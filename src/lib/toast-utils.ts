@@ -73,22 +73,22 @@ export function showToast(props: ToastProps & { id?: string }) {
         if ("stage" in props && props.stage === "downloading") {
           duration = Number.POSITIVE_INFINITY;
         } else if ("stage" in props && props.stage === "completed") {
-          duration = 3000; // Shorter duration for completed downloads
+          duration = 3000;
         } else {
-          duration = 8000; // 8 seconds for extracting/verifying
+          duration = 20000;
         }
         break;
       case "version-update":
-        duration = 15000; // 15 seconds instead of infinite
+        duration = 15000;
         break;
       case "success":
-        duration = 3000; // Shorter success duration
+        duration = 3000;
         break;
       case "error":
-        duration = 5000; // Reasonable error duration
+        duration = 10000;
         break;
       default:
-        duration = 4000;
+        duration = 5000;
     }
   }
 
