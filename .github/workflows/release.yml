@@ -119,6 +119,7 @@ jobs:
           pnpm run ${{ matrix.nodecar_script }}
 
       - name: Copy nodecar binary to Tauri binaries
+        shell: bash
         run: |
           mkdir -p src-tauri/binaries
           if [[ "${{ matrix.platform }}" == "windows-latest" ]]; then

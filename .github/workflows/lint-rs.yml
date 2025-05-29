@@ -73,6 +73,7 @@ jobs:
           fi
 
       - name: Copy nodecar binary to Tauri binaries
+        shell: bash
         run: |
           mkdir -p src-tauri/binaries
           if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
