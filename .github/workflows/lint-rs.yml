@@ -59,7 +59,7 @@ jobs:
         working-directory: ./nodecar
         run: |
           echo "DEBUG: Installing nodecar dependencies..."
-          pnpm install --frozen-lockfile
+          pnpm install --frozen-lockfile --workspace-root=.
           echo "DEBUG: Current directory: $(pwd)"
           echo "DEBUG: Contents of nodecar directory:"
           ls -la
@@ -71,12 +71,6 @@ jobs:
           pnpm install --frozen-lockfile
           echo "DEBUG: After pnpm install - checking node_modules:"
           ls -la node_modules/ | head -20
-          echo "DEBUG: Checking if specific dependencies exist:"
-          ls -la node_modules/commander || echo "commander not found"
-          ls -la node_modules/get-port || echo "get-port not found"
-          ls -la node_modules/proxy-chain || echo "proxy-chain not found"
-          echo "DEBUG: Checking get-port package.json type:"
-          cat node_modules/get-port/package.json | grep -E '"type":|"main":|"module":|"exports":' || echo "No ESM info found"
           echo "DEBUG: Checking what TypeScript can resolve:"
           npx tsc --noEmit --listFiles | head -20 || echo "TypeScript check failed"
 
