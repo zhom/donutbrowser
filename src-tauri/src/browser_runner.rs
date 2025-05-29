@@ -83,6 +83,7 @@ impl BrowserRunner {
   }
 
   // Helper function to validate PID for TOR/Mullvad browsers
+  #[cfg(target_os = "macos")]
   fn validate_tor_mullvad_pid(&self, profile: &BrowserProfile, pid: u32) -> bool {
     let system = System::new_all();
 
