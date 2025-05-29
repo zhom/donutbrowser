@@ -90,7 +90,7 @@ jobs:
         working-directory: ./nodecar
         run: |
           echo "DEBUG: Installing nodecar dependencies..."
-          pnpm install --frozen-lockfile --workspace-root=.
+          pnpm install --ignore-workspace --frozen-lockfile 
           echo "DEBUG: Current directory: $(pwd)"
           echo "DEBUG: Contents of nodecar directory:"
           ls -la
