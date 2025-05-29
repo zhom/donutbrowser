@@ -30,8 +30,6 @@ jobs:
 
       - name: Set up pnpm package manager
         uses: pnpm/action-setup@v4
-        with:
-          version: "10.11.0"
 
       - name: Set up Node.js v22
         uses: actions/setup-node@v4

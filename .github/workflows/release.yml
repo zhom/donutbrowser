@@ -62,12 +62,10 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 23
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: "10.11.0"
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
