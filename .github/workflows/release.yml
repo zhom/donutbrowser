@@ -90,6 +90,7 @@ jobs:
         working-directory: ./nodecar
         run: |
           pnpm install --frozen-lockfile
+          pnpm exec tsc
 
       - name: Build nodecar sidecar
         shell: bash
