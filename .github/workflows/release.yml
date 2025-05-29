@@ -92,6 +92,7 @@ jobs:
           pnpm install --frozen-lockfile
 
       - name: Build nodecar sidecar
+        shell: bash
         run: |
           cd nodecar
           pnpm run ${{ matrix.nodecar_script }}

@@ -8,6 +8,7 @@ import {
   deleteProxyConfig,
   isProcessRunning,
   generateProxyId,
+  listProxyConfigs,
 } from "./proxy-storage";
 
 /**
@@ -103,7 +104,7 @@ export async function stopProxyProcess(id: string): Promise<boolean> {
  * @returns Promise resolving when all proxies are stopped
  */
 export async function stopAllProxyProcesses(): Promise<void> {
-  const configs = require("./proxy-storage").listProxyConfigs();
+  const configs = listProxyConfigs();
 
   for (const config of configs) {
     await stopProxyProcess(config.id);

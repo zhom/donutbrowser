@@ -46,11 +46,14 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      - name: Install Linux dependencies
+      - name: Install dependencies (Ubuntu only)
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
           sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Install nodecar dependencies
         run: |
@@ -58,6 +61,7 @@ jobs:
           pnpm install --frozen-lockfile
 
       - name: Build nodecar binary
+        shell: bash
         run: |
           cd nodecar
           if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
