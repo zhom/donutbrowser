@@ -87,14 +87,14 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install nodecar dependencies
+        working-directory: ./nodecar
         run: |
-          cd nodecar
           pnpm install --frozen-lockfile
 
       - name: Build nodecar sidecar
         shell: bash
+        working-directory: ./nodecar
         run: |
-          cd nodecar
           pnpm run ${{ matrix.nodecar_script }}
 
       - name: Copy nodecar binary to Tauri binaries

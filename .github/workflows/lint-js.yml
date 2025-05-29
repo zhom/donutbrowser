@@ -41,8 +41,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install nodecar dependencies
+        working-directory: ./nodecar
         run: |
-          cd nodecar
           pnpm install --frozen-lockfile
 
       - name: Run lint step

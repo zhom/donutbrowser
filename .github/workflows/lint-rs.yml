@@ -56,14 +56,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install nodecar dependencies
-        run: |
-          cd nodecar
-          pnpm install --frozen-lockfile
+        working-directory: ./nodecar
+        run: pnpm install --frozen-lockfile
 
       - name: Build nodecar binary
         shell: bash
+        working-directory: ./nodecar
         run: |
-          cd nodecar
           if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
             pnpm run build:linux-x64
           elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
