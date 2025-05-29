@@ -104,15 +104,9 @@ impl VersionComponent {
 
     // Extract kind and number
     let (kind, number) = if let Some(stripped) = pre_release.strip_prefix("alpha") {
-      (
-        PreReleaseKind::Alpha,
-        Self::extract_number(stripped),
-      )
+      (PreReleaseKind::Alpha, Self::extract_number(stripped))
     } else if let Some(stripped) = pre_release.strip_prefix("beta") {
-      (
-        PreReleaseKind::Beta,
-        Self::extract_number(stripped),
-      )
+      (PreReleaseKind::Beta, Self::extract_number(stripped))
     } else if let Some(stripped) = pre_release.strip_prefix("rc") {
       (PreReleaseKind::RC, Self::extract_number(stripped))
     } else if let Some(stripped) = pre_release.strip_prefix("dev") {
@@ -120,15 +114,9 @@ impl VersionComponent {
     } else if let Some(stripped) = pre_release.strip_prefix("pre") {
       (PreReleaseKind::Pre, Self::extract_number(stripped))
     } else if let Some(stripped) = pre_release.strip_prefix('a') {
-      (
-        PreReleaseKind::Alpha,
-        Self::extract_number(stripped),
-      )
+      (PreReleaseKind::Alpha, Self::extract_number(stripped))
     } else if let Some(stripped) = pre_release.strip_prefix('b') {
-      (
-        PreReleaseKind::Beta,
-        Self::extract_number(stripped),
-      )
+      (PreReleaseKind::Beta, Self::extract_number(stripped))
     } else {
       return None;
     };

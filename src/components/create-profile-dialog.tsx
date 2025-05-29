@@ -65,7 +65,7 @@ export function CreateProfileDialog({
   >([]);
   const [isCreating, setIsCreating] = useState(false);
   const [existingProfiles, setExistingProfiles] = useState<BrowserProfile[]>(
-    []
+    [],
   );
 
   // Proxy settings
@@ -120,7 +120,7 @@ export function CreateProfileDialog({
   const loadSupportedBrowsers = async () => {
     try {
       const browsers = await invoke<BrowserTypeString[]>(
-        "get_supported_browsers"
+        "get_supported_browsers",
       );
       setSupportedBrowsers(browsers);
       if (browsers.includes("mullvad-browser")) {
@@ -156,7 +156,7 @@ export function CreateProfileDialog({
 
     // Check for duplicate names (case insensitive)
     const isDuplicate = existingProfiles.some(
-      (profile) => profile.name.toLowerCase() === trimmedName.toLowerCase()
+      (profile) => profile.name.toLowerCase() === trimmedName.toLowerCase(),
     );
 
     if (isDuplicate) {
@@ -271,7 +271,7 @@ export function CreateProfileDialog({
                     {browser
                       .split("-")
                       .map(
-                        (word) => word.charAt(0).toUpperCase() + word.slice(1)
+                        (word) => word.charAt(0).toUpperCase() + word.slice(1),
                       )
                       .join(" ")}
                   </SelectItem>

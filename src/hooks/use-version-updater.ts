@@ -61,7 +61,7 @@ export function useVersionUpdater() {
                   total: progress.total_browsers,
                   found: progress.new_versions_found,
                 },
-              }
+              },
             );
           } else {
             showLoadingToast("Starting version update check...", {
@@ -81,7 +81,7 @@ export function useVersionUpdater() {
                 duration: 4000,
                 description:
                   "Version information has been updated in the background",
-              }
+              },
             );
           } else {
             toast.success("No new browser versions found", {
@@ -103,7 +103,7 @@ export function useVersionUpdater() {
             description: "Check your internet connection and try again",
           });
         }
-      }
+      },
     );
 
     return () => {
@@ -130,7 +130,7 @@ export function useVersionUpdater() {
   const loadUpdateStatus = useCallback(async () => {
     try {
       const [lastUpdate, timeUntilNext] = await invoke<[number | null, number]>(
-        "get_version_update_status"
+        "get_version_update_status",
       );
       setLastUpdateTime(lastUpdate);
       setTimeUntilNextUpdate(timeUntilNext);
@@ -143,18 +143,18 @@ export function useVersionUpdater() {
     try {
       setIsUpdating(true);
       const results = await invoke<BackgroundUpdateResult[]>(
-        "trigger_manual_version_update"
+        "trigger_manual_version_update",
       );
 
       const totalNewVersions = results.reduce(
         (sum, result) => sum + result.new_versions_count,
-        0
+        0,
       );
       const successfulUpdates = results.filter(
-        (r) => r.updated_successfully
+        (r) => r.updated_successfully,
       ).length;
       const failedUpdates = results.filter(
-        (r) => !r.updated_successfully
+        (r) => !r.updated_successfully,
       ).length;
 
       if (failedUpdates > 0) {
@@ -194,7 +194,7 @@ export function useVersionUpdater() {
       try {
         const result = await invoke<BrowserVersionsResult>(
           "fetch_browser_versions_with_count",
-          { browserStr }
+          { browserStr },
         );
 
         // Show notification about new versions if any were found
@@ -205,7 +205,7 @@ export function useVersionUpdater() {
             {
               duration: 3000,
               description: `Total available: ${result.total_versions_count} versions`,
-            }
+            },
           );
         }
 
@@ -215,7 +215,7 @@ export function useVersionUpdater() {
         throw error;
       }
     },
-    []
+    [],
   );
 
   const formatTimeUntilUpdate = useCallback((seconds: number): string => {
@@ -251,7 +251,7 @@ export function useVersionUpdater() {
       }
       return "Just now";
     },
-    []
+    [],
   );
 
   return {

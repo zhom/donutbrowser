@@ -18,7 +18,7 @@ interface UpdateNotification {
 export function useUpdateNotifications() {
   const [notifications, setNotifications] = useState<UpdateNotification[]>([]);
   const [updatingBrowsers, setUpdatingBrowsers] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
   const [isClient, setIsClient] = useState(false);
 
@@ -32,7 +32,7 @@ export function useUpdateNotifications() {
 
     try {
       const updates = await invoke<UpdateNotification[]>(
-        "check_for_browser_updates"
+        "check_for_browser_updates",
       );
       setNotifications(updates);
 
@@ -51,7 +51,7 @@ export function useUpdateNotifications() {
 
         // Dismiss all notifications for this browser first
         const browserNotifications = notifications.filter(
-          (n) => n.browser === browser
+          (n) => n.browser === browser,
         );
         for (const notification of browserNotifications) {
           toast.dismiss(notification.id);
@@ -70,7 +70,7 @@ export function useUpdateNotifications() {
           if (isDownloaded) {
             // Browser already exists, skip download and go straight to profile update
             console.log(
-              `${browserDisplayName} ${newVersion} already exists, skipping download`
+              `${browserDisplayName} ${newVersion} already exists, skipping download`,
             );
           } else {
             // Mark download as auto-update in the backend for toast suppression
@@ -92,7 +92,7 @@ export function useUpdateNotifications() {
             {
               browser,
               newVersion,
-            }
+            },
           );
 
           // Show success message based on whether profiles were updated
@@ -158,7 +158,7 @@ export function useUpdateNotifications() {
         });
       }
     },
-    [notifications, checkForUpdates]
+    [notifications, checkForUpdates],
   );
 
   const handleDismiss = useCallback(
@@ -173,7 +173,7 @@ export function useUpdateNotifications() {
         console.error("Failed to dismiss notification:", error);
       }
     },
-    [checkForUpdates, isClient]
+    [checkForUpdates, isClient],
   );
 
   // Separate effect to show toasts when notifications change
@@ -198,7 +198,7 @@ export function useUpdateNotifications() {
           position: "top-right",
           // Remove transparent styling to fix background issue
           style: undefined,
-        }
+        },
       );
     }
   }, [notifications, updatingBrowsers, handleUpdate, handleDismiss, isClient]);

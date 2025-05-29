@@ -72,7 +72,7 @@ const isAlphaVersion = (version: string): boolean => {
 
 export function useBrowserDownload() {
   const [availableVersions, setAvailableVersions] = useState<GithubRelease[]>(
-    []
+    [],
   );
   const [downloadedVersions, setDownloadedVersions] = useState<string[]>([]);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -128,7 +128,7 @@ export function useBrowserDownload() {
             undefined,
             {
               suppressCompletionToast: isAutoUpdate,
-            }
+            },
           );
           setDownloadProgress(null);
         }
@@ -167,7 +167,7 @@ export function useBrowserDownload() {
               `Found ${progress.new_versions_found} new browser versions!`,
               {
                 duration: 3000,
-              }
+              },
             );
           }
           // Dismiss any update toasts
@@ -179,7 +179,7 @@ export function useBrowserDownload() {
           });
           toast.dismiss();
         }
-      }
+      },
     );
 
     return () => {
@@ -222,7 +222,7 @@ export function useBrowserDownload() {
     try {
       const versionInfos = await invoke<BrowserVersionInfo[]>(
         "fetch_browser_versions_cached_first",
-        { browserStr }
+        { browserStr },
       );
 
       // Convert BrowserVersionInfo to GithubRelease format for compatibility
@@ -232,7 +232,7 @@ export function useBrowserDownload() {
           assets: [],
           published_at: versionInfo.date,
           is_alpha: versionInfo.is_prerelease,
-        })
+        }),
       );
 
       setAvailableVersions(githubReleases);
@@ -257,13 +257,13 @@ export function useBrowserDownload() {
       // Get versions with new count info and cached detailed info
       const result = await invoke<BrowserVersionsResult>(
         "fetch_browser_versions_with_count_cached_first",
-        { browserStr }
+        { browserStr },
       );
 
       // Get detailed version info for compatibility
       const versionInfos = await invoke<BrowserVersionInfo[]>(
         "fetch_browser_versions_cached_first",
-        { browserStr }
+        { browserStr },
       );
 
       // Convert BrowserVersionInfo to GithubRelease format for compatibility
@@ -273,7 +273,7 @@ export function useBrowserDownload() {
           assets: [],
           published_at: versionInfo.date,
           is_alpha: versionInfo.is_prerelease,
-        })
+        }),
       );
 
       setAvailableVersions(githubReleases);
@@ -285,7 +285,7 @@ export function useBrowserDownload() {
           {
             duration: 3000,
             description: `Total available: ${result.total_versions_count} versions`,
-          }
+          },
         );
       }
 
@@ -305,7 +305,7 @@ export function useBrowserDownload() {
     try {
       const downloadedVersions = await invoke<string[]>(
         "get_downloaded_browser_versions",
-        { browserStr }
+        { browserStr },
       );
       setDownloadedVersions(downloadedVersions);
       return downloadedVersions;
@@ -319,7 +319,7 @@ export function useBrowserDownload() {
     async (
       browserStr: string,
       version: string,
-      suppressNotifications = false
+      suppressNotifications = false,
     ) => {
       const browserName = getBrowserDisplayName(browserStr);
       setIsDownloading(true);
@@ -343,14 +343,14 @@ export function useBrowserDownload() {
         setIsDownloading(false);
       }
     },
-    [loadDownloadedVersions]
+    [loadDownloadedVersions],
   );
 
   const isVersionDownloaded = useCallback(
     (version: string) => {
       return downloadedVersions.includes(version);
     },
-    [downloadedVersions]
+    [downloadedVersions],
   );
 
   return {

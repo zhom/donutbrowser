@@ -7,16 +7,15 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "biome ci src/ && tsc --noEmit && next lint",
+    "lint": "biome check src/ && tsc --noEmit && next lint",
     "lint:rust": "cd src-tauri && cargo clippy --all-targets --all-features -- -D warnings -D clippy::all",
     "tauri": "tauri",
     "shadcn:add": "pnpm dlx shadcn@latest add",
     "prepare": "husky",
-    "format:js": "biome check src/ --fix && prettier --write src/",
+    "format:js": "biome check src/ --fix",
     "format:rust": "cd src-tauri && cargo fmt --all",
     "format:biome": "biome check src/ --fix",
-    "format": "pnpm format:js && pnpm format:rust",
-    "prettier": "prettier --write"
+    "format": "pnpm format:js && pnpm format:rust"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.3.2",
@@ -62,7 +61,6 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "husky": "^9.1.7",
     "lint-staged": "^15.3.0",
-    "prettier": "^3.5.3",
     "tailwindcss": "^4.1.7",
     "tw-animate-css": "^1.3.0",
     "typescript": "~5.8.3",
@@ -71,8 +69,7 @@
   "packageManager": "pnpm@10.11.0+sha512.6540583f41cc5f628eb3d9773ecee802f4f9ef9923cc45b69890fb47991d4b092964694ec3a4f738a420c918a333062c8b925d312f42e4f0c263eb603551f977",
   "lint-staged": {
     "src/**/*.{js,jsx,ts,tsx,json,css,md}": [
-      "biome check --fix",
-      "prettier --write"
+      "biome check --fix"
     ],
     "src-tauri/**/*.rs": [
       "cd src-tauri && cargo fmt --all",
