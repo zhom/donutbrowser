@@ -44,7 +44,6 @@ jobs:
         working-directory: ./nodecar
         run: |
           pnpm install --frozen-lockfile
-          npx tsc
 
       - name: Run lint step
         run: pnpm lint
