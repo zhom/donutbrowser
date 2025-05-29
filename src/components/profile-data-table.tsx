@@ -101,7 +101,7 @@ export function ProfilesDataTable({
       setSorting(newSorting);
       updateSorting(newSorting);
     },
-    [sorting, updateSorting, isClient]
+    [sorting, updateSorting, isClient],
   );
 
   const handleRename = async () => {
@@ -131,7 +131,7 @@ export function ProfilesDataTable({
           const anyTorRunning =
             isClient &&
             data.some(
-              (p) => p.browser === "tor-browser" && runningProfiles.has(p.name)
+              (p) => p.browser === "tor-browser" && runningProfiles.has(p.name),
             );
           const shouldDisableTorStart =
             isTorBrowser && !isRunning && anyTorRunning;
@@ -159,12 +159,12 @@ export function ProfilesDataTable({
                   {!isClient
                     ? "Loading..."
                     : isRunning
-                    ? "Click to forcefully stop the browser"
-                    : isBrowserUpdating
-                    ? `${profile.browser} is being updated. Please wait for the update to complete.`
-                    : shouldDisableTorStart
-                    ? "Only one TOR browser instance can run at a time. Stop the running TOR browser first."
-                    : "Click to launch the browser"}
+                      ? "Click to forcefully stop the browser"
+                      : isBrowserUpdating
+                        ? `${profile.browser} is being updated. Please wait for the update to complete.`
+                        : shouldDisableTorStart
+                          ? "Only one TOR browser instance can run at a time. Stop the running TOR browser first."
+                          : "Click to launch the browser"}
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -392,7 +392,7 @@ export function ProfilesDataTable({
         },
       },
     ],
-    [isClient, runningProfiles, isUpdating, data]
+    [isClient, runningProfiles, isUpdating, data],
   );
 
   const table = useReactTable({
@@ -420,7 +420,7 @@ export function ProfilesDataTable({
                         ? null
                         : flexRender(
                             header.column.columnDef.header,
-                            header.getContext()
+                            header.getContext(),
                           )}
                     </TableHead>
                   );
@@ -439,7 +439,7 @@ export function ProfilesDataTable({
                     <TableCell key={cell.id}>
                       {flexRender(
                         cell.column.columnDef.cell,
-                        cell.getContext()
+                        cell.getContext(),
                       )}
                     </TableCell>
                   ))}

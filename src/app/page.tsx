@@ -63,7 +63,7 @@ export default function Home() {
 
     try {
       const profileList = await invoke<BrowserProfile[]>(
-        "list_browser_profiles"
+        "list_browser_profiles",
       );
       setProfiles(profileList);
 
@@ -90,9 +90,12 @@ export default function Home() {
     void checkStartupUrls();
 
     // Set up periodic update checks (every 30 minutes)
-    const updateInterval = setInterval(() => {
-      void checkForUpdates();
-    }, 30 * 60 * 1000);
+    const updateInterval = setInterval(
+      () => {
+        void checkForUpdates();
+      },
+      30 * 60 * 1000,
+    );
 
     return () => {
       clearInterval(updateInterval);
@@ -104,7 +107,7 @@ export default function Home() {
 
     try {
       const shouldShow = await invoke<boolean>(
-        "should_show_settings_on_startup"
+        "should_show_settings_on_startup",
       );
       if (shouldShow) {
         setSettingsDialogOpen(true);
@@ -119,7 +122,7 @@ export default function Home() {
 
     try {
       const hasStartupUrl = await invoke<boolean>(
-        "check_and_handle_startup_url"
+        "check_and_handle_startup_url",
       );
       if (hasStartupUrl) {
         console.log("Handled startup URL successfully");
@@ -152,10 +155,10 @@ export default function Home() {
       await listen<string>("show-create-profile-dialog", (event) => {
         console.log(
           "Received show create profile dialog request:",
-          event.payload
+          event.payload,
         );
         setError(
-          "No profiles available. Please create a profile first before opening URLs."
+          "No profiles available. Please create a profile first before opening URLs.",
         );
         setCreateProfileDialogOpen(true);
       });
@@ -177,7 +180,7 @@ export default function Home() {
     } catch (error: any) {
       console.log(
         "Smart URL opening failed or requires profile selection:",
-        error
+        error,
       );
 
       // Check if it's the special error cases
@@ -187,7 +190,7 @@ export default function Home() {
       } else if (error === "no_profiles") {
         // No profiles available, show error message
         setError(
-          "No profiles available. Please create a profile first before opening URLs."
+          "No profiles available. Please create a profile first before opening URLs.",
         );
       } else {
         // Some other error occurred
@@ -225,7 +228,7 @@ export default function Home() {
         setError(`Failed to update proxy settings: ${JSON.stringify(err)}`);
       }
     },
-    [currentProfileForProxy, loadProfiles]
+    [currentProfileForProxy, loadProfiles],
   );
 
   const handleCreateProfile = useCallback(
@@ -244,7 +247,7 @@ export default function Home() {
             name: profileData.name,
             browserStr: profileData.browserStr,
             version: profileData.version,
-          }
+          },
         );
 
         // Update proxy if provided
@@ -261,11 +264,11 @@ export default function Home() {
         throw error;
       }
     },
-    [loadProfiles]
+    [loadProfiles],
   );
 
   const [runningProfiles, setRunningProfiles] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
 
   const runningProfilesRef = useRef<Set<string>>(new Set());
@@ -297,7 +300,7 @@ export default function Home() {
         console.error("Failed to check browser status:", err);
       }
     },
-    [isClient]
+    [isClient],
   );
 
   const launchProfile = useCallback(
@@ -312,12 +315,12 @@ export default function Home() {
           "is_browser_disabled_for_update",
           {
             browser: profile.browser,
-          }
+          },
         );
 
         if (isDisabled || isUpdating(profile.browser)) {
           setError(
-            `${profile.browser} is currently being updated. Please wait for the update to complete.`
+            `${profile.browser} is currently being updated. Please wait for the update to complete.`,
           );
           return;
         }
@@ -328,7 +331,7 @@ export default function Home() {
       try {
         const updatedProfile = await invoke<BrowserProfile>(
           "launch_browser_profile",
-          { profile }
+          { profile },
         );
         await loadProfiles();
         await checkBrowserStatus(updatedProfile);
@@ -337,7 +340,7 @@ export default function Home() {
         setError(`Failed to launch browser: ${JSON.stringify(err)}`);
       }
     },
-    [loadProfiles, checkBrowserStatus, isUpdating, isClient]
+    [loadProfiles, checkBrowserStatus, isUpdating, isClient],
   );
 
   useEffect(() => {
@@ -376,7 +379,7 @@ export default function Home() {
         setError(`Failed to delete profile: ${JSON.stringify(err)}`);
       }
     },
-    [loadProfiles]
+    [loadProfiles],
   );
 
   const handleRenameProfile = useCallback(
@@ -391,7 +394,7 @@ export default function Home() {
         throw err;
       }
     },
-    [loadProfiles]
+    [loadProfiles],
   );
 
   const handleKillProfile = useCallback(
@@ -405,7 +408,7 @@ export default function Home() {
         setError(`Failed to kill browser: ${JSON.stringify(err)}`);
       }
     },
-    [loadProfiles]
+    [loadProfiles],
   );
 
   // Don't render anything until we're on the client side to prevent hydration issues
@@ -551,7 +554,7 @@ export default function Home() {
           isOpen={true}
           onClose={() => {
             setPendingUrls((prev) =>
-              prev.filter((u) => u.id !== pendingUrl.id)
+              prev.filter((u) => u.id !== pendingUrl.id),
             );
           }}
           url={pendingUrl.url}

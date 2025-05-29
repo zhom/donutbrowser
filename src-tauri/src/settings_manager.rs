@@ -66,7 +66,11 @@ impl SettingsManager {
 
   pub fn get_settings_dir(&self) -> PathBuf {
     let mut path = self.base_dirs.data_local_dir().to_path_buf();
-    path.push(if cfg!(debug_assertions) { "DonutBrowserDev" } else { "DonutBrowser" });
+    path.push(if cfg!(debug_assertions) {
+      "DonutBrowserDev"
+    } else {
+      "DonutBrowser"
+    });
     path.push("settings");
     path
   }
@@ -88,25 +92,31 @@ impl SettingsManager {
     }
 
     let content = fs::read_to_string(&settings_file)?;
-    
+
     // Parse the settings file - serde will use default values for missing fields
     match serde_json::from_str::<AppSettings>(&content) {
       Ok(settings) => {
         // Save the settings back to ensure any missing fields are written with defaults
         if let Err(e) = self.save_settings(&settings) {
-          eprintln!("Warning: Failed to update settings file with defaults: {}", e);
+          eprintln!(
+            "Warning: Failed to update settings file with defaults: {}",
+            e
+          );
         }
         Ok(settings)
       }
       Err(e) => {
-        eprintln!("Warning: Failed to parse settings file, using defaults: {}", e);
+        eprintln!(
+          "Warning: Failed to parse settings file, using defaults: {}",
+          e
+        );
         let default_settings = AppSettings::default();
-        
+
         // Try to save default settings to fix the corrupted file
         if let Err(save_error) = self.save_settings(&default_settings) {
           eprintln!("Warning: Failed to save default settings: {}", save_error);
         }
-        
+
         Ok(default_settings)
       }
     }
@@ -136,7 +146,10 @@ impl SettingsManager {
     Ok(sorting)
   }
 
-  pub fn save_table_sorting(&self, sorting: &TableSortingSettings) -> Result<(), Box<dyn std::error::Error>> {
+  pub fn save_table_sorting(
+    &self,
+    sorting: &TableSortingSettings,
+  ) -> Result<(), Box<dyn std::error::Error>> {
     let settings_dir = self.get_settings_dir();
     create_dir_all(&settings_dir)?;
 

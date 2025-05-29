@@ -58,7 +58,7 @@ export function ProfileSelectorDialog({
     setIsLoading(true);
     try {
       const profileList = await invoke<BrowserProfile[]>(
-        "list_browser_profiles"
+        "list_browser_profiles",
       );
 
       // Sort profiles by name
@@ -92,14 +92,14 @@ export function ProfileSelectorDialog({
   const canUseProfileForLinks = (
     profile: BrowserProfile,
     allProfiles: BrowserProfile[],
-    runningProfiles: Set<string>
+    runningProfiles: Set<string>,
   ): boolean => {
     const isRunning = runningProfiles.has(profile.name);
 
     // For TOR browser: Check if any TOR browser is running
     if (profile.browser === "tor-browser") {
       const runningTorProfiles = allProfiles.filter(
-        (p) => p.browser === "tor-browser" && runningProfiles.has(p.name)
+        (p) => p.browser === "tor-browser" && runningProfiles.has(p.name),
       );
 
       // If no TOR browser is running, allow any TOR profile
@@ -126,7 +126,7 @@ export function ProfileSelectorDialog({
 
     if (profile.browser === "tor-browser") {
       const runningTorProfiles = profiles.filter(
-        (p) => p.browser === "tor-browser" && runningProfiles.has(p.name)
+        (p) => p.browser === "tor-browser" && runningProfiles.has(p.name),
       );
 
       // If another TOR profile is running, this one is not available
@@ -192,7 +192,7 @@ export function ProfileSelectorDialog({
     return canUseProfileForLinks(
       selectedProfileData,
       profiles,
-      runningProfiles
+      runningProfiles,
     );
   };
 
@@ -261,7 +261,7 @@ export function ProfileSelectorDialog({
                       const canUseForLinks = canUseProfileForLinks(
                         profile,
                         profiles,
-                        runningProfiles
+                        runningProfiles,
                       );
                       const tooltipContent = getProfileTooltipContent(profile);
 
@@ -281,7 +281,7 @@ export function ProfileSelectorDialog({
                                   <div className="flex items-center gap-2">
                                     {(() => {
                                       const IconComponent = getBrowserIcon(
-                                        profile.browser
+                                        profile.browser,
                                       );
                                       return IconComponent ? (
                                         <IconComponent className="h-4 w-4" />

@@ -115,11 +115,10 @@ export function VersionUpdateSettings() {
           <AlertTitle>How it works</AlertTitle>
           <AlertDescription className="text-xs">
             • Version information is checked automatically every 3 hours
-            <br />
-            • New versions are added to the cache without removing old ones
-            <br />
-            • When creating profiles or changing versions, you&apos;ll see how
-            many new versions were found
+            <br />• New versions are added to the cache without removing old
+            ones
+            <br />• When creating profiles or changing versions, you&apos;ll see
+            how many new versions were found
             <br />• This keeps the app responsive while ensuring you have the
             latest information
           </AlertDescription>

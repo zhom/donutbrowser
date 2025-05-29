@@ -2,7 +2,7 @@ import { spawn } from "child_process";
 import path from "path";
 import getPort from "get-port";
 import {
-  ProxyConfig,
+  type ProxyConfig,
   saveProxyConfig,
   getProxyConfig,
   deleteProxyConfig,

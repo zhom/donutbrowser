@@ -298,7 +298,7 @@ export function showLoadingToast(
     id?: string;
     description?: string;
     duration?: number;
-  }
+  },
 ) {
   return showToast({
     type: "loading",
@@ -312,16 +312,16 @@ export function showDownloadToast(
   version: string,
   stage: "downloading" | "extracting" | "verifying" | "completed",
   progress?: { percentage: number; speed?: string; eta?: string },
-  options?: { suppressCompletionToast?: boolean }
+  options?: { suppressCompletionToast?: boolean },
 ) {
   const title =
     stage === "completed"
       ? `${browserName} ${version} downloaded successfully!`
       : stage === "downloading"
-      ? `Downloading ${browserName} ${version}`
-      : stage === "extracting"
-      ? `Extracting ${browserName} ${version}`
-      : `Verifying ${browserName} ${version}`;
+        ? `Downloading ${browserName} ${version}`
+        : stage === "extracting"
+          ? `Extracting ${browserName} ${version}`
+          : `Verifying ${browserName} ${version}`;
 
   // Don't show completion toast if suppressed (for auto-update scenarios)
   if (stage === "completed" && options?.suppressCompletionToast) {
@@ -349,7 +349,7 @@ export function showVersionUpdateToast(
       found: number;
     };
     duration?: number;
-  }
+  },
 ) {
   return showToast({
     type: "version-update",
@@ -364,7 +364,7 @@ export function showFetchingToast(
     id?: string;
     description?: string;
     duration?: number;
-  }
+  },
 ) {
   return showToast({
     type: "fetching",
@@ -382,7 +382,7 @@ export function showSuccessToast(
     id?: string;
     description?: string;
     duration?: number;
-  }
+  },
 ) {
   return showToast({
     type: "success",
@@ -397,7 +397,7 @@ export function showErrorToast(
     id?: string;
     description?: string;
     duration?: number;
-  }
+  },
 ) {
   return showToast({
     type: "error",

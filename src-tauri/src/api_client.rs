@@ -1,10 +1,10 @@
+use directories::BaseDirs;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
-use directories::BaseDirs;
 
 use crate::browser::GithubRelease;
 
@@ -34,7 +34,7 @@ enum PreReleaseKind {
 impl VersionComponent {
   fn parse(version: &str) -> Self {
     let version = version.trim();
-    
+
     // Handle special case for Zen Browser twilight releases
     if version.to_lowercase().contains("twilight") {
       return VersionComponent {
@@ -47,20 +47,22 @@ impl VersionComponent {
 
     // Split version into numeric and pre-release parts
     let (numeric_part, pre_release_part) = Self::split_version(version);
-    
+
     // Parse numeric parts (major.minor.patch)
     let parts: Vec<u32> = numeric_part
       .split('.')
       .filter_map(|part| part.parse().ok())
       .collect();
-    
+
     let major = parts.get(0).copied().unwrap_or(0);
     let minor = parts.get(1).copied().unwrap_or(0);
     let patch = parts.get(2).copied().unwrap_or(0);
-    
+
     // Parse pre-release part
-    let pre_release = pre_release_part.as_deref().and_then(Self::parse_pre_release);
-    
+    let pre_release = pre_release_part
+      .as_deref()
+      .and_then(Self::parse_pre_release);
+
     VersionComponent {
       major,
       minor,
@@ -68,39 +70,49 @@ impl VersionComponent {
       pre_release,
     }
   }
-  
+
   fn split_version(version: &str) -> (String, Option<String>) {
     let version = version.to_lowercase();
-    
+
     // Look for pre-release indicators
     for (i, ch) in version.char_indices() {
       if ch.is_alphabetic() && i > 0 {
         // Check if this is a pre-release indicator
         let remaining = &version[i..];
-        if remaining.starts_with('a') || remaining.starts_with('b') || 
-           remaining.starts_with("alpha") || remaining.starts_with("beta") ||
-           remaining.starts_with("rc") || remaining.starts_with("dev") ||
-           remaining.starts_with("pre") {
+        if remaining.starts_with('a')
+          || remaining.starts_with('b')
+          || remaining.starts_with("alpha")
+          || remaining.starts_with("beta")
+          || remaining.starts_with("rc")
+          || remaining.starts_with("dev")
+          || remaining.starts_with("pre")
+        {
           return (version[..i].to_string(), Some(remaining.to_string()));
         }
       }
     }
-    
+
     (version, None)
   }
-  
+
   fn parse_pre_release(pre_release: &str) -> Option<PreRelease> {
     let pre_release = pre_release.trim().to_lowercase();
-    
+
     if pre_release.is_empty() {
       return None;
     }
-    
+
     // Extract kind and number
     let (kind, number) = if pre_release.starts_with("alpha") {
-      (PreReleaseKind::Alpha, Self::extract_number(&pre_release[5..]))
+      (
+        PreReleaseKind::Alpha,
+        Self::extract_number(&pre_release[5..]),
+      )
     } else if pre_release.starts_with("beta") {
-      (PreReleaseKind::Beta, Self::extract_number(&pre_release[4..]))
+      (
+        PreReleaseKind::Beta,
+        Self::extract_number(&pre_release[4..]),
+      )
     } else if pre_release.starts_with("rc") {
       (PreReleaseKind::RC, Self::extract_number(&pre_release[2..]))
     } else if pre_release.starts_with("dev") {
@@ -108,16 +120,22 @@ impl VersionComponent {
     } else if pre_release.starts_with("pre") {
       (PreReleaseKind::Pre, Self::extract_number(&pre_release[3..]))
     } else if pre_release.starts_with('a') {
-      (PreReleaseKind::Alpha, Self::extract_number(&pre_release[1..]))
+      (
+        PreReleaseKind::Alpha,
+        Self::extract_number(&pre_release[1..]),
+      )
     } else if pre_release.starts_with('b') {
-      (PreReleaseKind::Beta, Self::extract_number(&pre_release[1..]))
+      (
+        PreReleaseKind::Beta,
+        Self::extract_number(&pre_release[1..]),
+      )
     } else {
       return None;
     };
-    
+
     Some(PreRelease { kind, number })
   }
-  
+
   fn extract_number(s: &str) -> Option<u32> {
     let numeric_part: String = s.chars().filter(|c| c.is_ascii_digit()).collect();
     numeric_part.parse().ok()
@@ -133,7 +151,7 @@ impl PartialOrd for VersionComponent {
 impl Ord for VersionComponent {
   fn cmp(&self, other: &Self) -> std::cmp::Ordering {
     use std::cmp::Ordering;
-    
+
     // Compare major.minor.patch first
     match (self.major, self.minor, self.patch).cmp(&(other.major, other.minor, other.patch)) {
       Ordering::Equal => {
@@ -181,8 +199,6 @@ pub fn sort_github_releases(releases: &mut [GithubRelease]) {
     version_b.cmp(&version_a) // Descending order (newest first)
   });
 }
-
-
 
 pub fn is_alpha_version(version: &str) -> bool {
   let version_comp = VersionComponent::parse(version);
@@ -264,14 +280,14 @@ impl ApiClient {
   pub fn load_cached_versions(&self, browser: &str) -> Option<Vec<String>> {
     let cache_dir = Self::get_cache_dir().ok()?;
     let cache_file = cache_dir.join(format!("{}_versions.json", browser));
-    
+
     if !cache_file.exists() {
       return None;
     }
 
     let content = fs::read_to_string(&cache_file).ok()?;
     let cached_data: CachedVersionData = serde_json::from_str(&content).ok()?;
-    
+
     // Always return cached versions regardless of age - they're always valid
     println!("Using cached versions for {}", browser);
     Some(cached_data.versions)
@@ -283,7 +299,7 @@ impl ApiClient {
       Err(_) => return true, // If we can't get cache dir, consider expired
     };
     let cache_file = cache_dir.join(format!("{}_versions.json", browser));
-    
+
     if !cache_file.exists() {
       return true; // No cache file means expired
     }
@@ -297,20 +313,24 @@ impl ApiClient {
       Ok(data) => data,
       Err(_) => return true, // Can't parse cache, consider expired
     };
-    
+
     // Check if cache is older than 10 minutes
     !Self::is_cache_valid(cached_data.timestamp)
   }
 
-  pub fn save_cached_versions(&self, browser: &str, versions: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+  pub fn save_cached_versions(
+    &self,
+    browser: &str,
+    versions: &[String],
+  ) -> Result<(), Box<dyn std::error::Error>> {
     let cache_dir = Self::get_cache_dir()?;
     let cache_file = cache_dir.join(format!("{}_versions.json", browser));
-    
+
     let cached_data = CachedVersionData {
       versions: versions.to_vec(),
       timestamp: Self::get_current_timestamp(),
     };
-    
+
     let content = serde_json::to_string_pretty(&cached_data)?;
     fs::write(&cache_file, content)?;
     println!("Cached {} versions for {}", versions.len(), browser);
@@ -320,56 +340,69 @@ impl ApiClient {
   fn load_cached_github_releases(&self, browser: &str) -> Option<Vec<GithubRelease>> {
     let cache_dir = Self::get_cache_dir().ok()?;
     let cache_file = cache_dir.join(format!("{}_github.json", browser));
-    
+
     if !cache_file.exists() {
       return None;
     }
 
     let content = fs::read_to_string(&cache_file).ok()?;
     let cached_data: CachedGithubData = serde_json::from_str(&content).ok()?;
-    
+
     // Always use cached GitHub releases - cache never expires, only gets updated with new versions
     println!("Using cached GitHub releases for {}", browser);
     Some(cached_data.releases)
   }
 
-  fn save_cached_github_releases(&self, browser: &str, releases: &[GithubRelease]) -> Result<(), Box<dyn std::error::Error>> {
+  fn save_cached_github_releases(
+    &self,
+    browser: &str,
+    releases: &[GithubRelease],
+  ) -> Result<(), Box<dyn std::error::Error>> {
     let cache_dir = Self::get_cache_dir()?;
     let cache_file = cache_dir.join(format!("{}_github.json", browser));
-    
+
     let cached_data = CachedGithubData {
       releases: releases.to_vec(),
       timestamp: Self::get_current_timestamp(),
     };
-    
+
     let content = serde_json::to_string_pretty(&cached_data)?;
     fs::write(&cache_file, content)?;
     println!("Cached {} GitHub releases for {}", releases.len(), browser);
     Ok(())
   }
 
-  pub async fn fetch_firefox_releases_with_caching(&self, no_caching: bool) -> Result<Vec<BrowserRelease>, Box<dyn std::error::Error + Send + Sync>> {
+  pub async fn fetch_firefox_releases_with_caching(
+    &self,
+    no_caching: bool,
+  ) -> Result<Vec<BrowserRelease>, Box<dyn std::error::Error + Send + Sync>> {
     // Check cache first (unless bypassing)
     if !no_caching {
       if let Some(cached_versions) = self.load_cached_versions("firefox") {
-        return Ok(cached_versions.into_iter().map(|version| {
-          BrowserRelease {
-            version: version.clone(),
-            date: "".to_string(), // Cache doesn't store dates
-            is_prerelease: is_alpha_version(&version),
-            download_url: Some(format!(
-              "https://download.mozilla.org/?product=firefox-{}&os=osx&lang=en-US",
-              version
-            )),
-          }
-        }).collect());
+        return Ok(
+          cached_versions
+            .into_iter()
+            .map(|version| {
+              BrowserRelease {
+                version: version.clone(),
+                date: "".to_string(), // Cache doesn't store dates
+                is_prerelease: is_alpha_version(&version),
+                download_url: Some(format!(
+                  "https://download.mozilla.org/?product=firefox-{}&os=osx&lang=en-US",
+                  version
+                )),
+              }
+            })
+            .collect(),
+        );
       }
     }
 
     println!("Fetching Firefox releases from Mozilla API...");
     let url = "https://product-details.mozilla.org/1.0/firefox.json";
-    
-    let response = self.client
+
+    let response = self
+      .client
       .get(url)
       .header("User-Agent", "donutbrowser")
       .send()
@@ -380,7 +413,7 @@ impl ApiClient {
     }
 
     let firefox_response: FirefoxApiResponse = response.json().await?;
-    
+
     // Extract releases and filter for stable versions
     let mut releases: Vec<BrowserRelease> = firefox_response
       .releases
@@ -413,7 +446,7 @@ impl ApiClient {
 
     // Extract versions for caching
     let versions: Vec<String> = releases.iter().map(|r| r.version.clone()).collect();
-    
+
     // Cache the results (unless bypassing cache)
     if !no_caching {
       if let Err(e) = self.save_cached_versions("firefox", &versions) {
@@ -424,35 +457,50 @@ impl ApiClient {
     Ok(releases)
   }
 
-  pub async fn fetch_firefox_developer_releases_with_caching(&self, no_caching: bool) -> Result<Vec<BrowserRelease>, Box<dyn std::error::Error + Send + Sync>> {
+  pub async fn fetch_firefox_developer_releases_with_caching(
+    &self,
+    no_caching: bool,
+  ) -> Result<Vec<BrowserRelease>, Box<dyn std::error::Error + Send + Sync>> {
     // Check cache first (unless bypassing)
     if !no_caching {
       if let Some(cached_versions) = self.load_cached_versions("firefox-developer") {
-        return Ok(cached_versions.into_iter().map(|version| {
-          BrowserRelease {
-            version: version.clone(),
-            date: "".to_string(), // Cache doesn't store dates
-            is_prerelease: is_alpha_version(&version),
-            download_url: Some(format!(
-              "https://download.mozilla.org/?product=devedition-{}&os=osx&lang=en-US",
-              version
-            )),
-          }
-        }).collect());
+        return Ok(
+          cached_versions
+            .into_iter()
+            .map(|version| {
+              BrowserRelease {
+                version: version.clone(),
+                date: "".to_string(), // Cache doesn't store dates
+                is_prerelease: is_alpha_version(&version),
+                download_url: Some(format!(
+                  "https://download.mozilla.org/?product=devedition-{}&os=osx&lang=en-US",
+                  version
+                )),
+              }
+            })
+            .collect(),
+        );
       }
     }
 
     println!("Fetching Firefox Developer Edition releases from Mozilla API...");
     let url = "https://product-details.mozilla.org/1.0/devedition.json";
-    
-    let response = self.client
+
+    let response = self
+      .client
       .get(url)
       .header("User-Agent", "donutbrowser")
       .send()
       .await?;
 
     if !response.status().is_success() {
-      return Err(format!("Failed to fetch Firefox Developer Edition versions: {}", response.status()).into());
+      return Err(
+        format!(
+          "Failed to fetch Firefox Developer Edition versions: {}",
+          response.status()
+        )
+        .into(),
+      );
     }
 
     let firefox_response: FirefoxApiResponse = response.json().await?;
@@ -489,7 +537,7 @@ impl ApiClient {
 
     // Extract versions for caching
     let versions: Vec<String> = releases.iter().map(|r| r.version.clone()).collect();
-    
+
     // Cache the results (unless bypassing cache)
     if !no_caching {
       if let Err(e) = self.save_cached_versions("firefox-developer", &versions) {
@@ -500,11 +548,16 @@ impl ApiClient {
     Ok(releases)
   }
 
-  pub async fn fetch_mullvad_releases(&self) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
+  pub async fn fetch_mullvad_releases(
+    &self,
+  ) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
     self.fetch_mullvad_releases_with_caching(false).await
   }
 
-  pub async fn fetch_mullvad_releases_with_caching(&self, no_caching: bool) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
+  pub async fn fetch_mullvad_releases_with_caching(
+    &self,
+    no_caching: bool,
+  ) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
     // Check cache first (unless bypassing)
     if !no_caching {
       if let Some(cached_releases) = self.load_cached_github_releases("mullvad") {
@@ -544,11 +597,16 @@ impl ApiClient {
     Ok(releases)
   }
 
-  pub async fn fetch_zen_releases(&self) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
+  pub async fn fetch_zen_releases(
+    &self,
+  ) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
     self.fetch_zen_releases_with_caching(false).await
   }
 
-  pub async fn fetch_zen_releases_with_caching(&self, no_caching: bool) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
+  pub async fn fetch_zen_releases_with_caching(
+    &self,
+    no_caching: bool,
+  ) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
     // Check cache first (unless bypassing)
     if !no_caching {
       if let Some(cached_releases) = self.load_cached_github_releases("zen") {
@@ -580,11 +638,16 @@ impl ApiClient {
     Ok(releases)
   }
 
-  pub async fn fetch_brave_releases(&self) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
+  pub async fn fetch_brave_releases(
+    &self,
+  ) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
     self.fetch_brave_releases_with_caching(false).await
   }
 
-  pub async fn fetch_brave_releases_with_caching(&self, no_caching: bool) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
+  pub async fn fetch_brave_releases_with_caching(
+    &self,
+    no_caching: bool,
+  ) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
     // Check cache first (unless bypassing)
     if !no_caching {
       if let Some(cached_releases) = self.load_cached_github_releases("brave") {
@@ -608,10 +671,11 @@ impl ApiClient {
       .into_iter()
       .filter_map(|mut release| {
         // Check if this release has a universal DMG asset
-        let has_universal_dmg = release.assets.iter().any(|asset| {
-          asset.name.contains(".dmg") && asset.name.contains("universal")
-        });
-        
+        let has_universal_dmg = release
+          .assets
+          .iter()
+          .any(|asset| asset.name.contains(".dmg") && asset.name.contains("universal"));
+
         if has_universal_dmg {
           // Set is_alpha based on the release name
           // Nightly releases contain "Nightly", stable contain "Release"
@@ -636,10 +700,19 @@ impl ApiClient {
     Ok(filtered_releases)
   }
 
-  pub async fn fetch_chromium_latest_version(&self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+  pub async fn fetch_chromium_latest_version(
+    &self,
+  ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     // Use architecture-aware URL for Chromium
-    let arch = if cfg!(target_arch = "aarch64") { "Mac_Arm" } else { "Mac" };
-    let url = format!("https://commondatastorage.googleapis.com/chromium-browser-snapshots/{}/LAST_CHANGE", arch);
+    let arch = if cfg!(target_arch = "aarch64") {
+      "Mac_Arm"
+    } else {
+      "Mac"
+    };
+    let url = format!(
+      "https://commondatastorage.googleapis.com/chromium-browser-snapshots/{}/LAST_CHANGE",
+      arch
+    );
     let version = self
       .client
       .get(&url)
@@ -654,27 +727,35 @@ impl ApiClient {
     Ok(version)
   }
 
-  pub async fn fetch_chromium_releases_with_caching(&self, no_caching: bool) -> Result<Vec<BrowserRelease>, Box<dyn std::error::Error + Send + Sync>> {
+  pub async fn fetch_chromium_releases_with_caching(
+    &self,
+    no_caching: bool,
+  ) -> Result<Vec<BrowserRelease>, Box<dyn std::error::Error + Send + Sync>> {
     // Check cache first (unless bypassing)
     if !no_caching {
       if let Some(cached_versions) = self.load_cached_versions("chromium") {
-        return Ok(cached_versions.into_iter().map(|version| {
-          BrowserRelease {
-            version: version.clone(),
-            date: "".to_string(), // Cache doesn't store dates
-            is_prerelease: false, // Chromium versions are generally stable builds
-            download_url: None,
-          }
-        }).collect());
+        return Ok(
+          cached_versions
+            .into_iter()
+            .map(|version| {
+              BrowserRelease {
+                version: version.clone(),
+                date: "".to_string(), // Cache doesn't store dates
+                is_prerelease: false, // Chromium versions are generally stable builds
+                download_url: None,
+              }
+            })
+            .collect(),
+        );
       }
     }
 
     println!("Fetching Chromium releases...");
-    
+
     // Get the latest version first
     let latest_version = self.fetch_chromium_latest_version().await?;
     let latest_num: u32 = latest_version.parse().unwrap_or(0);
-    
+
     // Generate a list of recent versions (last 20 builds, going back by 1000 each time)
     let mut versions = Vec::new();
     for i in 0..20 {
@@ -683,7 +764,7 @@ impl ApiClient {
         versions.push(version_num.to_string());
       }
     }
-    
+
     // Cache the results (unless bypassing cache)
     if !no_caching {
       if let Err(e) = self.save_cached_versions("chromium", &versions) {
@@ -691,17 +772,23 @@ impl ApiClient {
       }
     }
 
-    Ok(versions.into_iter().map(|version| {
-      BrowserRelease {
-        version: version.clone(),
-        date: "".to_string(),
-        is_prerelease: false,
-        download_url: None,
-      }
-    }).collect())
+    Ok(
+      versions
+        .into_iter()
+        .map(|version| BrowserRelease {
+          version: version.clone(),
+          date: "".to_string(),
+          is_prerelease: false,
+          download_url: None,
+        })
+        .collect(),
+    )
   }
 
-  pub async fn fetch_tor_releases_with_caching(&self, no_caching: bool) -> Result<Vec<BrowserRelease>, Box<dyn std::error::Error + Send + Sync>> {
+  pub async fn fetch_tor_releases_with_caching(
+    &self,
+    no_caching: bool,
+  ) -> Result<Vec<BrowserRelease>, Box<dyn std::error::Error + Send + Sync>> {
     // Check cache first (unless bypassing)
     if !no_caching {
       if let Some(cached_versions) = self.load_cached_versions("tor-browser") {
@@ -732,7 +819,7 @@ impl ApiClient {
 
     // Parse HTML to extract version directories
     let mut version_candidates = Vec::new();
-    
+
     // Look for directory links in the HTML
     for line in html.lines() {
       if line.contains("<a href=\"") && line.contains("/\">") {
@@ -741,9 +828,12 @@ impl ApiClient {
           let start = start + 9; // Length of "<a href=\""
           if let Some(end) = line[start..].find("/\">") {
             let version = &line[start..start + end];
-            
+
             // Skip parent directory and non-version entries
-            if version != ".." && !version.is_empty() && version.chars().next().unwrap_or('a').is_ascii_digit() {
+            if version != ".."
+              && !version.is_empty()
+              && version.chars().next().unwrap_or('a').is_ascii_digit()
+            {
               version_candidates.push(version.to_string());
             }
           }
@@ -763,7 +853,7 @@ impl ApiClient {
           version_strings.push(version);
         }
       }
-      
+
       // Add a small delay to avoid overwhelming the server
       tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
@@ -788,8 +878,14 @@ impl ApiClient {
     }).collect())
   }
 
-  async fn check_tor_version_has_macos(&self, version: &str) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-    let url = format!("https://archive.torproject.org/tor-package-archive/torbrowser/{}/", version);
+  async fn check_tor_version_has_macos(
+    &self,
+    version: &str,
+  ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    let url = format!(
+      "https://archive.torproject.org/tor-package-archive/torbrowser/{}/",
+      version
+    );
     let html = self
       .client
       .get(&url)
@@ -908,16 +1004,22 @@ mod tests {
   async fn test_firefox_api() {
     let client = ApiClient::new();
     let result = client.fetch_firefox_releases_with_caching(false).await;
-    
+
     match result {
       Ok(releases) => {
         assert!(!releases.is_empty(), "Should have Firefox releases");
-        
+
         // Check that releases have required fields
         let first_release = &releases[0];
-        assert!(!first_release.version.is_empty(), "Version should not be empty");
-        assert!(first_release.download_url.is_some(), "Should have download URL");
-        
+        assert!(
+          !first_release.version.is_empty(),
+          "Version should not be empty"
+        );
+        assert!(
+          first_release.download_url.is_some(),
+          "Should have download URL"
+        );
+
         println!("Firefox API test passed. Found {} releases", releases.len());
         println!("Latest version: {}", first_release.version);
       }
@@ -931,19 +1033,33 @@ mod tests {
   #[tokio::test]
   async fn test_firefox_developer_api() {
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await; // Rate limiting
-    
+
     let client = ApiClient::new();
-    let result = client.fetch_firefox_developer_releases_with_caching(false).await;
-    
+    let result = client
+      .fetch_firefox_developer_releases_with_caching(false)
+      .await;
+
     match result {
       Ok(releases) => {
-        assert!(!releases.is_empty(), "Should have Firefox Developer releases");
-        
+        assert!(
+          !releases.is_empty(),
+          "Should have Firefox Developer releases"
+        );
+
         let first_release = &releases[0];
-        assert!(!first_release.version.is_empty(), "Version should not be empty");
-        assert!(first_release.download_url.is_some(), "Should have download URL");
-        
-        println!("Firefox Developer API test passed. Found {} releases", releases.len());
+        assert!(
+          !first_release.version.is_empty(),
+          "Version should not be empty"
+        );
+        assert!(
+          first_release.download_url.is_some(),
+          "Should have download URL"
+        );
+
+        println!(
+          "Firefox Developer API test passed. Found {} releases",
+          releases.len()
+        );
         println!("Latest version: {}", first_release.version);
       }
       Err(e) => {
@@ -956,17 +1072,20 @@ mod tests {
   #[tokio::test]
   async fn test_mullvad_api() {
     tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await; // Rate limiting
-    
+
     let client = ApiClient::new();
     let result = client.fetch_mullvad_releases().await;
-    
+
     match result {
       Ok(releases) => {
         assert!(!releases.is_empty(), "Should have Mullvad releases");
-        
+
         let first_release = &releases[0];
-        assert!(!first_release.tag_name.is_empty(), "Tag name should not be empty");
-        
+        assert!(
+          !first_release.tag_name.is_empty(),
+          "Tag name should not be empty"
+        );
+
         println!("Mullvad API test passed. Found {} releases", releases.len());
         println!("Latest version: {}", first_release.tag_name);
       }
@@ -980,17 +1099,20 @@ mod tests {
   #[tokio::test]
   async fn test_zen_api() {
     tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await; // Rate limiting
-    
+
     let client = ApiClient::new();
     let result = client.fetch_zen_releases().await;
-    
+
     match result {
       Ok(releases) => {
         assert!(!releases.is_empty(), "Should have Zen releases");
-        
+
         let first_release = &releases[0];
-        assert!(!first_release.tag_name.is_empty(), "Tag name should not be empty");
-        
+        assert!(
+          !first_release.tag_name.is_empty(),
+          "Tag name should not be empty"
+        );
+
         println!("Zen API test passed. Found {} releases", releases.len());
         println!("Latest version: {}", first_release.tag_name);
       }
@@ -1004,14 +1126,17 @@ mod tests {
   #[tokio::test]
   async fn test_brave_api() {
     tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await; // Rate limiting
-    
+
     let client = ApiClient::new();
     let result = client.fetch_brave_releases().await;
-    
+
     match result {
       Ok(releases) => {
         // Note: Brave might not always have macOS releases, so we don't assert non-empty
-        println!("Brave API test passed. Found {} releases with macOS assets", releases.len());
+        println!(
+          "Brave API test passed. Found {} releases with macOS assets",
+          releases.len()
+        );
         if !releases.is_empty() {
           println!("Latest version: {}", releases[0].tag_name);
         }
@@ -1026,15 +1151,18 @@ mod tests {
   #[tokio::test]
   async fn test_chromium_api() {
     tokio::time::sleep(tokio::time::Duration::from_millis(2500)).await; // Rate limiting
-    
+
     let client = ApiClient::new();
     let result = client.fetch_chromium_latest_version().await;
-    
+
     match result {
       Ok(version) => {
         assert!(!version.is_empty(), "Version should not be empty");
-        assert!(version.chars().all(|c| c.is_ascii_digit()), "Version should be numeric");
-        
+        assert!(
+          version.chars().all(|c| c.is_ascii_digit()),
+          "Version should be numeric"
+        );
+
         println!("Chromium API test passed. Latest version: {}", version);
       }
       Err(e) => {
@@ -1047,21 +1175,31 @@ mod tests {
   #[tokio::test]
   async fn test_tor_api() {
     tokio::time::sleep(tokio::time::Duration::from_millis(3000)).await; // Rate limiting
-    
+
     let client = ApiClient::new();
-    
+
     // Use a timeout for this test since TOR API can be slow
     let timeout_duration = tokio::time::Duration::from_secs(30);
-    let result = tokio::time::timeout(timeout_duration, client.fetch_tor_releases_with_caching(false)).await;
-    
+    let result = tokio::time::timeout(
+      timeout_duration,
+      client.fetch_tor_releases_with_caching(false),
+    )
+    .await;
+
     match result {
       Ok(Ok(releases)) => {
         assert!(!releases.is_empty(), "Should have TOR releases");
-        
+
         let first_release = &releases[0];
-        assert!(!first_release.version.is_empty(), "Version should not be empty");
-        assert!(first_release.download_url.is_some(), "Should have download URL");
-        
+        assert!(
+          !first_release.version.is_empty(),
+          "Version should not be empty"
+        );
+        assert!(
+          first_release.download_url.is_some(),
+          "Should have download URL"
+        );
+
         println!("TOR API test passed. Found {} releases", releases.len());
         println!("Latest version: {}", first_release.version);
       }
@@ -1081,14 +1219,17 @@ mod tests {
   #[tokio::test]
   async fn test_tor_version_check() {
     tokio::time::sleep(tokio::time::Duration::from_millis(3500)).await; // Rate limiting
-    
+
     let client = ApiClient::new();
     let result = client.check_tor_version_has_macos("14.0.4").await;
-    
+
     match result {
       Ok(has_macos) => {
         assert!(has_macos, "Version 14.0.4 should have macOS support");
-        println!("TOR version check test passed. Version 14.0.4 has macOS: {}", has_macos);
+        println!(
+          "TOR version check test passed. Version 14.0.4 has macOS: {}",
+          has_macos
+        );
       }
       Err(e) => {
         println!("TOR version check test failed: {}", e);
@@ -1096,4 +1237,4 @@ mod tests {
       }
     }
   }
-} 
+}

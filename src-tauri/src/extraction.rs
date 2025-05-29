@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tauri::Emitter;
 
-use crate::download::DownloadProgress;
 use crate::browser::BrowserType;
+use crate::download::DownloadProgress;
 
 pub struct Extractor;
 
@@ -176,7 +176,7 @@ impl Extractor {
 
     // Find the extracted .app directory or Chromium.app specifically
     let mut app_path: Option<PathBuf> = None;
-    
+
     // First, try to find any .app file in the destination directory
     if let Ok(entries) = fs::read_dir(dest_dir) {
       for entry in entries {
@@ -197,7 +197,7 @@ impl Extractor {
                     let target_path = dest_dir.join(sub_path.file_name().unwrap());
                     fs::rename(&sub_path, &target_path)?;
                     app_path = Some(target_path);
-                    
+
                     // Clean up the now-empty subdirectory
                     let _ = fs::remove_dir_all(&path);
                     break;
@@ -247,16 +247,16 @@ mod tests {
     let temp_dir = TempDir::new().unwrap();
     let fake_archive = temp_dir.path().join("test.rar");
     File::create(&fake_archive).unwrap();
-    
+
     // Create a mock app handle (this won't work in real tests without Tauri runtime)
     // For now, we'll just test the logic without the actual extraction
-    
+
     // Test that unsupported formats return an error
     let extension = fake_archive
       .extension()
       .and_then(|ext| ext.to_str())
       .unwrap_or("");
-    
+
     assert_eq!(extension, "rar");
     // We know this would fail with "Unsupported archive format: rar"
   }
@@ -265,13 +265,13 @@ mod tests {
   fn test_dmg_path_validation() {
     let temp_dir = TempDir::new().unwrap();
     let dmg_path = temp_dir.path().join("test.dmg");
-    
+
     // Test that we can identify DMG files correctly
     let extension = dmg_path
       .extension()
       .and_then(|ext| ext.to_str())
       .unwrap_or("");
-    
+
     assert_eq!(extension, "dmg");
   }
 
@@ -279,13 +279,13 @@ mod tests {
   fn test_zip_path_validation() {
     let temp_dir = TempDir::new().unwrap();
     let zip_path = temp_dir.path().join("test.zip");
-    
+
     // Test that we can identify ZIP files correctly
     let extension = zip_path
       .extension()
       .and_then(|ext| ext.to_str())
       .unwrap_or("");
-    
+
     assert_eq!(extension, "zip");
   }
 
@@ -299,9 +299,9 @@ mod tests {
         .unwrap()
         .as_secs()
     ));
-    
+
     std::thread::sleep(std::time::Duration::from_millis(10));
-    
+
     let mount_point2 = std::env::temp_dir().join(format!(
       "donut_mount_{}",
       std::time::SystemTime::now()
@@ -309,7 +309,7 @@ mod tests {
         .unwrap()
         .as_secs()
     ));
-    
+
     // They should be different (or at least have the potential to be)
     assert!(mount_point1.to_string_lossy().contains("donut_mount_"));
     assert!(mount_point2.to_string_lossy().contains("donut_mount_"));
@@ -318,18 +318,18 @@ mod tests {
   #[test]
   fn test_app_path_detection() {
     let temp_dir = TempDir::new().unwrap();
-    
+
     // Create a fake .app directory
     let app_dir = temp_dir.path().join("TestApp.app");
     std::fs::create_dir_all(&app_dir).unwrap();
-    
+
     // Test finding .app directories
     let entries: Vec<_> = fs::read_dir(temp_dir.path())
       .unwrap()
       .filter_map(Result::ok)
       .filter(|entry| entry.path().extension().map_or(false, |ext| ext == "app"))
       .collect();
-    
+
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].file_name(), "TestApp.app");
   }
@@ -337,17 +337,17 @@ mod tests {
   #[test]
   fn test_nested_app_detection() {
     let temp_dir = TempDir::new().unwrap();
-    
+
     // Create a nested structure like Chromium
     let chrome_dir = temp_dir.path().join("chrome-mac");
     std::fs::create_dir_all(&chrome_dir).unwrap();
-    
+
     let app_dir = chrome_dir.join("Chromium.app");
     std::fs::create_dir_all(&app_dir).unwrap();
-    
+
     // Test finding nested .app directories
     let mut found_app = false;
-    
+
     if let Ok(entries) = fs::read_dir(temp_dir.path()) {
       for entry in entries {
         if let Ok(entry) = entry {
@@ -368,7 +368,7 @@ mod tests {
         }
       }
     }
-    
+
     assert!(found_app);
   }
-} 
+}

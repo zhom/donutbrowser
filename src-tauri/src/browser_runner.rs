@@ -9,8 +9,10 @@ use sysinfo::{Pid, System};
 use tauri::Emitter;
 
 use crate::browser::{create_browser, BrowserType, ProxySettings};
-use crate::browser_version_service::{BrowserVersionService, BrowserVersionInfo, BrowserVersionsResult};
-use crate::download::{Downloader, DownloadProgress};
+use crate::browser_version_service::{
+  BrowserVersionInfo, BrowserVersionService, BrowserVersionsResult,
+};
+use crate::download::{DownloadProgress, Downloader};
 use crate::downloaded_browsers::DownloadedBrowsersRegistry;
 use crate::extraction::Extractor;
 
@@ -39,7 +41,12 @@ impl BrowserRunner {
   }
 
   // Helper function to check if a process matches TOR/Mullvad browser
-  fn is_tor_or_mullvad_browser(&self, exe_name: &str, cmd: &[std::ffi::OsString], browser_type: &str) -> bool {
+  fn is_tor_or_mullvad_browser(
+    &self,
+    exe_name: &str,
+    cmd: &[std::ffi::OsString],
+    browser_type: &str,
+  ) -> bool {
     match browser_type {
       "mullvad-browser" => {
         // More specific detection for Mullvad Browser
@@ -47,30 +54,30 @@ impl BrowserRunner {
         let has_firefox_exe = exe_name == "firefox" || exe_name.contains("firefox-bin");
         let has_mullvad_in_cmd = cmd.iter().any(|arg| {
           let arg_str = arg.to_str().unwrap_or("");
-          arg_str.contains("Mullvad Browser.app") || 
-          arg_str.contains("mullvad") ||
-          arg_str.contains("Mullvad") ||
-          arg_str.contains("/Applications/Mullvad Browser.app/") ||
-          arg_str.contains("MullvadBrowser")
+          arg_str.contains("Mullvad Browser.app")
+            || arg_str.contains("mullvad")
+            || arg_str.contains("Mullvad")
+            || arg_str.contains("/Applications/Mullvad Browser.app/")
+            || arg_str.contains("MullvadBrowser")
         });
-        
+
         has_mullvad_in_exe || (has_firefox_exe && has_mullvad_in_cmd)
-      },
+      }
       "tor-browser" => {
         // More specific detection for TOR Browser
         let has_tor_in_exe = exe_name.contains("tor");
         let has_firefox_exe = exe_name == "firefox" || exe_name.contains("firefox-bin");
         let has_tor_in_cmd = cmd.iter().any(|arg| {
           let arg_str = arg.to_str().unwrap_or("");
-          arg_str.contains("Tor Browser.app") || 
-          arg_str.contains("tor-browser") ||
-          arg_str.contains("TorBrowser") ||
-          arg_str.contains("/Applications/Tor Browser.app/") ||
-          arg_str.contains("TorBrowser-Data")
+          arg_str.contains("Tor Browser.app")
+            || arg_str.contains("tor-browser")
+            || arg_str.contains("TorBrowser")
+            || arg_str.contains("/Applications/Tor Browser.app/")
+            || arg_str.contains("TorBrowser-Data")
         });
-        
+
         has_tor_in_exe || (has_firefox_exe && has_tor_in_cmd)
-      },
+      }
       _ => false,
     }
   }
@@ -78,37 +85,49 @@ impl BrowserRunner {
   // Helper function to validate PID for TOR/Mullvad browsers
   fn validate_tor_mullvad_pid(&self, profile: &BrowserProfile, pid: u32) -> bool {
     let system = System::new_all();
-    
+
     if let Some(process) = system.process(Pid::from(pid as usize)) {
       let exe_name = process.name().to_string_lossy().to_lowercase();
       let cmd = process.cmd();
-      
+
       // Check if this is the correct browser type
       let is_correct_browser = match profile.browser.as_str() {
         "mullvad-browser" => self.is_tor_or_mullvad_browser(&exe_name, &cmd, "mullvad-browser"),
         "tor-browser" => self.is_tor_or_mullvad_browser(&exe_name, &cmd, "tor-browser"),
         _ => return false,
       };
-      
+
       if !is_correct_browser {
-        println!("PID {} is not the correct browser type for {}", pid, profile.browser);
+        println!(
+          "PID {} is not the correct browser type for {}",
+          pid, profile.browser
+        );
         return false;
       }
-      
+
       // Check profile path match
       let profile_path_match = cmd.iter().any(|s| {
         let arg = s.to_str().unwrap_or("");
-        arg == &profile.profile_path || 
-        arg == format!("-profile={}", profile.profile_path) ||
-        (arg == "-profile" && cmd.iter().any(|s2| s2.to_str().unwrap_or("") == &profile.profile_path))
+        arg == &profile.profile_path
+          || arg == format!("-profile={}", profile.profile_path)
+          || (arg == "-profile"
+            && cmd
+              .iter()
+              .any(|s2| s2.to_str().unwrap_or("") == &profile.profile_path))
       });
-      
+
       if !profile_path_match {
-        println!("PID {} does not match profile path for {}", pid, profile.name);
+        println!(
+          "PID {} does not match profile path for {}",
+          pid, profile.name
+        );
         return false;
       }
-      
-      println!("PID {} validated successfully for {} profile {}", pid, profile.browser, profile.name);
+
+      println!(
+        "PID {} validated successfully for {} profile {}",
+        pid, profile.browser, profile.name
+      );
       return true;
     } else {
       println!("PID {} does not exist", pid);
@@ -117,14 +136,22 @@ impl BrowserRunner {
   }
   pub fn get_binaries_dir(&self) -> PathBuf {
     let mut path = self.base_dirs.data_local_dir().to_path_buf();
-    path.push(if cfg!(debug_assertions) { "DonutBrowserDev" } else { "DonutBrowser" });
+    path.push(if cfg!(debug_assertions) {
+      "DonutBrowserDev"
+    } else {
+      "DonutBrowser"
+    });
     path.push("binaries");
     path
   }
 
   pub fn get_profiles_dir(&self) -> PathBuf {
     let mut path = self.base_dirs.data_local_dir().to_path_buf();
-    path.push(if cfg!(debug_assertions) { "DonutBrowserDev" } else { "DonutBrowser" });
+    path.push(if cfg!(debug_assertions) {
+      "DonutBrowserDev"
+    } else {
+      "DonutBrowser"
+    });
     path.push("profiles");
     path
   }
@@ -244,7 +271,9 @@ impl BrowserRunner {
 
     // Check if the browser is currently running
     if profile.process_id.is_some() {
-      return Err("Cannot update version while browser is running. Please stop the browser first.".into());
+      return Err(
+        "Cannot update version while browser is running. Please stop the browser first.".into(),
+      );
     }
 
     // Verify the new version is downloaded
@@ -270,24 +299,20 @@ impl BrowserRunner {
     vec![
       // Disable default browser check
       "user_pref(\"browser.shell.checkDefaultBrowser\", false);".to_string(),
-      
       // Disable automatic updates
       "user_pref(\"app.update.enabled\", false);".to_string(),
       "user_pref(\"app.update.auto\", false);".to_string(),
       "user_pref(\"app.update.mode\", 0);".to_string(),
       "user_pref(\"app.update.service.enabled\", false);".to_string(),
       "user_pref(\"app.update.silent\", false);".to_string(),
-      
       // Disable update checking entirely
       "user_pref(\"app.update.checkInstallTime\", false);".to_string(),
       "user_pref(\"app.update.url\", \"\");".to_string(),
       "user_pref(\"app.update.url.manual\", \"\");".to_string(),
       "user_pref(\"app.update.url.details\", \"\");".to_string(),
-      
       // Disable background update downloads
       "user_pref(\"app.update.download.attemptOnce\", false);".to_string(),
       "user_pref(\"app.update.idletime\", -1);".to_string(),
-      
       // Additional update-related preferences for completeness
       "user_pref(\"security.tls.insecure_fallback_hosts\", \"\");".to_string(),
       "user_pref(\"app.update.staging.enabled\", false);".to_string(),
@@ -436,41 +461,52 @@ impl BrowserRunner {
     browser_dir.push(&profile.browser);
     browser_dir.push(&profile.version);
 
-    let executable_path = browser.get_executable_path(&browser_dir).expect("Failed to get executable path");
+    let executable_path = browser
+      .get_executable_path(&browser_dir)
+      .expect("Failed to get executable path");
 
     // Get launch arguments
-    let browser_args =
-      browser.create_launch_args(&profile.profile_path, profile.proxy.as_ref(), url).expect("Failed to create launch arguments");
+    let browser_args = browser
+      .create_launch_args(&profile.profile_path, profile.proxy.as_ref(), url)
+      .expect("Failed to create launch arguments");
 
     // Launch browser
     let child = Command::new(executable_path).args(&browser_args).spawn()?;
     let launcher_pid = child.id();
 
-    println!("Launched browser with launcher PID: {} for profile: {}", launcher_pid, profile.name);
+    println!(
+      "Launched browser with launcher PID: {} for profile: {}",
+      launcher_pid, profile.name
+    );
 
     // For TOR and Mullvad browsers, we need to find the actual browser process
     // because they use launcher scripts that spawn the real browser process
-    let actual_pid = if matches!(browser_type, BrowserType::TorBrowser | BrowserType::MullvadBrowser) {
+    let actual_pid = if matches!(
+      browser_type,
+      BrowserType::TorBrowser | BrowserType::MullvadBrowser
+    ) {
       println!("Waiting for TOR/Mullvad browser to fully start...");
-      
+
       // Wait a bit for the browser to fully start
       tokio::time::sleep(tokio::time::Duration::from_millis(3000)).await;
-      
+
       // Search for the actual browser process
       let system = System::new_all();
       let mut found_pid: Option<u32> = None;
-      
+
       // Try multiple times to find the process as it might take time to start
       for attempt in 1..=5 {
         println!("Attempt {} to find actual browser process...", attempt);
-        
+
         for (pid, process) in system.processes() {
           let cmd = process.cmd();
           if cmd.len() >= 2 {
             // Check if this is the right browser executable
             let exe_name = process.name().to_string_lossy().to_lowercase();
             let is_correct_browser = match profile.browser.as_str() {
-              "mullvad-browser" => self.is_tor_or_mullvad_browser(&exe_name, &cmd, "mullvad-browser"),
+              "mullvad-browser" => {
+                self.is_tor_or_mullvad_browser(&exe_name, &cmd, "mullvad-browser")
+              }
               "tor-browser" => self.is_tor_or_mullvad_browser(&exe_name, &cmd, "tor-browser"),
               _ => false,
             };
@@ -482,27 +518,34 @@ impl BrowserRunner {
             // Check for profile path match
             let profile_path_match = cmd.iter().any(|s| {
               let arg = s.to_str().unwrap_or("");
-              arg == &profile.profile_path || 
-              arg == format!("-profile={}", profile.profile_path) ||
-              (arg == "-profile" && cmd.iter().any(|s2| s2.to_str().unwrap_or("") == &profile.profile_path))
+              arg == &profile.profile_path
+                || arg == format!("-profile={}", profile.profile_path)
+                || (arg == "-profile"
+                  && cmd
+                    .iter()
+                    .any(|s2| s2.to_str().unwrap_or("") == &profile.profile_path))
             });
-            
+
             if profile_path_match {
               found_pid = Some(pid.as_u32());
-              println!("Found actual browser process with PID: {} for profile: {}", pid.as_u32(), profile.name);
+              println!(
+                "Found actual browser process with PID: {} for profile: {}",
+                pid.as_u32(),
+                profile.name
+              );
               break;
             }
           }
         }
-        
+
         if found_pid.is_some() {
           break;
         }
-        
+
         // Wait before next attempt
         tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
       }
-      
+
       found_pid.unwrap_or(launcher_pid)
     } else {
       // For other browsers, the launcher PID is usually the actual browser PID
@@ -515,9 +558,14 @@ impl BrowserRunner {
     updated_profile.last_launch = Some(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs());
 
     // Save the updated profile
-    self.save_process_info(&updated_profile).expect("Failed to save process info");
+    self
+      .save_process_info(&updated_profile)
+      .expect("Failed to save process info");
 
-    println!("Browser launched successfully with PID: {} for profile: {}", actual_pid, profile.name);
+    println!(
+      "Browser launched successfully with PID: {} for profile: {}",
+      actual_pid, profile.name
+    );
     Ok(updated_profile)
   }
 
@@ -536,7 +584,8 @@ impl BrowserRunner {
 
     // Get the updated profile with current PID
     let profiles = self.list_profiles().expect("Failed to list profiles");
-    let updated_profile = profiles.into_iter()
+    let updated_profile = profiles
+      .into_iter()
       .find(|p| p.name == profile.name)
       .unwrap_or_else(|| profile.clone());
 
@@ -554,7 +603,7 @@ impl BrowserRunner {
         #[cfg(target_os = "macos")]
         {
           let pid = updated_profile.process_id.unwrap();
-          
+
           // First try: Use Firefox remote command (most reliable for these browsers)
           println!("Trying Firefox remote command for PID: {}", pid);
           let mut browser_dir = self.get_binaries_dir();
@@ -570,9 +619,7 @@ impl BrowserRunner {
               url.to_string(),
             ];
 
-            let remote_output = Command::new(executable_path)
-              .args(&remote_args)
-              .output();
+            let remote_output = Command::new(executable_path).args(&remote_args).output();
 
             match remote_output {
               Ok(output) if output.status.success() => {
@@ -581,17 +628,26 @@ impl BrowserRunner {
               }
               Ok(output) => {
                 let stderr = String::from_utf8_lossy(&output.stderr);
-                println!("Firefox remote command failed with stderr: {}, trying AppleScript fallback", stderr);
+                println!(
+                  "Firefox remote command failed with stderr: {}, trying AppleScript fallback",
+                  stderr
+                );
               }
               Err(e) => {
-                println!("Firefox remote command error: {}, trying AppleScript fallback", e);
+                println!(
+                  "Firefox remote command error: {}, trying AppleScript fallback",
+                  e
+                );
               }
             }
           }
 
           // Fallback: Use AppleScript if remote command fails
-          let escaped_url = url.replace("\"", "\\\"").replace("\\", "\\\\").replace("'", "\\'");
-          
+          let escaped_url = url
+            .replace("\"", "\\\"")
+            .replace("\\", "\\\\")
+            .replace("'", "\\'");
+
           let script = format!(
             r#"
 try
@@ -660,18 +716,22 @@ end try
             pid, pid, escaped_url, pid
           );
 
-          println!("Executing AppleScript fallback for Firefox-based browser (PID: {})...", pid);
-          let output = Command::new("osascript")
-            .args(["-e", &script])
-            .output()?;
+          println!(
+            "Executing AppleScript fallback for Firefox-based browser (PID: {})...",
+            pid
+          );
+          let output = Command::new("osascript").args(["-e", &script]).output()?;
 
           if !output.status.success() {
             let error_msg = String::from_utf8_lossy(&output.stderr);
             println!("AppleScript failed: {}", error_msg);
-            return Err(format!(
-              "Both Firefox remote command and AppleScript failed. AppleScript error: {}",
-              error_msg
-            ).into());
+            return Err(
+              format!(
+                "Both Firefox remote command and AppleScript failed. AppleScript error: {}",
+                error_msg
+              )
+              .into(),
+            );
           } else {
             println!("AppleScript succeeded");
           }
@@ -688,19 +748,17 @@ end try
           let executable_path = browser.get_executable_path(&browser_dir)?;
 
           let output = Command::new(executable_path)
-            .args([
-              "-profile",
-              &updated_profile.profile_path,
-              "-new-tab",
-              url,
-            ])
+            .args(["-profile", &updated_profile.profile_path, "-new-tab", url])
             .output()?;
 
           if !output.status.success() {
-            return Err(format!(
-              "Failed to open URL in existing browser: {}",
-              String::from_utf8_lossy(&output.stderr)
-            ).into());
+            return Err(
+              format!(
+                "Failed to open URL in existing browser: {}",
+                String::from_utf8_lossy(&output.stderr)
+              )
+              .into(),
+            );
           }
         }
       }
@@ -709,25 +767,31 @@ end try
         #[cfg(target_os = "macos")]
         {
           let pid = updated_profile.process_id.unwrap();
-          
-          println!("Opening URL in TOR/Mullvad browser using file-based approach (PID: {})", pid);
-          
+
+          println!(
+            "Opening URL in TOR/Mullvad browser using file-based approach (PID: {})",
+            pid
+          );
+
           // Validate that we have the correct PID for this TOR/Mullvad browser
           if !self.validate_tor_mullvad_pid(&updated_profile, pid) {
-            return Err(format!(
-              "PID {} is not valid for {} profile {}. The browser process may have changed.",
-              pid, updated_profile.browser, updated_profile.name
-            ).into());
+            return Err(
+              format!(
+                "PID {} is not valid for {} profile {}. The browser process may have changed.",
+                pid, updated_profile.browser, updated_profile.name
+              )
+              .into(),
+            );
           }
-          
+
           // Method 1: Try using a temporary HTML file approach that doesn't require accessibility permissions
           println!("Attempting file-based URL opening for TOR/Mullvad browser");
-          
+
           // Create a temporary HTML file that redirects to the target URL
           let temp_dir = std::env::temp_dir();
           let temp_file_name = format!("donut_browser_url_{}.html", std::process::id());
           let temp_file_path = temp_dir.join(&temp_file_name);
-          
+
           let html_content = format!(
             r#"<!DOCTYPE html>
 <html>
@@ -745,78 +809,74 @@ end try
 </html>"#,
             url, url, url, url
           );
-          
+
           // Write the HTML file
           match std::fs::write(&temp_file_path, html_content) {
             Ok(()) => {
               println!("Created temporary HTML file: {:?}", temp_file_path);
-              
+
               // Get the browser executable path to use with 'open'
               let mut browser_dir = self.get_binaries_dir();
               browser_dir.push(&updated_profile.browser);
               browser_dir.push(&updated_profile.version);
-              
-                             let browser = create_browser(browser_type.clone());
-               if let Ok(executable_path) = browser.get_executable_path(&browser_dir) {
-                 // Use 'open' command to open the HTML file with the specific browser instance
-                 // This approach works because it uses the existing browser process
-                 let open_result = Command::new("open")
-                   .args([
-                     "-a",
-                     executable_path.to_str().unwrap(),
-                     temp_file_path.to_str().unwrap(),
-                   ])
-                   .output();
-                 
-                 // Clean up the temporary file after a short delay
-                 let temp_file_path_clone = temp_file_path.clone();
-                 tokio::spawn(async move {
-                   tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-                   let _ = std::fs::remove_file(temp_file_path_clone);
-                 });
-                 
-                 match open_result {
-                   Ok(output) if output.status.success() => {
-                     println!("Successfully opened URL using file-based approach");
-                     return Ok(());
-                   }
-                   Ok(output) => {
-                     let stderr = String::from_utf8_lossy(&output.stderr);
-                     println!("File-based approach failed: {}", stderr);
-                   }
-                   Err(e) => {
-                     println!("File-based approach error: {}", e);
-                   }
-                 }
-               }
-               
-               // Clean up temp file if the approach failed
-               let _ = std::fs::remove_file(&temp_file_path);
-             }
-             Err(e) => {
-               println!("Failed to create temporary HTML file: {}", e);
-             }
-           }
-           
-           // Method 2: Try using the 'open' command directly with the URL
-           println!("Attempting direct URL opening with 'open' command");
-           
-           // Get the browser executable path
-           let mut browser_dir = self.get_binaries_dir();
-           browser_dir.push(&updated_profile.browser);
-           browser_dir.push(&updated_profile.version);
-           
-           let browser = create_browser(browser_type.clone());
+
+              let browser = create_browser(browser_type.clone());
+              if let Ok(executable_path) = browser.get_executable_path(&browser_dir) {
+                // Use 'open' command to open the HTML file with the specific browser instance
+                // This approach works because it uses the existing browser process
+                let open_result = Command::new("open")
+                  .args([
+                    "-a",
+                    executable_path.to_str().unwrap(),
+                    temp_file_path.to_str().unwrap(),
+                  ])
+                  .output();
+
+                // Clean up the temporary file after a short delay
+                let temp_file_path_clone = temp_file_path.clone();
+                tokio::spawn(async move {
+                  tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                  let _ = std::fs::remove_file(temp_file_path_clone);
+                });
+
+                match open_result {
+                  Ok(output) if output.status.success() => {
+                    println!("Successfully opened URL using file-based approach");
+                    return Ok(());
+                  }
+                  Ok(output) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    println!("File-based approach failed: {}", stderr);
+                  }
+                  Err(e) => {
+                    println!("File-based approach error: {}", e);
+                  }
+                }
+              }
+
+              // Clean up temp file if the approach failed
+              let _ = std::fs::remove_file(&temp_file_path);
+            }
+            Err(e) => {
+              println!("Failed to create temporary HTML file: {}", e);
+            }
+          }
+
+          // Method 2: Try using the 'open' command directly with the URL
+          println!("Attempting direct URL opening with 'open' command");
+
+          // Get the browser executable path
+          let mut browser_dir = self.get_binaries_dir();
+          browser_dir.push(&updated_profile.browser);
+          browser_dir.push(&updated_profile.version);
+
+          let browser = create_browser(browser_type.clone());
           if let Ok(executable_path) = browser.get_executable_path(&browser_dir) {
             // Try to open the URL directly with the browser
             let direct_open_result = Command::new("open")
-              .args([
-                "-a",
-                executable_path.to_str().unwrap(),
-                url,
-              ])
+              .args(["-a", executable_path.to_str().unwrap(), url])
               .output();
-            
+
             match direct_open_result {
               Ok(output) if output.status.success() => {
                 println!("Successfully opened URL using direct 'open' command");
@@ -831,10 +891,10 @@ end try
               }
             }
           }
-          
+
           // Method 3: Try using osascript without accessibility features (just to bring window to front)
           println!("Attempting minimal AppleScript approach without accessibility features");
-          
+
           let minimal_script = format!(
             r#"
 try
@@ -865,12 +925,10 @@ end try
               let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
               if output.status.success() && result.contains("successfully") {
                 println!("Successfully brought browser to front: {}", result);
-                
+
                 // Now try to use the system's default URL opening mechanism
-                let system_open_result = Command::new("open")
-                  .args([url])
-                  .output();
-                
+                let system_open_result = Command::new("open").args([url]).output();
+
                 match system_open_result {
                   Ok(output) if output.status.success() => {
                     println!("Successfully opened URL using system default handler");
@@ -892,7 +950,7 @@ end try
               println!("Minimal AppleScript execution error: {}", e);
             }
           }
-          
+
           // If all methods fail, return a more helpful error message
           return Err(format!(
             "Failed to open URL in existing TOR/Mullvad browser (PID: {}). All methods failed:\n\
@@ -918,7 +976,7 @@ end try
         #[cfg(target_os = "macos")]
         {
           let pid = updated_profile.process_id.unwrap();
-          
+
           // First, try using the browser's built-in URL opening capability
           println!("Trying Chromium URL opening for PID: {}", pid);
           let mut browser_dir = self.get_binaries_dir();
@@ -942,17 +1000,23 @@ end try
               }
               Ok(output) => {
                 let stderr = String::from_utf8_lossy(&output.stderr);
-                println!("Chromium URL opening failed: {}, trying AppleScript", stderr);
+                println!(
+                  "Chromium URL opening failed: {}, trying AppleScript",
+                  stderr
+                );
               }
               Err(e) => {
                 println!("Chromium URL opening error: {}, trying AppleScript", e);
               }
             }
           }
-          
+
           // Fallback to AppleScript with more precise targeting
-          let escaped_url = url.replace("\"", "\\\"").replace("\\", "\\\\").replace("'", "\\'");
-          
+          let escaped_url = url
+            .replace("\"", "\\\"")
+            .replace("\\", "\\\\")
+            .replace("'", "\\'");
+
           let script = format!(
             r#"
 try
@@ -1021,18 +1085,22 @@ end try
             pid, pid, escaped_url, pid
           );
 
-          println!("Executing AppleScript for Chromium-based browser (PID: {})...", pid);
-          let output = Command::new("osascript")
-            .args(["-e", &script])
-            .output()?;
+          println!(
+            "Executing AppleScript for Chromium-based browser (PID: {})...",
+            pid
+          );
+          let output = Command::new("osascript").args(["-e", &script]).output()?;
 
           if !output.status.success() {
             let error_msg = String::from_utf8_lossy(&output.stderr);
             println!("AppleScript failed: {}", error_msg);
-            return Err(format!(
-              "Failed to open URL in existing Chromium-based browser: {}",
-              error_msg
-            ).into());
+            return Err(
+              format!(
+                "Failed to open URL in existing Chromium-based browser: {}",
+                error_msg
+              )
+              .into(),
+            );
           } else {
             println!("AppleScript succeeded");
           }
@@ -1057,10 +1125,13 @@ end try
             .output()?;
 
           if !output.status.success() {
-            return Err(format!(
-              "Failed to open URL in existing Chromium-based browser: {}",
-              String::from_utf8_lossy(&output.stderr)
-            ).into());
+            return Err(
+              format!(
+                "Failed to open URL in existing Chromium-based browser: {}",
+                String::from_utf8_lossy(&output.stderr)
+              )
+              .into(),
+            );
           }
         }
       }
@@ -1077,42 +1148,54 @@ end try
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
     // Get the most up-to-date profile data
     let profiles = self.list_profiles().expect("Failed to list profiles");
-    let updated_profile = profiles.into_iter()
+    let updated_profile = profiles
+      .into_iter()
       .find(|p| p.name == profile.name)
       .unwrap_or_else(|| profile.clone());
 
     // Check if browser is already running
-    let is_running = self.check_browser_status(app_handle.clone(), &updated_profile).await?;
-    
+    let is_running = self
+      .check_browser_status(app_handle.clone(), &updated_profile)
+      .await?;
+
     // Get the updated profile again after status check (PID might have been updated)
     let profiles = self.list_profiles().expect("Failed to list profiles");
-    let final_profile = profiles.into_iter()
+    let final_profile = profiles
+      .into_iter()
       .find(|p| p.name == profile.name)
       .unwrap_or_else(|| updated_profile.clone());
-    
-    println!("Browser status check - Profile: {}, Running: {}, URL: {:?}, PID: {:?}", 
-             final_profile.name, is_running, url, final_profile.process_id);
+
+    println!(
+      "Browser status check - Profile: {}, Running: {}, URL: {:?}, PID: {:?}",
+      final_profile.name, is_running, url, final_profile.process_id
+    );
 
     if is_running && url.is_some() {
       // Browser is running and we have a URL to open
       println!("Opening URL in existing browser: {}", url.as_ref().unwrap());
-      
+
       // For TOR/Mullvad browsers, add extra verification
-      if matches!(final_profile.browser.as_str(), "tor-browser" | "mullvad-browser") {
+      if matches!(
+        final_profile.browser.as_str(),
+        "tor-browser" | "mullvad-browser"
+      ) {
         println!("TOR/Mullvad browser detected - ensuring we have correct PID");
         if final_profile.process_id.is_none() {
           println!("ERROR: No PID found for running TOR/Mullvad browser - this should not happen");
           return Err("No PID found for running browser".into());
         }
       }
-      match self.open_url_in_existing_browser(app_handle, &final_profile, url.as_ref().unwrap()).await {
+      match self
+        .open_url_in_existing_browser(app_handle, &final_profile, url.as_ref().unwrap())
+        .await
+      {
         Ok(()) => {
           println!("Successfully opened URL in existing browser");
           Ok(final_profile)
         }
         Err(e) => {
           println!("Failed to open URL in existing browser: {}", e);
-          
+
           // For Mullvad and Tor browsers, don't fall back to new instance since they use -no-remote
           // and can't have multiple instances with the same profile
           match final_profile.browser.as_str() {
@@ -1123,7 +1206,10 @@ end try
               ).into());
             }
             _ => {
-              println!("Falling back to new instance for browser: {}", final_profile.browser);
+              println!(
+                "Falling back to new instance for browser: {}",
+                final_profile.browser
+              );
               // Fallback to launching a new instance for other browsers
               self.launch_browser(&final_profile, url).await
             }
@@ -1197,7 +1283,11 @@ end try
 
   pub fn get_saved_mullvad_releases(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let mut data_path = self.base_dirs.data_local_dir().to_path_buf();
-    data_path.push(if cfg!(debug_assertions) { "DonutBrowserDev" } else { "DonutBrowser" });
+    data_path.push(if cfg!(debug_assertions) {
+      "DonutBrowserDev"
+    } else {
+      "DonutBrowser"
+    });
     data_path.push("data");
     let releases_file = data_path.join("mullvad_releases.json");
 
@@ -1207,7 +1297,11 @@ end try
 
     let mut versions = Vec::new();
     let mut browser_dir = self.base_dirs.data_local_dir().to_path_buf();
-    browser_dir.push(if cfg!(debug_assertions) { "DonutBrowserDev" } else { "DonutBrowser" });
+    browser_dir.push(if cfg!(debug_assertions) {
+      "DonutBrowserDev"
+    } else {
+      "DonutBrowser"
+    });
     browser_dir.push("binaries");
     browser_dir.push("mullvad-browser");
     for entry in fs::read_dir(browser_dir)? {
@@ -1275,28 +1369,40 @@ end try
         let profile_path_match = cmd.iter().any(|s| {
           let arg = s.to_str().unwrap_or("");
           // For Firefox-based browsers, check for exact profile path match
-          if profile.browser == "tor-browser" || profile.browser == "firefox" || 
-             profile.browser == "firefox-developer" || profile.browser == "mullvad-browser" || 
-             profile.browser == "zen" {
-            arg == &profile.profile_path || 
-            arg == format!("-profile={}", profile.profile_path) ||
-            (arg == "-profile" && cmd.iter().any(|s2| s2.to_str().unwrap_or("") == &profile.profile_path))
+          if profile.browser == "tor-browser"
+            || profile.browser == "firefox"
+            || profile.browser == "firefox-developer"
+            || profile.browser == "mullvad-browser"
+            || profile.browser == "zen"
+          {
+            arg == &profile.profile_path
+              || arg == format!("-profile={}", profile.profile_path)
+              || (arg == "-profile"
+                && cmd
+                  .iter()
+                  .any(|s2| s2.to_str().unwrap_or("") == &profile.profile_path))
           } else {
             // For Chromium-based browsers, check for user-data-dir
-            arg.contains(&format!("--user-data-dir={}", profile.profile_path)) || 
-            arg == &profile.profile_path
+            arg.contains(&format!("--user-data-dir={}", profile.profile_path))
+              || arg == &profile.profile_path
           }
         });
-        
+
         if profile_path_match {
           is_running = true;
           found_pid = Some(pid);
-          println!("Found existing browser process with PID: {} for profile: {}", pid, profile.name);
+          println!(
+            "Found existing browser process with PID: {} for profile: {}",
+            pid, profile.name
+          );
         } else {
           println!("PID {} exists but doesn't match our profile path exactly, searching for correct process...", pid);
         }
       } else {
-        println!("Stored PID {} no longer exists, searching for browser process...", pid);
+        println!(
+          "Stored PID {} no longer exists, searching for browser process...",
+          pid
+        );
       }
     }
 
@@ -1308,7 +1414,12 @@ end try
           // Check if this is the right browser executable first
           let exe_name = process.name().to_string_lossy().to_lowercase();
           let is_correct_browser = match profile.browser.as_str() {
-            "firefox" => exe_name.contains("firefox") && !exe_name.contains("developer") && !exe_name.contains("tor") && !exe_name.contains("mullvad"),
+            "firefox" => {
+              exe_name.contains("firefox")
+                && !exe_name.contains("developer")
+                && !exe_name.contains("tor")
+                && !exe_name.contains("mullvad")
+            }
             "firefox-developer" => exe_name.contains("firefox") && exe_name.contains("developer"),
             "mullvad-browser" => self.is_tor_or_mullvad_browser(&exe_name, &cmd, "mullvad-browser"),
             "tor-browser" => self.is_tor_or_mullvad_browser(&exe_name, &cmd, "tor-browser"),
@@ -1326,24 +1437,34 @@ end try
           let profile_path_match = cmd.iter().any(|s| {
             let arg = s.to_str().unwrap_or("");
             // For Firefox-based browsers, check for exact profile path match
-            if profile.browser == "tor-browser" || profile.browser == "firefox" || 
-               profile.browser == "firefox-developer" || profile.browser == "mullvad-browser" || 
-               profile.browser == "zen" {
-              arg == &profile.profile_path || 
-              arg == format!("-profile={}", profile.profile_path) ||
-              (arg == "-profile" && cmd.iter().any(|s2| s2.to_str().unwrap_or("") == &profile.profile_path))
+            if profile.browser == "tor-browser"
+              || profile.browser == "firefox"
+              || profile.browser == "firefox-developer"
+              || profile.browser == "mullvad-browser"
+              || profile.browser == "zen"
+            {
+              arg == &profile.profile_path
+                || arg == format!("-profile={}", profile.profile_path)
+                || (arg == "-profile"
+                  && cmd
+                    .iter()
+                    .any(|s2| s2.to_str().unwrap_or("") == &profile.profile_path))
             } else {
               // For Chromium-based browsers, check for user-data-dir
-              arg.contains(&format!("--user-data-dir={}", profile.profile_path)) || 
-              arg == &profile.profile_path
+              arg.contains(&format!("--user-data-dir={}", profile.profile_path))
+                || arg == &profile.profile_path
             }
           });
-          
+
           if profile_path_match {
             // Found a matching process
             found_pid = Some(pid.as_u32());
             is_running = true;
-            println!("Found browser process with PID: {} for profile: {}", pid.as_u32(), profile.name);
+            println!(
+              "Found browser process with PID: {} for profile: {}",
+              pid.as_u32(),
+              profile.name
+            );
             break;
           }
         }
@@ -1357,7 +1478,10 @@ end try
         if let Err(e) = self.save_process_info(&inner_profile) {
           println!("Warning: Failed to update process info: {}", e);
         } else {
-          println!("Updated process ID for profile '{}' to: {}", inner_profile.name, pid);
+          println!(
+            "Updated process ID for profile '{}' to: {}",
+            inner_profile.name, pid
+          );
         }
       }
     } else if is_running {
@@ -1441,7 +1565,12 @@ end try
           // Check if this is the right browser executable first
           let exe_name = process.name().to_string_lossy().to_lowercase();
           let is_correct_browser = match profile.browser.as_str() {
-            "firefox" => exe_name.contains("firefox") && !exe_name.contains("developer") && !exe_name.contains("tor") && !exe_name.contains("mullvad"),
+            "firefox" => {
+              exe_name.contains("firefox")
+                && !exe_name.contains("developer")
+                && !exe_name.contains("tor")
+                && !exe_name.contains("mullvad")
+            }
             "firefox-developer" => exe_name.contains("firefox") && exe_name.contains("developer"),
             "mullvad-browser" => self.is_tor_or_mullvad_browser(&exe_name, &cmd, "mullvad-browser"),
             "tor-browser" => self.is_tor_or_mullvad_browser(&exe_name, &cmd, "tor-browser"),
@@ -1459,17 +1588,20 @@ end try
           let profile_path_match = cmd.iter().any(|s| {
             let arg = s.to_str().unwrap_or("");
             // For Firefox-based browsers, check for exact profile path match
-            if profile.browser == "tor-browser" || profile.browser == "firefox" || 
-               profile.browser == "firefox-developer" || profile.browser == "mullvad-browser" || 
-               profile.browser == "zen" {
+            if profile.browser == "tor-browser"
+              || profile.browser == "firefox"
+              || profile.browser == "firefox-developer"
+              || profile.browser == "mullvad-browser"
+              || profile.browser == "zen"
+            {
               arg == &profile.profile_path || arg == format!("-profile={}", profile.profile_path)
             } else {
               // For Chromium-based browsers, check for user-data-dir
-              arg.contains(&format!("--user-data-dir={}", profile.profile_path)) || 
-              arg == &profile.profile_path
+              arg.contains(&format!("--user-data-dir={}", profile.profile_path))
+                || arg == &profile.profile_path
             }
           });
-          
+
           if profile_path_match {
             found_pid = Some(pid.as_u32());
             break;
@@ -1491,7 +1623,7 @@ end try
     #[cfg(target_os = "macos")]
     {
       use std::process::Command;
-      
+
       // First try SIGTERM (graceful shutdown)
       let output = Command::new("kill")
         .args(["-TERM", &pid.to_string()])
@@ -1505,7 +1637,14 @@ end try
           .output()?;
 
         if !output.status.success() {
-          return Err(format!("Failed to kill process {}: {}", pid, String::from_utf8_lossy(&output.stderr)).into());
+          return Err(
+            format!(
+              "Failed to kill process {}: {}",
+              pid,
+              String::from_utf8_lossy(&output.stderr)
+            )
+            .into(),
+          );
         }
       }
     }
@@ -1526,7 +1665,8 @@ end try
     // Clear the process ID from the profile
     let mut updated_profile = profile.clone();
     updated_profile.process_id = None;
-    self.save_process_info(&updated_profile)
+    self
+      .save_process_info(&updated_profile)
       .map_err(|e| format!("Failed to update profile: {}", e))?;
 
     println!("Successfully killed browser process with PID: {}", pid);
@@ -1681,16 +1821,22 @@ pub fn get_supported_browsers() -> Result<Vec<&'static str>, String> {
 }
 
 #[tauri::command]
-pub async fn fetch_browser_versions_detailed(browser_str: String) -> Result<Vec<BrowserVersionInfo>, String> {
+pub async fn fetch_browser_versions_detailed(
+  browser_str: String,
+) -> Result<Vec<BrowserVersionInfo>, String> {
   let service = BrowserVersionService::new();
-  service.fetch_browser_versions_detailed(&browser_str, false).await
+  service
+    .fetch_browser_versions_detailed(&browser_str, false)
+    .await
     .map_err(|e| format!("Failed to fetch detailed browser versions: {}", e))
 }
 
 #[tauri::command]
-pub async fn fetch_browser_versions_cached_first(browser_str: String) -> Result<Vec<BrowserVersionInfo>, String> {
+pub async fn fetch_browser_versions_cached_first(
+  browser_str: String,
+) -> Result<Vec<BrowserVersionInfo>, String> {
   let service = BrowserVersionService::new();
-  
+
   // Get cached versions immediately if available
   if let Some(cached_versions) = service.get_cached_browser_versions_detailed(&browser_str) {
     // Check if we should update cache in background
@@ -1699,23 +1845,33 @@ pub async fn fetch_browser_versions_cached_first(browser_str: String) -> Result<
       let service_clone = BrowserVersionService::new();
       let browser_str_clone = browser_str.clone();
       tokio::spawn(async move {
-        if let Err(e) = service_clone.fetch_browser_versions_detailed(&browser_str_clone, false).await {
-          eprintln!("Background version update failed for {}: {}", browser_str_clone, e);
+        if let Err(e) = service_clone
+          .fetch_browser_versions_detailed(&browser_str_clone, false)
+          .await
+        {
+          eprintln!(
+            "Background version update failed for {}: {}",
+            browser_str_clone, e
+          );
         }
       });
     }
     Ok(cached_versions)
   } else {
     // No cache available, fetch fresh
-    service.fetch_browser_versions_detailed(&browser_str, false).await
+    service
+      .fetch_browser_versions_detailed(&browser_str, false)
+      .await
       .map_err(|e| format!("Failed to fetch detailed browser versions: {}", e))
   }
 }
 
 #[tauri::command]
-pub async fn fetch_browser_versions_with_count_cached_first(browser_str: String) -> Result<BrowserVersionsResult, String> {
+pub async fn fetch_browser_versions_with_count_cached_first(
+  browser_str: String,
+) -> Result<BrowserVersionsResult, String> {
   let service = BrowserVersionService::new();
-  
+
   // Get cached versions immediately if available
   if let Some(cached_versions) = service.get_cached_browser_versions(&browser_str) {
     // Check if we should update cache in background
@@ -1724,12 +1880,18 @@ pub async fn fetch_browser_versions_with_count_cached_first(browser_str: String)
       let service_clone = BrowserVersionService::new();
       let browser_str_clone = browser_str.clone();
       tokio::spawn(async move {
-        if let Err(e) = service_clone.fetch_browser_versions_with_count(&browser_str_clone, false).await {
-          eprintln!("Background version update failed for {}: {}", browser_str_clone, e);
+        if let Err(e) = service_clone
+          .fetch_browser_versions_with_count(&browser_str_clone, false)
+          .await
+        {
+          eprintln!(
+            "Background version update failed for {}: {}",
+            browser_str_clone, e
+          );
         }
       });
     }
-    
+
     // Return cached data in the expected format
     Ok(BrowserVersionsResult {
       versions: cached_versions.clone(),
@@ -1738,13 +1900,17 @@ pub async fn fetch_browser_versions_with_count_cached_first(browser_str: String)
     })
   } else {
     // No cache available, fetch fresh
-    service.fetch_browser_versions_with_count(&browser_str, false).await
+    service
+      .fetch_browser_versions_with_count(&browser_str, false)
+      .await
       .map_err(|e| format!("Failed to fetch browser versions: {}", e))
   }
 }
 
 #[tauri::command]
-pub fn get_cached_browser_versions_detailed(browser_str: String) -> Result<Option<Vec<BrowserVersionInfo>>, String> {
+pub fn get_cached_browser_versions_detailed(
+  browser_str: String,
+) -> Result<Option<Vec<BrowserVersionInfo>>, String> {
   let service = BrowserVersionService::new();
   Ok(service.get_cached_browser_versions_detailed(&browser_str))
 }
@@ -1794,12 +1960,20 @@ pub async fn download_browser(
 
   // Mark download as started in registry
   registry.mark_download_started(&browser_str, &version, browser_dir.clone());
-  registry.save().map_err(|e| format!("Failed to save registry: {}", e))?;
+  registry
+    .save()
+    .map_err(|e| format!("Failed to save registry: {}", e))?;
 
   // Use the new download module
   let downloader = Downloader::new();
   let download_path = match downloader
-    .download_browser(&app_handle, browser_type.clone(), &version, &download_info, &browser_dir)
+    .download_browser(
+      &app_handle,
+      browser_type.clone(),
+      &version,
+      &download_info,
+      &browser_dir,
+    )
     .await
   {
     Ok(path) => path,
@@ -1815,7 +1989,13 @@ pub async fn download_browser(
   if download_info.is_archive {
     let extractor = Extractor::new();
     match extractor
-      .extract_browser(&app_handle, browser_type.clone(), &version, &download_path, &browser_dir)
+      .extract_browser(
+        &app_handle,
+        browser_type.clone(),
+        &version,
+        &download_path,
+        &browser_dir,
+      )
       .await
     {
       Ok(_) => {
@@ -1850,8 +2030,11 @@ pub async fn download_browser(
   let _ = app_handle.emit("download-progress", &progress);
 
   // Verify the browser was downloaded correctly
-  println!("Verifying download for browser: {}, version: {}", browser_str, version);
-  
+  println!(
+    "Verifying download for browser: {}, version: {}",
+    browser_str, version
+  );
+
   // Use the browser's own verification method
   let binaries_dir = browser_runner.get_binaries_dir();
   if !browser.is_version_downloaded(&version, &binaries_dir) {
@@ -1866,10 +2049,13 @@ pub async fn download_browser(
   } else {
     None
   };
-  
-  registry.mark_download_completed_with_actual_version(&browser_str, &version, actual_version)
+
+  registry
+    .mark_download_completed_with_actual_version(&browser_str, &version, actual_version)
     .map_err(|e| format!("Failed to mark download as completed: {}", e))?;
-  registry.save().map_err(|e| format!("Failed to save registry: {}", e))?;
+  registry
+    .save()
+    .map_err(|e| format!("Failed to save registry: {}", e))?;
 
   // Emit completion
   let progress = DownloadProgress {
@@ -1913,7 +2099,9 @@ pub async fn kill_browser_profile(
   profile: BrowserProfile,
 ) -> Result<(), String> {
   let browser_runner = BrowserRunner::new();
-  browser_runner.kill_browser_process(app_handle, &profile).await
+  browser_runner
+    .kill_browser_process(app_handle, &profile)
+    .await
     .map_err(|e| format!("Failed to kill browser: {}", e))
 }
 
@@ -1924,22 +2112,28 @@ pub fn create_browser_profile_new(
   version: String,
   proxy: Option<ProxySettings>,
 ) -> Result<BrowserProfile, String> {
-  let browser_type = BrowserType::from_str(&browser_str)
-    .map_err(|e| format!("Invalid browser type: {}", e))?;
+  let browser_type =
+    BrowserType::from_str(&browser_str).map_err(|e| format!("Invalid browser type: {}", e))?;
   create_browser_profile(name, browser_type.as_str().to_string(), version, proxy)
 }
 
 #[tauri::command]
 pub async fn fetch_browser_versions(browser_str: String) -> Result<Vec<String>, String> {
   let service = BrowserVersionService::new();
-  service.fetch_browser_versions(&browser_str, false).await
+  service
+    .fetch_browser_versions(&browser_str, false)
+    .await
     .map_err(|e| format!("Failed to fetch browser versions: {}", e))
 }
 
 #[tauri::command]
-pub async fn fetch_browser_versions_with_count(browser_str: String) -> Result<BrowserVersionsResult, String> {
+pub async fn fetch_browser_versions_with_count(
+  browser_str: String,
+) -> Result<BrowserVersionsResult, String> {
   let service = BrowserVersionService::new();
-  service.fetch_browser_versions_with_count(&browser_str, false).await
+  service
+    .fetch_browser_versions_with_count(&browser_str, false)
+    .await
     .map_err(|e| format!("Failed to fetch browser versions: {}", e))
 }
 
@@ -1952,310 +2146,294 @@ pub fn get_downloaded_browser_versions(browser_str: String) -> Result<Vec<String
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::browser::ProxySettings;
-    use tempfile::TempDir;
+  use super::*;
+  use crate::browser::ProxySettings;
+  use tempfile::TempDir;
 
-    fn create_test_browser_runner() -> (BrowserRunner, TempDir) {
-        let temp_dir = TempDir::new().unwrap();
-        
-        // Mock the base directories by setting environment variables
-        std::env::set_var("HOME", temp_dir.path());
-        
-        let browser_runner = BrowserRunner::new();
-        (browser_runner, temp_dir)
-    }
+  fn create_test_browser_runner() -> (BrowserRunner, TempDir) {
+    let temp_dir = TempDir::new().unwrap();
 
-    #[test]
-    fn test_browser_runner_creation() {
-        let (_runner, _temp_dir) = create_test_browser_runner();
-        // If we get here without panicking, the test passes
-    }
+    // Mock the base directories by setting environment variables
+    std::env::set_var("HOME", temp_dir.path());
 
-    #[test]
-    fn test_get_binaries_dir() {
-        let (runner, _temp_dir) = create_test_browser_runner();
-        let binaries_dir = runner.get_binaries_dir();
-        
-        assert!(binaries_dir.to_string_lossy().contains("DonutBrowser"));
-        assert!(binaries_dir.to_string_lossy().contains("binaries"));
-    }
+    let browser_runner = BrowserRunner::new();
+    (browser_runner, temp_dir)
+  }
 
-    #[test]
-    fn test_get_profiles_dir() {
-        let (runner, _temp_dir) = create_test_browser_runner();
-        let profiles_dir = runner.get_profiles_dir();
-        
-        assert!(profiles_dir.to_string_lossy().contains("DonutBrowser"));
-        assert!(profiles_dir.to_string_lossy().contains("profiles"));
-    }
+  #[test]
+  fn test_browser_runner_creation() {
+    let (_runner, _temp_dir) = create_test_browser_runner();
+    // If we get here without panicking, the test passes
+  }
 
-    #[test]
-    fn test_create_profile() {
-        let (runner, _temp_dir) = create_test_browser_runner();
-        
-        let profile = runner.create_profile(
-            "Test Profile",
-            "firefox",
-            "139.0",
-            None
-        ).unwrap();
+  #[test]
+  fn test_get_binaries_dir() {
+    let (runner, _temp_dir) = create_test_browser_runner();
+    let binaries_dir = runner.get_binaries_dir();
 
-        assert_eq!(profile.name, "Test Profile");
-        assert_eq!(profile.browser, "firefox");
-        assert_eq!(profile.version, "139.0");
-        assert!(profile.proxy.is_none());
-        assert!(profile.process_id.is_none());
-    }
+    assert!(binaries_dir.to_string_lossy().contains("DonutBrowser"));
+    assert!(binaries_dir.to_string_lossy().contains("binaries"));
+  }
 
-    #[test]
-    fn test_create_profile_with_proxy() {
-        let (runner, _temp_dir) = create_test_browser_runner();
-        
-        let proxy = ProxySettings {
-            enabled: true,
-            proxy_type: "http".to_string(),
-            host: "127.0.0.1".to_string(),
-            port: 8080,
-        };
+  #[test]
+  fn test_get_profiles_dir() {
+    let (runner, _temp_dir) = create_test_browser_runner();
+    let profiles_dir = runner.get_profiles_dir();
 
-        let profile = runner.create_profile(
-            "Test Profile with Proxy",
-            "firefox",
-            "139.0",
-            Some(proxy.clone())
-        ).unwrap();
+    assert!(profiles_dir.to_string_lossy().contains("DonutBrowser"));
+    assert!(profiles_dir.to_string_lossy().contains("profiles"));
+  }
 
-        assert_eq!(profile.name, "Test Profile with Proxy");
-        assert!(profile.proxy.is_some());
-        let profile_proxy = profile.proxy.unwrap();
-        assert_eq!(profile_proxy.proxy_type, "http");
-        assert_eq!(profile_proxy.host, "127.0.0.1");
-        assert_eq!(profile_proxy.port, 8080);
-    }
+  #[test]
+  fn test_create_profile() {
+    let (runner, _temp_dir) = create_test_browser_runner();
 
-    #[test]
-    fn test_save_and_load_profile() {
-        let (runner, _temp_dir) = create_test_browser_runner();
-        
-        let profile = runner.create_profile(
-            "Test Save Load",
-            "firefox",
-            "139.0",
-            None
-        ).unwrap();
+    let profile = runner
+      .create_profile("Test Profile", "firefox", "139.0", None)
+      .unwrap();
 
-        // Save the profile
-        runner.save_profile(&profile).unwrap();
+    assert_eq!(profile.name, "Test Profile");
+    assert_eq!(profile.browser, "firefox");
+    assert_eq!(profile.version, "139.0");
+    assert!(profile.proxy.is_none());
+    assert!(profile.process_id.is_none());
+  }
 
-        // Load profiles and verify
-        let profiles = runner.list_profiles().unwrap();
-        assert_eq!(profiles.len(), 1);
-        assert_eq!(profiles[0].name, "Test Save Load");
-        assert_eq!(profiles[0].browser, "firefox");
-        assert_eq!(profiles[0].version, "139.0");
-    }
+  #[test]
+  fn test_create_profile_with_proxy() {
+    let (runner, _temp_dir) = create_test_browser_runner();
 
-    #[test]
-    fn test_update_profile_proxy() {
-        let (runner, _temp_dir) = create_test_browser_runner();
-        
-        // Create profile without proxy
-        let profile = runner.create_profile(
-            "Test Update Proxy",
-            "firefox",
-            "139.0",
-            None
-        ).unwrap();
+    let proxy = ProxySettings {
+      enabled: true,
+      proxy_type: "http".to_string(),
+      host: "127.0.0.1".to_string(),
+      port: 8080,
+    };
 
-        assert!(profile.proxy.is_none());
+    let profile = runner
+      .create_profile(
+        "Test Profile with Proxy",
+        "firefox",
+        "139.0",
+        Some(proxy.clone()),
+      )
+      .unwrap();
 
-        // Update with proxy
-        let proxy = ProxySettings {
-            enabled: true,
-            proxy_type: "socks5".to_string(),
-            host: "192.168.1.1".to_string(),
-            port: 1080,
-        };
+    assert_eq!(profile.name, "Test Profile with Proxy");
+    assert!(profile.proxy.is_some());
+    let profile_proxy = profile.proxy.unwrap();
+    assert_eq!(profile_proxy.proxy_type, "http");
+    assert_eq!(profile_proxy.host, "127.0.0.1");
+    assert_eq!(profile_proxy.port, 8080);
+  }
 
-        let updated_profile = runner.update_profile_proxy(
-            "Test Update Proxy",
-            Some(proxy.clone())
-        ).unwrap();
+  #[test]
+  fn test_save_and_load_profile() {
+    let (runner, _temp_dir) = create_test_browser_runner();
 
-        assert!(updated_profile.proxy.is_some());
-        let profile_proxy = updated_profile.proxy.unwrap();
-        assert_eq!(profile_proxy.proxy_type, "socks5");
-        assert_eq!(profile_proxy.host, "192.168.1.1");
-        assert_eq!(profile_proxy.port, 1080);
-    }
+    let profile = runner
+      .create_profile("Test Save Load", "firefox", "139.0", None)
+      .unwrap();
 
-    #[test]
-    fn test_rename_profile() {
-        let (runner, _temp_dir) = create_test_browser_runner();
-        
-        // Create profile
-        let _profile = runner.create_profile(
-            "Original Name",
-            "firefox",
-            "139.0",
-            None
-        ).unwrap();
+    // Save the profile
+    runner.save_profile(&profile).unwrap();
 
-        // Rename profile
-        let renamed_profile = runner.rename_profile(
-            "Original Name",
-            "New Name"
-        ).unwrap();
+    // Load profiles and verify
+    let profiles = runner.list_profiles().unwrap();
+    assert_eq!(profiles.len(), 1);
+    assert_eq!(profiles[0].name, "Test Save Load");
+    assert_eq!(profiles[0].browser, "firefox");
+    assert_eq!(profiles[0].version, "139.0");
+  }
 
-        assert_eq!(renamed_profile.name, "New Name");
+  #[test]
+  fn test_update_profile_proxy() {
+    let (runner, _temp_dir) = create_test_browser_runner();
 
-        // Verify old profile is gone and new one exists
-        let profiles = runner.list_profiles().unwrap();
-        assert_eq!(profiles.len(), 1);
-        assert_eq!(profiles[0].name, "New Name");
-    }
+    // Create profile without proxy
+    let profile = runner
+      .create_profile("Test Update Proxy", "firefox", "139.0", None)
+      .unwrap();
 
-    #[test]
-    fn test_delete_profile() {
-        let (runner, _temp_dir) = create_test_browser_runner();
-        
-        // Create profile
-        let _profile = runner.create_profile(
-            "To Delete",
-            "firefox",
-            "139.0",
-            None
-        ).unwrap();
+    assert!(profile.proxy.is_none());
 
-        // Verify profile exists
-        let profiles = runner.list_profiles().unwrap();
-        assert_eq!(profiles.len(), 1);
+    // Update with proxy
+    let proxy = ProxySettings {
+      enabled: true,
+      proxy_type: "socks5".to_string(),
+      host: "192.168.1.1".to_string(),
+      port: 1080,
+    };
 
-        // Delete profile
-        runner.delete_profile("To Delete").unwrap();
+    let updated_profile = runner
+      .update_profile_proxy("Test Update Proxy", Some(proxy.clone()))
+      .unwrap();
 
-        // Verify profile is gone
-        let profiles = runner.list_profiles().unwrap();
-        assert_eq!(profiles.len(), 0);
-    }
+    assert!(updated_profile.proxy.is_some());
+    let profile_proxy = updated_profile.proxy.unwrap();
+    assert_eq!(profile_proxy.proxy_type, "socks5");
+    assert_eq!(profile_proxy.host, "192.168.1.1");
+    assert_eq!(profile_proxy.port, 1080);
+  }
 
-    #[test]
-    fn test_profile_name_sanitization() {
-        let (runner, _temp_dir) = create_test_browser_runner();
-        
-        // Create profile with spaces and special characters
-        let profile = runner.create_profile(
-            "Test Profile With Spaces",
-            "firefox",
-            "139.0",
-            None
-        ).unwrap();
+  #[test]
+  fn test_rename_profile() {
+    let (runner, _temp_dir) = create_test_browser_runner();
 
-        // Profile path should use snake_case
-        assert!(profile.profile_path.contains("test_profile_with_spaces"));
-    }
+    // Create profile
+    let _profile = runner
+      .create_profile("Original Name", "firefox", "139.0", None)
+      .unwrap();
 
-    #[test]
-    fn test_multiple_profiles() {
-        let (runner, _temp_dir) = create_test_browser_runner();
-        
-        // Create multiple profiles
-        let _profile1 = runner.create_profile("Profile 1", "firefox", "139.0", None).unwrap();
-        let _profile2 = runner.create_profile("Profile 2", "chromium", "1465660", None).unwrap();
-        let _profile3 = runner.create_profile("Profile 3", "brave", "v1.81.9", None).unwrap();
+    // Rename profile
+    let renamed_profile = runner.rename_profile("Original Name", "New Name").unwrap();
 
-        // List profiles
-        let profiles = runner.list_profiles().unwrap();
-        assert_eq!(profiles.len(), 3);
+    assert_eq!(renamed_profile.name, "New Name");
 
-        let profile_names: Vec<&str> = profiles.iter().map(|p| p.name.as_str()).collect();
-        assert!(profile_names.contains(&"Profile 1"));
-        assert!(profile_names.contains(&"Profile 2"));
-        assert!(profile_names.contains(&"Profile 3"));
-    }
+    // Verify old profile is gone and new one exists
+    let profiles = runner.list_profiles().unwrap();
+    assert_eq!(profiles.len(), 1);
+    assert_eq!(profiles[0].name, "New Name");
+  }
 
-    #[test]
-    fn test_profile_validation() {
-        let (runner, _temp_dir) = create_test_browser_runner();
-        
-        // Test that we can't rename to an existing profile name
-        let _profile1 = runner.create_profile("Profile 1", "firefox", "139.0", None).unwrap();
-        let _profile2 = runner.create_profile("Profile 2", "firefox", "139.0", None).unwrap();
+  #[test]
+  fn test_delete_profile() {
+    let (runner, _temp_dir) = create_test_browser_runner();
 
-        // Try to rename profile2 to profile1's name (should fail)
-        let result = runner.rename_profile("Profile 2", "Profile 1");
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("already exists"));
-    }
+    // Create profile
+    let _profile = runner
+      .create_profile("To Delete", "firefox", "139.0", None)
+      .unwrap();
 
-    #[test]
-    fn test_error_handling() {
-        let (runner, _temp_dir) = create_test_browser_runner();
-        
-        // Test updating non-existent profile
-        let result = runner.update_profile_proxy("Non Existent", None);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("not found"));
+    // Verify profile exists
+    let profiles = runner.list_profiles().unwrap();
+    assert_eq!(profiles.len(), 1);
 
-        // Test deleting non-existent profile
-        let result = runner.delete_profile("Non Existent");
-        assert!(result.is_ok()); // Delete should be idempotent
+    // Delete profile
+    runner.delete_profile("To Delete").unwrap();
 
-        // Test renaming non-existent profile
-        let result = runner.rename_profile("Non Existent", "New Name");
-        assert!(result.is_err());
-    }
+    // Verify profile is gone
+    let profiles = runner.list_profiles().unwrap();
+    assert_eq!(profiles.len(), 0);
+  }
 
-    #[test]
-    fn test_firefox_default_browser_preferences() {
-        let (runner, _temp_dir) = create_test_browser_runner();
-        
-        // Create profile without proxy
-        let profile = runner.create_profile(
-            "Test Firefox Prefs",
-            "firefox",
-            "139.0",
-            None
-        ).unwrap();
+  #[test]
+  fn test_profile_name_sanitization() {
+    let (runner, _temp_dir) = create_test_browser_runner();
 
-        // Check that user.js file was created with default browser preference
-        let user_js_path = std::path::Path::new(&profile.profile_path).join("user.js");
-        assert!(user_js_path.exists());
-        
-        let user_js_content = std::fs::read_to_string(user_js_path).unwrap();
-        assert!(user_js_content.contains("browser.shell.checkDefaultBrowser"));
-        assert!(user_js_content.contains("false"));
-        
-        // Verify automatic update disabling preferences are present
-        assert!(user_js_content.contains("app.update.enabled"));
-        assert!(user_js_content.contains("app.update.auto"));
-        
-        // Create profile with proxy
-        let proxy = ProxySettings {
-            enabled: true,
-            proxy_type: "http".to_string(),
-            host: "127.0.0.1".to_string(),
-            port: 8080,
-        };
+    // Create profile with spaces and special characters
+    let profile = runner
+      .create_profile("Test Profile With Spaces", "firefox", "139.0", None)
+      .unwrap();
 
-        let profile_with_proxy = runner.create_profile(
-            "Test Firefox Prefs Proxy",
-            "firefox",
-            "139.0",
-            Some(proxy)
-        ).unwrap();
+    // Profile path should use snake_case
+    assert!(profile.profile_path.contains("test_profile_with_spaces"));
+  }
 
-        // Check that user.js file contains both proxy settings and default browser preference
-        let user_js_path_proxy = std::path::Path::new(&profile_with_proxy.profile_path).join("user.js");
-        assert!(user_js_path_proxy.exists());
-        
-        let user_js_content_proxy = std::fs::read_to_string(user_js_path_proxy).unwrap();
-        assert!(user_js_content_proxy.contains("browser.shell.checkDefaultBrowser"));
-        assert!(user_js_content_proxy.contains("network.proxy.type"));
-        
-        // Verify automatic update disabling preferences are present even with proxy
-        assert!(user_js_content_proxy.contains("app.update.enabled"));
-        assert!(user_js_content_proxy.contains("app.update.auto"));
-    }
+  #[test]
+  fn test_multiple_profiles() {
+    let (runner, _temp_dir) = create_test_browser_runner();
+
+    // Create multiple profiles
+    let _profile1 = runner
+      .create_profile("Profile 1", "firefox", "139.0", None)
+      .unwrap();
+    let _profile2 = runner
+      .create_profile("Profile 2", "chromium", "1465660", None)
+      .unwrap();
+    let _profile3 = runner
+      .create_profile("Profile 3", "brave", "v1.81.9", None)
+      .unwrap();
+
+    // List profiles
+    let profiles = runner.list_profiles().unwrap();
+    assert_eq!(profiles.len(), 3);
+
+    let profile_names: Vec<&str> = profiles.iter().map(|p| p.name.as_str()).collect();
+    assert!(profile_names.contains(&"Profile 1"));
+    assert!(profile_names.contains(&"Profile 2"));
+    assert!(profile_names.contains(&"Profile 3"));
+  }
+
+  #[test]
+  fn test_profile_validation() {
+    let (runner, _temp_dir) = create_test_browser_runner();
+
+    // Test that we can't rename to an existing profile name
+    let _profile1 = runner
+      .create_profile("Profile 1", "firefox", "139.0", None)
+      .unwrap();
+    let _profile2 = runner
+      .create_profile("Profile 2", "firefox", "139.0", None)
+      .unwrap();
+
+    // Try to rename profile2 to profile1's name (should fail)
+    let result = runner.rename_profile("Profile 2", "Profile 1");
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("already exists"));
+  }
+
+  #[test]
+  fn test_error_handling() {
+    let (runner, _temp_dir) = create_test_browser_runner();
+
+    // Test updating non-existent profile
+    let result = runner.update_profile_proxy("Non Existent", None);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("not found"));
+
+    // Test deleting non-existent profile
+    let result = runner.delete_profile("Non Existent");
+    assert!(result.is_ok()); // Delete should be idempotent
+
+    // Test renaming non-existent profile
+    let result = runner.rename_profile("Non Existent", "New Name");
+    assert!(result.is_err());
+  }
+
+  #[test]
+  fn test_firefox_default_browser_preferences() {
+    let (runner, _temp_dir) = create_test_browser_runner();
+
+    // Create profile without proxy
+    let profile = runner
+      .create_profile("Test Firefox Prefs", "firefox", "139.0", None)
+      .unwrap();
+
+    // Check that user.js file was created with default browser preference
+    let user_js_path = std::path::Path::new(&profile.profile_path).join("user.js");
+    assert!(user_js_path.exists());
+
+    let user_js_content = std::fs::read_to_string(user_js_path).unwrap();
+    assert!(user_js_content.contains("browser.shell.checkDefaultBrowser"));
+    assert!(user_js_content.contains("false"));
+
+    // Verify automatic update disabling preferences are present
+    assert!(user_js_content.contains("app.update.enabled"));
+    assert!(user_js_content.contains("app.update.auto"));
+
+    // Create profile with proxy
+    let proxy = ProxySettings {
+      enabled: true,
+      proxy_type: "http".to_string(),
+      host: "127.0.0.1".to_string(),
+      port: 8080,
+    };
+
+    let profile_with_proxy = runner
+      .create_profile("Test Firefox Prefs Proxy", "firefox", "139.0", Some(proxy))
+      .unwrap();
+
+    // Check that user.js file contains both proxy settings and default browser preference
+    let user_js_path_proxy = std::path::Path::new(&profile_with_proxy.profile_path).join("user.js");
+    assert!(user_js_path_proxy.exists());
+
+    let user_js_content_proxy = std::fs::read_to_string(user_js_path_proxy).unwrap();
+    assert!(user_js_content_proxy.contains("browser.shell.checkDefaultBrowser"));
+    assert!(user_js_content_proxy.contains("network.proxy.type"));
+
+    // Verify automatic update disabling preferences are present even with proxy
+    assert!(user_js_content_proxy.contains("app.update.enabled"));
+    assert!(user_js_content_proxy.contains("app.update.auto"));
+  }
 }

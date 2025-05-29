@@ -4,10 +4,7 @@ use tauri::command;
 mod macos {
   use core_foundation::base::OSStatus;
   use core_foundation::string::CFStringRef;
-  use core_foundation::{
-    base::TCFType,
-    string::CFString,
-      };
+  use core_foundation::{base::TCFType, string::CFString};
 
   #[link(name = "CoreServices", kind = "framework")]
   extern "C" {
@@ -18,7 +15,7 @@ mod macos {
   pub fn is_default_browser() -> Result<bool, String> {
     let schemes = ["http", "https"];
     let bundle_id = "com.donutbrowser";
-    
+
     for scheme in schemes {
       let scheme_str = CFString::new(scheme);
       unsafe {
@@ -26,10 +23,10 @@ mod macos {
         if current_handler.is_null() {
           return Ok(false);
         }
-        
+
         let current_handler_cf = CFString::wrap_under_create_rule(current_handler);
         let current_handler_str = current_handler_cf.to_string();
-        
+
         if current_handler_str != bundle_id {
           return Ok(false);
         }
@@ -123,14 +120,21 @@ pub async fn set_as_default_browser() -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn open_url_with_profile(app_handle: tauri::AppHandle, profile_name: String, url: String) -> Result<(), String> {
+pub async fn open_url_with_profile(
+  app_handle: tauri::AppHandle,
+  profile_name: String,
+  url: String,
+) -> Result<(), String> {
   use crate::browser_runner::BrowserRunner;
 
   let runner = BrowserRunner::new();
-  
+
   // Get the profile by name
-  let profiles = runner.list_profiles().map_err(|e| format!("Failed to list profiles: {}", e))?;
-  let profile = profiles.into_iter()
+  let profiles = runner
+    .list_profiles()
+    .map_err(|e| format!("Failed to list profiles: {}", e))?;
+  let profile = profiles
+    .into_iter()
     .find(|p| p.name == profile_name)
     .ok_or_else(|| format!("Profile '{}' not found", profile_name))?;
 
@@ -145,25 +149,37 @@ pub async fn open_url_with_profile(app_handle: tauri::AppHandle, profile_name: S
       format!("Failed to open URL with profile: {}", e)
     })?;
 
-  println!("Successfully opened URL '{}' with profile '{}'", url, profile_name);
+  println!(
+    "Successfully opened URL '{}' with profile '{}'",
+    url, profile_name
+  );
   Ok(())
 }
 
 #[tauri::command]
-pub async fn smart_open_url(_app_handle: tauri::AppHandle, _url: String, _is_startup: Option<bool>) -> Result<String, String> {
+pub async fn smart_open_url(
+  _app_handle: tauri::AppHandle,
+  _url: String,
+  _is_startup: Option<bool>,
+) -> Result<String, String> {
   use crate::browser_runner::BrowserRunner;
 
   let runner = BrowserRunner::new();
-  
+
   // Get all profiles
-  let profiles = runner.list_profiles().map_err(|e| format!("Failed to list profiles: {}", e))?;
-  
+  let profiles = runner
+    .list_profiles()
+    .map_err(|e| format!("Failed to list profiles: {}", e))?;
+
   if profiles.is_empty() {
     return Err("no_profiles".to_string());
   }
 
-  println!("URL opening - Total profiles: {}, showing profile selector", profiles.len());
-  
+  println!(
+    "URL opening - Total profiles: {}, showing profile selector",
+    profiles.len()
+  );
+
   // Always show the profile selector so the user can choose
   Err("show_selector".to_string())
 }

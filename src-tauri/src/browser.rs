@@ -61,8 +61,6 @@ pub trait Browser: Send + Sync {
   fn is_version_downloaded(&self, version: &str, binaries_dir: &Path) -> bool;
 }
 
-
-
 pub struct FirefoxBrowser {
   browser_type: BrowserType,
 }
@@ -71,15 +69,12 @@ impl FirefoxBrowser {
   pub fn new(browser_type: BrowserType) -> Self {
     Self { browser_type }
   }
-
 }
 
 impl Browser for FirefoxBrowser {
   fn browser_type(&self) -> BrowserType {
     self.browser_type.clone()
   }
-
-
 
   fn get_executable_path(&self, install_dir: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
     // Find the .app directory
@@ -99,7 +94,11 @@ impl Browser for FirefoxBrowser {
       .find(|entry| {
         let binding = entry.file_name();
         let name = binding.to_string_lossy();
-        name.starts_with("firefox") || name.starts_with("mullvad") || name.starts_with("zen") || name.starts_with("tor") || name.contains("Browser")
+        name.starts_with("firefox")
+          || name.starts_with("mullvad")
+          || name.starts_with("zen")
+          || name.starts_with("tor")
+          || name.contains("Browser")
       })
       .map(|entry| entry.path())
       .ok_or("No executable found in MacOS directory")?;
@@ -113,11 +112,8 @@ impl Browser for FirefoxBrowser {
     _proxy_settings: Option<&ProxySettings>,
     url: Option<String>,
   ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    let mut args = vec![
-      "-profile".to_string(),
-      profile_path.to_string(),
-    ];
-    
+    let mut args = vec!["-profile".to_string(), profile_path.to_string()];
+
     // Only use -no-remote for browsers that require it for security (Mullvad, Tor)
     // Regular Firefox browsers can use remote commands for better URL handling
     match self.browser_type {
@@ -129,7 +125,7 @@ impl Browser for FirefoxBrowser {
       }
       _ => {}
     }
-    
+
     // Firefox-based browsers use profile directory and user.js for proxy configuration
     if let Some(url) = url {
       args.push(url);
@@ -143,7 +139,10 @@ impl Browser for FirefoxBrowser {
       .join(self.browser_type().as_str())
       .join(version);
 
-    println!("Firefox browser checking version {} in directory: {:?}", version, browser_dir);
+    println!(
+      "Firefox browser checking version {} in directory: {:?}",
+      version, browser_dir
+    );
 
     // Only check if directory exists and contains a .app file
     if browser_dir.exists() {
@@ -182,7 +181,6 @@ impl Browser for ChromiumBrowser {
   fn browser_type(&self) -> BrowserType {
     self.browser_type.clone()
   }
-
 
   fn get_executable_path(&self, install_dir: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
     // Find the .app directory
@@ -253,7 +251,10 @@ impl Browser for ChromiumBrowser {
       .join(self.browser_type().as_str())
       .join(version);
 
-    println!("Chromium browser checking version {} in directory: {:?}", version, browser_dir);
+    println!(
+      "Chromium browser checking version {} in directory: {:?}",
+      version, browser_dir
+    );
 
     // Check if directory exists and contains at least one .app file
     if browser_dir.exists() {
@@ -286,9 +287,11 @@ impl Browser for ChromiumBrowser {
 // Factory function to create browser instances
 pub fn create_browser(browser_type: BrowserType) -> Box<dyn Browser> {
   match browser_type {
-    BrowserType::MullvadBrowser | BrowserType::Firefox | BrowserType::FirefoxDeveloper | BrowserType::Zen | BrowserType::TorBrowser => {
-      Box::new(FirefoxBrowser::new(browser_type))
-    }
+    BrowserType::MullvadBrowser
+    | BrowserType::Firefox
+    | BrowserType::FirefoxDeveloper
+    | BrowserType::Zen
+    | BrowserType::TorBrowser => Box::new(FirefoxBrowser::new(browser_type)),
     BrowserType::Chromium | BrowserType::Brave => Box::new(ChromiumBrowser::new(browser_type)),
   }
 }
@@ -332,13 +335,28 @@ mod tests {
     assert_eq!(BrowserType::TorBrowser.as_str(), "tor-browser");
 
     // Test from_str
-    assert_eq!(BrowserType::from_str("mullvad-browser").unwrap(), BrowserType::MullvadBrowser);
-    assert_eq!(BrowserType::from_str("firefox").unwrap(), BrowserType::Firefox);
-    assert_eq!(BrowserType::from_str("firefox-developer").unwrap(), BrowserType::FirefoxDeveloper);
-    assert_eq!(BrowserType::from_str("chromium").unwrap(), BrowserType::Chromium);
+    assert_eq!(
+      BrowserType::from_str("mullvad-browser").unwrap(),
+      BrowserType::MullvadBrowser
+    );
+    assert_eq!(
+      BrowserType::from_str("firefox").unwrap(),
+      BrowserType::Firefox
+    );
+    assert_eq!(
+      BrowserType::from_str("firefox-developer").unwrap(),
+      BrowserType::FirefoxDeveloper
+    );
+    assert_eq!(
+      BrowserType::from_str("chromium").unwrap(),
+      BrowserType::Chromium
+    );
     assert_eq!(BrowserType::from_str("brave").unwrap(), BrowserType::Brave);
     assert_eq!(BrowserType::from_str("zen").unwrap(), BrowserType::Zen);
-    assert_eq!(BrowserType::from_str("tor-browser").unwrap(), BrowserType::TorBrowser);
+    assert_eq!(
+      BrowserType::from_str("tor-browser").unwrap(),
+      BrowserType::TorBrowser
+    );
 
     // Test invalid browser type
     assert!(BrowserType::from_str("invalid").is_err());
@@ -353,10 +371,10 @@ mod tests {
 
     let browser = FirefoxBrowser::new(BrowserType::MullvadBrowser);
     assert_eq!(browser.browser_type(), BrowserType::MullvadBrowser);
-    
+
     let browser = FirefoxBrowser::new(BrowserType::TorBrowser);
     assert_eq!(browser.browser_type(), BrowserType::TorBrowser);
-    
+
     let browser = FirefoxBrowser::new(BrowserType::Zen);
     assert_eq!(browser.browser_type(), BrowserType::Zen);
   }
@@ -381,10 +399,10 @@ mod tests {
 
     let browser = create_browser(BrowserType::Zen);
     assert_eq!(browser.browser_type(), BrowserType::Zen);
-    
+
     let browser = create_browser(BrowserType::TorBrowser);
     assert_eq!(browser.browser_type(), BrowserType::TorBrowser);
-    
+
     let browser = create_browser(BrowserType::FirefoxDeveloper);
     assert_eq!(browser.browser_type(), BrowserType::FirefoxDeveloper);
 
@@ -400,47 +418,71 @@ mod tests {
   fn test_firefox_launch_args() {
     // Test regular Firefox (should not use -no-remote)
     let browser = FirefoxBrowser::new(BrowserType::Firefox);
-    let args = browser.create_launch_args("/path/to/profile", None, None).unwrap();
+    let args = browser
+      .create_launch_args("/path/to/profile", None, None)
+      .unwrap();
     assert_eq!(args, vec!["-profile", "/path/to/profile"]);
     assert!(!args.contains(&"-no-remote".to_string()));
 
-    let args = browser.create_launch_args("/path/to/profile", None, Some("https://example.com".to_string())).unwrap();
-    assert_eq!(args, vec!["-profile", "/path/to/profile", "https://example.com"]);
+    let args = browser
+      .create_launch_args(
+        "/path/to/profile",
+        None,
+        Some("https://example.com".to_string()),
+      )
+      .unwrap();
+    assert_eq!(
+      args,
+      vec!["-profile", "/path/to/profile", "https://example.com"]
+    );
 
     // Test Mullvad Browser (should use -no-remote)
     let browser = FirefoxBrowser::new(BrowserType::MullvadBrowser);
-    let args = browser.create_launch_args("/path/to/profile", None, None).unwrap();
+    let args = browser
+      .create_launch_args("/path/to/profile", None, None)
+      .unwrap();
     assert_eq!(args, vec!["-profile", "/path/to/profile", "-no-remote"]);
 
     // Test Tor Browser (should use -no-remote)
     let browser = FirefoxBrowser::new(BrowserType::TorBrowser);
-    let args = browser.create_launch_args("/path/to/profile", None, None).unwrap();
+    let args = browser
+      .create_launch_args("/path/to/profile", None, None)
+      .unwrap();
     assert_eq!(args, vec!["-profile", "/path/to/profile", "-no-remote"]);
-    
+
     // Test Zen Browser (should not use -no-remote)
     let browser = FirefoxBrowser::new(BrowserType::Zen);
-    let args = browser.create_launch_args("/path/to/profile", None, None).unwrap();
+    let args = browser
+      .create_launch_args("/path/to/profile", None, None)
+      .unwrap();
     assert_eq!(args, vec!["-profile", "/path/to/profile"]);
     assert!(!args.contains(&"-no-remote".to_string()));
   }
 
-
   #[test]
   fn test_chromium_launch_args() {
     let browser = ChromiumBrowser::new(BrowserType::Chromium);
-    let args = browser.create_launch_args("/path/to/profile", None, None).unwrap();
-    
+    let args = browser
+      .create_launch_args("/path/to/profile", None, None)
+      .unwrap();
+
     // Test that basic required arguments are present
     assert!(args.contains(&"--user-data-dir=/path/to/profile".to_string()));
     assert!(args.contains(&"--no-default-browser-check".to_string()));
-    
+
     // Test that automatic update disabling arguments are present
     assert!(args.contains(&"--disable-background-mode".to_string()));
     assert!(args.contains(&"--disable-component-update".to_string()));
 
-    let args_with_url = browser.create_launch_args("/path/to/profile", None, Some("https://example.com".to_string())).unwrap();
+    let args_with_url = browser
+      .create_launch_args(
+        "/path/to/profile",
+        None,
+        Some("https://example.com".to_string()),
+      )
+      .unwrap();
     assert!(args_with_url.contains(&"https://example.com".to_string()));
-    
+
     // Verify URL is at the end
     assert_eq!(args_with_url.last().unwrap(), "https://example.com");
   }
@@ -458,7 +500,7 @@ mod tests {
     assert_eq!(proxy.proxy_type, "http");
     assert_eq!(proxy.host, "127.0.0.1");
     assert_eq!(proxy.port, 8080);
-    
+
     // Test different proxy types
     let socks_proxy = ProxySettings {
       enabled: true,
@@ -466,12 +508,11 @@ mod tests {
       host: "proxy.example.com".to_string(),
       port: 1080,
     };
-    
+
     assert_eq!(socks_proxy.proxy_type, "socks5");
     assert_eq!(socks_proxy.host, "proxy.example.com");
     assert_eq!(socks_proxy.port, 1080);
   }
-
 
   #[test]
   fn test_version_downloaded_check() {
@@ -489,17 +530,20 @@ mod tests {
     let browser = FirefoxBrowser::new(BrowserType::Firefox);
     assert!(browser.is_version_downloaded("139.0", binaries_dir));
     assert!(!browser.is_version_downloaded("140.0", binaries_dir));
-    
+
     // Test with Chromium browser
     let chromium_dir = binaries_dir.join("chromium").join("1465660");
     fs::create_dir_all(&chromium_dir).unwrap();
     let chromium_app_dir = chromium_dir.join("Chromium.app");
     fs::create_dir_all(&chromium_app_dir.join("Contents").join("MacOS")).unwrap();
-    
+
     // Create a mock executable
-    let executable_path = chromium_app_dir.join("Contents").join("MacOS").join("Chromium");
+    let executable_path = chromium_app_dir
+      .join("Contents")
+      .join("MacOS")
+      .join("Chromium");
     fs::write(&executable_path, "mock executable").unwrap();
-    
+
     let chromium_browser = ChromiumBrowser::new(BrowserType::Chromium);
     assert!(chromium_browser.is_version_downloaded("1465660", binaries_dir));
     assert!(!chromium_browser.is_version_downloaded("1465661", binaries_dir));
@@ -513,7 +557,7 @@ mod tests {
     // Create browser directory but no .app directory
     let browser_dir = binaries_dir.join("firefox").join("139.0");
     fs::create_dir_all(&browser_dir).unwrap();
-    
+
     // Create some other files but no .app
     fs::write(browser_dir.join("readme.txt"), "Some content").unwrap();
 
@@ -526,7 +570,7 @@ mod tests {
     let browser_type = BrowserType::Firefox;
     let cloned = browser_type.clone();
     assert_eq!(browser_type, cloned);
-    
+
     // Test Debug trait
     let debug_str = format!("{:?}", browser_type);
     assert!(debug_str.contains("Firefox"));
@@ -540,13 +584,13 @@ mod tests {
       host: "127.0.0.1".to_string(),
       port: 8080,
     };
-    
+
     // Test that it can be serialized (implements Serialize)
     let json = serde_json::to_string(&proxy).unwrap();
     assert!(json.contains("127.0.0.1"));
     assert!(json.contains("8080"));
     assert!(json.contains("http"));
-    
+
     // Test that it can be deserialized (implements Deserialize)
     let deserialized: ProxySettings = serde_json::from_str(&json).unwrap();
     assert_eq!(deserialized.enabled, proxy.enabled);

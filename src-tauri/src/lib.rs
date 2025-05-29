@@ -1,7 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::{Manager, Emitter};
+use tauri::{Emitter, Manager};
 use tauri_plugin_deep_link::DeepLinkExt;
 
 // Store pending URLs that need to be handled when the window is ready
@@ -23,28 +23,33 @@ mod version_updater;
 extern crate lazy_static;
 
 use browser_runner::{
-  check_browser_status, create_browser_profile, create_browser_profile_new, delete_profile,
-  download_browser, fetch_browser_versions, fetch_browser_versions_cached_first,
-  fetch_browser_versions_detailed, fetch_browser_versions_with_count, fetch_browser_versions_with_count_cached_first,
-  get_cached_browser_versions_detailed, get_downloaded_browser_versions, get_saved_mullvad_releases, get_supported_browsers, is_browser_downloaded, check_browser_exists,
-  kill_browser_profile, launch_browser_profile, list_browser_profiles, rename_profile, should_update_browser_cache, update_profile_proxy,
-  update_profile_version,
+  check_browser_exists, check_browser_status, create_browser_profile, create_browser_profile_new,
+  delete_profile, download_browser, fetch_browser_versions, fetch_browser_versions_cached_first,
+  fetch_browser_versions_detailed, fetch_browser_versions_with_count,
+  fetch_browser_versions_with_count_cached_first, get_cached_browser_versions_detailed,
+  get_downloaded_browser_versions, get_saved_mullvad_releases, get_supported_browsers,
+  is_browser_downloaded, kill_browser_profile, launch_browser_profile, list_browser_profiles,
+  rename_profile, should_update_browser_cache, update_profile_proxy, update_profile_version,
 };
 
 use settings_manager::{
-  disable_default_browser_prompt, get_app_settings, save_app_settings,
-  should_show_settings_on_startup, get_table_sorting_settings, save_table_sorting_settings,
+  disable_default_browser_prompt, get_app_settings, get_table_sorting_settings, save_app_settings,
+  save_table_sorting_settings, should_show_settings_on_startup,
 };
 
-use default_browser::{is_default_browser, open_url_with_profile, set_as_default_browser, smart_open_url};
+use default_browser::{
+  is_default_browser, open_url_with_profile, set_as_default_browser, smart_open_url,
+};
 
-use version_updater::{trigger_manual_version_update, get_version_update_status, get_version_updater, check_version_update_needed, force_version_update_check};
+use version_updater::{
+  check_version_update_needed, force_version_update_check, get_version_update_status,
+  get_version_updater, trigger_manual_version_update,
+};
 
 use auto_updater::{
-  check_for_browser_updates, start_browser_update, complete_browser_update,
-  is_browser_disabled_for_update, dismiss_update_notification,
-  complete_browser_update_with_auto_update,
-  mark_auto_update_download, remove_auto_update_download, is_auto_update_download,
+  check_for_browser_updates, complete_browser_update, complete_browser_update_with_auto_update,
+  dismiss_update_notification, is_auto_update_download, is_browser_disabled_for_update,
+  mark_auto_update_download, remove_auto_update_download, start_browser_update,
 };
 
 #[tauri::command]
@@ -57,13 +62,14 @@ fn greet() -> String {
 #[tauri::command]
 async fn handle_url_open(app: tauri::AppHandle, url: String) -> Result<(), String> {
   println!("handle_url_open called with URL: {}", url);
-  
+
   // Check if the main window exists and is ready
   if let Some(window) = app.get_webview_window("main") {
     if window.is_visible().unwrap_or(false) {
       // Window is visible, emit event directly
       println!("Main window is visible, emitting show-profile-selector event");
-      app.emit("show-profile-selector", url.clone())
+      app
+        .emit("show-profile-selector", url.clone())
         .map_err(|e| format!("Failed to emit URL open event: {}", e))?;
       let _ = window.show();
       let _ = window.set_focus();
@@ -79,7 +85,7 @@ async fn handle_url_open(app: tauri::AppHandle, url: String) -> Result<(), Strin
     let mut pending = PENDING_URLS.lock().unwrap();
     pending.push(url);
   }
-  
+
   Ok(())
 }
 
@@ -91,10 +97,13 @@ async fn check_and_handle_startup_url(app_handle: tauri::AppHandle) -> Result<bo
     pending.clear(); // Clear after getting them
     urls
   };
-  
+
   if !pending_urls.is_empty() {
-    println!("Handling {} pending URLs from frontend request", pending_urls.len());
-    
+    println!(
+      "Handling {} pending URLs from frontend request",
+      pending_urls.len()
+    );
+
     for url in pending_urls {
       println!("Emitting show-profile-selector event for URL: {}", url);
       if let Err(e) = app_handle.emit("show-profile-selector", url.clone()) {
@@ -102,10 +111,10 @@ async fn check_and_handle_startup_url(app_handle: tauri::AppHandle) -> Result<bo
         return Err(format!("Failed to emit URL event: {}", e));
       }
     }
-    
+
     return Ok(true);
   }
-  
+
   Ok(false)
 }
 
@@ -119,13 +128,13 @@ pub fn run() {
     .setup(|app| {
       // Set up deep link handler
       let handle = app.handle().clone();
-      
+
       #[cfg(any(windows, target_os = "linux"))]
       {
         // For Windows and Linux, register all deep links at runtime for development
         app.deep_link().register_all()?;
       }
-      
+
       // Handle deep links - this works for both scenarios:
       // 1. App is running and URL is opened
       // 2. App is not running and URL causes app to launch
@@ -136,10 +145,10 @@ pub fn run() {
           for url in urls {
             let url_string = url.to_string();
             println!("Deep link received: {}", url_string);
-            
+
             // Clone the handle for each async task
             let handle_clone = handle.clone();
-            
+
             // Handle the URL asynchronously
             tauri::async_runtime::spawn(async move {
               if let Err(e) = handle_url_open(handle_clone, url_string.clone()).await {
@@ -155,14 +164,14 @@ pub fn run() {
       tauri::async_runtime::spawn(async move {
         let version_updater = get_version_updater();
         let mut updater_guard = version_updater.lock().await;
-        
+
         // Set the app handle
         updater_guard.set_app_handle(app_handle).await;
-        
+
         // Start the background updates
         updater_guard.start_background_updates().await;
       });
-      
+
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
@@ -173,7 +182,7 @@ pub fn run() {
       is_browser_downloaded,
       check_browser_exists,
       create_browser_profile_new,
-      create_browser_profile,          // Keep for backward compatibility
+      create_browser_profile, // Keep for backward compatibility
       list_browser_profiles,
       launch_browser_profile,
       fetch_browser_versions,

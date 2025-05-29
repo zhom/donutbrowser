@@ -18,7 +18,7 @@ program
   .option(
     "-p, --port <number>",
     "local port to use (random if not specified)",
-    parseInt
+    Number.parseInt
   )
   .option("--ignore-certificate", "ignore certificate errors for HTTPS proxies")
   .option("--id <id>", "proxy ID for stop command")

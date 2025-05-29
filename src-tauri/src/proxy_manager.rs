@@ -174,8 +174,6 @@ impl ProxyManager {
     })
   }
 
-
-
   // Get stored proxy info for a profile
   pub fn get_profile_proxy_info(&self, profile_name: &str) -> Option<(String, u16)> {
     let profile_proxies = self.profile_proxies.lock().unwrap();

@@ -60,10 +60,10 @@ export function ChangeVersionDialog({
     if (profile && selectedVersion) {
       // Check if this is a downgrade
       const currentVersionIndex = availableVersions.findIndex(
-        (v) => v.tag_name === profile.version
+        (v) => v.tag_name === profile.version,
       );
       const selectedVersionIndex = availableVersions.findIndex(
-        (v) => v.tag_name === selectedVersion
+        (v) => v.tag_name === selectedVersion,
       );
 
       // If selected version has a higher index, it's older (downgrade)
