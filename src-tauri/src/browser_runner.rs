@@ -83,6 +83,7 @@ impl BrowserRunner {
   }
 
   // Helper function to validate PID for TOR/Mullvad browsers
+  // TODO: make available for other platforms once other functionality is implemented
   #[cfg(target_os = "macos")]
   fn validate_tor_mullvad_pid(&self, profile: &BrowserProfile, pid: u32) -> bool {
     let system = System::new_all();
@@ -135,6 +136,7 @@ impl BrowserRunner {
       false
     }
   }
+
   pub fn get_binaries_dir(&self) -> PathBuf {
     let mut path = self.base_dirs.data_local_dir().to_path_buf();
     path.push(if cfg!(debug_assertions) {
