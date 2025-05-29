@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "prettier --check src/ && tsc --noEmit && next lint",
+    "lint:rust": "cd src-tauri && cargo clippy --all-targets --all-features -- -D warnings -D clippy::all",
     "tauri": "tauri",
     "shadcn:add": "pnpm dlx shadcn@latest add",
     "prepare": "husky",
@@ -72,6 +73,7 @@
     ],
     "src-tauri/**/*.rs": [
       "cd src-tauri && cargo fmt --all",
+      "cd src-tauri && cargo clippy --all-targets --all-features -- -D warnings -D clippy::all",
       "cd src-tauri && cargo test"
     ]
   }

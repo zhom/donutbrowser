@@ -1,16 +1,16 @@
-name: Release
+name: Rolling Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
 
 env:
   TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
   TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
 jobs:
-  release:
+  rolling-release:
     permissions:
       contents: write
     strategy:
@@ -29,31 +29,6 @@ jobs:
             target: "x86_64-apple-darwin"
             pkg_target: "latest-macos-x64"
             nodecar_script: "build:x86_64"
-          # Future platforms can be added here:
-          # - platform: "ubuntu-20.04"
-          #   args: "--target x86_64-unknown-linux-gnu"
-          #   arch: "x86_64"
-          #   target: "x86_64-unknown-linux-gnu"
-          #   pkg_target: "latest-linux-x64"
-          #   nodecar_script: "build:linux-x64"
-          # - platform: "ubuntu-20.04"
-          #   args: "--target aarch64-unknown-linux-gnu"
-          #   arch: "aarch64"
-          #   target: "aarch64-unknown-linux-gnu"
-          #   pkg_target: "latest-linux-arm64"
-          #   nodecar_script: "build:linux-arm64"
-          # - platform: "windows-latest"
-          #   args: "--target x86_64-pc-windows-msvc"
-          #   arch: "x86_64"
-          #   target: "x86_64-pc-windows-msvc"
-          #   pkg_target: "latest-win-x64"
-          #   nodecar_script: "build:win-x64"
-          # - platform: "windows-latest"
-          #   args: "--target aarch64-pc-windows-msvc"
-          #   arch: "aarch64"
-          #   target: "aarch64-pc-windows-msvc"
-          #   pkg_target: "latest-win-arm64"
-          #   nodecar_script: "build:win-arm64"
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -71,12 +46,6 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-
-      - name: Install dependencies (Ubuntu only)
-        if: matrix.platform == 'ubuntu-20.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -100,23 +69,23 @@ jobs:
       - name: Copy nodecar binary to Tauri binaries
         run: |
           mkdir -p src-tauri/binaries
-          if [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
-            cp nodecar/dist/nodecar.exe src-tauri/binaries/nodecar-${{ matrix.target }}.exe
-          else
-            cp nodecar/dist/nodecar src-tauri/binaries/nodecar-${{ matrix.target }}
-          fi
+          cp nodecar/dist/nodecar src-tauri/binaries/nodecar-${{ matrix.target }}
 
       - name: Build frontend
         run: pnpm build
+
+      - name: Get commit hash
+        id: commit
+        run: echo "hash=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "Donut Browser ${{ github.ref_name }}"
-          releaseBody: "See the assets to download this version and install."
-          releaseDraft: true
-          prerelease: false
+          tagName: "alpha-${{ steps.commit.outputs.hash }}"
+          releaseName: "Donut Browser Alpha (Build ${{ steps.commit.outputs.hash }})"
+          releaseBody: "⚠️ **Alpha Release** - This is an automatically generated pre-release build from the latest main branch. Use with caution.\n\nCommit: ${{ github.sha }}\nBuild: ${{ steps.commit.outputs.hash }}"
+          releaseDraft: false
+          prerelease: true
           args: ${{ matrix.args }}

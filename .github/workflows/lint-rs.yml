@@ -58,53 +58,17 @@ jobs:
       - name: Install nodecar dependencies
         working-directory: ./nodecar
         run: |
-          echo "DEBUG: Installing nodecar dependencies..."
-          pnpm install --ignore-workspace --frozen-lockfile 
-          echo "DEBUG: Current directory: $(pwd)"
-          echo "DEBUG: Contents of nodecar directory:"
-          ls -la
-          echo "DEBUG: Checking if package.json exists:"
-          cat package.json | head -20
-          echo "DEBUG: Checking pnpm version and cache:"
-          pnpm --version
-          echo "DEBUG: Running pnpm install..."
-          pnpm install --frozen-lockfile
-          echo "DEBUG: After pnpm install - checking node_modules:"
-          ls -la node_modules/ | head -20
-          echo "DEBUG: Checking what TypeScript can resolve:"
-          npx tsc --noEmit --listFiles | head -20 || echo "TypeScript check failed"
+          pnpm install --ignore-workspace --frozen-lockfile
 
       - name: Build nodecar binary
         shell: bash
         working-directory: ./nodecar
         run: |
-          echo "DEBUG: Building nodecar binary..."
-          echo "DEBUG: Current directory: $(pwd)"
-          echo "DEBUG: Contents of nodecar directory:"
-          ls -la
-          echo "DEBUG: Checking if node_modules still exists:"
-          ls -la node_modules/ | head -10 || echo "node_modules not found!"
-          echo "DEBUG: Checking TypeScript config:"
-          cat tsconfig.json
-          echo "DEBUG: Checking src directory:"
-          ls -la src/
-          echo "DEBUG: Testing individual imports:"
-          echo "import { program } from 'commander';" > test-import.ts
-          npx tsc --noEmit test-import.ts || echo "Commander import failed"
-          echo "import getPort from 'get-port';" > test-import.ts  
-          npx tsc --noEmit test-import.ts || echo "get-port import failed"
-          echo "import * as ProxyChain from 'proxy-chain';" > test-import.ts
-          npx tsc --noEmit test-import.ts || echo "proxy-chain import failed"
-          rm test-import.ts
-          echo "DEBUG: Running build script based on OS..."
           if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-            echo "DEBUG: Running Linux x64 build..."
             pnpm run build:linux-x64
           elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-            echo "DEBUG: Running macOS aarch64 build..."
             pnpm run build:aarch64
           elif [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            echo "DEBUG: Running Windows x64 build..."
             pnpm run build:win-x64
           fi
 
@@ -127,7 +91,7 @@ jobs:
         working-directory: src-tauri
 
       - name: Run clippy check and deny warnings
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --all-targets --all-features -- -D warnings -D clippy::all
         working-directory: src-tauri
 
       - name: Run Rust unit tests
