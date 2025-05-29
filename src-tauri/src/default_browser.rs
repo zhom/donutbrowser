@@ -49,12 +49,10 @@ mod macos {
         if status != 0 {
           let error_msg = match status {
             -54 => format!(
-              "Failed to set as default browser for scheme '{}'. The app is not properly registered as a browser. Please:\n1. Build and install the app properly\n2. Manually set Donut Browser as default in System Settings > General > Default web browser\n3. Make sure the app is in your Applications folder",
-              scheme
+              "Failed to set as default browser for scheme '{scheme}'. The app is not properly registered as a browser. Please:\n1. Build and install the app properly\n2. Manually set Donut Browser as default in System Settings > General > Default web browser\n3. Make sure the app is in your Applications folder"
             ),
             _ => format!(
-              "Failed to set as default browser for scheme '{}'. Status code: {}. Please manually set Donut Browser as default in System Settings > General > Default web browser.",
-              scheme, status
+              "Failed to set as default browser for scheme '{scheme}'. Status code: {status}. Please manually set Donut Browser as default in System Settings > General > Default web browser."
             )
           };
           return Err(error_msg);
@@ -132,27 +130,24 @@ pub async fn open_url_with_profile(
   // Get the profile by name
   let profiles = runner
     .list_profiles()
-    .map_err(|e| format!("Failed to list profiles: {}", e))?;
+    .map_err(|e| format!("Failed to list profiles: {e}"))?;
   let profile = profiles
     .into_iter()
     .find(|p| p.name == profile_name)
-    .ok_or_else(|| format!("Profile '{}' not found", profile_name))?;
+    .ok_or_else(|| format!("Profile '{profile_name}' not found"))?;
 
-  println!("Opening URL '{}' with profile '{}'", url, profile_name);
+  println!("Opening URL '{url}' with profile '{profile_name}'");
 
   // Use launch_or_open_url which handles both launching new instances and opening in existing ones
   runner
     .launch_or_open_url(app_handle, &profile, Some(url.clone()))
     .await
     .map_err(|e| {
-      println!("Failed to open URL with profile '{}': {}", profile_name, e);
-      format!("Failed to open URL with profile: {}", e)
+      println!("Failed to open URL with profile '{profile_name}': {e}");
+      format!("Failed to open URL with profile: {e}")
     })?;
 
-  println!(
-    "Successfully opened URL '{}' with profile '{}'",
-    url, profile_name
-  );
+  println!("Successfully opened URL '{url}' with profile '{profile_name}'");
   Ok(())
 }
 
@@ -169,7 +164,7 @@ pub async fn smart_open_url(
   // Get all profiles
   let profiles = runner
     .list_profiles()
-    .map_err(|e| format!("Failed to list profiles: {}", e))?;
+    .map_err(|e| format!("Failed to list profiles: {e}"))?;
 
   if profiles.is_empty() {
     return Err("no_profiles".to_string());

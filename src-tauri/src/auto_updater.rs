@@ -49,7 +49,7 @@ impl AutoUpdater {
     let settings = self
       .settings_manager
       .load_settings()
-      .map_err(|e| format!("Failed to load settings: {}", e))?;
+      .map_err(|e| format!("Failed to load settings: {e}"))?;
     if !settings.auto_updates_enabled {
       return Ok(Vec::new());
     }
@@ -57,7 +57,7 @@ impl AutoUpdater {
     let profiles = self
       .browser_runner
       .list_profiles()
-      .map_err(|e| format!("Failed to list profiles: {}", e))?;
+      .map_err(|e| format!("Failed to list profiles: {e}"))?;
     let mut notifications = Vec::new();
     let mut browser_versions: HashMap<String, Vec<BrowserVersionInfo>> = HashMap::new();
 
@@ -188,7 +188,7 @@ impl AutoUpdater {
     version: &str,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut state = self.load_auto_update_state()?;
-    let download_key = format!("{}-{}", browser, version);
+    let download_key = format!("{browser}-{version}");
     state.auto_update_downloads.insert(download_key);
     self.save_auto_update_state(&state)?;
     Ok(())
@@ -201,7 +201,7 @@ impl AutoUpdater {
     version: &str,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut state = self.load_auto_update_state()?;
-    let download_key = format!("{}-{}", browser, version);
+    let download_key = format!("{browser}-{version}");
     state.auto_update_downloads.remove(&download_key);
     self.save_auto_update_state(&state)?;
     Ok(())
@@ -214,7 +214,7 @@ impl AutoUpdater {
     version: &str,
   ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
     let state = self.load_auto_update_state()?;
-    let download_key = format!("{}-{}", browser, version);
+    let download_key = format!("{browser}-{version}");
     Ok(state.auto_update_downloads.contains(&download_key))
   }
 
@@ -229,7 +229,7 @@ impl AutoUpdater {
     state.disabled_browsers.insert(browser.to_string());
 
     // Mark this download as auto-update for toast suppression
-    let download_key = format!("{}-{}", browser, new_version);
+    let download_key = format!("{browser}-{new_version}");
     state.auto_update_downloads.insert(download_key);
 
     self.save_auto_update_state(&state)?;
@@ -261,7 +261,7 @@ impl AutoUpdater {
     let profiles = self
       .browser_runner
       .list_profiles()
-      .map_err(|e| format!("Failed to list profiles: {}", e))?;
+      .map_err(|e| format!("Failed to list profiles: {e}"))?;
 
     let mut updated_profiles = Vec::new();
 
@@ -308,7 +308,7 @@ impl AutoUpdater {
     // Remove browser from disabled list and clean up auto-update tracking
     let mut state = self.load_auto_update_state()?;
     state.disabled_browsers.remove(browser);
-    let download_key = format!("{}-{}", browser, new_version);
+    let download_key = format!("{browser}-{new_version}");
     state.auto_update_downloads.remove(&download_key);
     self.save_auto_update_state(&state)?;
 
@@ -409,7 +409,7 @@ pub async fn check_for_browser_updates() -> Result<Vec<UpdateNotification>, Stri
   let notifications = updater
     .check_for_updates()
     .await
-    .map_err(|e| format!("Failed to check for updates: {}", e))?;
+    .map_err(|e| format!("Failed to check for updates: {e}"))?;
   let grouped = updater.group_update_notifications(notifications);
   Ok(grouped)
 }
@@ -420,7 +420,7 @@ pub async fn start_browser_update(browser: String, new_version: String) -> Resul
   updater
     .start_browser_update(&browser, &new_version)
     .await
-    .map_err(|e| format!("Failed to start browser update: {}", e))
+    .map_err(|e| format!("Failed to start browser update: {e}"))
 }
 
 #[tauri::command]
@@ -429,7 +429,7 @@ pub async fn complete_browser_update(browser: String) -> Result<(), String> {
   updater
     .complete_browser_update(&browser)
     .await
-    .map_err(|e| format!("Failed to complete browser update: {}", e))
+    .map_err(|e| format!("Failed to complete browser update: {e}"))
 }
 
 #[tauri::command]
@@ -437,7 +437,7 @@ pub async fn is_browser_disabled_for_update(browser: String) -> Result<bool, Str
   let updater = AutoUpdater::new();
   updater
     .is_browser_disabled(&browser)
-    .map_err(|e| format!("Failed to check browser status: {}", e))
+    .map_err(|e| format!("Failed to check browser status: {e}"))
 }
 
 #[tauri::command]
@@ -445,7 +445,7 @@ pub async fn dismiss_update_notification(notification_id: String) -> Result<(), 
   let updater = AutoUpdater::new();
   updater
     .dismiss_update_notification(&notification_id)
-    .map_err(|e| format!("Failed to dismiss notification: {}", e))
+    .map_err(|e| format!("Failed to dismiss notification: {e}"))
 }
 
 #[tauri::command]
@@ -457,7 +457,7 @@ pub async fn complete_browser_update_with_auto_update(
   updater
     .complete_browser_update_with_auto_update(&browser, &new_version)
     .await
-    .map_err(|e| format!("Failed to complete browser update: {}", e))
+    .map_err(|e| format!("Failed to complete browser update: {e}"))
 }
 
 #[tauri::command]
@@ -465,7 +465,7 @@ pub async fn mark_auto_update_download(browser: String, version: String) -> Resu
   let updater = AutoUpdater::new();
   updater
     .mark_auto_update_download(&browser, &version)
-    .map_err(|e| format!("Failed to mark auto-update download: {}", e))
+    .map_err(|e| format!("Failed to mark auto-update download: {e}"))
 }
 
 #[tauri::command]
@@ -473,7 +473,7 @@ pub async fn remove_auto_update_download(browser: String, version: String) -> Re
   let updater = AutoUpdater::new();
   updater
     .remove_auto_update_download(&browser, &version)
-    .map_err(|e| format!("Failed to remove auto-update download: {}", e))
+    .map_err(|e| format!("Failed to remove auto-update download: {e}"))
 }
 
 #[tauri::command]
@@ -481,7 +481,7 @@ pub async fn is_auto_update_download(browser: String, version: String) -> Result
   let updater = AutoUpdater::new();
   updater
     .is_auto_update_download(&browser, &version)
-    .map_err(|e| format!("Failed to check auto-update download: {}", e))
+    .map_err(|e| format!("Failed to check auto-update download: {e}"))
 }
 
 #[cfg(test)]
@@ -493,7 +493,7 @@ mod tests {
       name: name.to_string(),
       browser: browser.to_string(),
       version: version.to_string(),
-      profile_path: format!("/tmp/{}", name),
+      profile_path: format!("/tmp/{name}"),
       process_id: None,
       proxy: None,
       last_launch: None,

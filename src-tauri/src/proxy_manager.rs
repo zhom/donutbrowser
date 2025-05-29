@@ -78,15 +78,15 @@ impl ProxyManager {
 
     if !output.status.success() {
       let stderr = String::from_utf8_lossy(&output.stderr);
-      return Err(format!("Proxy start failed: {}", stderr));
+      return Err(format!("Proxy start failed: {stderr}"));
     }
 
-    let json_string = String::from_utf8(output.stdout)
-      .map_err(|e| format!("Failed to parse proxy output: {}", e))?;
+    let json_string =
+      String::from_utf8(output.stdout).map_err(|e| format!("Failed to parse proxy output: {e}"))?;
 
     // Parse the JSON output
     let json: Value =
-      serde_json::from_str(&json_string).map_err(|e| format!("Failed to parse JSON: {}", e))?;
+      serde_json::from_str(&json_string).map_err(|e| format!("Failed to parse JSON: {e}"))?;
 
     // Extract proxy information
     let id = json["id"].as_str().ok_or("Missing proxy ID")?;
@@ -146,7 +146,7 @@ impl ProxyManager {
     let nodecar = app_handle
       .shell()
       .sidecar("nodecar")
-      .map_err(|e| format!("Failed to create sidecar: {}", e))?
+      .map_err(|e| format!("Failed to create sidecar: {e}"))?
       .arg("proxy")
       .arg("stop")
       .arg("--id")
@@ -156,7 +156,7 @@ impl ProxyManager {
 
     if !output.status.success() {
       let stderr = String::from_utf8_lossy(&output.stderr);
-      eprintln!("Proxy stop error: {}", stderr);
+      eprintln!("Proxy stop error: {stderr}");
       // We still return Ok since we've already removed the proxy from our tracking
     }
 

@@ -98,23 +98,17 @@ impl SettingsManager {
       Ok(settings) => {
         // Save the settings back to ensure any missing fields are written with defaults
         if let Err(e) = self.save_settings(&settings) {
-          eprintln!(
-            "Warning: Failed to update settings file with defaults: {}",
-            e
-          );
+          eprintln!("Warning: Failed to update settings file with defaults: {e}");
         }
         Ok(settings)
       }
       Err(e) => {
-        eprintln!(
-          "Warning: Failed to parse settings file, using defaults: {}",
-          e
-        );
+        eprintln!("Warning: Failed to parse settings file, using defaults: {e}");
         let default_settings = AppSettings::default();
 
         // Try to save default settings to fix the corrupted file
         if let Err(save_error) = self.save_settings(&default_settings) {
-          eprintln!("Warning: Failed to save default settings: {}", save_error);
+          eprintln!("Warning: Failed to save default settings: {save_error}");
         }
 
         Ok(default_settings)
@@ -183,7 +177,7 @@ pub async fn get_app_settings() -> Result<AppSettings, String> {
   let manager = SettingsManager::new();
   manager
     .load_settings()
-    .map_err(|e| format!("Failed to load settings: {}", e))
+    .map_err(|e| format!("Failed to load settings: {e}"))
 }
 
 #[tauri::command]
@@ -191,7 +185,7 @@ pub async fn save_app_settings(settings: AppSettings) -> Result<(), String> {
   let manager = SettingsManager::new();
   manager
     .save_settings(&settings)
-    .map_err(|e| format!("Failed to save settings: {}", e))
+    .map_err(|e| format!("Failed to save settings: {e}"))
 }
 
 #[tauri::command]
@@ -199,7 +193,7 @@ pub async fn should_show_settings_on_startup() -> Result<bool, String> {
   let manager = SettingsManager::new();
   manager
     .should_show_settings_on_startup()
-    .map_err(|e| format!("Failed to check prompt setting: {}", e))
+    .map_err(|e| format!("Failed to check prompt setting: {e}"))
 }
 
 #[tauri::command]
@@ -207,7 +201,7 @@ pub async fn disable_default_browser_prompt() -> Result<(), String> {
   let manager = SettingsManager::new();
   manager
     .disable_default_browser_prompt()
-    .map_err(|e| format!("Failed to disable prompt: {}", e))
+    .map_err(|e| format!("Failed to disable prompt: {e}"))
 }
 
 #[tauri::command]
@@ -215,7 +209,7 @@ pub async fn get_table_sorting_settings() -> Result<TableSortingSettings, String
   let manager = SettingsManager::new();
   manager
     .load_table_sorting()
-    .map_err(|e| format!("Failed to load table sorting settings: {}", e))
+    .map_err(|e| format!("Failed to load table sorting settings: {e}"))
 }
 
 #[tauri::command]
@@ -223,5 +217,5 @@ pub async fn save_table_sorting_settings(sorting: TableSortingSettings) -> Resul
   let manager = SettingsManager::new();
   manager
     .save_table_sorting(&sorting)
-    .map_err(|e| format!("Failed to save table sorting settings: {}", e))
+    .map_err(|e| format!("Failed to save table sorting settings: {e}"))
 }

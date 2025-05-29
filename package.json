@@ -13,7 +13,7 @@
     "shadcn:add": "pnpm dlx shadcn@latest add",
     "prepare": "husky",
     "format:js": "biome check src/ --fix",
-    "format:rust": "cd src-tauri && cargo fmt --all",
+    "format:rust": "cd src-tauri && cargo clippy --fix --allow-dirty --all-targets --all-features -- -D warnings -D clippy::all && cargo fmt --all",
     "format:biome": "biome check src/ --fix",
     "format": "pnpm format:js && pnpm format:rust"
   },

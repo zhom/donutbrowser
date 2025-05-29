@@ -267,7 +267,7 @@ impl ApiClient {
 
   pub fn load_cached_versions(&self, browser: &str) -> Option<Vec<String>> {
     let cache_dir = Self::get_cache_dir().ok()?;
-    let cache_file = cache_dir.join(format!("{}_versions.json", browser));
+    let cache_file = cache_dir.join(format!("{browser}_versions.json"));
 
     if !cache_file.exists() {
       return None;
@@ -277,7 +277,7 @@ impl ApiClient {
     let cached_data: CachedVersionData = serde_json::from_str(&content).ok()?;
 
     // Always return cached versions regardless of age - they're always valid
-    println!("Using cached versions for {}", browser);
+    println!("Using cached versions for {browser}");
     Some(cached_data.versions)
   }
 
@@ -286,7 +286,7 @@ impl ApiClient {
       Ok(dir) => dir,
       Err(_) => return true, // If we can't get cache dir, consider expired
     };
-    let cache_file = cache_dir.join(format!("{}_versions.json", browser));
+    let cache_file = cache_dir.join(format!("{browser}_versions.json"));
 
     if !cache_file.exists() {
       return true; // No cache file means expired
@@ -312,7 +312,7 @@ impl ApiClient {
     versions: &[String],
   ) -> Result<(), Box<dyn std::error::Error>> {
     let cache_dir = Self::get_cache_dir()?;
-    let cache_file = cache_dir.join(format!("{}_versions.json", browser));
+    let cache_file = cache_dir.join(format!("{browser}_versions.json"));
 
     let cached_data = CachedVersionData {
       versions: versions.to_vec(),
@@ -327,7 +327,7 @@ impl ApiClient {
 
   fn load_cached_github_releases(&self, browser: &str) -> Option<Vec<GithubRelease>> {
     let cache_dir = Self::get_cache_dir().ok()?;
-    let cache_file = cache_dir.join(format!("{}_github.json", browser));
+    let cache_file = cache_dir.join(format!("{browser}_github.json"));
 
     if !cache_file.exists() {
       return None;
@@ -337,7 +337,7 @@ impl ApiClient {
     let cached_data: CachedGithubData = serde_json::from_str(&content).ok()?;
 
     // Always use cached GitHub releases - cache never expires, only gets updated with new versions
-    println!("Using cached GitHub releases for {}", browser);
+    println!("Using cached GitHub releases for {browser}");
     Some(cached_data.releases)
   }
 
@@ -347,7 +347,7 @@ impl ApiClient {
     releases: &[GithubRelease],
   ) -> Result<(), Box<dyn std::error::Error>> {
     let cache_dir = Self::get_cache_dir()?;
-    let cache_file = cache_dir.join(format!("{}_github.json", browser));
+    let cache_file = cache_dir.join(format!("{browser}_github.json"));
 
     let cached_data = CachedGithubData {
       releases: releases.to_vec(),
@@ -376,8 +376,7 @@ impl ApiClient {
                 date: "".to_string(), // Cache doesn't store dates
                 is_prerelease: is_alpha_version(&version),
                 download_url: Some(format!(
-                  "https://download.mozilla.org/?product=firefox-{}&os=osx&lang=en-US",
-                  version
+                  "https://download.mozilla.org/?product=firefox-{version}&os=osx&lang=en-US"
                 )),
               }
             })
@@ -438,7 +437,7 @@ impl ApiClient {
     // Cache the results (unless bypassing cache)
     if !no_caching {
       if let Err(e) = self.save_cached_versions("firefox", &versions) {
-        eprintln!("Failed to cache Firefox versions: {}", e);
+        eprintln!("Failed to cache Firefox versions: {e}");
       }
     }
 
@@ -461,8 +460,7 @@ impl ApiClient {
                 date: "".to_string(), // Cache doesn't store dates
                 is_prerelease: is_alpha_version(&version),
                 download_url: Some(format!(
-                  "https://download.mozilla.org/?product=devedition-{}&os=osx&lang=en-US",
-                  version
+                  "https://download.mozilla.org/?product=devedition-{version}&os=osx&lang=en-US"
                 )),
               }
             })
@@ -529,7 +527,7 @@ impl ApiClient {
     // Cache the results (unless bypassing cache)
     if !no_caching {
       if let Err(e) = self.save_cached_versions("firefox-developer", &versions) {
-        eprintln!("Failed to cache Firefox Developer versions: {}", e);
+        eprintln!("Failed to cache Firefox Developer versions: {e}");
       }
     }
 
@@ -578,7 +576,7 @@ impl ApiClient {
     // Cache the results (unless bypassing cache)
     if !no_caching {
       if let Err(e) = self.save_cached_github_releases("mullvad", &releases) {
-        eprintln!("Failed to cache Mullvad releases: {}", e);
+        eprintln!("Failed to cache Mullvad releases: {e}");
       }
     }
 
@@ -619,7 +617,7 @@ impl ApiClient {
     // Cache the results (unless bypassing cache)
     if !no_caching {
       if let Err(e) = self.save_cached_github_releases("zen", &releases) {
-        eprintln!("Failed to cache Zen releases: {}", e);
+        eprintln!("Failed to cache Zen releases: {e}");
       }
     }
 
@@ -681,7 +679,7 @@ impl ApiClient {
     // Cache the results (unless bypassing cache)
     if !no_caching {
       if let Err(e) = self.save_cached_github_releases("brave", &filtered_releases) {
-        eprintln!("Failed to cache Brave releases: {}", e);
+        eprintln!("Failed to cache Brave releases: {e}");
       }
     }
 
@@ -698,8 +696,7 @@ impl ApiClient {
       "Mac"
     };
     let url = format!(
-      "https://commondatastorage.googleapis.com/chromium-browser-snapshots/{}/LAST_CHANGE",
-      arch
+      "https://commondatastorage.googleapis.com/chromium-browser-snapshots/{arch}/LAST_CHANGE"
     );
     let version = self
       .client
@@ -756,7 +753,7 @@ impl ApiClient {
     // Cache the results (unless bypassing cache)
     if !no_caching {
       if let Err(e) = self.save_cached_versions("chromium", &versions) {
-        eprintln!("Failed to cache Chromium versions: {}", e);
+        eprintln!("Failed to cache Chromium versions: {e}");
       }
     }
 
@@ -786,8 +783,7 @@ impl ApiClient {
             date: "".to_string(), // Cache doesn't store dates
             is_prerelease: false, // Assume all archived versions are stable
             download_url: Some(format!(
-              "https://archive.torproject.org/tor-package-archive/torbrowser/{}/tor-browser-macos-{}.dmg",
-              version, version
+              "https://archive.torproject.org/tor-package-archive/torbrowser/{version}/tor-browser-macos-{version}.dmg"
             )),
           }
         }).collect());
@@ -849,7 +845,7 @@ impl ApiClient {
     // Cache the results (unless bypassing cache)
     if !no_caching {
       if let Err(e) = self.save_cached_versions("tor-browser", &version_strings) {
-        eprintln!("Failed to cache TOR versions: {}", e);
+        eprintln!("Failed to cache TOR versions: {e}");
       }
     }
 
@@ -859,8 +855,7 @@ impl ApiClient {
         date: "".to_string(), // TOR archive doesn't provide structured dates
         is_prerelease: false, // Assume all archived versions are stable
         download_url: Some(format!(
-          "https://archive.torproject.org/tor-package-archive/torbrowser/{}/tor-browser-macos-{}.dmg",
-          version, version
+          "https://archive.torproject.org/tor-package-archive/torbrowser/{version}/tor-browser-macos-{version}.dmg"
         )),
       }
     }).collect())
@@ -870,10 +865,7 @@ impl ApiClient {
     &self,
     version: &str,
   ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-    let url = format!(
-      "https://archive.torproject.org/tor-package-archive/torbrowser/{}/",
-      version
-    );
+    let url = format!("https://archive.torproject.org/tor-package-archive/torbrowser/{version}/");
     let html = self
       .client
       .get(&url)
@@ -1008,10 +1000,10 @@ mod tests {
         );
 
         println!("Firefox API test passed. Found {} releases", releases.len());
-        println!("Latest version: {}", first_release.version);
+        println!("Latest version: {}", releases[0].version);
       }
       Err(e) => {
-        println!("Firefox API test failed: {}", e);
+        println!("Firefox API test failed: {e}");
         panic!("Firefox API should work");
       }
     }
@@ -1047,10 +1039,10 @@ mod tests {
           "Firefox Developer API test passed. Found {} releases",
           releases.len()
         );
-        println!("Latest version: {}", first_release.version);
+        println!("Latest version: {}", releases[0].version);
       }
       Err(e) => {
-        println!("Firefox Developer API test failed: {}", e);
+        println!("Firefox Developer API test failed: {e}");
         panic!("Firefox Developer API should work");
       }
     }
@@ -1074,10 +1066,10 @@ mod tests {
         );
 
         println!("Mullvad API test passed. Found {} releases", releases.len());
-        println!("Latest version: {}", first_release.tag_name);
+        println!("Latest version: {}", releases[0].tag_name);
       }
       Err(e) => {
-        println!("Mullvad API test failed: {}", e);
+        println!("Mullvad API test failed: {e}");
         panic!("Mullvad API should work");
       }
     }
@@ -1101,10 +1093,10 @@ mod tests {
         );
 
         println!("Zen API test passed. Found {} releases", releases.len());
-        println!("Latest version: {}", first_release.tag_name);
+        println!("Latest version: {}", releases[0].tag_name);
       }
       Err(e) => {
-        println!("Zen API test failed: {}", e);
+        println!("Zen API test failed: {e}");
         panic!("Zen API should work");
       }
     }
@@ -1129,7 +1121,7 @@ mod tests {
         }
       }
       Err(e) => {
-        println!("Brave API test failed: {}", e);
+        println!("Brave API test failed: {e}");
         panic!("Brave API should work");
       }
     }
@@ -1150,10 +1142,10 @@ mod tests {
           "Version should be numeric"
         );
 
-        println!("Chromium API test passed. Latest version: {}", version);
+        println!("Chromium API test passed. Latest version: {version}");
       }
       Err(e) => {
-        println!("Chromium API test failed: {}", e);
+        println!("Chromium API test failed: {e}");
         panic!("Chromium API should work");
       }
     }
@@ -1188,10 +1180,10 @@ mod tests {
         );
 
         println!("TOR API test passed. Found {} releases", releases.len());
-        println!("Latest version: {}", first_release.version);
+        println!("Latest version: {}", releases[0].version);
       }
       Ok(Err(e)) => {
-        println!("TOR API test failed: {}", e);
+        println!("TOR API test failed: {e}");
         // Don't panic for TOR API since it can be unreliable
         println!("TOR API test skipped due to network issues");
       }
@@ -1213,13 +1205,10 @@ mod tests {
     match result {
       Ok(has_macos) => {
         assert!(has_macos, "Version 14.0.4 should have macOS support");
-        println!(
-          "TOR version check test passed. Version 14.0.4 has macOS: {}",
-          has_macos
-        );
+        println!("TOR version check test passed. Version 14.0.4 has macOS: {has_macos}");
       }
       Err(e) => {
-        println!("TOR version check test failed: {}", e);
+        println!("TOR version check test failed: {e}");
         panic!("TOR version check should work");
       }
     }

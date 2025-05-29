@@ -127,10 +127,7 @@ impl DownloadedBrowsersRegistry {
       info.actual_version = actual_version;
       Ok(())
     } else {
-      Err(format!(
-        "Browser {}:{} not found in registry",
-        browser, version
-      ))
+      Err(format!("Browser {browser}:{version} not found in registry"))
     }
   }
 

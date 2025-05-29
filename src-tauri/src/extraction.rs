@@ -42,7 +42,7 @@ impl Extractor {
     match extension {
       "dmg" => self.extract_dmg(archive_path, dest_dir).await,
       "zip" => self.extract_zip(archive_path, dest_dir).await,
-      _ => Err(format!("Unsupported archive format: {}", extension).into()),
+      _ => Err(format!("Unsupported archive format: {extension}").into()),
     }
   }
 

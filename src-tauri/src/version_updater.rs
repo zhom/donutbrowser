@@ -174,13 +174,13 @@ impl VersionUpdater {
           };
 
           if let Err(e) = Self::save_background_update_state(&state) {
-            eprintln!("Failed to save background update state: {}", e);
+            eprintln!("Failed to save background update state: {e}");
           } else {
             println!("Startup version update completed successfully");
           }
         }
         Err(e) => {
-          eprintln!("Startup version update failed: {}", e);
+          eprintln!("Startup version update failed: {e}");
           return Err(e);
         }
       }
@@ -198,7 +198,7 @@ impl VersionUpdater {
 
     // Run initial startup check
     if let Err(e) = self.check_and_run_startup_update().await {
-      eprintln!("Startup version update failed: {}", e);
+      eprintln!("Startup version update failed: {e}");
     }
 
     loop {
@@ -227,13 +227,13 @@ impl VersionUpdater {
             };
 
             if let Err(e) = Self::save_background_update_state(&state) {
-              eprintln!("Failed to save background update state: {}", e);
+              eprintln!("Failed to save background update state: {e}");
             } else {
               println!("Background version update completed successfully");
             }
           }
           Err(e) => {
-            eprintln!("Background version update failed: {}", e);
+            eprintln!("Background version update failed: {e}");
 
             // Emit error event
             let progress = VersionUpdateProgress {
@@ -287,7 +287,7 @@ impl VersionUpdater {
     for (index, browser) in browsers.iter().enumerate() {
       // Check if individual browser cache is expired before updating
       if !self.version_service.should_update_cache(browser) {
-        println!("Skipping {} - cache is still fresh", browser);
+        println!("Skipping {browser} - cache is still fresh");
 
         let browser_result = BackgroundUpdateResult {
           browser: browser.to_string(),
@@ -300,7 +300,7 @@ impl VersionUpdater {
         continue;
       }
 
-      println!("Updating versions for browser: {}", browser);
+      println!("Updating versions for browser: {browser}");
 
       // Emit progress for current browser
       let progress = VersionUpdateProgress {
@@ -327,10 +327,10 @@ impl VersionUpdater {
           };
           results.push(browser_result);
 
-          println!("Found {} new versions for {}", new_count, browser);
+          println!("Found {new_count} new versions for {browser}");
         }
         Err(e) => {
-          eprintln!("Failed to update versions for {}: {}", browser, e);
+          eprintln!("Failed to update versions for {browser}: {e}");
           let browser_result = BackgroundUpdateResult {
             browser: browser.to_string(),
             new_versions_count: 0,
@@ -357,10 +357,7 @@ impl VersionUpdater {
     };
     let _ = app_handle.emit("version-update-progress", &progress);
 
-    println!(
-      "Background version update completed. Found {} new versions total",
-      total_new_versions
-    );
+    println!("Background version update completed. Found {total_new_versions} new versions total");
 
     Ok(results)
   }
@@ -388,10 +385,7 @@ impl VersionUpdater {
     };
 
     if let Err(e) = Self::save_background_update_state(&state) {
-      eprintln!(
-        "Failed to save background update state after manual update: {}",
-        e
-      );
+      eprintln!("Failed to save background update state after manual update: {e}");
     }
 
     Ok(results)
@@ -440,7 +434,7 @@ pub async fn trigger_manual_version_update(
   updater_guard
     .trigger_manual_update(&app_handle)
     .await
-    .map_err(|e| format!("Failed to trigger manual update: {}", e))
+    .map_err(|e| format!("Failed to trigger manual update: {e}"))
 }
 
 #[tauri::command]
@@ -466,7 +460,7 @@ pub async fn force_version_update_check(_app_handle: tauri::AppHandle) -> Result
 
   match updater_guard.check_and_run_startup_update().await {
     Ok(_) => Ok(true),
-    Err(e) => Err(format!("Failed to run version update check: {}", e)),
+    Err(e) => Err(format!("Failed to run version update check: {e}")),
   }
 }
 
@@ -477,7 +471,7 @@ mod tests {
   // Helper function to create a unique test state file
   fn get_test_state_file(test_name: &str) -> PathBuf {
     let cache_dir = VersionUpdater::get_cache_dir().unwrap();
-    cache_dir.join(format!("test_{}_state.json", test_name))
+    cache_dir.join(format!("test_{test_name}_state.json"))
   }
 
   fn save_test_state(

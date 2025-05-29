@@ -52,7 +52,7 @@ impl Downloader {
           .find(|r| {
             r.tag_name == version || r.tag_name == format!("v{}", version.trim_start_matches('v'))
           })
-          .ok_or(format!("Brave version {} not found", version))?;
+          .ok_or(format!("Brave version {version} not found"))?;
 
         // Find the universal macOS DMG asset
         let asset = release
@@ -60,8 +60,7 @@ impl Downloader {
           .iter()
           .find(|asset| asset.name.contains(".dmg") && asset.name.contains("universal"))
           .ok_or(format!(
-            "No universal macOS DMG asset found for Brave version {}",
-            version
+            "No universal macOS DMG asset found for Brave version {version}"
           ))?;
 
         Ok(asset.browser_download_url.clone())
@@ -73,7 +72,7 @@ impl Downloader {
         let release = releases
           .iter()
           .find(|r| r.tag_name == version)
-          .ok_or(format!("Zen version {} not found", version))?;
+          .ok_or(format!("Zen version {version} not found"))?;
 
         // Find the macOS universal DMG asset
         let asset = release
@@ -81,8 +80,7 @@ impl Downloader {
           .iter()
           .find(|asset| asset.name == "zen.macos-universal.dmg")
           .ok_or(format!(
-            "No macOS universal asset found for Zen version {}",
-            version
+            "No macOS universal asset found for Zen version {version}"
           ))?;
 
         Ok(asset.browser_download_url.clone())
@@ -94,7 +92,7 @@ impl Downloader {
         let release = releases
           .iter()
           .find(|r| r.tag_name == version)
-          .ok_or(format!("Mullvad version {} not found", version))?;
+          .ok_or(format!("Mullvad version {version} not found"))?;
 
         // Find the macOS DMG asset
         let asset = release
@@ -102,8 +100,7 @@ impl Downloader {
           .iter()
           .find(|asset| asset.name.contains(".dmg") && asset.name.contains("mac"))
           .ok_or(format!(
-            "No macOS asset found for Mullvad version {}",
-            version
+            "No macOS asset found for Mullvad version {version}"
           ))?;
 
         Ok(asset.browser_download_url.clone())
@@ -230,13 +227,10 @@ mod tests {
         assert!(url.contains("github.com/brave/brave-browser"));
         assert!(url.contains(".dmg"));
         assert!(url.contains("universal"));
-        println!("Brave download URL resolved: {}", url);
+        println!("Brave download URL resolved: {url}");
       }
       Err(e) => {
-        println!(
-          "Brave URL resolution failed (expected if version doesn't exist): {}",
-          e
-        );
+        println!("Brave URL resolution failed (expected if version doesn't exist): {e}");
         // This might fail if the version doesn't exist, which is okay for testing
       }
     }
@@ -260,13 +254,10 @@ mod tests {
       Ok(url) => {
         assert!(url.contains("github.com/zen-browser/desktop"));
         assert!(url.contains("zen.macos-universal.dmg"));
-        println!("Zen download URL resolved: {}", url);
+        println!("Zen download URL resolved: {url}");
       }
       Err(e) => {
-        println!(
-          "Zen URL resolution failed (expected if version doesn't exist): {}",
-          e
-        );
+        println!("Zen URL resolution failed (expected if version doesn't exist): {e}");
       }
     }
   }
@@ -289,13 +280,10 @@ mod tests {
       Ok(url) => {
         assert!(url.contains("github.com/mullvad/mullvad-browser"));
         assert!(url.contains(".dmg"));
-        println!("Mullvad download URL resolved: {}", url);
+        println!("Mullvad download URL resolved: {url}");
       }
       Err(e) => {
-        println!(
-          "Mullvad URL resolution failed (expected if version doesn't exist): {}",
-          e
-        );
+        println!("Mullvad URL resolution failed (expected if version doesn't exist): {e}");
       }
     }
   }
@@ -317,10 +305,10 @@ mod tests {
     match result {
       Ok(url) => {
         assert_eq!(url, download_info.url);
-        println!("Firefox download URL (passthrough): {}", url);
+        println!("Firefox download URL (passthrough): {url}");
       }
       Err(e) => {
-        panic!("Firefox URL resolution should not fail: {}", e);
+        panic!("Firefox URL resolution should not fail: {e}");
       }
     }
   }
@@ -342,10 +330,10 @@ mod tests {
     match result {
       Ok(url) => {
         assert_eq!(url, download_info.url);
-        println!("Chromium download URL (passthrough): {}", url);
+        println!("Chromium download URL (passthrough): {url}");
       }
       Err(e) => {
-        panic!("Chromium URL resolution should not fail: {}", e);
+        panic!("Chromium URL resolution should not fail: {e}");
       }
     }
   }
@@ -367,10 +355,10 @@ mod tests {
     match result {
       Ok(url) => {
         assert_eq!(url, download_info.url);
-        println!("TOR download URL (passthrough): {}", url);
+        println!("TOR download URL (passthrough): {url}");
       }
       Err(e) => {
-        panic!("TOR URL resolution should not fail: {}", e);
+        panic!("TOR URL resolution should not fail: {e}");
       }
     }
   }

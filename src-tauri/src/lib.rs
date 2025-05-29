@@ -56,12 +56,12 @@ use auto_updater::{
 fn greet() -> String {
   let now = SystemTime::now();
   let epoch_ms = now.duration_since(UNIX_EPOCH).unwrap().as_millis();
-  format!("Hello world from Rust! Current epoch: {}", epoch_ms)
+  format!("Hello world from Rust! Current epoch: {epoch_ms}")
 }
 
 #[tauri::command]
 async fn handle_url_open(app: tauri::AppHandle, url: String) -> Result<(), String> {
-  println!("handle_url_open called with URL: {}", url);
+  println!("handle_url_open called with URL: {url}");
 
   // Check if the main window exists and is ready
   if let Some(window) = app.get_webview_window("main") {
@@ -70,7 +70,7 @@ async fn handle_url_open(app: tauri::AppHandle, url: String) -> Result<(), Strin
       println!("Main window is visible, emitting show-profile-selector event");
       app
         .emit("show-profile-selector", url.clone())
-        .map_err(|e| format!("Failed to emit URL open event: {}", e))?;
+        .map_err(|e| format!("Failed to emit URL open event: {e}"))?;
       let _ = window.show();
       let _ = window.set_focus();
     } else {
@@ -105,10 +105,10 @@ async fn check_and_handle_startup_url(app_handle: tauri::AppHandle) -> Result<bo
     );
 
     for url in pending_urls {
-      println!("Emitting show-profile-selector event for URL: {}", url);
+      println!("Emitting show-profile-selector event for URL: {url}");
       if let Err(e) = app_handle.emit("show-profile-selector", url.clone()) {
-        eprintln!("Failed to emit URL event: {}", e);
-        return Err(format!("Failed to emit URL event: {}", e));
+        eprintln!("Failed to emit URL event: {e}");
+        return Err(format!("Failed to emit URL event: {e}"));
       }
     }
 
@@ -144,7 +144,7 @@ pub fn run() {
           let urls = event.urls();
           for url in urls {
             let url_string = url.to_string();
-            println!("Deep link received: {}", url_string);
+            println!("Deep link received: {url_string}");
 
             // Clone the handle for each async task
             let handle_clone = handle.clone();
@@ -152,7 +152,7 @@ pub fn run() {
             // Handle the URL asynchronously
             tauri::async_runtime::spawn(async move {
               if let Err(e) = handle_url_open(handle_clone, url_string.clone()).await {
-                eprintln!("Failed to handle deep link URL: {}", e);
+                eprintln!("Failed to handle deep link URL: {e}");
               }
             });
           }

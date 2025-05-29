@@ -130,7 +130,7 @@ impl BrowserRunner {
       );
       true
     } else {
-      println!("PID {} does not exist", pid);
+      println!("PID {pid} does not exist");
       false
     }
   }
@@ -169,7 +169,7 @@ impl BrowserRunner {
       .iter()
       .any(|p| p.name.to_lowercase() == name.to_lowercase())
     {
-      return Err(format!("Profile with name '{}' already exists", name).into());
+      return Err(format!("Profile with name '{name}' already exists").into());
     }
 
     let snake_case_name = name.to_lowercase().replace(" ", "_");
@@ -216,7 +216,7 @@ impl BrowserRunner {
     let profile_path = profiles_dir.join(profile_name.to_lowercase().replace(" ", "_"));
 
     if !profile_file.exists() {
-      return Err(format!("Profile {} not found", profile_name).into());
+      return Err(format!("Profile {profile_name} not found").into());
     }
 
     // Read the profile
@@ -262,7 +262,7 @@ impl BrowserRunner {
     ));
 
     if !profile_file.exists() {
-      return Err(format!("Profile {} not found", profile_name).into());
+      return Err(format!("Profile {profile_name} not found").into());
     }
 
     // Read the profile
@@ -283,7 +283,7 @@ impl BrowserRunner {
     let binaries_dir = self.get_binaries_dir();
 
     if !browser.is_version_downloaded(version, &binaries_dir) {
-      return Err(format!("Browser version {} is not downloaded", version).into());
+      return Err(format!("Browser version {version} is not downloaded").into());
     }
 
     // Update version
@@ -496,7 +496,7 @@ impl BrowserRunner {
 
       // Try multiple times to find the process as it might take time to start
       for attempt in 1..=5 {
-        println!("Attempt {} to find actual browser process...", attempt);
+        println!("Attempt {attempt} to find actual browser process...");
 
         for (pid, process) in system.processes() {
           let cmd = process.cmd();
@@ -605,7 +605,7 @@ impl BrowserRunner {
           let pid = updated_profile.process_id.unwrap();
 
           // First try: Use Firefox remote command (most reliable for these browsers)
-          println!("Trying Firefox remote command for PID: {}", pid);
+          println!("Trying Firefox remote command for PID: {pid}");
           let mut browser_dir = self.get_binaries_dir();
           browser_dir.push(&updated_profile.browser);
           browser_dir.push(&updated_profile.version);
@@ -629,15 +629,11 @@ impl BrowserRunner {
               Ok(output) => {
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 println!(
-                  "Firefox remote command failed with stderr: {}, trying AppleScript fallback",
-                  stderr
+                  "Firefox remote command failed with stderr: {stderr}, trying AppleScript fallback"
                 );
               }
               Err(e) => {
-                println!(
-                  "Firefox remote command error: {}, trying AppleScript fallback",
-                  e
-                );
+                println!("Firefox remote command error: {e}, trying AppleScript fallback");
               }
             }
           }
@@ -653,11 +649,11 @@ impl BrowserRunner {
 try
   tell application "System Events"
     -- Find the exact process by PID
-    set targetProcess to (first application process whose unix id is {})
+    set targetProcess to (first application process whose unix id is {pid})
     
     -- Verify the process exists
     if not (exists targetProcess) then
-      error "No process found with PID {}"
+      error "No process found with PID {pid}"
     end if
     
     -- Get the process name for verification
@@ -700,35 +696,30 @@ try
       delay 0.5
       
       -- Type the URL
-      keystroke "{}"
+      keystroke "{escaped_url}"
       delay 0.5
       
       -- Press Enter to navigate
       keystroke return
     end tell
     
-    return "Successfully opened URL in " & processName & " (PID: {})"
+    return "Successfully opened URL in " & processName & " (PID: {pid})"
   end tell
 on error errMsg number errNum
   return "AppleScript failed: " & errMsg & " (Error " & errNum & ")"
 end try
-            "#,
-            pid, pid, escaped_url, pid
+            "#
           );
 
-          println!(
-            "Executing AppleScript fallback for Firefox-based browser (PID: {})...",
-            pid
-          );
+          println!("Executing AppleScript fallback for Firefox-based browser (PID: {pid})...");
           let output = Command::new("osascript").args(["-e", &script]).output()?;
 
           if !output.status.success() {
             let error_msg = String::from_utf8_lossy(&output.stderr);
-            println!("AppleScript failed: {}", error_msg);
+            println!("AppleScript failed: {error_msg}");
             return Err(
               format!(
-                "Both Firefox remote command and AppleScript failed. AppleScript error: {}",
-                error_msg
+                "Both Firefox remote command and AppleScript failed. AppleScript error: {error_msg}"
               )
               .into(),
             );
@@ -770,10 +761,7 @@ end try
         {
           let pid = updated_profile.process_id.unwrap();
 
-          println!(
-            "Opening URL in TOR/Mullvad browser using file-based approach (PID: {})",
-            pid
-          );
+          println!("Opening URL in TOR/Mullvad browser using file-based approach (PID: {pid})");
 
           // Validate that we have the correct PID for this TOR/Mullvad browser
           if !self.validate_tor_mullvad_pid(&updated_profile, pid) {
@@ -799,23 +787,22 @@ end try
 <html>
 <head>
     <meta charset="utf-8">
-    <meta http-equiv="refresh" content="0; url={}">
+    <meta http-equiv="refresh" content="0; url={url}">
     <title>Redirecting...</title>
     <script>
-        window.location.href = "{}";
+        window.location.href = "{url}";
     </script>
 </head>
 <body>
-    <p>Redirecting to <a href="{}">{}</a>...</p>
+    <p>Redirecting to <a href="{url}">{url}</a>...</p>
 </body>
-</html>"#,
-            url, url, url, url
+</html>"#
           );
 
           // Write the HTML file
           match std::fs::write(&temp_file_path, html_content) {
             Ok(()) => {
-              println!("Created temporary HTML file: {:?}", temp_file_path);
+              println!("Created temporary HTML file: {temp_file_path:?}");
 
               // Get the browser executable path to use with 'open'
               let mut browser_dir = self.get_binaries_dir();
@@ -848,10 +835,10 @@ end try
                   }
                   Ok(output) => {
                     let stderr = String::from_utf8_lossy(&output.stderr);
-                    println!("File-based approach failed: {}", stderr);
+                    println!("File-based approach failed: {stderr}");
                   }
                   Err(e) => {
-                    println!("File-based approach error: {}", e);
+                    println!("File-based approach error: {e}");
                   }
                 }
               }
@@ -860,7 +847,7 @@ end try
               let _ = std::fs::remove_file(&temp_file_path);
             }
             Err(e) => {
-              println!("Failed to create temporary HTML file: {}", e);
+              println!("Failed to create temporary HTML file: {e}");
             }
           }
 
@@ -886,10 +873,10 @@ end try
               }
               Ok(output) => {
                 let stderr = String::from_utf8_lossy(&output.stderr);
-                println!("Direct 'open' command failed: {}", stderr);
+                println!("Direct 'open' command failed: {stderr}");
               }
               Err(e) => {
-                println!("Direct 'open' command error: {}", e);
+                println!("Direct 'open' command error: {e}");
               }
             }
           }
@@ -901,9 +888,9 @@ end try
             r#"
 try
   tell application "System Events"
-    set targetProcess to (first application process whose unix id is {})
+    set targetProcess to (first application process whose unix id is {pid})
     if not (exists targetProcess) then
-      error "No process found with PID {}"
+      error "No process found with PID {pid}"
     end if
     
     -- Just bring the process to front without trying to control it
@@ -914,8 +901,7 @@ try
 on error errMsg
   return "Minimal AppleScript failed: " & errMsg
 end try
-            "#,
-            pid, pid
+            "#
           );
 
           let minimal_output = Command::new("osascript")
@@ -926,7 +912,7 @@ end try
             Ok(output) => {
               let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
               if output.status.success() && result.contains("successfully") {
-                println!("Successfully brought browser to front: {}", result);
+                println!("Successfully brought browser to front: {result}");
 
                 // Now try to use the system's default URL opening mechanism
                 let system_open_result = Command::new("open").args([url]).output();
@@ -938,31 +924,30 @@ end try
                   }
                   Ok(output) => {
                     let stderr = String::from_utf8_lossy(&output.stderr);
-                    println!("System default URL opening failed: {}", stderr);
+                    println!("System default URL opening failed: {stderr}");
                   }
                   Err(e) => {
-                    println!("System default URL opening error: {}", e);
+                    println!("System default URL opening error: {e}");
                   }
                 }
               } else {
-                println!("Minimal AppleScript failed: {}", result);
+                println!("Minimal AppleScript failed: {result}");
               }
             }
             Err(e) => {
-              println!("Minimal AppleScript execution error: {}", e);
+              println!("Minimal AppleScript execution error: {e}");
             }
           }
 
           // If all methods fail, return a more helpful error message
           return Err(format!(
-            "Failed to open URL in existing TOR/Mullvad browser (PID: {}). All methods failed:\n\
+            "Failed to open URL in existing TOR/Mullvad browser (PID: {pid}). All methods failed:\n\
             1. File-based approach failed\n\
             2. Direct 'open' command failed\n\
             3. Minimal AppleScript approach failed\n\
             \n\
             This may be due to browser security restrictions or the browser process may have changed.\n\
-            Try closing and reopening the browser, or manually paste the URL: {}",
-            pid, url
+            Try closing and reopening the browser, or manually paste the URL: {url}"
           ).into());
         }
 
@@ -980,7 +965,7 @@ end try
           let pid = updated_profile.process_id.unwrap();
 
           // First, try using the browser's built-in URL opening capability
-          println!("Trying Chromium URL opening for PID: {}", pid);
+          println!("Trying Chromium URL opening for PID: {pid}");
           let mut browser_dir = self.get_binaries_dir();
           browser_dir.push(&updated_profile.browser);
           browser_dir.push(&updated_profile.version);
@@ -1002,13 +987,10 @@ end try
               }
               Ok(output) => {
                 let stderr = String::from_utf8_lossy(&output.stderr);
-                println!(
-                  "Chromium URL opening failed: {}, trying AppleScript",
-                  stderr
-                );
+                println!("Chromium URL opening failed: {stderr}, trying AppleScript");
               }
               Err(e) => {
-                println!("Chromium URL opening error: {}, trying AppleScript", e);
+                println!("Chromium URL opening error: {e}, trying AppleScript");
               }
             }
           }
@@ -1024,11 +1006,11 @@ end try
 try
   tell application "System Events"
     -- Find the exact process by PID
-    set targetProcess to (first application process whose unix id is {})
+    set targetProcess to (first application process whose unix id is {pid})
     
     -- Verify the process exists
     if not (exists targetProcess) then
-      error "No process found with PID {}"
+      error "No process found with PID {pid}"
     end if
     
     -- Get the process name for verification
@@ -1071,37 +1053,29 @@ try
       delay 0.5
       
       -- Type the URL
-      keystroke "{}"
+      keystroke "{escaped_url}"
       delay 0.5
       
       -- Press Enter to navigate
       keystroke return
     end tell
     
-    return "Successfully opened URL in " & processName & " (PID: {})"
+    return "Successfully opened URL in " & processName & " (PID: {pid})"
   end tell
 on error errMsg number errNum
   return "AppleScript failed: " & errMsg & " (Error " & errNum & ")"
 end try
-            "#,
-            pid, pid, escaped_url, pid
+            "#
           );
 
-          println!(
-            "Executing AppleScript for Chromium-based browser (PID: {})...",
-            pid
-          );
+          println!("Executing AppleScript for Chromium-based browser (PID: {pid})...");
           let output = Command::new("osascript").args(["-e", &script]).output()?;
 
           if !output.status.success() {
             let error_msg = String::from_utf8_lossy(&output.stderr);
-            println!("AppleScript failed: {}", error_msg);
+            println!("AppleScript failed: {error_msg}");
             return Err(
-              format!(
-                "Failed to open URL in existing Chromium-based browser: {}",
-                error_msg
-              )
-              .into(),
+              format!("Failed to open URL in existing Chromium-based browser: {error_msg}").into(),
             );
           } else {
             println!("AppleScript succeeded");
@@ -1176,49 +1150,57 @@ end try
 
     if is_running && url.is_some() {
       // Browser is running and we have a URL to open
-      println!("Opening URL in existing browser: {}", url.as_ref().unwrap());
+      if let Some(url_ref) = url.as_ref() {
+        println!("Opening URL in existing browser: {url_ref}");
 
-      // For TOR/Mullvad browsers, add extra verification
-      if matches!(
-        final_profile.browser.as_str(),
-        "tor-browser" | "mullvad-browser"
-      ) {
-        println!("TOR/Mullvad browser detected - ensuring we have correct PID");
-        if final_profile.process_id.is_none() {
-          println!("ERROR: No PID found for running TOR/Mullvad browser - this should not happen");
-          return Err("No PID found for running browser".into());
+        // For TOR/Mullvad browsers, add extra verification
+        if matches!(
+          final_profile.browser.as_str(),
+          "tor-browser" | "mullvad-browser"
+        ) {
+          println!("TOR/Mullvad browser detected - ensuring we have correct PID");
+          if final_profile.process_id.is_none() {
+            println!(
+              "ERROR: No PID found for running TOR/Mullvad browser - this should not happen"
+            );
+            return Err("No PID found for running browser".into());
+          }
         }
-      }
-      match self
-        .open_url_in_existing_browser(app_handle, &final_profile, url.as_ref().unwrap())
-        .await
-      {
-        Ok(()) => {
-          println!("Successfully opened URL in existing browser");
-          Ok(final_profile)
-        }
-        Err(e) => {
-          println!("Failed to open URL in existing browser: {}", e);
+        match self
+          .open_url_in_existing_browser(app_handle, &final_profile, url_ref)
+          .await
+        {
+          Ok(()) => {
+            println!("Successfully opened URL in existing browser");
+            Ok(final_profile)
+          }
+          Err(e) => {
+            println!("Failed to open URL in existing browser: {e}");
 
-          // For Mullvad and Tor browsers, don't fall back to new instance since they use -no-remote
-          // and can't have multiple instances with the same profile
-          match final_profile.browser.as_str() {
-            "mullvad-browser" | "tor-browser" => {
-              Err(format!(
-                "Failed to open URL in existing {} browser. Cannot launch new instance due to profile conflict: {}",
-                final_profile.browser, e
-              ).into())
-            }
-            _ => {
-              println!(
-                "Falling back to new instance for browser: {}",
-                final_profile.browser
-              );
-              // Fallback to launching a new instance for other browsers
-              self.launch_browser(&final_profile, url).await
+            // For Mullvad and Tor browsers, don't fall back to new instance since they use -no-remote
+            // and can't have multiple instances with the same profile
+            match final_profile.browser.as_str() {
+              "mullvad-browser" | "tor-browser" => {
+                Err(format!(
+                  "Failed to open URL in existing {} browser. Cannot launch new instance due to profile conflict: {}",
+                  final_profile.browser, e
+                ).into())
+              }
+              _ => {
+                println!(
+                  "Falling back to new instance for browser: {}",
+                  final_profile.browser
+                );
+                // Fallback to launching a new instance for other browsers
+                self.launch_browser(&final_profile, url).await
+              }
             }
           }
         }
+      } else {
+        // This case shouldn't happen since we checked is_some() above, but handle it gracefully
+        println!("URL was unexpectedly None, launching new browser instance");
+        self.launch_browser(&final_profile, url).await
       }
     } else {
       // Browser is not running or no URL provided, launch new instance
@@ -1249,7 +1231,7 @@ end try
       .iter()
       .any(|p| p.name.to_lowercase() == new_name.to_lowercase())
     {
-      return Err(format!("Profile with name '{}' already exists", new_name).into());
+      return Err(format!("Profile with name '{new_name}' already exists").into());
     }
 
     // Read the profile
@@ -1400,13 +1382,10 @@ end try
             pid, profile.name
           );
         } else {
-          println!("PID {} exists but doesn't match our profile path exactly, searching for correct process...", pid);
+          println!("PID {pid} exists but doesn't match our profile path exactly, searching for correct process...");
         }
       } else {
-        println!(
-          "Stored PID {} no longer exists, searching for browser process...",
-          pid
-        );
+        println!("Stored PID {pid} no longer exists, searching for browser process...");
       }
     }
 
@@ -1480,7 +1459,7 @@ end try
       if inner_profile.process_id != Some(pid) {
         inner_profile.process_id = Some(pid);
         if let Err(e) = self.save_process_info(&inner_profile) {
-          println!("Warning: Failed to update process info: {}", e);
+          println!("Warning: Failed to update process info: {e}");
         } else {
           println!(
             "Updated process ID for profile '{}' to: {}",
@@ -1495,7 +1474,7 @@ end try
       if inner_profile.process_id.is_some() {
         inner_profile.process_id = None;
         if let Err(e) = self.save_process_info(&inner_profile) {
-          println!("Warning: Failed to clear process info: {}", e);
+          println!("Warning: Failed to clear process info: {e}");
         } else {
           println!("Cleared process ID for profile '{}'", inner_profile.name);
         }
@@ -1616,11 +1595,11 @@ end try
       found_pid.ok_or("Browser process not found")?
     };
 
-    println!("Attempting to kill browser process with PID: {}", pid);
+    println!("Attempting to kill browser process with PID: {pid}");
 
     // Stop any associated proxy first
     if let Err(e) = PROXY_MANAGER.stop_proxy(app_handle, pid).await {
-      println!("Warning: Failed to stop proxy for PID {}: {}", pid, e);
+      println!("Warning: Failed to stop proxy for PID {pid}: {e}");
     }
 
     // Kill the process
@@ -1632,7 +1611,7 @@ end try
       let output = Command::new("kill")
         .args(["-TERM", &pid.to_string()])
         .output()
-        .map_err(|e| format!("Failed to execute kill command: {}", e))?;
+        .map_err(|e| format!("Failed to execute kill command: {e}"))?;
 
       if !output.status.success() {
         // If SIGTERM fails, try SIGKILL (force kill)
@@ -1671,9 +1650,9 @@ end try
     updated_profile.process_id = None;
     self
       .save_process_info(&updated_profile)
-      .map_err(|e| format!("Failed to update profile: {}", e))?;
+      .map_err(|e| format!("Failed to update profile: {e}"))?;
 
-    println!("Successfully killed browser process with PID: {}", pid);
+    println!("Successfully killed browser process with PID: {pid}");
     Ok(())
   }
 }
@@ -1688,7 +1667,7 @@ pub fn create_browser_profile(
   let browser_runner = BrowserRunner::new();
   browser_runner
     .create_profile(&name, &browser, &version, proxy)
-    .map_err(|e| format!("Failed to create profile: {}", e))
+    .map_err(|e| format!("Failed to create profile: {e}"))
 }
 
 #[tauri::command]
@@ -1696,7 +1675,7 @@ pub fn list_browser_profiles() -> Result<Vec<BrowserProfile>, String> {
   let browser_runner = BrowserRunner::new();
   browser_runner
     .list_profiles()
-    .map_err(|e| format!("Failed to list profiles: {}", e))
+    .map_err(|e| format!("Failed to list profiles: {e}"))
 }
 
 #[tauri::command]
@@ -1734,10 +1713,10 @@ pub async fn launch_browser_profile(
             // Apply the proxy settings with the internal proxy
             browser_runner
               .apply_proxy_settings_to_profile(&profile_path, proxy, Some(&internal_proxy_settings))
-              .map_err(|e| format!("Failed to update profile proxy: {}", e))?;
+              .map_err(|e| format!("Failed to update profile proxy: {e}"))?;
           }
           Err(e) => {
-            eprintln!("Failed to start proxy: {}", e);
+            eprintln!("Failed to start proxy: {e}");
             // Continue without proxy
           }
         }
@@ -1765,7 +1744,7 @@ pub fn update_profile_proxy(
   let browser_runner = BrowserRunner::new();
   browser_runner
     .update_profile_proxy(&profile_name, proxy)
-    .map_err(|e| format!("Failed to update profile: {}", e))
+    .map_err(|e| format!("Failed to update profile: {e}"))
 }
 
 #[tauri::command]
@@ -1776,7 +1755,7 @@ pub fn update_profile_version(
   let browser_runner = BrowserRunner::new();
   browser_runner
     .update_profile_version(&profile_name, &version)
-    .map_err(|e| format!("Failed to update profile version: {}", e))
+    .map_err(|e| format!("Failed to update profile version: {e}"))
 }
 
 #[tauri::command]
@@ -1788,7 +1767,7 @@ pub async fn check_browser_status(
   browser_runner
     .check_browser_status(app_handle, &profile)
     .await
-    .map_err(|e| format!("Failed to check browser status: {}", e))
+    .map_err(|e| format!("Failed to check browser status: {e}"))
 }
 
 #[tauri::command]
@@ -1800,7 +1779,7 @@ pub fn rename_profile(
   let browser_runner = BrowserRunner::new();
   browser_runner
     .rename_profile(old_name, new_name)
-    .map_err(|e| format!("Failed to delete profile: {}", e))
+    .map_err(|e| format!("Failed to delete profile: {e}"))
 }
 
 #[tauri::command]
@@ -1808,7 +1787,7 @@ pub fn delete_profile(_app_handle: tauri::AppHandle, profile_name: String) -> Re
   let browser_runner = BrowserRunner::new();
   browser_runner
     .delete_profile(profile_name.as_str())
-    .map_err(|e| format!("Failed to delete profile: {}", e))
+    .map_err(|e| format!("Failed to delete profile: {e}"))
 }
 
 #[tauri::command]
@@ -1832,7 +1811,7 @@ pub async fn fetch_browser_versions_detailed(
   service
     .fetch_browser_versions_detailed(&browser_str, false)
     .await
-    .map_err(|e| format!("Failed to fetch detailed browser versions: {}", e))
+    .map_err(|e| format!("Failed to fetch detailed browser versions: {e}"))
 }
 
 #[tauri::command]
@@ -1853,10 +1832,7 @@ pub async fn fetch_browser_versions_cached_first(
           .fetch_browser_versions_detailed(&browser_str_clone, false)
           .await
         {
-          eprintln!(
-            "Background version update failed for {}: {}",
-            browser_str_clone, e
-          );
+          eprintln!("Background version update failed for {browser_str_clone}: {e}");
         }
       });
     }
@@ -1866,7 +1842,7 @@ pub async fn fetch_browser_versions_cached_first(
     service
       .fetch_browser_versions_detailed(&browser_str, false)
       .await
-      .map_err(|e| format!("Failed to fetch detailed browser versions: {}", e))
+      .map_err(|e| format!("Failed to fetch detailed browser versions: {e}"))
   }
 }
 
@@ -1888,10 +1864,7 @@ pub async fn fetch_browser_versions_with_count_cached_first(
           .fetch_browser_versions_with_count(&browser_str_clone, false)
           .await
         {
-          eprintln!(
-            "Background version update failed for {}: {}",
-            browser_str_clone, e
-          );
+          eprintln!("Background version update failed for {browser_str_clone}: {e}");
         }
       });
     }
@@ -1907,7 +1880,7 @@ pub async fn fetch_browser_versions_with_count_cached_first(
     service
       .fetch_browser_versions_with_count(&browser_str, false)
       .await
-      .map_err(|e| format!("Failed to fetch browser versions: {}", e))
+      .map_err(|e| format!("Failed to fetch browser versions: {e}"))
   }
 }
 
@@ -1933,12 +1906,12 @@ pub async fn download_browser(
 ) -> Result<String, String> {
   let browser_runner = BrowserRunner::new();
   let browser_type =
-    BrowserType::from_str(&browser_str).map_err(|e| format!("Invalid browser type: {}", e))?;
+    BrowserType::from_str(&browser_str).map_err(|e| format!("Invalid browser type: {e}"))?;
   let browser = create_browser(browser_type.clone());
 
   // Load registry and check if already downloaded
   let mut registry = DownloadedBrowsersRegistry::load()
-    .map_err(|e| format!("Failed to load browser registry: {}", e))?;
+    .map_err(|e| format!("Failed to load browser registry: {e}"))?;
 
   if registry.is_browser_downloaded(&browser_str, &version) {
     return Ok(version);
@@ -1948,7 +1921,7 @@ pub async fn download_browser(
   let version_service = BrowserVersionService::new();
   let download_info = version_service
     .get_download_info(&browser_str, &version)
-    .map_err(|e| format!("Failed to get download info: {}", e))?;
+    .map_err(|e| format!("Failed to get download info: {e}"))?;
 
   // Create browser directory
   let mut browser_dir = browser_runner.get_binaries_dir();
@@ -1957,16 +1930,16 @@ pub async fn download_browser(
 
   // Clean up any failed previous download
   if let Err(e) = registry.cleanup_failed_download(&browser_str, &version) {
-    println!("Warning: Failed to cleanup previous download: {}", e);
+    println!("Warning: Failed to cleanup previous download: {e}");
   }
 
-  create_dir_all(&browser_dir).map_err(|e| format!("Failed to create browser directory: {}", e))?;
+  create_dir_all(&browser_dir).map_err(|e| format!("Failed to create browser directory: {e}"))?;
 
   // Mark download as started in registry
   registry.mark_download_started(&browser_str, &version, browser_dir.clone());
   registry
     .save()
-    .map_err(|e| format!("Failed to save registry: {}", e))?;
+    .map_err(|e| format!("Failed to save registry: {e}"))?;
 
   // Use the new download module
   let downloader = Downloader::new();
@@ -1985,7 +1958,7 @@ pub async fn download_browser(
       // Clean up failed download
       let _ = registry.cleanup_failed_download(&browser_str, &version);
       let _ = registry.save();
-      return Err(format!("Failed to download browser: {}", e));
+      return Err(format!("Failed to download browser: {e}"));
     }
   };
 
@@ -2005,14 +1978,14 @@ pub async fn download_browser(
       Ok(_) => {
         // Clean up the downloaded archive
         if let Err(e) = std::fs::remove_file(&download_path) {
-          println!("Warning: Could not delete archive file: {}", e);
+          println!("Warning: Could not delete archive file: {e}");
         }
       }
       Err(e) => {
         // Clean up failed download
         let _ = registry.cleanup_failed_download(&browser_str, &version);
         let _ = registry.save();
-        return Err(format!("Failed to extract browser: {}", e));
+        return Err(format!("Failed to extract browser: {e}"));
       }
     }
 
@@ -2034,10 +2007,7 @@ pub async fn download_browser(
   let _ = app_handle.emit("download-progress", &progress);
 
   // Verify the browser was downloaded correctly
-  println!(
-    "Verifying download for browser: {}, version: {}",
-    browser_str, version
-  );
+  println!("Verifying download for browser: {browser_str}, version: {version}");
 
   // Use the browser's own verification method
   let binaries_dir = browser_runner.get_binaries_dir();
@@ -2056,10 +2026,10 @@ pub async fn download_browser(
 
   registry
     .mark_download_completed_with_actual_version(&browser_str, &version, actual_version)
-    .map_err(|e| format!("Failed to mark download as completed: {}", e))?;
+    .map_err(|e| format!("Failed to mark download as completed: {e}"))?;
   registry
     .save()
-    .map_err(|e| format!("Failed to save registry: {}", e))?;
+    .map_err(|e| format!("Failed to save registry: {e}"))?;
 
   // Emit completion
   let progress = DownloadProgress {
@@ -2106,7 +2076,7 @@ pub async fn kill_browser_profile(
   browser_runner
     .kill_browser_process(app_handle, &profile)
     .await
-    .map_err(|e| format!("Failed to kill browser: {}", e))
+    .map_err(|e| format!("Failed to kill browser: {e}"))
 }
 
 #[tauri::command]
@@ -2117,7 +2087,7 @@ pub fn create_browser_profile_new(
   proxy: Option<ProxySettings>,
 ) -> Result<BrowserProfile, String> {
   let browser_type =
-    BrowserType::from_str(&browser_str).map_err(|e| format!("Invalid browser type: {}", e))?;
+    BrowserType::from_str(&browser_str).map_err(|e| format!("Invalid browser type: {e}"))?;
   create_browser_profile(name, browser_type.as_str().to_string(), version, proxy)
 }
 
@@ -2127,7 +2097,7 @@ pub async fn fetch_browser_versions(browser_str: String) -> Result<Vec<String>, 
   service
     .fetch_browser_versions(&browser_str, false)
     .await
-    .map_err(|e| format!("Failed to fetch browser versions: {}", e))
+    .map_err(|e| format!("Failed to fetch browser versions: {e}"))
 }
 
 #[tauri::command]
@@ -2138,13 +2108,13 @@ pub async fn fetch_browser_versions_with_count(
   service
     .fetch_browser_versions_with_count(&browser_str, false)
     .await
-    .map_err(|e| format!("Failed to fetch browser versions: {}", e))
+    .map_err(|e| format!("Failed to fetch browser versions: {e}"))
 }
 
 #[tauri::command]
 pub fn get_downloaded_browser_versions(browser_str: String) -> Result<Vec<String>, String> {
   let registry = DownloadedBrowsersRegistry::load()
-    .map_err(|e| format!("Failed to load browser registry: {}", e))?;
+    .map_err(|e| format!("Failed to load browser registry: {e}"))?;
   Ok(registry.get_downloaded_versions(&browser_str))
 }
 

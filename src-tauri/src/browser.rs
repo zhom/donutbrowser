@@ -44,7 +44,7 @@ impl BrowserType {
       "brave" => Ok(BrowserType::Brave),
       "zen" => Ok(BrowserType::Zen),
       "tor-browser" => Ok(BrowserType::TorBrowser),
-      _ => Err(format!("Unknown browser type: {}", s)),
+      _ => Err(format!("Unknown browser type: {s}")),
     }
   }
 }
@@ -139,10 +139,7 @@ impl Browser for FirefoxBrowser {
       .join(self.browser_type().as_str())
       .join(version);
 
-    println!(
-      "Firefox browser checking version {} in directory: {:?}",
-      version, browser_dir
-    );
+    println!("Firefox browser checking version {version} in directory: {browser_dir:?}");
 
     // Only check if directory exists and contains a .app file
     if browser_dir.exists() {
@@ -158,7 +155,7 @@ impl Browser for FirefoxBrowser {
       }
       println!("No .app files found in directory");
     } else {
-      println!("Directory does not exist: {:?}", browser_dir);
+      println!("Directory does not exist: {browser_dir:?}");
     }
     false
   }
@@ -229,8 +226,7 @@ impl Browser for ChromiumBrowser {
           let pac_content = fs::read(&pac_path)?;
           let pac_base64 = general_purpose::STANDARD.encode(&pac_content);
           args.push(format!(
-            "--proxy-pac-url=data:application/x-javascript-config;base64,{}",
-            pac_base64
+            "--proxy-pac-url=data:application/x-javascript-config;base64,{pac_base64}"
           ));
         }
       }
@@ -248,10 +244,7 @@ impl Browser for ChromiumBrowser {
       .join(self.browser_type().as_str())
       .join(version);
 
-    println!(
-      "Chromium browser checking version {} in directory: {:?}",
-      version, browser_dir
-    );
+    println!("Chromium browser checking version {version} in directory: {browser_dir:?}");
 
     // Check if directory exists and contains at least one .app file
     if browser_dir.exists() {
@@ -273,7 +266,7 @@ impl Browser for ChromiumBrowser {
       }
       println!("No valid .app files found in directory");
     } else {
-      println!("Directory does not exist: {:?}", browser_dir);
+      println!("Directory does not exist: {browser_dir:?}");
     }
     false
   }
@@ -567,7 +560,7 @@ mod tests {
     assert_eq!(browser_type, cloned);
 
     // Test Debug trait
-    let debug_str = format!("{:?}", browser_type);
+    let debug_str = format!("{browser_type:?}");
     assert!(debug_str.contains("Firefox"));
   }
 

@@ -101,7 +101,7 @@ impl BrowserVersionService {
       "brave" => self.fetch_brave_versions(true).await?,
       "chromium" => self.fetch_chromium_versions(true).await?,
       "tor-browser" => self.fetch_tor_versions(true).await?,
-      _ => return Err(format!("Unsupported browser: {}", browser).into()),
+      _ => return Err(format!("Unsupported browser: {browser}").into()),
     };
 
     let fresh_set: HashSet<String> = fresh_versions.into_iter().collect();
@@ -126,7 +126,7 @@ impl BrowserVersionService {
         .api_client
         .save_cached_versions(browser, &merged_versions)
       {
-        eprintln!("Failed to save merged cache for {}: {}", browser, e);
+        eprintln!("Failed to save merged cache for {browser}: {e}");
       }
     }
 
@@ -304,7 +304,7 @@ impl BrowserVersionService {
           })
           .collect()
       }
-      _ => return Err(format!("Unsupported browser: {}", browser).into()),
+      _ => return Err(format!("Unsupported browser: {browser}").into()),
     };
 
     Ok(detailed_info)
@@ -338,7 +338,7 @@ impl BrowserVersionService {
 
     // Save the updated cache
     if let Err(e) = self.api_client.save_cached_versions(browser, &all_versions) {
-      eprintln!("Failed to save updated cache for {}: {}", browser, e);
+      eprintln!("Failed to save updated cache for {browser}: {e}");
     }
 
     Ok(new_versions_count)
@@ -352,29 +352,27 @@ impl BrowserVersionService {
   ) -> Result<DownloadInfo, Box<dyn std::error::Error + Send + Sync>> {
     match browser {
             "firefox" => Ok(DownloadInfo {
-                url: format!("https://download.mozilla.org/?product=firefox-{}&os=osx&lang=en-US", version),
-                filename: format!("firefox-{}.dmg", version),
+                url: format!("https://download.mozilla.org/?product=firefox-{version}&os=osx&lang=en-US"),
+                filename: format!("firefox-{version}.dmg"),
                 is_archive: true,
             }),
             "firefox-developer" => Ok(DownloadInfo {
-                url: format!("https://download.mozilla.org/?product=devedition-{}&os=osx&lang=en-US", version),
-                filename: format!("firefox-developer-{}.dmg", version),
+                url: format!("https://download.mozilla.org/?product=devedition-{version}&os=osx&lang=en-US"),
+                filename: format!("firefox-developer-{version}.dmg"),
                 is_archive: true,
             }),
             "mullvad-browser" => Ok(DownloadInfo {
                 url: format!(
-                    "https://github.com/mullvad/mullvad-browser/releases/download/{}/mullvad-browser-macos-{}.dmg",
-                    version, version
+                    "https://github.com/mullvad/mullvad-browser/releases/download/{version}/mullvad-browser-macos-{version}.dmg"
                 ),
-                filename: format!("mullvad-browser-{}.dmg", version),
+                filename: format!("mullvad-browser-{version}.dmg"),
                 is_archive: true,
             }),
             "zen" => Ok(DownloadInfo {
                 url: format!(
-                    "https://github.com/zen-browser/desktop/releases/download/{}/zen.macos-universal.dmg",
-                    version
+                    "https://github.com/zen-browser/desktop/releases/download/{version}/zen.macos-universal.dmg"
                 ),
-                filename: format!("zen-{}.dmg", version),
+                filename: format!("zen-{version}.dmg"),
                 is_archive: true,
             }),
             "brave" => {
@@ -382,10 +380,9 @@ impl BrowserVersionService {
                 // The actual URL will be resolved in the download service using the GitHub API
                 Ok(DownloadInfo {
                     url: format!(
-                        "https://github.com/brave/brave-browser/releases/download/{}/Brave-Browser-universal.dmg",
-                        version
+                        "https://github.com/brave/brave-browser/releases/download/{version}/Brave-Browser-universal.dmg"
                     ),
-                    filename: format!("brave-{}.dmg", version),
+                    filename: format!("brave-{version}.dmg"),
                     is_archive: true,
                 })
             }
@@ -393,22 +390,20 @@ impl BrowserVersionService {
                 let arch = if cfg!(target_arch = "aarch64") { "Mac_Arm" } else { "Mac" };
                 Ok(DownloadInfo {
                     url: format!(
-                        "https://commondatastorage.googleapis.com/chromium-browser-snapshots/{}/{}/chrome-mac.zip",
-                        arch, version
+                        "https://commondatastorage.googleapis.com/chromium-browser-snapshots/{arch}/{version}/chrome-mac.zip"
                     ),
-                    filename: format!("chromium-{}.zip", version),
+                    filename: format!("chromium-{version}.zip"),
                     is_archive: true,
                 })
             }
             "tor-browser" => Ok(DownloadInfo {
                 url: format!(
-                    "https://archive.torproject.org/tor-package-archive/torbrowser/{}/tor-browser-macos-{}.dmg",
-                    version, version
+                    "https://archive.torproject.org/tor-package-archive/torbrowser/{version}/tor-browser-macos-{version}.dmg"
                 ),
-                filename: format!("tor-browser-{}.dmg", version),
+                filename: format!("tor-browser-{version}.dmg"),
                 is_archive: true,
             }),
-            _ => Err(format!("Unsupported browser: {}", browser).into()),
+            _ => Err(format!("Unsupported browser: {browser}").into()),
         }
   }
 
@@ -567,8 +562,8 @@ mod tests {
     if let Ok(versions) = result_cached {
       assert!(!versions.is_empty(), "Should have Firefox versions");
       println!(
-        "Firefox cached test passed. Found {} versions",
-        versions.len()
+        "Firefox cached test passed. Found {versions_count} versions",
+        versions_count = versions.len()
       );
     }
 
@@ -588,8 +583,8 @@ mod tests {
         "Should have Firefox versions without caching"
       );
       println!(
-        "Firefox no-cache test passed. Found {} versions",
-        versions.len()
+        "Firefox no-cache test passed. Found {versions_count} versions",
+        versions_count = versions.len()
       );
     }
   }
@@ -611,8 +606,9 @@ mod tests {
         "Total count should match versions length"
       );
       println!(
-        "Firefox count test passed. Found {} versions, new: {:?}",
-        result.total_versions_count, result.new_versions_count
+        "Firefox count test passed. Found {} versions, new: {}",
+        result.total_versions_count,
+        result.new_versions_count.unwrap_or(0)
       );
     }
   }
@@ -636,8 +632,8 @@ mod tests {
         "Version should not be empty"
       );
       println!(
-        "Firefox detailed test passed. Found {} detailed versions",
-        versions.len()
+        "Firefox detailed test passed. Found {versions_count} detailed versions",
+        versions_count = versions.len()
       );
     }
   }
@@ -672,17 +668,10 @@ mod tests {
     // The test should complete without panicking
     match result {
       Ok(count) => {
-        println!(
-          "Incremental update test passed. Found {} new versions",
-          count
-        );
+        println!("Incremental update test passed. Found {count} new versions");
       }
       Err(e) => {
-        println!(
-          "Incremental update test failed (expected for first run): {}",
-          e
-        );
-        // Don't fail the test, as this is expected behavior for first run
+        println!("Incremental update test failed (expected for first run): {e}");
       }
     }
   }
@@ -706,11 +695,14 @@ mod tests {
 
       match result {
         Ok(versions) => {
-          println!("{} test passed. Found {} versions", browser, versions.len());
+          println!(
+            "{browser} test passed. Found {versions_count} versions",
+            versions_count = versions.len()
+          );
         }
         Err(e) => {
           // Some browsers might fail due to network issues, but shouldn't panic
-          println!("{} test failed (network issue): {}", browser, e);
+          println!("{browser} test failed (network issue): {e}");
         }
       }
 
