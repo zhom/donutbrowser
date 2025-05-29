@@ -54,7 +54,7 @@ impl VersionComponent {
       .filter_map(|part| part.parse().ok())
       .collect();
 
-    let major = parts.get(0).copied().unwrap_or(0);
+    let major = parts.first().copied().unwrap_or(0);
     let minor = parts.get(1).copied().unwrap_or(0);
     let patch = parts.get(2).copied().unwrap_or(0);
 
@@ -103,31 +103,31 @@ impl VersionComponent {
     }
 
     // Extract kind and number
-    let (kind, number) = if pre_release.starts_with("alpha") {
+    let (kind, number) = if let Some(stripped) = pre_release.strip_prefix("alpha") {
       (
         PreReleaseKind::Alpha,
-        Self::extract_number(&pre_release[5..]),
+        Self::extract_number(stripped),
       )
-    } else if pre_release.starts_with("beta") {
+    } else if let Some(stripped) = pre_release.strip_prefix("beta") {
       (
         PreReleaseKind::Beta,
-        Self::extract_number(&pre_release[4..]),
+        Self::extract_number(stripped),
       )
-    } else if pre_release.starts_with("rc") {
-      (PreReleaseKind::RC, Self::extract_number(&pre_release[2..]))
-    } else if pre_release.starts_with("dev") {
-      (PreReleaseKind::Dev, Self::extract_number(&pre_release[3..]))
-    } else if pre_release.starts_with("pre") {
-      (PreReleaseKind::Pre, Self::extract_number(&pre_release[3..]))
-    } else if pre_release.starts_with('a') {
+    } else if let Some(stripped) = pre_release.strip_prefix("rc") {
+      (PreReleaseKind::RC, Self::extract_number(stripped))
+    } else if let Some(stripped) = pre_release.strip_prefix("dev") {
+      (PreReleaseKind::Dev, Self::extract_number(stripped))
+    } else if let Some(stripped) = pre_release.strip_prefix("pre") {
+      (PreReleaseKind::Pre, Self::extract_number(stripped))
+    } else if let Some(stripped) = pre_release.strip_prefix('a') {
       (
         PreReleaseKind::Alpha,
-        Self::extract_number(&pre_release[1..]),
+        Self::extract_number(stripped),
       )
-    } else if pre_release.starts_with('b') {
+    } else if let Some(stripped) = pre_release.strip_prefix('b') {
       (
         PreReleaseKind::Beta,
-        Self::extract_number(&pre_release[1..]),
+        Self::extract_number(stripped),
       )
     } else {
       return None;
@@ -903,7 +903,6 @@ impl ApiClient {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use tokio;
 
   #[test]
   fn test_version_parsing() {

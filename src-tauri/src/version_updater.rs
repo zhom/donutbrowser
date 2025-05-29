@@ -259,7 +259,7 @@ impl VersionUpdater {
   ) -> Result<Vec<BackgroundUpdateResult>, Box<dyn std::error::Error + Send + Sync>> {
     println!("Starting background version update for all browsers");
 
-    let browsers = vec![
+    let browsers = [
       "firefox",
       "firefox-developer",
       "mullvad-browser",
@@ -416,11 +416,7 @@ impl VersionUpdater {
       let elapsed = current_time.saturating_sub(state.last_update_time);
       let update_interval_secs = state.update_interval_hours * 60 * 60;
 
-      if elapsed >= update_interval_secs {
-        0 // Update overdue
-      } else {
-        update_interval_secs - elapsed
-      }
+      update_interval_secs.saturating_sub(elapsed)
     }
   }
 }

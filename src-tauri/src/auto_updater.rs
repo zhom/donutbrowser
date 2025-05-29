@@ -17,24 +17,13 @@ pub struct UpdateNotification {
   pub timestamp: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct AutoUpdateState {
   pub pending_updates: Vec<UpdateNotification>,
   pub disabled_browsers: HashSet<String>, // browsers disabled during update
   #[serde(default)]
   pub auto_update_downloads: HashSet<String>, // track auto-update downloads for toast suppression
   pub last_check_timestamp: u64,
-}
-
-impl Default for AutoUpdateState {
-  fn default() -> Self {
-    Self {
-      pending_updates: Vec::new(),
-      disabled_browsers: HashSet::new(),
-      auto_update_downloads: HashSet::new(),
-      last_check_timestamp: 0,
-    }
-  }
 }
 
 pub struct AutoUpdater {
@@ -77,7 +66,7 @@ impl AutoUpdater {
     for profile in profiles {
       browser_profiles
         .entry(profile.browser.clone())
-        .or_insert_with(Vec::new)
+        .or_default()
         .push(profile);
     }
 
@@ -132,7 +121,7 @@ impl AutoUpdater {
         // Only consider versions newer than current
         self.is_version_newer(&v.version, current_version) &&
                 // Respect version type preference
-                (is_current_stable == !v.is_prerelease || !is_current_stable)
+                is_current_stable != v.is_prerelease
       })
       .max_by(|a, b| self.compare_versions(&a.version, &b.version));
 
@@ -843,7 +832,6 @@ mod tests {
     std::fs::write(&state_file, json).unwrap();
 
     // Dismiss notification (remove from pending updates)
-    let mut state = state;
     state
       .pending_updates
       .retain(|n| n.id != "test_notification");

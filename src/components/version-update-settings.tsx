@@ -11,10 +11,10 @@ import {
 } from "@/components/ui/card";
 import { useVersionUpdater } from "@/hooks/use-version-updater";
 import {
-  LuRefreshCw,
-  LuClock,
   LuCheckCheck,
   LuCircleAlert,
+  LuClock,
+  LuRefreshCw,
 } from "react-icons/lu";
 
 export function VersionUpdateSettings() {

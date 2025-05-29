@@ -66,7 +66,7 @@ impl DownloadedBrowsersRegistry {
     self
       .browsers
       .entry(info.browser.clone())
-      .or_insert_with(HashMap::new)
+      .or_default()
       .insert(info.version.clone(), info);
   }
 

@@ -6,7 +6,6 @@ import { ProfilesDataTable } from "@/components/profile-data-table";
 import { ProfileSelectorDialog } from "@/components/profile-selector-dialog";
 import { ProxySettingsDialog } from "@/components/proxy-settings-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
-import { useUpdateNotifications } from "@/components/update-notification";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -14,12 +13,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useUpdateNotifications } from "@/hooks/use-update-notifications";
+import { showErrorToast } from "@/lib/toast-utils";
 import type { BrowserProfile, ProxySettings } from "@/types";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { GoGear, GoPlus } from "react-icons/go";
-import { showErrorToast } from "@/components/custom-toast";
 
 type BrowserTypeString =
   | "mullvad-browser"
@@ -177,26 +177,14 @@ export default function Home() {
       });
       console.log("Smart URL opening succeeded:", result);
       // URL was handled successfully
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.log(
         "Smart URL opening failed or requires profile selection:",
         error
       );
 
-      // Check if it's the special error cases
-      if (error === "show_selector") {
-        // Show profile selector
-        setPendingUrls((prev) => [...prev, { id: Date.now().toString(), url }]);
-      } else if (error === "no_profiles") {
-        // No profiles available, show error message
-        setError(
-          "No profiles available. Please create a profile first before opening URLs."
-        );
-      } else {
-        // Some other error occurred
-        console.error("Failed to open URL:", error);
-        setError(`Failed to open URL: ${error}`);
-      }
+      // Show profile selector for manual selection
+      setPendingUrls((prev) => [...prev, { id: Date.now().toString(), url }]);
     }
   };
 
@@ -260,7 +248,9 @@ export default function Home() {
 
         await loadProfiles();
       } catch (error) {
-        setError(`Failed to create profile: ${error as any}`);
+        setError(
+          `Failed to create profile: ${error instanceof Error ? error.message : String(error)}`
+        );
         throw error;
       }
     },
@@ -347,9 +337,9 @@ export default function Home() {
     if (profiles.length === 0 || !isClient) return;
 
     const interval = setInterval(() => {
-      profiles.forEach((profile) => {
+      for (const profile of profiles) {
         void checkBrowserStatus(profile);
-      });
+      }
     }, 500);
 
     return () => {

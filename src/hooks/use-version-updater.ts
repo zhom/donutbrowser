@@ -1,13 +1,13 @@
+import { getBrowserDisplayName } from "@/lib/browser-utils";
+import {
+  dismissToast,
+  showLoadingToast,
+  showVersionUpdateToast,
+} from "@/lib/toast-utils";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import {
-  showVersionUpdateToast,
-  showLoadingToast,
-  dismissToast,
-} from "../components/custom-toast";
-import { getBrowserDisplayName } from "@/lib/browser-utils";
 
 interface VersionUpdateProgress {
   current_browser: string;
@@ -158,7 +158,7 @@ export function useVersionUpdater() {
       ).length;
 
       if (failedUpdates > 0) {
-        toast.warning(`Update completed with some errors`, {
+        toast.warning("Update completed with some errors", {
           description: `${totalNewVersions} new versions found, ${failedUpdates} browsers failed to update`,
           duration: 5000,
         });
@@ -226,11 +226,11 @@ export function useVersionUpdater() {
 
     if (hours > 0) {
       return `${hours}h ${minutes}m`;
-    } else if (minutes > 0) {
-      return `${minutes}m`;
-    } else {
-      return "< 1m";
     }
+    if (minutes > 0) {
+      return `${minutes}m`;
+    }
+    return "< 1m";
   }, []);
 
   const formatLastUpdateTime = useCallback(
@@ -245,11 +245,11 @@ export function useVersionUpdater() {
 
       if (diffHours > 0) {
         return `${diffHours}h ${diffMinutes}m ago`;
-      } else if (diffMinutes > 0) {
-        return `${diffMinutes}m ago`;
-      } else {
-        return "Just now";
       }
+      if (diffMinutes > 0) {
+        return `${diffMinutes}m ago`;
+      }
+      return "Just now";
     },
     []
   );

@@ -180,8 +180,8 @@ impl Downloader {
         } else {
           0.0
         };
-        let eta = if speed > 0.0 && total_size.is_some() {
-          Some((total_size.unwrap() - downloaded) as f64 / speed)
+        let eta = if speed > 0.0 {
+          total_size.map(|total| (total - downloaded) as f64 / speed)
         } else {
           None
         };
@@ -209,7 +209,6 @@ impl Downloader {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use tokio;
 
   #[tokio::test]
   async fn test_resolve_brave_download_url() {

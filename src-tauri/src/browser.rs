@@ -80,7 +80,7 @@ impl Browser for FirefoxBrowser {
     // Find the .app directory
     let app_path = std::fs::read_dir(install_dir)?
       .filter_map(Result::ok)
-      .find(|entry| entry.path().extension().map_or(false, |ext| ext == "app"))
+      .find(|entry| entry.path().extension().is_some_and(|ext| ext == "app"))
       .ok_or("Browser app not found")?;
 
     // Construct the browser executable path
@@ -148,13 +148,11 @@ impl Browser for FirefoxBrowser {
     if browser_dir.exists() {
       println!("Directory exists, checking for .app files...");
       if let Ok(entries) = std::fs::read_dir(&browser_dir) {
-        for entry in entries {
-          if let Ok(entry) = entry {
-            println!("  Found entry: {:?}", entry.path());
-            if entry.path().extension().map_or(false, |ext| ext == "app") {
-              println!("  Found .app file: {:?}", entry.path());
-              return true;
-            }
+        for entry in entries.flatten() {
+          println!("  Found entry: {:?}", entry.path());
+          if entry.path().extension().is_some_and(|ext| ext == "app") {
+            println!("  Found .app file: {:?}", entry.path());
+            return true;
           }
         }
       }
@@ -186,7 +184,7 @@ impl Browser for ChromiumBrowser {
     // Find the .app directory
     let app_path = std::fs::read_dir(install_dir)?
       .filter_map(Result::ok)
-      .find(|entry| entry.path().extension().map_or(false, |ext| ext == "app"))
+      .find(|entry| entry.path().extension().is_some_and(|ext| ext == "app"))
       .ok_or("Browser app not found")?;
 
     // Construct the browser executable path
@@ -226,7 +224,6 @@ impl Browser for ChromiumBrowser {
     // Add proxy configuration if provided
     if let Some(proxy) = proxy_settings {
       if proxy.enabled {
-        // Read PAC file and encode it as base64
         let pac_path = Path::new(profile_path).join("proxy.pac");
         if pac_path.exists() {
           let pac_content = fs::read(&pac_path)?;
@@ -260,18 +257,16 @@ impl Browser for ChromiumBrowser {
     if browser_dir.exists() {
       println!("Directory exists, checking for .app files...");
       if let Ok(entries) = std::fs::read_dir(&browser_dir) {
-        for entry in entries {
-          if let Ok(entry) = entry {
-            println!("  Found entry: {:?}", entry.path());
-            if entry.path().extension().map_or(false, |ext| ext == "app") {
-              println!("  Found .app file: {:?}", entry.path());
-              // Try to get the executable path as a final verification
-              if self.get_executable_path(&browser_dir).is_ok() {
-                println!("  Executable path verification successful");
-                return true;
-              } else {
-                println!("  Executable path verification failed");
-              }
+        for entry in entries.flatten() {
+          println!("  Found entry: {:?}", entry.path());
+          if entry.path().extension().is_some_and(|ext| ext == "app") {
+            println!("  Found .app file: {:?}", entry.path());
+            // Try to get the executable path as a final verification
+            if self.get_executable_path(&browser_dir).is_ok() {
+              println!("  Executable path verification successful");
+              return true;
+            } else {
+              println!("  Executable path verification failed");
             }
           }
         }
@@ -535,7 +530,7 @@ mod tests {
     let chromium_dir = binaries_dir.join("chromium").join("1465660");
     fs::create_dir_all(&chromium_dir).unwrap();
     let chromium_app_dir = chromium_dir.join("Chromium.app");
-    fs::create_dir_all(&chromium_app_dir.join("Contents").join("MacOS")).unwrap();
+    fs::create_dir_all(chromium_app_dir.join("Contents").join("MacOS")).unwrap();
 
     // Create a mock executable
     let executable_path = chromium_app_dir

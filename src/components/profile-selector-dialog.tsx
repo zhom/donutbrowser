@@ -23,12 +23,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { getBrowserDisplayName, getBrowserIcon } from "@/lib/browser-utils";
 import type { BrowserProfile } from "@/types";
 import { invoke } from "@tauri-apps/api/core";
-import { LuCopy } from "react-icons/lu";
 import { useEffect, useState } from "react";
+import { LuCopy } from "react-icons/lu";
 import { toast } from "sonner";
-import { getBrowserDisplayName, getBrowserIcon } from "@/lib/browser-utils";
 
 interface ProfileSelectorDialogProps {
   isOpen: boolean;

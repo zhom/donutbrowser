@@ -31,6 +31,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useTableSorting } from "@/hooks/use-table-sorting";
+import { getBrowserDisplayName, getBrowserIcon } from "@/lib/browser-utils";
 import type { BrowserProfile } from "@/types";
 import {
   type ColumnDef,
@@ -40,14 +42,12 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { LuChevronDown, LuChevronUp } from "react-icons/lu";
-import { IoEllipsisHorizontal } from "react-icons/io5";
 import * as React from "react";
 import { CiCircleCheck } from "react-icons/ci";
-import { useTableSorting } from "@/hooks/use-table-sorting";
+import { IoEllipsisHorizontal } from "react-icons/io5";
+import { LuChevronDown, LuChevronUp } from "react-icons/lu";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { getBrowserDisplayName, getBrowserIcon } from "@/lib/browser-utils";
 
 interface ProfilesDataTableProps {
   data: BrowserProfile[];
@@ -392,7 +392,17 @@ export function ProfilesDataTable({
         },
       },
     ],
-    [isClient, runningProfiles, isUpdating, data]
+    [
+      isClient,
+      runningProfiles,
+      isUpdating,
+      data,
+      onLaunchProfile,
+      onKillProfile,
+      onProxySettings,
+      onDeleteProfile,
+      onChangeVersion,
+    ]
   );
 
   const table = useReactTable({

@@ -16,8 +16,8 @@ import { VersionSelector } from "@/components/version-selector";
 import { useBrowserDownload } from "@/hooks/use-browser-download";
 import type { BrowserProfile } from "@/types";
 import { invoke } from "@tauri-apps/api/core";
-import { LuTriangleAlert } from "react-icons/lu";
 import { useEffect, useState } from "react";
+import { LuTriangleAlert } from "react-icons/lu";
 
 interface ChangeVersionDialogProps {
   isOpen: boolean;

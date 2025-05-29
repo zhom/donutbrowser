@@ -551,7 +551,6 @@ mod tests {
   async fn test_browser_version_service_creation() {
     let _service = BrowserVersionService::new();
     // Test passes if we can create the service without panicking
-    assert!(true);
   }
 
   #[tokio::test]

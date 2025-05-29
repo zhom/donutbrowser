@@ -9,11 +9,14 @@
     "ntlm",
     "propertylist",
     "rlib",
+    "rustc",
     "serde",
+    "shadcn",
     "signon",
     "sspi",
     "staticlib",
     "sysinfo",
-    "systempreferences"
+    "systempreferences",
+    "turbopack"
   ]
 }

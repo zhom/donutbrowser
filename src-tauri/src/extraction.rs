@@ -85,7 +85,7 @@ impl Extractor {
     // Find the .app directory in the mount point
     let app_entry = fs::read_dir(&mount_point)?
       .filter_map(Result::ok)
-      .find(|entry| entry.path().extension().map_or(false, |ext| ext == "app"))
+      .find(|entry| entry.path().extension().is_some_and(|ext| ext == "app"))
       .ok_or("No .app found in DMG")?;
 
     // Copy the .app to the destination
@@ -179,34 +179,30 @@ impl Extractor {
 
     // First, try to find any .app file in the destination directory
     if let Ok(entries) = fs::read_dir(dest_dir) {
-      for entry in entries {
-        if let Ok(entry) = entry {
-          let path = entry.path();
-          if path.extension().map_or(false, |ext| ext == "app") {
-            app_path = Some(path);
-            break;
-          }
-          // For Chromium, check subdirectories (chrome-mac folder)
-          if path.is_dir() {
-            if let Ok(sub_entries) = fs::read_dir(&path) {
-              for sub_entry in sub_entries {
-                if let Ok(sub_entry) = sub_entry {
-                  let sub_path = sub_entry.path();
-                  if sub_path.extension().map_or(false, |ext| ext == "app") {
-                    // Move the app to the root destination directory
-                    let target_path = dest_dir.join(sub_path.file_name().unwrap());
-                    fs::rename(&sub_path, &target_path)?;
-                    app_path = Some(target_path);
+      for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().is_some_and(|ext| ext == "app") {
+          app_path = Some(path);
+          break;
+        }
+        // For Chromium, check subdirectories (chrome-mac folder)
+        if path.is_dir() {
+          if let Ok(sub_entries) = fs::read_dir(&path) {
+            for sub_entry in sub_entries.flatten() {
+              let sub_path = sub_entry.path();
+              if sub_path.extension().is_some_and(|ext| ext == "app") {
+                // Move the app to the root destination directory
+                let target_path = dest_dir.join(sub_path.file_name().unwrap());
+                fs::rename(&sub_path, &target_path)?;
+                app_path = Some(target_path);
 
-                    // Clean up the now-empty subdirectory
-                    let _ = fs::remove_dir_all(&path);
-                    break;
-                  }
-                }
-              }
-              if app_path.is_some() {
+                // Clean up the now-empty subdirectory
+                let _ = fs::remove_dir_all(&path);
                 break;
               }
+            }
+            if app_path.is_some() {
+              break;
             }
           }
         }
@@ -238,7 +234,6 @@ mod tests {
   fn test_extractor_creation() {
     let _extractor = Extractor::new();
     // Just verify we can create an extractor instance
-    assert!(true);
   }
 
   #[test]
@@ -327,7 +322,7 @@ mod tests {
     let entries: Vec<_> = fs::read_dir(temp_dir.path())
       .unwrap()
       .filter_map(Result::ok)
-      .filter(|entry| entry.path().extension().map_or(false, |ext| ext == "app"))
+      .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "app"))
       .collect();
 
     assert_eq!(entries.len(), 1);
@@ -349,19 +344,15 @@ mod tests {
     let mut found_app = false;
 
     if let Ok(entries) = fs::read_dir(temp_dir.path()) {
-      for entry in entries {
-        if let Ok(entry) = entry {
-          let path = entry.path();
-          if path.is_dir() {
-            if let Ok(sub_entries) = fs::read_dir(&path) {
-              for sub_entry in sub_entries {
-                if let Ok(sub_entry) = sub_entry {
-                  let sub_path = sub_entry.path();
-                  if sub_path.extension().map_or(false, |ext| ext == "app") {
-                    found_app = true;
-                    break;
-                  }
-                }
+      for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+          if let Ok(sub_entries) = fs::read_dir(&path) {
+            for sub_entry in sub_entries.flatten() {
+              let sub_path = sub_entry.path();
+              if sub_path.extension().is_some_and(|ext| ext == "app") {
+                found_app = true;
+                break;
               }
             }
           }

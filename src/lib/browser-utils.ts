@@ -3,8 +3,8 @@
  * Centralized helpers for browser name mapping, icons, etc.
  */
 
-import { SiMullvad, SiBrave, SiTorbrowser } from "react-icons/si";
 import { FaChrome, FaFirefox } from "react-icons/fa";
+import { SiBrave, SiMullvad, SiTorbrowser } from "react-icons/si";
 
 /**
  * Map internal browser names to display names

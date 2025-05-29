@@ -92,8 +92,8 @@ impl BrowserRunner {
 
       // Check if this is the correct browser type
       let is_correct_browser = match profile.browser.as_str() {
-        "mullvad-browser" => self.is_tor_or_mullvad_browser(&exe_name, &cmd, "mullvad-browser"),
-        "tor-browser" => self.is_tor_or_mullvad_browser(&exe_name, &cmd, "tor-browser"),
+        "mullvad-browser" => self.is_tor_or_mullvad_browser(&exe_name, cmd, "mullvad-browser"),
+        "tor-browser" => self.is_tor_or_mullvad_browser(&exe_name, cmd, "tor-browser"),
         _ => return false,
       };
 
@@ -108,12 +108,12 @@ impl BrowserRunner {
       // Check profile path match
       let profile_path_match = cmd.iter().any(|s| {
         let arg = s.to_str().unwrap_or("");
-        arg == &profile.profile_path
+        arg == profile.profile_path
           || arg == format!("-profile={}", profile.profile_path)
           || (arg == "-profile"
             && cmd
               .iter()
-              .any(|s2| s2.to_str().unwrap_or("") == &profile.profile_path))
+              .any(|s2| s2.to_str().unwrap_or("") == profile.profile_path))
       });
 
       if !profile_path_match {
@@ -128,10 +128,10 @@ impl BrowserRunner {
         "PID {} validated successfully for {} profile {}",
         pid, profile.browser, profile.name
       );
-      return true;
+      true
     } else {
       println!("PID {} does not exist", pid);
-      return false;
+      false
     }
   }
   pub fn get_binaries_dir(&self) -> PathBuf {
@@ -436,7 +436,7 @@ impl BrowserRunner {
       let entry = entry?;
       let path = entry.path();
 
-      if path.extension().map_or(false, |ext| ext == "json") {
+      if path.extension().is_some_and(|ext| ext == "json") {
         let content = fs::read_to_string(path)?;
         let profile: BrowserProfile = serde_json::from_str(&content)?;
         profiles.push(profile);
@@ -505,9 +505,9 @@ impl BrowserRunner {
             let exe_name = process.name().to_string_lossy().to_lowercase();
             let is_correct_browser = match profile.browser.as_str() {
               "mullvad-browser" => {
-                self.is_tor_or_mullvad_browser(&exe_name, &cmd, "mullvad-browser")
+                self.is_tor_or_mullvad_browser(&exe_name, cmd, "mullvad-browser")
               }
-              "tor-browser" => self.is_tor_or_mullvad_browser(&exe_name, &cmd, "tor-browser"),
+              "tor-browser" => self.is_tor_or_mullvad_browser(&exe_name, cmd, "tor-browser"),
               _ => false,
             };
 
@@ -518,12 +518,12 @@ impl BrowserRunner {
             // Check for profile path match
             let profile_path_match = cmd.iter().any(|s| {
               let arg = s.to_str().unwrap_or("");
-              arg == &profile.profile_path
+              arg == profile.profile_path
                 || arg == format!("-profile={}", profile.profile_path)
                 || (arg == "-profile"
                   && cmd
                     .iter()
-                    .any(|s2| s2.to_str().unwrap_or("") == &profile.profile_path))
+                    .any(|s2| s2.to_str().unwrap_or("") == profile.profile_path))
             });
 
             if profile_path_match {
@@ -1200,10 +1200,10 @@ end try
           // and can't have multiple instances with the same profile
           match final_profile.browser.as_str() {
             "mullvad-browser" | "tor-browser" => {
-              return Err(format!(
+              Err(format!(
                 "Failed to open URL in existing {} browser. Cannot launch new instance due to profile conflict: {}",
                 final_profile.browser, e
-              ).into());
+              ).into())
             }
             _ => {
               println!(
@@ -1375,16 +1375,16 @@ end try
             || profile.browser == "mullvad-browser"
             || profile.browser == "zen"
           {
-            arg == &profile.profile_path
+            arg == profile.profile_path
               || arg == format!("-profile={}", profile.profile_path)
               || (arg == "-profile"
                 && cmd
                   .iter()
-                  .any(|s2| s2.to_str().unwrap_or("") == &profile.profile_path))
+                  .any(|s2| s2.to_str().unwrap_or("") == profile.profile_path))
           } else {
             // For Chromium-based browsers, check for user-data-dir
             arg.contains(&format!("--user-data-dir={}", profile.profile_path))
-              || arg == &profile.profile_path
+              || arg == profile.profile_path
           }
         });
 
@@ -1421,8 +1421,8 @@ end try
                 && !exe_name.contains("mullvad")
             }
             "firefox-developer" => exe_name.contains("firefox") && exe_name.contains("developer"),
-            "mullvad-browser" => self.is_tor_or_mullvad_browser(&exe_name, &cmd, "mullvad-browser"),
-            "tor-browser" => self.is_tor_or_mullvad_browser(&exe_name, &cmd, "tor-browser"),
+            "mullvad-browser" => self.is_tor_or_mullvad_browser(&exe_name, cmd, "mullvad-browser"),
+            "tor-browser" => self.is_tor_or_mullvad_browser(&exe_name, cmd, "tor-browser"),
             "zen" => exe_name.contains("zen"),
             "chromium" => exe_name.contains("chromium"),
             "brave" => exe_name.contains("brave"),
@@ -1443,16 +1443,16 @@ end try
               || profile.browser == "mullvad-browser"
               || profile.browser == "zen"
             {
-              arg == &profile.profile_path
+              arg == profile.profile_path
                 || arg == format!("-profile={}", profile.profile_path)
                 || (arg == "-profile"
                   && cmd
                     .iter()
-                    .any(|s2| s2.to_str().unwrap_or("") == &profile.profile_path))
+                    .any(|s2| s2.to_str().unwrap_or("") == profile.profile_path))
             } else {
               // For Chromium-based browsers, check for user-data-dir
               arg.contains(&format!("--user-data-dir={}", profile.profile_path))
-                || arg == &profile.profile_path
+                || arg == profile.profile_path
             }
           });
 
@@ -1572,8 +1572,8 @@ end try
                 && !exe_name.contains("mullvad")
             }
             "firefox-developer" => exe_name.contains("firefox") && exe_name.contains("developer"),
-            "mullvad-browser" => self.is_tor_or_mullvad_browser(&exe_name, &cmd, "mullvad-browser"),
-            "tor-browser" => self.is_tor_or_mullvad_browser(&exe_name, &cmd, "tor-browser"),
+            "mullvad-browser" => self.is_tor_or_mullvad_browser(&exe_name, cmd, "mullvad-browser"),
+            "tor-browser" => self.is_tor_or_mullvad_browser(&exe_name, cmd, "tor-browser"),
             "zen" => exe_name.contains("zen"),
             "chromium" => exe_name.contains("chromium"),
             "brave" => exe_name.contains("brave"),
@@ -1594,11 +1594,11 @@ end try
               || profile.browser == "mullvad-browser"
               || profile.browser == "zen"
             {
-              arg == &profile.profile_path || arg == format!("-profile={}", profile.profile_path)
+              arg == profile.profile_path || arg == format!("-profile={}", profile.profile_path)
             } else {
               // For Chromium-based browsers, check for user-data-dir
               arg.contains(&format!("--user-data-dir={}", profile.profile_path))
-                || arg == &profile.profile_path
+                || arg == profile.profile_path
             }
           });
 

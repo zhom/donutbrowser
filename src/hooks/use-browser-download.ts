@@ -1,15 +1,15 @@
+import { getBrowserDisplayName } from "@/lib/browser-utils";
+import {
+  dismissToast,
+  showDownloadToast,
+  showErrorToast,
+  showFetchingToast,
+  showSuccessToast,
+} from "@/lib/toast-utils";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import {
-  showDownloadToast,
-  showFetchingToast,
-  showSuccessToast,
-  showErrorToast,
-  dismissToast,
-} from "../components/custom-toast";
-import { getBrowserDisplayName } from "@/lib/browser-utils";
 
 interface GithubRelease {
   tag_name: string;
@@ -192,15 +192,15 @@ export function useBrowserDownload() {
   const formatTime = (seconds: number): string => {
     if (seconds < 60) {
       return `${Math.round(seconds)}s`;
-    } else if (seconds < 3600) {
+    }
+    if (seconds < 3600) {
       const minutes = Math.floor(seconds / 60);
       const remainingSeconds = Math.round(seconds % 60);
       return `${minutes}m ${remainingSeconds}s`;
-    } else {
-      const hours = Math.floor(seconds / 3600);
-      const minutes = Math.floor((seconds % 3600) / 60);
-      return `${hours}h ${minutes}m`;
     }
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    return `${hours}h ${minutes}m`;
   };
 
   const formatBytes = (bytes: number): string => {
@@ -208,9 +208,7 @@ export function useBrowserDownload() {
     const k = 1024;
     const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${Number.parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${
-      sizes[i]
-    }`;
+    return `${Number.parseFloat((bytes / k ** i).toFixed(1))} ${sizes[i]}`;
   };
 
   const loadVersions = useCallback(async (browserStr: string) => {
