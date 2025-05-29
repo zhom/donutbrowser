@@ -1,0 +1,55 @@
+# Installs Rust and checks formatting + linting
+
+name: Lint Rust
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths-ignore:
+      - "src/**"
+      - "package.json"
+      - "package-lock.json"
+      - "yarn.lock"
+      - "pnpm-lock.yaml"
+      - "README.md"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Disable git core.autocrlf on Windows
+        if: matrix.os == 'windows-latest'
+        run: git config --global core.autocrlf false
+
+      - name: Checkout repository code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Create empty 'dist' directory
+        run: mkdir dist
+
+      - name: Run rustfmt check
+        run: cargo fmt --all -- --check
+        working-directory: src-tauri
+
+      - name: Run clippy check and deny warnings
+        run: cargo clippy --all-targets --all-features -- -D warnings
+        working-directory: src-tauri

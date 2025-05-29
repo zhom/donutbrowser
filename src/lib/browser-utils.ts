@@ -1,0 +1,58 @@
+/**
+ * Browser utility functions
+ * Centralized helpers for browser name mapping, icons, etc.
+ */
+
+import { SiMullvad, SiBrave, SiTorbrowser } from "react-icons/si";
+import { FaChrome, FaFirefox } from "react-icons/fa";
+
+/**
+ * Map internal browser names to display names
+ */
+export function getBrowserDisplayName(browserType: string): string {
+  const browserNames: Record<string, string> = {
+    firefox: "Firefox",
+    "firefox-developer": "Firefox Developer Edition",
+    "mullvad-browser": "Mullvad Browser",
+    zen: "Zen Browser",
+    brave: "Brave",
+    chromium: "Chromium",
+    "tor-browser": "Tor Browser",
+  };
+
+  return browserNames[browserType] || browserType;
+}
+
+/**
+ * Get the appropriate icon component for a browser type
+ */
+export function getBrowserIcon(browserType: string) {
+  switch (browserType) {
+    case "mullvad-browser":
+      return SiMullvad;
+    case "chromium":
+      return FaChrome;
+    case "brave":
+      return SiBrave;
+    case "firefox":
+    case "firefox-developer":
+      return FaFirefox;
+    case "zen":
+      return FaFirefox;
+    case "tor-browser":
+      return SiTorbrowser;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Format browser name by capitalizing words and joining with spaces
+ * (fallback method for simple transformations)
+ */
+export function formatBrowserName(browserType: string): string {
+  return browserType
+    .split("-")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}

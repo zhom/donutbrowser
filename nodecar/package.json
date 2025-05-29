@@ -1,0 +1,33 @@
+{
+  "name": "nodecar",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/index.ts",
+  "scripts": {
+    "watch": "nodemon --exec ts-node --esm ./src/index.ts --watch src",
+    "dev": "node --loader ts-node/esm ./src/index.ts",
+    "start": "node --loader ts-node/esm ./src/index.ts",
+    "build": "tsc && pkg ./dist/index.js --targets latest-macos-arm64 --output dist/nodecar",
+    "build:aarch64": "tsc && pkg ./dist/index.js --targets latest-macos-arm64 --output dist/nodecar",
+    "build:x86_64": "tsc && pkg ./dist/index.js --targets latest-macos-x64 --output dist/nodecar",
+    "build:linux-x64": "tsc && pkg ./dist/index.js --targets latest-linux-x64 --output dist/nodecar",
+    "build:linux-arm64": "tsc && pkg ./dist/index.js --targets latest-linux-arm64 --output dist/nodecar",
+    "build:win-x64": "tsc && pkg ./dist/index.js --targets latest-win-x64 --output dist/nodecar",
+    "build:win-arm64": "tsc && pkg ./dist/index.js --targets latest-win-arm64 --output dist/nodecar"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.6.1",
+  "dependencies": {
+    "@types/node": "^22.15.17",
+    "@yao-pkg/pkg": "^6.4.1",
+    "commander": "^13.1.0",
+    "dotenv": "^16.5.0",
+    "get-port": "^7.1.0",
+    "nodemon": "^3.1.10",
+    "proxy-chain": "^2.5.8",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  }
+}
