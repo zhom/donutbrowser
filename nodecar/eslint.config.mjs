@@ -11,9 +11,9 @@ const eslintConfig = tseslint.config(
   ...compat.extends("next/core-web-vitals"),
   {
     // Disabled rules taken from https://biomejs.dev/linter/rules-sources for ones that
-    // are already handled by Biome
+    // are already handled by Prettier and TypeScript or are not needed
     rules: {
-      // eslint-plugin-jsx-a11y rules replaced by Biome
+      // eslint-plugin-jsx-a11y rules - some disabled for performance/specific project needs
       "jsx-a11y/alt-text": "off",
       "jsx-a11y/anchor-has-content": "off",
       "jsx-a11y/anchor-is-valid": "off",
@@ -47,7 +47,7 @@ const eslintConfig = tseslint.config(
       "jsx-a11y/role-supports-aria-props": "off",
       "jsx-a11y/scope": "off",
       "jsx-a11y/tabindex-no-positive": "off",
-      // eslint-plugin-react rules replaced by Biome
+      // eslint-plugin-react rules - some disabled for performance/specific project needs
       "react/button-has-type": "off",
       "react/jsx-boolean-value": "off",
       "react/jsx-curly-brace-presence": "off",
@@ -62,10 +62,10 @@ const eslintConfig = tseslint.config(
       "react/no-danger": "off",
       "react/no-danger-with-children": "off",
       "react/void-dom-elements-no-children": "off",
-      // eslint-plugin-react-hooks rules replaced by Biome
+      // eslint-plugin-react-hooks rules - disabled for specific project needs
       "react-hooks/exhaustive-deps": "off",
       "react-hooks/rules-of-hooks": "off",
-      // typescript-eslint rules replaced by Biome
+      // typescript-eslint rules - some handled by TypeScript compiler or disabled for project needs
       "@typescript-eslint/adjacent-overload-signatures": "off",
       "@typescript-eslint/array-type": "off",
       "@typescript-eslint/ban-types": "off",

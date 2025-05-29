@@ -7,11 +7,11 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "biome check src/ && next lint",
+    "lint": "prettier --check src/ && tsc --noEmit && next lint",
     "tauri": "tauri",
     "shadcn:add": "pnpm dlx shadcn@latest add",
     "prepare": "husky",
-    "format:js": "biome format --write src/",
+    "format:js": "prettier --write src/",
     "format:rust": "cd src-tauri && cargo fmt --all",
     "format": "pnpm format:js && pnpm format:rust",
     "prettier": "prettier --write"
@@ -43,7 +43,6 @@
     "tailwind-merge": "^3.3.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.4",
     "@eslint/eslintrc": "^3.3.1",
     "@eslint/js": "^9.27.0",
     "@next/eslint-plugin-next": "^15.3.2",

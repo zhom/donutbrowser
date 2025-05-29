@@ -15,7 +15,7 @@ export function useTableSorting() {
     const loadSettings = async () => {
       try {
         const settings = await invoke<TableSortingSettings>(
-          "get_table_sorting_settings",
+          "get_table_sorting_settings"
         );
         setSortingSettings(settings);
       } catch (error) {
@@ -39,7 +39,7 @@ export function useTableSorting() {
         console.error("Failed to save table sorting settings:", error);
       }
     },
-    [],
+    []
   );
 
   // Convert our settings to tanstack table sorting format
@@ -67,7 +67,7 @@ export function useTableSorting() {
         void saveSortingSettings(newSettings);
       }
     },
-    [saveSortingSettings, isLoaded],
+    [saveSortingSettings, isLoaded]
   );
 
   return {

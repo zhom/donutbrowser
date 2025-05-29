@@ -17,7 +17,7 @@ interface CustomThemeProviderProps {
 function getSystemTheme(): string {
   if (typeof window !== "undefined") {
     const isDarkMode = window.matchMedia(
-      "(prefers-color-scheme: dark)",
+      "(prefers-color-scheme: dark)"
     ).matches;
     return isDarkMode ? "dark" : "light";
   }
@@ -39,7 +39,7 @@ export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
         const systemTheme = getSystemTheme();
         console.log(
           "First-time user detected, applying system theme:",
-          systemTheme,
+          systemTheme
         );
 
         // Save the detected theme as the default

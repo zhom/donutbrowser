@@ -91,7 +91,7 @@ export function VersionSelector({
                 <CommandGroup>
                   {availableVersions.map((version) => {
                     const isDownloaded = downloadedVersions.includes(
-                      version.tag_name,
+                      version.tag_name
                     );
                     return (
                       <CommandItem
@@ -101,7 +101,7 @@ export function VersionSelector({
                           onVersionSelect(
                             currentValue === selectedVersion
                               ? null
-                              : currentValue,
+                              : currentValue
                           );
                           setVersionPopoverOpen(false);
                         }}
@@ -111,7 +111,7 @@ export function VersionSelector({
                             "mr-2 h-4 w-4",
                             selectedVersion === version.tag_name
                               ? "opacity-100"
-                              : "opacity-0",
+                              : "opacity-0"
                           )}
                         />
                         <div className="flex items-center gap-2">

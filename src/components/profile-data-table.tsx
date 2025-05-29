@@ -101,7 +101,7 @@ export function ProfilesDataTable({
       setSorting(newSorting);
       updateSorting(newSorting);
     },
-    [sorting, updateSorting, isClient],
+    [sorting, updateSorting, isClient]
   );
 
   const handleRename = async () => {
@@ -131,7 +131,7 @@ export function ProfilesDataTable({
           const anyTorRunning =
             isClient &&
             data.some(
-              (p) => p.browser === "tor-browser" && runningProfiles.has(p.name),
+              (p) => p.browser === "tor-browser" && runningProfiles.has(p.name)
             );
           const shouldDisableTorStart =
             isTorBrowser && !isRunning && anyTorRunning;
@@ -392,7 +392,7 @@ export function ProfilesDataTable({
         },
       },
     ],
-    [isClient, runningProfiles, isUpdating, data],
+    [isClient, runningProfiles, isUpdating, data]
   );
 
   const table = useReactTable({
@@ -420,7 +420,7 @@ export function ProfilesDataTable({
                         ? null
                         : flexRender(
                             header.column.columnDef.header,
-                            header.getContext(),
+                            header.getContext()
                           )}
                     </TableHead>
                   );
@@ -439,7 +439,7 @@ export function ProfilesDataTable({
                     <TableCell key={cell.id}>
                       {flexRender(
                         cell.column.columnDef.cell,
-                        cell.getContext(),
+                        cell.getContext()
                       )}
                     </TableCell>
                   ))}
