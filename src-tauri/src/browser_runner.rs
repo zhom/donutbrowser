@@ -745,7 +745,9 @@ end try
           browser_dir.push(&updated_profile.version);
 
           let browser = create_browser(browser_type);
-          let executable_path = browser.get_executable_path(&browser_dir)?;
+          let executable_path = browser
+            .get_executable_path(&browser_dir)
+            .map_err(|e| format!("Failed to get executable path: {}", e))?;
 
           let output = Command::new(executable_path)
             .args(["-profile", &updated_profile.profile_path, "-new-tab", url])
@@ -1114,7 +1116,9 @@ end try
           browser_dir.push(&updated_profile.version);
 
           let browser = create_browser(browser_type);
-          let executable_path = browser.get_executable_path(&browser_dir)?;
+          let executable_path = browser
+            .get_executable_path(&browser_dir)
+            .map_err(|e| format!("Failed to get executable path: {}", e))?;
 
           // Try to open in existing instance
           let output = Command::new(executable_path)
