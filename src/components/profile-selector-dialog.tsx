@@ -287,10 +287,6 @@ export function ProfileSelectorDialog({
                                         <IconComponent className="h-4 w-4" />
                                       ) : null;
                                     })()}
-                                    <span className="text-sm text-muted-foreground">
-                                      {getBrowserDisplayName(profile.browser)}{" "}
-                                      {profile.version}
-                                    </span>
                                   </div>
                                   <div className="flex-1 text-right">
                                     <div className="font-medium">
