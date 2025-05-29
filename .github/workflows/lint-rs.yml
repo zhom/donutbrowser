@@ -32,6 +32,15 @@ jobs:
       - name: Checkout repository code
         uses: actions/checkout@v4
 
+      - name: Set up pnpm package manager
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: "pnpm"
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -43,6 +52,33 @@ jobs:
           sudo apt-get update
           sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 
+      - name: Install nodecar dependencies
+        run: |
+          cd nodecar
+          pnpm install --frozen-lockfile
+
+      - name: Build nodecar binary
+        run: |
+          cd nodecar
+          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            pnpm run build:linux-x64
+          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            pnpm run build:aarch64
+          elif [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            pnpm run build:win-x64
+          fi
+
+      - name: Copy nodecar binary to Tauri binaries
+        run: |
+          mkdir -p src-tauri/binaries
+          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+            cp nodecar/dist/nodecar src-tauri/binaries/nodecar-x86_64-unknown-linux-gnu
+          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            cp nodecar/dist/nodecar src-tauri/binaries/nodecar-aarch64-apple-darwin
+          elif [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            cp nodecar/dist/nodecar.exe src-tauri/binaries/nodecar-x86_64-pc-windows-msvc.exe
+          fi
+
       - name: Create empty 'dist' directory
         run: mkdir dist
 
@@ -52,4 +88,8 @@ jobs:
 
       - name: Run clippy check and deny warnings
         run: cargo clippy --all-targets --all-features -- -D warnings
+        working-directory: src-tauri
+
+      - name: Run Rust unit tests
+        run: cargo test
         working-directory: src-tauri

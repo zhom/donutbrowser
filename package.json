@@ -72,7 +72,8 @@
       "prettier --write"
     ],
     "src-tauri/**/*.rs": [
-      "cd src-tauri && cargo fmt --all"
+      "cd src-tauri && cargo fmt --all",
+      "cd src-tauri && cargo test"
     ]
   }
 }
