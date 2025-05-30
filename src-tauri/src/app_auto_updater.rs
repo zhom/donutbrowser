@@ -65,8 +65,8 @@ impl AppAutoUpdater {
     let is_nightly = Self::is_nightly_build();
 
     println!("=== App Update Check ===");
-    println!("Current version: {}", current_version);
-    println!("Is nightly build: {}", is_nightly);
+    println!("Current version: {current_version}");
+    println!("Is nightly build: {is_nightly}");
     println!("STABLE_RELEASE env: {:?}", option_env!("STABLE_RELEASE"));
 
     let releases = self.fetch_app_releases().await?;
@@ -94,18 +94,21 @@ impl AppAutoUpdater {
     };
 
     if filtered_releases.is_empty() {
-      println!("No releases found for build type (nightly: {})", is_nightly);
+      println!("No releases found for build type (nightly: {is_nightly})");
       return Ok(None);
     }
 
     // Get the latest release
     let latest_release = filtered_releases[0];
-    println!("Latest release: {} ({})", latest_release.tag_name, latest_release.name);
+    println!(
+      "Latest release: {} ({})",
+      latest_release.tag_name, latest_release.name
+    );
 
     // Check if we need to update
     if self.should_update(&current_version, &latest_release.tag_name, is_nightly) {
       println!("Update available!");
-      
+
       // Find the appropriate asset for current platform
       if let Some(download_url) = self.get_download_url_for_platform(&latest_release.assets) {
         let update_info = AppUpdateInfo {
@@ -117,7 +120,10 @@ impl AppAutoUpdater {
           published_at: latest_release.published_at.clone(),
         };
 
-        println!("Update info prepared: {} -> {}", update_info.current_version, update_info.new_version);
+        println!(
+          "Update info prepared: {} -> {}",
+          update_info.current_version, update_info.new_version
+        );
         return Ok(Some(update_info));
       } else {
         println!("No suitable download asset found for current platform");
@@ -151,8 +157,10 @@ impl AppAutoUpdater {
 
   /// Determine if an update should be performed
   fn should_update(&self, current_version: &str, new_version: &str, is_nightly: bool) -> bool {
-    println!("Comparing versions: current={}, new={}, is_nightly={}", current_version, new_version, is_nightly);
-    
+    println!(
+      "Comparing versions: current={current_version}, new={new_version}, is_nightly={is_nightly}"
+    );
+
     if is_nightly {
       // For nightly builds, always update if there's a newer nightly
       if let (Some(current_hash), Some(new_hash)) = (
@@ -161,20 +169,20 @@ impl AppAutoUpdater {
       ) {
         // Different commit hashes mean we should update
         let should_update = new_hash != current_hash;
-        println!("Nightly comparison: current_hash={}, new_hash={}, should_update={}", current_hash, new_hash, should_update);
+        println!("Nightly comparison: current_hash={current_hash}, new_hash={new_hash}, should_update={should_update}");
         return should_update;
       }
-      
+
       // If current version doesn't have nightly prefix but we're in nightly mode,
       // this could be a dev build or stable build upgrading to nightly
       if !current_version.starts_with("nightly-") {
-        println!("Upgrading from non-nightly to nightly: {}", new_version);
+        println!("Upgrading from non-nightly to nightly: {new_version}");
         return true;
       }
     } else {
       // For stable builds, use semantic versioning comparison
       let should_update = self.is_version_newer(new_version, current_version);
-      println!("Stable comparison: {} > {} = {}", new_version, current_version, should_update);
+      println!("Stable comparison: {new_version} > {current_version} = {should_update}");
       return should_update;
     }
 
@@ -210,18 +218,19 @@ impl AppAutoUpdater {
       "unknown"
     };
 
-    println!("Looking for assets with architecture: {}", arch);
+    println!("Looking for assets with architecture: {arch}");
     for asset in assets {
       println!("Found asset: {}", asset.name);
     }
 
     // Priority 1: Look for exact architecture match in DMG
     for asset in assets {
-      if asset.name.contains(".dmg") && 
-         (asset.name.contains(&format!("_{}.dmg", arch)) || 
-          asset.name.contains(&format!("-{}.dmg", arch)) ||
-          asset.name.contains(&format!("_{}_", arch)) ||
-          asset.name.contains(&format!("-{}-", arch))) {
+      if asset.name.contains(".dmg")
+        && (asset.name.contains(&format!("_{arch}.dmg"))
+          || asset.name.contains(&format!("-{arch}.dmg"))
+          || asset.name.contains(&format!("_{arch}_"))
+          || asset.name.contains(&format!("-{arch}-")))
+      {
         println!("Found exact architecture match: {}", asset.name);
         return Some(asset.browser_download_url.clone());
       }
@@ -230,8 +239,9 @@ impl AppAutoUpdater {
     // Priority 2: Look for x86_64 variations if we're looking for x64
     if arch == "x64" {
       for asset in assets {
-        if asset.name.contains(".dmg") && 
-           (asset.name.contains("x86_64") || asset.name.contains("x86-64")) {
+        if asset.name.contains(".dmg")
+          && (asset.name.contains("x86_64") || asset.name.contains("x86-64"))
+        {
           println!("Found x86_64 variant: {}", asset.name);
           return Some(asset.browser_download_url.clone());
         }
@@ -241,8 +251,9 @@ impl AppAutoUpdater {
     // Priority 3: Look for arm64 variations if we're looking for aarch64
     if arch == "aarch64" {
       for asset in assets {
-        if asset.name.contains(".dmg") && 
-           (asset.name.contains("arm64") || asset.name.contains("aarch64")) {
+        if asset.name.contains(".dmg")
+          && (asset.name.contains("arm64") || asset.name.contains("aarch64"))
+        {
           println!("Found arm64 variant: {}", asset.name);
           return Some(asset.browser_download_url.clone());
         }
@@ -251,10 +262,12 @@ impl AppAutoUpdater {
 
     // Priority 4: Fallback to any macOS DMG
     for asset in assets {
-      if asset.name.contains(".dmg") && 
-         (asset.name.to_lowercase().contains("macos") || 
-          asset.name.to_lowercase().contains("darwin") ||
-          asset.name.contains(".app.tar.gz") == false) { // Exclude app.tar.gz files
+      if asset.name.contains(".dmg")
+        && (asset.name.to_lowercase().contains("macos")
+          || asset.name.to_lowercase().contains("darwin")
+          || !asset.name.contains(".app.tar.gz"))
+      {
+        // Exclude app.tar.gz files
         println!("Found fallback DMG: {}", asset.name);
         return Some(asset.browser_download_url.clone());
       }
@@ -474,14 +487,59 @@ impl AppAutoUpdater {
   /// Restart the application
   async fn restart_application(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let app_path = self.get_current_app_path()?;
+    let current_pid = std::process::id();
 
-    // Use open command to restart the app
-    let _ = Command::new("open")
-      .args([app_path.to_str().unwrap()])
-      .spawn()?;
+    // Create a temporary restart script
+    let temp_dir = std::env::temp_dir();
+    let script_path = temp_dir.join("donut_restart.sh");
 
-    // Exit current process after a short delay
-    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+    // Create the restart script content
+    let script_content = format!(
+      r#"#!/bin/bash
+# Wait for the current process to exit
+while kill -0 {} 2>/dev/null; do
+  sleep 0.5
+done
+
+# Wait a bit more to ensure clean exit
+sleep 1
+
+# Start the new application
+open "{}"
+
+# Clean up this script
+rm "{}"
+"#,
+      current_pid,
+      app_path.to_str().unwrap(),
+      script_path.to_str().unwrap()
+    );
+
+    // Write the script to file
+    fs::write(&script_path, script_content)?;
+
+    // Make the script executable
+    let _ = Command::new("chmod")
+      .args(["+x", script_path.to_str().unwrap()])
+      .output();
+
+    // Execute the restart script in the background
+    let mut cmd = Command::new("bash");
+    cmd.arg(script_path.to_str().unwrap());
+
+    // Detach the process completely
+    #[cfg(unix)]
+    {
+      use std::os::unix::process::CommandExt;
+      cmd.process_group(0);
+    }
+
+    let _child = cmd.spawn()?;
+
+    // Give the script a moment to start
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+    // Exit the current process
     std::process::exit(0);
   }
 }
@@ -581,7 +639,7 @@ mod tests {
 
     // Upgrade from stable to nightly
     assert!(updater.should_update("v1.0.0", "nightly-abc123", true));
-    
+
     // Upgrade from dev to nightly
     assert!(updater.should_update("dev-0.1.0", "nightly-abc123", true));
   }

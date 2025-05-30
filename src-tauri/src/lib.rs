@@ -54,7 +54,8 @@ use auto_updater::{
 };
 
 use app_auto_updater::{
-  check_for_app_updates, check_for_app_updates_manual, download_and_install_app_update, get_app_version_info,
+  check_for_app_updates, check_for_app_updates_manual, download_and_install_app_update,
+  get_app_version_info,
 };
 
 #[tauri::command]
@@ -193,7 +194,7 @@ pub fn run() {
             );
             // Emit update available event to the frontend
             if let Err(e) = app_handle_update.emit("app-update-available", &update_info) {
-              eprintln!("Failed to emit app update event: {}", e);
+              eprintln!("Failed to emit app update event: {e}");
             } else {
               println!("App update event emitted successfully");
             }
@@ -202,7 +203,7 @@ pub fn run() {
             println!("No app updates available");
           }
           Err(e) => {
-            eprintln!("Failed to check for app updates: {}", e);
+            eprintln!("Failed to check for app updates: {e}");
           }
         }
       });

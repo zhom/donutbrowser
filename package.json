@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "biome check src/ && tsc --noEmit && next lint",
-    "lint:rust": "cd src-tauri && cargo clippy --all-targets --all-features -- -D warnings -D clippy::all",
+    "lint:rust": "cd src-tauri && cargo clippy --all-targets --all-features -- -D warnings -D clippy::all && cargo fmt --all",
     "tauri": "tauri",
     "shadcn:add": "pnpm dlx shadcn@latest add",
     "prepare": "husky",
