@@ -182,11 +182,14 @@ pub fn run() {
       tauri::async_runtime::spawn(async move {
         // Add a small delay to ensure the app is fully loaded
         tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-        
+
         let updater = app_auto_updater::AppAutoUpdater::new();
         match updater.check_for_updates().await {
           Ok(Some(update_info)) => {
-            println!("App update available: {} -> {}", update_info.current_version, update_info.new_version);
+            println!(
+              "App update available: {} -> {}",
+              update_info.current_version, update_info.new_version
+            );
             // Emit update available event to the frontend
             let _ = app_handle_update.emit("app-update-available", &update_info);
           }
@@ -194,7 +197,7 @@ pub fn run() {
             println!("No app updates available");
           }
           Err(e) => {
-            eprintln!("Failed to check for app updates: {}", e);
+            eprintln!("Failed to check for app updates: {e}");
           }
         }
       });

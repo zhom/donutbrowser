@@ -52,7 +52,10 @@ impl Downloader {
     match browser_type {
       BrowserType::Brave => {
         // For Brave, we need to find the actual macOS asset
-        let releases = self.api_client.fetch_brave_releases_with_caching(true).await?;
+        let releases = self
+          .api_client
+          .fetch_brave_releases_with_caching(true)
+          .await?;
 
         // Find the release with the matching version
         let release = releases
@@ -75,7 +78,10 @@ impl Downloader {
       }
       BrowserType::Zen => {
         // For Zen, verify the asset exists
-        let releases = self.api_client.fetch_zen_releases_with_caching(true).await?;
+        let releases = self
+          .api_client
+          .fetch_zen_releases_with_caching(true)
+          .await?;
 
         let release = releases
           .iter()
@@ -95,7 +101,10 @@ impl Downloader {
       }
       BrowserType::MullvadBrowser => {
         // For Mullvad, verify the asset exists
-        let releases = self.api_client.fetch_mullvad_releases_with_caching(true).await?;
+        let releases = self
+          .api_client
+          .fetch_mullvad_releases_with_caching(true)
+          .await?;
 
         let release = releases
           .iter()
@@ -223,9 +232,9 @@ mod tests {
   use crate::browser::BrowserType;
   use crate::browser_version_service::DownloadInfo;
 
-  use wiremock::{MockServer, Mock, ResponseTemplate};
-  use wiremock::matchers::{method, path, header};
   use tempfile::TempDir;
+  use wiremock::matchers::{header, method, path};
+  use wiremock::{Mock, MockServer, ResponseTemplate};
 
   async fn setup_mock_server() -> MockServer {
     MockServer::start().await
@@ -234,12 +243,12 @@ mod tests {
   fn create_test_api_client(server: &MockServer) -> ApiClient {
     let base_url = server.uri();
     ApiClient::new_with_base_urls(
-      base_url.clone(),    // firefox_api_base
-      base_url.clone(),    // firefox_dev_api_base
-      base_url.clone(),    // github_api_base
-      base_url.clone(),    // chromium_api_base
-      base_url.clone(),    // tor_archive_base
-      base_url.clone(),    // mozilla_download_base
+      base_url.clone(), // firefox_api_base
+      base_url.clone(), // firefox_dev_api_base
+      base_url.clone(), // github_api_base
+      base_url.clone(), // chromium_api_base
+      base_url.clone(), // tor_archive_base
+      base_url.clone(), // mozilla_download_base
     )
   }
 
@@ -267,9 +276,11 @@ mod tests {
     Mock::given(method("GET"))
       .and(path("/repos/brave/brave-browser/releases"))
       .and(header("user-agent", "donutbrowser"))
-      .respond_with(ResponseTemplate::new(200)
-        .set_body_string(mock_response)
-        .insert_header("content-type", "application/json"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(mock_response)
+          .insert_header("content-type", "application/json"),
+      )
       .mount(&server)
       .await;
 
@@ -312,9 +323,11 @@ mod tests {
     Mock::given(method("GET"))
       .and(path("/repos/zen-browser/desktop/releases"))
       .and(header("user-agent", "donutbrowser"))
-      .respond_with(ResponseTemplate::new(200)
-        .set_body_string(mock_response)
-        .insert_header("content-type", "application/json"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(mock_response)
+          .insert_header("content-type", "application/json"),
+      )
       .mount(&server)
       .await;
 
@@ -357,9 +370,11 @@ mod tests {
     Mock::given(method("GET"))
       .and(path("/repos/mullvad/mullvad-browser/releases"))
       .and(header("user-agent", "donutbrowser"))
-      .respond_with(ResponseTemplate::new(200)
-        .set_body_string(mock_response)
-        .insert_header("content-type", "application/json"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(mock_response)
+          .insert_header("content-type", "application/json"),
+      )
       .mount(&server)
       .await;
 
@@ -465,9 +480,11 @@ mod tests {
     Mock::given(method("GET"))
       .and(path("/repos/brave/brave-browser/releases"))
       .and(header("user-agent", "donutbrowser"))
-      .respond_with(ResponseTemplate::new(200)
-        .set_body_string(mock_response)
-        .insert_header("content-type", "application/json"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(mock_response)
+          .insert_header("content-type", "application/json"),
+      )
       .mount(&server)
       .await;
 
@@ -482,7 +499,10 @@ mod tests {
       .await;
 
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("Brave version v1.81.9 not found"));
+    assert!(result
+      .unwrap_err()
+      .to_string()
+      .contains("Brave version v1.81.9 not found"));
   }
 
   #[tokio::test]
@@ -509,9 +529,11 @@ mod tests {
     Mock::given(method("GET"))
       .and(path("/repos/zen-browser/desktop/releases"))
       .and(header("user-agent", "donutbrowser"))
-      .respond_with(ResponseTemplate::new(200)
-        .set_body_string(mock_response)
-        .insert_header("content-type", "application/json"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(mock_response)
+          .insert_header("content-type", "application/json"),
+      )
       .mount(&server)
       .await;
 
@@ -526,7 +548,10 @@ mod tests {
       .await;
 
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("No macOS universal asset found"));
+    assert!(result
+      .unwrap_err()
+      .to_string()
+      .contains("No macOS universal asset found"));
   }
 
   #[tokio::test]
@@ -534,22 +559,24 @@ mod tests {
     let server = setup_mock_server().await;
     let api_client = create_test_api_client(&server);
     let downloader = Downloader::new_with_api_client(api_client);
-    
+
     // Create a temporary directory for the test
     let temp_dir = TempDir::new().unwrap();
     let dest_path = temp_dir.path();
 
     // Create test file content (simulating a small download)
     let test_content = b"This is a test file content for download simulation";
-    
+
     // Mock the download endpoint
     Mock::given(method("GET"))
       .and(path("/test-download"))
       .and(header("user-agent", "donutbrowser"))
-      .respond_with(ResponseTemplate::new(200)
-        .set_body_bytes(test_content)
-        .insert_header("content-length", test_content.len().to_string())
-        .insert_header("content-type", "application/octet-stream"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_bytes(test_content)
+          .insert_header("content-length", test_content.len().to_string())
+          .insert_header("content-type", "application/octet-stream"),
+      )
       .mount(&server)
       .await;
 
@@ -576,7 +603,7 @@ mod tests {
     assert!(result.is_ok());
     let downloaded_file = result.unwrap();
     assert!(downloaded_file.exists());
-    
+
     // Verify file content
     let downloaded_content = std::fs::read(&downloaded_file).unwrap();
     assert_eq!(downloaded_content, test_content);
@@ -587,7 +614,7 @@ mod tests {
     let server = setup_mock_server().await;
     let api_client = create_test_api_client(&server);
     let downloader = Downloader::new_with_api_client(api_client);
-    
+
     let temp_dir = TempDir::new().unwrap();
     let dest_path = temp_dir.path();
 
@@ -645,9 +672,11 @@ mod tests {
     Mock::given(method("GET"))
       .and(path("/repos/mullvad/mullvad-browser/releases"))
       .and(header("user-agent", "donutbrowser"))
-      .respond_with(ResponseTemplate::new(200)
-        .set_body_string(mock_response)
-        .insert_header("content-type", "application/json"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(mock_response)
+          .insert_header("content-type", "application/json"),
+      )
       .mount(&server)
       .await;
 
@@ -662,7 +691,10 @@ mod tests {
       .await;
 
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("No macOS asset found"));
+    assert!(result
+      .unwrap_err()
+      .to_string()
+      .contains("No macOS asset found"));
   }
 
   #[tokio::test]
@@ -689,9 +721,11 @@ mod tests {
     Mock::given(method("GET"))
       .and(path("/repos/brave/brave-browser/releases"))
       .and(header("user-agent", "donutbrowser"))
-      .respond_with(ResponseTemplate::new(200)
-        .set_body_string(mock_response)
-        .insert_header("content-type", "application/json"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(mock_response)
+          .insert_header("content-type", "application/json"),
+      )
       .mount(&server)
       .await;
 
@@ -716,20 +750,22 @@ mod tests {
     let server = setup_mock_server().await;
     let api_client = create_test_api_client(&server);
     let downloader = Downloader::new_with_api_client(api_client);
-    
+
     let temp_dir = TempDir::new().unwrap();
     let dest_path = temp_dir.path();
 
     // Create larger test content to simulate chunked transfer
     let test_content = vec![42u8; 1024]; // 1KB of data
-    
+
     Mock::given(method("GET"))
       .and(path("/chunked-download"))
       .and(header("user-agent", "donutbrowser"))
-      .respond_with(ResponseTemplate::new(200)
-        .set_body_bytes(test_content.clone())
-        .insert_header("content-length", test_content.len().to_string())
-        .insert_header("content-type", "application/octet-stream"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_bytes(test_content.clone())
+          .insert_header("content-length", test_content.len().to_string())
+          .insert_header("content-type", "application/octet-stream"),
+      )
       .mount(&server)
       .await;
 
@@ -755,7 +791,7 @@ mod tests {
     assert!(result.is_ok());
     let downloaded_file = result.unwrap();
     assert!(downloaded_file.exists());
-    
+
     let downloaded_content = std::fs::read(&downloaded_file).unwrap();
     assert_eq!(downloaded_content.len(), test_content.len());
   }

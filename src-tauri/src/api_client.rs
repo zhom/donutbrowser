@@ -246,7 +246,8 @@ impl ApiClient {
       firefox_api_base: "https://product-details.mozilla.org/1.0".to_string(),
       firefox_dev_api_base: "https://product-details.mozilla.org/1.0".to_string(),
       github_api_base: "https://api.github.com".to_string(),
-      chromium_api_base: "https://commondatastorage.googleapis.com/chromium-browser-snapshots".to_string(),
+      chromium_api_base: "https://commondatastorage.googleapis.com/chromium-browser-snapshots"
+        .to_string(),
       tor_archive_base: "https://archive.torproject.org/tor-package-archive/torbrowser".to_string(),
       mozilla_download_base: "https://download.mozilla.org".to_string(),
     }
@@ -587,7 +588,10 @@ impl ApiClient {
     }
 
     println!("Fetching Mullvad releases from GitHub API...");
-    let url = format!("{}/repos/mullvad/mullvad-browser/releases", self.github_api_base);
+    let url = format!(
+      "{}/repos/mullvad/mullvad-browser/releases",
+      self.github_api_base
+    );
     let releases = self
       .client
       .get(url)
@@ -637,7 +641,10 @@ impl ApiClient {
     }
 
     println!("Fetching Zen releases from GitHub API...");
-    let url = format!("{}/repos/zen-browser/desktop/releases", self.github_api_base);
+    let url = format!(
+      "{}/repos/zen-browser/desktop/releases",
+      self.github_api_base
+    );
     let mut releases = self
       .client
       .get(url)
@@ -679,7 +686,10 @@ impl ApiClient {
     }
 
     println!("Fetching Brave releases from GitHub API...");
-    let url = format!("{}/repos/brave/brave-browser/releases", self.github_api_base);
+    let url = format!(
+      "{}/repos/brave/brave-browser/releases",
+      self.github_api_base
+    );
     let releases = self
       .client
       .get(url)
@@ -732,10 +742,7 @@ impl ApiClient {
     } else {
       "Mac"
     };
-    let url = format!(
-      "{}/{arch}/LAST_CHANGE",
-      self.chromium_api_base
-    );
+    let url = format!("{}/{arch}/LAST_CHANGE", self.chromium_api_base);
     let version = self
       .client
       .get(&url)
@@ -815,17 +822,22 @@ impl ApiClient {
     // Check cache first (unless bypassing)
     if !no_caching {
       if let Some(cached_versions) = self.load_cached_versions("tor-browser") {
-        return Ok(cached_versions.into_iter().map(|version| {
-          BrowserRelease {
-            version: version.clone(),
-            date: "".to_string(), // Cache doesn't store dates
-            is_prerelease: false, // Assume all archived versions are stable
-            download_url: Some(format!(
-              "{}/{version}/tor-browser-macos-{version}.dmg",
-              self.tor_archive_base
-            )),
-          }
-        }).collect());
+        return Ok(
+          cached_versions
+            .into_iter()
+            .map(|version| {
+              BrowserRelease {
+                version: version.clone(),
+                date: "".to_string(), // Cache doesn't store dates
+                is_prerelease: false, // Assume all archived versions are stable
+                download_url: Some(format!(
+                  "{}/{version}/tor-browser-macos-{version}.dmg",
+                  self.tor_archive_base
+                )),
+              }
+            })
+            .collect(),
+        );
       }
     }
 
@@ -888,17 +900,22 @@ impl ApiClient {
       }
     }
 
-    Ok(version_strings.into_iter().map(|version| {
-      BrowserRelease {
-        version: version.clone(),
-        date: "".to_string(), // TOR archive doesn't provide structured dates
-        is_prerelease: false, // Assume all archived versions are stable
-        download_url: Some(format!(
-          "{}/{version}/tor-browser-macos-{version}.dmg",
-          self.tor_archive_base
-        )),
-      }
-    }).collect())
+    Ok(
+      version_strings
+        .into_iter()
+        .map(|version| {
+          BrowserRelease {
+            version: version.clone(),
+            date: "".to_string(), // TOR archive doesn't provide structured dates
+            is_prerelease: false, // Assume all archived versions are stable
+            download_url: Some(format!(
+              "{}/{version}/tor-browser-macos-{version}.dmg",
+              self.tor_archive_base
+            )),
+          }
+        })
+        .collect(),
+    )
   }
 
   async fn check_tor_version_has_macos(
@@ -923,8 +940,8 @@ impl ApiClient {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use wiremock::{MockServer, Mock, ResponseTemplate};
-  use wiremock::matchers::{method, path, header};
+  use wiremock::matchers::{header, method, path};
+  use wiremock::{Mock, MockServer, ResponseTemplate};
 
   async fn setup_mock_server() -> MockServer {
     MockServer::start().await
@@ -933,12 +950,12 @@ mod tests {
   fn create_test_client(server: &MockServer) -> ApiClient {
     let base_url = server.uri();
     ApiClient::new_with_base_urls(
-      base_url.clone(),    // firefox_api_base
-      base_url.clone(),    // firefox_dev_api_base
-      base_url.clone(),    // github_api_base
-      base_url.clone(),    // chromium_api_base
-      base_url.clone(),    // tor_archive_base
-      base_url.clone(),    // mozilla_download_base
+      base_url.clone(), // firefox_api_base
+      base_url.clone(), // firefox_dev_api_base
+      base_url.clone(), // github_api_base
+      base_url.clone(), // chromium_api_base
+      base_url.clone(), // tor_archive_base
+      base_url.clone(), // mozilla_download_base
     )
   }
 
@@ -1068,9 +1085,11 @@ mod tests {
     Mock::given(method("GET"))
       .and(path("/firefox.json"))
       .and(header("user-agent", "donutbrowser"))
-      .respond_with(ResponseTemplate::new(200)
-        .set_body_string(mock_response)
-        .insert_header("content-type", "application/json"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(mock_response)
+          .insert_header("content-type", "application/json"),
+      )
       .mount(&server)
       .await;
 
@@ -1081,7 +1100,11 @@ mod tests {
     assert!(!releases.is_empty());
     assert_eq!(releases[0].version, "139.0");
     assert!(releases[0].download_url.is_some());
-    assert!(releases[0].download_url.as_ref().unwrap().contains(&server.uri()));
+    assert!(releases[0]
+      .download_url
+      .as_ref()
+      .unwrap()
+      .contains(&server.uri()));
   }
 
   #[tokio::test]
@@ -1106,20 +1129,28 @@ mod tests {
     Mock::given(method("GET"))
       .and(path("/devedition.json"))
       .and(header("user-agent", "donutbrowser"))
-      .respond_with(ResponseTemplate::new(200)
-        .set_body_string(mock_response)
-        .insert_header("content-type", "application/json"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(mock_response)
+          .insert_header("content-type", "application/json"),
+      )
       .mount(&server)
       .await;
 
-    let result = client.fetch_firefox_developer_releases_with_caching(true).await;
+    let result = client
+      .fetch_firefox_developer_releases_with_caching(true)
+      .await;
 
     assert!(result.is_ok());
     let releases = result.unwrap();
     assert!(!releases.is_empty());
     assert_eq!(releases[0].version, "140.0b1");
     assert!(releases[0].download_url.is_some());
-    assert!(releases[0].download_url.as_ref().unwrap().contains(&server.uri()));
+    assert!(releases[0]
+      .download_url
+      .as_ref()
+      .unwrap()
+      .contains(&server.uri()));
   }
 
   #[tokio::test]
@@ -1145,9 +1176,11 @@ mod tests {
     Mock::given(method("GET"))
       .and(path("/repos/mullvad/mullvad-browser/releases"))
       .and(header("user-agent", "donutbrowser"))
-      .respond_with(ResponseTemplate::new(200)
-        .set_body_string(mock_response)
-        .insert_header("content-type", "application/json"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(mock_response)
+          .insert_header("content-type", "application/json"),
+      )
       .mount(&server)
       .await;
 
@@ -1183,9 +1216,11 @@ mod tests {
     Mock::given(method("GET"))
       .and(path("/repos/zen-browser/desktop/releases"))
       .and(header("user-agent", "donutbrowser"))
-      .respond_with(ResponseTemplate::new(200)
-        .set_body_string(mock_response)
-        .insert_header("content-type", "application/json"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(mock_response)
+          .insert_header("content-type", "application/json"),
+      )
       .mount(&server)
       .await;
 
@@ -1220,9 +1255,11 @@ mod tests {
     Mock::given(method("GET"))
       .and(path("/repos/brave/brave-browser/releases"))
       .and(header("user-agent", "donutbrowser"))
-      .respond_with(ResponseTemplate::new(200)
-        .set_body_string(mock_response)
-        .insert_header("content-type", "application/json"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(mock_response)
+          .insert_header("content-type", "application/json"),
+      )
       .mount(&server)
       .await;
 
@@ -1249,9 +1286,11 @@ mod tests {
     Mock::given(method("GET"))
       .and(path(format!("/{arch}/LAST_CHANGE")))
       .and(header("user-agent", "donutbrowser"))
-      .respond_with(ResponseTemplate::new(200)
-        .set_body_string("1465660")
-        .insert_header("content-type", "text/plain"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string("1465660")
+          .insert_header("content-type", "text/plain"),
+      )
       .mount(&server)
       .await;
 
@@ -1276,9 +1315,11 @@ mod tests {
     Mock::given(method("GET"))
       .and(path(format!("/{arch}/LAST_CHANGE")))
       .and(header("user-agent", "donutbrowser"))
-      .respond_with(ResponseTemplate::new(200)
-        .set_body_string("1465660")
-        .insert_header("content-type", "text/plain"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string("1465660")
+          .insert_header("content-type", "text/plain"),
+      )
       .mount(&server)
       .await;
 
@@ -1317,27 +1358,33 @@ mod tests {
     Mock::given(method("GET"))
       .and(path("/"))
       .and(header("user-agent", "donutbrowser"))
-      .respond_with(ResponseTemplate::new(200)
-        .set_body_string(mock_html)
-        .insert_header("content-type", "text/html"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(mock_html)
+          .insert_header("content-type", "text/html"),
+      )
       .mount(&server)
       .await;
 
     Mock::given(method("GET"))
       .and(path("/14.0.4/"))
       .and(header("user-agent", "donutbrowser"))
-      .respond_with(ResponseTemplate::new(200)
-        .set_body_string(version_html)
-        .insert_header("content-type", "text/html"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(version_html)
+          .insert_header("content-type", "text/html"),
+      )
       .mount(&server)
       .await;
 
     Mock::given(method("GET"))
       .and(path("/14.0.3/"))
       .and(header("user-agent", "donutbrowser"))
-      .respond_with(ResponseTemplate::new(200)
-        .set_body_string(version_html.replace("14.0.4", "14.0.3"))
-        .insert_header("content-type", "text/html"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(version_html.replace("14.0.4", "14.0.3"))
+          .insert_header("content-type", "text/html"),
+      )
       .mount(&server)
       .await;
 
@@ -1348,7 +1395,11 @@ mod tests {
     assert!(!releases.is_empty());
     assert_eq!(releases[0].version, "14.0.4");
     assert!(releases[0].download_url.is_some());
-    assert!(releases[0].download_url.as_ref().unwrap().contains(&server.uri()));
+    assert!(releases[0]
+      .download_url
+      .as_ref()
+      .unwrap()
+      .contains(&server.uri()));
   }
 
   #[tokio::test]
@@ -1367,9 +1418,11 @@ mod tests {
     Mock::given(method("GET"))
       .and(path("/14.0.4/"))
       .and(header("user-agent", "donutbrowser"))
-      .respond_with(ResponseTemplate::new(200)
-        .set_body_string(version_html)
-        .insert_header("content-type", "text/html"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(version_html)
+          .insert_header("content-type", "text/html"),
+      )
       .mount(&server)
       .await;
 
@@ -1395,9 +1448,11 @@ mod tests {
     Mock::given(method("GET"))
       .and(path("/14.0.5/"))
       .and(header("user-agent", "donutbrowser"))
-      .respond_with(ResponseTemplate::new(200)
-        .set_body_string(version_html)
-        .insert_header("content-type", "text/html"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(version_html)
+          .insert_header("content-type", "text/html"),
+      )
       .mount(&server)
       .await;
 
@@ -1465,9 +1520,11 @@ mod tests {
     Mock::given(method("GET"))
       .and(path("/firefox.json"))
       .and(header("user-agent", "donutbrowser"))
-      .respond_with(ResponseTemplate::new(200)
-        .set_body_string("invalid json")
-        .insert_header("content-type", "application/json"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string("invalid json")
+          .insert_header("content-type", "application/json"),
+      )
       .mount(&server)
       .await;
 
@@ -1483,8 +1540,7 @@ mod tests {
     Mock::given(method("GET"))
       .and(path("/repos/zen-browser/desktop/releases"))
       .and(header("user-agent", "donutbrowser"))
-      .respond_with(ResponseTemplate::new(429)
-        .insert_header("retry-after", "60"))
+      .respond_with(ResponseTemplate::new(429).insert_header("retry-after", "60"))
       .mount(&server)
       .await;
 

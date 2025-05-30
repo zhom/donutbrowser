@@ -63,10 +63,7 @@ impl AppAutoUpdater {
     let current_version = Self::get_current_version();
     let is_nightly = Self::is_nightly_build();
 
-    println!(
-      "Checking for updates - Current version: {}, Is nightly: {}",
-      current_version, is_nightly
-    );
+    println!("Checking for updates - Current version: {current_version}, Is nightly: {is_nightly}");
 
     let releases = self.fetch_app_releases().await?;
 
@@ -147,10 +144,10 @@ impl AppAutoUpdater {
         return new_hash != current_hash;
       }
       // If current version doesn't have nightly prefix, it's an upgrade from stable to nightly
-      return !current_version.starts_with("nightly-");
+      !current_version.starts_with("nightly-")
     } else {
       // For stable builds, use semantic versioning comparison
-      return self.is_version_newer(new_version, current_version);
+      self.is_version_newer(new_version, current_version)
     }
   }
 
@@ -212,7 +209,7 @@ impl AppAutoUpdater {
     let filename = update_info
       .download_url
       .split('/')
-      .last()
+      .next_back()
       .unwrap_or("update.dmg")
       .to_string();
 
@@ -220,7 +217,9 @@ impl AppAutoUpdater {
     let _ = app_handle.emit("app-update-progress", "Downloading update...");
 
     // Download the update
-    let download_path = self.download_update(&update_info.download_url, &temp_dir, &filename).await?;
+    let download_path = self
+      .download_update(&update_info.download_url, &temp_dir, &filename)
+      .await?;
 
     // Emit extraction start event
     let _ = app_handle.emit("app-update-progress", "Preparing update...");
@@ -369,7 +368,11 @@ impl AppAutoUpdater {
 
     // Remove quarantine attributes from the new app
     let _ = Command::new("xattr")
-      .args(["-dr", "com.apple.quarantine", current_app_path.to_str().unwrap()])
+      .args([
+        "-dr",
+        "com.apple.quarantine",
+        current_app_path.to_str().unwrap(),
+      ])
       .output();
 
     let _ = Command::new("xattr")
@@ -422,7 +425,7 @@ pub async fn check_for_app_updates() -> Result<Option<AppUpdateInfo>, String> {
   updater
     .check_for_updates()
     .await
-    .map_err(|e| format!("Failed to check for app updates: {}", e))
+    .map_err(|e| format!("Failed to check for app updates: {e}"))
 }
 
 #[tauri::command]
@@ -434,7 +437,7 @@ pub async fn download_and_install_app_update(
   updater
     .download_and_install_update(&app_handle, &update_info)
     .await
-    .map_err(|e| format!("Failed to install app update: {}", e))
+    .map_err(|e| format!("Failed to install app update: {e}"))
 }
 
 #[tauri::command]
@@ -453,7 +456,7 @@ mod tests {
   fn test_is_nightly_build() {
     // This will depend on whether STABLE_RELEASE is set during test compilation
     let is_nightly = AppAutoUpdater::is_nightly_build();
-    println!("Is nightly build: {}", is_nightly);
+    println!("Is nightly build: {is_nightly}");
   }
 
   #[test]
@@ -496,7 +499,7 @@ mod tests {
     // Nightly version updates
     assert!(updater.should_update("nightly-abc123", "nightly-def456", true));
     assert!(!updater.should_update("nightly-abc123", "nightly-abc123", true));
-    
+
     // Upgrade from stable to nightly
     assert!(updater.should_update("v1.0.0", "nightly-abc123", true));
   }
@@ -520,9 +523,9 @@ mod tests {
 
     let url = updater.get_download_url_for_platform(&assets);
     assert!(url.is_some());
-    
+
     // The exact URL depends on the target architecture
     let url = url.unwrap();
     assert!(url.contains(".dmg"));
   }
-} 
+}
