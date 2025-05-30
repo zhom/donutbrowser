@@ -34,6 +34,14 @@ impl Downloader {
     }
   }
 
+  #[cfg(test)]
+  pub fn new_with_api_client(api_client: ApiClient) -> Self {
+    Self {
+      client: Client::new(),
+      api_client,
+    }
+  }
+
   /// Resolve the actual download URL for browsers that need dynamic asset resolution
   pub async fn resolve_download_url(
     &self,
@@ -44,7 +52,7 @@ impl Downloader {
     match browser_type {
       BrowserType::Brave => {
         // For Brave, we need to find the actual macOS asset
-        let releases = self.api_client.fetch_brave_releases().await?;
+        let releases = self.api_client.fetch_brave_releases_with_caching(true).await?;
 
         // Find the release with the matching version
         let release = releases
@@ -67,7 +75,7 @@ impl Downloader {
       }
       BrowserType::Zen => {
         // For Zen, verify the asset exists
-        let releases = self.api_client.fetch_zen_releases().await?;
+        let releases = self.api_client.fetch_zen_releases_with_caching(true).await?;
 
         let release = releases
           .iter()
@@ -87,7 +95,7 @@ impl Downloader {
       }
       BrowserType::MullvadBrowser => {
         // For Mullvad, verify the asset exists
-        let releases = self.api_client.fetch_mullvad_releases().await?;
+        let releases = self.api_client.fetch_mullvad_releases_with_caching(true).await?;
 
         let release = releases
           .iter()
@@ -112,9 +120,9 @@ impl Downloader {
     }
   }
 
-  pub async fn download_browser(
+  pub async fn download_browser<R: tauri::Runtime>(
     &self,
-    app_handle: &tauri::AppHandle,
+    app_handle: &tauri::AppHandle<R>,
     browser_type: BrowserType,
     version: &str,
     download_info: &DownloadInfo,
@@ -148,6 +156,11 @@ impl Downloader {
       .header("User-Agent", "donutbrowser")
       .send()
       .await?;
+
+    // Check if the response is successful
+    if !response.status().is_success() {
+      return Err(format!("Download failed with status: {}", response.status()).into());
+    }
 
     let total_size = response.content_length();
     let mut downloaded = 0u64;
@@ -206,12 +219,60 @@ impl Downloader {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::api_client::ApiClient;
+  use crate::browser::BrowserType;
+  use crate::browser_version_service::DownloadInfo;
+
+  use wiremock::{MockServer, Mock, ResponseTemplate};
+  use wiremock::matchers::{method, path, header};
+  use tempfile::TempDir;
+
+  async fn setup_mock_server() -> MockServer {
+    MockServer::start().await
+  }
+
+  fn create_test_api_client(server: &MockServer) -> ApiClient {
+    let base_url = server.uri();
+    ApiClient::new_with_base_urls(
+      base_url.clone(),    // firefox_api_base
+      base_url.clone(),    // firefox_dev_api_base
+      base_url.clone(),    // github_api_base
+      base_url.clone(),    // chromium_api_base
+      base_url.clone(),    // tor_archive_base
+      base_url.clone(),    // mozilla_download_base
+    )
+  }
 
   #[tokio::test]
   async fn test_resolve_brave_download_url() {
-    let downloader = Downloader::new();
+    let server = setup_mock_server().await;
+    let api_client = create_test_api_client(&server);
+    let downloader = Downloader::new_with_api_client(api_client);
 
-    // Test with a known Brave version
+    let mock_response = r#"[
+      {
+        "tag_name": "v1.81.9",
+        "name": "Brave Release 1.81.9",
+        "prerelease": false,
+        "published_at": "2024-01-15T10:00:00Z",
+        "assets": [
+          {
+            "name": "brave-v1.81.9-universal.dmg",
+            "browser_download_url": "https://example.com/brave-1.81.9-universal.dmg"
+          }
+        ]
+      }
+    ]"#;
+
+    Mock::given(method("GET"))
+      .and(path("/repos/brave/brave-browser/releases"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(ResponseTemplate::new(200)
+        .set_body_string(mock_response)
+        .insert_header("content-type", "application/json"))
+      .mount(&server)
+      .await;
+
     let download_info = DownloadInfo {
       url: "placeholder".to_string(),
       filename: "brave-test.dmg".to_string(),
@@ -222,23 +283,40 @@ mod tests {
       .resolve_download_url(BrowserType::Brave, "v1.81.9", &download_info)
       .await;
 
-    match result {
-      Ok(url) => {
-        assert!(url.contains("github.com/brave/brave-browser"));
-        assert!(url.contains(".dmg"));
-        assert!(url.contains("universal"));
-        println!("Brave download URL resolved: {url}");
-      }
-      Err(e) => {
-        println!("Brave URL resolution failed (expected if version doesn't exist): {e}");
-        // This might fail if the version doesn't exist, which is okay for testing
-      }
-    }
+    assert!(result.is_ok());
+    let url = result.unwrap();
+    assert_eq!(url, "https://example.com/brave-1.81.9-universal.dmg");
   }
 
   #[tokio::test]
   async fn test_resolve_zen_download_url() {
-    let downloader = Downloader::new();
+    let server = setup_mock_server().await;
+    let api_client = create_test_api_client(&server);
+    let downloader = Downloader::new_with_api_client(api_client);
+
+    let mock_response = r#"[
+      {
+        "tag_name": "1.11b",
+        "name": "Zen Browser 1.11b",
+        "prerelease": false,
+        "published_at": "2024-01-15T10:00:00Z",
+        "assets": [
+          {
+            "name": "zen.macos-universal.dmg",
+            "browser_download_url": "https://example.com/zen-1.11b-universal.dmg"
+          }
+        ]
+      }
+    ]"#;
+
+    Mock::given(method("GET"))
+      .and(path("/repos/zen-browser/desktop/releases"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(ResponseTemplate::new(200)
+        .set_body_string(mock_response)
+        .insert_header("content-type", "application/json"))
+      .mount(&server)
+      .await;
 
     let download_info = DownloadInfo {
       url: "placeholder".to_string(),
@@ -250,21 +328,40 @@ mod tests {
       .resolve_download_url(BrowserType::Zen, "1.11b", &download_info)
       .await;
 
-    match result {
-      Ok(url) => {
-        assert!(url.contains("github.com/zen-browser/desktop"));
-        assert!(url.contains("zen.macos-universal.dmg"));
-        println!("Zen download URL resolved: {url}");
-      }
-      Err(e) => {
-        println!("Zen URL resolution failed (expected if version doesn't exist): {e}");
-      }
-    }
+    assert!(result.is_ok());
+    let url = result.unwrap();
+    assert_eq!(url, "https://example.com/zen-1.11b-universal.dmg");
   }
 
   #[tokio::test]
   async fn test_resolve_mullvad_download_url() {
-    let downloader = Downloader::new();
+    let server = setup_mock_server().await;
+    let api_client = create_test_api_client(&server);
+    let downloader = Downloader::new_with_api_client(api_client);
+
+    let mock_response = r#"[
+      {
+        "tag_name": "14.5a6",
+        "name": "Mullvad Browser 14.5a6",
+        "prerelease": true,
+        "published_at": "2024-01-15T10:00:00Z",
+        "assets": [
+          {
+            "name": "mullvad-browser-macos-14.5a6.dmg",
+            "browser_download_url": "https://example.com/mullvad-14.5a6.dmg"
+          }
+        ]
+      }
+    ]"#;
+
+    Mock::given(method("GET"))
+      .and(path("/repos/mullvad/mullvad-browser/releases"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(ResponseTemplate::new(200)
+        .set_body_string(mock_response)
+        .insert_header("content-type", "application/json"))
+      .mount(&server)
+      .await;
 
     let download_info = DownloadInfo {
       url: "placeholder".to_string(),
@@ -276,21 +373,16 @@ mod tests {
       .resolve_download_url(BrowserType::MullvadBrowser, "14.5a6", &download_info)
       .await;
 
-    match result {
-      Ok(url) => {
-        assert!(url.contains("github.com/mullvad/mullvad-browser"));
-        assert!(url.contains(".dmg"));
-        println!("Mullvad download URL resolved: {url}");
-      }
-      Err(e) => {
-        println!("Mullvad URL resolution failed (expected if version doesn't exist): {e}");
-      }
-    }
+    assert!(result.is_ok());
+    let url = result.unwrap();
+    assert_eq!(url, "https://example.com/mullvad-14.5a6.dmg");
   }
 
   #[tokio::test]
   async fn test_resolve_firefox_download_url() {
-    let downloader = Downloader::new();
+    let server = setup_mock_server().await;
+    let api_client = create_test_api_client(&server);
+    let downloader = Downloader::new_with_api_client(api_client);
 
     let download_info = DownloadInfo {
       url: "https://download.mozilla.org/?product=firefox-139.0&os=osx&lang=en-US".to_string(),
@@ -302,20 +394,16 @@ mod tests {
       .resolve_download_url(BrowserType::Firefox, "139.0", &download_info)
       .await;
 
-    match result {
-      Ok(url) => {
-        assert_eq!(url, download_info.url);
-        println!("Firefox download URL (passthrough): {url}");
-      }
-      Err(e) => {
-        panic!("Firefox URL resolution should not fail: {e}");
-      }
-    }
+    assert!(result.is_ok());
+    let url = result.unwrap();
+    assert_eq!(url, download_info.url);
   }
 
   #[tokio::test]
   async fn test_resolve_chromium_download_url() {
-    let downloader = Downloader::new();
+    let server = setup_mock_server().await;
+    let api_client = create_test_api_client(&server);
+    let downloader = Downloader::new_with_api_client(api_client);
 
     let download_info = DownloadInfo {
       url: "https://commondatastorage.googleapis.com/chromium-browser-snapshots/Mac/1465660/chrome-mac.zip".to_string(),
@@ -327,20 +415,16 @@ mod tests {
       .resolve_download_url(BrowserType::Chromium, "1465660", &download_info)
       .await;
 
-    match result {
-      Ok(url) => {
-        assert_eq!(url, download_info.url);
-        println!("Chromium download URL (passthrough): {url}");
-      }
-      Err(e) => {
-        panic!("Chromium URL resolution should not fail: {e}");
-      }
-    }
+    assert!(result.is_ok());
+    let url = result.unwrap();
+    assert_eq!(url, download_info.url);
   }
 
   #[tokio::test]
   async fn test_resolve_tor_download_url() {
-    let downloader = Downloader::new();
+    let server = setup_mock_server().await;
+    let api_client = create_test_api_client(&server);
+    let downloader = Downloader::new_with_api_client(api_client);
 
     let download_info = DownloadInfo {
       url: "https://archive.torproject.org/tor-package-archive/torbrowser/14.0.4/tor-browser-macos-14.0.4.dmg".to_string(),
@@ -352,14 +436,327 @@ mod tests {
       .resolve_download_url(BrowserType::TorBrowser, "14.0.4", &download_info)
       .await;
 
-    match result {
-      Ok(url) => {
-        assert_eq!(url, download_info.url);
-        println!("TOR download URL (passthrough): {url}");
+    assert!(result.is_ok());
+    let url = result.unwrap();
+    assert_eq!(url, download_info.url);
+  }
+
+  #[tokio::test]
+  async fn test_resolve_brave_version_not_found() {
+    let server = setup_mock_server().await;
+    let api_client = create_test_api_client(&server);
+    let downloader = Downloader::new_with_api_client(api_client);
+
+    let mock_response = r#"[
+      {
+        "tag_name": "v1.81.8",
+        "name": "Brave Release 1.81.8",
+        "prerelease": false,
+        "published_at": "2024-01-15T10:00:00Z",
+        "assets": [
+          {
+            "name": "brave-v1.81.8-universal.dmg",
+            "browser_download_url": "https://example.com/brave-1.81.8-universal.dmg"
+          }
+        ]
       }
-      Err(e) => {
-        panic!("TOR URL resolution should not fail: {e}");
+    ]"#;
+
+    Mock::given(method("GET"))
+      .and(path("/repos/brave/brave-browser/releases"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(ResponseTemplate::new(200)
+        .set_body_string(mock_response)
+        .insert_header("content-type", "application/json"))
+      .mount(&server)
+      .await;
+
+    let download_info = DownloadInfo {
+      url: "placeholder".to_string(),
+      filename: "brave-test.dmg".to_string(),
+      is_archive: true,
+    };
+
+    let result = downloader
+      .resolve_download_url(BrowserType::Brave, "v1.81.9", &download_info)
+      .await;
+
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Brave version v1.81.9 not found"));
+  }
+
+  #[tokio::test]
+  async fn test_resolve_zen_asset_not_found() {
+    let server = setup_mock_server().await;
+    let api_client = create_test_api_client(&server);
+    let downloader = Downloader::new_with_api_client(api_client);
+
+    let mock_response = r#"[
+      {
+        "tag_name": "1.11b",
+        "name": "Zen Browser 1.11b",
+        "prerelease": false,
+        "published_at": "2024-01-15T10:00:00Z",
+        "assets": [
+          {
+            "name": "zen.linux-universal.tar.bz2",
+            "browser_download_url": "https://example.com/zen-1.11b-linux.tar.bz2"
+          }
+        ]
       }
-    }
+    ]"#;
+
+    Mock::given(method("GET"))
+      .and(path("/repos/zen-browser/desktop/releases"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(ResponseTemplate::new(200)
+        .set_body_string(mock_response)
+        .insert_header("content-type", "application/json"))
+      .mount(&server)
+      .await;
+
+    let download_info = DownloadInfo {
+      url: "placeholder".to_string(),
+      filename: "zen-test.dmg".to_string(),
+      is_archive: true,
+    };
+
+    let result = downloader
+      .resolve_download_url(BrowserType::Zen, "1.11b", &download_info)
+      .await;
+
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("No macOS universal asset found"));
+  }
+
+  #[tokio::test]
+  async fn test_download_browser_with_progress() {
+    let server = setup_mock_server().await;
+    let api_client = create_test_api_client(&server);
+    let downloader = Downloader::new_with_api_client(api_client);
+    
+    // Create a temporary directory for the test
+    let temp_dir = TempDir::new().unwrap();
+    let dest_path = temp_dir.path();
+
+    // Create test file content (simulating a small download)
+    let test_content = b"This is a test file content for download simulation";
+    
+    // Mock the download endpoint
+    Mock::given(method("GET"))
+      .and(path("/test-download"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(ResponseTemplate::new(200)
+        .set_body_bytes(test_content)
+        .insert_header("content-length", test_content.len().to_string())
+        .insert_header("content-type", "application/octet-stream"))
+      .mount(&server)
+      .await;
+
+    let download_info = DownloadInfo {
+      url: format!("{}/test-download", server.uri()),
+      filename: "test-file.dmg".to_string(),
+      is_archive: true,
+    };
+
+    // Create a mock app handle for testing
+    let app = tauri::test::mock_app();
+    let app_handle = app.handle().clone();
+
+    let result = downloader
+      .download_browser(
+        &app_handle,
+        BrowserType::Firefox,
+        "139.0",
+        &download_info,
+        dest_path,
+      )
+      .await;
+
+    assert!(result.is_ok());
+    let downloaded_file = result.unwrap();
+    assert!(downloaded_file.exists());
+    
+    // Verify file content
+    let downloaded_content = std::fs::read(&downloaded_file).unwrap();
+    assert_eq!(downloaded_content, test_content);
+  }
+
+  #[tokio::test]
+  async fn test_download_browser_network_error() {
+    let server = setup_mock_server().await;
+    let api_client = create_test_api_client(&server);
+    let downloader = Downloader::new_with_api_client(api_client);
+    
+    let temp_dir = TempDir::new().unwrap();
+    let dest_path = temp_dir.path();
+
+    // Mock a 404 response
+    Mock::given(method("GET"))
+      .and(path("/missing-file"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(ResponseTemplate::new(404))
+      .mount(&server)
+      .await;
+
+    let download_info = DownloadInfo {
+      url: format!("{}/missing-file", server.uri()),
+      filename: "missing-file.dmg".to_string(),
+      is_archive: true,
+    };
+
+    let app = tauri::test::mock_app();
+    let app_handle = app.handle().clone();
+
+    let result = downloader
+      .download_browser(
+        &app_handle,
+        BrowserType::Firefox,
+        "139.0",
+        &download_info,
+        dest_path,
+      )
+      .await;
+
+    assert!(result.is_err());
+  }
+
+  #[tokio::test]
+  async fn test_resolve_mullvad_asset_not_found() {
+    let server = setup_mock_server().await;
+    let api_client = create_test_api_client(&server);
+    let downloader = Downloader::new_with_api_client(api_client);
+
+    let mock_response = r#"[
+      {
+        "tag_name": "14.5a6",
+        "name": "Mullvad Browser 14.5a6",
+        "prerelease": true,
+        "published_at": "2024-01-15T10:00:00Z",
+        "assets": [
+          {
+            "name": "mullvad-browser-linux-14.5a6.tar.xz",
+            "browser_download_url": "https://example.com/mullvad-14.5a6.tar.xz"
+          }
+        ]
+      }
+    ]"#;
+
+    Mock::given(method("GET"))
+      .and(path("/repos/mullvad/mullvad-browser/releases"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(ResponseTemplate::new(200)
+        .set_body_string(mock_response)
+        .insert_header("content-type", "application/json"))
+      .mount(&server)
+      .await;
+
+    let download_info = DownloadInfo {
+      url: "placeholder".to_string(),
+      filename: "mullvad-test.dmg".to_string(),
+      is_archive: true,
+    };
+
+    let result = downloader
+      .resolve_download_url(BrowserType::MullvadBrowser, "14.5a6", &download_info)
+      .await;
+
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("No macOS asset found"));
+  }
+
+  #[tokio::test]
+  async fn test_brave_version_with_v_prefix() {
+    let server = setup_mock_server().await;
+    let api_client = create_test_api_client(&server);
+    let downloader = Downloader::new_with_api_client(api_client);
+
+    let mock_response = r#"[
+      {
+        "tag_name": "v1.81.9",
+        "name": "Brave Release 1.81.9",
+        "prerelease": false,
+        "published_at": "2024-01-15T10:00:00Z",
+        "assets": [
+          {
+            "name": "brave-v1.81.9-universal.dmg",
+            "browser_download_url": "https://example.com/brave-1.81.9-universal.dmg"
+          }
+        ]
+      }
+    ]"#;
+
+    Mock::given(method("GET"))
+      .and(path("/repos/brave/brave-browser/releases"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(ResponseTemplate::new(200)
+        .set_body_string(mock_response)
+        .insert_header("content-type", "application/json"))
+      .mount(&server)
+      .await;
+
+    let download_info = DownloadInfo {
+      url: "placeholder".to_string(),
+      filename: "brave-test.dmg".to_string(),
+      is_archive: true,
+    };
+
+    // Test with version without v prefix
+    let result = downloader
+      .resolve_download_url(BrowserType::Brave, "1.81.9", &download_info)
+      .await;
+
+    assert!(result.is_ok());
+    let url = result.unwrap();
+    assert_eq!(url, "https://example.com/brave-1.81.9-universal.dmg");
+  }
+
+  #[tokio::test]
+  async fn test_download_browser_chunked_response() {
+    let server = setup_mock_server().await;
+    let api_client = create_test_api_client(&server);
+    let downloader = Downloader::new_with_api_client(api_client);
+    
+    let temp_dir = TempDir::new().unwrap();
+    let dest_path = temp_dir.path();
+
+    // Create larger test content to simulate chunked transfer
+    let test_content = vec![42u8; 1024]; // 1KB of data
+    
+    Mock::given(method("GET"))
+      .and(path("/chunked-download"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(ResponseTemplate::new(200)
+        .set_body_bytes(test_content.clone())
+        .insert_header("content-length", test_content.len().to_string())
+        .insert_header("content-type", "application/octet-stream"))
+      .mount(&server)
+      .await;
+
+    let download_info = DownloadInfo {
+      url: format!("{}/chunked-download", server.uri()),
+      filename: "chunked-file.dmg".to_string(),
+      is_archive: true,
+    };
+
+    let app = tauri::test::mock_app();
+    let app_handle = app.handle().clone();
+
+    let result = downloader
+      .download_browser(
+        &app_handle,
+        BrowserType::Chromium,
+        "1465660",
+        &download_info,
+        dest_path,
+      )
+      .await;
+
+    assert!(result.is_ok());
+    let downloaded_file = result.unwrap();
+    assert!(downloaded_file.exists());
+    
+    let downloaded_content = std::fs::read(&downloaded_file).unwrap();
+    assert_eq!(downloaded_content.len(), test_content.len());
   }
 }

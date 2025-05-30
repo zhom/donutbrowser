@@ -231,12 +231,44 @@ struct CachedGithubData {
 
 pub struct ApiClient {
   client: Client,
+  firefox_api_base: String,
+  firefox_dev_api_base: String,
+  github_api_base: String,
+  chromium_api_base: String,
+  tor_archive_base: String,
+  mozilla_download_base: String,
 }
 
 impl ApiClient {
   pub fn new() -> Self {
     Self {
       client: Client::new(),
+      firefox_api_base: "https://product-details.mozilla.org/1.0".to_string(),
+      firefox_dev_api_base: "https://product-details.mozilla.org/1.0".to_string(),
+      github_api_base: "https://api.github.com".to_string(),
+      chromium_api_base: "https://commondatastorage.googleapis.com/chromium-browser-snapshots".to_string(),
+      tor_archive_base: "https://archive.torproject.org/tor-package-archive/torbrowser".to_string(),
+      mozilla_download_base: "https://download.mozilla.org".to_string(),
+    }
+  }
+
+  #[cfg(test)]
+  pub fn new_with_base_urls(
+    firefox_api_base: String,
+    firefox_dev_api_base: String,
+    github_api_base: String,
+    chromium_api_base: String,
+    tor_archive_base: String,
+    mozilla_download_base: String,
+  ) -> Self {
+    Self {
+      client: Client::new(),
+      firefox_api_base,
+      firefox_dev_api_base,
+      github_api_base,
+      chromium_api_base,
+      tor_archive_base,
+      mozilla_download_base,
     }
   }
 
@@ -376,7 +408,8 @@ impl ApiClient {
                 date: "".to_string(), // Cache doesn't store dates
                 is_prerelease: is_alpha_version(&version),
                 download_url: Some(format!(
-                  "https://download.mozilla.org/?product=firefox-{version}&os=osx&lang=en-US"
+                  "{}/?product=firefox-{}&os=osx&lang=en-US",
+                  self.mozilla_download_base, version
                 )),
               }
             })
@@ -386,7 +419,7 @@ impl ApiClient {
     }
 
     println!("Fetching Firefox releases from Mozilla API...");
-    let url = "https://product-details.mozilla.org/1.0/firefox.json";
+    let url = format!("{}/firefox.json", self.firefox_api_base);
 
     let response = self
       .client
@@ -414,8 +447,8 @@ impl ApiClient {
             date: release.date,
             is_prerelease: !is_stable,
             download_url: Some(format!(
-              "https://download.mozilla.org/?product=firefox-{}&os=osx&lang=en-US",
-              release.version
+              "{}/?product=firefox-{}&os=osx&lang=en-US",
+              self.mozilla_download_base, release.version
             )),
           })
         } else {
@@ -460,7 +493,8 @@ impl ApiClient {
                 date: "".to_string(), // Cache doesn't store dates
                 is_prerelease: is_alpha_version(&version),
                 download_url: Some(format!(
-                  "https://download.mozilla.org/?product=devedition-{version}&os=osx&lang=en-US"
+                  "{}/?product=devedition-{}&os=osx&lang=en-US",
+                  self.mozilla_download_base, version
                 )),
               }
             })
@@ -470,7 +504,7 @@ impl ApiClient {
     }
 
     println!("Fetching Firefox Developer Edition releases from Mozilla API...");
-    let url = "https://product-details.mozilla.org/1.0/devedition.json";
+    let url = format!("{}/devedition.json", self.firefox_dev_api_base);
 
     let response = self
       .client
@@ -504,8 +538,8 @@ impl ApiClient {
             date: release.date,
             is_prerelease: !is_stable,
             download_url: Some(format!(
-              "https://download.mozilla.org/?product=devedition-{}&os=osx&lang=en-US",
-              release.version
+              "{}/?product=devedition-{}&os=osx&lang=en-US",
+              self.mozilla_download_base, release.version
             )),
           })
         } else {
@@ -534,6 +568,7 @@ impl ApiClient {
     Ok(releases)
   }
 
+  #[allow(dead_code)]
   pub async fn fetch_mullvad_releases(
     &self,
   ) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
@@ -552,7 +587,7 @@ impl ApiClient {
     }
 
     println!("Fetching Mullvad releases from GitHub API...");
-    let url = "https://api.github.com/repos/mullvad/mullvad-browser/releases";
+    let url = format!("{}/repos/mullvad/mullvad-browser/releases", self.github_api_base);
     let releases = self
       .client
       .get(url)
@@ -583,6 +618,7 @@ impl ApiClient {
     Ok(releases)
   }
 
+  #[allow(dead_code)]
   pub async fn fetch_zen_releases(
     &self,
   ) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
@@ -601,7 +637,7 @@ impl ApiClient {
     }
 
     println!("Fetching Zen releases from GitHub API...");
-    let url = "https://api.github.com/repos/zen-browser/desktop/releases";
+    let url = format!("{}/repos/zen-browser/desktop/releases", self.github_api_base);
     let mut releases = self
       .client
       .get(url)
@@ -624,6 +660,7 @@ impl ApiClient {
     Ok(releases)
   }
 
+  #[allow(dead_code)]
   pub async fn fetch_brave_releases(
     &self,
   ) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
@@ -642,7 +679,7 @@ impl ApiClient {
     }
 
     println!("Fetching Brave releases from GitHub API...");
-    let url = "https://api.github.com/repos/brave/brave-browser/releases";
+    let url = format!("{}/repos/brave/brave-browser/releases", self.github_api_base);
     let releases = self
       .client
       .get(url)
@@ -696,7 +733,8 @@ impl ApiClient {
       "Mac"
     };
     let url = format!(
-      "https://commondatastorage.googleapis.com/chromium-browser-snapshots/{arch}/LAST_CHANGE"
+      "{}/{arch}/LAST_CHANGE",
+      self.chromium_api_base
     );
     let version = self
       .client
@@ -783,7 +821,8 @@ impl ApiClient {
             date: "".to_string(), // Cache doesn't store dates
             is_prerelease: false, // Assume all archived versions are stable
             download_url: Some(format!(
-              "https://archive.torproject.org/tor-package-archive/torbrowser/{version}/tor-browser-macos-{version}.dmg"
+              "{}/{version}/tor-browser-macos-{version}.dmg",
+              self.tor_archive_base
             )),
           }
         }).collect());
@@ -791,7 +830,7 @@ impl ApiClient {
     }
 
     println!("Fetching TOR releases from archive...");
-    let url = "https://archive.torproject.org/tor-package-archive/torbrowser/";
+    let url = format!("{}/", self.tor_archive_base);
     let html = self
       .client
       .get(url)
@@ -855,7 +894,8 @@ impl ApiClient {
         date: "".to_string(), // TOR archive doesn't provide structured dates
         is_prerelease: false, // Assume all archived versions are stable
         download_url: Some(format!(
-          "https://archive.torproject.org/tor-package-archive/torbrowser/{version}/tor-browser-macos-{version}.dmg"
+          "{}/{version}/tor-browser-macos-{version}.dmg",
+          self.tor_archive_base
         )),
       }
     }).collect())
@@ -865,7 +905,7 @@ impl ApiClient {
     &self,
     version: &str,
   ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-    let url = format!("https://archive.torproject.org/tor-package-archive/torbrowser/{version}/");
+    let url = format!("{}/{version}/", self.tor_archive_base);
     let html = self
       .client
       .get(&url)
@@ -883,6 +923,24 @@ impl ApiClient {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use wiremock::{MockServer, Mock, ResponseTemplate};
+  use wiremock::matchers::{method, path, header};
+
+  async fn setup_mock_server() -> MockServer {
+    MockServer::start().await
+  }
+
+  fn create_test_client(server: &MockServer) -> ApiClient {
+    let base_url = server.uri();
+    ApiClient::new_with_base_urls(
+      base_url.clone(),    // firefox_api_base
+      base_url.clone(),    // firefox_dev_api_base
+      base_url.clone(),    // github_api_base
+      base_url.clone(),    // chromium_api_base
+      base_url.clone(),    // tor_archive_base
+      base_url.clone(),    // mozilla_download_base
+    )
+  }
 
   #[test]
   fn test_version_parsing() {
@@ -981,236 +1039,456 @@ mod tests {
 
   #[tokio::test]
   async fn test_firefox_api() {
-    let client = ApiClient::new();
-    let result = client.fetch_firefox_releases_with_caching(false).await;
+    let server = setup_mock_server().await;
+    let client = create_test_client(&server);
 
-    match result {
-      Ok(releases) => {
-        assert!(!releases.is_empty(), "Should have Firefox releases");
-
-        // Check that releases have required fields
-        let first_release = &releases[0];
-        assert!(
-          !first_release.version.is_empty(),
-          "Version should not be empty"
-        );
-        assert!(
-          first_release.download_url.is_some(),
-          "Should have download URL"
-        );
-
-        println!("Firefox API test passed. Found {} releases", releases.len());
-        println!("Latest version: {}", releases[0].version);
+    let mock_response = r#"{
+      "releases": {
+        "firefox-139.0": {
+          "build_number": 1,
+          "category": "major",
+          "date": "2024-01-15",
+          "description": "Firefox 139.0 Release",
+          "is_security_driven": false,
+          "product": "firefox",
+          "version": "139.0"
+        },
+        "firefox-138.0": {
+          "build_number": 1,
+          "category": "major",
+          "date": "2024-01-01",
+          "description": "Firefox 138.0 Release",
+          "is_security_driven": false,
+          "product": "firefox",
+          "version": "138.0"
+        }
       }
-      Err(e) => {
-        println!("Firefox API test failed: {e}");
-        panic!("Firefox API should work");
-      }
-    }
+    }"#;
+
+    Mock::given(method("GET"))
+      .and(path("/firefox.json"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(ResponseTemplate::new(200)
+        .set_body_string(mock_response)
+        .insert_header("content-type", "application/json"))
+      .mount(&server)
+      .await;
+
+    let result = client.fetch_firefox_releases_with_caching(true).await;
+
+    assert!(result.is_ok());
+    let releases = result.unwrap();
+    assert!(!releases.is_empty());
+    assert_eq!(releases[0].version, "139.0");
+    assert!(releases[0].download_url.is_some());
+    assert!(releases[0].download_url.as_ref().unwrap().contains(&server.uri()));
   }
 
   #[tokio::test]
   async fn test_firefox_developer_api() {
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await; // Rate limiting
+    let server = setup_mock_server().await;
+    let client = create_test_client(&server);
 
-    let client = ApiClient::new();
-    let result = client
-      .fetch_firefox_developer_releases_with_caching(false)
+    let mock_response = r#"{
+      "releases": {
+        "devedition-140.0b1": {
+          "build_number": 1,
+          "category": "major",
+          "date": "2024-01-20",
+          "description": "Firefox Developer Edition 140.0b1",
+          "is_security_driven": false,
+          "product": "devedition",
+          "version": "140.0b1"
+        }
+      }
+    }"#;
+
+    Mock::given(method("GET"))
+      .and(path("/devedition.json"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(ResponseTemplate::new(200)
+        .set_body_string(mock_response)
+        .insert_header("content-type", "application/json"))
+      .mount(&server)
       .await;
 
-    match result {
-      Ok(releases) => {
-        assert!(
-          !releases.is_empty(),
-          "Should have Firefox Developer releases"
-        );
+    let result = client.fetch_firefox_developer_releases_with_caching(true).await;
 
-        let first_release = &releases[0];
-        assert!(
-          !first_release.version.is_empty(),
-          "Version should not be empty"
-        );
-        assert!(
-          first_release.download_url.is_some(),
-          "Should have download URL"
-        );
-
-        println!(
-          "Firefox Developer API test passed. Found {} releases",
-          releases.len()
-        );
-        println!("Latest version: {}", releases[0].version);
-      }
-      Err(e) => {
-        println!("Firefox Developer API test failed: {e}");
-        panic!("Firefox Developer API should work");
-      }
-    }
+    assert!(result.is_ok());
+    let releases = result.unwrap();
+    assert!(!releases.is_empty());
+    assert_eq!(releases[0].version, "140.0b1");
+    assert!(releases[0].download_url.is_some());
+    assert!(releases[0].download_url.as_ref().unwrap().contains(&server.uri()));
   }
 
   #[tokio::test]
   async fn test_mullvad_api() {
-    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await; // Rate limiting
+    let server = setup_mock_server().await;
+    let client = create_test_client(&server);
 
-    let client = ApiClient::new();
-    let result = client.fetch_mullvad_releases().await;
-
-    match result {
-      Ok(releases) => {
-        assert!(!releases.is_empty(), "Should have Mullvad releases");
-
-        let first_release = &releases[0];
-        assert!(
-          !first_release.tag_name.is_empty(),
-          "Tag name should not be empty"
-        );
-
-        println!("Mullvad API test passed. Found {} releases", releases.len());
-        println!("Latest version: {}", releases[0].tag_name);
+    let mock_response = r#"[
+      {
+        "tag_name": "14.5a6",
+        "name": "Mullvad Browser 14.5a6",
+        "prerelease": true,
+        "published_at": "2024-01-15T10:00:00Z",
+        "assets": [
+          {
+            "name": "mullvad-browser-macos-14.5a6.dmg",
+            "browser_download_url": "https://example.com/mullvad-14.5a6.dmg"
+          }
+        ]
       }
-      Err(e) => {
-        println!("Mullvad API test failed: {e}");
-        panic!("Mullvad API should work");
-      }
-    }
+    ]"#;
+
+    Mock::given(method("GET"))
+      .and(path("/repos/mullvad/mullvad-browser/releases"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(ResponseTemplate::new(200)
+        .set_body_string(mock_response)
+        .insert_header("content-type", "application/json"))
+      .mount(&server)
+      .await;
+
+    let result = client.fetch_mullvad_releases_with_caching(true).await;
+
+    assert!(result.is_ok());
+    let releases = result.unwrap();
+    assert!(!releases.is_empty());
+    assert_eq!(releases[0].tag_name, "14.5a6");
+    assert!(releases[0].is_alpha);
   }
 
   #[tokio::test]
   async fn test_zen_api() {
-    tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await; // Rate limiting
+    let server = setup_mock_server().await;
+    let client = create_test_client(&server);
 
-    let client = ApiClient::new();
-    let result = client.fetch_zen_releases().await;
-
-    match result {
-      Ok(releases) => {
-        assert!(!releases.is_empty(), "Should have Zen releases");
-
-        let first_release = &releases[0];
-        assert!(
-          !first_release.tag_name.is_empty(),
-          "Tag name should not be empty"
-        );
-
-        println!("Zen API test passed. Found {} releases", releases.len());
-        println!("Latest version: {}", releases[0].tag_name);
+    let mock_response = r#"[
+      {
+        "tag_name": "1.0.0-twilight",
+        "name": "Zen Browser Twilight",
+        "prerelease": false,
+        "published_at": "2024-01-15T10:00:00Z",
+        "assets": [
+          {
+            "name": "zen.macos-universal.dmg",
+            "browser_download_url": "https://example.com/zen-twilight.dmg"
+          }
+        ]
       }
-      Err(e) => {
-        println!("Zen API test failed: {e}");
-        panic!("Zen API should work");
-      }
-    }
+    ]"#;
+
+    Mock::given(method("GET"))
+      .and(path("/repos/zen-browser/desktop/releases"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(ResponseTemplate::new(200)
+        .set_body_string(mock_response)
+        .insert_header("content-type", "application/json"))
+      .mount(&server)
+      .await;
+
+    let result = client.fetch_zen_releases_with_caching(true).await;
+
+    assert!(result.is_ok());
+    let releases = result.unwrap();
+    assert!(!releases.is_empty());
+    assert_eq!(releases[0].tag_name, "1.0.0-twilight");
   }
 
   #[tokio::test]
   async fn test_brave_api() {
-    tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await; // Rate limiting
+    let server = setup_mock_server().await;
+    let client = create_test_client(&server);
 
-    let client = ApiClient::new();
-    let result = client.fetch_brave_releases().await;
+    let mock_response = r#"[
+      {
+        "tag_name": "v1.81.9",
+        "name": "Brave Release 1.81.9",
+        "prerelease": false,
+        "published_at": "2024-01-15T10:00:00Z",
+        "assets": [
+          {
+            "name": "brave-v1.81.9-universal.dmg",
+            "browser_download_url": "https://example.com/brave-1.81.9-universal.dmg"
+          }
+        ]
+      }
+    ]"#;
 
-    match result {
-      Ok(releases) => {
-        // Note: Brave might not always have macOS releases, so we don't assert non-empty
-        println!(
-          "Brave API test passed. Found {} releases with macOS assets",
-          releases.len()
-        );
-        if !releases.is_empty() {
-          println!("Latest version: {}", releases[0].tag_name);
-        }
-      }
-      Err(e) => {
-        println!("Brave API test failed: {e}");
-        panic!("Brave API should work");
-      }
-    }
+    Mock::given(method("GET"))
+      .and(path("/repos/brave/brave-browser/releases"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(ResponseTemplate::new(200)
+        .set_body_string(mock_response)
+        .insert_header("content-type", "application/json"))
+      .mount(&server)
+      .await;
+
+    let result = client.fetch_brave_releases_with_caching(true).await;
+
+    assert!(result.is_ok());
+    let releases = result.unwrap();
+    assert!(!releases.is_empty());
+    assert_eq!(releases[0].tag_name, "v1.81.9");
+    assert!(!releases[0].is_alpha);
   }
 
   #[tokio::test]
   async fn test_chromium_api() {
-    tokio::time::sleep(tokio::time::Duration::from_millis(2500)).await; // Rate limiting
+    let server = setup_mock_server().await;
+    let client = create_test_client(&server);
 
-    let client = ApiClient::new();
+    let arch = if cfg!(target_arch = "aarch64") {
+      "Mac_Arm"
+    } else {
+      "Mac"
+    };
+
+    Mock::given(method("GET"))
+      .and(path(format!("/{arch}/LAST_CHANGE")))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(ResponseTemplate::new(200)
+        .set_body_string("1465660")
+        .insert_header("content-type", "text/plain"))
+      .mount(&server)
+      .await;
+
     let result = client.fetch_chromium_latest_version().await;
 
-    match result {
-      Ok(version) => {
-        assert!(!version.is_empty(), "Version should not be empty");
-        assert!(
-          version.chars().all(|c| c.is_ascii_digit()),
-          "Version should be numeric"
-        );
+    assert!(result.is_ok());
+    let version = result.unwrap();
+    assert_eq!(version, "1465660");
+  }
 
-        println!("Chromium API test passed. Latest version: {version}");
-      }
-      Err(e) => {
-        println!("Chromium API test failed: {e}");
-        panic!("Chromium API should work");
-      }
-    }
+  #[tokio::test]
+  async fn test_chromium_releases_with_caching() {
+    let server = setup_mock_server().await;
+    let client = create_test_client(&server);
+
+    let arch = if cfg!(target_arch = "aarch64") {
+      "Mac_Arm"
+    } else {
+      "Mac"
+    };
+
+    Mock::given(method("GET"))
+      .and(path(format!("/{arch}/LAST_CHANGE")))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(ResponseTemplate::new(200)
+        .set_body_string("1465660")
+        .insert_header("content-type", "text/plain"))
+      .mount(&server)
+      .await;
+
+    let result = client.fetch_chromium_releases_with_caching(true).await;
+
+    assert!(result.is_ok());
+    let releases = result.unwrap();
+    assert!(!releases.is_empty());
+    assert_eq!(releases[0].version, "1465660");
+    assert!(!releases[0].is_prerelease);
   }
 
   #[tokio::test]
   async fn test_tor_api() {
-    tokio::time::sleep(tokio::time::Duration::from_millis(3000)).await; // Rate limiting
+    let server = setup_mock_server().await;
+    let client = create_test_client(&server);
 
-    let client = ApiClient::new();
+    let mock_html = r#"
+    <html>
+    <body>
+    <a href="../">../</a>
+    <a href="14.0.4/">14.0.4/</a>
+    <a href="14.0.3/">14.0.3/</a>
+    </body>
+    </html>
+    "#;
 
-    // Use a timeout for this test since TOR API can be slow
-    let timeout_duration = tokio::time::Duration::from_secs(30);
-    let result = tokio::time::timeout(
-      timeout_duration,
-      client.fetch_tor_releases_with_caching(false),
-    )
-    .await;
+    let version_html = r#"
+    <html>
+    <body>
+    <a href="tor-browser-macos-14.0.4.dmg">tor-browser-macos-14.0.4.dmg</a>
+    </body>
+    </html>
+    "#;
 
-    match result {
-      Ok(Ok(releases)) => {
-        assert!(!releases.is_empty(), "Should have TOR releases");
+    Mock::given(method("GET"))
+      .and(path("/"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(ResponseTemplate::new(200)
+        .set_body_string(mock_html)
+        .insert_header("content-type", "text/html"))
+      .mount(&server)
+      .await;
 
-        let first_release = &releases[0];
-        assert!(
-          !first_release.version.is_empty(),
-          "Version should not be empty"
-        );
-        assert!(
-          first_release.download_url.is_some(),
-          "Should have download URL"
-        );
+    Mock::given(method("GET"))
+      .and(path("/14.0.4/"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(ResponseTemplate::new(200)
+        .set_body_string(version_html)
+        .insert_header("content-type", "text/html"))
+      .mount(&server)
+      .await;
 
-        println!("TOR API test passed. Found {} releases", releases.len());
-        println!("Latest version: {}", releases[0].version);
-      }
-      Ok(Err(e)) => {
-        println!("TOR API test failed: {e}");
-        // Don't panic for TOR API since it can be unreliable
-        println!("TOR API test skipped due to network issues");
-      }
-      Err(_) => {
-        println!("TOR API test timed out after 30 seconds");
-        // Don't panic for timeout, just skip
-        println!("TOR API test skipped due to timeout");
-      }
-    }
+    Mock::given(method("GET"))
+      .and(path("/14.0.3/"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(ResponseTemplate::new(200)
+        .set_body_string(version_html.replace("14.0.4", "14.0.3"))
+        .insert_header("content-type", "text/html"))
+      .mount(&server)
+      .await;
+
+    let result = client.fetch_tor_releases_with_caching(true).await;
+
+    assert!(result.is_ok());
+    let releases = result.unwrap();
+    assert!(!releases.is_empty());
+    assert_eq!(releases[0].version, "14.0.4");
+    assert!(releases[0].download_url.is_some());
+    assert!(releases[0].download_url.as_ref().unwrap().contains(&server.uri()));
   }
 
   #[tokio::test]
   async fn test_tor_version_check() {
-    tokio::time::sleep(tokio::time::Duration::from_millis(3500)).await; // Rate limiting
+    let server = setup_mock_server().await;
+    let client = create_test_client(&server);
 
-    let client = ApiClient::new();
+    let version_html = r#"
+    <html>
+    <body>
+    <a href="tor-browser-macos-14.0.4.dmg">tor-browser-macos-14.0.4.dmg</a>
+    </body>
+    </html>
+    "#;
+
+    Mock::given(method("GET"))
+      .and(path("/14.0.4/"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(ResponseTemplate::new(200)
+        .set_body_string(version_html)
+        .insert_header("content-type", "text/html"))
+      .mount(&server)
+      .await;
+
     let result = client.check_tor_version_has_macos("14.0.4").await;
 
-    match result {
-      Ok(has_macos) => {
-        assert!(has_macos, "Version 14.0.4 should have macOS support");
-        println!("TOR version check test passed. Version 14.0.4 has macOS: {has_macos}");
-      }
-      Err(e) => {
-        println!("TOR version check test failed: {e}");
-        panic!("TOR version check should work");
-      }
-    }
+    assert!(result.is_ok());
+    assert!(result.unwrap());
+  }
+
+  #[tokio::test]
+  async fn test_tor_version_check_no_macos() {
+    let server = setup_mock_server().await;
+    let client = create_test_client(&server);
+
+    let version_html = r#"
+    <html>
+    <body>
+    <a href="tor-browser-linux-14.0.4.tar.xz">tor-browser-linux-14.0.4.tar.xz</a>
+    </body>
+    </html>
+    "#;
+
+    Mock::given(method("GET"))
+      .and(path("/14.0.5/"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(ResponseTemplate::new(200)
+        .set_body_string(version_html)
+        .insert_header("content-type", "text/html"))
+      .mount(&server)
+      .await;
+
+    let result = client.check_tor_version_has_macos("14.0.5").await;
+
+    assert!(result.is_ok());
+    assert!(!result.unwrap());
+  }
+
+  #[test]
+  fn test_is_alpha_version() {
+    assert!(is_alpha_version("1.2.3a1"));
+    assert!(is_alpha_version("137.0b5"));
+    assert!(is_alpha_version("140.0rc1"));
+    assert!(!is_alpha_version("139.0"));
+    assert!(!is_alpha_version("1.2.3"));
+  }
+
+  #[test]
+  fn test_sort_versions_comprehensive() {
+    let mut versions = vec![
+      "1.0.0".to_string(),
+      "1.0.1".to_string(),
+      "1.1.0".to_string(),
+      "2.0.0a1".to_string(),
+      "2.0.0b1".to_string(),
+      "2.0.0rc1".to_string(),
+      "2.0.0".to_string(),
+      "10.0.0".to_string(),
+      "1.0.0-twilight".to_string(),
+    ];
+
+    sort_versions(&mut versions);
+
+    // Twilight should be first, then normal semantic versioning
+    assert_eq!(versions[0], "1.0.0-twilight");
+    assert_eq!(versions[1], "10.0.0");
+    assert_eq!(versions[2], "2.0.0");
+    assert_eq!(versions[3], "2.0.0rc1");
+    assert_eq!(versions[4], "2.0.0b1");
+    assert_eq!(versions[5], "2.0.0a1");
+  }
+
+  #[tokio::test]
+  async fn test_error_handling_404() {
+    let server = setup_mock_server().await;
+    let client = create_test_client(&server);
+
+    Mock::given(method("GET"))
+      .and(path("/firefox.json"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(ResponseTemplate::new(404))
+      .mount(&server)
+      .await;
+
+    let result = client.fetch_firefox_releases_with_caching(true).await;
+    assert!(result.is_err());
+  }
+
+  #[tokio::test]
+  async fn test_error_handling_invalid_json() {
+    let server = setup_mock_server().await;
+    let client = create_test_client(&server);
+
+    Mock::given(method("GET"))
+      .and(path("/firefox.json"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(ResponseTemplate::new(200)
+        .set_body_string("invalid json")
+        .insert_header("content-type", "application/json"))
+      .mount(&server)
+      .await;
+
+    let result = client.fetch_firefox_releases_with_caching(true).await;
+    assert!(result.is_err());
+  }
+
+  #[tokio::test]
+  async fn test_github_api_rate_limit() {
+    let server = setup_mock_server().await;
+    let client = create_test_client(&server);
+
+    Mock::given(method("GET"))
+      .and(path("/repos/zen-browser/desktop/releases"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(ResponseTemplate::new(429)
+        .insert_header("retry-after", "60"))
+      .mount(&server)
+      .await;
+
+    let result = client.fetch_zen_releases_with_caching(true).await;
+    assert!(result.is_err());
   }
 }

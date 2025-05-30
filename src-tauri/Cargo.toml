@@ -20,7 +20,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }
-tauri = { version = "2", features = ["devtools"] }
+tauri = { version = "2", features = ["devtools", "test"] }
 tauri-plugin-opener = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-shell = "2"
@@ -41,6 +41,7 @@ core-foundation="0.10"
 [dev-dependencies]
 tempfile = "3.13.0"
 tokio-test = "0.4.4"
+wiremock = "0.6"
 
 [features]
 # by default Tauri runs in production mode
