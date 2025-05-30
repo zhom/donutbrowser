@@ -95,9 +95,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: "alpha-${{ steps.commit.outputs.hash }}"
-          releaseName: "Donut Browser Alpha (Build ${{ steps.commit.outputs.hash }})"
-          releaseBody: "⚠️ **Alpha Release** - This is an automatically generated pre-release build from the latest main branch. Use with caution.\n\nCommit: ${{ github.sha }}\nBuild: ${{ steps.commit.outputs.hash }}"
+          tagName: "nightly-${{ steps.commit.outputs.hash }}"
+          releaseName: "Donut Browser Nightly (Build ${{ steps.commit.outputs.hash }})"
+          releaseBody: "⚠️ **Nightly Release** - This is an automatically generated pre-release build from the latest main branch. Use with caution.\n\nCommit: ${{ github.sha }}\nBuild: ${{ steps.commit.outputs.hash }}"
           releaseDraft: false
           prerelease: true
           args: ${{ matrix.args }}
