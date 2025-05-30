@@ -1,11 +1,13 @@
 <div align="center">
   <img src="assets/logo.png" alt="Donut Browser Logo" width="150">
-  <h1>Donut Browser <a href="https://github.com/zhom/donutbrowser/releases/latest" target="_blank"><img alt="GitHub release" src="https://img.shields.io/github/v/release/zhom/donutbrowser"></a></h1>
+  <h1>Donut Browser</h1>
   <strong>A powerful browser orchestrator that puts you in control of your browsing experience. 🍩</strong>
 </div>
 <br>
 
 <p align="center">
+  <a href="https://github.com/zhom/donutbrowser/releases/latest" target="_blank"><img alt="GitHub release" src="https://img.shields.io/github/v/release/zhom/donutbrowser">
+  </a>
   <a href="https://github.com/zhom/donutbrowser/issues" target="_blank">
     <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat" alt="PRs Welcome">
   </a>
