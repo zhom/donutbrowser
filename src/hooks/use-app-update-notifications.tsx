@@ -13,6 +13,7 @@ export function useAppUpdateNotifications() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [updateProgress, setUpdateProgress] = useState<string>("");
   const [isClient, setIsClient] = useState(false);
+  const [dismissedVersion, setDismissedVersion] = useState<string | null>(null);
 
   // Ensure we're on the client side to prevent hydration mismatches
   useEffect(() => {
@@ -26,9 +27,32 @@ export function useAppUpdateNotifications() {
       const update = await invoke<AppUpdateInfo | null>(
         "check_for_app_updates",
       );
-      setUpdateInfo(update);
+
+      // Don't show update if this version was already dismissed
+      if (update && update.new_version !== dismissedVersion) {
+        setUpdateInfo(update);
+      } else if (update) {
+        console.log("Update available but dismissed:", update.new_version);
+      }
     } catch (error) {
       console.error("Failed to check for app updates:", error);
+    }
+  }, [isClient, dismissedVersion]);
+
+  const checkForAppUpdatesManual = useCallback(async () => {
+    if (!isClient) return;
+
+    try {
+      console.log("Triggering manual app update check...");
+      const update = await invoke<AppUpdateInfo | null>(
+        "check_for_app_updates_manual",
+      );
+      console.log("Manual check result:", update);
+
+      // Always show manual check results, even if previously dismissed
+      setUpdateInfo(update);
+    } catch (error) {
+      console.error("Failed to manually check for app updates:", error);
     }
   }, [isClient]);
 
@@ -56,9 +80,15 @@ export function useAppUpdateNotifications() {
   const dismissAppUpdate = useCallback(() => {
     if (!isClient) return;
 
+    // Remember the dismissed version so we don't show it again
+    if (updateInfo) {
+      setDismissedVersion(updateInfo.new_version);
+      console.log("Dismissed app update version:", updateInfo.new_version);
+    }
+
     setUpdateInfo(null);
     toast.dismiss("app-update");
-  }, [isClient]);
+  }, [isClient, updateInfo]);
 
   // Listen for app update availability
   useEffect(() => {
@@ -116,10 +146,19 @@ export function useAppUpdateNotifications() {
     isClient,
   ]);
 
+  // Check for app updates on startup
+  useEffect(() => {
+    if (!isClient) return;
+
+    // Check for updates immediately on startup
+    void checkForAppUpdates();
+  }, [isClient, checkForAppUpdates]);
+
   return {
     updateInfo,
     isUpdating,
     checkForAppUpdates,
+    checkForAppUpdatesManual,
     dismissAppUpdate,
   };
 }

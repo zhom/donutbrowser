@@ -126,6 +126,7 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Donut Browser ${{ github.ref_name }}"

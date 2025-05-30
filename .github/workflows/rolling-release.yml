@@ -94,6 +94,8 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REF_NAME: "nightly-${{ steps.commit.outputs.hash }}"
+          GITHUB_SHA: ${{ github.sha }}
         with:
           tagName: "nightly-${{ steps.commit.outputs.hash }}"
           releaseName: "Donut Browser Nightly (Build ${{ steps.commit.outputs.hash }})"

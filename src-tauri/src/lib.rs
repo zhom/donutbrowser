@@ -54,7 +54,7 @@ use auto_updater::{
 };
 
 use app_auto_updater::{
-  check_for_app_updates, download_and_install_app_update, get_app_version_info,
+  check_for_app_updates, check_for_app_updates_manual, download_and_install_app_update, get_app_version_info,
 };
 
 #[tauri::command]
@@ -183,6 +183,7 @@ pub fn run() {
         // Add a small delay to ensure the app is fully loaded
         tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
+        println!("Starting app update check at startup...");
         let updater = app_auto_updater::AppAutoUpdater::new();
         match updater.check_for_updates().await {
           Ok(Some(update_info)) => {
@@ -191,13 +192,17 @@ pub fn run() {
               update_info.current_version, update_info.new_version
             );
             // Emit update available event to the frontend
-            let _ = app_handle_update.emit("app-update-available", &update_info);
+            if let Err(e) = app_handle_update.emit("app-update-available", &update_info) {
+              eprintln!("Failed to emit app update event: {}", e);
+            } else {
+              println!("App update event emitted successfully");
+            }
           }
           Ok(None) => {
             println!("No app updates available");
           }
           Err(e) => {
-            eprintln!("Failed to check for app updates: {e}");
+            eprintln!("Failed to check for app updates: {}", e);
           }
         }
       });
@@ -255,6 +260,7 @@ pub fn run() {
       remove_auto_update_download,
       is_auto_update_download,
       check_for_app_updates,
+      check_for_app_updates_manual,
       download_and_install_app_update,
       get_app_version_info,
     ])

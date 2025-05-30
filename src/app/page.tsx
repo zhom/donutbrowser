@@ -56,6 +56,7 @@ export default function Home() {
 
   // App auto-update functionality
   const appUpdateNotifications = useAppUpdateNotifications();
+  const { checkForAppUpdatesManual } = appUpdateNotifications;
 
   // Ensure we're on the client side to prevent hydration mismatches
   useEffect(() => {

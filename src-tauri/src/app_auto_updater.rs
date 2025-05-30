@@ -51,9 +51,10 @@ impl AppAutoUpdater {
     option_env!("STABLE_RELEASE").is_none()
   }
 
-  /// Get current app version from Cargo.toml
+  /// Get current app version from build-time injection
   pub fn get_current_version() -> String {
-    env!("CARGO_PKG_VERSION").to_string()
+    // Use build-time injected version instead of CARGO_PKG_VERSION
+    env!("BUILD_VERSION").to_string()
   }
 
   /// Check for app updates
@@ -63,37 +64,48 @@ impl AppAutoUpdater {
     let current_version = Self::get_current_version();
     let is_nightly = Self::is_nightly_build();
 
-    println!("Checking for updates - Current version: {current_version}, Is nightly: {is_nightly}");
+    println!("=== App Update Check ===");
+    println!("Current version: {}", current_version);
+    println!("Is nightly build: {}", is_nightly);
+    println!("STABLE_RELEASE env: {:?}", option_env!("STABLE_RELEASE"));
 
     let releases = self.fetch_app_releases().await?;
+    println!("Fetched {} releases from GitHub", releases.len());
 
     // Filter releases based on build type
     let filtered_releases: Vec<&AppRelease> = if is_nightly {
       // For nightly builds, look for nightly releases
-      releases
+      let nightly_releases: Vec<&AppRelease> = releases
         .iter()
         .filter(|release| release.tag_name.starts_with("nightly-"))
-        .collect()
+        .collect();
+      println!("Found {} nightly releases", nightly_releases.len());
+      nightly_releases
     } else {
       // For stable builds, look for stable releases (semver format)
-      releases
+      let stable_releases: Vec<&AppRelease> = releases
         .iter()
         .filter(|release| {
           release.tag_name.starts_with('v') && !release.tag_name.starts_with("nightly-")
         })
-        .collect()
+        .collect();
+      println!("Found {} stable releases", stable_releases.len());
+      stable_releases
     };
 
     if filtered_releases.is_empty() {
-      println!("No releases found for build type");
+      println!("No releases found for build type (nightly: {})", is_nightly);
       return Ok(None);
     }
 
     // Get the latest release
     let latest_release = filtered_releases[0];
+    println!("Latest release: {} ({})", latest_release.tag_name, latest_release.name);
 
     // Check if we need to update
     if self.should_update(&current_version, &latest_release.tag_name, is_nightly) {
+      println!("Update available!");
+      
       // Find the appropriate asset for current platform
       if let Some(download_url) = self.get_download_url_for_platform(&latest_release.assets) {
         let update_info = AppUpdateInfo {
@@ -105,8 +117,13 @@ impl AppAutoUpdater {
           published_at: latest_release.published_at.clone(),
         };
 
+        println!("Update info prepared: {} -> {}", update_info.current_version, update_info.new_version);
         return Ok(Some(update_info));
+      } else {
+        println!("No suitable download asset found for current platform");
       }
+    } else {
+      println!("No update needed");
     }
 
     Ok(None)
@@ -134,21 +151,34 @@ impl AppAutoUpdater {
 
   /// Determine if an update should be performed
   fn should_update(&self, current_version: &str, new_version: &str, is_nightly: bool) -> bool {
+    println!("Comparing versions: current={}, new={}, is_nightly={}", current_version, new_version, is_nightly);
+    
     if is_nightly {
       // For nightly builds, always update if there's a newer nightly
-      // Compare the commit hashes (assuming format: nightly-<commit_hash>)
       if let (Some(current_hash), Some(new_hash)) = (
         current_version.strip_prefix("nightly-"),
         new_version.strip_prefix("nightly-"),
       ) {
-        return new_hash != current_hash;
+        // Different commit hashes mean we should update
+        let should_update = new_hash != current_hash;
+        println!("Nightly comparison: current_hash={}, new_hash={}, should_update={}", current_hash, new_hash, should_update);
+        return should_update;
       }
-      // If current version doesn't have nightly prefix, it's an upgrade from stable to nightly
-      !current_version.starts_with("nightly-")
+      
+      // If current version doesn't have nightly prefix but we're in nightly mode,
+      // this could be a dev build or stable build upgrading to nightly
+      if !current_version.starts_with("nightly-") {
+        println!("Upgrading from non-nightly to nightly: {}", new_version);
+        return true;
+      }
     } else {
       // For stable builds, use semantic versioning comparison
-      self.is_version_newer(new_version, current_version)
+      let should_update = self.is_version_newer(new_version, current_version);
+      println!("Stable comparison: {} > {} = {}", new_version, current_version, should_update);
+      return should_update;
     }
+
+    false
   }
 
   /// Compare semantic versions (returns true if version1 > version2)
@@ -174,24 +204,63 @@ impl AppAutoUpdater {
   fn get_download_url_for_platform(&self, assets: &[AppReleaseAsset]) -> Option<String> {
     let arch = if cfg!(target_arch = "aarch64") {
       "aarch64"
-    } else {
+    } else if cfg!(target_arch = "x86_64") {
       "x64"
+    } else {
+      "unknown"
     };
 
-    // Look for macOS DMG with the appropriate architecture
+    println!("Looking for assets with architecture: {}", arch);
     for asset in assets {
-      if asset.name.contains(".dmg") && asset.name.contains(arch) {
+      println!("Found asset: {}", asset.name);
+    }
+
+    // Priority 1: Look for exact architecture match in DMG
+    for asset in assets {
+      if asset.name.contains(".dmg") && 
+         (asset.name.contains(&format!("_{}.dmg", arch)) || 
+          asset.name.contains(&format!("-{}.dmg", arch)) ||
+          asset.name.contains(&format!("_{}_", arch)) ||
+          asset.name.contains(&format!("-{}-", arch))) {
+        println!("Found exact architecture match: {}", asset.name);
         return Some(asset.browser_download_url.clone());
       }
     }
 
-    // Fallback: look for any macOS DMG
+    // Priority 2: Look for x86_64 variations if we're looking for x64
+    if arch == "x64" {
+      for asset in assets {
+        if asset.name.contains(".dmg") && 
+           (asset.name.contains("x86_64") || asset.name.contains("x86-64")) {
+          println!("Found x86_64 variant: {}", asset.name);
+          return Some(asset.browser_download_url.clone());
+        }
+      }
+    }
+
+    // Priority 3: Look for arm64 variations if we're looking for aarch64
+    if arch == "aarch64" {
+      for asset in assets {
+        if asset.name.contains(".dmg") && 
+           (asset.name.contains("arm64") || asset.name.contains("aarch64")) {
+          println!("Found arm64 variant: {}", asset.name);
+          return Some(asset.browser_download_url.clone());
+        }
+      }
+    }
+
+    // Priority 4: Fallback to any macOS DMG
     for asset in assets {
-      if asset.name.contains(".dmg") {
+      if asset.name.contains(".dmg") && 
+         (asset.name.to_lowercase().contains("macos") || 
+          asset.name.to_lowercase().contains("darwin") ||
+          asset.name.contains(".app.tar.gz") == false) { // Exclude app.tar.gz files
+        println!("Found fallback DMG: {}", asset.name);
         return Some(asset.browser_download_url.clone());
       }
     }
 
+    println!("No suitable asset found for platform");
     None
   }
 
@@ -448,6 +517,16 @@ pub fn get_app_version_info() -> Result<(String, bool), String> {
   ))
 }
 
+#[tauri::command]
+pub async fn check_for_app_updates_manual() -> Result<Option<AppUpdateInfo>, String> {
+  println!("Manual app update check triggered");
+  let updater = AppAutoUpdater::new();
+  updater
+    .check_for_updates()
+    .await
+    .map_err(|e| format!("Failed to check for app updates: {e}"))
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -502,6 +581,27 @@ mod tests {
 
     // Upgrade from stable to nightly
     assert!(updater.should_update("v1.0.0", "nightly-abc123", true));
+    
+    // Upgrade from dev to nightly
+    assert!(updater.should_update("dev-0.1.0", "nightly-abc123", true));
+  }
+
+  #[test]
+  fn test_should_update_edge_cases() {
+    let updater = AppAutoUpdater::new();
+
+    // Test with different nightly formats
+    assert!(updater.should_update("nightly-abc123", "nightly-def456", true));
+    assert!(!updater.should_update("nightly-abc123", "nightly-abc123", true));
+
+    // Test stable version edge cases
+    assert!(updater.should_update("v0.9.9", "v1.0.0", false));
+    assert!(!updater.should_update("v1.0.0", "v0.9.9", false));
+    assert!(!updater.should_update("v1.0.0", "v1.0.0", false));
+
+    // Test version without 'v' prefix
+    assert!(updater.should_update("0.9.9", "v1.0.0", false));
+    assert!(updater.should_update("v0.9.9", "1.0.0", false));
   }
 
   #[test]
