@@ -78,6 +78,11 @@ export function ProfilesDataTable({
     React.useState<BrowserProfile | null>(null);
   const [newProfileName, setNewProfileName] = React.useState("");
   const [renameError, setRenameError] = React.useState<string | null>(null);
+  const [profileToDelete, setProfileToDelete] =
+    React.useState<BrowserProfile | null>(null);
+  const [deleteConfirmationName, setDeleteConfirmationName] =
+    React.useState("");
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
   const [isClient, setIsClient] = React.useState(false);
 
   // Ensure we're on the client side to prevent hydration mismatches
@@ -114,6 +119,26 @@ export function ProfilesDataTable({
       setRenameError(null);
     } catch (err) {
       setRenameError(err as string);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!profileToDelete || !deleteConfirmationName.trim()) return;
+
+    if (deleteConfirmationName.trim() !== profileToDelete.name) {
+      setDeleteError(
+        "Profile name doesn't match. Please type the exact name to confirm deletion.",
+      );
+      return;
+    }
+
+    try {
+      await onDeleteProfile(profileToDelete);
+      setProfileToDelete(null);
+      setDeleteConfirmationName("");
+      setDeleteError(null);
+    } catch (err) {
+      setDeleteError(err as string);
     }
   };
 
@@ -379,7 +404,10 @@ export function ProfilesDataTable({
                     Rename profile
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onClick={() => void onDeleteProfile(profile)}
+                    onClick={() => {
+                      setProfileToDelete(profile);
+                      setDeleteConfirmationName("");
+                    }}
                     className="text-red-600"
                     disabled={!isClient || isRunning || isBrowserUpdating}
                   >
@@ -400,7 +428,6 @@ export function ProfilesDataTable({
       onLaunchProfile,
       onKillProfile,
       onProxySettings,
-      onDeleteProfile,
       onChangeVersion,
     ],
   );
@@ -511,6 +538,69 @@ export function ProfilesDataTable({
               Cancel
             </Button>
             <Button onClick={() => void handleRename()}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={profileToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setProfileToDelete(null);
+            setDeleteConfirmationName("");
+            setDeleteError(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Profile</DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. This will permanently delete the
+              profile &quot;{profileToDelete?.name}&quot; and all its associated
+              data.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="delete-confirmation">
+                Please type <strong>{profileToDelete?.name}</strong> to confirm:
+              </Label>
+              <Input
+                id="delete-confirmation"
+                value={deleteConfirmationName}
+                onChange={(e) => {
+                  setDeleteConfirmationName(e.target.value);
+                  setDeleteError(null);
+                }}
+                placeholder="Type the profile name here"
+              />
+            </div>
+            {deleteError && (
+              <p className="text-sm text-red-600">{deleteError}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setProfileToDelete(null);
+                setDeleteConfirmationName("");
+                setDeleteError(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void handleDelete()}
+              disabled={
+                !deleteConfirmationName.trim() ||
+                deleteConfirmationName !== profileToDelete?.name
+              }
+            >
+              Delete Profile
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
