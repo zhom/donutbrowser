@@ -43,17 +43,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 If you face any problems while using the application, please [open an issue](https://github.com/zhom/donutbrowser/issues).
 
-## Roadmap
-
-Here is the roadmap for Donut Browser:
-
-- 🔄 Windows support
-- 🔄 Linux support
-- 🔄 Browser extensions marketplace
-- 🔄 Advanced proxy configuration
-- 🔄 Profile synchronization
-- 🔄 Enhanced security features
-
 ## Community
 
 Have questions or want to contribute? We'd love to hear from you!
