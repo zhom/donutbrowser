@@ -13,6 +13,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAppUpdateNotifications } from "@/hooks/use-app-update-notifications";
 import { useUpdateNotifications } from "@/hooks/use-update-notifications";
 import { showErrorToast } from "@/lib/toast-utils";
 import type { BrowserProfile, ProxySettings } from "@/types";
@@ -52,6 +53,9 @@ export default function Home() {
   // Auto-update functionality - only initialize on client
   const updateNotifications = useUpdateNotifications();
   const { checkForUpdates, isUpdating } = updateNotifications;
+
+  // App auto-update functionality
+  const appUpdateNotifications = useAppUpdateNotifications();
 
   // Ensure we're on the client side to prevent hydration mismatches
   useEffect(() => {
@@ -249,7 +253,9 @@ export default function Home() {
         await loadProfiles();
       } catch (error) {
         setError(
-          `Failed to create profile: ${error instanceof Error ? error.message : String(error)}`,
+          `Failed to create profile: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
         );
         throw error;
       }

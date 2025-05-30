@@ -8,6 +8,7 @@ use tauri_plugin_deep_link::DeepLinkExt;
 static PENDING_URLS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 mod api_client;
+mod app_auto_updater;
 mod auto_updater;
 mod browser;
 mod browser_runner;
@@ -50,6 +51,10 @@ use auto_updater::{
   check_for_browser_updates, complete_browser_update, complete_browser_update_with_auto_update,
   dismiss_update_notification, is_auto_update_download, is_browser_disabled_for_update,
   mark_auto_update_download, remove_auto_update_download, start_browser_update,
+};
+
+use app_auto_updater::{
+  check_for_app_updates, download_and_install_app_update, get_app_version_info,
 };
 
 #[tauri::command]
@@ -172,6 +177,28 @@ pub fn run() {
         updater_guard.start_background_updates().await;
       });
 
+      // Check for app updates at startup
+      let app_handle_update = app.handle().clone();
+      tauri::async_runtime::spawn(async move {
+        // Add a small delay to ensure the app is fully loaded
+        tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+        
+        let updater = app_auto_updater::AppAutoUpdater::new();
+        match updater.check_for_updates().await {
+          Ok(Some(update_info)) => {
+            println!("App update available: {} -> {}", update_info.current_version, update_info.new_version);
+            // Emit update available event to the frontend
+            let _ = app_handle_update.emit("app-update-available", &update_info);
+          }
+          Ok(None) => {
+            println!("No app updates available");
+          }
+          Err(e) => {
+            eprintln!("Failed to check for app updates: {}", e);
+          }
+        }
+      });
+
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
@@ -182,7 +209,7 @@ pub fn run() {
       is_browser_downloaded,
       check_browser_exists,
       create_browser_profile_new,
-      create_browser_profile, // Keep for backward compatibility
+      create_browser_profile,
       list_browser_profiles,
       launch_browser_profile,
       fetch_browser_versions,
@@ -199,26 +226,22 @@ pub fn run() {
       check_browser_status,
       kill_browser_profile,
       rename_profile,
-      // Settings commands
       get_app_settings,
       save_app_settings,
       should_show_settings_on_startup,
       disable_default_browser_prompt,
       get_table_sorting_settings,
       save_table_sorting_settings,
-      // Default browser commands
       is_default_browser,
       open_url_with_profile,
       set_as_default_browser,
       smart_open_url,
       handle_url_open,
       check_and_handle_startup_url,
-      // Version update commands
       trigger_manual_version_update,
       get_version_update_status,
       check_version_update_needed,
       force_version_update_check,
-      // Auto-update commands
       check_for_browser_updates,
       start_browser_update,
       complete_browser_update,
@@ -228,6 +251,9 @@ pub fn run() {
       mark_auto_update_download,
       remove_auto_update_download,
       is_auto_update_download,
+      check_for_app_updates,
+      download_and_install_app_update,
+      get_app_version_info,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

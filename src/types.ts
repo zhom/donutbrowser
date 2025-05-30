@@ -19,3 +19,17 @@ export interface BrowserProfile {
   process_id?: number;
   last_launch?: number;
 }
+
+export interface AppUpdateInfo {
+  current_version: string;
+  new_version: string;
+  release_notes: string;
+  download_url: string;
+  is_nightly: boolean;
+  published_at: string;
+}
+
+export interface AppVersionInfo {
+  version: string;
+  is_nightly: boolean;
+}
