@@ -10,7 +10,18 @@ env:
   TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
 jobs:
+  lint-js:
+    name: Lint JavaScript/TypeScript
+    uses: ./.github/workflows/lint-js.yml
+    secrets: inherit
+
+  lint-rust:
+    name: Lint Rust
+    uses: ./.github/workflows/lint-rs.yml
+    secrets: inherit
+
   release:
+    needs: [lint-js, lint-rust]
     permissions:
       contents: write
     strategy:

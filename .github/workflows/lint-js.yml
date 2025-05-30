@@ -3,6 +3,7 @@
 name: Lint Node.js
 
 on:
+  workflow_call:
   push:
     branches:
       - main

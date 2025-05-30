@@ -3,6 +3,7 @@
 name: Lint Rust
 
 on:
+  workflow_call:
   push:
     branches:
       - main
