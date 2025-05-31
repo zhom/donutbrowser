@@ -612,8 +612,10 @@ mod tests {
     // Upgrade from stable to nightly
     assert!(updater.should_update("v1.0.0", "nightly-abc123", true));
 
-    // Upgrade from dev to nightly
-    assert!(updater.should_update("dev-0.1.0", "nightly-abc123", false));
+    // Don't upgrade dev, ever
+    assert!(!updater.should_update("dev-0.1.0", "nightly-xyz987", false));
+    assert!(!updater.should_update("dev-0.1.0", "nightly-xyz987", true));
+    assert!(!updater.should_update("dev-0.1.0", "v1.2.3", false));
   }
 
   #[test]
