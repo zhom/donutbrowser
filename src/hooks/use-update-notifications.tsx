@@ -13,6 +13,7 @@ interface UpdateNotification {
   affected_profiles: string[];
   is_stable_update: boolean;
   timestamp: number;
+  is_rolling_release: boolean;
 }
 
 export function useUpdateNotifications() {

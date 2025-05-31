@@ -144,6 +144,10 @@ impl Downloader {
       .resolve_download_url(browser_type.clone(), version, download_info)
       .await?;
 
+    // Check if this is a twilight release for special handling
+    let is_twilight =
+      browser_type == BrowserType::Zen && version.to_lowercase().contains("twilight");
+
     // Emit initial progress
     let progress = DownloadProgress {
       browser: browser_type.as_str().to_string(),
@@ -153,7 +157,11 @@ impl Downloader {
       percentage: 0.0,
       speed_bytes_per_sec: 0.0,
       eta_seconds: None,
-      stage: "downloading".to_string(),
+      stage: if is_twilight {
+        "downloading (twilight rolling release)".to_string()
+      } else {
+        "downloading".to_string()
+      },
     };
 
     let _ = app_handle.emit("download-progress", &progress);
@@ -205,6 +213,12 @@ impl Downloader {
           None
         };
 
+        let stage_description = if is_twilight {
+          "downloading (twilight rolling release)".to_string()
+        } else {
+          "downloading".to_string()
+        };
+
         let progress = DownloadProgress {
           browser: browser_type.as_str().to_string(),
           version: version.to_string(),
@@ -213,7 +227,7 @@ impl Downloader {
           percentage,
           speed_bytes_per_sec: speed,
           eta_seconds: eta,
-          stage: "downloading".to_string(),
+          stage: stage_description,
         };
 
         let _ = app_handle.emit("download-progress", &progress);
@@ -267,7 +281,8 @@ mod tests {
         "assets": [
           {
             "name": "brave-v1.81.9-universal.dmg",
-            "browser_download_url": "https://example.com/brave-1.81.9-universal.dmg"
+            "browser_download_url": "https://example.com/brave-1.81.9-universal.dmg",
+            "size": 200000000
           }
         ]
       }
@@ -314,7 +329,8 @@ mod tests {
         "assets": [
           {
             "name": "zen.macos-universal.dmg",
-            "browser_download_url": "https://example.com/zen-1.11b-universal.dmg"
+            "browser_download_url": "https://example.com/zen-1.11b-universal.dmg",
+            "size": 120000000
           }
         ]
       }
@@ -361,7 +377,8 @@ mod tests {
         "assets": [
           {
             "name": "mullvad-browser-macos-14.5a6.dmg",
-            "browser_download_url": "https://example.com/mullvad-14.5a6.dmg"
+            "browser_download_url": "https://example.com/mullvad-14.5a6.dmg",
+            "size": 100000000
           }
         ]
       }
@@ -471,7 +488,8 @@ mod tests {
         "assets": [
           {
             "name": "brave-v1.81.8-universal.dmg",
-            "browser_download_url": "https://example.com/brave-1.81.8-universal.dmg"
+            "browser_download_url": "https://example.com/brave-1.81.8-universal.dmg",
+            "size": 200000000
           }
         ]
       }
@@ -520,7 +538,8 @@ mod tests {
         "assets": [
           {
             "name": "zen.linux-universal.tar.bz2",
-            "browser_download_url": "https://example.com/zen-1.11b-linux.tar.bz2"
+            "browser_download_url": "https://example.com/zen-1.11b-linux.tar.bz2",
+            "size": 150000000
           }
         ]
       }
@@ -663,7 +682,8 @@ mod tests {
         "assets": [
           {
             "name": "mullvad-browser-linux-14.5a6.tar.xz",
-            "browser_download_url": "https://example.com/mullvad-14.5a6.tar.xz"
+            "browser_download_url": "https://example.com/mullvad-14.5a6.tar.xz",
+            "size": 80000000
           }
         ]
       }
@@ -712,7 +732,8 @@ mod tests {
         "assets": [
           {
             "name": "brave-v1.81.9-universal.dmg",
-            "browser_download_url": "https://example.com/brave-1.81.9-universal.dmg"
+            "browser_download_url": "https://example.com/brave-1.81.9-universal.dmg",
+            "size": 200000000
           }
         ]
       }

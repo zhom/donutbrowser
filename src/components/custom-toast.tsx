@@ -71,7 +71,12 @@ interface ErrorToastProps extends BaseToastProps {
 
 interface DownloadToastProps extends BaseToastProps {
   type: "download";
-  stage?: "downloading" | "extracting" | "verifying" | "completed";
+  stage?:
+    | "downloading"
+    | "extracting"
+    | "verifying"
+    | "completed"
+    | "downloading (twilight rolling release)";
   progress?: {
     percentage: number;
     speed?: string;
@@ -93,13 +98,20 @@ interface FetchingToastProps extends BaseToastProps {
   browserName?: string;
 }
 
+interface TwilightUpdateToastProps extends BaseToastProps {
+  type: "twilight-update";
+  browserName?: string;
+  hasUpdate?: boolean;
+}
+
 type ToastProps =
   | LoadingToastProps
   | SuccessToastProps
   | ErrorToastProps
   | DownloadToastProps
   | VersionUpdateToastProps
-  | FetchingToastProps;
+  | FetchingToastProps
+  | TwilightUpdateToastProps;
 
 function getToastIcon(type: ToastProps["type"], stage?: string) {
   switch (type) {
@@ -121,6 +133,10 @@ function getToastIcon(type: ToastProps["type"], stage?: string) {
     case "fetching":
       return (
         <LuRefreshCw className="h-4 w-4 text-blue-500 animate-spin flex-shrink-0" />
+      );
+    case "twilight-update":
+      return (
+        <LuRefreshCw className="h-4 w-4 text-purple-500 animate-spin flex-shrink-0" />
       );
     default:
       return (
@@ -186,6 +202,22 @@ export function UnifiedToast(props: ToastProps) {
           </div>
         )}
 
+        {/* Twilight update progress */}
+        {type === "twilight-update" && (
+          <div className="mt-2">
+            <p className="text-xs text-gray-600 dark:text-gray-300">
+              {"hasUpdate" in props && props.hasUpdate
+                ? "New twilight build available for download"
+                : "Checking for twilight updates..."}
+            </p>
+            {props.browserName && (
+              <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
+                {props.browserName} • Rolling Release
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Description */}
         {description && (
           <p className="mt-1 text-xs text-gray-600 dark:text-gray-300 leading-tight">
@@ -204,6 +236,11 @@ export function UnifiedToast(props: ToastProps) {
             {stage === "verifying" && (
               <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
                 Verifying installation...
+              </p>
+            )}
+            {stage === "downloading (twilight rolling release)" && (
+              <p className="mt-1 text-xs text-purple-600 dark:text-purple-400">
+                Downloading rolling release build...
               </p>
             )}
           </>

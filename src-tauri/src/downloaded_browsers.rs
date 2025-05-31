@@ -12,6 +12,9 @@ pub struct DownloadedBrowserInfo {
   pub file_path: PathBuf,
   pub verified: bool,
   pub actual_version: Option<String>, // For browsers like Chromium where we track the actual version
+  pub file_size: Option<u64>, // For tracking file size changes (useful for rolling releases)
+  #[serde(default)] // Add default value (false) for backwards compatibility
+  pub is_rolling_release: bool, // True for Zen's twilight releases and other rolling releases
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -98,6 +101,7 @@ impl DownloadedBrowsersRegistry {
   }
 
   pub fn mark_download_started(&mut self, browser: &str, version: &str, file_path: PathBuf) {
+    let is_rolling = Self::is_rolling_release(browser, version);
     let info = DownloadedBrowserInfo {
       browser: browser.to_string(),
       version: version.to_string(),
@@ -108,6 +112,8 @@ impl DownloadedBrowsersRegistry {
       file_path,
       verified: false,
       actual_version: None,
+      file_size: None,
+      is_rolling_release: is_rolling,
     };
     self.add_browser(info);
   }
@@ -129,6 +135,11 @@ impl DownloadedBrowsersRegistry {
     } else {
       Err(format!("Browser {browser}:{version} not found in registry"))
     }
+  }
+
+  fn is_rolling_release(browser: &str, version: &str) -> bool {
+    // Check if this is a rolling release like twilight
+    browser == "zen" && version.to_lowercase() == "twilight"
   }
 
   pub fn cleanup_failed_download(
@@ -186,6 +197,8 @@ mod tests {
       file_path: PathBuf::from("/test/path"),
       verified: true,
       actual_version: None,
+      file_size: None,
+      is_rolling_release: false,
     };
 
     registry.add_browser(info.clone());
@@ -206,6 +219,8 @@ mod tests {
       file_path: PathBuf::from("/test/path1"),
       verified: true,
       actual_version: None,
+      file_size: None,
+      is_rolling_release: false,
     };
 
     let info2 = DownloadedBrowserInfo {
@@ -215,6 +230,8 @@ mod tests {
       file_path: PathBuf::from("/test/path2"),
       verified: false, // Not verified, should not be included
       actual_version: None,
+      file_size: None,
+      is_rolling_release: false,
     };
 
     let info3 = DownloadedBrowserInfo {
@@ -224,6 +241,8 @@ mod tests {
       file_path: PathBuf::from("/test/path3"),
       verified: true,
       actual_version: None,
+      file_size: None,
+      is_rolling_release: false,
     };
 
     registry.add_browser(info1);
@@ -266,6 +285,8 @@ mod tests {
       file_path: PathBuf::from("/test/path"),
       verified: true,
       actual_version: None,
+      file_size: None,
+      is_rolling_release: false,
     };
 
     registry.add_browser(info);
@@ -274,5 +295,18 @@ mod tests {
     let removed = registry.remove_browser("firefox", "139.0");
     assert!(removed.is_some());
     assert!(!registry.is_browser_downloaded("firefox", "139.0"));
+  }
+
+  #[test]
+  fn test_twilight_rolling_release() {
+    let mut registry = DownloadedBrowsersRegistry::new();
+
+    // Mark twilight download started
+    registry.mark_download_started("zen", "twilight", PathBuf::from("/test/zen-twilight"));
+
+    // Check that it's marked as rolling release
+    let zen_versions = &registry.browsers["zen"];
+    let twilight_info = &zen_versions["twilight"];
+    assert!(twilight_info.is_rolling_release);
   }
 }

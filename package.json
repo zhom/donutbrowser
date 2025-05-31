@@ -7,15 +7,16 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "biome check src/ && tsc --noEmit && next lint",
+    "lint": "pnpm lint:js && pnpm lint:rust",
+    "lint:js": "biome check src/ && tsc --noEmit && next lint",
     "lint:rust": "cd src-tauri && cargo clippy --all-targets --all-features -- -D warnings -D clippy::all && cargo fmt --all",
     "tauri": "tauri",
     "shadcn:add": "pnpm dlx shadcn@latest add",
     "prepare": "husky",
-    "format:js": "biome check src/ --fix",
     "format:rust": "cd src-tauri && cargo clippy --fix --allow-dirty --all-targets --all-features -- -D warnings -D clippy::all && cargo fmt --all",
-    "format:biome": "biome check src/ --fix",
-    "format": "pnpm format:js && pnpm format:rust"
+    "format:js": "biome check src/ --fix",
+    "format": "pnpm format:js && pnpm format:rust",
+    "cargo": "cd src-tauri && cargo"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.3.2",

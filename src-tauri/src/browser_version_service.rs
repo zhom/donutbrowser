@@ -695,7 +695,7 @@ mod tests {
   async fn setup_zen_mocks(server: &MockServer) {
     let mock_response = r#"[
       {
-        "tag_name": "1.0.0-twilight",
+        "tag_name": "twilight",
         "name": "Zen Browser Twilight",
         "prerelease": false,
         "published_at": "2024-01-15T10:00:00Z",

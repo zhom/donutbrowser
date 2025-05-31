@@ -36,12 +36,16 @@ impl VersionComponent {
     let version = version.trim();
 
     // Handle special case for Zen Browser twilight releases
-    if version.to_lowercase().contains("twilight") {
+    if version.to_lowercase() == "twilight" {
+      // Pure twilight release without base version
       return VersionComponent {
-        major: u32::MAX,
-        minor: u32::MAX,
-        patch: u32::MAX,
-        pre_release: None,
+        major: 999, // High major version to indicate it's a rolling release
+        minor: 0,
+        patch: 0,
+        pre_release: Some(PreRelease {
+          kind: PreReleaseKind::Alpha,
+          number: Some(999), // High number to indicate it's a rolling release
+        }),
       };
     }
 
@@ -140,6 +144,38 @@ impl Ord for VersionComponent {
   fn cmp(&self, other: &Self) -> std::cmp::Ordering {
     use std::cmp::Ordering;
 
+    // Check for twilight versions
+    let self_is_twilight = self
+      .pre_release
+      .as_ref()
+      .map(|pr| pr.kind == PreReleaseKind::Alpha && pr.number == Some(999))
+      .unwrap_or(false);
+    let other_is_twilight = other
+      .pre_release
+      .as_ref()
+      .map(|pr| pr.kind == PreReleaseKind::Alpha && pr.number == Some(999))
+      .unwrap_or(false);
+
+    // If one is twilight and the other isn't, twilight always has priority
+    if self_is_twilight && !other_is_twilight {
+      return Ordering::Greater; // twilight > non-twilight
+    }
+    if !self_is_twilight && other_is_twilight {
+      return Ordering::Less; // non-twilight < twilight
+    }
+
+    // Both are twilight or both are not twilight - use normal comparison
+    match (self_is_twilight, other_is_twilight) {
+      (true, true) => {
+        // Both are twilight, compare by base version
+        return (self.major, self.minor, self.patch).cmp(&(other.major, other.minor, other.patch));
+      }
+      (false, false) => {
+        // Neither is twilight, continue with normal comparison
+      }
+      _ => unreachable!(), // Already handled above
+    }
+
     // Compare major.minor.patch first
     match (self.major, self.minor, self.patch).cmp(&(other.major, other.minor, other.patch)) {
       Ordering::Equal => {
@@ -191,6 +227,12 @@ pub fn sort_github_releases(releases: &mut [GithubRelease]) {
 pub fn is_alpha_version(version: &str) -> bool {
   let version_comp = VersionComponent::parse(version);
   version_comp.pre_release.is_some()
+}
+
+// Browser-specific alpha version detection for Zen Browser
+pub fn is_zen_alpha_version(version: &str) -> bool {
+  // For Zen Browser, only "twilight" is considered alpha/pre-release
+  version.to_lowercase() == "twilight"
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -273,7 +315,7 @@ impl ApiClient {
     }
   }
 
-  fn get_cache_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
+  fn get_cache_dir() -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     let base_dirs = BaseDirs::new().ok_or("Failed to get base directories")?;
     let app_name = if cfg!(debug_assertions) {
       "DonutBrowserDev"
@@ -343,7 +385,7 @@ impl ApiClient {
     &self,
     browser: &str,
     versions: &[String],
-  ) -> Result<(), Box<dyn std::error::Error>> {
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cache_dir = Self::get_cache_dir()?;
     let cache_file = cache_dir.join(format!("{browser}_versions.json"));
 
@@ -378,7 +420,7 @@ impl ApiClient {
     &self,
     browser: &str,
     releases: &[GithubRelease],
-  ) -> Result<(), Box<dyn std::error::Error>> {
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cache_dir = Self::get_cache_dir()?;
     let cache_file = cache_dir.join(format!("{browser}_github.json"));
 
@@ -569,13 +611,6 @@ impl ApiClient {
     Ok(releases)
   }
 
-  #[allow(dead_code)]
-  pub async fn fetch_mullvad_releases(
-    &self,
-  ) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
-    self.fetch_mullvad_releases_with_caching(false).await
-  }
-
   pub async fn fetch_mullvad_releases_with_caching(
     &self,
     no_caching: bool,
@@ -622,13 +657,6 @@ impl ApiClient {
     Ok(releases)
   }
 
-  #[allow(dead_code)]
-  pub async fn fetch_zen_releases(
-    &self,
-  ) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
-    self.fetch_zen_releases_with_caching(false).await
-  }
-
   pub async fn fetch_zen_releases_with_caching(
     &self,
     no_caching: bool,
@@ -654,7 +682,25 @@ impl ApiClient {
       .json::<Vec<GithubRelease>>()
       .await?;
 
-    // Sort releases using the new version sorting system (twilight releases will be at top)
+    // Check for twilight updates and mark alpha releases
+    for release in &mut releases {
+      // Use browser-specific alpha detection for Zen Browser
+      release.is_alpha = is_zen_alpha_version(&release.tag_name) || release.prerelease;
+
+      // Check for twilight update if this is a twilight release
+      if release.tag_name.to_lowercase() == "twilight" {
+        if let Ok(has_update) = self.check_twilight_update(release).await {
+          if has_update {
+            println!(
+              "Detected update for Zen twilight release: {}",
+              release.tag_name
+            );
+          }
+        }
+      }
+    }
+
+    // Sort releases using the new version sorting system
     sort_github_releases(&mut releases);
 
     // Cache the results (unless bypassing cache)
@@ -665,13 +711,6 @@ impl ApiClient {
     }
 
     Ok(releases)
-  }
-
-  #[allow(dead_code)]
-  pub async fn fetch_brave_releases(
-    &self,
-  ) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
-    self.fetch_brave_releases_with_caching(false).await
   }
 
   pub async fn fetch_brave_releases_with_caching(
@@ -935,6 +974,64 @@ impl ApiClient {
     // Check if there's a macOS DMG file in this version directory
     Ok(html.contains("tor-browser-macos-") && html.contains(".dmg"))
   }
+
+  /// Check if a Zen twilight release has been updated by comparing file size
+  pub async fn check_twilight_update(
+    &self,
+    release: &GithubRelease,
+  ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    if release.tag_name.to_lowercase() != "twilight" {
+      return Ok(false); // Not a twilight release
+    }
+
+    // Find the macOS universal DMG asset
+    let asset = release
+      .assets
+      .iter()
+      .find(|asset| asset.name == "zen.macos-universal.dmg")
+      .ok_or("No macOS universal asset found for twilight release")?;
+
+    // Check if we have cached file size information
+    let cache_dir = Self::get_cache_dir()?;
+    let twilight_cache_file = cache_dir.join("zen_twilight_info.json");
+
+    #[derive(serde::Serialize, serde::Deserialize)]
+    struct TwilightInfo {
+      file_size: u64,
+      last_updated: u64,
+      download_url: String,
+    }
+
+    let current_info = TwilightInfo {
+      file_size: asset.size,
+      last_updated: Self::get_current_timestamp(),
+      download_url: asset.browser_download_url.clone(),
+    };
+
+    if !twilight_cache_file.exists() {
+      // No cache exists, save current info and return true (new)
+      let content = serde_json::to_string_pretty(&current_info)?;
+      fs::write(&twilight_cache_file, content)?;
+      return Ok(true);
+    }
+
+    let cached_content = fs::read_to_string(&twilight_cache_file)?;
+    let cached_info: TwilightInfo = serde_json::from_str(&cached_content)?;
+
+    // Check if file size has changed
+    if cached_info.file_size != current_info.file_size {
+      // File size changed, update cache and return true
+      let content = serde_json::to_string_pretty(&current_info)?;
+      fs::write(&twilight_cache_file, content)?;
+      println!(
+        "Zen twilight release updated: file size changed from {} to {}",
+        cached_info.file_size, current_info.file_size
+      );
+      return Ok(true);
+    }
+
+    Ok(false) // No update detected
+  }
 }
 
 #[cfg(test)]
@@ -989,10 +1086,14 @@ mod tests {
     assert_eq!(pre.number, Some(5));
 
     // Test twilight version (Zen Browser)
-    let v4 = VersionComponent::parse("1.0.0-twilight");
-    assert_eq!(v4.major, u32::MAX);
-    assert_eq!(v4.minor, u32::MAX);
-    assert_eq!(v4.patch, u32::MAX);
+    let v4 = VersionComponent::parse("twilight");
+    assert_eq!(v4.major, 999);
+    assert_eq!(v4.minor, 0);
+    assert_eq!(v4.patch, 0);
+    assert!(v4.pre_release.is_some());
+    let pre = v4.pre_release.unwrap();
+    assert_eq!(pre.kind, PreReleaseKind::Alpha);
+    assert_eq!(pre.number, Some(999));
   }
 
   #[test]
@@ -1022,10 +1123,15 @@ mod tests {
     let v10 = VersionComponent::parse("137.0b5");
     assert!(v10 > v9); // b5 > b4
 
-    // Test twilight version (should be highest)
-    let v11 = VersionComponent::parse("1.0.0-twilight");
-    let v12 = VersionComponent::parse("999.999.999");
-    assert!(v11 > v12);
+    // Test twilight version (should have highest priority)
+    let v11 = VersionComponent::parse("twilight");
+    let v12 = VersionComponent::parse("1.0.0");
+    assert!(v11 > v12); // twilight > stable due to high major version
+
+    // Test twilight vs other pre-releases
+    let v13 = VersionComponent::parse("twilight");
+    let v14 = VersionComponent::parse("1.0.0a1");
+    assert!(v13 > v14); // twilight > a1 due to high major version
   }
 
   #[test]
@@ -1037,14 +1143,14 @@ mod tests {
       "137.0b4".to_string(),
       "137.0b5".to_string(),
       "137.0".to_string(),
-      "1.0.0-twilight".to_string(),
+      "twilight".to_string(),
       "2.0.0a1".to_string(),
     ];
 
     sort_versions(&mut versions);
 
-    // Expected order: twilight, 137.0, 137.0b5, 137.0b4, 2.0.0a1, 1.12.6b, 1.10.0, 1.9.9b
-    assert_eq!(versions[0], "1.0.0-twilight");
+    // Expected order with twilight priority: twilight first due to high major version (999), then normal semantic versioning
+    assert_eq!(versions[0], "twilight");
     assert_eq!(versions[1], "137.0");
     assert_eq!(versions[2], "137.0b5");
     assert_eq!(versions[3], "137.0b4");
@@ -1052,6 +1158,31 @@ mod tests {
     assert_eq!(versions[5], "1.12.6b");
     assert_eq!(versions[6], "1.10.0");
     assert_eq!(versions[7], "1.9.9b");
+  }
+
+  #[test]
+  fn test_sort_versions_comprehensive() {
+    let mut versions = vec![
+      "1.0.0".to_string(),
+      "1.0.1".to_string(),
+      "1.1.0".to_string(),
+      "2.0.0a1".to_string(),
+      "2.0.0b1".to_string(),
+      "2.0.0rc1".to_string(),
+      "2.0.0".to_string(),
+      "10.0.0".to_string(),
+      "twilight".to_string(),
+    ];
+
+    sort_versions(&mut versions);
+
+    // Expected order with twilight priority: twilight first due to high major version (999), then normal semantic versioning
+    assert_eq!(versions[0], "twilight");
+    assert_eq!(versions[1], "10.0.0");
+    assert_eq!(versions[2], "2.0.0");
+    assert_eq!(versions[3], "2.0.0rc1");
+    assert_eq!(versions[4], "2.0.0b1");
+    assert_eq!(versions[5], "2.0.0a1");
   }
 
   #[tokio::test]
@@ -1167,7 +1298,8 @@ mod tests {
         "assets": [
           {
             "name": "mullvad-browser-macos-14.5a6.dmg",
-            "browser_download_url": "https://example.com/mullvad-14.5a6.dmg"
+            "browser_download_url": "https://example.com/mullvad-14.5a6.dmg",
+            "size": 100000000
           }
         ]
       }
@@ -1200,14 +1332,15 @@ mod tests {
 
     let mock_response = r#"[
       {
-        "tag_name": "1.0.0-twilight",
+        "tag_name": "twilight",
         "name": "Zen Browser Twilight",
         "prerelease": false,
         "published_at": "2024-01-15T10:00:00Z",
         "assets": [
           {
             "name": "zen.macos-universal.dmg",
-            "browser_download_url": "https://example.com/zen-twilight.dmg"
+            "browser_download_url": "https://example.com/zen-twilight.dmg",
+            "size": 120000000
           }
         ]
       }
@@ -1229,7 +1362,7 @@ mod tests {
     assert!(result.is_ok());
     let releases = result.unwrap();
     assert!(!releases.is_empty());
-    assert_eq!(releases[0].tag_name, "1.0.0-twilight");
+    assert_eq!(releases[0].tag_name, "twilight");
   }
 
   #[tokio::test]
@@ -1246,7 +1379,8 @@ mod tests {
         "assets": [
           {
             "name": "brave-v1.81.9-universal.dmg",
-            "browser_download_url": "https://example.com/brave-1.81.9-universal.dmg"
+            "browser_download_url": "https://example.com/brave-1.81.9-universal.dmg",
+            "size": 200000000
           }
         ]
       }
@@ -1472,28 +1606,15 @@ mod tests {
   }
 
   #[test]
-  fn test_sort_versions_comprehensive() {
-    let mut versions = vec![
-      "1.0.0".to_string(),
-      "1.0.1".to_string(),
-      "1.1.0".to_string(),
-      "2.0.0a1".to_string(),
-      "2.0.0b1".to_string(),
-      "2.0.0rc1".to_string(),
-      "2.0.0".to_string(),
-      "10.0.0".to_string(),
-      "1.0.0-twilight".to_string(),
-    ];
+  fn test_is_zen_alpha_version() {
+    // Only "twilight" should be considered alpha for Zen Browser
+    assert!(is_zen_alpha_version("twilight"));
+    assert!(is_zen_alpha_version("TWILIGHT")); // Case insensitive
 
-    sort_versions(&mut versions);
-
-    // Twilight should be first, then normal semantic versioning
-    assert_eq!(versions[0], "1.0.0-twilight");
-    assert_eq!(versions[1], "10.0.0");
-    assert_eq!(versions[2], "2.0.0");
-    assert_eq!(versions[3], "2.0.0rc1");
-    assert_eq!(versions[4], "2.0.0b1");
-    assert_eq!(versions[5], "2.0.0a1");
+    // Versions with "b" should NOT be considered alpha for Zen Browser
+    assert!(!is_zen_alpha_version("1.12.8b"));
+    assert!(!is_zen_alpha_version("1.0.0b1"));
+    assert!(!is_zen_alpha_version("2.0.0"));
   }
 
   #[tokio::test]
