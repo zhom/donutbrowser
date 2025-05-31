@@ -170,6 +170,10 @@ impl AppAutoUpdater {
 
   /// Determine if an update should be performed
   fn should_update(&self, current_version: &str, new_version: &str, is_nightly: bool) -> bool {
+    if current_version.starts_with("dev-") {
+      return false;
+    }
+
     println!(
       "Comparing versions: current={current_version}, new={new_version}, is_nightly={is_nightly}"
     );
