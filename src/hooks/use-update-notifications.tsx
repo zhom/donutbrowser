@@ -16,33 +16,63 @@ interface UpdateNotification {
   is_rolling_release: boolean;
 }
 
-export function useUpdateNotifications() {
+export function useUpdateNotifications(
+  onProfilesUpdated?: () => Promise<void>,
+) {
   const [notifications, setNotifications] = useState<UpdateNotification[]>([]);
   const [updatingBrowsers, setUpdatingBrowsers] = useState<Set<string>>(
     new Set(),
   );
-  const [isClient, setIsClient] = useState(false);
-
-  // Ensure we're on the client side to prevent hydration mismatches
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
+  const [dismissedNotifications, setDismissedNotifications] = useState<
+    Set<string>
+  >(new Set());
 
   const checkForUpdates = useCallback(async () => {
-    if (!isClient) return; // Only run on client side
-
     try {
       const updates = await invoke<UpdateNotification[]>(
         "check_for_browser_updates",
       );
-      setNotifications(updates);
+
+      // Filter out dismissed notifications unless they're for a newer version
+      const filteredUpdates = updates.filter((notification) => {
+        // Check if this exact notification was dismissed
+        if (dismissedNotifications.has(notification.id)) {
+          return false;
+        }
+
+        // Check if we dismissed an older version for this browser
+        const dismissedForBrowser = Array.from(dismissedNotifications).find(
+          (dismissedId) => {
+            const parts = dismissedId.split("_");
+            if (parts.length >= 2) {
+              const browser = parts[0];
+              return browser === notification.browser;
+            }
+            return false;
+          },
+        );
+
+        if (dismissedForBrowser) {
+          // Extract the dismissed version to compare
+          const dismissedParts = dismissedForBrowser.split("_to_");
+          if (dismissedParts.length === 2) {
+            const dismissedToVersion = dismissedParts[1];
+            // Only show if this is a newer version than what was dismissed
+            return notification.new_version !== dismissedToVersion;
+          }
+        }
+
+        return true;
+      });
+
+      setNotifications(filteredUpdates);
 
       // Show toasts for new notifications - we'll define handleUpdate and handleDismiss separately
       // to avoid circular dependencies
     } catch (error) {
       console.error("Failed to check for updates:", error);
     }
-  }, [isClient]);
+  }, [dismissedNotifications]);
 
   const handleUpdate = useCallback(
     async (browser: string, newVersion: string) => {
@@ -118,6 +148,11 @@ export function useUpdateNotifications() {
               duration: 5000,
             });
           }
+
+          // Trigger profile refresh to update UI with new versions
+          if (onProfilesUpdated) {
+            void onProfilesUpdated();
+          }
         } catch (downloadError) {
           console.error("Failed to download browser:", downloadError);
 
@@ -159,28 +194,28 @@ export function useUpdateNotifications() {
         });
       }
     },
-    [notifications, checkForUpdates],
+    [notifications, checkForUpdates, onProfilesUpdated],
   );
 
   const handleDismiss = useCallback(
     async (notificationId: string) => {
-      if (!isClient) return; // Only run on client side
-
       try {
         toast.dismiss(notificationId);
         await invoke("dismiss_update_notification", { notificationId });
+
+        // Track this notification as dismissed to prevent showing it again
+        setDismissedNotifications((prev) => new Set(prev).add(notificationId));
+
         await checkForUpdates();
       } catch (error) {
         console.error("Failed to dismiss notification:", error);
       }
     },
-    [checkForUpdates, isClient],
+    [checkForUpdates],
   );
 
   // Separate effect to show toasts when notifications change
   useEffect(() => {
-    if (!isClient) return;
-
     for (const notification of notifications) {
       const isUpdating = updatingBrowsers.has(notification.browser);
 
@@ -202,7 +237,7 @@ export function useUpdateNotifications() {
         },
       );
     }
-  }, [notifications, updatingBrowsers, handleUpdate, handleDismiss, isClient]);
+  }, [notifications, updatingBrowsers, handleUpdate, handleDismiss]);
 
   return {
     notifications,

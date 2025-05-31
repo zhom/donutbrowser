@@ -134,7 +134,7 @@ export function useAppUpdateNotifications() {
       {
         id: "app-update",
         duration: Number.POSITIVE_INFINITY, // Persistent until user action
-        position: "top-right",
+        position: "top-left",
       },
     );
   }, [

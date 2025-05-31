@@ -48,24 +48,26 @@ export default function Home() {
     useState<BrowserProfile | null>(null);
   const [currentProfileForVersionChange, setCurrentProfileForVersionChange] =
     useState<BrowserProfile | null>(null);
-  const [isClient, setIsClient] = useState(false);
 
-  // Auto-update functionality - only initialize on client
-  const updateNotifications = useUpdateNotifications();
-  const { checkForUpdates, isUpdating } = updateNotifications;
-
-  // App auto-update functionality
-  const appUpdateNotifications = useAppUpdateNotifications();
-  const { checkForAppUpdatesManual } = appUpdateNotifications;
-
-  // Ensure we're on the client side to prevent hydration mismatches
-  useEffect(() => {
-    setIsClient(true);
+  // Simple profiles loader without updates check (for use as callback)
+  const loadProfiles = useCallback(async () => {
+    try {
+      const profileList = await invoke<BrowserProfile[]>(
+        "list_browser_profiles",
+      );
+      setProfiles(profileList);
+    } catch (err: unknown) {
+      console.error("Failed to load profiles:", err);
+      setError(`Failed to load profiles: ${JSON.stringify(err)}`);
+    }
   }, []);
 
-  const loadProfiles = useCallback(async () => {
-    if (!isClient) return; // Only run on client side
+  // Auto-update functionality - pass loadProfiles to refresh profiles after updates
+  const updateNotifications = useUpdateNotifications(loadProfiles);
+  const { checkForUpdates, isUpdating } = updateNotifications;
 
+  // Profiles loader with update check (for initial load and manual refresh)
+  const loadProfilesWithUpdateCheck = useCallback(async () => {
     try {
       const profileList = await invoke<BrowserProfile[]>(
         "list_browser_profiles",
@@ -78,12 +80,12 @@ export default function Home() {
       console.error("Failed to load profiles:", err);
       setError(`Failed to load profiles: ${JSON.stringify(err)}`);
     }
-  }, [checkForUpdates, isClient]);
+  }, [checkForUpdates]);
+
+  useAppUpdateNotifications();
 
   useEffect(() => {
-    if (!isClient) return; // Only run on client side
-
-    void loadProfiles();
+    void loadProfilesWithUpdateCheck();
 
     // Check for startup default browser prompt
     void checkStartupPrompt();
@@ -105,11 +107,9 @@ export default function Home() {
     return () => {
       clearInterval(updateInterval);
     };
-  }, [loadProfiles, checkForUpdates, isClient]);
+  }, [loadProfilesWithUpdateCheck, checkForUpdates]);
 
   const checkStartupPrompt = async () => {
-    if (!isClient) return; // Only run on client side
-
     try {
       const shouldShow = await invoke<boolean>(
         "should_show_settings_on_startup",
@@ -123,8 +123,6 @@ export default function Home() {
   };
 
   const checkStartupUrls = async () => {
-    if (!isClient) return; // Only run on client side
-
     try {
       const hasStartupUrl = await invoke<boolean>(
         "check_and_handle_startup_url",
@@ -138,8 +136,6 @@ export default function Home() {
   };
 
   const listenForUrlEvents = async () => {
-    if (!isClient) return; // Only run on client side
-
     try {
       // Listen for URL open events from the deep link handler (when app is already running)
       await listen<string>("url-open-request", (event) => {
@@ -173,8 +169,6 @@ export default function Home() {
   };
 
   const handleUrlOpen = async (url: string) => {
-    if (!isClient) return; // Only run on client side
-
     try {
       // Use smart profile selection
       const result = await invoke<string>("smart_open_url", {
@@ -270,40 +264,33 @@ export default function Home() {
 
   const runningProfilesRef = useRef<Set<string>>(new Set());
 
-  const checkBrowserStatus = useCallback(
-    async (profile: BrowserProfile) => {
-      if (!isClient) return; // Only run on client side
+  const checkBrowserStatus = useCallback(async (profile: BrowserProfile) => {
+    try {
+      const isRunning = await invoke<boolean>("check_browser_status", {
+        profile,
+      });
 
-      try {
-        const isRunning = await invoke<boolean>("check_browser_status", {
-          profile,
+      const currentRunning = runningProfilesRef.current.has(profile.name);
+
+      if (isRunning !== currentRunning) {
+        setRunningProfiles((prev) => {
+          const next = new Set(prev);
+          if (isRunning) {
+            next.add(profile.name);
+          } else {
+            next.delete(profile.name);
+          }
+          runningProfilesRef.current = next;
+          return next;
         });
-
-        const currentRunning = runningProfilesRef.current.has(profile.name);
-
-        if (isRunning !== currentRunning) {
-          setRunningProfiles((prev) => {
-            const next = new Set(prev);
-            if (isRunning) {
-              next.add(profile.name);
-            } else {
-              next.delete(profile.name);
-            }
-            runningProfilesRef.current = next;
-            return next;
-          });
-        }
-      } catch (err) {
-        console.error("Failed to check browser status:", err);
       }
-    },
-    [isClient],
-  );
+    } catch (err) {
+      console.error("Failed to check browser status:", err);
+    }
+  }, []);
 
   const launchProfile = useCallback(
     async (profile: BrowserProfile) => {
-      if (!isClient) return; // Only run on client side
-
       setError(null);
 
       // Check if browser is disabled due to ongoing update
@@ -337,11 +324,11 @@ export default function Home() {
         setError(`Failed to launch browser: ${JSON.stringify(err)}`);
       }
     },
-    [loadProfiles, checkBrowserStatus, isUpdating, isClient],
+    [loadProfiles, checkBrowserStatus, isUpdating],
   );
 
   useEffect(() => {
-    if (profiles.length === 0 || !isClient) return;
+    if (profiles.length === 0) return;
 
     const interval = setInterval(() => {
       for (const profile of profiles) {
@@ -352,7 +339,7 @@ export default function Home() {
     return () => {
       clearInterval(interval);
     };
-  }, [profiles, checkBrowserStatus, isClient]);
+  }, [profiles, checkBrowserStatus]);
 
   useEffect(() => {
     runningProfilesRef.current = runningProfiles;
@@ -407,53 +394,6 @@ export default function Home() {
     },
     [loadProfiles],
   );
-
-  // Don't render anything until we're on the client side to prevent hydration issues
-  if (!isClient) {
-    return (
-      <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 gap-8 sm:p-12 font-[family-name:var(--font-geist-sans)]">
-        <main className="flex flex-col gap-8 row-start-2 items-center w-full max-w-3xl">
-          <Card className="w-full">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Profiles</CardTitle>
-                <div className="flex items-center gap-2">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled
-                        className="flex items-center gap-2"
-                      >
-                        <GoGear className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Settings</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        size="sm"
-                        disabled
-                        className="flex items-center gap-2"
-                      >
-                        <GoPlus className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Create a new profile</TooltipContent>
-                  </Tooltip>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-8 text-center">
-              <div className="animate-pulse">Loading...</div>
-            </CardContent>
-          </Card>
-        </main>
-      </div>
-    );
-  }
 
   return (
     <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 gap-8 sm:p-12 font-[family-name:var(--font-geist-sans)]">

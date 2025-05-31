@@ -24,7 +24,12 @@ export interface ErrorToastProps extends BaseToastProps {
 
 export interface DownloadToastProps extends BaseToastProps {
   type: "download";
-  stage?: "downloading" | "extracting" | "verifying" | "completed";
+  stage?:
+    | "downloading"
+    | "extracting"
+    | "verifying"
+    | "completed"
+    | "downloading (twilight rolling release)";
   progress?: {
     percentage: number;
     speed?: string;
@@ -46,13 +51,20 @@ export interface FetchingToastProps extends BaseToastProps {
   browserName?: string;
 }
 
+export interface TwilightUpdateToastProps extends BaseToastProps {
+  type: "twilight-update";
+  browserName?: string;
+  hasUpdate?: boolean;
+}
+
 export type ToastProps =
   | LoadingToastProps
   | SuccessToastProps
   | ErrorToastProps
   | DownloadToastProps
   | VersionUpdateToastProps
-  | FetchingToastProps;
+  | FetchingToastProps
+  | TwilightUpdateToastProps;
 
 // Unified toast function
 export function showToast(props: ToastProps & { id?: string }) {
@@ -80,6 +92,9 @@ export function showToast(props: ToastProps & { id?: string }) {
         break;
       case "version-update":
         duration = 15000;
+        break;
+      case "twilight-update":
+        duration = 10000;
         break;
       case "success":
         duration = 3000;
@@ -149,7 +164,12 @@ export function showLoadingToast(
 export function showDownloadToast(
   browserName: string,
   version: string,
-  stage: "downloading" | "extracting" | "verifying" | "completed",
+  stage:
+    | "downloading"
+    | "extracting"
+    | "verifying"
+    | "completed"
+    | "downloading (twilight rolling release)",
   progress?: { percentage: number; speed?: string; eta?: string },
   options?: { suppressCompletionToast?: boolean },
 ) {
@@ -160,7 +180,9 @@ export function showDownloadToast(
         ? `Downloading ${browserName} ${version}`
         : stage === "extracting"
           ? `Extracting ${browserName} ${version}`
-          : `Verifying ${browserName} ${version}`;
+          : stage === "downloading (twilight rolling release)"
+            ? `Downloading ${browserName} ${version}`
+            : `Verifying ${browserName} ${version}`;
 
   // Don't show completion toast if suppressed (for auto-update scenarios)
   if (stage === "completed" && options?.suppressCompletionToast) {
@@ -241,6 +263,25 @@ export function showErrorToast(
   return showToast({
     type: "error",
     title,
+    ...options,
+  });
+}
+
+export function showTwilightUpdateToast(
+  browserName: string,
+  options?: {
+    id?: string;
+    description?: string;
+    hasUpdate?: boolean;
+    duration?: number;
+  },
+) {
+  return showToast({
+    type: "twilight-update",
+    title: options?.hasUpdate
+      ? `${browserName} twilight update available`
+      : `Checking for ${browserName} twilight updates...`,
+    browserName,
     ...options,
   });
 }
