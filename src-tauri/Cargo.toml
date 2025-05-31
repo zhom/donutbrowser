@@ -1,6 +1,6 @@
 [package]
 name = "donutbrowser"
-version = "0.2.2"
+version = "0.2.3"
 description = "Browser Orchestrator"
 authors = ["zhom@github"]
 edition = "2021"
