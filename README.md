@@ -27,6 +27,8 @@
 
 ## Download
 
+> As of right now, the app is not signed by Apple. You need to have Gatekeeper disabled to run it.
+
 The app can be downloaded from the [releases page](https://github.com/zhom/donutbrowser/releases/latest).
 
 ## Supported Platforms
