@@ -27,6 +27,11 @@ function getSystemTheme(): string {
 export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [defaultTheme, setDefaultTheme] = useState<string>("system");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const loadTheme = async () => {
@@ -65,11 +70,18 @@ export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
   }, []);
 
   if (isLoading) {
-    // Detect system theme to show appropriate loading screen
-    const systemTheme = getSystemTheme();
-    const loadingBgColor = systemTheme === "dark" ? "bg-gray-900" : "bg-white";
-    const spinnerColor =
-      systemTheme === "dark" ? "border-white" : "border-gray-900";
+    // Use a consistent loading screen that doesn't depend on system theme during SSR
+    // This prevents hydration mismatch by ensuring server and client render the same initially
+    let loadingBgColor = "bg-white";
+    let spinnerColor = "border-gray-900";
+
+    // Only apply system theme detection after component is mounted (client-side only)
+    if (mounted) {
+      const systemTheme = getSystemTheme();
+      loadingBgColor = systemTheme === "dark" ? "bg-gray-900" : "bg-white";
+      spinnerColor =
+        systemTheme === "dark" ? "border-white" : "border-gray-900";
+    }
 
     return (
       <div
