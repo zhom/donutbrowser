@@ -613,7 +613,7 @@ mod tests {
     assert!(updater.should_update("v1.0.0", "nightly-abc123", true));
 
     // Upgrade from dev to nightly
-    assert!(updater.should_update("dev-0.1.0", "nightly-abc123", true));
+    assert!(updater.should_update("dev-0.1.0", "nightly-abc123", false));
   }
 
   #[test]
