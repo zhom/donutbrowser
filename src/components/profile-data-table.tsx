@@ -401,7 +401,7 @@ export function ProfilesDataTable({
                     }}
                     disabled={!isClient || isRunning || isBrowserUpdating}
                   >
-                    Rename profile
+                    Rename
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => {
@@ -411,7 +411,7 @@ export function ProfilesDataTable({
                     className="text-red-600"
                     disabled={!isClient || isRunning || isBrowserUpdating}
                   >
-                    Delete profile
+                    Delete
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
