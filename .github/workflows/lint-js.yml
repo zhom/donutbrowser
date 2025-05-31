@@ -49,4 +49,4 @@ jobs:
           pnpm install --frozen-lockfile
 
       - name: Run lint step
-        run: pnpm lint
+        run: pnpm run lint:js
