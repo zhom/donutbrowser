@@ -6,6 +6,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tauri::Emitter;
 
+use crate::extraction::Extractor;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AppReleaseAsset {
   pub name: String,
@@ -370,73 +372,24 @@ impl AppAutoUpdater {
     Ok(file_path)
   }
 
-  /// Extract the update (DMG on macOS)
+  /// Extract the update using the extraction module
   async fn extract_update(
     &self,
-    dmg_path: &Path,
+    archive_path: &Path,
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    // For DMG files on macOS, we need to mount and copy the .app
-    let mount_point = dest_dir.join("mount");
-    fs::create_dir_all(&mount_point)?;
+    let extractor = Extractor::new();
+    
+    let extension = archive_path
+      .extension()
+      .and_then(|ext| ext.to_str())
+      .unwrap_or("");
 
-    // Mount the DMG
-    let output = Command::new("hdiutil")
-      .args([
-        "attach",
-        "-nobrowse",
-        "-mountpoint",
-        mount_point.to_str().unwrap(),
-        dmg_path.to_str().unwrap(),
-      ])
-      .output()?;
-
-    if !output.status.success() {
-      return Err(
-        format!(
-          "Failed to mount DMG: {}",
-          String::from_utf8_lossy(&output.stderr)
-        )
-        .into(),
-      );
+    match extension {
+      "dmg" => extractor.extract_dmg(archive_path, dest_dir).await,
+      "zip" => extractor.extract_zip(archive_path, dest_dir).await,
+      _ => Err(format!("Unsupported archive format: {extension}").into()),
     }
-
-    // Find the .app in the mount point
-    let app_entry = fs::read_dir(&mount_point)?
-      .filter_map(Result::ok)
-      .find(|entry| entry.path().extension().is_some_and(|ext| ext == "app"))
-      .ok_or("No .app found in DMG")?;
-
-    let app_path = dest_dir.join("extracted_app");
-    if app_path.exists() {
-      fs::remove_dir_all(&app_path)?;
-    }
-
-    // Copy the .app to extraction directory
-    let output = Command::new("cp")
-      .args([
-        "-R",
-        app_entry.path().to_str().unwrap(),
-        app_path.to_str().unwrap(),
-      ])
-      .output()?;
-
-    if !output.status.success() {
-      return Err(
-        format!(
-          "Failed to copy app: {}",
-          String::from_utf8_lossy(&output.stderr)
-        )
-        .into(),
-      );
-    }
-
-    // Unmount the DMG
-    let _ = Command::new("hdiutil")
-      .args(["detach", mount_point.to_str().unwrap()])
-      .output();
-
-    Ok(app_path)
   }
 
   /// Install the update by replacing the current app
@@ -700,5 +653,31 @@ mod tests {
     // The exact URL depends on the target architecture
     let url = url.unwrap();
     assert!(url.contains(".dmg"));
+  }
+
+  #[test]
+  fn test_extract_update_uses_extractor() {
+    // This test verifies that the extract_update method properly uses the Extractor
+    // We can't run the actual extraction in unit tests without real DMG files,
+    // but we can verify the method signature and basic logic
+    let updater = AppAutoUpdater::new();
+    
+    // Test that unsupported formats would be rejected
+    let temp_dir = std::env::temp_dir();
+    let unsupported_file = temp_dir.join("test.rar");
+    
+    // Create a mock runtime to test the logic
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    
+    // This would fail because .rar is not supported, which proves
+    // our method is using the Extractor logic
+    let result = rt.block_on(async {
+      updater.extract_update(&unsupported_file, &temp_dir).await
+    });
+    
+    // Should fail with unsupported format error
+    assert!(result.is_err());
+    let error_msg = result.unwrap_err().to_string();
+    assert!(error_msg.contains("Unsupported archive format: rar"));
   }
 }

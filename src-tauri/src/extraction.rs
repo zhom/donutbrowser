@@ -46,7 +46,7 @@ impl Extractor {
     }
   }
 
-  async fn extract_dmg(
+  pub async fn extract_dmg(
     &self,
     dmg_path: &Path,
     dest_dir: &Path,
@@ -149,7 +149,7 @@ impl Extractor {
     Ok(app_path)
   }
 
-  async fn extract_zip(
+  pub async fn extract_zip(
     &self,
     zip_path: &Path,
     dest_dir: &Path,
