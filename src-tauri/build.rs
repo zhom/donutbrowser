@@ -6,8 +6,11 @@ fn main() {
   }
 
   // Inject build version based on environment variables set by CI
-  if let Ok(tag_name) = std::env::var("GITHUB_REF_NAME") {
-    // This is set by GitHub Actions to the tag name (e.g., "v1.0.0" or "nightly-abc123")
+  if let Ok(build_tag) = std::env::var("BUILD_TAG") {
+    // Custom BUILD_TAG takes highest priority (used for nightly builds)
+    println!("cargo:rustc-env=BUILD_VERSION={build_tag}");
+  } else if let Ok(tag_name) = std::env::var("GITHUB_REF_NAME") {
+    // This is set by GitHub Actions to the tag name (e.g., "v1.0.0")
     println!("cargo:rustc-env=BUILD_VERSION={tag_name}");
   } else if std::env::var("STABLE_RELEASE").is_ok() {
     // Fallback for stable releases - use CARGO_PKG_VERSION with 'v' prefix

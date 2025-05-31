@@ -94,6 +94,7 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUILD_TAG: "nightly-${{ steps.commit.outputs.hash }}"
           GITHUB_REF_NAME: "nightly-${{ steps.commit.outputs.hash }}"
           GITHUB_SHA: ${{ github.sha }}
         with:
