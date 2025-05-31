@@ -50,13 +50,13 @@ impl AppAutoUpdater {
     if option_env!("STABLE_RELEASE").is_some() {
       return false;
     }
-    
+
     // Also check if the current version starts with "nightly-"
     let current_version = Self::get_current_version();
     if current_version.starts_with("nightly-") {
       return true;
     }
-    
+
     // If STABLE_RELEASE is not set and version doesn't start with "nightly-",
     // it's still considered a nightly build (dev builds, main branch builds, etc.)
     true
@@ -605,7 +605,7 @@ mod tests {
     // This will depend on whether STABLE_RELEASE is set during test compilation
     let is_nightly = AppAutoUpdater::is_nightly_build();
     println!("Is nightly build: {is_nightly}");
-    
+
     // The result should be true for test builds since STABLE_RELEASE is not set
     // unless the test is run in a stable release environment
     assert!(is_nightly || option_env!("STABLE_RELEASE").is_some());
@@ -687,7 +687,6 @@ mod tests {
         browser_download_url: "https://example.com/x64.dmg".to_string(),
         size: 12345,
       },
-
       AppReleaseAsset {
         name: "Donut.Browser_0.1.0_aarch64.dmg".to_string(),
         browser_download_url: "https://example.com/aarch64.dmg".to_string(),
@@ -703,4 +702,3 @@ mod tests {
     assert!(url.contains(".dmg"));
   }
 }
-
