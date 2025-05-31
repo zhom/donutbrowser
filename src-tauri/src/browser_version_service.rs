@@ -35,6 +35,11 @@ impl BrowserVersionService {
     }
   }
 
+  #[cfg(test)]
+  pub fn new_with_api_client(api_client: ApiClient) -> Self {
+    Self { api_client }
+  }
+
   /// Get cached browser versions immediately (returns None if no cache exists)
   pub fn get_cached_browser_versions(&self, browser: &str) -> Option<Vec<String>> {
     self.api_client.load_cached_versions(browser)
@@ -541,6 +546,335 @@ impl BrowserVersionService {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use wiremock::matchers::{header, method, path};
+  use wiremock::{Mock, MockServer, ResponseTemplate};
+
+  async fn setup_mock_server() -> MockServer {
+    MockServer::start().await
+  }
+
+  fn create_test_api_client(server: &MockServer) -> ApiClient {
+    let base_url = server.uri();
+    ApiClient::new_with_base_urls(
+      base_url.clone(), // firefox_api_base
+      base_url.clone(), // firefox_dev_api_base
+      base_url.clone(), // github_api_base
+      base_url.clone(), // chromium_api_base
+      base_url.clone(), // tor_archive_base
+      base_url.clone(), // mozilla_download_base
+    )
+  }
+
+  fn create_test_service(api_client: ApiClient) -> BrowserVersionService {
+    BrowserVersionService::new_with_api_client(api_client)
+  }
+
+  async fn setup_firefox_mocks(server: &MockServer) {
+    let mock_response = r#"{
+      "releases": {
+        "firefox-139.0": {
+          "build_number": 1,
+          "category": "major",
+          "date": "2024-01-15",
+          "description": "Firefox 139.0 Release",
+          "is_security_driven": false,
+          "product": "firefox",
+          "version": "139.0"
+        },
+        "firefox-138.0": {
+          "build_number": 1,
+          "category": "major",
+          "date": "2024-01-01",
+          "description": "Firefox 138.0 Release",
+          "is_security_driven": false,
+          "product": "firefox",
+          "version": "138.0"
+        },
+        "firefox-137.0": {
+          "build_number": 1,
+          "category": "major",
+          "date": "2023-12-15",
+          "description": "Firefox 137.0 Release",
+          "is_security_driven": false,
+          "product": "firefox",
+          "version": "137.0"
+        }
+      }
+    }"#;
+
+    Mock::given(method("GET"))
+      .and(path("/firefox.json"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(mock_response)
+          .insert_header("content-type", "application/json"),
+      )
+      .mount(server)
+      .await;
+  }
+
+  async fn setup_firefox_dev_mocks(server: &MockServer) {
+    let mock_response = r#"{
+      "releases": {
+        "devedition-140.0b1": {
+          "build_number": 1,
+          "category": "major",
+          "date": "2024-01-20",
+          "description": "Firefox Developer Edition 140.0b1",
+          "is_security_driven": false,
+          "product": "devedition",
+          "version": "140.0b1"
+        },
+        "devedition-139.0b5": {
+          "build_number": 1,
+          "category": "major",
+          "date": "2024-01-10",
+          "description": "Firefox Developer Edition 139.0b5",
+          "is_security_driven": false,
+          "product": "devedition",
+          "version": "139.0b5"
+        }
+      }
+    }"#;
+
+    Mock::given(method("GET"))
+      .and(path("/devedition.json"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(mock_response)
+          .insert_header("content-type", "application/json"),
+      )
+      .mount(server)
+      .await;
+  }
+
+  async fn setup_mullvad_mocks(server: &MockServer) {
+    let mock_response = r#"[
+      {
+        "tag_name": "14.5a6",
+        "name": "Mullvad Browser 14.5a6",
+        "prerelease": true,
+        "published_at": "2024-01-15T10:00:00Z",
+        "assets": [
+          {
+            "name": "mullvad-browser-macos-14.5a6.dmg",
+            "browser_download_url": "https://example.com/mullvad-14.5a6.dmg",
+            "size": 100000000
+          }
+        ]
+      },
+      {
+        "tag_name": "14.5a5",
+        "name": "Mullvad Browser 14.5a5",
+        "prerelease": true,
+        "published_at": "2024-01-10T10:00:00Z",
+        "assets": [
+          {
+            "name": "mullvad-browser-macos-14.5a5.dmg",
+            "browser_download_url": "https://example.com/mullvad-14.5a5.dmg",
+            "size": 99000000
+          }
+        ]
+      }
+    ]"#;
+
+    Mock::given(method("GET"))
+      .and(path("/repos/mullvad/mullvad-browser/releases"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(mock_response)
+          .insert_header("content-type", "application/json"),
+      )
+      .mount(server)
+      .await;
+  }
+
+  async fn setup_zen_mocks(server: &MockServer) {
+    let mock_response = r#"[
+      {
+        "tag_name": "1.0.0-twilight",
+        "name": "Zen Browser Twilight",
+        "prerelease": false,
+        "published_at": "2024-01-15T10:00:00Z",
+        "assets": [
+          {
+            "name": "zen.macos-universal.dmg",
+            "browser_download_url": "https://example.com/zen-twilight.dmg",
+            "size": 120000000
+          }
+        ]
+      },
+      {
+        "tag_name": "1.11b",
+        "name": "Zen Browser 1.11b",
+        "prerelease": false,
+        "published_at": "2024-01-10T10:00:00Z",
+        "assets": [
+          {
+            "name": "zen.macos-universal.dmg",
+            "browser_download_url": "https://example.com/zen-1.11b.dmg",
+            "size": 115000000
+          }
+        ]
+      }
+    ]"#;
+
+    Mock::given(method("GET"))
+      .and(path("/repos/zen-browser/desktop/releases"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(mock_response)
+          .insert_header("content-type", "application/json"),
+      )
+      .mount(server)
+      .await;
+  }
+
+  async fn setup_brave_mocks(server: &MockServer) {
+    let mock_response = r#"[
+      {
+        "tag_name": "v1.81.9",
+        "name": "Brave Release 1.81.9",
+        "prerelease": false,
+        "published_at": "2024-01-15T10:00:00Z",
+        "assets": [
+          {
+            "name": "brave-v1.81.9-universal.dmg",
+            "browser_download_url": "https://example.com/brave-1.81.9-universal.dmg",
+            "size": 200000000
+          }
+        ]
+      },
+      {
+        "tag_name": "v1.81.8",
+        "name": "Brave Release 1.81.8",
+        "prerelease": false,
+        "published_at": "2024-01-10T10:00:00Z",
+        "assets": [
+          {
+            "name": "brave-v1.81.8-universal.dmg",
+            "browser_download_url": "https://example.com/brave-1.81.8-universal.dmg",
+            "size": 199000000
+          }
+        ]
+      }
+    ]"#;
+
+    Mock::given(method("GET"))
+      .and(path("/repos/brave/brave-browser/releases"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(mock_response)
+          .insert_header("content-type", "application/json"),
+      )
+      .mount(server)
+      .await;
+  }
+
+  async fn setup_chromium_mocks(server: &MockServer) {
+    let arch = if cfg!(target_arch = "aarch64") {
+      "Mac_Arm"
+    } else {
+      "Mac"
+    };
+
+    Mock::given(method("GET"))
+      .and(path(format!("/{arch}/LAST_CHANGE")))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string("1465660")
+          .insert_header("content-type", "text/plain"),
+      )
+      .mount(server)
+      .await;
+  }
+
+  async fn setup_tor_mocks(server: &MockServer) {
+    let mock_html = r#"
+    <html>
+    <body>
+    <a href="../">../</a>
+    <a href="14.0.4/">14.0.4/</a>
+    <a href="14.0.3/">14.0.3/</a>
+    <a href="14.0.2/">14.0.2/</a>
+    </body>
+    </html>
+    "#;
+
+    let version_html_144 = r#"
+    <html>
+    <body>
+    <a href="tor-browser-macos-14.0.4.dmg">tor-browser-macos-14.0.4.dmg</a>
+    </body>
+    </html>
+    "#;
+
+    let version_html_143 = r#"
+    <html>
+    <body>
+    <a href="tor-browser-macos-14.0.3.dmg">tor-browser-macos-14.0.3.dmg</a>
+    </body>
+    </html>
+    "#;
+
+    let version_html_142 = r#"
+    <html>
+    <body>
+    <a href="tor-browser-macos-14.0.2.dmg">tor-browser-macos-14.0.2.dmg</a>
+    </body>
+    </html>
+    "#;
+
+    Mock::given(method("GET"))
+      .and(path("/"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(mock_html)
+          .insert_header("content-type", "text/html"),
+      )
+      .mount(server)
+      .await;
+
+    Mock::given(method("GET"))
+      .and(path("/14.0.4/"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(version_html_144)
+          .insert_header("content-type", "text/html"),
+      )
+      .mount(server)
+      .await;
+
+    Mock::given(method("GET"))
+      .and(path("/14.0.3/"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(version_html_143)
+          .insert_header("content-type", "text/html"),
+      )
+      .mount(server)
+      .await;
+
+    Mock::given(method("GET"))
+      .and(path("/14.0.2/"))
+      .and(header("user-agent", "donutbrowser"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(version_html_142)
+          .insert_header("content-type", "text/html"),
+      )
+      .mount(server)
+      .await;
+  }
 
   #[tokio::test]
   async fn test_browser_version_service_creation() {
@@ -550,7 +884,11 @@ mod tests {
 
   #[tokio::test]
   async fn test_fetch_firefox_versions() {
-    let service = BrowserVersionService::new();
+    let server = setup_mock_server().await;
+    setup_firefox_mocks(&server).await;
+
+    let api_client = create_test_api_client(&server);
+    let service = create_test_service(api_client);
 
     // Test with caching
     let result_cached = service.fetch_browser_versions("firefox", false).await;
@@ -561,14 +899,12 @@ mod tests {
 
     if let Ok(versions) = result_cached {
       assert!(!versions.is_empty(), "Should have Firefox versions");
+      assert_eq!(versions[0], "139.0", "Should have latest version first");
       println!(
         "Firefox cached test passed. Found {versions_count} versions",
         versions_count = versions.len()
       );
     }
-
-    // Small delay to avoid rate limiting
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
     // Test without caching
     let result_no_cache = service.fetch_browser_versions("firefox", true).await;
@@ -582,6 +918,7 @@ mod tests {
         !versions.is_empty(),
         "Should have Firefox versions without caching"
       );
+      assert_eq!(versions[0], "139.0", "Should have latest version first");
       println!(
         "Firefox no-cache test passed. Found {versions_count} versions",
         versions_count = versions.len()
@@ -591,7 +928,11 @@ mod tests {
 
   #[tokio::test]
   async fn test_fetch_browser_versions_with_count() {
-    let service = BrowserVersionService::new();
+    let server = setup_mock_server().await;
+    setup_firefox_mocks(&server).await;
+
+    let api_client = create_test_api_client(&server);
+    let service = create_test_service(api_client);
 
     let result = service
       .fetch_browser_versions_with_count("firefox", false)
@@ -605,6 +946,10 @@ mod tests {
         result.versions.len(),
         "Total count should match versions length"
       );
+      assert_eq!(
+        result.versions[0], "139.0",
+        "Should have latest version first"
+      );
       println!(
         "Firefox count test passed. Found {} versions, new: {}",
         result.total_versions_count,
@@ -615,7 +960,11 @@ mod tests {
 
   #[tokio::test]
   async fn test_fetch_detailed_versions() {
-    let service = BrowserVersionService::new();
+    let server = setup_mock_server().await;
+    setup_firefox_mocks(&server).await;
+
+    let api_client = create_test_api_client(&server);
+    let service = create_test_service(api_client);
 
     let result = service
       .fetch_browser_versions_detailed("firefox", false)
@@ -631,6 +980,12 @@ mod tests {
         !first_version.version.is_empty(),
         "Version should not be empty"
       );
+      assert_eq!(
+        first_version.version, "139.0",
+        "Should have latest version first"
+      );
+      assert_eq!(first_version.date, "2024-01-15", "Should have correct date");
+      assert!(!first_version.is_prerelease, "Should be stable release");
       println!(
         "Firefox detailed test passed. Found {versions_count} detailed versions",
         versions_count = versions.len()
@@ -640,7 +995,9 @@ mod tests {
 
   #[tokio::test]
   async fn test_unsupported_browser() {
-    let service = BrowserVersionService::new();
+    let server = setup_mock_server().await;
+    let api_client = create_test_api_client(&server);
+    let service = create_test_service(api_client);
 
     let result = service.fetch_browser_versions("unsupported", false).await;
     assert!(
@@ -658,7 +1015,11 @@ mod tests {
 
   #[tokio::test]
   async fn test_incremental_update() {
-    let service = BrowserVersionService::new();
+    let server = setup_mock_server().await;
+    setup_firefox_mocks(&server).await;
+
+    let api_client = create_test_api_client(&server);
+    let service = create_test_service(api_client);
 
     // This test might fail if there are no cached versions yet, which is fine
     let result = service
@@ -678,7 +1039,20 @@ mod tests {
 
   #[tokio::test]
   async fn test_all_supported_browsers() {
-    let service = BrowserVersionService::new();
+    let server = setup_mock_server().await;
+
+    // Setup all browser mocks
+    setup_firefox_mocks(&server).await;
+    setup_firefox_dev_mocks(&server).await;
+    setup_mullvad_mocks(&server).await;
+    setup_zen_mocks(&server).await;
+    setup_brave_mocks(&server).await;
+    setup_chromium_mocks(&server).await;
+    setup_tor_mocks(&server).await;
+
+    let api_client = create_test_api_client(&server);
+    let service = create_test_service(api_client);
+
     let browsers = vec![
       "firefox",
       "firefox-developer",
@@ -690,30 +1064,30 @@ mod tests {
     ];
 
     for browser in browsers {
-      // Test that we can at least call the function without panicking
       let result = service.fetch_browser_versions(browser, false).await;
 
       match result {
         Ok(versions) => {
+          assert!(!versions.is_empty(), "Should have versions for {browser}");
           println!(
             "{browser} test passed. Found {versions_count} versions",
             versions_count = versions.len()
           );
         }
         Err(e) => {
-          // Some browsers might fail due to network issues, but shouldn't panic
-          println!("{browser} test failed (network issue): {e}");
+          panic!("{browser} test failed: {e}");
         }
       }
-
-      // Small delay between requests to avoid rate limiting
-      tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
     }
   }
 
   #[tokio::test]
   async fn test_no_caching_parameter() {
-    let service = BrowserVersionService::new();
+    let server = setup_mock_server().await;
+    setup_firefox_mocks(&server).await;
+
+    let api_client = create_test_api_client(&server);
+    let service = create_test_service(api_client);
 
     // Test with caching enabled (default)
     let result_cached = service.fetch_browser_versions("firefox", false).await;
@@ -721,9 +1095,6 @@ mod tests {
       result_cached.is_ok(),
       "Should fetch Firefox versions with caching"
     );
-
-    // Small delay to avoid rate limiting
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
     // Test with caching disabled (no_caching = true)
     let result_no_cache = service.fetch_browser_versions("firefox", true).await;
@@ -742,6 +1113,10 @@ mod tests {
         !no_cache_versions.is_empty(),
         "No-cache versions should not be empty"
       );
+      assert_eq!(
+        cached_versions, no_cache_versions,
+        "Both should return same versions"
+      );
       println!(
         "No-caching test passed. Cached: {} versions, No-cache: {} versions",
         cached_versions.len(),
@@ -752,7 +1127,11 @@ mod tests {
 
   #[tokio::test]
   async fn test_detailed_versions_with_no_caching() {
-    let service = BrowserVersionService::new();
+    let server = setup_mock_server().await;
+    setup_firefox_mocks(&server).await;
+
+    let api_client = create_test_api_client(&server);
+    let service = create_test_service(api_client);
 
     // Test detailed versions with caching
     let result_cached = service
@@ -762,9 +1141,6 @@ mod tests {
       result_cached.is_ok(),
       "Should fetch detailed Firefox versions with caching"
     );
-
-    // Small delay to avoid rate limiting
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
     // Test detailed versions without caching
     let result_no_cache = service
@@ -797,6 +1173,17 @@ mod tests {
       assert!(
         !first_no_cache.version.is_empty(),
         "No-cache version should not be empty"
+      );
+
+      assert_eq!(first_cached.version, "139.0", "Should have correct version");
+      assert_eq!(
+        first_no_cache.version, "139.0",
+        "Should have correct version"
+      );
+      assert_eq!(first_cached.date, "2024-01-15", "Should have correct date");
+      assert_eq!(
+        first_no_cache.date, "2024-01-15",
+        "Should have correct date"
       );
 
       println!(
