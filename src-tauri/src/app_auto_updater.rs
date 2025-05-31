@@ -379,7 +379,7 @@ impl AppAutoUpdater {
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     let extractor = Extractor::new();
-    
+
     let extension = archive_path
       .extension()
       .and_then(|ext| ext.to_str())
@@ -661,20 +661,18 @@ mod tests {
     // We can't run the actual extraction in unit tests without real DMG files,
     // but we can verify the method signature and basic logic
     let updater = AppAutoUpdater::new();
-    
+
     // Test that unsupported formats would be rejected
     let temp_dir = std::env::temp_dir();
     let unsupported_file = temp_dir.join("test.rar");
-    
+
     // Create a mock runtime to test the logic
     let rt = tokio::runtime::Runtime::new().unwrap();
-    
+
     // This would fail because .rar is not supported, which proves
     // our method is using the Extractor logic
-    let result = rt.block_on(async {
-      updater.extract_update(&unsupported_file, &temp_dir).await
-    });
-    
+    let result = rt.block_on(async { updater.extract_update(&unsupported_file, &temp_dir).await });
+
     // Should fail with unsupported format error
     assert!(result.is_err());
     let error_msg = result.unwrap_err().to_string();
