@@ -54,6 +54,10 @@ Have questions or want to contribute? We'd love to hear from you!
 - **Issues**: [GitHub Issues](https://github.com/zhom/donutbrowser/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/zhom/donutbrowser/discussions)
 
+## Contact
+
+Have an urgent question or want to report a security vulnerability? Send and email to contact at donutbrowser dot com and we'll get back to you as fast as possible.
+
 ## License
 
 This project is licensed under the AGPL-3.0 License - see the [LICENSE](LICENSE) file for details.
