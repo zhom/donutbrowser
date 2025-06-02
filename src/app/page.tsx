@@ -146,10 +146,7 @@ export default function Home() {
       // Listen for show profile selector events
       await listen<string>("show-profile-selector", (event) => {
         console.log("Received show profile selector request:", event.payload);
-        setPendingUrls((prev) => [
-          ...prev,
-          { id: Date.now().toString(), url: event.payload },
-        ]);
+        setPendingUrls([{ id: Date.now().toString(), url: event.payload }]);
       });
 
       // Listen for show create profile dialog events
@@ -175,7 +172,7 @@ export default function Home() {
         url,
       });
       console.log("Smart URL opening succeeded:", result);
-      // URL was handled successfully
+      // URL was handled successfully, no need to show selector
     } catch (error: unknown) {
       console.log(
         "Smart URL opening failed or requires profile selection:",
@@ -183,7 +180,8 @@ export default function Home() {
       );
 
       // Show profile selector for manual selection
-      setPendingUrls((prev) => [...prev, { id: Date.now().toString(), url }]);
+      // Replace any existing pending URL with the new one
+      setPendingUrls([{ id: Date.now().toString(), url }]);
     }
   };
 

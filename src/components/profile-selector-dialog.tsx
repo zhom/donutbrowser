@@ -69,16 +69,29 @@ export function ProfileSelectorDialog({
 
       // Auto-select first available profile for link opening
       if (profileList.length > 0) {
-        // Find the first profile that can be used for opening links
-        const availableProfile = profileList.find((profile) => {
-          return canUseProfileForLinks(profile, profileList, runningProfiles);
+        // First, try to find a running profile that can be used for opening links
+        const runningAvailableProfile = profileList.find((profile) => {
+          const isRunning = runningProfiles.has(profile.name);
+          return (
+            isRunning &&
+            canUseProfileForLinks(profile, profileList, runningProfiles)
+          );
         });
 
-        if (availableProfile) {
-          setSelectedProfile(availableProfile.name);
+        if (runningAvailableProfile) {
+          setSelectedProfile(runningAvailableProfile.name);
         } else {
-          // If no suitable profile found, still select the first one to show UI
-          setSelectedProfile(profileList[0].name);
+          // If no running profile is suitable, find the first profile that can be used for opening links
+          const availableProfile = profileList.find((profile) => {
+            return canUseProfileForLinks(profile, profileList, runningProfiles);
+          });
+
+          if (availableProfile) {
+            setSelectedProfile(availableProfile.name);
+          } else {
+            // If no suitable profile found, still select the first one to show UI
+            setSelectedProfile(profileList[0].name);
+          }
         }
       }
     } catch (error) {
@@ -277,7 +290,7 @@ export function ProfileSelectorDialog({
                                   !canUseForLinks ? "opacity-50" : ""
                                 }`}
                               >
-                                <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent cursor-pointer">
+                                <div className="flex items-center gap-3 py-1 px-2 rounded-lg hover:bg-accent cursor-pointer">
                                   <div className="flex items-center gap-2">
                                     {(() => {
                                       const IconComponent = getBrowserIcon(

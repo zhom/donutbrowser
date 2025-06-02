@@ -153,8 +153,8 @@ pub async fn open_url_with_profile(
 
 #[tauri::command]
 pub async fn smart_open_url(
-  _app_handle: tauri::AppHandle,
-  _url: String,
+  app_handle: tauri::AppHandle,
+  url: String,
   _is_startup: Option<bool>,
 ) -> Result<String, String> {
   use crate::browser_runner::BrowserRunner;
@@ -171,10 +171,75 @@ pub async fn smart_open_url(
   }
 
   println!(
-    "URL opening - Total profiles: {}, showing profile selector",
+    "URL opening - Total profiles: {}, checking for running profiles",
     profiles.len()
   );
 
-  // Always show the profile selector so the user can choose
+  // Check for running profiles and find the first one that can handle URLs
+  for profile in &profiles {
+    // Check if this profile is running
+    let is_running = runner
+      .check_browser_status(app_handle.clone(), profile)
+      .await
+      .unwrap_or(false);
+
+    if is_running {
+      println!(
+        "Found running profile '{}', attempting to open URL",
+        profile.name
+      );
+
+      // For TOR browser: Check if any other TOR browser is running
+      if profile.browser == "tor-browser" {
+        let mut other_tor_running = false;
+        for p in &profiles {
+          if p.browser == "tor-browser"
+            && p.name != profile.name
+            && runner
+              .check_browser_status(app_handle.clone(), p)
+              .await
+              .unwrap_or(false)
+          {
+            other_tor_running = true;
+            break;
+          }
+        }
+
+        if other_tor_running {
+          continue; // Skip this one, can't have multiple TOR instances
+        }
+      }
+
+      // For Mullvad browser: skip if running (can't open URLs in running Mullvad)
+      if profile.browser == "mullvad-browser" {
+        continue;
+      }
+
+      // Try to open the URL with this running profile
+      match runner
+        .launch_or_open_url(app_handle.clone(), profile, Some(url.clone()))
+        .await
+      {
+        Ok(_) => {
+          println!(
+            "Successfully opened URL '{}' with running profile '{}'",
+            url, profile.name
+          );
+          return Ok(format!("opened_with_profile:{}", profile.name));
+        }
+        Err(e) => {
+          println!(
+            "Failed to open URL with running profile '{}': {}",
+            profile.name, e
+          );
+          // Continue to try other profiles or show selector
+        }
+      }
+    }
+  }
+
+  println!("No suitable running profiles found, showing profile selector");
+
+  // No suitable running profile found, show the profile selector
   Err("show_selector".to_string())
 }
