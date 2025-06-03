@@ -239,7 +239,7 @@ impl BrowserVersionService {
             } else {
               BrowserVersionInfo {
                 version: version.clone(),
-                is_prerelease: version.contains("alpha") || version.contains("beta"),
+                is_prerelease: false, // Zen Browser releases are usually stable
                 date: "".to_string(),
               }
             }
@@ -356,60 +356,148 @@ impl BrowserVersionService {
     version: &str,
   ) -> Result<DownloadInfo, Box<dyn std::error::Error + Send + Sync>> {
     match browser {
-            "firefox" => Ok(DownloadInfo {
-                url: format!("https://download.mozilla.org/?product=firefox-{version}&os=osx&lang=en-US"),
-                filename: format!("firefox-{version}.dmg"),
-                is_archive: true,
-            }),
-            "firefox-developer" => Ok(DownloadInfo {
-                url: format!("https://download.mozilla.org/?product=devedition-{version}&os=osx&lang=en-US"),
-                filename: format!("firefox-developer-{version}.dmg"),
-                is_archive: true,
-            }),
-            "mullvad-browser" => Ok(DownloadInfo {
-                url: format!(
-                    "https://github.com/mullvad/mullvad-browser/releases/download/{version}/mullvad-browser-macos-{version}.dmg"
-                ),
-                filename: format!("mullvad-browser-{version}.dmg"),
-                is_archive: true,
-            }),
-            "zen" => Ok(DownloadInfo {
-                url: format!(
-                    "https://github.com/zen-browser/desktop/releases/download/{version}/zen.macos-universal.dmg"
-                ),
-                filename: format!("zen-{version}.dmg"),
-                is_archive: true,
-            }),
-            "brave" => {
-                // For Brave, we use a placeholder URL since we need to resolve the actual asset URL dynamically
-                // The actual URL will be resolved in the download service using the GitHub API
-                Ok(DownloadInfo {
-                    url: format!(
-                        "https://github.com/brave/brave-browser/releases/download/{version}/Brave-Browser-universal.dmg"
-                    ),
-                    filename: format!("brave-{version}.dmg"),
-                    is_archive: true,
-                })
-            }
-            "chromium" => {
-                let arch = if cfg!(target_arch = "aarch64") { "Mac_Arm" } else { "Mac" };
-                Ok(DownloadInfo {
-                    url: format!(
-                        "https://commondatastorage.googleapis.com/chromium-browser-snapshots/{arch}/{version}/chrome-mac.zip"
-                    ),
-                    filename: format!("chromium-{version}.zip"),
-                    is_archive: true,
-                })
-            }
-            "tor-browser" => Ok(DownloadInfo {
-                url: format!(
-                    "https://archive.torproject.org/tor-package-archive/torbrowser/{version}/tor-browser-macos-{version}.dmg"
-                ),
-                filename: format!("tor-browser-{version}.dmg"),
-                is_archive: true,
-            }),
-            _ => Err(format!("Unsupported browser: {browser}").into()),
-        }
+      "firefox" => {
+        #[cfg(target_os = "macos")]
+        return Ok(DownloadInfo {
+          url: format!("https://download.mozilla.org/?product=firefox-{version}&os=osx&lang=en-US"),
+          filename: format!("firefox-{version}.dmg"),
+          is_archive: true,
+        });
+
+        #[cfg(target_os = "windows")]
+        return Ok(DownloadInfo {
+          url: format!("https://download.mozilla.org/?product=firefox-{version}&os=win64&lang=en-US"),
+          filename: format!("firefox-{version}.exe"),
+          is_archive: false,
+        });
+
+        #[cfg(target_os = "linux")]
+        return Ok(DownloadInfo {
+          url: format!("https://download.mozilla.org/?product=firefox-{version}&os=linux64&lang=en-US"),
+          filename: format!("firefox-{version}.tar.bz2"),
+          is_archive: true,
+        });
+
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+        return Err("Unsupported platform for Firefox".into());
+      }
+      "firefox-developer" => {
+        #[cfg(target_os = "macos")]
+        return Ok(DownloadInfo {
+          url: format!("https://download.mozilla.org/?product=devedition-{version}&os=osx&lang=en-US"),
+          filename: format!("firefox-developer-{version}.dmg"),
+          is_archive: true,
+        });
+
+        #[cfg(target_os = "windows")]
+        return Ok(DownloadInfo {
+          url: format!("https://download.mozilla.org/?product=devedition-{version}&os=win64&lang=en-US"),
+          filename: format!("firefox-developer-{version}.exe"),
+          is_archive: false,
+        });
+
+        #[cfg(target_os = "linux")]
+        return Ok(DownloadInfo {
+          url: format!("https://download.mozilla.org/?product=devedition-{version}&os=linux64&lang=en-US"),
+          filename: format!("firefox-developer-{version}.tar.bz2"),
+          is_archive: true,
+        });
+
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+        return Err("Unsupported platform for Firefox Developer".into());
+      }
+      "mullvad-browser" => {
+        #[cfg(target_os = "macos")]
+        return Ok(DownloadInfo {
+          url: format!(
+            "https://github.com/mullvad/mullvad-browser/releases/download/{version}/mullvad-browser-macos-{version}.dmg"
+          ),
+          filename: format!("mullvad-browser-{version}.dmg"),
+          is_archive: true,
+        });
+
+        #[cfg(target_os = "windows")]
+        return Ok(DownloadInfo {
+          url: format!(
+            "https://github.com/mullvad/mullvad-browser/releases/download/{version}/mullvad-browser-windows-{version}.exe"
+          ),
+          filename: format!("mullvad-browser-{version}.exe"),
+          is_archive: false,
+        });
+
+        #[cfg(target_os = "linux")]
+        return Ok(DownloadInfo {
+          url: format!(
+            "https://github.com/mullvad/mullvad-browser/releases/download/{version}/mullvad-browser-linux-{version}.tar.xz"
+          ),
+          filename: format!("mullvad-browser-{version}.tar.xz"),
+          is_archive: true,
+        });
+
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+        return Err("Unsupported platform for Mullvad Browser".into());
+      }
+      "zen" => {
+        #[cfg(target_os = "macos")]
+        return Ok(DownloadInfo {
+          url: format!(
+            "https://github.com/zen-browser/desktop/releases/download/{version}/zen.macos-universal.dmg"
+          ),
+          filename: format!("zen-{version}.dmg"),
+          is_archive: true,
+        });
+
+        #[cfg(target_os = "windows")]
+        return Ok(DownloadInfo {
+          url: format!(
+            "https://github.com/zen-browser/desktop/releases/download/{version}/zen.win.x64.zip"
+          ),
+          filename: format!("zen-{version}.zip"),
+          is_archive: true,
+        });
+
+        #[cfg(target_os = "linux")]
+        return Ok(DownloadInfo {
+          url: format!(
+            "https://github.com/zen-browser/desktop/releases/download/{version}/zen.linux-x86_64.AppImage"
+          ),
+          filename: format!("zen-{version}.AppImage"),
+          is_archive: false,
+        });
+
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+        return Err("Unsupported platform for Zen Browser".into());
+      }
+      "brave" => {
+        // For Brave, we use a placeholder URL since we need to resolve the actual asset URL dynamically
+        // The actual URL will be resolved in the download service using the GitHub API
+        Ok(DownloadInfo {
+          url: format!(
+            "https://github.com/brave/brave-browser/releases/download/{version}/Brave-Browser-universal.dmg"
+          ),
+          filename: format!("brave-{version}.dmg"),
+          is_archive: true,
+        })
+      }
+      "chromium" => {
+        let arch = if cfg!(target_arch = "aarch64") { "Mac_Arm" } else { "Mac" };
+        Ok(DownloadInfo {
+          url: format!(
+            "https://commondatastorage.googleapis.com/chromium-browser-snapshots/{arch}/{version}/chrome-mac.zip"
+          ),
+          filename: format!("chromium-{version}.zip"),
+          is_archive: true,
+        })
+      }
+      "tor-browser" => Ok(DownloadInfo {
+        url: format!(
+          "https://archive.torproject.org/tor-package-archive/torbrowser/{version}/tor-browser-macos-{version}.dmg"
+        ),
+        filename: format!("tor-browser-{version}.dmg"),
+        is_archive: true,
+      }),
+      _ => Err(format!("Unsupported browser: {browser}").into()),
+    }
   }
 
   // Private helper methods for each browser type

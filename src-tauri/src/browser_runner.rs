@@ -30,26 +30,15 @@ pub struct BrowserProfile {
   pub last_launch: Option<u64>,
 }
 
-pub struct BrowserRunner {
-  base_dirs: BaseDirs,
-}
-impl BrowserRunner {
-  pub fn new() -> Self {
-    Self {
-      base_dirs: BaseDirs::new().expect("Failed to get base directories"),
-    }
-  }
+// Platform-specific modules
+#[cfg(target_os = "macos")]
+mod macos {
+  use super::*;
+  use std::ffi::OsString;
 
-  // Helper function to check if a process matches TOR/Mullvad browser
-  fn is_tor_or_mullvad_browser(
-    &self,
-    exe_name: &str,
-    cmd: &[std::ffi::OsString],
-    browser_type: &str,
-  ) -> bool {
+  pub fn is_tor_or_mullvad_browser(exe_name: &str, cmd: &[OsString], browser_type: &str) -> bool {
     match browser_type {
       "mullvad-browser" => {
-        // More specific detection for Mullvad Browser
         let has_mullvad_in_exe = exe_name.contains("mullvad");
         let has_firefox_exe = exe_name == "firefox" || exe_name.contains("firefox-bin");
         let has_mullvad_in_cmd = cmd.iter().any(|arg| {
@@ -64,7 +53,6 @@ impl BrowserRunner {
         has_mullvad_in_exe || (has_firefox_exe && has_mullvad_in_cmd)
       }
       "tor-browser" => {
-        // More specific detection for TOR Browser
         let has_tor_in_exe = exe_name.contains("tor");
         let has_firefox_exe = exe_name == "firefox" || exe_name.contains("firefox-bin");
         let has_tor_in_cmd = cmd.iter().any(|arg| {
@@ -82,57 +70,628 @@ impl BrowserRunner {
     }
   }
 
-  // Helper function to validate PID for TOR/Mullvad browsers
-  // TODO: make available for other platforms once other functionality is implemented
-  #[cfg(target_os = "macos")]
-  fn validate_tor_mullvad_pid(&self, profile: &BrowserProfile, pid: u32) -> bool {
-    let system = System::new_all();
+  pub async fn open_url_in_existing_browser_firefox_like(
+    profile: &BrowserProfile,
+    url: &str,
+    browser_type: BrowserType,
+    browser_dir: &Path,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let pid = profile.process_id.unwrap();
 
-    if let Some(process) = system.process(Pid::from(pid as usize)) {
-      let exe_name = process.name().to_string_lossy().to_lowercase();
-      let cmd = process.cmd();
+    // First try: Use Firefox remote command
+    println!("Trying Firefox remote command for PID: {pid}");
+    let browser = create_browser(browser_type);
+    if let Ok(executable_path) = browser.get_executable_path(browser_dir) {
+      let remote_args = vec![
+        "-profile".to_string(),
+        profile.profile_path.clone(),
+        "-new-tab".to_string(),
+        url.to_string(),
+      ];
 
-      // Check if this is the correct browser type
-      let is_correct_browser = match profile.browser.as_str() {
-        "mullvad-browser" => self.is_tor_or_mullvad_browser(&exe_name, cmd, "mullvad-browser"),
-        "tor-browser" => self.is_tor_or_mullvad_browser(&exe_name, cmd, "tor-browser"),
-        _ => return false,
-      };
+      let remote_output = Command::new(executable_path).args(&remote_args).output();
 
-      if !is_correct_browser {
-        println!(
-          "PID {} is not the correct browser type for {}",
-          pid, profile.browser
-        );
-        return false;
+      match remote_output {
+        Ok(output) if output.status.success() => {
+          println!("Firefox remote command succeeded");
+          return Ok(());
+        }
+        Ok(output) => {
+          let stderr = String::from_utf8_lossy(&output.stderr);
+          println!(
+            "Firefox remote command failed with stderr: {stderr}, trying AppleScript fallback"
+          );
+        }
+        Err(e) => {
+          println!("Firefox remote command error: {e}, trying AppleScript fallback");
+        }
       }
+    }
 
-      // Check profile path match
-      let profile_path_match = cmd.iter().any(|s| {
-        let arg = s.to_str().unwrap_or("");
-        arg == profile.profile_path
-          || arg == format!("-profile={}", profile.profile_path)
-          || (arg == "-profile"
-            && cmd
-              .iter()
-              .any(|s2| s2.to_str().unwrap_or("") == profile.profile_path))
-      });
+    // Fallback: Use AppleScript
+    let escaped_url = url
+      .replace("\"", "\\\"")
+      .replace("\\", "\\\\")
+      .replace("'", "\\'");
 
-      if !profile_path_match {
-        println!(
-          "PID {} does not match profile path for {}",
-          pid, profile.name
-        );
-        return false;
-      }
+    let script = format!(
+      r#"
+try
+  tell application "System Events"
+    -- Find the exact process by PID
+    set targetProcess to (first application process whose unix id is {pid})
+    
+    -- Verify the process exists
+    if not (exists targetProcess) then
+      error "No process found with PID {pid}"
+    end if
+    
+    -- Get the process name for verification
+    set processName to name of targetProcess
+    
+    -- Bring the process to the front first
+    set frontmost of targetProcess to true
+    delay 1.0
+    
+    -- Check if the process has any visible windows
+    set windowList to windows of targetProcess
+    set hasVisibleWindow to false
+    repeat with w in windowList
+      if visible of w is true then
+        set hasVisibleWindow to true
+        exit repeat
+      end if
+    end repeat
+    
+    if not hasVisibleWindow then
+      -- No visible windows, create a new one
+      tell targetProcess
+        keystroke "n" using command down
+        delay 2.0
+      end tell
+    end if
+    
+    -- Ensure the process is frontmost again
+    set frontmost of targetProcess to true
+    delay 0.5
+    
+    -- Focus on the address bar and open URL
+    tell targetProcess
+      -- Open a new tab
+      keystroke "t" using command down
+      delay 1.5
+      
+      -- Focus address bar (Cmd+L)
+      keystroke "l" using command down
+      delay 0.5
+      
+      -- Type the URL
+      keystroke "{escaped_url}"
+      delay 0.5
+      
+      -- Press Enter to navigate
+      keystroke return
+    end tell
+    
+    return "Successfully opened URL in " & processName & " (PID: {pid})"
+  end tell
+on error errMsg number errNum
+  return "AppleScript failed: " & errMsg & " (Error " & errNum & ")"
+end try
+      "#
+    );
 
-      println!(
-        "PID {} validated successfully for {} profile {}",
-        pid, profile.browser, profile.name
+    println!("Executing AppleScript fallback for Firefox-based browser (PID: {pid})...");
+    let output = Command::new("osascript").args(["-e", &script]).output()?;
+
+    if !output.status.success() {
+      let error_msg = String::from_utf8_lossy(&output.stderr);
+      println!("AppleScript failed: {error_msg}");
+      return Err(
+        format!(
+          "Both Firefox remote command and AppleScript failed. AppleScript error: {error_msg}"
+        )
+        .into(),
       );
-      true
     } else {
-      println!("PID {pid} does not exist");
+      println!("AppleScript succeeded");
+    }
+
+    Ok(())
+  }
+
+  pub async fn open_url_in_existing_browser_tor_mullvad(
+    profile: &BrowserProfile,
+    url: &str,
+    browser_type: BrowserType,
+    browser_dir: &Path,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let pid = profile.process_id.unwrap();
+
+    println!("Opening URL in TOR/Mullvad browser using file-based approach (PID: {pid})");
+
+    // Method 1: Try using a temporary HTML file approach
+    println!("Attempting file-based URL opening for TOR/Mullvad browser");
+
+    let temp_dir = std::env::temp_dir();
+    let temp_file_name = format!("donut_browser_url_{}.html", std::process::id());
+    let temp_file_path = temp_dir.join(&temp_file_name);
+
+    let html_content = format!(
+      r#"<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="refresh" content="0; url={url}">
+    <title>Redirecting...</title>
+    <script>
+        window.location.href = "{url}";
+    </script>
+</head>
+<body>
+    <p>Redirecting to <a href="{url}">{url}</a>...</p>
+</body>
+</html>"#
+    );
+
+    match std::fs::write(&temp_file_path, html_content) {
+      Ok(()) => {
+        println!("Created temporary HTML file: {temp_file_path:?}");
+
+        let browser = create_browser(browser_type.clone());
+        if let Ok(executable_path) = browser.get_executable_path(browser_dir) {
+          let open_result = Command::new("open")
+            .args([
+              "-a",
+              executable_path.to_str().unwrap(),
+              temp_file_path.to_str().unwrap(),
+            ])
+            .output();
+
+          // Clean up the temporary file after a short delay
+          let temp_file_path_clone = temp_file_path.clone();
+          tokio::spawn(async move {
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+            let _ = std::fs::remove_file(temp_file_path_clone);
+          });
+
+          match open_result {
+            Ok(output) if output.status.success() => {
+              println!("Successfully opened URL using file-based approach");
+              return Ok(());
+            }
+            Ok(output) => {
+              let stderr = String::from_utf8_lossy(&output.stderr);
+              println!("File-based approach failed: {stderr}");
+            }
+            Err(e) => {
+              println!("File-based approach error: {e}");
+            }
+          }
+        }
+
+        let _ = std::fs::remove_file(&temp_file_path);
+      }
+      Err(e) => {
+        println!("Failed to create temporary HTML file: {e}");
+      }
+    }
+
+    // Method 2: Try using the 'open' command directly with the URL
+    println!("Attempting direct URL opening with 'open' command");
+
+    let browser = create_browser(browser_type.clone());
+    if let Ok(executable_path) = browser.get_executable_path(browser_dir) {
+      let direct_open_result = Command::new("open")
+        .args(["-a", executable_path.to_str().unwrap(), url])
+        .output();
+
+      match direct_open_result {
+        Ok(output) if output.status.success() => {
+          println!("Successfully opened URL using direct 'open' command");
+          return Ok(());
+        }
+        Ok(output) => {
+          let stderr = String::from_utf8_lossy(&output.stderr);
+          println!("Direct 'open' command failed: {stderr}");
+        }
+        Err(e) => {
+          println!("Direct 'open' command error: {e}");
+        }
+      }
+    }
+
+    // If all methods fail, return a helpful error message
+    Err(
+      format!(
+        "Failed to open URL in existing TOR/Mullvad browser (PID: {pid}). All methods failed:\n\
+      1. File-based approach failed\n\
+      2. Direct 'open' command failed\n\
+      \n\
+      This may be due to browser security restrictions or the browser process may have changed.\n\
+      Try closing and reopening the browser, or manually paste the URL: {url}"
+      )
+      .into(),
+    )
+  }
+
+  pub async fn open_url_in_existing_browser_chromium(
+    profile: &BrowserProfile,
+    url: &str,
+    browser_type: BrowserType,
+    browser_dir: &Path,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let pid = profile.process_id.unwrap();
+
+    // First, try using the browser's built-in URL opening capability
+    println!("Trying Chromium URL opening for PID: {pid}");
+
+    let browser = create_browser(browser_type);
+    if let Ok(executable_path) = browser.get_executable_path(browser_dir) {
+      let remote_output = Command::new(executable_path)
+        .args([&format!("--user-data-dir={}", profile.profile_path), url])
+        .output();
+
+      match remote_output {
+        Ok(output) if output.status.success() => {
+          println!("Chromium URL opening succeeded");
+          return Ok(());
+        }
+        Ok(output) => {
+          let stderr = String::from_utf8_lossy(&output.stderr);
+          println!("Chromium URL opening failed: {stderr}, trying AppleScript");
+        }
+        Err(e) => {
+          println!("Chromium URL opening error: {e}, trying AppleScript");
+        }
+      }
+    }
+
+    // Fallback to AppleScript
+    let escaped_url = url
+      .replace("\"", "\\\"")
+      .replace("\\", "\\\\")
+      .replace("'", "\\'");
+
+    let script = format!(
+      r#"
+try
+  tell application "System Events"
+    -- Find the exact process by PID
+    set targetProcess to (first application process whose unix id is {pid})
+    
+    -- Verify the process exists
+    if not (exists targetProcess) then
+      error "No process found with PID {pid}"
+    end if
+    
+    -- Get the process name for verification
+    set processName to name of targetProcess
+    
+    -- Bring the process to the front first
+    set frontmost of targetProcess to true
+    delay 1.0
+    
+    -- Check if the process has any visible windows
+    set windowList to windows of targetProcess
+    set hasVisibleWindow to false
+    repeat with w in windowList
+      if visible of w is true then
+        set hasVisibleWindow to true
+        exit repeat
+      end if
+    end repeat
+    
+    if not hasVisibleWindow then
+      -- No visible windows, create a new one
+      tell targetProcess
+        keystroke "n" using command down
+        delay 2.0
+      end tell
+    end if
+    
+    -- Ensure the process is frontmost again
+    set frontmost of targetProcess to true
+    delay 0.5
+    
+    -- Focus on the address bar and open URL
+    tell targetProcess
+      -- Open a new tab
+      keystroke "t" using command down
+      delay 1.5
+      
+      -- Focus address bar (Cmd+L)
+      keystroke "l" using command down
+      delay 0.5
+      
+      -- Type the URL
+      keystroke "{escaped_url}"
+      delay 0.5
+      
+      -- Press Enter to navigate
+      keystroke return
+    end tell
+    
+    return "Successfully opened URL in " & processName & " (PID: {pid})"
+  end tell
+on error errMsg number errNum
+  return "AppleScript failed: " & errMsg & " (Error " & errNum & ")"
+end try
+      "#
+    );
+
+    println!("Executing AppleScript for Chromium-based browser (PID: {pid})...");
+    let output = Command::new("osascript").args(["-e", &script]).output()?;
+
+    if !output.status.success() {
+      let error_msg = String::from_utf8_lossy(&output.stderr);
+      println!("AppleScript failed: {error_msg}");
+      return Err(
+        format!("Failed to open URL in existing Chromium-based browser: {error_msg}").into(),
+      );
+    } else {
+      println!("AppleScript succeeded");
+    }
+
+    Ok(())
+  }
+
+  pub async fn kill_browser_process_impl(
+    pid: u32,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("Attempting to kill browser process with PID: {pid}");
+
+    // First try SIGTERM (graceful shutdown)
+    let output = Command::new("kill")
+      .args(["-TERM", &pid.to_string()])
+      .output()
+      .map_err(|e| format!("Failed to execute kill command: {e}"))?;
+
+    if !output.status.success() {
+      // If SIGTERM fails, try SIGKILL (force kill)
+      let output = Command::new("kill")
+        .args(["-KILL", &pid.to_string()])
+        .output()?;
+
+      if !output.status.success() {
+        return Err(
+          format!(
+            "Failed to kill process {}: {}",
+            pid,
+            String::from_utf8_lossy(&output.stderr)
+          )
+          .into(),
+        );
+      }
+    }
+
+    println!("Successfully killed browser process with PID: {pid}");
+    Ok(())
+  }
+}
+
+#[cfg(target_os = "windows")]
+mod windows {
+  use super::*;
+  use std::ffi::OsString;
+
+  pub fn is_tor_or_mullvad_browser(
+    _exe_name: &str,
+    _cmd: &[OsString],
+    _browser_type: &str,
+  ) -> bool {
+    // Windows implementation would go here
+    false
+  }
+
+  pub async fn open_url_in_existing_browser_firefox_like(
+    profile: &BrowserProfile,
+    url: &str,
+    browser_type: BrowserType,
+    browser_dir: &Path,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let browser = create_browser(browser_type);
+    let executable_path = browser
+      .get_executable_path(browser_dir)
+      .map_err(|e| format!("Failed to get executable path: {}", e))?;
+
+    let output = Command::new(executable_path)
+      .args(["-profile", &profile.profile_path, "-new-tab", url])
+      .output()?;
+
+    if !output.status.success() {
+      return Err(
+        format!(
+          "Failed to open URL in existing browser: {}",
+          String::from_utf8_lossy(&output.stderr)
+        )
+        .into(),
+      );
+    }
+
+    Ok(())
+  }
+
+  pub async fn open_url_in_existing_browser_tor_mullvad(
+    _profile: &BrowserProfile,
+    _url: &str,
+    _browser_type: BrowserType,
+    _browser_dir: &Path,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    Err("Opening URLs in existing Firefox-based browsers is not supported on Windows when using -no-remote".into())
+  }
+
+  pub async fn open_url_in_existing_browser_chromium(
+    profile: &BrowserProfile,
+    url: &str,
+    browser_type: BrowserType,
+    browser_dir: &Path,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let browser = create_browser(browser_type);
+    let executable_path = browser
+      .get_executable_path(browser_dir)
+      .map_err(|e| format!("Failed to get executable path: {}", e))?;
+
+    let output = Command::new(executable_path)
+      .args([&format!("--user-data-dir={}", profile.profile_path), url])
+      .output()?;
+
+    if !output.status.success() {
+      return Err(
+        format!(
+          "Failed to open URL in existing Chromium-based browser: {}",
+          String::from_utf8_lossy(&output.stderr)
+        )
+        .into(),
+      );
+    }
+
+    Ok(())
+  }
+
+  pub async fn kill_browser_process_impl(
+    pid: u32,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let system = System::new_all();
+    if let Some(process) = system.process(Pid::from(pid as usize)) {
+      if !process.kill() {
+        return Err(format!("Failed to kill process {}", pid).into());
+      }
+    } else {
+      return Err(format!("Process {} not found", pid).into());
+    }
+
+    println!("Successfully killed browser process with PID: {pid}");
+    Ok(())
+  }
+}
+
+#[cfg(target_os = "linux")]
+mod linux {
+  use super::*;
+  use std::ffi::OsString;
+
+  pub fn is_tor_or_mullvad_browser(
+    _exe_name: &str,
+    _cmd: &[OsString],
+    _browser_type: &str,
+  ) -> bool {
+    // Linux implementation would go here
+    false
+  }
+
+  pub async fn open_url_in_existing_browser_firefox_like(
+    profile: &BrowserProfile,
+    url: &str,
+    browser_type: BrowserType,
+    browser_dir: &Path,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let browser = create_browser(browser_type);
+    let executable_path = browser
+      .get_executable_path(browser_dir)
+      .map_err(|e| format!("Failed to get executable path: {}", e))?;
+
+    let output = Command::new(executable_path)
+      .args(["-profile", &profile.profile_path, "-new-tab", url])
+      .output()?;
+
+    if !output.status.success() {
+      return Err(
+        format!(
+          "Failed to open URL in existing browser: {}",
+          String::from_utf8_lossy(&output.stderr)
+        )
+        .into(),
+      );
+    }
+
+    Ok(())
+  }
+
+  pub async fn open_url_in_existing_browser_tor_mullvad(
+    _profile: &BrowserProfile,
+    _url: &str,
+    _browser_type: BrowserType,
+    _browser_dir: &Path,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    Err("Opening URLs in existing Firefox-based browsers is not supported on Linux when using -no-remote".into())
+  }
+
+  pub async fn open_url_in_existing_browser_chromium(
+    profile: &BrowserProfile,
+    url: &str,
+    browser_type: BrowserType,
+    browser_dir: &Path,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let browser = create_browser(browser_type);
+    let executable_path = browser
+      .get_executable_path(browser_dir)
+      .map_err(|e| format!("Failed to get executable path: {}", e))?;
+
+    let output = Command::new(executable_path)
+      .args([&format!("--user-data-dir={}", profile.profile_path), url])
+      .output()?;
+
+    if !output.status.success() {
+      return Err(
+        format!(
+          "Failed to open URL in existing Chromium-based browser: {}",
+          String::from_utf8_lossy(&output.stderr)
+        )
+        .into(),
+      );
+    }
+
+    Ok(())
+  }
+
+  pub async fn kill_browser_process_impl(
+    pid: u32,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let system = System::new_all();
+    if let Some(process) = system.process(Pid::from(pid as usize)) {
+      if !process.kill() {
+        return Err(format!("Failed to kill process {}", pid).into());
+      }
+    } else {
+      return Err(format!("Process {} not found", pid).into());
+    }
+
+    println!("Successfully killed browser process with PID: {pid}");
+    Ok(())
+  }
+}
+
+pub struct BrowserRunner {
+  base_dirs: BaseDirs,
+}
+
+impl BrowserRunner {
+  pub fn new() -> Self {
+    Self {
+      base_dirs: BaseDirs::new().expect("Failed to get base directories"),
+    }
+  }
+
+  // Helper function to check if a process matches TOR/Mullvad browser
+  fn is_tor_or_mullvad_browser(
+    &self,
+    exe_name: &str,
+    cmd: &[std::ffi::OsString],
+    browser_type: &str,
+  ) -> bool {
+    #[cfg(target_os = "macos")]
+    return macos::is_tor_or_mullvad_browser(exe_name, cmd, browser_type);
+
+    #[cfg(target_os = "windows")]
+    return windows::is_tor_or_mullvad_browser(exe_name, cmd, browser_type);
+
+    #[cfg(target_os = "linux")]
+    return linux::is_tor_or_mullvad_browser(exe_name, cmd, browser_type);
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+      let _ = (exe_name, cmd, browser_type);
       false
     }
   }
@@ -600,525 +1159,106 @@ impl BrowserRunner {
     let browser_type = BrowserType::from_str(&updated_profile.browser)
       .map_err(|_| format!("Invalid browser type: {}", updated_profile.browser))?;
 
+    // Get browser directory for all platforms
+    let mut browser_dir = self.get_binaries_dir();
+    browser_dir.push(&updated_profile.browser);
+    browser_dir.push(&updated_profile.version);
+
     match browser_type {
       BrowserType::Firefox | BrowserType::FirefoxDeveloper | BrowserType::Zen => {
-        // These browsers don't use -no-remote, so we can use Firefox remote commands
         #[cfg(target_os = "macos")]
-        {
-          let pid = updated_profile.process_id.unwrap();
+        return macos::open_url_in_existing_browser_firefox_like(
+          &updated_profile,
+          url,
+          browser_type,
+          &browser_dir,
+        )
+        .await;
 
-          // First try: Use Firefox remote command (most reliable for these browsers)
-          println!("Trying Firefox remote command for PID: {pid}");
-          let mut browser_dir = self.get_binaries_dir();
-          browser_dir.push(&updated_profile.browser);
-          browser_dir.push(&updated_profile.version);
+        #[cfg(target_os = "windows")]
+        return windows::open_url_in_existing_browser_firefox_like(
+          &updated_profile,
+          url,
+          browser_type,
+          &browser_dir,
+        )
+        .await;
 
-          let browser = create_browser(browser_type);
-          if let Ok(executable_path) = browser.get_executable_path(&browser_dir) {
-            let remote_args = vec![
-              "-profile".to_string(),
-              updated_profile.profile_path.clone(),
-              "-new-tab".to_string(),
-              url.to_string(),
-            ];
+        #[cfg(target_os = "linux")]
+        return linux::open_url_in_existing_browser_firefox_like(
+          &updated_profile,
+          url,
+          browser_type,
+          &browser_dir,
+        )
+        .await;
 
-            let remote_output = Command::new(executable_path).args(&remote_args).output();
-
-            match remote_output {
-              Ok(output) if output.status.success() => {
-                println!("Firefox remote command succeeded");
-                return Ok(());
-              }
-              Ok(output) => {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                println!(
-                  "Firefox remote command failed with stderr: {stderr}, trying AppleScript fallback"
-                );
-              }
-              Err(e) => {
-                println!("Firefox remote command error: {e}, trying AppleScript fallback");
-              }
-            }
-          }
-
-          // Fallback: Use AppleScript if remote command fails
-          let escaped_url = url
-            .replace("\"", "\\\"")
-            .replace("\\", "\\\\")
-            .replace("'", "\\'");
-
-          let script = format!(
-            r#"
-try
-  tell application "System Events"
-    -- Find the exact process by PID
-    set targetProcess to (first application process whose unix id is {pid})
-    
-    -- Verify the process exists
-    if not (exists targetProcess) then
-      error "No process found with PID {pid}"
-    end if
-    
-    -- Get the process name for verification
-    set processName to name of targetProcess
-    
-    -- Bring the process to the front first
-    set frontmost of targetProcess to true
-    delay 1.0
-    
-    -- Check if the process has any visible windows
-    set windowList to windows of targetProcess
-    set hasVisibleWindow to false
-    repeat with w in windowList
-      if visible of w is true then
-        set hasVisibleWindow to true
-        exit repeat
-      end if
-    end repeat
-    
-    if not hasVisibleWindow then
-      -- No visible windows, create a new one
-      tell targetProcess
-        keystroke "n" using command down
-        delay 2.0
-      end tell
-    end if
-    
-    -- Ensure the process is frontmost again
-    set frontmost of targetProcess to true
-    delay 0.5
-    
-    -- Focus on the address bar and open URL
-    tell targetProcess
-      -- Open a new tab
-      keystroke "t" using command down
-      delay 1.5
-      
-      -- Focus address bar (Cmd+L)
-      keystroke "l" using command down
-      delay 0.5
-      
-      -- Type the URL
-      keystroke "{escaped_url}"
-      delay 0.5
-      
-      -- Press Enter to navigate
-      keystroke return
-    end tell
-    
-    return "Successfully opened URL in " & processName & " (PID: {pid})"
-  end tell
-on error errMsg number errNum
-  return "AppleScript failed: " & errMsg & " (Error " & errNum & ")"
-end try
-            "#
-          );
-
-          println!("Executing AppleScript fallback for Firefox-based browser (PID: {pid})...");
-          let output = Command::new("osascript").args(["-e", &script]).output()?;
-
-          if !output.status.success() {
-            let error_msg = String::from_utf8_lossy(&output.stderr);
-            println!("AppleScript failed: {error_msg}");
-            return Err(
-              format!(
-                "Both Firefox remote command and AppleScript failed. AppleScript error: {error_msg}"
-              )
-              .into(),
-            );
-          } else {
-            println!("AppleScript succeeded");
-          }
-        }
-
-        #[cfg(not(target_os = "macos"))]
-        {
-          // For non-macOS platforms, use Firefox remote command
-          let mut browser_dir = self.get_binaries_dir();
-          browser_dir.push(&updated_profile.browser);
-          browser_dir.push(&updated_profile.version);
-
-          let browser = create_browser(browser_type);
-          let executable_path = browser
-            .get_executable_path(&browser_dir)
-            .map_err(|e| format!("Failed to get executable path: {}", e))?;
-
-          let output = Command::new(executable_path)
-            .args(["-profile", &updated_profile.profile_path, "-new-tab", url])
-            .output()?;
-
-          if !output.status.success() {
-            return Err(
-              format!(
-                "Failed to open URL in existing browser: {}",
-                String::from_utf8_lossy(&output.stderr)
-              )
-              .into(),
-            );
-          }
-        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+        return Err("Unsupported platform".into());
       }
       BrowserType::MullvadBrowser | BrowserType::TorBrowser => {
-        // These browsers use -no-remote, so we need a different approach that doesn't require accessibility permissions
         #[cfg(target_os = "macos")]
-        {
-          let pid = updated_profile.process_id.unwrap();
+        return macos::open_url_in_existing_browser_tor_mullvad(
+          &updated_profile,
+          url,
+          browser_type,
+          &browser_dir,
+        )
+        .await;
 
-          println!("Opening URL in TOR/Mullvad browser using file-based approach (PID: {pid})");
+        #[cfg(target_os = "windows")]
+        return windows::open_url_in_existing_browser_tor_mullvad(
+          &updated_profile,
+          url,
+          browser_type,
+          &browser_dir,
+        )
+        .await;
 
-          // Validate that we have the correct PID for this TOR/Mullvad browser
-          if !self.validate_tor_mullvad_pid(&updated_profile, pid) {
-            return Err(
-              format!(
-                "PID {} is not valid for {} profile {}. The browser process may have changed.",
-                pid, updated_profile.browser, updated_profile.name
-              )
-              .into(),
-            );
-          }
+        #[cfg(target_os = "linux")]
+        return linux::open_url_in_existing_browser_tor_mullvad(
+          &updated_profile,
+          url,
+          browser_type,
+          &browser_dir,
+        )
+        .await;
 
-          // Method 1: Try using a temporary HTML file approach that doesn't require accessibility permissions
-          println!("Attempting file-based URL opening for TOR/Mullvad browser");
-
-          // Create a temporary HTML file that redirects to the target URL
-          let temp_dir = std::env::temp_dir();
-          let temp_file_name = format!("donut_browser_url_{}.html", std::process::id());
-          let temp_file_path = temp_dir.join(&temp_file_name);
-
-          let html_content = format!(
-            r#"<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta http-equiv="refresh" content="0; url={url}">
-    <title>Redirecting...</title>
-    <script>
-        window.location.href = "{url}";
-    </script>
-</head>
-<body>
-    <p>Redirecting to <a href="{url}">{url}</a>...</p>
-</body>
-</html>"#
-          );
-
-          // Write the HTML file
-          match std::fs::write(&temp_file_path, html_content) {
-            Ok(()) => {
-              println!("Created temporary HTML file: {temp_file_path:?}");
-
-              // Get the browser executable path to use with 'open'
-              let mut browser_dir = self.get_binaries_dir();
-              browser_dir.push(&updated_profile.browser);
-              browser_dir.push(&updated_profile.version);
-
-              let browser = create_browser(browser_type.clone());
-              if let Ok(executable_path) = browser.get_executable_path(&browser_dir) {
-                // Use 'open' command to open the HTML file with the specific browser instance
-                // This approach works because it uses the existing browser process
-                let open_result = Command::new("open")
-                  .args([
-                    "-a",
-                    executable_path.to_str().unwrap(),
-                    temp_file_path.to_str().unwrap(),
-                  ])
-                  .output();
-
-                // Clean up the temporary file after a short delay
-                let temp_file_path_clone = temp_file_path.clone();
-                tokio::spawn(async move {
-                  tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-                  let _ = std::fs::remove_file(temp_file_path_clone);
-                });
-
-                match open_result {
-                  Ok(output) if output.status.success() => {
-                    println!("Successfully opened URL using file-based approach");
-                    return Ok(());
-                  }
-                  Ok(output) => {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    println!("File-based approach failed: {stderr}");
-                  }
-                  Err(e) => {
-                    println!("File-based approach error: {e}");
-                  }
-                }
-              }
-
-              // Clean up temp file if the approach failed
-              let _ = std::fs::remove_file(&temp_file_path);
-            }
-            Err(e) => {
-              println!("Failed to create temporary HTML file: {e}");
-            }
-          }
-
-          // Method 2: Try using the 'open' command directly with the URL
-          println!("Attempting direct URL opening with 'open' command");
-
-          // Get the browser executable path
-          let mut browser_dir = self.get_binaries_dir();
-          browser_dir.push(&updated_profile.browser);
-          browser_dir.push(&updated_profile.version);
-
-          let browser = create_browser(browser_type.clone());
-          if let Ok(executable_path) = browser.get_executable_path(&browser_dir) {
-            // Try to open the URL directly with the browser
-            let direct_open_result = Command::new("open")
-              .args(["-a", executable_path.to_str().unwrap(), url])
-              .output();
-
-            match direct_open_result {
-              Ok(output) if output.status.success() => {
-                println!("Successfully opened URL using direct 'open' command");
-                return Ok(());
-              }
-              Ok(output) => {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                println!("Direct 'open' command failed: {stderr}");
-              }
-              Err(e) => {
-                println!("Direct 'open' command error: {e}");
-              }
-            }
-          }
-
-          // Method 3: Try using osascript without accessibility features (just to bring window to front)
-          println!("Attempting minimal AppleScript approach without accessibility features");
-
-          let minimal_script = format!(
-            r#"
-try
-  tell application "System Events"
-    set targetProcess to (first application process whose unix id is {pid})
-    if not (exists targetProcess) then
-      error "No process found with PID {pid}"
-    end if
-    
-    -- Just bring the process to front without trying to control it
-    set frontmost of targetProcess to true
-    
-    return "Process brought to front successfully"
-  end tell
-on error errMsg
-  return "Minimal AppleScript failed: " & errMsg
-end try
-            "#
-          );
-
-          let minimal_output = Command::new("osascript")
-            .args(["-e", &minimal_script])
-            .output();
-
-          match minimal_output {
-            Ok(output) => {
-              let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
-              if output.status.success() && result.contains("successfully") {
-                println!("Successfully brought browser to front: {result}");
-
-                // Now try to use the system's default URL opening mechanism
-                let system_open_result = Command::new("open").args([url]).output();
-
-                match system_open_result {
-                  Ok(output) if output.status.success() => {
-                    println!("Successfully opened URL using system default handler");
-                    return Ok(());
-                  }
-                  Ok(output) => {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    println!("System default URL opening failed: {stderr}");
-                  }
-                  Err(e) => {
-                    println!("System default URL opening error: {e}");
-                  }
-                }
-              } else {
-                println!("Minimal AppleScript failed: {result}");
-              }
-            }
-            Err(e) => {
-              println!("Minimal AppleScript execution error: {e}");
-            }
-          }
-
-          // If all methods fail, return a more helpful error message
-          return Err(format!(
-            "Failed to open URL in existing TOR/Mullvad browser (PID: {pid}). All methods failed:\n\
-            1. File-based approach failed\n\
-            2. Direct 'open' command failed\n\
-            3. Minimal AppleScript approach failed\n\
-            \n\
-            This may be due to browser security restrictions or the browser process may have changed.\n\
-            Try closing and reopening the browser, or manually paste the URL: {url}"
-          ).into());
-        }
-
-        #[cfg(not(target_os = "macos"))]
-        {
-          // For non-macOS platforms, we can't use AppleScript, so try a different approach
-          // This is a limitation - Firefox with -no-remote can't receive remote commands
-          return Err("Opening URLs in existing Firefox-based browsers is not supported on this platform when using -no-remote".into());
-        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+        return Err("Unsupported platform".into());
       }
       BrowserType::Chromium | BrowserType::Brave => {
-        // For Chromium-based browsers, use a more targeted approach
         #[cfg(target_os = "macos")]
-        {
-          let pid = updated_profile.process_id.unwrap();
+        return macos::open_url_in_existing_browser_chromium(
+          &updated_profile,
+          url,
+          browser_type,
+          &browser_dir,
+        )
+        .await;
 
-          // First, try using the browser's built-in URL opening capability
-          println!("Trying Chromium URL opening for PID: {pid}");
-          let mut browser_dir = self.get_binaries_dir();
-          browser_dir.push(&updated_profile.browser);
-          browser_dir.push(&updated_profile.version);
+        #[cfg(target_os = "windows")]
+        return windows::open_url_in_existing_browser_chromium(
+          &updated_profile,
+          url,
+          browser_type,
+          &browser_dir,
+        )
+        .await;
 
-          let browser = create_browser(browser_type);
-          if let Ok(executable_path) = browser.get_executable_path(&browser_dir) {
-            // Try to open URL in existing instance using the same user data dir
-            let remote_output = Command::new(executable_path)
-              .args([
-                &format!("--user-data-dir={}", updated_profile.profile_path),
-                url,
-              ])
-              .output();
+        #[cfg(target_os = "linux")]
+        return linux::open_url_in_existing_browser_chromium(
+          &updated_profile,
+          url,
+          browser_type,
+          &browser_dir,
+        )
+        .await;
 
-            match remote_output {
-              Ok(output) if output.status.success() => {
-                println!("Chromium URL opening succeeded");
-                return Ok(());
-              }
-              Ok(output) => {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                println!("Chromium URL opening failed: {stderr}, trying AppleScript");
-              }
-              Err(e) => {
-                println!("Chromium URL opening error: {e}, trying AppleScript");
-              }
-            }
-          }
-
-          // Fallback to AppleScript with more precise targeting
-          let escaped_url = url
-            .replace("\"", "\\\"")
-            .replace("\\", "\\\\")
-            .replace("'", "\\'");
-
-          let script = format!(
-            r#"
-try
-  tell application "System Events"
-    -- Find the exact process by PID
-    set targetProcess to (first application process whose unix id is {pid})
-    
-    -- Verify the process exists
-    if not (exists targetProcess) then
-      error "No process found with PID {pid}"
-    end if
-    
-    -- Get the process name for verification
-    set processName to name of targetProcess
-    
-    -- Bring the process to the front first
-    set frontmost of targetProcess to true
-    delay 1.0
-    
-    -- Check if the process has any visible windows
-    set windowList to windows of targetProcess
-    set hasVisibleWindow to false
-    repeat with w in windowList
-      if visible of w is true then
-        set hasVisibleWindow to true
-        exit repeat
-      end if
-    end repeat
-    
-    if not hasVisibleWindow then
-      -- No visible windows, create a new one
-      tell targetProcess
-        keystroke "n" using command down
-        delay 2.0
-      end tell
-    end if
-    
-    -- Ensure the process is frontmost again
-    set frontmost of targetProcess to true
-    delay 0.5
-    
-    -- Focus on the address bar and open URL
-    tell targetProcess
-      -- Open a new tab
-      keystroke "t" using command down
-      delay 1.5
-      
-      -- Focus address bar (Cmd+L)
-      keystroke "l" using command down
-      delay 0.5
-      
-      -- Type the URL
-      keystroke "{escaped_url}"
-      delay 0.5
-      
-      -- Press Enter to navigate
-      keystroke return
-    end tell
-    
-    return "Successfully opened URL in " & processName & " (PID: {pid})"
-  end tell
-on error errMsg number errNum
-  return "AppleScript failed: " & errMsg & " (Error " & errNum & ")"
-end try
-            "#
-          );
-
-          println!("Executing AppleScript for Chromium-based browser (PID: {pid})...");
-          let output = Command::new("osascript").args(["-e", &script]).output()?;
-
-          if !output.status.success() {
-            let error_msg = String::from_utf8_lossy(&output.stderr);
-            println!("AppleScript failed: {error_msg}");
-            return Err(
-              format!("Failed to open URL in existing Chromium-based browser: {error_msg}").into(),
-            );
-          } else {
-            println!("AppleScript succeeded");
-          }
-        }
-
-        #[cfg(not(target_os = "macos"))]
-        {
-          // For non-macOS platforms, try using the browser's remote opening capability
-          let mut browser_dir = self.get_binaries_dir();
-          browser_dir.push(&updated_profile.browser);
-          browser_dir.push(&updated_profile.version);
-
-          let browser = create_browser(browser_type);
-          let executable_path = browser
-            .get_executable_path(&browser_dir)
-            .map_err(|e| format!("Failed to get executable path: {}", e))?;
-
-          // Try to open in existing instance
-          let output = Command::new(executable_path)
-            .args([
-              &format!("--user-data-dir={}", updated_profile.profile_path),
-              url,
-            ])
-            .output()?;
-
-          if !output.status.success() {
-            return Err(
-              format!(
-                "Failed to open URL in existing Chromium-based browser: {}",
-                String::from_utf8_lossy(&output.stderr)
-              )
-              .into(),
-            );
-          }
-        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+        return Err("Unsupported platform".into());
       }
     }
-
-    Ok(())
   }
 
   pub async fn launch_or_open_url(
@@ -1605,48 +1745,18 @@ end try
       println!("Warning: Failed to stop proxy for PID {pid}: {e}");
     }
 
-    // Kill the process
+    // Kill the process using platform-specific implementation
     #[cfg(target_os = "macos")]
-    {
-      use std::process::Command;
+    macos::kill_browser_process_impl(pid).await?;
 
-      // First try SIGTERM (graceful shutdown)
-      let output = Command::new("kill")
-        .args(["-TERM", &pid.to_string()])
-        .output()
-        .map_err(|e| format!("Failed to execute kill command: {e}"))?;
+    #[cfg(target_os = "windows")]
+    windows::kill_browser_process_impl(pid).await?;
 
-      if !output.status.success() {
-        // If SIGTERM fails, try SIGKILL (force kill)
-        let output = Command::new("kill")
-          .args(["-KILL", &pid.to_string()])
-          .output()?;
+    #[cfg(target_os = "linux")]
+    linux::kill_browser_process_impl(pid).await?;
 
-        if !output.status.success() {
-          return Err(
-            format!(
-              "Failed to kill process {}: {}",
-              pid,
-              String::from_utf8_lossy(&output.stderr)
-            )
-            .into(),
-          );
-        }
-      }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-      // For other platforms, use the sysinfo crate
-      let system = System::new_all();
-      if let Some(process) = system.process(Pid::from(pid as usize)) {
-        if !process.kill() {
-          return Err(format!("Failed to kill process {}", pid).into());
-        }
-      } else {
-        return Err(format!("Process {} not found", pid).into());
-      }
-    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    return Err("Unsupported platform".into());
 
     // Clear the process ID from the profile
     let mut updated_profile = profile.clone();
@@ -1655,7 +1765,6 @@ end try
       .save_process_info(&updated_profile)
       .map_err(|e| format!("Failed to update profile: {e}"))?;
 
-    println!("Successfully killed browser process with PID: {pid}");
     Ok(())
   }
 }
