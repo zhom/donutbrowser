@@ -24,6 +24,7 @@
     "reqwest",
     "rlib",
     "rustc",
+    "SARIF",
     "serde",
     "shadcn",
     "signon",
