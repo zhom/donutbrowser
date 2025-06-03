@@ -13,6 +13,8 @@ on:
     paths-ignore:
       - "src-tauri/**"
       - "README.md"
+      - ".github/workflows/lint-rs.yml"
+      - ".github/workflows/osv.yml"
 
 jobs:
   build:

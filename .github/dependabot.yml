@@ -1,28 +1,70 @@
 version: 2
 updates:
-  # Enable version updates for Node.js dependencies
+  # Frontend dependencies (root package.json)
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "weekly"
+      day: "monday"
+      time: "09:00"
     allow:
       - dependency-type: "all"
     groups:
-      all:
+      frontend-dependencies:
         patterns:
           - "*"
     ignore:
       - dependency-name: "eslint"
         versions: ">= 9"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
 
-  # Enable version updates for rust
+  # Nodecar dependencies
+  - package-ecosystem: "npm"
+    directory: "/nodecar"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    allow:
+      - dependency-type: "all"
+    groups:
+      nodecar-dependencies:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "deps(nodecar)"
+      include: "scope"
+
+  # Rust dependencies
   - package-ecosystem: "cargo"
     directory: "/src-tauri"
     schedule:
       interval: "weekly"
+      day: "monday"
+      time: "09:00"
     allow:
       - dependency-type: "all"
     groups:
-      all:
+      rust-dependencies:
         patterns:
           - "*"
+    commit-message:
+      prefix: "deps(rust)"
+      include: "scope"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "ci"
+      include: "scope"

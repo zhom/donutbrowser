@@ -1,0 +1,51 @@
+name: Pull Request Checks
+
+on:
+  pull_request:
+    branches: ["main"]
+  merge_group:
+    branches: ["main"]
+
+permissions:
+  # Required for OSV scanner to upload SARIF file to security tab
+  security-events: write
+  # Read commit contents
+  contents: read
+
+jobs:
+  lint-js:
+    name: Lint JavaScript/TypeScript
+    uses: ./.github/workflows/lint-js.yml
+    secrets: inherit
+
+  lint-rust:
+    name: Lint Rust
+    uses: ./.github/workflows/lint-rs.yml
+    secrets: inherit
+
+  security-scan:
+    name: Security Vulnerability Scan
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@1f1242919d8a60496dd1874b24b62b2370ed4c78" # v1.7.1
+    with:
+      scan-args: |-
+        -r
+        --skip-git
+        --lockfile=pnpm-lock.yaml
+        --lockfile=nodecar/pnpm-lock.yaml
+        --lockfile=src-tauri/Cargo.lock
+        ./
+
+  pr-status:
+    name: PR Status Check
+    runs-on: ubuntu-latest
+    needs: [lint-js, lint-rust, security-scan]
+    if: always()
+    steps:
+      - name: Check all jobs succeeded
+        run: |
+          if [[ "${{ needs.lint-js.result }}" != "success" || "${{ needs.lint-rust.result }}" != "success" || "${{ needs.security-scan.result }}" != "success" ]]; then
+            echo "One or more checks failed"
+            exit 1
+          fi
+          echo "All checks passed!"

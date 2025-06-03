@@ -12,11 +12,18 @@ on:
   pull_request:
     paths-ignore:
       - "src/**"
+      - "nodecar/**"
       - "package.json"
       - "package-lock.json"
       - "yarn.lock"
       - "pnpm-lock.yaml"
       - "README.md"
+      - ".github/workflows/lint-js.yml"
+      - ".github/workflows/osv.yml"
+      - "next.config.js"
+      - "tailwind.config.js"
+      - "tsconfig.json"
+      - "biome.json"
 
 jobs:
   build:
