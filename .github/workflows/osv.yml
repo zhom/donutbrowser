@@ -44,10 +44,9 @@ on:
       - "nodecar/package-lock.json"
 
 permissions:
-  # Require writing security events to upload SARIF file to security tab
   security-events: write
-  # Read commit contents
   contents: read
+  actions: read
 
 jobs:
   scan-scheduled:

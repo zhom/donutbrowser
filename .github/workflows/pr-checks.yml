@@ -7,10 +7,9 @@ on:
     branches: ["main"]
 
 permissions:
-  # Required for OSV scanner to upload SARIF file to security tab
   security-events: write
-  # Read commit contents
   contents: read
+  actions: read
 
 jobs:
   lint-js:
