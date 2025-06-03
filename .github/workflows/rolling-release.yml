@@ -10,6 +10,23 @@ env:
   TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
 jobs:
+  security-scan:
+    name: Security Vulnerability Scan
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@e69cc6c86b31f1e7e23935bbe7031b50e51082de" # v2.0.2
+    with:
+      scan-args: |-
+        -r
+        --skip-git
+        --lockfile=package-lock.json
+        --lockfile=pnpm-lock.yaml
+        --lockfile=src-tauri/Cargo.lock
+        --lockfile=nodecar/package-lock.json
+        ./
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+
   lint-js:
     name: Lint JavaScript/TypeScript
     uses: ./.github/workflows/lint-js.yml
@@ -21,7 +38,7 @@ jobs:
     secrets: inherit
 
   rolling-release:
-    needs: [lint-js, lint-rust]
+    needs: [security-scan, lint-js, lint-rust]
     permissions:
       contents: write
     strategy:
