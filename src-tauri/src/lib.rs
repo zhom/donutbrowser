@@ -1,7 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_deep_link::DeepLinkExt;
 
 // Store pending URLs that need to be handled when the window is ready
@@ -57,6 +57,51 @@ use app_auto_updater::{
   check_for_app_updates, check_for_app_updates_manual, download_and_install_app_update,
   get_app_version_info,
 };
+
+// Trait to extend WebviewWindow with transparent titlebar functionality
+pub trait WindowExt {
+  #[cfg(target_os = "macos")]
+  fn set_transparent_titlebar(&self, transparent: bool) -> Result<(), String>;
+}
+
+impl<R: Runtime> WindowExt for WebviewWindow<R> {
+  #[cfg(target_os = "macos")]
+  fn set_transparent_titlebar(&self, transparent: bool) -> Result<(), String> {
+    use objc2::rc::Retained;
+    use objc2_app_kit::{NSWindow, NSWindowStyleMask, NSWindowTitleVisibility};
+
+    unsafe {
+      let ns_window: Retained<NSWindow> =
+        Retained::retain(self.ns_window().unwrap().cast()).unwrap();
+
+      if transparent {
+        // Hide the title text
+        ns_window.setTitleVisibility(NSWindowTitleVisibility(2)); // NSWindowTitleHidden
+
+        // Make titlebar transparent
+        ns_window.setTitlebarAppearsTransparent(true);
+
+        // Set full size content view
+        let current_mask = ns_window.styleMask();
+        let new_mask = NSWindowStyleMask(current_mask.0 | (1 << 15)); // NSFullSizeContentViewWindowMask
+        ns_window.setStyleMask(new_mask);
+      } else {
+        // Show the title text
+        ns_window.setTitleVisibility(NSWindowTitleVisibility(0)); // NSWindowTitleVisible
+
+        // Make titlebar opaque
+        ns_window.setTitlebarAppearsTransparent(false);
+
+        // Remove full size content view
+        let current_mask = ns_window.styleMask();
+        let new_mask = NSWindowStyleMask(current_mask.0 & !(1 << 15));
+        ns_window.setStyleMask(new_mask);
+      }
+    }
+
+    Ok(())
+  }
+}
 
 #[tauri::command]
 fn greet() -> String {
@@ -124,6 +169,61 @@ async fn check_and_handle_startup_url(app_handle: tauri::AppHandle) -> Result<bo
   Ok(false)
 }
 
+#[tauri::command]
+async fn set_window_background_color(
+  app_handle: tauri::AppHandle,
+  is_dark_mode: bool,
+) -> Result<(), String> {
+  #[cfg(target_os = "macos")]
+  {
+    if let Some(window) = app_handle.get_webview_window("main") {
+      use objc2::rc::Retained;
+      use objc2_app_kit::{NSColor, NSWindow};
+
+      let ns_window: Retained<NSWindow> =
+        unsafe { Retained::retain(window.ns_window().unwrap().cast()).unwrap() };
+
+      let bg_color = if is_dark_mode {
+        // Dark mode - pure black background
+        unsafe { NSColor::colorWithRed_green_blue_alpha(0.0, 0.0, 0.0, 1.0) }
+      } else {
+        // Light mode - pure white background
+        unsafe { NSColor::colorWithRed_green_blue_alpha(1.0, 1.0, 1.0, 1.0) }
+      };
+
+      // Ensure this runs on the main thread for immediate visual update
+      unsafe {
+        // Set the window background color
+        ns_window.setBackgroundColor(Some(&bg_color));
+
+        // Force immediate visual updates using multiple refresh methods
+        ns_window.invalidateShadow();
+        ns_window.display();
+
+        // Ensure the window content is redrawn
+        if let Some(content_view) = ns_window.contentView() {
+          content_view.setNeedsDisplay(true);
+          content_view.displayIfNeeded();
+        }
+
+        // Trigger a window update
+        ns_window.update();
+      }
+
+      // Also emit an event to the frontend to ensure synchronization
+      let _ = app_handle.emit("window-background-updated", is_dark_mode);
+    }
+  }
+
+  #[cfg(not(target_os = "macos"))]
+  {
+    // For non-macOS platforms, we can't change the native window background
+    let _ = (app_handle, is_dark_mode); // Suppress unused variable warnings
+  }
+
+  Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -132,6 +232,23 @@ pub fn run() {
     .plugin(tauri_plugin_shell::init())
     .plugin(tauri_plugin_deep_link::init())
     .setup(|app| {
+      // Create the main window programmatically
+      let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
+        .title("Donut Browser")
+        .inner_size(900.0, 600.0)
+        .resizable(false)
+        .fullscreen(false);
+
+      let window = win_builder.build().unwrap();
+
+      // Set transparent titlebar for macOS
+      #[cfg(target_os = "macos")]
+      {
+        if let Err(e) = window.set_transparent_titlebar(true) {
+          eprintln!("Failed to set transparent titlebar: {e}");
+        }
+      }
+
       // Set up deep link handler
       let handle = app.handle().clone();
 
@@ -264,6 +381,7 @@ pub fn run() {
       check_for_app_updates_manual,
       download_and_install_app_update,
       get_app_version_info,
+      set_window_background_color,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

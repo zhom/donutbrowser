@@ -394,13 +394,13 @@ export default function Home() {
   );
 
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 gap-8 sm:p-12 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center w-full max-w-3xl">
+    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 gap-8 sm:p-12 font-[family-name:var(--font-geist-sans)]  bg-white dark:bg-black">
+      <main className="flex flex-col row-start-2 gap-8 items-center w-full max-w-3xl">
         <Card className="w-full">
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex justify-between items-center">
               <CardTitle>Profiles</CardTitle>
-              <div className="flex items-center gap-2">
+              <div className="flex gap-2 items-center">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -409,9 +409,9 @@ export default function Home() {
                       onClick={() => {
                         setSettingsDialogOpen(true);
                       }}
-                      className="flex items-center gap-2"
+                      className="flex gap-2 items-center"
                     >
-                      <GoGear className="h-4 w-4" />
+                      <GoGear className="w-4 h-4" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>Settings</TooltipContent>
@@ -423,9 +423,9 @@ export default function Home() {
                       onClick={() => {
                         setCreateProfileDialogOpen(true);
                       }}
-                      className="flex items-center gap-2"
+                      className="flex gap-2 items-center"
                     >
-                      <GoPlus className="h-4 w-4" />
+                      <GoPlus className="w-4 h-4" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>Create a new profile</TooltipContent>

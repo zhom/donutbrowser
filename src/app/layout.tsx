@@ -4,6 +4,7 @@ import "@/styles/globals.css";
 import { CustomThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { WindowDragArea } from "@/components/window-drag-area";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -26,6 +27,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <CustomThemeProvider>
+          <WindowDragArea />
           <TooltipProvider>{children}</TooltipProvider>
           <Toaster />
         </CustomThemeProvider>

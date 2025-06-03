@@ -971,6 +971,8 @@ dependencies = [
  "directories",
  "futures-util",
  "lazy_static",
+ "objc2 0.6.1",
+ "objc2-app-kit",
  "reqwest",
  "serde",
  "serde_json",
