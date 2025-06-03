@@ -20,13 +20,13 @@
   "license": "AGPL-3.0",
   "packageManager": "pnpm@10.6.1",
   "dependencies": {
-    "@types/node": "^22.15.17",
-    "@yao-pkg/pkg": "^6.4.1",
-    "commander": "^13.1.0",
+    "@types/node": "^22.15.29",
+    "@yao-pkg/pkg": "^6.5.1",
+    "commander": "^14.0.0",
     "dotenv": "^16.5.0",
     "get-port": "^7.1.0",
     "nodemon": "^3.1.10",
-    "proxy-chain": "^2.5.8",
+    "proxy-chain": "^2.5.9",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   }
