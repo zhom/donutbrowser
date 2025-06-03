@@ -50,7 +50,7 @@ After having the above dependencies installed, proceed through the following ste
 
    ```bash
    cd nodecar
-   pnpm install --ignore-workspace --frozen-lockfile
+   pnpm install --frozen-lockfile
    cd ..
    ```
 

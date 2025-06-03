@@ -1,6 +1,9 @@
+packages:
+  - "nodecar"
+
 onlyBuiltDependencies:
-  - '@biomejs/biome'
-  - '@tailwindcss/oxide'
+  - "@biomejs/biome"
+  - "@tailwindcss/oxide"
   - esbuild
   - sharp
   - unrs-resolver

@@ -48,8 +48,8 @@ program
             ignoreProxyCertificate: options.ignoreCertificate,
           });
           console.log(JSON.stringify(config));
-        } catch (error: any) {
-          console.error(`Failed to start proxy: ${error.message}`);
+        } catch (error: unknown) {
+          console.error(`Failed to start proxy: ${JSON.stringify(error)}`);
         }
       } else if (action === "stop") {
         if (options.id) {

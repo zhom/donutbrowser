@@ -18,10 +18,9 @@ jobs:
       scan-args: |-
         -r
         --skip-git
-        --lockfile=package-lock.json
         --lockfile=pnpm-lock.yaml
         --lockfile=src-tauri/Cargo.lock
-        --lockfile=nodecar/package-lock.json
+        --lockfile=nodecar/pnpm-lock.yaml
         ./
     permissions:
       security-events: write
@@ -118,7 +117,7 @@ jobs:
       - name: Install nodecar dependencies
         working-directory: ./nodecar
         run: |
-          pnpm install --ignore-workspace --frozen-lockfile
+          pnpm install --frozen-lockfile
 
       - name: Build nodecar sidecar
         shell: bash

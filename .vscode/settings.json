@@ -3,6 +3,7 @@
     "applescript",
     "autoconfig",
     "autologin",
+    "biomejs",
     "cdylib",
     "CFURL",
     "checkin",
@@ -11,6 +12,7 @@
     "donutbrowser",
     "dtolnay",
     "elif",
+    "esbuild",
     "gifs",
     "launchservices",
     "mountpoint",
@@ -39,6 +41,7 @@
     "Torbrowser",
     "turbopack",
     "unlisten",
+    "unrs",
     "wiremock",
     "xattr",
     "zhom"

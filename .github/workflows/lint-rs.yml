@@ -14,9 +14,8 @@ on:
       - "src/**"
       - "nodecar/**"
       - "package.json"
-      - "package-lock.json"
-      - "yarn.lock"
       - "pnpm-lock.yaml"
+      - "yarn.lock"
       - "README.md"
       - ".github/workflows/lint-js.yml"
       - ".github/workflows/osv.yml"
@@ -68,7 +67,7 @@ jobs:
       - name: Install nodecar dependencies
         working-directory: ./nodecar
         run: |
-          pnpm install --ignore-workspace --frozen-lockfile
+          pnpm install --frozen-lockfile
 
       - name: Build nodecar binary
         shell: bash
