@@ -116,6 +116,8 @@ export function showToast(props: ToastProps & { id?: string }) {
         border: "none",
         boxShadow: "none",
         padding: 0,
+        zIndex: 99999,
+        pointerEvents: "auto",
       },
     });
   } else if (props.type === "error") {
@@ -127,6 +129,8 @@ export function showToast(props: ToastProps & { id?: string }) {
         border: "none",
         boxShadow: "none",
         padding: 0,
+        zIndex: 99999,
+        pointerEvents: "auto",
       },
     });
   } else {
@@ -138,6 +142,8 @@ export function showToast(props: ToastProps & { id?: string }) {
         border: "none",
         boxShadow: "none",
         padding: 0,
+        zIndex: 99999,
+        pointerEvents: "auto",
       },
     });
   }

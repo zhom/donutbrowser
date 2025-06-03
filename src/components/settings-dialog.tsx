@@ -139,7 +139,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
           <DialogTitle>Settings</DialogTitle>
         </DialogHeader>
 
-        <div className="grid gap-6 py-4 overflow-y-auto flex-1 min-h-0">
+        <div className="grid overflow-y-auto flex-1 gap-6 py-4 min-h-0">
           {/* Appearance Section */}
           <div className="space-y-4">
             <Label className="text-base font-medium">Appearance</Label>
@@ -172,7 +172,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
 
           {/* Default Browser Section */}
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex justify-between items-center">
               <Label className="text-base font-medium">Default Browser</Label>
               <Badge variant={isDefaultBrowser ? "default" : "secondary"}>
                 {isDefaultBrowser ? "Active" : "Inactive"}

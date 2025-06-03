@@ -232,8 +232,10 @@ export function useUpdateNotifications(
           id: notification.id,
           duration: Number.POSITIVE_INFINITY, // Persistent until user action
           position: "top-right",
-          // Remove transparent styling to fix background issue
-          style: undefined,
+          style: {
+            zIndex: 99999, // Ensure notifications appear above dialogs
+            pointerEvents: "auto", // Ensure notifications remain interactive
+          },
         },
       );
     }

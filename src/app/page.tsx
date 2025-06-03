@@ -48,6 +48,7 @@ export default function Home() {
     useState<BrowserProfile | null>(null);
   const [currentProfileForVersionChange, setCurrentProfileForVersionChange] =
     useState<BrowserProfile | null>(null);
+  const [hasCheckedStartupPrompt, setHasCheckedStartupPrompt] = useState(false);
 
   // Simple profiles loader without updates check (for use as callback)
   const loadProfiles = useCallback(async () => {
@@ -110,6 +111,9 @@ export default function Home() {
   }, [loadProfilesWithUpdateCheck, checkForUpdates]);
 
   const checkStartupPrompt = async () => {
+    // Only check once during app startup to prevent reopening after dismissing notifications
+    if (hasCheckedStartupPrompt) return;
+
     try {
       const shouldShow = await invoke<boolean>(
         "should_show_settings_on_startup",
@@ -117,8 +121,10 @@ export default function Home() {
       if (shouldShow) {
         setSettingsDialogOpen(true);
       }
+      setHasCheckedStartupPrompt(true);
     } catch (error) {
       console.error("Failed to check startup prompt:", error);
+      setHasCheckedStartupPrompt(true);
     }
   };
 

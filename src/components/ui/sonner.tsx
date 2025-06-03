@@ -15,8 +15,15 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--normal-bg": "var(--popover)",
           "--normal-text": "var(--popover-foreground)",
           "--normal-border": "var(--border)",
+          zIndex: 99999,
         } as React.CSSProperties
       }
+      toastOptions={{
+        style: {
+          zIndex: 99999,
+          pointerEvents: "auto",
+        },
+      }}
       {...props}
     />
   );

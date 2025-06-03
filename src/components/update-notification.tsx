@@ -47,17 +47,17 @@ export function UpdateNotificationComponent({
   };
 
   return (
-    <div className="flex flex-col gap-3 p-4 max-w-md bg-background border border-border rounded-lg shadow-lg">
-      <div className="flex items-start justify-between gap-2">
+    <div className="flex flex-col gap-3 p-4 max-w-md rounded-lg border shadow-lg bg-background border-border">
+      <div className="flex gap-2 justify-between items-start">
         <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
+          <div className="flex gap-2 items-center">
             <span className="font-semibold text-foreground">
               {browserDisplayName} Update Available
             </span>
             <Badge
               variant={notification.is_stable_update ? "default" : "secondary"}
             >
-              {notification.is_stable_update ? "Stable" : "Beta"}
+              {notification.is_stable_update ? "Stable" : "Nightly"}
             </Badge>
           </div>
           <div className="text-sm text-muted-foreground">
@@ -71,20 +71,20 @@ export function UpdateNotificationComponent({
           onClick={async () => {
             await onDismiss(notification.id);
           }}
-          className="h-6 w-6 p-0 shrink-0"
+          className="p-0 w-6 h-6 shrink-0"
         >
-          <FaTimes className="h-3 w-3" />
+          <FaTimes className="w-3 h-3" />
         </Button>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex gap-2 items-center">
         <Button
           onClick={handleUpdateClick}
           disabled={isUpdating}
           size="sm"
-          className="flex items-center gap-2"
+          className="flex gap-2 items-center"
         >
-          <FaDownload className="h-3 w-3" />
+          <FaDownload className="w-3 h-3" />
           Update
         </Button>
         <Button

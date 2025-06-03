@@ -123,3 +123,23 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Ensure Sonner toasts appear above all dialogs and remain interactive */
+.toaster,
+[data-sonner-toaster] {
+  z-index: 99999 !important;
+  pointer-events: auto !important;
+}
+
+[data-sonner-toast] {
+  z-index: 99999 !important;
+  pointer-events: auto !important;
+}
+
+/* Ensure toast buttons and interactive elements work */
+[data-sonner-toast] button,
+[data-sonner-toast] [role="button"],
+[data-sonner-toast] input,
+[data-sonner-toast] select {
+  pointer-events: auto !important;
+}

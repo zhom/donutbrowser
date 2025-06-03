@@ -135,6 +135,10 @@ export function useAppUpdateNotifications() {
         id: "app-update",
         duration: Number.POSITIVE_INFINITY, // Persistent until user action
         position: "top-left",
+        style: {
+          zIndex: 99999, // Ensure app updates appear above dialogs
+          pointerEvents: "auto", // Ensure app updates remain interactive
+        },
       },
     );
   }, [
