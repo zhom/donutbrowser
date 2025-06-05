@@ -5,7 +5,7 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-      day: "monday"
+      day: "saturday"
       time: "09:00"
     allow:
       - dependency-type: "all"
@@ -25,7 +25,7 @@ updates:
     directory: "/nodecar"
     schedule:
       interval: "weekly"
-      day: "monday"
+      day: "saturday"
       time: "09:00"
     allow:
       - dependency-type: "all"
@@ -42,7 +42,7 @@ updates:
     directory: "/src-tauri"
     schedule:
       interval: "weekly"
-      day: "monday"
+      day: "saturday"
       time: "09:00"
     allow:
       - dependency-type: "all"
@@ -59,7 +59,7 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-      day: "monday"
+      day: "saturday"
       time: "09:00"
     groups:
       github-actions:
