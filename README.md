@@ -3,23 +3,11 @@
   <h1>Donut Browser</h1>
   <strong>A powerful browser orchestrator that puts you in control of your browsing experience. 🍩</strong>
 </div>
-<br>
 
-<p align="center">
-  <a href="https://github.com/zhom/donutbrowser/releases/latest" target="_blank"><img alt="GitHub release" src="https://img.shields.io/github/v/release/zhom/donutbrowser">
-  </a>
-  <a href="https://github.com/zhom/donutbrowser/issues" target="_blank">
-    <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat" alt="PRs Welcome">
-  </a>
-  <a href="https://github.com/zhom/donutbrowser/blob/main/LICENSE" target="_blank">
-    <img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License">
-  </a>
-  <a href="https://github.com/zhom/donutbrowser/stargazers" target="_blank">
-    <img src="https://img.shields.io/github/stars/zhom/donutbrowser?style=social" alt="GitHub stars">
-  </a>
-</p>
-
-## Donut Browser
+[![GitHub Release](https://img.shields.io/github/v/release/zhom/donutbrowser)](https://github.com/zhom/donutbrowser/releases/latest)
+[![RPs Welcome!](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat)](https://github.com/zhom/donutbrowser/issues)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](https://github.com/zhom/donutbrowser/blob/main/LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/zhom/donutbrowser?style=social)](https://github.com/zhom/donutbrowser/stargazers)
 
 > A free and open source browser orchestrator built with [Tauri](https://v2.tauri.app/).
 
