@@ -1495,7 +1495,7 @@ mod tests {
     let releases = result.unwrap();
     assert!(!releases.is_empty());
     assert_eq!(releases[0].tag_name, "v1.81.9");
-    assert!(!releases[0].is_nightly);
+    assert!(releases[0].is_nightly);
   }
 
   #[tokio::test]

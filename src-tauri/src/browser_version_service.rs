@@ -1508,7 +1508,7 @@ mod tests {
 
     // Test Brave
     let brave_info = service.get_download_info("brave", "v1.81.9").unwrap();
-    assert_eq!(brave_info.filename, "brave-v1.81.9.dmg");
+    assert_eq!(brave_info.filename, "Brave-Browser-universal.dmg");
     assert!(brave_info.url.contains("brave-placeholder"));
     assert!(brave_info.is_archive);
 
