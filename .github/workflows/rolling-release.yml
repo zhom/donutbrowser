@@ -96,6 +96,14 @@ jobs:
             sudo apt-get install -y gcc-aarch64-linux-gnu
           fi
 
+      - name: Setup cross-compilation environment (Ubuntu ARM64 only)
+        if: matrix.platform == 'ubuntu-22.04' && matrix.arch == 'aarch64'
+        run: |
+          echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+          echo "CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++" >> $GITHUB_ENV
+          echo "AR_aarch64_unknown_linux_gnu=aarch64-linux-gnu-ar" >> $GITHUB_ENV
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
