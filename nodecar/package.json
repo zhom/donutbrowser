@@ -11,7 +11,6 @@
     "build": "tsc && pkg ./dist/index.js --targets latest-macos-arm64 --output dist/nodecar && pnpm rename-binary",
     "build:mac-aarch64": "tsc && pkg ./dist/index.js --targets latest-macos-arm64 --output dist/nodecar && pnpm rename-binary",
     "build:mac-x86_64": "tsc && pkg ./dist/index.js --targets latest-macos-x64 --output dist/nodecar && pnpm rename-binary",
-    "build:mac-universal": "pnpm build:mac-aarch64 && pnpm rename-binary && pnpm build:mac-x86_64 && pnpm rename-binary x86_64-apple-darwin",
     "build:linux-x64": "tsc && pkg ./dist/index.js --targets latest-linux-x64 --output dist/nodecar && pnpm rename-binary",
     "build:linux-arm64": "tsc && pkg ./dist/index.js --targets latest-linux-arm64 --output dist/nodecar && pnpm rename-binary",
     "build:win-x64": "tsc && pkg ./dist/index.js --targets latest-win-x64 --output dist/nodecar && pnpm rename-binary",

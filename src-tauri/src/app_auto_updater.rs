@@ -227,45 +227,7 @@ impl AppAutoUpdater {
 
   /// Get the appropriate download URL for the current platform
   fn get_download_url_for_platform(&self, assets: &[AppReleaseAsset]) -> Option<String> {
-    println!("Looking for macOS universal binary assets");
-    for asset in assets {
-      println!("Found asset: {}", asset.name);
-    }
-
-    // Priority 1: Look for universal macOS DMG (preferred)
-    for asset in assets {
-      if asset.name.contains(".dmg")
-        && (asset.name.contains("universal")
-          || asset.name.contains("Universal")
-          || asset.name.contains("_universal.dmg")
-          || asset.name.contains("-universal.dmg")
-          || asset.name.contains("_universal_")
-          || asset.name.contains("-universal-"))
-      {
-        println!("Found universal binary: {}", asset.name);
-        return Some(asset.browser_download_url.clone());
-      }
-    }
-
-    // Priority 2: Look for generic macOS DMG without architecture specification
-    // This would be the case for universal binaries that don't explicitly mention "universal"
-    for asset in assets {
-      if asset.name.contains(".dmg")
-        && (asset.name.to_lowercase().contains("macos")
-          || asset.name.to_lowercase().contains("darwin"))
-        && !asset.name.contains("x64")
-        && !asset.name.contains("x86_64")
-        && !asset.name.contains("x86-64")
-        && !asset.name.contains("aarch64")
-        && !asset.name.contains("arm64")
-        && !asset.name.contains(".app.tar.gz")
-      {
-        println!("Found generic macOS DMG (likely universal): {}", asset.name);
-        return Some(asset.browser_download_url.clone());
-      }
-    }
-
-    // Priority 3: Fallback to current architecture-specific binary for backward compatibility
+    // Priority 1: Get architecture-specific binary for backward compatibility
     let arch = if cfg!(target_arch = "aarch64") {
       "aarch64"
     } else if cfg!(target_arch = "x86_64") {
@@ -313,7 +275,7 @@ impl AppAutoUpdater {
       }
     }
 
-    // Priority 4: Final fallback to any macOS DMG
+    // Priority 2: Fallback to any macOS DMG
     for asset in assets {
       if asset.name.contains(".dmg")
         && (asset.name.to_lowercase().contains("macos")
