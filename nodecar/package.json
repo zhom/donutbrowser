@@ -20,7 +20,7 @@
   "author": "",
   "license": "AGPL-3.0",
   "dependencies": {
-    "@types/node": "^22.15.29",
+    "@types/node": "^22.15.30",
     "@yao-pkg/pkg": "^6.5.1",
     "commander": "^14.0.0",
     "dotenv": "^16.5.0",
