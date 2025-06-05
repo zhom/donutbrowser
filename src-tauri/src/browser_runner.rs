@@ -70,6 +70,14 @@ mod macos {
     }
   }
 
+  pub async fn launch_browser_process(
+    executable_path: &std::path::Path,
+    args: &[String],
+  ) -> Result<std::process::Child, Box<dyn std::error::Error + Send + Sync>> {
+    println!("Launching browser on macOS: {executable_path:?} with args: {args:?}");
+    Ok(Command::new(executable_path).args(args).spawn()?)
+  }
+
   pub async fn open_url_in_existing_browser_firefox_like(
     profile: &BrowserProfile,
     url: &str,
@@ -484,6 +492,17 @@ mod windows {
     false
   }
 
+  pub async fn launch_browser_process(
+    executable_path: &std::path::Path,
+    args: &[String],
+  ) -> Result<std::process::Child, Box<dyn std::error::Error + Send + Sync>> {
+    println!(
+      "Launching browser on Windows: {:?} with args: {:?}",
+      executable_path, args
+    );
+    Ok(Command::new(executable_path).args(args).spawn()?)
+  }
+
   pub async fn open_url_in_existing_browser_firefox_like(
     profile: &BrowserProfile,
     url: &str,
@@ -578,6 +597,126 @@ mod linux {
   ) -> bool {
     // Linux implementation would go here
     false
+  }
+
+  pub async fn launch_browser_process(
+    executable_path: &std::path::Path,
+    args: &[String],
+  ) -> Result<std::process::Child, Box<dyn std::error::Error + Send + Sync>> {
+    println!(
+      "Launching browser on Linux: {:?} with args: {:?}",
+      executable_path, args
+    );
+
+    // Check if the executable exists and is executable
+    if !executable_path.exists() {
+      return Err(format!("Browser executable not found: {:?}", executable_path).into());
+    }
+
+    // Check if we can read the executable to detect architecture issues early
+    if let Err(e) = std::fs::File::open(executable_path) {
+      return Err(format!("Cannot access browser executable: {}", e).into());
+    }
+
+    // Ensure the executable has proper permissions
+    if let Err(e) = std::fs::metadata(executable_path) {
+      return Err(format!("Cannot get executable metadata: {}", e).into());
+    }
+
+    // On Linux, we might need to set LD_LIBRARY_PATH for some browsers
+    let mut cmd = Command::new(executable_path);
+    cmd.args(args);
+
+    // For Firefox-based browsers, ensure library path includes the installation directory
+    if let Some(install_dir) = executable_path.parent() {
+      let mut ld_library_path = Vec::new();
+
+      // Add multiple potential library directories
+      let lib_dirs = [
+        install_dir.join("lib"),
+        install_dir.join("../lib"),    // Parent directory lib
+        install_dir.join("../../lib"), // Grandparent directory lib
+        install_dir.to_path_buf(),     // Installation directory itself
+      ];
+
+      for lib_dir in &lib_dirs {
+        if lib_dir.exists() {
+          ld_library_path.push(lib_dir.to_string_lossy().to_string());
+        }
+      }
+
+      // For Firefox specifically, add common system library paths that might be needed
+      let firefox_lib_paths = [
+        "/usr/lib/firefox",
+        "/usr/lib/x86_64-linux-gnu",
+        "/usr/lib/aarch64-linux-gnu",
+        "/lib/x86_64-linux-gnu",
+        "/lib/aarch64-linux-gnu",
+      ];
+
+      for lib_path in &firefox_lib_paths {
+        let path = std::path::Path::new(lib_path);
+        if path.exists() {
+          ld_library_path.push(lib_path.to_string());
+        }
+      }
+
+      // Preserve existing LD_LIBRARY_PATH
+      if let Ok(existing_path) = std::env::var("LD_LIBRARY_PATH") {
+        ld_library_path.push(existing_path);
+      }
+
+      // Set the combined LD_LIBRARY_PATH
+      if !ld_library_path.is_empty() {
+        cmd.env("LD_LIBRARY_PATH", ld_library_path.join(":"));
+        println!("Set LD_LIBRARY_PATH to: {}", ld_library_path.join(":"));
+      }
+    }
+
+    // Additional Linux-specific environment variables for better compatibility
+    cmd.env(
+      "DISPLAY",
+      std::env::var("DISPLAY").unwrap_or(":0".to_string()),
+    );
+
+    // Set MOZ_ENABLE_WAYLAND for better Wayland support
+    if std::env::var("WAYLAND_DISPLAY").is_ok() {
+      cmd.env("MOZ_ENABLE_WAYLAND", "1");
+    }
+
+    // Disable GPU acceleration if running in headless environments
+    if std::env::var("DISPLAY").is_err() || std::env::var("WAYLAND_DISPLAY").is_err() {
+      println!("No display detected, browser may fail to start");
+    }
+
+    // Attempt to spawn with better error handling for architecture issues
+    match cmd.spawn() {
+      Ok(child) => Ok(child),
+      Err(e) => {
+        // Detect architecture mismatch errors
+        if e.kind() == std::io::ErrorKind::Other {
+          let error_msg = e.to_string();
+          if error_msg.contains("Exec format error") {
+            return Err(format!(
+              "Architecture mismatch: The browser executable is not compatible with your system architecture ({}). \
+              This typically happens when trying to run x86_64 binaries on ARM64 systems. \
+              Please use a browser that supports your architecture, such as Zen Browser or Brave. \
+              Executable: {:?}",
+              std::env::consts::ARCH,
+              executable_path
+            ).into());
+          } else if error_msg.contains("No such file or directory") {
+            return Err(format!(
+              "Executable or required library not found. This might be due to missing dependencies or incorrect executable path. \
+              Try installing missing libraries or verify the browser installation. \
+              Executable: {:?}, Error: {}",
+              executable_path, error_msg
+            ).into());
+          }
+        }
+        Err(format!("Failed to launch browser: {}", e).into())
+      }
+    }
   }
 
   pub async fn open_url_in_existing_browser_firefox_like(
@@ -854,7 +993,36 @@ impl BrowserRunner {
     // Save the updated profile
     self.save_profile(&profile)?;
 
+    // Check if auto-delete of unused binaries is enabled
+    let settings_manager = crate::settings_manager::SettingsManager::new();
+    if let Ok(settings) = settings_manager.load_settings() {
+      if settings.auto_delete_unused_binaries {
+        // Perform cleanup in the background
+        let _ = self.cleanup_unused_binaries_internal();
+      }
+    }
+
     Ok(profile)
+  }
+
+  /// Internal method to cleanup unused binaries (used by auto-cleanup)
+  fn cleanup_unused_binaries_internal(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    // Load current profiles
+    let profiles = self.list_profiles()?;
+
+    // Load registry
+    let mut registry = crate::downloaded_browsers::DownloadedBrowsersRegistry::load()?;
+
+    // Get active browser versions
+    let active_versions = registry.get_active_browser_versions(&profiles);
+
+    // Cleanup unused binaries
+    let cleaned_up = registry.cleanup_unused_binaries(&active_versions)?;
+
+    // Save updated registry
+    registry.save()?;
+
+    Ok(cleaned_up)
   }
 
   fn get_common_firefox_preferences(&self) -> Vec<String> {
@@ -1018,7 +1186,7 @@ impl BrowserRunner {
       .map_err(|_| format!("Invalid browser type: {}", profile.browser))?;
     let browser = create_browser(browser_type.clone());
 
-    // Get executable path
+    // Get executable path - path structure: binaries/<browser>/<version>/
     let mut browser_dir = self.get_binaries_dir();
     browser_dir.push(&profile.browser);
     browser_dir.push(&profile.version);
@@ -1027,13 +1195,40 @@ impl BrowserRunner {
       .get_executable_path(&browser_dir)
       .expect("Failed to get executable path");
 
+    // Prepare the executable (set permissions, etc.)
+    if let Err(e) = browser.prepare_executable(&executable_path) {
+      println!("Warning: Failed to prepare executable: {e}");
+      // Continue anyway, the error might not be critical
+    }
+
     // Get launch arguments
     let browser_args = browser
       .create_launch_args(&profile.profile_path, profile.proxy.as_ref(), url)
       .expect("Failed to create launch arguments");
 
-    // Launch browser
-    let child = Command::new(executable_path).args(&browser_args).spawn()?;
+    // Launch browser using platform-specific method
+    let child = {
+      #[cfg(target_os = "macos")]
+      {
+        macos::launch_browser_process(&executable_path, &browser_args).await?
+      }
+
+      #[cfg(target_os = "windows")]
+      {
+        windows::launch_browser_process(&executable_path, &browser_args).await?
+      }
+
+      #[cfg(target_os = "linux")]
+      {
+        linux::launch_browser_process(&executable_path, &browser_args).await?
+      }
+
+      #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+      {
+        return Err("Unsupported platform for browser launching".into());
+      }
+    };
+
     let launcher_pid = child.id();
 
     println!(
@@ -1159,7 +1354,7 @@ impl BrowserRunner {
     let browser_type = BrowserType::from_str(&updated_profile.browser)
       .map_err(|_| format!("Invalid browser type: {}", updated_profile.browser))?;
 
-    // Get browser directory for all platforms
+    // Get browser directory for all platforms - path structure: binaries/<browser>/<version>/
     let mut browser_dir = self.get_binaries_dir();
     browser_dir.push(&updated_profile.browser);
     browser_dir.push(&updated_profile.version);
@@ -1385,7 +1580,7 @@ impl BrowserRunner {
     profile.name = new_name.to_string();
 
     // Create new paths
-    let _new_profile_file = profiles_dir.join(format!(
+    let _ = profiles_dir.join(format!(
       "{}.json",
       new_name.to_lowercase().replace(" ", "_")
     ));
@@ -1408,44 +1603,6 @@ impl BrowserRunner {
     }
 
     Ok(profile)
-  }
-
-  pub fn get_saved_mullvad_releases(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    let mut data_path = self.base_dirs.data_local_dir().to_path_buf();
-    data_path.push(if cfg!(debug_assertions) {
-      "DonutBrowserDev"
-    } else {
-      "DonutBrowser"
-    });
-    data_path.push("data");
-    let releases_file = data_path.join("mullvad_releases.json");
-
-    if !releases_file.exists() {
-      return Ok(vec![]);
-    }
-
-    let mut versions = Vec::new();
-    let mut browser_dir = self.base_dirs.data_local_dir().to_path_buf();
-    browser_dir.push(if cfg!(debug_assertions) {
-      "DonutBrowserDev"
-    } else {
-      "DonutBrowser"
-    });
-    browser_dir.push("binaries");
-    browser_dir.push("mullvad-browser");
-    for entry in fs::read_dir(browser_dir)? {
-      let entry = entry?;
-      if entry.path().is_dir() {
-        if let Some(version_str) = entry.file_name().to_str() {
-          versions.push(version_str.to_string());
-        }
-      }
-    }
-
-    // Sort versions in descending order (newest first)
-    versions.sort_by(|a, b| b.cmp(a));
-
-    Ok(versions)
   }
 
   fn save_process_info(&self, profile: &BrowserProfile) -> Result<(), Box<dyn std::error::Error>> {
@@ -1475,6 +1632,15 @@ impl BrowserRunner {
     // Delete profile JSON file
     if profile_file.exists() {
       fs::remove_file(profile_file)?
+    }
+
+    // Check if auto-delete of unused binaries is enabled
+    let settings_manager = crate::settings_manager::SettingsManager::new();
+    if let Ok(settings) = settings_manager.load_settings() {
+      if settings.auto_delete_unused_binaries {
+        // Perform cleanup in the background after profile deletion
+        let _ = self.cleanup_unused_binaries_internal();
+      }
     }
 
     Ok(())
@@ -1802,7 +1968,16 @@ pub async fn launch_browser_profile(
   let updated_profile = browser_runner
     .launch_or_open_url(app_handle.clone(), &profile, url)
     .await
-    .expect("Failed to launch browser or open URL");
+    .map_err(|e| {
+      // Check if this is an architecture compatibility issue
+      if let Some(io_error) = e.downcast_ref::<std::io::Error>() {
+        if io_error.kind() == std::io::ErrorKind::Other
+           && io_error.to_string().contains("Exec format error") {
+          return format!("Failed to launch browser: Executable format error. This browser version is not compatible with your system architecture ({}). Please try a different browser or version that supports your platform.", std::env::consts::ARCH);
+        }
+      }
+      format!("Failed to launch browser or open URL: {e}")
+    })?;
 
   // If the profile has proxy settings, start a proxy for it
   if let Some(proxy) = &profile.proxy {
@@ -1837,15 +2012,6 @@ pub async fn launch_browser_profile(
   }
 
   Ok(updated_profile)
-}
-
-// Add Tauri command to get saved releases
-#[tauri::command]
-pub fn get_saved_mullvad_releases() -> Result<Vec<String>, String> {
-  let browser_runner = BrowserRunner::new();
-  browser_runner
-    .get_saved_mullvad_releases()
-    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1903,27 +2069,17 @@ pub fn delete_profile(_app_handle: tauri::AppHandle, profile_name: String) -> Re
 }
 
 #[tauri::command]
-pub fn get_supported_browsers() -> Result<Vec<&'static str>, String> {
-  Ok(vec![
-    BrowserType::MullvadBrowser.as_str(),
-    BrowserType::Firefox.as_str(),
-    BrowserType::FirefoxDeveloper.as_str(),
-    BrowserType::Chromium.as_str(),
-    BrowserType::Brave.as_str(),
-    BrowserType::Zen.as_str(),
-    BrowserType::TorBrowser.as_str(),
-  ])
+pub fn get_supported_browsers() -> Result<Vec<String>, String> {
+  let service = BrowserVersionService::new();
+  Ok(service.get_supported_browsers())
 }
 
 #[tauri::command]
-pub async fn fetch_browser_versions_detailed(
-  browser_str: String,
-) -> Result<Vec<BrowserVersionInfo>, String> {
+pub fn is_browser_supported_on_platform(browser_str: String) -> Result<bool, String> {
   let service = BrowserVersionService::new();
   service
-    .fetch_browser_versions_detailed(&browser_str, false)
-    .await
-    .map_err(|e| format!("Failed to fetch detailed browser versions: {e}"))
+    .is_browser_supported(&browser_str)
+    .map_err(|e| format!("Failed to check browser support: {e}"))
 }
 
 #[tauri::command]
@@ -1997,20 +2153,6 @@ pub async fn fetch_browser_versions_with_count_cached_first(
 }
 
 #[tauri::command]
-pub fn get_cached_browser_versions_detailed(
-  browser_str: String,
-) -> Result<Option<Vec<BrowserVersionInfo>>, String> {
-  let service = BrowserVersionService::new();
-  Ok(service.get_cached_browser_versions_detailed(&browser_str))
-}
-
-#[tauri::command]
-pub fn should_update_browser_cache(browser_str: String) -> Result<bool, String> {
-  let service = BrowserVersionService::new();
-  Ok(service.should_update_cache(&browser_str))
-}
-
-#[tauri::command]
 pub async fn download_browser(
   app_handle: tauri::AppHandle,
   browser_str: String,
@@ -2029,8 +2171,22 @@ pub async fn download_browser(
     return Ok(version);
   }
 
-  // Use the centralized browser version service for download info
+  // Check if browser is supported on current platform before attempting download
   let version_service = BrowserVersionService::new();
+
+  if !version_service
+    .is_browser_supported(&browser_str)
+    .unwrap_or(false)
+  {
+    return Err(format!(
+      "Browser '{}' is not supported on your platform ({} {}). Supported browsers: {}",
+      browser_str,
+      std::env::consts::OS,
+      std::env::consts::ARCH,
+      version_service.get_supported_browsers().join(", ")
+    ));
+  }
+
   let download_info = version_service
     .get_download_info(&browser_str, &version)
     .map_err(|e| format!("Failed to get download info: {e}"))?;
@@ -2204,15 +2360,6 @@ pub fn create_browser_profile_new(
 }
 
 #[tauri::command]
-pub async fn fetch_browser_versions(browser_str: String) -> Result<Vec<String>, String> {
-  let service = BrowserVersionService::new();
-  service
-    .fetch_browser_versions(&browser_str, false)
-    .await
-    .map_err(|e| format!("Failed to fetch browser versions: {e}"))
-}
-
-#[tauri::command]
 pub async fn fetch_browser_versions_with_count(
   browser_str: String,
 ) -> Result<BrowserVersionsResult, String> {
@@ -2228,6 +2375,14 @@ pub fn get_downloaded_browser_versions(browser_str: String) -> Result<Vec<String
   let registry = DownloadedBrowsersRegistry::load()
     .map_err(|e| format!("Failed to load browser registry: {e}"))?;
   Ok(registry.get_downloaded_versions(&browser_str))
+}
+
+#[tauri::command]
+pub fn cleanup_unused_binaries() -> Result<Vec<String>, String> {
+  let browser_runner = BrowserRunner::new();
+  browser_runner
+    .cleanup_unused_binaries_internal()
+    .map_err(|e| format!("Failed to cleanup unused binaries: {e}"))
 }
 
 #[cfg(test)]
@@ -2367,7 +2522,7 @@ mod tests {
     let (runner, _temp_dir) = create_test_browser_runner();
 
     // Create profile
-    let _profile = runner
+    let _ = runner
       .create_profile("Original Name", "firefox", "139.0", None)
       .unwrap();
 
@@ -2387,7 +2542,7 @@ mod tests {
     let (runner, _temp_dir) = create_test_browser_runner();
 
     // Create profile
-    let _profile = runner
+    let _ = runner
       .create_profile("To Delete", "firefox", "139.0", None)
       .unwrap();
 
@@ -2421,13 +2576,13 @@ mod tests {
     let (runner, _temp_dir) = create_test_browser_runner();
 
     // Create multiple profiles
-    let _profile1 = runner
+    let _ = runner
       .create_profile("Profile 1", "firefox", "139.0", None)
       .unwrap();
-    let _profile2 = runner
+    let _ = runner
       .create_profile("Profile 2", "chromium", "1465660", None)
       .unwrap();
-    let _profile3 = runner
+    let _ = runner
       .create_profile("Profile 3", "brave", "v1.81.9", None)
       .unwrap();
 
@@ -2446,10 +2601,10 @@ mod tests {
     let (runner, _temp_dir) = create_test_browser_runner();
 
     // Test that we can't rename to an existing profile name
-    let _profile1 = runner
+    let _ = runner
       .create_profile("Profile 1", "firefox", "139.0", None)
       .unwrap();
-    let _profile2 = runner
+    let _ = runner
       .create_profile("Profile 2", "firefox", "139.0", None)
       .unwrap();
 

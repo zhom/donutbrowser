@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "biomejs.biome",
+    "streetsidesoftware.code-spell-checker",
+    "usernamehw.errorlens",
+    "heybourn.headwind",
+    "yoavbls.pretty-ts-errors",
+    "rust-lang.rust-analyzer",
+    "bradlc.vscode-tailwindcss"
+  ]
+}

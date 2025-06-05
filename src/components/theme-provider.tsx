@@ -9,6 +9,10 @@ interface AppSettings {
   theme: string;
 }
 
+interface SystemTheme {
+  theme: string;
+}
+
 interface CustomThemeProviderProps {
   children: React.ReactNode;
 }
@@ -22,6 +26,25 @@ function getSystemTheme(): string {
     return isDarkMode ? "dark" : "light";
   }
   return "light";
+}
+
+// Function to get native system theme (fallback to CSS media query)
+async function getNativeSystemTheme(): Promise<string> {
+  try {
+    const systemTheme = await invoke<SystemTheme>("get_system_theme");
+    if (systemTheme.theme === "dark" || systemTheme.theme === "light") {
+      return systemTheme.theme;
+    }
+    // Fallback to CSS media query if native detection returns "unknown"
+    return getSystemTheme();
+  } catch (error) {
+    console.warn(
+      "Failed to get native system theme, falling back to CSS media query:",
+      error,
+    );
+    // Fallback to CSS media query
+    return getSystemTheme();
+  }
 }
 
 export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
@@ -41,7 +64,7 @@ export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
       } catch (error) {
         console.error("Failed to load theme settings:", error);
         // For first-time users, detect system preference and apply it
-        const systemTheme = getSystemTheme();
+        const systemTheme = await getNativeSystemTheme();
         console.log(
           "First-time user detected, applying system theme:",
           systemTheme,
@@ -69,6 +92,50 @@ export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
     void loadTheme();
   }, []);
 
+  // Monitor system theme changes when using "system" theme
+  useEffect(() => {
+    if (!mounted || defaultTheme !== "system") {
+      return;
+    }
+
+    const checkSystemTheme = async () => {
+      try {
+        const currentSystemTheme = await getNativeSystemTheme();
+        // Force re-evaluation by toggling the theme
+        const html = document.documentElement;
+        const currentClass = html.className;
+
+        // Apply the system theme class
+        if (currentSystemTheme === "dark") {
+          if (!html.classList.contains("dark")) {
+            html.classList.add("dark");
+            html.classList.remove("light");
+          }
+        } else {
+          if (
+            !html.classList.contains("light") ||
+            html.classList.contains("dark")
+          ) {
+            html.classList.add("light");
+            html.classList.remove("dark");
+          }
+        }
+      } catch (error) {
+        console.warn("Failed to check system theme:", error);
+      }
+    };
+
+    // Check system theme every 2 seconds when using system theme
+    const intervalId = setInterval(() => void checkSystemTheme(), 2000);
+
+    // Initial check
+    void checkSystemTheme();
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [mounted, defaultTheme]);
+
   if (isLoading) {
     // Use a consistent loading screen that doesn't depend on system theme during SSR
     // This prevents hydration mismatch by ensuring server and client render the same initially
@@ -77,6 +144,7 @@ export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
 
     // Only apply system theme detection after component is mounted (client-side only)
     if (mounted) {
+      // Use CSS media query for loading screen since async call would complicate this
       const systemTheme = getSystemTheme();
       loadingBgColor = systemTheme === "dark" ? "bg-gray-900" : "bg-white";
       spinnerColor =
@@ -85,10 +153,10 @@ export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
 
     return (
       <div
-        className={`fixed inset-0 ${loadingBgColor} flex items-center justify-center`}
+        className={`flex fixed inset-0 justify-center items-center ${loadingBgColor}`}
       >
         <div
-          className={`animate-spin rounded-full h-8 w-8 border-2 ${spinnerColor} border-t-transparent`}
+          className={`w-8 h-8 rounded-full border-2 animate-spin ${spinnerColor} border-t-transparent`}
         />
       </div>
     );

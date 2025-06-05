@@ -30,7 +30,7 @@ interface GithubRelease {
     hash?: string;
   }>;
   published_at: string;
-  is_alpha: boolean;
+  is_nightly: boolean;
 }
 
 interface VersionSelectorProps {
@@ -75,7 +75,7 @@ export function VersionSelector({
             className="justify-between w-full"
           >
             {selectedVersion ?? placeholder}
-            <LuChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            <LuChevronsUpDown className="ml-2 w-4 h-4 opacity-50 shrink-0" />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[300px] p-0">
@@ -114,11 +114,11 @@ export function VersionSelector({
                               : "opacity-0",
                           )}
                         />
-                        <div className="flex items-center gap-2">
+                        <div className="flex gap-2 items-center">
                           <span>{version.tag_name}</span>
-                          {version.is_alpha && (
+                          {version.is_nightly && (
                             <Badge variant="secondary" className="text-xs">
-                              Alpha
+                              Nightly
                             </Badge>
                           )}
                           {isDownloaded && (
@@ -147,7 +147,7 @@ export function VersionSelector({
           variant="outline"
           className="w-full"
         >
-          <LuDownload className="mr-2 h-4 w-4" />
+          <LuDownload className="mr-2 w-4 h-4" />
           {isDownloading ? "Downloading..." : "Download Browser"}
         </LoadingButton>
       )}

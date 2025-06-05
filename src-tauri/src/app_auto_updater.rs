@@ -156,7 +156,7 @@ impl AppAutoUpdater {
     let response = self
       .client
       .get(url)
-      .header("User-Agent", "donutbrowser")
+      .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
       .send()
       .await?;
 
@@ -227,6 +227,45 @@ impl AppAutoUpdater {
 
   /// Get the appropriate download URL for the current platform
   fn get_download_url_for_platform(&self, assets: &[AppReleaseAsset]) -> Option<String> {
+    println!("Looking for macOS universal binary assets");
+    for asset in assets {
+      println!("Found asset: {}", asset.name);
+    }
+
+    // Priority 1: Look for universal macOS DMG (preferred)
+    for asset in assets {
+      if asset.name.contains(".dmg")
+        && (asset.name.contains("universal")
+          || asset.name.contains("Universal")
+          || asset.name.contains("_universal.dmg")
+          || asset.name.contains("-universal.dmg")
+          || asset.name.contains("_universal_")
+          || asset.name.contains("-universal-"))
+      {
+        println!("Found universal binary: {}", asset.name);
+        return Some(asset.browser_download_url.clone());
+      }
+    }
+
+    // Priority 2: Look for generic macOS DMG without architecture specification
+    // This would be the case for universal binaries that don't explicitly mention "universal"
+    for asset in assets {
+      if asset.name.contains(".dmg")
+        && (asset.name.to_lowercase().contains("macos")
+          || asset.name.to_lowercase().contains("darwin"))
+        && !asset.name.contains("x64")
+        && !asset.name.contains("x86_64")
+        && !asset.name.contains("x86-64")
+        && !asset.name.contains("aarch64")
+        && !asset.name.contains("arm64")
+        && !asset.name.contains(".app.tar.gz")
+      {
+        println!("Found generic macOS DMG (likely universal): {}", asset.name);
+        return Some(asset.browser_download_url.clone());
+      }
+    }
+
+    // Priority 3: Fallback to current architecture-specific binary for backward compatibility
     let arch = if cfg!(target_arch = "aarch64") {
       "aarch64"
     } else if cfg!(target_arch = "x86_64") {
@@ -235,12 +274,9 @@ impl AppAutoUpdater {
       "unknown"
     };
 
-    println!("Looking for assets with architecture: {arch}");
-    for asset in assets {
-      println!("Found asset: {}", asset.name);
-    }
+    println!("Falling back to architecture-specific search for: {arch}");
 
-    // Priority 1: Look for exact architecture match in DMG
+    // Look for exact architecture match in DMG
     for asset in assets {
       if asset.name.contains(".dmg")
         && (asset.name.contains(&format!("_{arch}.dmg"))
@@ -253,7 +289,7 @@ impl AppAutoUpdater {
       }
     }
 
-    // Priority 2: Look for x86_64 variations if we're looking for x64
+    // Look for x86_64 variations if we're looking for x64
     if arch == "x64" {
       for asset in assets {
         if asset.name.contains(".dmg")
@@ -265,7 +301,7 @@ impl AppAutoUpdater {
       }
     }
 
-    // Priority 3: Look for arm64 variations if we're looking for aarch64
+    // Look for arm64 variations if we're looking for aarch64
     if arch == "aarch64" {
       for asset in assets {
         if asset.name.contains(".dmg")
@@ -277,7 +313,7 @@ impl AppAutoUpdater {
       }
     }
 
-    // Priority 4: Fallback to any macOS DMG
+    // Priority 4: Final fallback to any macOS DMG
     for asset in assets {
       if asset.name.contains(".dmg")
         && (asset.name.to_lowercase().contains("macos")
@@ -356,7 +392,7 @@ impl AppAutoUpdater {
     let response = self
       .client
       .get(download_url)
-      .header("User-Agent", "donutbrowser")
+      .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
       .send()
       .await?;
 
@@ -390,7 +426,16 @@ impl AppAutoUpdater {
       .unwrap_or("");
 
     match extension {
-      "dmg" => extractor.extract_dmg(archive_path, dest_dir).await,
+      "dmg" => {
+        #[cfg(target_os = "macos")]
+        {
+          extractor.extract_dmg(archive_path, dest_dir).await
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+          Err("DMG extraction is only supported on macOS".into())
+        }
+      }
       "zip" => extractor.extract_zip(archive_path, dest_dir).await,
       _ => Err(format!("Unsupported archive format: {extension}").into()),
     }
@@ -536,14 +581,6 @@ pub async fn download_and_install_app_update(
 }
 
 #[tauri::command]
-pub fn get_app_version_info() -> Result<(String, bool), String> {
-  Ok((
-    AppAutoUpdater::get_current_version(),
-    AppAutoUpdater::is_nightly_build(),
-  ))
-}
-
-#[tauri::command]
 pub async fn check_for_app_updates_manual() -> Result<Option<AppUpdateInfo>, String> {
   println!("Manual app update check triggered");
   let updater = AppAutoUpdater::new();
@@ -651,14 +688,50 @@ mod tests {
         browser_download_url: "https://example.com/aarch64.dmg".to_string(),
         size: 12345,
       },
+      AppReleaseAsset {
+        name: "Donut.Browser_0.1.0_universal.dmg".to_string(),
+        browser_download_url: "https://example.com/universal.dmg".to_string(),
+        size: 12345,
+      },
     ];
 
     let url = updater.get_download_url_for_platform(&assets);
     assert!(url.is_some());
 
-    // The exact URL depends on the target architecture
+    // Should prefer universal binary over architecture-specific ones
     let url = url.unwrap();
-    assert!(url.contains(".dmg"));
+    assert_eq!(url, "https://example.com/universal.dmg");
+
+    // Test with generic macOS DMG (no architecture specified)
+    let generic_assets = vec![AppReleaseAsset {
+      name: "Donut.Browser_0.1.0_macos.dmg".to_string(),
+      browser_download_url: "https://example.com/macos.dmg".to_string(),
+      size: 12345,
+    }];
+
+    let generic_url = updater.get_download_url_for_platform(&generic_assets);
+    assert!(generic_url.is_some());
+    assert_eq!(generic_url.unwrap(), "https://example.com/macos.dmg");
+
+    // Test fallback to architecture-specific when no universal is available
+    let arch_specific_assets = vec![
+      AppReleaseAsset {
+        name: "Donut.Browser_0.1.0_x64.dmg".to_string(),
+        browser_download_url: "https://example.com/x64.dmg".to_string(),
+        size: 12345,
+      },
+      AppReleaseAsset {
+        name: "Donut.Browser_0.1.0_aarch64.dmg".to_string(),
+        browser_download_url: "https://example.com/aarch64.dmg".to_string(),
+        size: 12345,
+      },
+    ];
+
+    let arch_url = updater.get_download_url_for_platform(&arch_specific_assets);
+    assert!(arch_url.is_some());
+    // The exact URL depends on the target architecture, but should be one of the available ones
+    let arch_url = arch_url.unwrap();
+    assert!(arch_url.contains(".dmg"));
   }
 
   #[test]

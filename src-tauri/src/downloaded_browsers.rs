@@ -175,6 +175,48 @@ impl DownloadedBrowsersRegistry {
     }
     Ok(())
   }
+
+  /// Find and remove unused browser binaries that are not referenced by any active profiles
+  pub fn cleanup_unused_binaries(
+    &mut self,
+    active_profiles: &[(String, String)], // (browser, version) pairs
+  ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    let active_set: std::collections::HashSet<(String, String)> =
+      active_profiles.iter().cloned().collect();
+    let mut cleaned_up = Vec::new();
+
+    // Collect all downloaded browsers that are not in active profiles
+    let mut to_remove = Vec::new();
+    for (browser, versions) in &self.browsers {
+      for (version, info) in versions {
+        if info.verified && !active_set.contains(&(browser.clone(), version.clone())) {
+          to_remove.push((browser.clone(), version.clone()));
+        }
+      }
+    }
+
+    // Remove unused binaries
+    for (browser, version) in to_remove {
+      if let Err(e) = self.cleanup_failed_download(&browser, &version) {
+        eprintln!("Failed to cleanup unused binary {browser}:{version}: {e}");
+      } else {
+        cleaned_up.push(format!("{browser} {version}"));
+      }
+    }
+
+    Ok(cleaned_up)
+  }
+
+  /// Get all browsers and versions referenced by active profiles
+  pub fn get_active_browser_versions(
+    &self,
+    profiles: &[crate::browser_runner::BrowserProfile],
+  ) -> Vec<(String, String)> {
+    profiles
+      .iter()
+      .map(|profile| (profile.browser.clone(), profile.version.clone()))
+      .collect()
+  }
 }
 
 #[cfg(test)]

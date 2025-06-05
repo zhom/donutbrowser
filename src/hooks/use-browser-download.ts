@@ -19,7 +19,7 @@ interface GithubRelease {
     hash?: string;
   }>;
   published_at: string;
-  is_alpha: boolean;
+  is_nightly: boolean;
 }
 
 interface BrowserVersionInfo {
@@ -231,7 +231,7 @@ export function useBrowserDownload() {
           tag_name: versionInfo.version,
           assets: [],
           published_at: versionInfo.date,
-          is_alpha: versionInfo.is_prerelease,
+          is_nightly: versionInfo.is_prerelease,
         }),
       );
 
@@ -272,7 +272,7 @@ export function useBrowserDownload() {
           tag_name: versionInfo.version,
           assets: [],
           published_at: versionInfo.date,
-          is_alpha: versionInfo.is_prerelease,
+          is_nightly: versionInfo.is_prerelease,
         }),
       );
 
@@ -325,6 +325,22 @@ export function useBrowserDownload() {
       setIsDownloading(true);
 
       try {
+        // Check browser compatibility before attempting download
+        const isSupported = await invoke<boolean>(
+          "is_browser_supported_on_platform",
+          { browserStr },
+        );
+        if (!isSupported) {
+          const supportedBrowsers = await invoke<string[]>(
+            "get_supported_browsers",
+          );
+          throw new Error(
+            `${browserName} is not supported on your platform. Supported browsers: ${supportedBrowsers
+              .map(getBrowserDisplayName)
+              .join(", ")}`,
+          );
+        }
+
         await invoke("download_browser", { browserStr, version });
         await loadDownloadedVersions(browserStr);
       } catch (error) {

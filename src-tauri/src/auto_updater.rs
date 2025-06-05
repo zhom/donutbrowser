@@ -112,7 +112,7 @@ impl AutoUpdater {
     available_versions: &[BrowserVersionInfo],
   ) -> Result<Option<UpdateNotification>, Box<dyn std::error::Error + Send + Sync>> {
     let current_version = &profile.version;
-    let is_current_stable = !self.is_alpha_version(current_version);
+    let is_current_stable = !self.is_nightly_version(current_version);
 
     // Find the best available update
     let best_update = available_versions
@@ -218,40 +218,6 @@ impl AutoUpdater {
     Ok(state.auto_update_downloads.contains(&download_key))
   }
 
-  /// Start browser update process
-  pub async fn start_browser_update(
-    &self,
-    browser: &str,
-    new_version: &str,
-  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Add browser to disabled list to prevent conflicts during update
-    let mut state = self.load_auto_update_state()?;
-    state.disabled_browsers.insert(browser.to_string());
-
-    // Mark this download as auto-update for toast suppression
-    let download_key = format!("{browser}-{new_version}");
-    state.auto_update_downloads.insert(download_key);
-
-    self.save_auto_update_state(&state)?;
-
-    // The actual download will be triggered by the frontend
-    // This function now just marks the browser as updating to prevent conflicts
-    Ok(())
-  }
-
-  /// Complete browser update process
-  pub async fn complete_browser_update(
-    &self,
-    browser: &str,
-  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Remove browser from disabled list
-    let mut state = self.load_auto_update_state()?;
-    state.disabled_browsers.remove(browser);
-    self.save_auto_update_state(&state)?;
-
-    Ok(())
-  }
-
   /// Automatically update all affected profile versions after browser download
   pub async fn auto_update_profile_versions(
     &self,
@@ -312,7 +278,49 @@ impl AutoUpdater {
     state.auto_update_downloads.remove(&download_key);
     self.save_auto_update_state(&state)?;
 
+    // Check if auto-delete of unused binaries is enabled and perform cleanup
+    let settings = self
+      .settings_manager
+      .load_settings()
+      .map_err(|e| format!("Failed to load settings: {e}"))?;
+    if settings.auto_delete_unused_binaries {
+      // Perform cleanup in the background - don't fail the update if cleanup fails
+      if let Err(e) = self.cleanup_unused_binaries_internal() {
+        eprintln!("Warning: Failed to cleanup unused binaries after auto-update: {e}");
+      }
+    }
+
     Ok(updated_profiles)
+  }
+
+  /// Internal method to cleanup unused binaries (used by auto-cleanup)
+  fn cleanup_unused_binaries_internal(
+    &self,
+  ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    // Load current profiles
+    let profiles = self
+      .browser_runner
+      .list_profiles()
+      .map_err(|e| format!("Failed to load profiles: {e}"))?;
+
+    // Load registry
+    let mut registry = crate::downloaded_browsers::DownloadedBrowsersRegistry::load()
+      .map_err(|e| format!("Failed to load browser registry: {e}"))?;
+
+    // Get active browser versions
+    let active_versions = registry.get_active_browser_versions(&profiles);
+
+    // Cleanup unused binaries
+    let cleaned_up = registry
+      .cleanup_unused_binaries(&active_versions)
+      .map_err(|e| format!("Failed to cleanup unused binaries: {e}"))?;
+
+    // Save updated registry
+    registry
+      .save()
+      .map_err(|e| format!("Failed to save registry: {e}"))?;
+
+    Ok(cleaned_up)
   }
 
   /// Check if browser is disabled due to ongoing update
@@ -337,7 +345,7 @@ impl AutoUpdater {
 
   // Helper methods
 
-  fn is_alpha_version(&self, version: &str) -> bool {
+  fn is_nightly_version(&self, version: &str) -> bool {
     version.contains("alpha")
       || version.contains("beta")
       || version.contains("rc")
@@ -412,24 +420,6 @@ pub async fn check_for_browser_updates() -> Result<Vec<UpdateNotification>, Stri
     .map_err(|e| format!("Failed to check for updates: {e}"))?;
   let grouped = updater.group_update_notifications(notifications);
   Ok(grouped)
-}
-
-#[tauri::command]
-pub async fn start_browser_update(browser: String, new_version: String) -> Result<(), String> {
-  let updater = AutoUpdater::new();
-  updater
-    .start_browser_update(&browser, &new_version)
-    .await
-    .map_err(|e| format!("Failed to start browser update: {e}"))
-}
-
-#[tauri::command]
-pub async fn complete_browser_update(browser: String) -> Result<(), String> {
-  let updater = AutoUpdater::new();
-  updater
-    .complete_browser_update(&browser)
-    .await
-    .map_err(|e| format!("Failed to complete browser update: {e}"))
 }
 
 #[tauri::command]
@@ -509,18 +499,18 @@ mod tests {
   }
 
   #[test]
-  fn test_is_alpha_version() {
+  fn test_is_nightly_version() {
     let updater = AutoUpdater::new();
 
-    assert!(updater.is_alpha_version("1.0.0-alpha"));
-    assert!(updater.is_alpha_version("1.0.0-beta"));
-    assert!(updater.is_alpha_version("1.0.0-rc"));
-    assert!(updater.is_alpha_version("1.0.0a1"));
-    assert!(updater.is_alpha_version("1.0.0b1"));
-    assert!(updater.is_alpha_version("1.0.0-dev"));
+    assert!(updater.is_nightly_version("1.0.0-alpha"));
+    assert!(updater.is_nightly_version("1.0.0-beta"));
+    assert!(updater.is_nightly_version("1.0.0-rc"));
+    assert!(updater.is_nightly_version("1.0.0a1"));
+    assert!(updater.is_nightly_version("1.0.0b1"));
+    assert!(updater.is_nightly_version("1.0.0-dev"));
 
-    assert!(!updater.is_alpha_version("1.0.0"));
-    assert!(!updater.is_alpha_version("1.2.3"));
+    assert!(!updater.is_nightly_version("1.0.0"));
+    assert!(!updater.is_nightly_version("1.2.3"));
   }
 
   #[test]

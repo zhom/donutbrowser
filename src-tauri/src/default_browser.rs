@@ -77,13 +77,139 @@ mod windows {
 
 #[cfg(target_os = "linux")]
 mod linux {
+  use std::process::Command;
+
+  const APP_DESKTOP_NAME: &str = "donutbrowser.desktop";
+
   pub fn is_default_browser() -> Result<bool, String> {
-    // Linux implementation would go here
-    Err("Linux support not implemented yet".to_string())
+    // Check if xdg-mime is available
+    if !is_xdg_mime_available() {
+      return Err("xdg-mime utility not found. Please install xdg-utils package.".to_string());
+    }
+
+    let schemes = ["http", "https"];
+
+    for scheme in schemes {
+      let mime_type = format!("x-scheme-handler/{}", scheme);
+
+      // Query the current default handler for this scheme
+      let output = Command::new("xdg-mime")
+        .args(["query", "default", &mime_type])
+        .output()
+        .map_err(|e| format!("Failed to query default handler for {}: {}", scheme, e))?;
+
+      if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("xdg-mime query failed for {}: {}", scheme, stderr));
+      }
+
+      let current_handler = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+      // Check if our app is the default handler
+      if current_handler != APP_DESKTOP_NAME {
+        return Ok(false);
+      }
+    }
+
+    Ok(true)
   }
 
   pub fn set_as_default_browser() -> Result<(), String> {
-    Err("Linux support not implemented yet".to_string())
+    // Check if xdg-mime is available
+    if !is_xdg_mime_available() {
+      return Err("xdg-mime utility not found. Please install xdg-utils package.".to_string());
+    }
+
+    // Check if the desktop file exists in common locations
+    if !check_desktop_file_exists() {
+      return Err(format!(
+        "Desktop file '{}' not found in standard locations. Please ensure the application is properly installed. You can manually set Donut Browser as the default browser in your system settings.",
+        APP_DESKTOP_NAME
+      ));
+    }
+
+    let schemes = ["http", "https"];
+    let mut all_succeeded = true;
+    let mut error_messages = Vec::new();
+
+    for scheme in schemes {
+      let mime_type = format!("x-scheme-handler/{}", scheme);
+
+      // Set our app as the default handler for this scheme
+      let output = Command::new("xdg-mime")
+        .args(["default", APP_DESKTOP_NAME, &mime_type])
+        .output()
+        .map_err(|e| format!("Failed to set default handler for {}: {}", scheme, e))?;
+
+      if !output.status.success() {
+        all_succeeded = false;
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        error_messages.push(format!("Failed to set default for {}: {}", scheme, stderr));
+      }
+    }
+
+    if !all_succeeded {
+      return Err(format!(
+        "Some xdg-mime commands failed:\n{}\n\nYou may need to:\n1. Run with appropriate permissions\n2. Manually set the default browser in your desktop environment settings\n3. Restart your desktop session",
+        error_messages.join("\n")
+      ));
+    }
+
+    // Give the system a moment to process the changes
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    // Verify the changes took effect
+    match is_default_browser() {
+      Ok(true) => Ok(()),
+      Ok(false) => {
+        // This is the common case where commands succeed but verification fails
+        Err(format!(
+          "The xdg-mime commands completed successfully, but Donut Browser is not yet set as the default. This is common on some Linux distributions. Please try one of these options:\n\n1. Restart your desktop session and try again\n2. Log out and log back in\n3. Manually set Donut Browser as the default in your system settings:\n   - GNOME: Settings > Default Applications > Web\n   - KDE: System Settings > Applications > Default Applications > Web Browser\n   - XFCE: Settings > Preferred Applications > Web Browser\n   - Or run: xdg-settings set default-web-browser {}\n\nThe changes may take effect automatically after a desktop restart.",
+          APP_DESKTOP_NAME
+        ))
+      }
+      Err(e) => Err(format!(
+        "Set as default completed, but verification failed: {}. The changes may still be in effect after restarting your desktop session.",
+        e
+      ))
+    }
+  }
+
+  fn is_xdg_mime_available() -> bool {
+    Command::new("which")
+      .arg("xdg-mime")
+      .output()
+      .map(|output| output.status.success())
+      .unwrap_or(false)
+  }
+
+  fn check_desktop_file_exists() -> bool {
+    let desktop_locations = [
+      "~/.local/share/applications/",
+      "/usr/share/applications/",
+      "/usr/local/share/applications/",
+      "/var/lib/flatpak/exports/share/applications/",
+      "~/.local/share/flatpak/exports/share/applications/",
+    ];
+
+    for location in &desktop_locations {
+      let path = if location.starts_with('~') {
+        if let Ok(home) = std::env::var("HOME") {
+          location.replace('~', &home)
+        } else {
+          continue;
+        }
+      } else {
+        location.to_string()
+      };
+
+      let full_path = format!("{}{}", path, APP_DESKTOP_NAME);
+      if std::path::Path::new(&full_path).exists() {
+        return true;
+      }
+    }
+
+    false
   }
 }
 

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Donut Browser
+Comment=Simple Yet Powerful Browser Orchestrator
+Exec=donutbrowser %u
+Icon=donutbrowser
+StartupNotify=true
+NoDisplay=false
+Categories=Network;WebBrowser;Productivity;
+MimeType=x-scheme-handler/http;x-scheme-handler/https;text/html;application/xhtml+xml;
+StartupWMClass=donutbrowser
+Keywords=browser;web;internet;productivity;

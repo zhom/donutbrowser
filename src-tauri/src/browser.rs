@@ -50,7 +50,6 @@ impl BrowserType {
 }
 
 pub trait Browser: Send + Sync {
-  fn browser_type(&self) -> BrowserType;
   fn get_executable_path(&self, install_dir: &Path) -> Result<PathBuf, Box<dyn std::error::Error>>;
   fn create_launch_args(
     &self,
@@ -59,24 +58,17 @@ pub trait Browser: Send + Sync {
     url: Option<String>,
   ) -> Result<Vec<String>, Box<dyn std::error::Error>>;
   fn is_version_downloaded(&self, version: &str, binaries_dir: &Path) -> bool;
+  fn prepare_executable(&self, executable_path: &Path) -> Result<(), Box<dyn std::error::Error>>;
 }
 
-pub struct FirefoxBrowser {
-  browser_type: BrowserType,
-}
+// Platform-specific modules
+#[cfg(target_os = "macos")]
+mod macos {
+  use super::*;
 
-impl FirefoxBrowser {
-  pub fn new(browser_type: BrowserType) -> Self {
-    Self { browser_type }
-  }
-}
-
-impl Browser for FirefoxBrowser {
-  fn browser_type(&self) -> BrowserType {
-    self.browser_type.clone()
-  }
-
-  fn get_executable_path(&self, install_dir: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+  pub fn get_firefox_executable_path(
+    install_dir: &Path,
+  ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     // Find the .app directory
     let app_path = std::fs::read_dir(install_dir)?
       .filter_map(Result::ok)
@@ -104,6 +96,439 @@ impl Browser for FirefoxBrowser {
       .ok_or("No executable found in MacOS directory")?;
 
     Ok(executable_path)
+  }
+
+  pub fn get_chromium_executable_path(
+    install_dir: &Path,
+  ) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    // Find the .app directory
+    let app_path = std::fs::read_dir(install_dir)?
+      .filter_map(Result::ok)
+      .find(|entry| entry.path().extension().is_some_and(|ext| ext == "app"))
+      .ok_or("Browser app not found")?;
+
+    // Construct the browser executable path
+    let mut executable_dir = app_path.path();
+    executable_dir.push("Contents");
+    executable_dir.push("MacOS");
+
+    // Find the first executable in the MacOS directory
+    let executable_path = std::fs::read_dir(&executable_dir)?
+      .filter_map(Result::ok)
+      .find(|entry| {
+        let binding = entry.file_name();
+        let name = binding.to_string_lossy();
+        name.contains("Chromium") || name.contains("Brave") || name.contains("Google Chrome")
+      })
+      .map(|entry| entry.path())
+      .ok_or("No executable found in MacOS directory")?;
+
+    Ok(executable_path)
+  }
+
+  pub fn is_firefox_version_downloaded(install_dir: &Path) -> bool {
+    // On macOS, check for .app files
+    if let Ok(entries) = std::fs::read_dir(install_dir) {
+      for entry in entries.flatten() {
+        if entry.path().extension().is_some_and(|ext| ext == "app") {
+          return true;
+        }
+      }
+    }
+    false
+  }
+
+  pub fn is_chromium_version_downloaded(install_dir: &Path) -> bool {
+    // On macOS, check for .app files
+    if let Ok(entries) = std::fs::read_dir(install_dir) {
+      for entry in entries.flatten() {
+        if entry.path().extension().is_some_and(|ext| ext == "app") {
+          return true;
+        }
+      }
+    }
+    false
+  }
+
+  pub fn prepare_executable(_executable_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    // On macOS, no special preparation needed
+    Ok(())
+  }
+}
+
+#[cfg(target_os = "linux")]
+mod linux {
+  use super::*;
+  use std::os::unix::fs::PermissionsExt;
+
+  pub fn get_firefox_executable_path(
+    install_dir: &Path,
+    browser_type: &BrowserType,
+  ) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    // Expected structure: install_dir/<browser>/<binary>
+    let browser_subdir = install_dir.join(browser_type.as_str());
+
+    // Try firefox first (preferred), then firefox-bin
+    let possible_executables = match browser_type {
+      BrowserType::Firefox | BrowserType::FirefoxDeveloper => {
+        vec![
+          browser_subdir.join("firefox"),
+          browser_subdir.join("firefox-bin"),
+        ]
+      }
+      BrowserType::MullvadBrowser => {
+        vec![
+          browser_subdir.join("firefox"),
+          browser_subdir.join("mullvad-browser"),
+          browser_subdir.join("firefox-bin"),
+        ]
+      }
+      BrowserType::Zen => {
+        vec![browser_subdir.join("zen"), browser_subdir.join("zen-bin")]
+      }
+      BrowserType::TorBrowser => {
+        vec![
+          browser_subdir.join("firefox"),
+          browser_subdir.join("tor-browser"),
+          browser_subdir.join("firefox-bin"),
+        ]
+      }
+      _ => vec![],
+    };
+
+    for executable_path in &possible_executables {
+      if executable_path.exists() && executable_path.is_file() {
+        return Ok(executable_path.clone());
+      }
+    }
+
+    Err(
+      format!(
+        "Firefox executable not found in {}/{}",
+        install_dir.display(),
+        browser_type.as_str()
+      )
+      .into(),
+    )
+  }
+
+  pub fn get_chromium_executable_path(
+    install_dir: &Path,
+    browser_type: &BrowserType,
+  ) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    // Expected structure: install_dir/<browser>/<binary>
+    let browser_subdir = install_dir.join(browser_type.as_str());
+
+    let possible_executables = match browser_type {
+      BrowserType::Chromium => vec![
+        browser_subdir.join("chromium"),
+        browser_subdir.join("chrome"),
+      ],
+      BrowserType::Brave => vec![
+        browser_subdir.join("brave"),
+        browser_subdir.join("brave-browser"),
+      ],
+      _ => vec![],
+    };
+
+    for executable_path in &possible_executables {
+      if executable_path.exists() && executable_path.is_file() {
+        return Ok(executable_path.clone());
+      }
+    }
+
+    Err(
+      format!(
+        "Chromium executable not found in {}/{}",
+        install_dir.display(),
+        browser_type.as_str()
+      )
+      .into(),
+    )
+  }
+
+  pub fn is_firefox_version_downloaded(install_dir: &Path, browser_type: &BrowserType) -> bool {
+    // Expected structure: install_dir/<browser>/<binary>
+    let browser_subdir = install_dir.join(browser_type.as_str());
+
+    if !browser_subdir.exists() || !browser_subdir.is_dir() {
+      return false;
+    }
+
+    let possible_executables = match browser_type {
+      BrowserType::Firefox | BrowserType::FirefoxDeveloper => {
+        vec![
+          browser_subdir.join("firefox-bin"),
+          browser_subdir.join("firefox"),
+        ]
+      }
+      BrowserType::MullvadBrowser => {
+        vec![
+          browser_subdir.join("mullvad-browser"),
+          browser_subdir.join("firefox-bin"),
+          browser_subdir.join("firefox"),
+        ]
+      }
+      BrowserType::Zen => {
+        vec![browser_subdir.join("zen"), browser_subdir.join("zen-bin")]
+      }
+      BrowserType::TorBrowser => {
+        vec![
+          browser_subdir.join("tor-browser"),
+          browser_subdir.join("firefox-bin"),
+          browser_subdir.join("firefox"),
+        ]
+      }
+      _ => vec![],
+    };
+
+    for exe_path in &possible_executables {
+      if exe_path.exists() && exe_path.is_file() {
+        return true;
+      }
+    }
+
+    false
+  }
+
+  pub fn is_chromium_version_downloaded(install_dir: &Path, browser_type: &BrowserType) -> bool {
+    // Expected structure: install_dir/<browser>/<binary>
+    let browser_subdir = install_dir.join(browser_type.as_str());
+
+    if !browser_subdir.exists() || !browser_subdir.is_dir() {
+      return false;
+    }
+
+    let possible_executables = match browser_type {
+      BrowserType::Chromium => vec![
+        browser_subdir.join("chromium"),
+        browser_subdir.join("chrome"),
+      ],
+      BrowserType::Brave => vec![
+        browser_subdir.join("brave"),
+        browser_subdir.join("brave-browser"),
+      ],
+      _ => vec![],
+    };
+
+    for exe_path in &possible_executables {
+      if exe_path.exists() && exe_path.is_file() {
+        return true;
+      }
+    }
+
+    false
+  }
+
+  pub fn prepare_executable(executable_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    // On Linux, ensure the executable has proper permissions
+    println!("Setting execute permissions for: {:?}", executable_path);
+
+    let metadata = std::fs::metadata(executable_path)?;
+    let mut permissions = metadata.permissions();
+
+    // Add execute permissions for owner, group, and others
+    let mode = permissions.mode();
+    permissions.set_mode(mode | 0o755);
+
+    std::fs::set_permissions(executable_path, permissions)?;
+
+    println!(
+      "Execute permissions set successfully for: {:?}",
+      executable_path
+    );
+    Ok(())
+  }
+}
+
+#[cfg(target_os = "windows")]
+mod windows {
+  use super::*;
+
+  pub fn get_firefox_executable_path(
+    install_dir: &Path,
+  ) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    // On Windows, look for firefox.exe
+    let possible_paths = [
+      install_dir.join("firefox.exe"),
+      install_dir.join("firefox").join("firefox.exe"),
+      install_dir.join("bin").join("firefox.exe"),
+    ];
+
+    for path in &possible_paths {
+      if path.exists() && path.is_file() {
+        return Ok(path.clone());
+      }
+    }
+
+    // Look for any .exe file that might be the browser
+    if let Ok(entries) = std::fs::read_dir(install_dir) {
+      for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().is_some_and(|ext| ext == "exe") {
+          let name = path.file_stem().unwrap_or_default().to_string_lossy();
+          if name.starts_with("firefox")
+            || name.starts_with("mullvad")
+            || name.starts_with("zen")
+            || name.starts_with("tor")
+            || name.contains("browser")
+          {
+            return Ok(path);
+          }
+        }
+      }
+    }
+
+    Err("Firefox executable not found in Windows installation directory".into())
+  }
+
+  pub fn get_chromium_executable_path(
+    install_dir: &Path,
+    browser_type: &BrowserType,
+  ) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    // On Windows, look for .exe files
+    let possible_paths = match browser_type {
+      BrowserType::Chromium => vec![
+        install_dir.join("chromium.exe"),
+        install_dir.join("chrome.exe"),
+        install_dir.join("chromium-browser.exe"),
+        install_dir.join("bin").join("chromium.exe"),
+      ],
+      BrowserType::Brave => vec![
+        install_dir.join("brave.exe"),
+        install_dir.join("brave-browser.exe"),
+        install_dir.join("bin").join("brave.exe"),
+      ],
+      _ => vec![],
+    };
+
+    for path in &possible_paths {
+      if path.exists() && path.is_file() {
+        return Ok(path.clone());
+      }
+    }
+
+    // Look for any .exe file that might be the browser
+    if let Ok(entries) = std::fs::read_dir(install_dir) {
+      for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().is_some_and(|ext| ext == "exe") {
+          let name = path.file_stem().unwrap_or_default().to_string_lossy();
+          if name.contains("chromium") || name.contains("brave") || name.contains("chrome") {
+            return Ok(path);
+          }
+        }
+      }
+    }
+
+    Err("Chromium/Brave executable not found in Windows installation directory".into())
+  }
+
+  pub fn is_firefox_version_downloaded(install_dir: &Path) -> bool {
+    // On Windows, check for .exe files
+    let possible_executables = [
+      install_dir.join("firefox.exe"),
+      install_dir.join("firefox").join("firefox.exe"),
+      install_dir.join("bin").join("firefox.exe"),
+    ];
+
+    for exe_path in &possible_executables {
+      if exe_path.exists() && exe_path.is_file() {
+        return true;
+      }
+    }
+
+    // Check for any .exe file that looks like a browser
+    if let Ok(entries) = std::fs::read_dir(install_dir) {
+      for entry in entries.flatten() {
+        let path = entry.path();
+
+        if path.extension().is_some_and(|ext| ext == "exe") {
+          let name = path.file_stem().unwrap_or_default().to_string_lossy();
+          if name.starts_with("firefox")
+            || name.starts_with("mullvad")
+            || name.starts_with("zen")
+            || name.starts_with("tor")
+            || name.contains("browser")
+          {
+            return true;
+          }
+        }
+      }
+    }
+
+    false
+  }
+
+  pub fn is_chromium_version_downloaded(install_dir: &Path, browser_type: &BrowserType) -> bool {
+    // On Windows, check for .exe files
+    let possible_executables = match browser_type {
+      BrowserType::Chromium => vec![
+        install_dir.join("chromium.exe"),
+        install_dir.join("chrome.exe"),
+        install_dir.join("chromium-browser.exe"),
+        install_dir.join("bin").join("chromium.exe"),
+      ],
+      BrowserType::Brave => vec![
+        install_dir.join("brave.exe"),
+        install_dir.join("brave-browser.exe"),
+        install_dir.join("bin").join("brave.exe"),
+      ],
+      _ => vec![],
+    };
+
+    for exe_path in &possible_executables {
+      if exe_path.exists() && exe_path.is_file() {
+        return true;
+      }
+    }
+
+    // Check for any .exe file that looks like the browser
+    if let Ok(entries) = std::fs::read_dir(install_dir) {
+      for entry in entries.flatten() {
+        let path = entry.path();
+
+        if path.extension().is_some_and(|ext| ext == "exe") {
+          let name = path.file_stem().unwrap_or_default().to_string_lossy();
+          if name.contains("chromium") || name.contains("brave") || name.contains("chrome") {
+            return true;
+          }
+        }
+      }
+    }
+
+    false
+  }
+
+  pub fn prepare_executable(_executable_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    // On Windows, no special preparation needed
+    Ok(())
+  }
+}
+
+pub struct FirefoxBrowser {
+  browser_type: BrowserType,
+}
+
+impl FirefoxBrowser {
+  pub fn new(browser_type: BrowserType) -> Self {
+    Self { browser_type }
+  }
+}
+
+impl Browser for FirefoxBrowser {
+  fn get_executable_path(&self, install_dir: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    #[cfg(target_os = "macos")]
+    return macos::get_firefox_executable_path(install_dir);
+
+    #[cfg(target_os = "linux")]
+    return linux::get_firefox_executable_path(install_dir, &self.browser_type);
+
+    #[cfg(target_os = "windows")]
+    return windows::get_firefox_executable_path(install_dir);
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    Err("Unsupported platform".into())
   }
 
   fn create_launch_args(
@@ -135,34 +560,52 @@ impl Browser for FirefoxBrowser {
   }
 
   fn is_version_downloaded(&self, version: &str, binaries_dir: &Path) -> bool {
-    let browser_dir = binaries_dir
-      .join(self.browser_type().as_str())
-      .join(version);
+    // Expected structure: binaries/<browser>/<version>
+    let browser_dir = binaries_dir.join(self.browser_type.as_str()).join(version);
 
     println!("Firefox browser checking version {version} in directory: {browser_dir:?}");
 
-    // Only check if directory exists and contains a .app file
-    if browser_dir.exists() {
-      println!("Directory exists, checking for .app files...");
-      if let Ok(entries) = std::fs::read_dir(&browser_dir) {
-        for entry in entries.flatten() {
-          println!("  Found entry: {:?}", entry.path());
-          if entry.path().extension().is_some_and(|ext| ext == "app") {
-            println!("  Found .app file: {:?}", entry.path());
-            return true;
-          }
-        }
-      }
-      println!("No .app files found in directory");
-    } else {
+    if !browser_dir.exists() {
       println!("Directory does not exist: {browser_dir:?}");
+      return false;
     }
-    false
+
+    println!("Directory exists, checking for browser files...");
+
+    #[cfg(target_os = "macos")]
+    return macos::is_firefox_version_downloaded(&browser_dir);
+
+    #[cfg(target_os = "linux")]
+    return linux::is_firefox_version_downloaded(&browser_dir, &self.browser_type);
+
+    #[cfg(target_os = "windows")]
+    return windows::is_firefox_version_downloaded(&browser_dir);
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+      println!("Unsupported platform for browser verification");
+      false
+    }
+  }
+
+  fn prepare_executable(&self, executable_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(target_os = "macos")]
+    return macos::prepare_executable(executable_path);
+
+    #[cfg(target_os = "linux")]
+    return linux::prepare_executable(executable_path);
+
+    #[cfg(target_os = "windows")]
+    return windows::prepare_executable(executable_path);
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    Err("Unsupported platform".into())
   }
 }
 
 // Chromium-based browsers (Chromium, Brave)
 pub struct ChromiumBrowser {
+  #[allow(dead_code)]
   browser_type: BrowserType,
 }
 
@@ -173,34 +616,18 @@ impl ChromiumBrowser {
 }
 
 impl Browser for ChromiumBrowser {
-  fn browser_type(&self) -> BrowserType {
-    self.browser_type.clone()
-  }
-
   fn get_executable_path(&self, install_dir: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    // Find the .app directory
-    let app_path = std::fs::read_dir(install_dir)?
-      .filter_map(Result::ok)
-      .find(|entry| entry.path().extension().is_some_and(|ext| ext == "app"))
-      .ok_or("Browser app not found")?;
+    #[cfg(target_os = "macos")]
+    return macos::get_chromium_executable_path(install_dir);
 
-    // Construct the browser executable path
-    let mut executable_dir = app_path.path();
-    executable_dir.push("Contents");
-    executable_dir.push("MacOS");
+    #[cfg(target_os = "linux")]
+    return linux::get_chromium_executable_path(install_dir, &self.browser_type);
 
-    // Find the first executable in the MacOS directory
-    let executable_path = std::fs::read_dir(&executable_dir)?
-      .filter_map(Result::ok)
-      .find(|entry| {
-        let binding = entry.file_name();
-        let name = binding.to_string_lossy();
-        name.contains("Chromium") || name.contains("Brave") || name.contains("Google Chrome")
-      })
-      .map(|entry| entry.path())
-      .ok_or("No executable found in MacOS directory")?;
+    #[cfg(target_os = "windows")]
+    return windows::get_chromium_executable_path(install_dir, &self.browser_type);
 
-    Ok(executable_path)
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    Err("Unsupported platform".into())
   }
 
   fn create_launch_args(
@@ -240,35 +667,46 @@ impl Browser for ChromiumBrowser {
   }
 
   fn is_version_downloaded(&self, version: &str, binaries_dir: &Path) -> bool {
-    let browser_dir = binaries_dir
-      .join(self.browser_type().as_str())
-      .join(version);
+    // Expected structure: binaries/<browser>/<version>
+    let browser_dir = binaries_dir.join(self.browser_type.as_str()).join(version);
 
     println!("Chromium browser checking version {version} in directory: {browser_dir:?}");
 
-    // Check if directory exists and contains at least one .app file
-    if browser_dir.exists() {
-      println!("Directory exists, checking for .app files...");
-      if let Ok(entries) = std::fs::read_dir(&browser_dir) {
-        for entry in entries.flatten() {
-          println!("  Found entry: {:?}", entry.path());
-          if entry.path().extension().is_some_and(|ext| ext == "app") {
-            println!("  Found .app file: {:?}", entry.path());
-            // Try to get the executable path as a final verification
-            if self.get_executable_path(&browser_dir).is_ok() {
-              println!("  Executable path verification successful");
-              return true;
-            } else {
-              println!("  Executable path verification failed");
-            }
-          }
-        }
-      }
-      println!("No valid .app files found in directory");
-    } else {
+    if !browser_dir.exists() {
       println!("Directory does not exist: {browser_dir:?}");
+      return false;
     }
-    false
+
+    println!("Directory exists, checking for browser files...");
+
+    #[cfg(target_os = "macos")]
+    return macos::is_chromium_version_downloaded(&browser_dir);
+
+    #[cfg(target_os = "linux")]
+    return linux::is_chromium_version_downloaded(&browser_dir, &self.browser_type);
+
+    #[cfg(target_os = "windows")]
+    return windows::is_chromium_version_downloaded(&browser_dir, &self.browser_type);
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+      println!("Unsupported platform for browser verification");
+      false
+    }
+  }
+
+  fn prepare_executable(&self, executable_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(target_os = "macos")]
+    return macos::prepare_executable(executable_path);
+
+    #[cfg(target_os = "linux")]
+    return linux::prepare_executable(executable_path);
+
+    #[cfg(target_os = "windows")]
+    return windows::prepare_executable(executable_path);
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    Err("Unsupported platform".into())
   }
 }
 
@@ -294,7 +732,7 @@ pub struct GithubRelease {
   #[serde(default)]
   pub published_at: String,
   #[serde(default)]
-  pub is_alpha: bool,
+  pub is_nightly: bool,
   #[serde(default)]
   pub prerelease: bool,
 }
@@ -352,56 +790,6 @@ mod tests {
     assert!(BrowserType::from_str("invalid").is_err());
     assert!(BrowserType::from_str("").is_err());
     assert!(BrowserType::from_str("Firefox").is_err()); // Case sensitive
-  }
-
-  #[test]
-  fn test_firefox_browser_creation() {
-    let browser = FirefoxBrowser::new(BrowserType::Firefox);
-    assert_eq!(browser.browser_type(), BrowserType::Firefox);
-
-    let browser = FirefoxBrowser::new(BrowserType::MullvadBrowser);
-    assert_eq!(browser.browser_type(), BrowserType::MullvadBrowser);
-
-    let browser = FirefoxBrowser::new(BrowserType::TorBrowser);
-    assert_eq!(browser.browser_type(), BrowserType::TorBrowser);
-
-    let browser = FirefoxBrowser::new(BrowserType::Zen);
-    assert_eq!(browser.browser_type(), BrowserType::Zen);
-  }
-
-  #[test]
-  fn test_chromium_browser_creation() {
-    let browser = ChromiumBrowser::new(BrowserType::Chromium);
-    assert_eq!(browser.browser_type(), BrowserType::Chromium);
-
-    let browser = ChromiumBrowser::new(BrowserType::Brave);
-    assert_eq!(browser.browser_type(), BrowserType::Brave);
-  }
-
-  #[test]
-  fn test_browser_factory() {
-    // Test Firefox-based browsers
-    let browser = create_browser(BrowserType::Firefox);
-    assert_eq!(browser.browser_type(), BrowserType::Firefox);
-
-    let browser = create_browser(BrowserType::MullvadBrowser);
-    assert_eq!(browser.browser_type(), BrowserType::MullvadBrowser);
-
-    let browser = create_browser(BrowserType::Zen);
-    assert_eq!(browser.browser_type(), BrowserType::Zen);
-
-    let browser = create_browser(BrowserType::TorBrowser);
-    assert_eq!(browser.browser_type(), BrowserType::TorBrowser);
-
-    let browser = create_browser(BrowserType::FirefoxDeveloper);
-    assert_eq!(browser.browser_type(), BrowserType::FirefoxDeveloper);
-
-    // Test Chromium-based browsers
-    let browser = create_browser(BrowserType::Chromium);
-    assert_eq!(browser.browser_type(), BrowserType::Chromium);
-
-    let browser = create_browser(BrowserType::Brave);
-    assert_eq!(browser.browser_type(), BrowserType::Brave);
   }
 
   #[test]
@@ -509,7 +897,7 @@ mod tests {
     let temp_dir = TempDir::new().unwrap();
     let binaries_dir = temp_dir.path();
 
-    // Create a mock Firefox browser installation
+    // Create a mock Firefox browser installation with new path structure: binaries/<browser>/<version>/
     let browser_dir = binaries_dir.join("firefox").join("139.0");
     fs::create_dir_all(&browser_dir).unwrap();
 
@@ -521,7 +909,7 @@ mod tests {
     assert!(browser.is_version_downloaded("139.0", binaries_dir));
     assert!(!browser.is_version_downloaded("140.0", binaries_dir));
 
-    // Test with Chromium browser
+    // Test with Chromium browser with new path structure
     let chromium_dir = binaries_dir.join("chromium").join("1465660");
     fs::create_dir_all(&chromium_dir).unwrap();
     let chromium_app_dir = chromium_dir.join("Chromium.app");
@@ -544,7 +932,7 @@ mod tests {
     let temp_dir = TempDir::new().unwrap();
     let binaries_dir = temp_dir.path();
 
-    // Create browser directory but no .app directory
+    // Create browser directory but no .app directory with new path structure
     let browser_dir = binaries_dir.join("firefox").join("139.0");
     fs::create_dir_all(&browser_dir).unwrap();
 

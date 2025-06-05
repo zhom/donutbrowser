@@ -448,22 +448,6 @@ pub async fn get_version_update_status() -> Result<(Option<u64>, u64), String> {
   Ok((last_update, time_until_next))
 }
 
-#[tauri::command]
-pub async fn check_version_update_needed() -> Result<bool, String> {
-  Ok(VersionUpdater::should_run_background_update())
-}
-
-#[tauri::command]
-pub async fn force_version_update_check(_app_handle: tauri::AppHandle) -> Result<bool, String> {
-  let updater = get_version_updater();
-  let updater_guard = updater.lock().await;
-
-  match updater_guard.check_and_run_startup_update().await {
-    Ok(_) => Ok(true),
-    Err(e) => Err(format!("Failed to run version update check: {e}")),
-  }
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;

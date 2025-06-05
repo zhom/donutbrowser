@@ -37,6 +37,25 @@
       "files": {
         "Info.plist": "Info.plist"
       }
+    },
+    "linux": {
+      "deb": {
+        "depends": ["xdg-utils"],
+        "files": {
+          "/usr/share/applications/donutbrowser.desktop": "donutbrowser.desktop"
+        }
+      },
+      "rpm": {
+        "depends": ["xdg-utils"],
+        "files": {
+          "/usr/share/applications/donutbrowser.desktop": "donutbrowser.desktop"
+        }
+      },
+      "appimage": {
+        "files": {
+          "usr/share/applications/donutbrowser.desktop": "donutbrowser.desktop"
+        }
+      }
     }
   },
   "plugins": {

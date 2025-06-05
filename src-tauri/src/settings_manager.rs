@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::fs::{self, create_dir_all};
 use std::path::PathBuf;
 
+use crate::api_client::ApiClient;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TableSortingSettings {
   pub column: String,    // Column to sort by: "name", "browser", "status"
@@ -28,6 +30,8 @@ pub struct AppSettings {
   pub theme: String, // "light", "dark", or "system"
   #[serde(default = "default_auto_updates_enabled")]
   pub auto_updates_enabled: bool,
+  #[serde(default = "default_auto_delete_unused_binaries")]
+  pub auto_delete_unused_binaries: bool,
 }
 
 fn default_show_settings_on_startup() -> bool {
@@ -42,6 +46,10 @@ fn default_auto_updates_enabled() -> bool {
   true
 }
 
+fn default_auto_delete_unused_binaries() -> bool {
+  true
+}
+
 impl Default for AppSettings {
   fn default() -> Self {
     Self {
@@ -49,6 +57,7 @@ impl Default for AppSettings {
       show_settings_on_startup: default_show_settings_on_startup(),
       theme: default_theme(),
       auto_updates_enabled: default_auto_updates_enabled(),
+      auto_delete_unused_binaries: default_auto_delete_unused_binaries(),
     }
   }
 }
@@ -163,13 +172,6 @@ impl SettingsManager {
     // 3. User hasn't explicitly disabled the default browser setting
     Ok(settings.show_settings_on_startup && !settings.set_as_default_browser)
   }
-
-  pub fn disable_default_browser_prompt(&self) -> Result<(), Box<dyn std::error::Error>> {
-    let mut settings = self.load_settings()?;
-    settings.show_settings_on_startup = false;
-    self.save_settings(&settings)?;
-    Ok(())
-  }
 }
 
 #[tauri::command]
@@ -197,14 +199,6 @@ pub async fn should_show_settings_on_startup() -> Result<bool, String> {
 }
 
 #[tauri::command]
-pub async fn disable_default_browser_prompt() -> Result<(), String> {
-  let manager = SettingsManager::new();
-  manager
-    .disable_default_browser_prompt()
-    .map_err(|e| format!("Failed to disable prompt: {e}"))
-}
-
-#[tauri::command]
 pub async fn get_table_sorting_settings() -> Result<TableSortingSettings, String> {
   let manager = SettingsManager::new();
   manager
@@ -218,4 +212,12 @@ pub async fn save_table_sorting_settings(sorting: TableSortingSettings) -> Resul
   manager
     .save_table_sorting(&sorting)
     .map_err(|e| format!("Failed to save table sorting settings: {e}"))
+}
+
+#[tauri::command]
+pub async fn clear_all_version_cache() -> Result<(), String> {
+  let api_client = ApiClient::new();
+  api_client
+    .clear_all_cache()
+    .map_err(|e| format!("Failed to clear version cache: {e}"))
 }

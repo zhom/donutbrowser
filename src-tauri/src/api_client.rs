@@ -224,13 +224,13 @@ pub fn sort_github_releases(releases: &mut [GithubRelease]) {
   });
 }
 
-pub fn is_alpha_version(version: &str) -> bool {
+pub fn is_nightly_version(version: &str) -> bool {
   let version_comp = VersionComponent::parse(version);
   version_comp.pre_release.is_some()
 }
 
 // Browser-specific alpha version detection for Zen Browser
-pub fn is_zen_alpha_version(version: &str) -> bool {
+pub fn is_zen_nightly_version(version: &str) -> bool {
   // For Zen Browser, only "twilight" is considered alpha/pre-release
   version.to_lowercase() == "twilight"
 }
@@ -449,7 +449,7 @@ impl ApiClient {
               BrowserRelease {
                 version: version.clone(),
                 date: "".to_string(), // Cache doesn't store dates
-                is_prerelease: is_alpha_version(&version),
+                is_prerelease: is_nightly_version(&version),
                 download_url: Some(format!(
                   "{}/?product=firefox-{}&os=osx&lang=en-US",
                   self.mozilla_download_base, version
@@ -467,7 +467,7 @@ impl ApiClient {
     let response = self
       .client
       .get(url)
-      .header("User-Agent", "donutbrowser")
+      .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
       .send()
       .await?;
 
@@ -534,7 +534,7 @@ impl ApiClient {
               BrowserRelease {
                 version: version.clone(),
                 date: "".to_string(), // Cache doesn't store dates
-                is_prerelease: is_alpha_version(&version),
+                is_prerelease: is_nightly_version(&version),
                 download_url: Some(format!(
                   "{}/?product=devedition-{}&os=osx&lang=en-US",
                   self.mozilla_download_base, version
@@ -552,7 +552,7 @@ impl ApiClient {
     let response = self
       .client
       .get(url)
-      .header("User-Agent", "donutbrowser")
+      .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
       .send()
       .await?;
 
@@ -624,13 +624,13 @@ impl ApiClient {
 
     println!("Fetching Mullvad releases from GitHub API...");
     let url = format!(
-      "{}/repos/mullvad/mullvad-browser/releases",
+      "{}/repos/mullvad/mullvad-browser/releases?per_page=100",
       self.github_api_base
     );
     let releases = self
       .client
       .get(url)
-      .header("User-Agent", "donutbrowser")
+      .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
       .send()
       .await?
       .json::<Vec<GithubRelease>>()
@@ -639,7 +639,7 @@ impl ApiClient {
     let mut releases: Vec<GithubRelease> = releases
       .into_iter()
       .map(|mut release| {
-        release.is_alpha = release.prerelease;
+        release.is_nightly = release.prerelease;
         release
       })
       .collect();
@@ -670,13 +670,13 @@ impl ApiClient {
 
     println!("Fetching Zen releases from GitHub API...");
     let url = format!(
-      "{}/repos/zen-browser/desktop/releases",
+      "{}/repos/zen-browser/desktop/releases?per_page=100",
       self.github_api_base
     );
     let mut releases = self
       .client
       .get(url)
-      .header("User-Agent", "donutbrowser")
+      .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
       .send()
       .await?
       .json::<Vec<GithubRelease>>()
@@ -684,8 +684,8 @@ impl ApiClient {
 
     // Check for twilight updates and mark alpha releases
     for release in &mut releases {
-      // Use browser-specific alpha detection for Zen Browser
-      release.is_alpha = is_zen_alpha_version(&release.tag_name) || release.prerelease;
+      // Use browser-specific alpha detection for Zen Browser - only "twilight" is nightly
+      release.is_nightly = is_zen_nightly_version(&release.tag_name);
 
       // Check for twilight update if this is a twilight release
       if release.tag_name.to_lowercase() == "twilight" {
@@ -726,32 +726,32 @@ impl ApiClient {
 
     println!("Fetching Brave releases from GitHub API...");
     let url = format!(
-      "{}/repos/brave/brave-browser/releases",
+      "{}/repos/brave/brave-browser/releases?per_page=100",
       self.github_api_base
     );
     let releases = self
       .client
       .get(url)
-      .header("User-Agent", "donutbrowser")
+      .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
       .send()
       .await?
       .json::<Vec<GithubRelease>>()
       .await?;
 
-    // Filter releases that have universal macOS DMG assets
+    // Get platform info to filter appropriate releases
+    let (os, arch) = Self::get_platform_info();
+    
+    // Filter releases that have assets compatible with the current platform
     let mut filtered_releases: Vec<GithubRelease> = releases
       .into_iter()
       .filter_map(|mut release| {
-        // Check if this release has a universal DMG asset
-        let has_universal_dmg = release
-          .assets
-          .iter()
-          .any(|asset| asset.name.contains(".dmg") && asset.name.contains("universal"));
+        // Check if this release has compatible assets for the current platform
+        let has_compatible_asset = Self::has_compatible_brave_asset(&release.assets, &os, &arch);
 
-        if has_universal_dmg {
-          // Set is_alpha based on the release name
-          // Nightly releases contain "Nightly", stable contain "Release"
-          release.is_alpha = release.name.to_lowercase().contains("nightly");
+        if has_compatible_asset {
+          // Set is_nightly based on the release name
+          // Stable releases start with "Release", everything else is nightly
+          release.is_nightly = !release.name.starts_with("Release");
           Some(release)
         } else {
           None
@@ -772,6 +772,83 @@ impl ApiClient {
     Ok(filtered_releases)
   }
 
+  /// Check if a Brave release has compatible assets for the given platform and architecture
+  fn has_compatible_brave_asset(
+    assets: &[crate::browser::GithubAsset],
+    os: &str,
+    arch: &str,
+  ) -> bool {
+    match os {
+      "windows" => {
+        // For Windows, look for standalone setup EXE (not the auto-updater one)
+        assets
+          .iter()
+          .any(|asset| {
+            let name = asset.name.to_lowercase();
+            name.contains("standalone") && name.ends_with(".exe") && !name.contains("silent")
+          })
+          || assets.iter().any(|asset| asset.name.ends_with(".exe"))
+      }
+      "macos" => {
+        // For macOS, prefer universal DMG
+        assets
+          .iter()
+          .any(|asset| {
+            let name = asset.name.to_lowercase();
+            name.contains("universal") && name.ends_with(".dmg")
+          })
+          || assets.iter().any(|asset| asset.name.ends_with(".dmg"))
+      }
+      "linux" => {
+        // For Linux, check for architecture-specific packages (prefer ZIP for stable releases)
+        let arch_pattern = if arch == "arm64" { "arm64" } else { "amd64" };
+
+        assets
+          .iter()
+          .any(|asset| {
+            let name = asset.name.to_lowercase();
+            name.contains("linux") && name.contains(arch_pattern) && name.ends_with(".zip")
+          })
+          || assets.iter().any(|asset| {
+            let name = asset.name.to_lowercase();
+            name.contains(arch_pattern) && (name.ends_with(".deb") || name.ends_with(".rpm"))
+          })
+          || assets.iter().any(|asset| {
+            let name = asset.name.to_lowercase();
+            name.contains("linux") && name.ends_with(".zip")
+          })
+          || assets.iter().any(|asset| {
+            let name = asset.name.to_lowercase();
+            name.ends_with(".deb") || name.ends_with(".rpm")
+          })
+      }
+      _ => false,
+    }
+  }
+
+  /// Get platform and architecture information  
+  fn get_platform_info() -> (String, String) {
+    let os = if cfg!(target_os = "windows") {
+      "windows"
+    } else if cfg!(target_os = "linux") {
+      "linux"
+    } else if cfg!(target_os = "macos") {
+      "macos"
+    } else {
+      "unknown"
+    };
+
+    let arch = if cfg!(target_arch = "x86_64") {
+      "x64"
+    } else if cfg!(target_arch = "aarch64") {
+      "arm64"
+    } else {
+      "unknown"
+    };
+
+    (os.to_string(), arch.to_string())
+  }
+
   pub async fn fetch_chromium_latest_version(
     &self,
   ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
@@ -785,7 +862,7 @@ impl ApiClient {
     let version = self
       .client
       .get(&url)
-      .header("User-Agent", "donutbrowser")
+      .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
       .send()
       .await?
       .text()
@@ -885,7 +962,7 @@ impl ApiClient {
     let html = self
       .client
       .get(url)
-      .header("User-Agent", "donutbrowser")
+      .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
       .send()
       .await?
       .text()
@@ -965,7 +1042,7 @@ impl ApiClient {
     let html = self
       .client
       .get(&url)
-      .header("User-Agent", "donutbrowser")
+      .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
       .send()
       .await?
       .text()
@@ -1032,12 +1109,31 @@ impl ApiClient {
 
     Ok(false) // No update detected
   }
+
+  pub fn clear_all_cache(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let cache_dir = Self::get_cache_dir()?;
+
+    if cache_dir.exists() {
+      // Remove all cache files
+      for entry in fs::read_dir(&cache_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_file() {
+          fs::remove_file(&path)?;
+          println!("Removed cache file: {path:?}");
+        }
+      }
+      println!("All version cache cleared successfully");
+    }
+
+    Ok(())
+  }
 }
 
 #[cfg(test)]
 mod tests {
   use super::*;
-  use wiremock::matchers::{header, method, path};
+  use wiremock::matchers::{method, path, query_param};
   use wiremock::{Mock, MockServer, ResponseTemplate};
 
   async fn setup_mock_server() -> MockServer {
@@ -1215,7 +1311,6 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/firefox.json"))
-      .and(header("user-agent", "donutbrowser"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(mock_response)
@@ -1226,6 +1321,9 @@ mod tests {
 
     let result = client.fetch_firefox_releases_with_caching(true).await;
 
+    if let Err(e) = &result {
+      println!("Firefox API test error: {e}");
+    }
     assert!(result.is_ok());
     let releases = result.unwrap();
     assert!(!releases.is_empty());
@@ -1259,7 +1357,6 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/devedition.json"))
-      .and(header("user-agent", "donutbrowser"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(mock_response)
@@ -1272,6 +1369,9 @@ mod tests {
       .fetch_firefox_developer_releases_with_caching(true)
       .await;
 
+    if let Err(e) = &result {
+      println!("Firefox Developer API test error: {e}");
+    }
     assert!(result.is_ok());
     let releases = result.unwrap();
     assert!(!releases.is_empty());
@@ -1307,7 +1407,7 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/repos/mullvad/mullvad-browser/releases"))
-      .and(header("user-agent", "donutbrowser"))
+      .and(query_param("per_page", "100"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(mock_response)
@@ -1322,7 +1422,7 @@ mod tests {
     let releases = result.unwrap();
     assert!(!releases.is_empty());
     assert_eq!(releases[0].tag_name, "14.5a6");
-    assert!(releases[0].is_alpha);
+    assert!(releases[0].is_nightly);
   }
 
   #[tokio::test]
@@ -1348,7 +1448,7 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/repos/zen-browser/desktop/releases"))
-      .and(header("user-agent", "donutbrowser"))
+      .and(query_param("per_page", "100"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(mock_response)
@@ -1388,7 +1488,7 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/repos/brave/brave-browser/releases"))
-      .and(header("user-agent", "donutbrowser"))
+      .and(query_param("per_page", "100"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(mock_response)
@@ -1399,11 +1499,14 @@ mod tests {
 
     let result = client.fetch_brave_releases_with_caching(true).await;
 
+    if let Err(e) = &result {
+      println!("Brave API test error: {e}");
+    }
     assert!(result.is_ok());
     let releases = result.unwrap();
     assert!(!releases.is_empty());
     assert_eq!(releases[0].tag_name, "v1.81.9");
-    assert!(!releases[0].is_alpha);
+    assert!(!releases[0].is_nightly);
   }
 
   #[tokio::test]
@@ -1419,7 +1522,6 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path(format!("/{arch}/LAST_CHANGE")))
-      .and(header("user-agent", "donutbrowser"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string("1465660")
@@ -1448,7 +1550,6 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path(format!("/{arch}/LAST_CHANGE")))
-      .and(header("user-agent", "donutbrowser"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string("1465660")
@@ -1491,7 +1592,6 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/"))
-      .and(header("user-agent", "donutbrowser"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(mock_html)
@@ -1502,7 +1602,6 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/14.0.4/"))
-      .and(header("user-agent", "donutbrowser"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(version_html)
@@ -1513,7 +1612,6 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/14.0.3/"))
-      .and(header("user-agent", "donutbrowser"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(version_html.replace("14.0.4", "14.0.3"))
@@ -1551,7 +1649,6 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/14.0.4/"))
-      .and(header("user-agent", "donutbrowser"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(version_html)
@@ -1581,7 +1678,6 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/14.0.5/"))
-      .and(header("user-agent", "donutbrowser"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(version_html)
@@ -1597,24 +1693,24 @@ mod tests {
   }
 
   #[test]
-  fn test_is_alpha_version() {
-    assert!(is_alpha_version("1.2.3a1"));
-    assert!(is_alpha_version("137.0b5"));
-    assert!(is_alpha_version("140.0rc1"));
-    assert!(!is_alpha_version("139.0"));
-    assert!(!is_alpha_version("1.2.3"));
+  fn test_is_nightly_version() {
+    assert!(is_nightly_version("1.2.3a1"));
+    assert!(is_nightly_version("137.0b5"));
+    assert!(is_nightly_version("140.0rc1"));
+    assert!(!is_nightly_version("139.0"));
+    assert!(!is_nightly_version("1.2.3"));
   }
 
   #[test]
-  fn test_is_zen_alpha_version() {
-    // Only "twilight" should be considered alpha for Zen Browser
-    assert!(is_zen_alpha_version("twilight"));
-    assert!(is_zen_alpha_version("TWILIGHT")); // Case insensitive
+  fn test_is_zen_nightly_version() {
+    // Only "twilight" should be considered nightly for Zen Browser
+    assert!(is_zen_nightly_version("twilight"));
+    assert!(is_zen_nightly_version("TWILIGHT")); // Case insensitive
 
-    // Versions with "b" should NOT be considered alpha for Zen Browser
-    assert!(!is_zen_alpha_version("1.12.8b"));
-    assert!(!is_zen_alpha_version("1.0.0b1"));
-    assert!(!is_zen_alpha_version("2.0.0"));
+    // Versions with "b" should NOT be considered nightly for Zen Browser
+    assert!(!is_zen_nightly_version("1.12.8b"));
+    assert!(!is_zen_nightly_version("1.0.0b1"));
+    assert!(!is_zen_nightly_version("2.0.0"));
   }
 
   #[tokio::test]
@@ -1624,7 +1720,6 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/firefox.json"))
-      .and(header("user-agent", "donutbrowser"))
       .respond_with(ResponseTemplate::new(404))
       .mount(&server)
       .await;
@@ -1640,7 +1735,6 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/firefox.json"))
-      .and(header("user-agent", "donutbrowser"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string("invalid json")
@@ -1660,7 +1754,7 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/repos/zen-browser/desktop/releases"))
-      .and(header("user-agent", "donutbrowser"))
+      .and(query_param("per_page", "100"))
       .respond_with(ResponseTemplate::new(429).insert_header("retry-after", "60"))
       .mount(&server)
       .await;

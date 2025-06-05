@@ -10,6 +10,7 @@
     "build": "tsc && pkg ./dist/index.js --targets latest-macos-arm64 --output dist/nodecar",
     "build:aarch64": "tsc && pkg ./dist/index.js --targets latest-macos-arm64 --output dist/nodecar",
     "build:x86_64": "tsc && pkg ./dist/index.js --targets latest-macos-x64 --output dist/nodecar",
+    "build:universal": "tsc && pkg ./dist/index.js --targets latest-macos-arm64 --output dist/nodecar-arm64 && pkg ./dist/index.js --targets latest-macos-x64 --output dist/nodecar-x64 && lipo -create -output dist/nodecar dist/nodecar-arm64 dist/nodecar-x64 && rm dist/nodecar-arm64 dist/nodecar-x64",
     "build:linux-x64": "tsc && pkg ./dist/index.js --targets latest-linux-x64 --output dist/nodecar",
     "build:linux-arm64": "tsc && pkg ./dist/index.js --targets latest-linux-arm64 --output dist/nodecar",
     "build:win-x64": "tsc && pkg ./dist/index.js --targets latest-win-x64 --output dist/nodecar",
@@ -18,7 +19,6 @@
   "keywords": [],
   "author": "",
   "license": "AGPL-3.0",
-  "packageManager": "pnpm@10.11.1+sha512.e519b9f7639869dc8d5c3c5dfef73b3f091094b0a006d7317353c72b124e80e1afd429732e28705ad6bfa1ee879c1fce46c128ccebd3192101f43dd67c667912",
   "dependencies": {
     "@types/node": "^22.15.29",
     "@yao-pkg/pkg": "^6.5.1",

@@ -51,7 +51,7 @@ impl Downloader {
   ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     match browser_type {
       BrowserType::Brave => {
-        // For Brave, we need to find the actual macOS asset
+        // For Brave, we need to find the actual platform-specific asset
         let releases = self
           .api_client
           .fetch_brave_releases_with_caching(true)
@@ -65,19 +65,20 @@ impl Downloader {
           })
           .ok_or(format!("Brave version {version} not found"))?;
 
-        // Find the universal macOS DMG asset
-        let asset = release
-          .assets
-          .iter()
-          .find(|asset| asset.name.contains(".dmg") && asset.name.contains("universal"))
+        // Get platform and architecture info
+        let (os, arch) = Self::get_platform_info();
+
+        // Find the appropriate asset based on platform and architecture
+        let asset_url = self
+          .find_brave_asset(&release.assets, &os, &arch)
           .ok_or(format!(
-            "No universal macOS DMG asset found for Brave version {version}"
+            "No compatible asset found for Brave version {version} on {os}/{arch}"
           ))?;
 
-        Ok(asset.browser_download_url.clone())
+        Ok(asset_url)
       }
       BrowserType::Zen => {
-        // For Zen, verify the asset exists
+        // For Zen, verify the asset exists and handle different naming patterns
         let releases = self
           .api_client
           .fetch_zen_releases_with_caching(true)
@@ -88,16 +89,17 @@ impl Downloader {
           .find(|r| r.tag_name == version)
           .ok_or(format!("Zen version {version} not found"))?;
 
-        // Find the macOS universal DMG asset
-        let asset = release
-          .assets
-          .iter()
-          .find(|asset| asset.name == "zen.macos-universal.dmg")
+        // Get platform and architecture info
+        let (os, arch) = Self::get_platform_info();
+
+        // Find the appropriate asset
+        let asset_url = self
+          .find_zen_asset(&release.assets, &os, &arch)
           .ok_or(format!(
-            "No macOS universal asset found for Zen version {version}"
+            "No compatible asset found for Zen version {version} on {os}/{arch}"
           ))?;
 
-        Ok(asset.browser_download_url.clone())
+        Ok(asset_url)
       }
       BrowserType::MullvadBrowser => {
         // For Mullvad, verify the asset exists
@@ -111,22 +113,219 @@ impl Downloader {
           .find(|r| r.tag_name == version)
           .ok_or(format!("Mullvad version {version} not found"))?;
 
-        // Find the macOS DMG asset
-        let asset = release
-          .assets
-          .iter()
-          .find(|asset| asset.name.contains(".dmg") && asset.name.contains("mac"))
+        // Get platform and architecture info
+        let (os, arch) = Self::get_platform_info();
+
+        // Find the appropriate asset
+        let asset_url = self
+          .find_mullvad_asset(&release.assets, &os, &arch)
           .ok_or(format!(
-            "No macOS asset found for Mullvad version {version}"
+            "No compatible asset found for Mullvad version {version} on {os}/{arch}"
           ))?;
 
-        Ok(asset.browser_download_url.clone())
+        Ok(asset_url)
       }
       _ => {
         // For other browsers, use the provided URL
         Ok(download_info.url.clone())
       }
     }
+  }
+
+  /// Get platform and architecture information
+  fn get_platform_info() -> (String, String) {
+    let os = if cfg!(target_os = "windows") {
+      "windows"
+    } else if cfg!(target_os = "linux") {
+      "linux"
+    } else if cfg!(target_os = "macos") {
+      "macos"
+    } else {
+      "unknown"
+    };
+
+    let arch = if cfg!(target_arch = "x86_64") {
+      "x64"
+    } else if cfg!(target_arch = "aarch64") {
+      "arm64"
+    } else {
+      "unknown"
+    };
+
+    (os.to_string(), arch.to_string())
+  }
+
+  /// Find the appropriate Brave asset for the current platform and architecture
+  fn find_brave_asset(
+    &self,
+    assets: &[crate::browser::GithubAsset],
+    os: &str,
+    arch: &str,
+  ) -> Option<String> {
+    // Brave asset naming patterns:
+    // Windows: BraveBrowserStandaloneNightlySetup.exe, BraveBrowserStandaloneSilentNightlySetup.exe
+    // macOS: Brave-Browser-Nightly-universal.dmg, Brave-Browser-Nightly-universal.pkg
+    // Linux: brave-browser-1.79.119-linux-arm64.zip, brave-browser-1.79.119-linux-amd64.zip
+
+    let asset = match os {
+      "windows" => {
+        // For Windows, look for standalone setup EXE (not the auto-updater one)
+        assets
+          .iter()
+          .find(|asset| {
+            let name = asset.name.to_lowercase();
+            name.contains("standalone") && name.ends_with(".exe") && !name.contains("silent")
+          })
+          .or_else(|| {
+            // Fallback to any EXE if standalone not found
+            assets.iter().find(|asset| asset.name.ends_with(".exe"))
+          })
+      }
+      "macos" => {
+        // For macOS, prefer universal DMG
+        assets
+          .iter()
+          .find(|asset| {
+            let name = asset.name.to_lowercase();
+            name.contains("universal") && name.ends_with(".dmg")
+          })
+          .or_else(|| {
+            // Fallback to any DMG
+            assets.iter().find(|asset| asset.name.ends_with(".dmg"))
+          })
+      }
+      "linux" => {
+        // For Linux, prefer ZIP files matching architecture (new format for stable releases)
+        let arch_pattern = if arch == "arm64" { "arm64" } else { "amd64" };
+
+        assets
+          .iter()
+          .find(|asset| {
+            let name = asset.name.to_lowercase();
+            name.contains("linux") && name.contains(arch_pattern) && name.ends_with(".zip")
+          })
+          .or_else(|| {
+            // Fallback to DEB packages
+            assets
+              .iter()
+              .find(|asset| {
+                let name = asset.name.to_lowercase();
+                name.contains(arch_pattern) && name.ends_with(".deb")
+              })
+          })
+          .or_else(|| {
+            // Fallback to any ZIP
+            assets.iter().find(|asset| {
+              let name = asset.name.to_lowercase();
+              name.contains("linux") && name.ends_with(".zip")
+            })
+          })
+          .or_else(|| {
+            // Fallback to any DEB
+            assets.iter().find(|asset| asset.name.ends_with(".deb"))
+          })
+          .or_else(|| {
+            // Last fallback to RPM if no ZIP or DEB found
+            assets.iter().find(|asset| {
+              let name = asset.name.to_lowercase();
+              name.contains("x86_64") && name.ends_with(".rpm")
+            })
+          })
+      }
+      _ => None,
+    };
+
+    asset.map(|a| a.browser_download_url.clone())
+  }
+
+  /// Find the appropriate Zen asset for the current platform and architecture
+  fn find_zen_asset(
+    &self,
+    assets: &[crate::browser::GithubAsset],
+    os: &str,
+    arch: &str,
+  ) -> Option<String> {
+    // Zen asset naming patterns:
+    // Windows: zen.installer.exe, zen.installer-arm64.exe
+    // macOS: zen.macos-universal.dmg
+    // Linux: zen.linux-x86_64.tar.xz, zen.linux-aarch64.tar.xz, zen-x86_64.AppImage, zen-aarch64.AppImage
+
+    let asset = match (os, arch) {
+      ("windows", "x64") => assets
+        .iter()
+        .find(|asset| asset.name == "zen.installer.exe"),
+      ("windows", "arm64") => assets
+        .iter()
+        .find(|asset| asset.name == "zen.installer-arm64.exe"),
+      ("macos", _) => assets
+        .iter()
+        .find(|asset| asset.name == "zen.macos-universal.dmg"),
+      ("linux", "x64") => {
+        // Prefer tar.xz, fallback to AppImage
+        assets
+          .iter()
+          .find(|asset| asset.name == "zen.linux-x86_64.tar.xz")
+          .or_else(|| {
+            assets
+              .iter()
+              .find(|asset| asset.name == "zen-x86_64.AppImage")
+          })
+      }
+      ("linux", "arm64") => {
+        // Prefer tar.xz, fallback to AppImage
+        assets
+          .iter()
+          .find(|asset| asset.name == "zen.linux-aarch64.tar.xz")
+          .or_else(|| {
+            assets
+              .iter()
+              .find(|asset| asset.name == "zen-aarch64.AppImage")
+          })
+      }
+      _ => None,
+    };
+
+    asset.map(|a| a.browser_download_url.clone())
+  }
+
+  /// Find the appropriate Mullvad asset for the current platform and architecture
+  fn find_mullvad_asset(
+    &self,
+    assets: &[crate::browser::GithubAsset],
+    os: &str,
+    arch: &str,
+  ) -> Option<String> {
+    // Mullvad asset naming patterns:
+    // Windows: mullvad-browser-windows-x86_64-VERSION.exe
+    // macOS: mullvad-browser-macos-VERSION.dmg
+    // Linux: mullvad-browser-x86_64-VERSION.tar.xz
+
+    let asset = match (os, arch) {
+      ("windows", "x64") => assets.iter().find(|asset| {
+        asset.name.contains("windows")
+          && asset.name.contains("x86_64")
+          && asset.name.ends_with(".exe")
+      }),
+      ("windows", "arm64") => {
+        // Mullvad doesn't support ARM64 on Windows
+        None
+      }
+      ("macos", _) => assets
+        .iter()
+        .find(|asset| asset.name.contains("macos") && asset.name.ends_with(".dmg")),
+      ("linux", "x64") => assets.iter().find(|asset| {
+        asset.name.contains("x86_64")
+          && asset.name.ends_with(".tar.xz")
+          && !asset.name.contains("windows")
+      }),
+      ("linux", "arm64") => {
+        // Mullvad doesn't support ARM64 on Linux
+        None
+      }
+      _ => None,
+    };
+
+    asset.map(|a| a.browser_download_url.clone())
   }
 
   pub async fn download_browser<R: tauri::Runtime>(
@@ -170,7 +369,7 @@ impl Downloader {
     let response = self
       .client
       .get(&download_url)
-      .header("User-Agent", "donutbrowser")
+      .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
       .send()
       .await?;
 
@@ -247,7 +446,7 @@ mod tests {
   use crate::browser_version_service::DownloadInfo;
 
   use tempfile::TempDir;
-  use wiremock::matchers::{header, method, path};
+  use wiremock::matchers::{method, path, query_param};
   use wiremock::{Mock, MockServer, ResponseTemplate};
 
   async fn setup_mock_server() -> MockServer {
@@ -290,7 +489,7 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/repos/brave/brave-browser/releases"))
-      .and(header("user-agent", "donutbrowser"))
+      .and(query_param("per_page", "100"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(mock_response)
@@ -338,7 +537,7 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/repos/zen-browser/desktop/releases"))
-      .and(header("user-agent", "donutbrowser"))
+      .and(query_param("per_page", "100"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(mock_response)
@@ -386,7 +585,7 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/repos/mullvad/mullvad-browser/releases"))
-      .and(header("user-agent", "donutbrowser"))
+      .and(query_param("per_page", "100"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(mock_response)
@@ -497,7 +696,7 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/repos/brave/brave-browser/releases"))
-      .and(header("user-agent", "donutbrowser"))
+      .and(query_param("per_page", "100"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(mock_response)
@@ -547,7 +746,7 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/repos/zen-browser/desktop/releases"))
-      .and(header("user-agent", "donutbrowser"))
+      .and(query_param("per_page", "100"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(mock_response)
@@ -570,7 +769,7 @@ mod tests {
     assert!(result
       .unwrap_err()
       .to_string()
-      .contains("No macOS universal asset found"));
+      .contains("No compatible asset found"));
   }
 
   #[tokio::test]
@@ -589,7 +788,6 @@ mod tests {
     // Mock the download endpoint
     Mock::given(method("GET"))
       .and(path("/test-download"))
-      .and(header("user-agent", "donutbrowser"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_bytes(test_content)
@@ -640,7 +838,6 @@ mod tests {
     // Mock a 404 response
     Mock::given(method("GET"))
       .and(path("/missing-file"))
-      .and(header("user-agent", "donutbrowser"))
       .respond_with(ResponseTemplate::new(404))
       .mount(&server)
       .await;
@@ -691,7 +888,7 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/repos/mullvad/mullvad-browser/releases"))
-      .and(header("user-agent", "donutbrowser"))
+      .and(query_param("per_page", "100"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(mock_response)
@@ -714,7 +911,7 @@ mod tests {
     assert!(result
       .unwrap_err()
       .to_string()
-      .contains("No macOS asset found"));
+      .contains("No compatible asset found"));
   }
 
   #[tokio::test]
@@ -741,7 +938,7 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/repos/brave/brave-browser/releases"))
-      .and(header("user-agent", "donutbrowser"))
+      .and(query_param("per_page", "100"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(mock_response)
@@ -780,7 +977,6 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/chunked-download"))
-      .and(header("user-agent", "donutbrowser"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_bytes(test_content.clone())

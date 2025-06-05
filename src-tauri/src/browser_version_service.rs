@@ -40,6 +40,70 @@ impl BrowserVersionService {
     Self { api_client }
   }
 
+  /// Check if a browser is supported on the current platform and architecture
+  pub fn is_browser_supported(
+    &self,
+    browser: &str,
+  ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    let (os, arch) = Self::get_platform_info();
+
+    match browser {
+      "firefox" | "firefox-developer" => Ok(true),
+      "mullvad-browser" => {
+        // Mullvad doesn't support ARM64 on Windows and Linux
+        if arch == "arm64" && (os == "windows" || os == "linux") {
+          Ok(false)
+        } else {
+          Ok(true)
+        }
+      }
+      "zen" => {
+        // Zen supports all platforms and architectures
+        Ok(true)
+      }
+      "brave" => {
+        // Brave supports all platforms and architectures
+        Ok(true)
+      }
+      "chromium" => {
+        // Chromium doesn't support ARM64 on Linux
+        if arch == "arm64" && os == "linux" {
+          Ok(false)
+        } else {
+          Ok(true)
+        }
+      }
+      "tor-browser" => {
+        // TOR Browser doesn't support ARM64 on Windows and Linux
+        if arch == "arm64" && (os == "windows" || os == "linux") {
+          Ok(false)
+        } else {
+          Ok(true)
+        }
+      }
+      _ => Err(format!("Unknown browser: {browser}").into()),
+    }
+  }
+
+  /// Get list of browsers supported on the current platform
+  pub fn get_supported_browsers(&self) -> Vec<String> {
+    let all_browsers = vec![
+      "firefox",
+      "firefox-developer",
+      "mullvad-browser",
+      "zen",
+      "brave",
+      "chromium",
+      "tor-browser",
+    ];
+
+    all_browsers
+      .into_iter()
+      .filter(|browser| self.is_browser_supported(browser).unwrap_or(false))
+      .map(|s| s.to_string())
+      .collect()
+  }
+
   /// Get cached browser versions immediately (returns None if no cache exists)
   pub fn get_cached_browser_versions(&self, browser: &str) -> Option<Vec<String>> {
     self.api_client.load_cached_versions(browser)
@@ -58,7 +122,7 @@ impl BrowserVersionService {
       .map(|version| {
         BrowserVersionInfo {
           version: version.clone(),
-          is_prerelease: crate::api_client::is_alpha_version(&version),
+          is_prerelease: crate::api_client::is_nightly_version(&version),
           date: "".to_string(), // Cache doesn't store dates
         }
       })
@@ -176,7 +240,7 @@ impl BrowserVersionService {
             } else {
               BrowserVersionInfo {
                 version: version.clone(),
-                is_prerelease: crate::api_client::is_alpha_version(&version),
+                is_prerelease: crate::api_client::is_nightly_version(&version),
                 date: "".to_string(),
               }
             }
@@ -197,7 +261,7 @@ impl BrowserVersionService {
             } else {
               BrowserVersionInfo {
                 version: version.clone(),
-                is_prerelease: crate::api_client::is_alpha_version(&version),
+                is_prerelease: crate::api_client::is_nightly_version(&version),
                 date: "".to_string(),
               }
             }
@@ -212,7 +276,7 @@ impl BrowserVersionService {
             if let Some(release) = releases.iter().find(|r| r.tag_name == version) {
               BrowserVersionInfo {
                 version: release.tag_name.clone(),
-                is_prerelease: release.is_alpha,
+                is_prerelease: release.is_nightly,
                 date: release.published_at.clone(),
               }
             } else {
@@ -233,7 +297,7 @@ impl BrowserVersionService {
             if let Some(release) = releases.iter().find(|r| r.tag_name == version) {
               BrowserVersionInfo {
                 version: release.tag_name.clone(),
-                is_prerelease: release.prerelease,
+                is_prerelease: release.is_nightly,
                 date: release.published_at.clone(),
               }
             } else {
@@ -254,7 +318,7 @@ impl BrowserVersionService {
             if let Some(release) = releases.iter().find(|r| r.tag_name == version) {
               BrowserVersionInfo {
                 version: release.tag_name.clone(),
-                is_prerelease: release.prerelease,
+                is_prerelease: release.is_nightly,
                 date: release.published_at.clone(),
               }
             } else {
@@ -281,7 +345,7 @@ impl BrowserVersionService {
             } else {
               BrowserVersionInfo {
                 version: version.clone(),
-                is_prerelease: false, // Chromium versions are usually stable
+                is_prerelease: false, // Chromium usually stable releases
                 date: "".to_string(),
               }
             }
@@ -302,7 +366,7 @@ impl BrowserVersionService {
             } else {
               BrowserVersionInfo {
                 version: version.clone(),
-                is_prerelease: version.contains("alpha") || version.contains("rc"),
+                is_prerelease: false, // TOR Browser usually stable releases
                 date: "".to_string(),
               }
             }
@@ -355,149 +419,262 @@ impl BrowserVersionService {
     browser: &str,
     version: &str,
   ) -> Result<DownloadInfo, Box<dyn std::error::Error + Send + Sync>> {
+    let (os, arch) = Self::get_platform_info();
+
     match browser {
       "firefox" => {
-        #[cfg(target_os = "macos")]
-        return Ok(DownloadInfo {
-          url: format!("https://download.mozilla.org/?product=firefox-{version}&os=osx&lang=en-US"),
-          filename: format!("firefox-{version}.dmg"),
-          is_archive: true,
-        });
+        let os_param = match (&os[..], &arch[..]) {
+          ("windows", _) => "win64",
+          ("linux", "x64") => "linux64",
+          ("linux", "arm64") => "linux64-aarch64",
+          ("macos", _) => "osx",
+          _ => {
+            return Err(
+              format!("Unsupported platform/architecture for Firefox: {os}/{arch}").into(),
+            )
+          }
+        };
 
-        #[cfg(target_os = "windows")]
-        return Ok(DownloadInfo {
-          url: format!("https://download.mozilla.org/?product=firefox-{version}&os=win64&lang=en-US"),
-          filename: format!("firefox-{version}.exe"),
-          is_archive: false,
-        });
+        let (filename, is_archive) = match os.as_str() {
+          "windows" => (format!("firefox-{version}.exe"), false),
+          "linux" => (format!("firefox-{version}.tar.xz"), true),
+          "macos" => (format!("firefox-{version}.dmg"), true),
+          _ => return Err(format!("Unsupported platform for Firefox: {os}").into()),
+        };
 
-        #[cfg(target_os = "linux")]
-        return Ok(DownloadInfo {
-          url: format!("https://download.mozilla.org/?product=firefox-{version}&os=linux64&lang=en-US"),
-          filename: format!("firefox-{version}.tar.bz2"),
-          is_archive: true,
-        });
-
-        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-        return Err("Unsupported platform for Firefox".into());
-      }
-      "firefox-developer" => {
-        #[cfg(target_os = "macos")]
-        return Ok(DownloadInfo {
-          url: format!("https://download.mozilla.org/?product=devedition-{version}&os=osx&lang=en-US"),
-          filename: format!("firefox-developer-{version}.dmg"),
-          is_archive: true,
-        });
-
-        #[cfg(target_os = "windows")]
-        return Ok(DownloadInfo {
-          url: format!("https://download.mozilla.org/?product=devedition-{version}&os=win64&lang=en-US"),
-          filename: format!("firefox-developer-{version}.exe"),
-          is_archive: false,
-        });
-
-        #[cfg(target_os = "linux")]
-        return Ok(DownloadInfo {
-          url: format!("https://download.mozilla.org/?product=devedition-{version}&os=linux64&lang=en-US"),
-          filename: format!("firefox-developer-{version}.tar.bz2"),
-          is_archive: true,
-        });
-
-        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-        return Err("Unsupported platform for Firefox Developer".into());
-      }
-      "mullvad-browser" => {
-        #[cfg(target_os = "macos")]
-        return Ok(DownloadInfo {
-          url: format!(
-            "https://github.com/mullvad/mullvad-browser/releases/download/{version}/mullvad-browser-macos-{version}.dmg"
-          ),
-          filename: format!("mullvad-browser-{version}.dmg"),
-          is_archive: true,
-        });
-
-        #[cfg(target_os = "windows")]
-        return Ok(DownloadInfo {
-          url: format!(
-            "https://github.com/mullvad/mullvad-browser/releases/download/{version}/mullvad-browser-windows-{version}.exe"
-          ),
-          filename: format!("mullvad-browser-{version}.exe"),
-          is_archive: false,
-        });
-
-        #[cfg(target_os = "linux")]
-        return Ok(DownloadInfo {
-          url: format!(
-            "https://github.com/mullvad/mullvad-browser/releases/download/{version}/mullvad-browser-linux-{version}.tar.xz"
-          ),
-          filename: format!("mullvad-browser-{version}.tar.xz"),
-          is_archive: true,
-        });
-
-        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-        return Err("Unsupported platform for Mullvad Browser".into());
-      }
-      "zen" => {
-        #[cfg(target_os = "macos")]
-        return Ok(DownloadInfo {
-          url: format!(
-            "https://github.com/zen-browser/desktop/releases/download/{version}/zen.macos-universal.dmg"
-          ),
-          filename: format!("zen-{version}.dmg"),
-          is_archive: true,
-        });
-
-        #[cfg(target_os = "windows")]
-        return Ok(DownloadInfo {
-          url: format!(
-            "https://github.com/zen-browser/desktop/releases/download/{version}/zen.win.x64.zip"
-          ),
-          filename: format!("zen-{version}.zip"),
-          is_archive: true,
-        });
-
-        #[cfg(target_os = "linux")]
-        return Ok(DownloadInfo {
-          url: format!(
-            "https://github.com/zen-browser/desktop/releases/download/{version}/zen.linux-x86_64.AppImage"
-          ),
-          filename: format!("zen-{version}.AppImage"),
-          is_archive: false,
-        });
-
-        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-        return Err("Unsupported platform for Zen Browser".into());
-      }
-      "brave" => {
-        // For Brave, we use a placeholder URL since we need to resolve the actual asset URL dynamically
-        // The actual URL will be resolved in the download service using the GitHub API
         Ok(DownloadInfo {
           url: format!(
-            "https://github.com/brave/brave-browser/releases/download/{version}/Brave-Browser-universal.dmg"
+            "https://download.mozilla.org/?product=firefox-{version}&os={os_param}&lang=en-US"
           ),
-          filename: format!("brave-{version}.dmg"),
-          is_archive: true,
+          filename,
+          is_archive,
+        })
+      }
+      "firefox-developer" => {
+        let os_param = match (&os[..], &arch[..]) {
+          ("windows", _) => "win64",
+          ("linux", "x64") => "linux64",
+          ("linux", "arm64") => "linux64-aarch64",
+          ("macos", _) => "osx",
+          _ => {
+            return Err(
+              format!("Unsupported platform/architecture for Firefox Developer: {os}/{arch}")
+                .into(),
+            )
+          }
+        };
+
+        let (filename, is_archive) = match os.as_str() {
+          "windows" => (format!("firefox-developer-{version}.exe"), false),
+          "linux" => (format!("firefox-developer-{version}.tar.xz"), true),
+          "macos" => (format!("firefox-developer-{version}.dmg"), true),
+          _ => return Err(format!("Unsupported platform for Firefox Developer: {os}").into()),
+        };
+
+        Ok(DownloadInfo {
+          url: format!(
+            "https://download.mozilla.org/?product=firefox-devedition-{version}&os={os_param}&lang=en-US"
+          ),
+          filename,
+          is_archive,
+        })
+      }
+      "mullvad-browser" => {
+        // Mullvad Browser doesn't support ARM64 on Windows and Linux
+        if arch == "arm64" && (os == "windows" || os == "linux") {
+          return Err(format!("Mullvad Browser doesn't support ARM64 on {os}").into());
+        }
+
+        let (platform_str, filename, is_archive) = match os.as_str() {
+          "windows" => {
+            if arch == "arm64" {
+              return Err("Mullvad Browser doesn't support ARM64 on Windows".into());
+            }
+            (
+              "windows-x86_64",
+              format!("mullvad-browser-windows-x86_64-{version}.exe"),
+              false,
+            )
+          }
+          "linux" => {
+            if arch == "arm64" {
+              return Err("Mullvad Browser doesn't support ARM64 on Linux".into());
+            }
+            (
+              "x86_64",
+              format!("mullvad-browser-x86_64-{version}.tar.xz"),
+              true,
+            )
+          }
+          "macos" => (
+            "macos",
+            format!("mullvad-browser-macos-{version}.dmg"),
+            true,
+          ),
+          _ => return Err(format!("Unsupported platform for Mullvad Browser: {os}").into()),
+        };
+
+        Ok(DownloadInfo {
+          url: format!(
+            "https://github.com/mullvad/mullvad-browser/releases/download/{version}/mullvad-browser-{platform_str}-{version}{}", 
+            if os == "windows" { ".exe" } else if os == "linux" { ".tar.xz" } else { ".dmg" }
+          ),
+          filename,
+          is_archive,
+        })
+      }
+      "zen" => {
+        let (asset_name, filename, is_archive) = match (&os[..], &arch[..]) {
+          ("windows", "x64") => ("zen.installer.exe", format!("zen-{version}.exe"), false),
+          ("windows", "arm64") => (
+            "zen.installer-arm64.exe",
+            format!("zen-{version}-arm64.exe"),
+            false,
+          ),
+          ("linux", "x64") => (
+            "zen.linux-x86_64.tar.xz",
+            format!("zen-{version}-x86_64.tar.xz"),
+            true,
+          ),
+          ("linux", "arm64") => (
+            "zen.linux-aarch64.tar.xz",
+            format!("zen-{version}-aarch64.tar.xz"),
+            true,
+          ),
+          ("macos", _) => (
+            "zen.macos-universal.dmg",
+            format!("zen-{version}.dmg"),
+            true,
+          ),
+          _ => {
+            return Err(format!("Unsupported platform/architecture for Zen: {os}/{arch}").into())
+          }
+        };
+
+        Ok(DownloadInfo {
+          url: format!(
+            "https://github.com/zen-browser/desktop/releases/download/{version}/{asset_name}"
+          ),
+          filename,
+          is_archive,
+        })
+      }
+      "brave" => {
+        // Brave uses different asset naming conventions
+        // The actual URL will be resolved dynamically in the download service
+        let (filename, is_archive) = match (&os[..], &arch[..]) {
+          ("windows", _) => (format!("brave-{version}.exe"), false),
+          ("linux", "x64") => (format!("brave-browser-{version}-linux-amd64.zip"), true),
+          ("linux", "arm64") => (format!("brave-browser-{version}-linux-arm64.zip"), true),
+          ("macos", _) => (format!("Brave-Browser-universal.dmg"), true),
+          _ => {
+            return Err(format!("Unsupported platform/architecture for Brave: {os}/{arch}").into())
+          }
+        };
+
+        Ok(DownloadInfo {
+          url: format!(
+            "https://github.com/brave/brave-browser/releases/download/{version}/brave-placeholder"
+          ),
+          filename,
+          is_archive,
         })
       }
       "chromium" => {
-        let arch = if cfg!(target_arch = "aarch64") { "Mac_Arm" } else { "Mac" };
+        let platform_str = match (&os[..], &arch[..]) {
+          ("windows", "x64") => "Win_x64",
+          ("windows", "arm64") => "Win_Arm64",
+          ("linux", "x64") => "Linux_x64",
+          ("linux", "arm64") => return Err("Chromium doesn't support ARM64 on Linux".into()),
+          ("macos", "x64") => "Mac",
+          ("macos", "arm64") => "Mac_Arm",
+          _ => {
+            return Err(
+              format!("Unsupported platform/architecture for Chromium: {os}/{arch}").into(),
+            )
+          }
+        };
+
+        let (archive_name, filename) = match os.as_str() {
+          "windows" => ("chrome-win.zip", format!("chromium-{version}-win.zip")),
+          "linux" => ("chrome-linux.zip", format!("chromium-{version}-linux.zip")),
+          "macos" => ("chrome-mac.zip", format!("chromium-{version}-mac.zip")),
+          _ => return Err(format!("Unsupported platform for Chromium: {os}").into()),
+        };
+
         Ok(DownloadInfo {
           url: format!(
-            "https://commondatastorage.googleapis.com/chromium-browser-snapshots/{arch}/{version}/chrome-mac.zip"
+            "https://commondatastorage.googleapis.com/chromium-browser-snapshots/{platform_str}/{version}/{archive_name}"
           ),
-          filename: format!("chromium-{version}.zip"),
+          filename,
           is_archive: true,
         })
       }
-      "tor-browser" => Ok(DownloadInfo {
-        url: format!(
-          "https://archive.torproject.org/tor-package-archive/torbrowser/{version}/tor-browser-macos-{version}.dmg"
-        ),
-        filename: format!("tor-browser-{version}.dmg"),
-        is_archive: true,
-      }),
+      "tor-browser" => {
+        // TOR Browser doesn't support ARM64 on Windows and Linux
+        if arch == "arm64" && (os == "windows" || os == "linux") {
+          return Err(format!("TOR Browser doesn't support ARM64 on {os}").into());
+        }
+
+        let (platform_str, filename, is_archive) = match os.as_str() {
+          "windows" => {
+            if arch == "arm64" {
+              return Err("TOR Browser doesn't support ARM64 on Windows".into());
+            }
+            (
+              "windows-x86_64-portable",
+              format!("tor-browser-windows-x86_64-portable-{version}.exe"),
+              false,
+            )
+          }
+          "linux" => {
+            if arch == "arm64" {
+              return Err("TOR Browser doesn't support ARM64 on Linux".into());
+            }
+            (
+              "linux-x86_64",
+              format!("tor-browser-linux-x86_64-{version}.tar.xz"),
+              true,
+            )
+          }
+          "macos" => ("macos", format!("tor-browser-macos-{version}.dmg"), true),
+          _ => return Err(format!("Unsupported platform for TOR Browser: {os}").into()),
+        };
+
+        Ok(DownloadInfo {
+          url: format!(
+            "https://archive.torproject.org/tor-package-archive/torbrowser/{version}/tor-browser-{platform_str}-{version}{}", 
+            if os == "windows" { ".exe" } else if os == "linux" { ".tar.xz" } else { ".dmg" }
+          ),
+          filename,
+          is_archive,
+        })
+      }
       _ => Err(format!("Unsupported browser: {browser}").into()),
     }
+  }
+
+  /// Get platform and architecture information
+  fn get_platform_info() -> (String, String) {
+    let os = if cfg!(target_os = "windows") {
+      "windows"
+    } else if cfg!(target_os = "linux") {
+      "linux"
+    } else if cfg!(target_os = "macos") {
+      "macos"
+    } else {
+      "unknown"
+    };
+
+    let arch = if cfg!(target_arch = "x86_64") {
+      "x64"
+    } else if cfg!(target_arch = "aarch64") {
+      "arm64"
+    } else {
+      "unknown"
+    };
+
+    (os.to_string(), arch.to_string())
   }
 
   // Private helper methods for each browser type
@@ -634,7 +811,7 @@ impl BrowserVersionService {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use wiremock::matchers::{header, method, path};
+  use wiremock::matchers::{method, path, query_param};
   use wiremock::{Mock, MockServer, ResponseTemplate};
 
   async fn setup_mock_server() -> MockServer {
@@ -692,7 +869,6 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/firefox.json"))
-      .and(header("user-agent", "donutbrowser"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(mock_response)
@@ -728,7 +904,6 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/devedition.json"))
-      .and(header("user-agent", "donutbrowser"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(mock_response)
@@ -770,7 +945,7 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/repos/mullvad/mullvad-browser/releases"))
-      .and(header("user-agent", "donutbrowser"))
+      .and(query_param("per_page", "100"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(mock_response)
@@ -812,7 +987,7 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/repos/zen-browser/desktop/releases"))
-      .and(header("user-agent", "donutbrowser"))
+      .and(query_param("per_page", "100"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(mock_response)
@@ -825,21 +1000,31 @@ mod tests {
   async fn setup_brave_mocks(server: &MockServer) {
     let mock_response = r#"[
       {
-        "tag_name": "v1.81.9",
-        "name": "Brave Release 1.81.9",
+        "tag_name": "v1.79.119",
+        "name": "Release v1.79.119 (Chromium 137.0.7151.68)",
         "prerelease": false,
         "published_at": "2024-01-15T10:00:00Z",
         "assets": [
           {
-            "name": "brave-v1.81.9-universal.dmg",
-            "browser_download_url": "https://example.com/brave-1.81.9-universal.dmg",
+            "name": "brave-v1.79.119-universal.dmg",
+            "browser_download_url": "https://example.com/brave-1.79.119-universal.dmg",
             "size": 200000000
+          },
+          {
+            "name": "brave-browser-1.79.119-linux-amd64.zip",
+            "browser_download_url": "https://example.com/brave-browser-1.79.119-linux-amd64.zip",
+            "size": 150000000
+          },
+          {
+            "name": "brave-browser-1.79.119-linux-arm64.zip",
+            "browser_download_url": "https://example.com/brave-browser-1.79.119-linux-arm64.zip",
+            "size": 145000000
           }
         ]
       },
       {
         "tag_name": "v1.81.8",
-        "name": "Brave Release 1.81.8",
+        "name": "Nightly v1.81.8",
         "prerelease": false,
         "published_at": "2024-01-10T10:00:00Z",
         "assets": [
@@ -854,7 +1039,7 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/repos/brave/brave-browser/releases"))
-      .and(header("user-agent", "donutbrowser"))
+      .and(query_param("per_page", "100"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(mock_response)
@@ -873,7 +1058,6 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path(format!("/{arch}/LAST_CHANGE")))
-      .and(header("user-agent", "donutbrowser"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string("1465660")
@@ -921,7 +1105,6 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/"))
-      .and(header("user-agent", "donutbrowser"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(mock_html)
@@ -932,7 +1115,6 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/14.0.4/"))
-      .and(header("user-agent", "donutbrowser"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(version_html_144)
@@ -943,7 +1125,6 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/14.0.3/"))
-      .and(header("user-agent", "donutbrowser"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(version_html_143)
@@ -954,7 +1135,6 @@ mod tests {
 
     Mock::given(method("GET"))
       .and(path("/14.0.2/"))
-      .and(header("user-agent", "donutbrowser"))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string(version_html_142)
@@ -966,7 +1146,7 @@ mod tests {
 
   #[tokio::test]
   async fn test_browser_version_service_creation() {
-    let _service = BrowserVersionService::new();
+    let _ = BrowserVersionService::new();
     // Test passes if we can create the service without panicking
   }
 
@@ -1304,7 +1484,7 @@ mod tests {
     let mullvad_info = service
       .get_download_info("mullvad-browser", "14.5a6")
       .unwrap();
-    assert_eq!(mullvad_info.filename, "mullvad-browser-14.5a6.dmg");
+    assert_eq!(mullvad_info.filename, "mullvad-browser-macos-14.5a6.dmg");
     assert!(mullvad_info.url.contains("mullvad-browser-macos-14.5a6"));
     assert!(mullvad_info.is_archive);
 
@@ -1316,20 +1496,20 @@ mod tests {
 
     // Test Tor Browser
     let tor_info = service.get_download_info("tor-browser", "14.0.4").unwrap();
-    assert_eq!(tor_info.filename, "tor-browser-14.0.4.dmg");
+    assert_eq!(tor_info.filename, "tor-browser-macos-14.0.4.dmg");
     assert!(tor_info.url.contains("tor-browser-macos-14.0.4"));
     assert!(tor_info.is_archive);
 
     // Test Chromium
     let chromium_info = service.get_download_info("chromium", "1465660").unwrap();
-    assert_eq!(chromium_info.filename, "chromium-1465660.zip");
+    assert_eq!(chromium_info.filename, "chromium-1465660-mac.zip");
     assert!(chromium_info.url.contains("chrome-mac.zip"));
     assert!(chromium_info.is_archive);
 
     // Test Brave
     let brave_info = service.get_download_info("brave", "v1.81.9").unwrap();
     assert_eq!(brave_info.filename, "brave-v1.81.9.dmg");
-    assert!(brave_info.url.contains("Brave-Browser"));
+    assert!(brave_info.url.contains("brave-placeholder"));
     assert!(brave_info.is_archive);
 
     // Test unsupported browser

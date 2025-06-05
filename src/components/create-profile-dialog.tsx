@@ -26,6 +26,8 @@ import {
 } from "@/components/ui/tooltip";
 import { VersionSelector } from "@/components/version-selector";
 import { useBrowserDownload } from "@/hooks/use-browser-download";
+import { useBrowserSupport } from "@/hooks/use-browser-support";
+import { getBrowserDisplayName } from "@/lib/browser-utils";
 import type { BrowserProfile, ProxySettings } from "@/types";
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
@@ -60,9 +62,6 @@ export function CreateProfileDialog({
   const [selectedBrowser, setSelectedBrowser] =
     useState<BrowserTypeString | null>("mullvad-browser");
   const [selectedVersion, setSelectedVersion] = useState<string | null>(null);
-  const [supportedBrowsers, setSupportedBrowsers] = useState<
-    BrowserTypeString[]
-  >([]);
   const [isCreating, setIsCreating] = useState(false);
   const [existingProfiles, setExistingProfiles] = useState<BrowserProfile[]>(
     [],
@@ -84,12 +83,28 @@ export function CreateProfileDialog({
     isVersionDownloaded,
   } = useBrowserDownload();
 
+  const {
+    supportedBrowsers,
+    isLoading: isLoadingSupport,
+    isBrowserSupported,
+  } = useBrowserSupport();
+
   useEffect(() => {
     if (isOpen) {
-      void loadSupportedBrowsers();
       void loadExistingProfiles();
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (supportedBrowsers.length > 0) {
+      // Set default browser to first supported browser
+      if (supportedBrowsers.includes("mullvad-browser")) {
+        setSelectedBrowser("mullvad-browser");
+      } else if (supportedBrowsers.length > 0) {
+        setSelectedBrowser(supportedBrowsers[0] as BrowserTypeString);
+      }
+    }
+  }, [supportedBrowsers]);
 
   useEffect(() => {
     if (isOpen && selectedBrowser) {
@@ -105,7 +120,7 @@ export function CreateProfileDialog({
     if (availableVersions.length > 0 && selectedBrowser) {
       // Always reset version when browser changes or versions are loaded
       // Find the latest stable version (not alpha/beta)
-      const stableVersions = availableVersions.filter((v) => !v.is_alpha);
+      const stableVersions = availableVersions.filter((v) => !v.is_nightly);
 
       if (stableVersions.length > 0) {
         // Select the first stable version (they're already sorted newest first)
@@ -116,22 +131,6 @@ export function CreateProfileDialog({
       }
     }
   }, [availableVersions, selectedBrowser]);
-
-  const loadSupportedBrowsers = async () => {
-    try {
-      const browsers = await invoke<BrowserTypeString[]>(
-        "get_supported_browsers",
-      );
-      setSupportedBrowsers(browsers);
-      if (browsers.includes("mullvad-browser")) {
-        setSelectedBrowser("mullvad-browser");
-      } else if (browsers.length > 0) {
-        setSelectedBrowser(browsers[0]);
-      }
-    } catch (error) {
-      console.error("Failed to load supported browsers:", error);
-    }
-  };
 
   const loadExistingProfiles = async () => {
     try {
@@ -261,21 +260,58 @@ export function CreateProfileDialog({
               onValueChange={(value) => {
                 setSelectedBrowser(value as BrowserTypeString);
               }}
+              disabled={isLoadingSupport}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select browser" />
+                <SelectValue
+                  placeholder={
+                    isLoadingSupport ? "Loading browsers..." : "Select browser"
+                  }
+                />
               </SelectTrigger>
               <SelectContent>
-                {supportedBrowsers.map((browser) => (
-                  <SelectItem key={browser} value={browser}>
-                    {browser
-                      .split("-")
-                      .map(
-                        (word) => word.charAt(0).toUpperCase() + word.slice(1),
-                      )
-                      .join(" ")}
-                  </SelectItem>
-                ))}
+                {(
+                  [
+                    "mullvad-browser",
+                    "firefox",
+                    "firefox-developer",
+                    "chromium",
+                    "brave",
+                    "zen",
+                    "tor-browser",
+                  ] as BrowserTypeString[]
+                ).map((browser) => {
+                  const isSupported = isBrowserSupported(browser);
+                  const displayName = getBrowserDisplayName(browser);
+
+                  if (!isSupported) {
+                    return (
+                      <Tooltip key={browser}>
+                        <TooltipTrigger asChild>
+                          <SelectItem
+                            value={browser}
+                            disabled={true}
+                            className="opacity-50"
+                          >
+                            {displayName} (Not supported on this platform)
+                          </SelectItem>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>
+                            {displayName} is not supported on your current
+                            platform or architecture.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  }
+
+                  return (
+                    <SelectItem key={browser} value={browser}>
+                      {displayName}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
           </div>
