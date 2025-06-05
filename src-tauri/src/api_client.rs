@@ -934,7 +934,7 @@ impl ApiClient {
               BrowserRelease {
                 version: version.clone(),
                 date: "".to_string(), // Cache doesn't store dates
-                is_prerelease: false, // Assume all archived versions are stable
+                is_prerelease: is_nightly_version(&version),
                 download_url: Some(format!(
                   "{}/{version}/tor-browser-macos-{version}.dmg",
                   self.tor_archive_base

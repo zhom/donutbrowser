@@ -360,7 +360,7 @@ impl BrowserVersionService {
             if let Some(release) = releases.iter().find(|r| r.version == version) {
               BrowserVersionInfo {
                 version: release.version.clone(),
-                is_prerelease: release.is_prerelease,
+                is_prerelease: crate::api_client::is_nightly_version(&version),
                 date: release.date.clone(),
               }
             } else {
