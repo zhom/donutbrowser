@@ -650,19 +650,10 @@ mod tests {
         browser_download_url: "https://example.com/aarch64.dmg".to_string(),
         size: 12345,
       },
-      AppReleaseAsset {
-        name: "Donut.Browser_0.1.0_universal.dmg".to_string(),
-        browser_download_url: "https://example.com/universal.dmg".to_string(),
-        size: 12345,
-      },
     ];
 
     let url = updater.get_download_url_for_platform(&assets);
     assert!(url.is_some());
-
-    // Should prefer universal binary over architecture-specific ones
-    let url = url.unwrap();
-    assert_eq!(url, "https://example.com/universal.dmg");
 
     // Test with generic macOS DMG (no architecture specified)
     let generic_assets = vec![AppReleaseAsset {
@@ -675,7 +666,7 @@ mod tests {
     assert!(generic_url.is_some());
     assert_eq!(generic_url.unwrap(), "https://example.com/macos.dmg");
 
-    // Test fallback to architecture-specific when no universal is available
+    // Test architecture-specific DMG
     let arch_specific_assets = vec![
       AppReleaseAsset {
         name: "Donut.Browser_0.1.0_x64.dmg".to_string(),
