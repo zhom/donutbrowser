@@ -10,7 +10,7 @@
     "build": "tsc && pkg ./dist/index.js --targets latest-macos-arm64 --output dist/nodecar",
     "build:aarch64": "tsc && pkg ./dist/index.js --targets latest-macos-arm64 --output dist/nodecar",
     "build:x86_64": "tsc && pkg ./dist/index.js --targets latest-macos-x64 --output dist/nodecar",
-    "build:universal": "tsc && pkg ./dist/index.js --targets latest-macos-arm64 --output dist/nodecar-arm64 && pkg ./dist/index.js --targets latest-macos-x64 --output dist/nodecar-x64 && lipo -create -output dist/nodecar dist/nodecar-arm64 dist/nodecar-x64 && rm dist/nodecar-arm64 dist/nodecar-x64",
+    "build:universal": "pnpm build:aarch64 && pnpm build:x86_64",
     "build:linux-x64": "tsc && pkg ./dist/index.js --targets latest-linux-x64 --output dist/nodecar",
     "build:linux-arm64": "tsc && pkg ./dist/index.js --targets latest-linux-arm64 --output dist/nodecar",
     "build:win-x64": "tsc && pkg ./dist/index.js --targets latest-win-x64 --output dist/nodecar",
