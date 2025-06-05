@@ -1,8 +1,8 @@
-<div align="center">
-  <img src="assets/logo.png" alt="Donut Browser Logo" width="150">
-  <h1>Donut Browser</h1>
-  <strong>A powerful browser orchestrator that puts you in control of your browsing experience. 🍩</strong>
-</div>
+# Donut Browser
+
+![Donut Browser Logo](assets/logo.png)
+
+## **A powerful browser orchestrator that puts you in control of your browsing experience. 🍩**
 
 [![GitHub Release](https://img.shields.io/github/v/release/zhom/donutbrowser)](https://github.com/zhom/donutbrowser/releases/latest)
 [![RPs Welcome!](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat)](https://github.com/zhom/donutbrowser/issues)
