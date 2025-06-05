@@ -20,6 +20,13 @@ export interface BrowserProfile {
   last_launch?: number;
 }
 
+export interface DetectedProfile {
+  browser: string;
+  name: string;
+  path: string;
+  description: string;
+}
+
 export interface AppUpdateInfo {
   current_version: string;
   new_version: string;

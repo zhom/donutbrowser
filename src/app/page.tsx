@@ -2,12 +2,19 @@
 
 import { ChangeVersionDialog } from "@/components/change-version-dialog";
 import { CreateProfileDialog } from "@/components/create-profile-dialog";
+import { ImportProfileDialog } from "@/components/import-profile-dialog";
 import { ProfilesDataTable } from "@/components/profile-data-table";
 import { ProfileSelectorDialog } from "@/components/profile-selector-dialog";
 import { ProxySettingsDialog } from "@/components/proxy-settings-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -20,7 +27,8 @@ import type { BrowserProfile, ProxySettings } from "@/types";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { GoGear, GoPlus } from "react-icons/go";
+import { FaDownload } from "react-icons/fa";
+import { GoGear, GoKebabHorizontal, GoPlus } from "react-icons/go";
 
 type BrowserTypeString =
   | "mullvad-browser"
@@ -43,6 +51,7 @@ export default function Home() {
   const [createProfileDialogOpen, setCreateProfileDialogOpen] = useState(false);
   const [changeVersionDialogOpen, setChangeVersionDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [importProfileDialogOpen, setImportProfileDialogOpen] = useState(false);
   const [pendingUrls, setPendingUrls] = useState<PendingUrl[]>([]);
   const [currentProfileForProxy, setCurrentProfileForProxy] =
     useState<BrowserProfile | null>(null);
@@ -407,21 +416,35 @@ export default function Home() {
             <div className="flex justify-between items-center">
               <CardTitle>Profiles</CardTitle>
               <div className="flex gap-2 items-center">
-                <Tooltip>
-                  <TooltipTrigger asChild>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
                     <Button
                       size="sm"
                       variant="outline"
+                      className="flex gap-2 items-center"
+                    >
+                      <GoKebabHorizontal className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
                       onClick={() => {
                         setSettingsDialogOpen(true);
                       }}
-                      className="flex gap-2 items-center"
                     >
-                      <GoGear className="w-4 h-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Settings</TooltipContent>
-                </Tooltip>
+                      <GoGear className="mr-2 w-4 h-4" />
+                      Settings
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        setImportProfileDialogOpen(true);
+                      }}
+                    >
+                      <FaDownload className="mr-2 w-4 h-4" />
+                      Import Profile
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -487,6 +510,14 @@ export default function Home() {
         }}
         profile={currentProfileForVersionChange}
         onVersionChanged={() => void loadProfiles()}
+      />
+
+      <ImportProfileDialog
+        isOpen={importProfileDialogOpen}
+        onClose={() => {
+          setImportProfileDialogOpen(false);
+        }}
+        onImportComplete={() => void loadProfiles()}
       />
 
       {pendingUrls.map((pendingUrl) => (

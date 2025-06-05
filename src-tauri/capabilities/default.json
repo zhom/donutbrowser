@@ -18,6 +18,8 @@
     "shell:allow-open",
     "shell:allow-spawn",
     "shell:allow-stdin-write",
-    "deep-link:default"
+    "deep-link:default",
+    "dialog:default",
+    "dialog:allow-open"
   ]
 }

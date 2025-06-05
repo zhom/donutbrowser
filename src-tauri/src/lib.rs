@@ -16,6 +16,7 @@ mod default_browser;
 mod download;
 mod downloaded_browsers;
 mod extraction;
+mod profile_importer;
 mod proxy_manager;
 mod settings_manager;
 mod theme_detector;
@@ -54,6 +55,8 @@ use auto_updater::{
 use app_auto_updater::{
   check_for_app_updates, check_for_app_updates_manual, download_and_install_app_update,
 };
+
+use profile_importer::{detect_existing_profiles, import_browser_profile};
 
 use theme_detector::get_system_theme;
 
@@ -168,6 +171,7 @@ pub fn run() {
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_shell::init())
     .plugin(tauri_plugin_deep_link::init())
+    .plugin(tauri_plugin_dialog::init())
     .setup(|app| {
       // Create the main window programmatically
       #[allow(unused_variables)]
@@ -309,6 +313,8 @@ pub fn run() {
       check_for_app_updates_manual,
       download_and_install_app_update,
       get_system_theme,
+      detect_existing_profiles,
+      import_browser_profile,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
