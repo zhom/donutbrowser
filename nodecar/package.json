@@ -7,7 +7,7 @@
     "watch": "nodemon --exec ts-node --esm ./src/index.ts --watch src",
     "dev": "node --loader ts-node/esm ./src/index.ts",
     "start": "node --loader ts-node/esm ./src/index.ts",
-    "rename-binary": "sh ./rename-binary.sh",
+    "rename-binary": "sh ./copy-binary.sh",
     "build": "tsc && pkg ./dist/index.js --targets latest-macos-arm64 --output dist/nodecar && pnpm rename-binary",
     "build:mac-aarch64": "tsc && pkg ./dist/index.js --targets latest-macos-arm64 --output dist/nodecar && pnpm rename-binary",
     "build:mac-x86_64": "tsc && pkg ./dist/index.js --targets latest-macos-x64 --output dist/nodecar && pnpm rename-binary",
