@@ -28,14 +28,15 @@
 ## Download
 
 > As of right now, the app is not signed by Apple. You need to have Gatekeeper disabled to run it. The app automatically checks for updates on each launch.
+> For Linux, .deb and .rpm packages are available as well as standalone .AppImage files.
 
 The app can be downloaded from the [releases page](https://github.com/zhom/donutbrowser/releases/latest).
 
 ## Supported Platforms
 
 - ✅ **macOS** (Intel & Apple Silicon)
+- ✅ **Linux** (x64 & arm64)
 - 🔄 **Windows** (Planned)
-- 🔄 **Linux** (Planned)
 
 ## Development
 
@@ -53,6 +54,10 @@ Have questions or want to contribute? We'd love to hear from you!
 
 - **Issues**: [GitHub Issues](https://github.com/zhom/donutbrowser/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/zhom/donutbrowser/discussions)
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=zhom/donutbrowser&type=Date)](https://www.star-history.com/#zhom/donutbrowser&Date)
 
 ## Contact
 
