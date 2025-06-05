@@ -2,14 +2,12 @@
 
 ![Donut Browser Logo](assets/logo.png)
 
-## **A powerful browser orchestrator that puts you in control of your browsing experience. 🍩**
+> **A powerful browser orchestrator that puts you in control of your browsing experience. 🍩**
 
 [![GitHub Release](https://img.shields.io/github/v/release/zhom/donutbrowser)](https://github.com/zhom/donutbrowser/releases/latest)
 [![RPs Welcome!](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat)](https://github.com/zhom/donutbrowser/issues)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](https://github.com/zhom/donutbrowser/blob/main/LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/zhom/donutbrowser?style=social)](https://github.com/zhom/donutbrowser/stargazers)
-
-> A free and open source browser orchestrator built with [Tauri](https://v2.tauri.app/).
 
 ![Donut Browser Preview](assets/preview.png)
 
@@ -29,6 +27,8 @@ The app can be downloaded from the [releases page](https://github.com/zhom/donut
 ## Development
 
 ### Contributing
+
+> Donut Browser is built with [Tauri](https://v2.tauri.app/).
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
