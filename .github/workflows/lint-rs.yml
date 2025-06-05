@@ -79,7 +79,7 @@ jobs:
           if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
             pnpm run build:linux-x64
           elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-            pnpm run build:aarch64
+            pnpm run build:mac-aarch64
           elif [[ "${{ matrix.os }}" == "windows-latest" ]]; then
             pnpm run build:win-x64
           fi

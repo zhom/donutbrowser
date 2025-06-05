@@ -1,5 +1,6 @@
 {
   "cSpell.words": [
+    "appindicator",
     "applescript",
     "autoconfig",
     "autologin",
@@ -22,7 +23,11 @@
     "idletime",
     "KHTML",
     "launchservices",
+    "libayatana",
+    "librsvg",
+    "libwebkit",
     "mountpoint",
+    "msvc",
     "msys",
     "Mullvad",
     "nodecar",
