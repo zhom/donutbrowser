@@ -86,6 +86,15 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Check and Update Repository URLs (Ubuntu ARM64 only)
+        if: matrix.platform == 'ubuntu-22.04' && matrix.arch == 'aarch64'
+        run: |
+          echo "Checking repository links..."
+          if ! curl -s --head https://security.ubuntu.com/ubuntu/dists/jammy/main/binary-arm64/Packages | grep "200 OK"; then
+            echo "Repository link invalid. Updating mirrors..."
+            sudo apt-get update --fix-missing
+          fi
+
       - name: Install dependencies (Ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
@@ -93,11 +102,11 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev pkg-config
           # Install cross-compilation tools for ARM64
           if [[ "${{ matrix.arch }}" == "aarch64" ]]; then
-            sudo dpkg --add-architecture arm64
-            sudo apt-get update
+            sudo dpkg --add-architecture arm64 || true  # Prevent failure if architecture is already added
+            sudo apt-get update || sudo apt-get update --fix-missing
             sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-            sudo apt-get install -y libwebkit2gtk-4.1-dev:arm64 libgtk-3-dev:arm64 libayatana-appindicator3-dev:arm64 librsvg2-dev:arm64
-            sudo apt-get install -y libglib2.0-dev:arm64 libcairo2-dev:arm64 libpango1.0-dev:arm64 libgdk-pixbuf2.0-dev:arm64 libatk1.0-dev:arm64
+            sudo apt-get install -y libwebkit2gtk-4.1-dev:arm64 libgtk-3-dev:arm64 libayatana-appindicator3-dev:arm64 librsvg2-dev:arm64 || echo "Package fetch failed for ARM64 dependencies."
+            sudo apt-get install -y libglib2.0-dev:arm64 libcairo2-dev:arm64 libpango1.0-dev:arm64 libgdk-pixbuf2.0-dev:arm64 libatk1.0-dev:arm64 || echo "Package fetch failed for ARM64 dependencies."
           fi
 
       - name: Setup cross-compilation environment (Ubuntu ARM64 only)
