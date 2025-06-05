@@ -566,7 +566,7 @@ impl BrowserVersionService {
           ("windows", _) => (format!("brave-{version}.exe"), false),
           ("linux", "x64") => (format!("brave-browser-{version}-linux-amd64.zip"), true),
           ("linux", "arm64") => (format!("brave-browser-{version}-linux-arm64.zip"), true),
-          ("macos", _) => (format!("Brave-Browser-universal.dmg"), true),
+          ("macos", _) => ("Brave-Browser-universal.dmg".to_string(), true),
           _ => {
             return Err(format!("Unsupported platform/architecture for Brave: {os}/{arch}").into())
           }

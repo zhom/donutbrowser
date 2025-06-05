@@ -206,12 +206,10 @@ impl Downloader {
           })
           .or_else(|| {
             // Fallback to DEB packages
-            assets
-              .iter()
-              .find(|asset| {
-                let name = asset.name.to_lowercase();
-                name.contains(arch_pattern) && name.ends_with(".deb")
-              })
+            assets.iter().find(|asset| {
+              let name = asset.name.to_lowercase();
+              name.contains(arch_pattern) && name.ends_with(".deb")
+            })
           })
           .or_else(|| {
             // Fallback to any ZIP

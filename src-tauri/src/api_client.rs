@@ -740,7 +740,7 @@ impl ApiClient {
 
     // Get platform info to filter appropriate releases
     let (os, arch) = Self::get_platform_info();
-    
+
     // Filter releases that have assets compatible with the current platform
     let mut filtered_releases: Vec<GithubRelease> = releases
       .into_iter()
@@ -781,46 +781,35 @@ impl ApiClient {
     match os {
       "windows" => {
         // For Windows, look for standalone setup EXE (not the auto-updater one)
-        assets
-          .iter()
-          .any(|asset| {
-            let name = asset.name.to_lowercase();
-            name.contains("standalone") && name.ends_with(".exe") && !name.contains("silent")
-          })
-          || assets.iter().any(|asset| asset.name.ends_with(".exe"))
+        assets.iter().any(|asset| {
+          let name = asset.name.to_lowercase();
+          name.contains("standalone") && name.ends_with(".exe") && !name.contains("silent")
+        }) || assets.iter().any(|asset| asset.name.ends_with(".exe"))
       }
       "macos" => {
         // For macOS, prefer universal DMG
-        assets
-          .iter()
-          .any(|asset| {
-            let name = asset.name.to_lowercase();
-            name.contains("universal") && name.ends_with(".dmg")
-          })
-          || assets.iter().any(|asset| asset.name.ends_with(".dmg"))
+        assets.iter().any(|asset| {
+          let name = asset.name.to_lowercase();
+          name.contains("universal") && name.ends_with(".dmg")
+        }) || assets.iter().any(|asset| asset.name.ends_with(".dmg"))
       }
       "linux" => {
         // For Linux, check for architecture-specific packages (prefer ZIP for stable releases)
         let arch_pattern = if arch == "arm64" { "arm64" } else { "amd64" };
 
-        assets
-          .iter()
-          .any(|asset| {
-            let name = asset.name.to_lowercase();
-            name.contains("linux") && name.contains(arch_pattern) && name.ends_with(".zip")
-          })
-          || assets.iter().any(|asset| {
-            let name = asset.name.to_lowercase();
-            name.contains(arch_pattern) && (name.ends_with(".deb") || name.ends_with(".rpm"))
-          })
-          || assets.iter().any(|asset| {
-            let name = asset.name.to_lowercase();
-            name.contains("linux") && name.ends_with(".zip")
-          })
-          || assets.iter().any(|asset| {
-            let name = asset.name.to_lowercase();
-            name.ends_with(".deb") || name.ends_with(".rpm")
-          })
+        assets.iter().any(|asset| {
+          let name = asset.name.to_lowercase();
+          name.contains("linux") && name.contains(arch_pattern) && name.ends_with(".zip")
+        }) || assets.iter().any(|asset| {
+          let name = asset.name.to_lowercase();
+          name.contains(arch_pattern) && (name.ends_with(".deb") || name.ends_with(".rpm"))
+        }) || assets.iter().any(|asset| {
+          let name = asset.name.to_lowercase();
+          name.contains("linux") && name.ends_with(".zip")
+        }) || assets.iter().any(|asset| {
+          let name = asset.name.to_lowercase();
+          name.ends_with(".deb") || name.ends_with(".rpm")
+        })
       }
       _ => false,
     }
