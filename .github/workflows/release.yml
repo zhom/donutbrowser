@@ -63,7 +63,7 @@ jobs:
             target: "x86_64-unknown-linux-gnu"
             pkg_target: "latest-linux-x64"
             nodecar_script: "build:linux-x64"
-          - platform: "ubuntu-22.04"
+          - platform: "ubuntu-22.04-arm"
             args: "--target aarch64-unknown-linux-gnu"
             arch: "aarch64"
             target: "aarch64-unknown-linux-gnu"
@@ -100,39 +100,11 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Check and Update Repository URLs (Ubuntu ARM64 only)
-        if: matrix.platform == 'ubuntu-22.04' && matrix.arch == 'aarch64'
-        run: |
-          echo "Checking repository links..."
-          if ! curl -s --head https://security.ubuntu.com/ubuntu/dists/jammy/main/binary-arm64/Packages | grep "200 OK"; then
-            echo "Repository link invalid. Updating mirrors..."
-            sudo apt-get update --fix-missing
-          fi
-
       - name: Install dependencies (Ubuntu only)
-        if: matrix.platform == 'ubuntu-22.04'
+        if: matrix.platform == 'ubuntu-22.04' || matrix.platform == 'ubuntu-22.04-arm'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev pkg-config
-          # Install cross-compilation tools for ARM64
-          if [[ "${{ matrix.arch }}" == "aarch64" ]]; then
-            sudo dpkg --add-architecture arm64 || true  # Prevent failure if architecture is already added
-            sudo apt-get update || sudo apt-get update --fix-missing
-            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-            sudo apt-get install -y libwebkit2gtk-4.1-dev:arm64 libgtk-3-dev:arm64 libayatana-appindicator3-dev:arm64 librsvg2-dev:arm64 || echo "Package fetch failed for ARM64 dependencies."
-            sudo apt-get install -y libglib2.0-dev:arm64 libcairo2-dev:arm64 libpango1.0-dev:arm64 libgdk-pixbuf2.0-dev:arm64 libatk1.0-dev:arm64 || echo "Package fetch failed for ARM64 dependencies."
-          fi
-
-      - name: Setup cross-compilation environment (Ubuntu ARM64 only)
-        if: matrix.platform == 'ubuntu-22.04' && matrix.arch == 'aarch64'
-        run: |
-          echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-          echo "CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++" >> $GITHUB_ENV
-          echo "AR_aarch64_unknown_linux_gnu=aarch64-linux-gnu-ar" >> $GITHUB_ENV
-          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-          echo "PKG_CONFIG_SYSROOT_DIR=/usr" >> $GITHUB_ENV
-          echo "PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig" >> $GITHUB_ENV
-          echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
