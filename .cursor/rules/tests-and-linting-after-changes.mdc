@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+After your changes, instead of running specific tests or linting specific files, run "pnpm format && pnpm lint && pnpm test"
