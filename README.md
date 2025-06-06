@@ -49,8 +49,6 @@ The app can be downloaded from the [releases page](https://github.com/zhom/donut
 
 ### Contributing
 
-> Donut Browser is built with [Tauri](https://v2.tauri.app/).
-
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Issues
