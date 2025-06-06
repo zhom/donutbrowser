@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { showSuccessToast } from "@/lib/toast-utils";
 import { invoke } from "@tauri-apps/api/core";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
@@ -56,7 +57,6 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isSettingDefault, setIsSettingDefault] = useState(false);
   const [isClearingCache, setIsClearingCache] = useState(false);
-  const [isCleaningBinaries, setIsCleaningBinaries] = useState(false);
 
   const { setTheme } = useTheme();
 
@@ -114,9 +114,12 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   const handleClearCache = async () => {
     setIsClearingCache(true);
     try {
-      await invoke("clear_all_version_cache");
-      // Optionally show a success message
-      console.log("Cache cleared successfully");
+      await invoke("clear_all_version_cache_and_refetch");
+      showSuccessToast("Cache cleared successfully", {
+        description:
+          "All browser version cache has been cleared and browsers are being refreshed",
+        duration: 4000,
+      });
     } catch (error) {
       console.error("Failed to clear cache:", error);
     } finally {
@@ -124,31 +127,10 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     }
   };
 
-  const handleCleanupBinaries = async () => {
-    setIsCleaningBinaries(true);
-    try {
-      const cleanedUp = await invoke<string[]>("cleanup_unused_binaries");
-      if (cleanedUp.length > 0) {
-        console.log(
-          `Cleaned up ${cleanedUp.length} unused binaries:`,
-          cleanedUp,
-        );
-        // You could show a toast with the results
-      } else {
-        console.log("No unused binaries to clean up");
-      }
-    } catch (error) {
-      console.error("Failed to cleanup unused binaries:", error);
-    } finally {
-      setIsCleaningBinaries(false);
-    }
-  };
-
   const handleSave = async () => {
     setIsSaving(true);
     try {
       await invoke("save_app_settings", { settings });
-      // Apply theme change immediately
       setTheme(settings.theme);
       setOriginalSettings(settings);
       onClose();
@@ -318,26 +300,9 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
             </LoadingButton>
 
             <p className="text-xs text-muted-foreground">
-              Clear all cached browser version data. This will force a fresh
-              download of version information on the next app restart or manual
-              refresh.
-            </p>
-
-            <LoadingButton
-              isLoading={isCleaningBinaries}
-              onClick={() => {
-                void handleCleanupBinaries();
-              }}
-              variant="outline"
-              className="w-full"
-            >
-              Clean Up Unused Binaries
-            </LoadingButton>
-
-            <p className="text-xs text-muted-foreground">
-              Manually remove browser binaries that are not used by any profile.
-              This can help free up disk space. Note: This will run
-              automatically when the setting above is enabled.
+              Clear all cached browser version data and refresh all browser
+              versions from their sources. This will force a fresh download of
+              version information for all browsers.
             </p>
           </div>
         </div>

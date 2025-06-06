@@ -2377,14 +2377,6 @@ pub fn get_downloaded_browser_versions(browser_str: String) -> Result<Vec<String
   Ok(registry.get_downloaded_versions(&browser_str))
 }
 
-#[tauri::command]
-pub fn cleanup_unused_binaries() -> Result<Vec<String>, String> {
-  let browser_runner = BrowserRunner::new();
-  browser_runner
-    .cleanup_unused_binaries_internal()
-    .map_err(|e| format!("Failed to cleanup unused binaries: {e}"))
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;

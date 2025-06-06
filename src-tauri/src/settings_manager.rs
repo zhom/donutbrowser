@@ -4,6 +4,7 @@ use std::fs::{self, create_dir_all};
 use std::path::PathBuf;
 
 use crate::api_client::ApiClient;
+use crate::browser_version_service::BrowserVersionService;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TableSortingSettings {
@@ -215,9 +216,31 @@ pub async fn save_table_sorting_settings(sorting: TableSortingSettings) -> Resul
 }
 
 #[tauri::command]
-pub async fn clear_all_version_cache() -> Result<(), String> {
+pub async fn clear_all_version_cache_and_refetch() -> Result<(), String> {
   let api_client = ApiClient::new();
+
+  // Clear all cache first
   api_client
     .clear_all_cache()
-    .map_err(|e| format!("Failed to clear version cache: {e}"))
+    .map_err(|e| format!("Failed to clear version cache: {e}"))?;
+
+  // Trigger auto-fetch for all supported browsers
+  let service = BrowserVersionService::new();
+  let supported_browsers = service.get_supported_browsers();
+
+  for browser in supported_browsers {
+    // Start background fetch for each browser (don't wait for completion)
+    let service_clone = BrowserVersionService::new();
+    let browser_clone = browser.clone();
+    tokio::spawn(async move {
+      if let Err(e) = service_clone
+        .fetch_browser_versions_detailed(&browser_clone, false)
+        .await
+      {
+        eprintln!("Background version fetch failed for {browser_clone}: {e}");
+      }
+    });
+  }
+
+  Ok(())
 }
