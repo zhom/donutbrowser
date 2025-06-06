@@ -25,18 +25,17 @@ mod version_updater;
 extern crate lazy_static;
 
 use browser_runner::{
-  check_browser_exists, check_browser_status, create_browser_profile_new,
-  delete_profile, download_browser, fetch_browser_versions_cached_first,
-  fetch_browser_versions_with_count, fetch_browser_versions_with_count_cached_first,
-  get_downloaded_browser_versions, get_supported_browsers, is_browser_supported_on_platform,
-  kill_browser_profile, launch_browser_profile, list_browser_profiles, rename_profile,
-  update_profile_proxy, update_profile_version,
+  check_browser_exists, check_browser_status, create_browser_profile_new, delete_profile,
+  download_browser, fetch_browser_versions_cached_first, fetch_browser_versions_with_count,
+  fetch_browser_versions_with_count_cached_first, get_downloaded_browser_versions,
+  get_supported_browsers, is_browser_supported_on_platform, kill_browser_profile,
+  launch_browser_profile, list_browser_profiles, rename_profile, update_profile_proxy,
+  update_profile_version,
 };
 
 use settings_manager::{
-  clear_all_version_cache_and_refetch, get_app_settings,
-  get_table_sorting_settings, save_app_settings, save_table_sorting_settings,
-  should_show_settings_on_startup,
+  clear_all_version_cache_and_refetch, get_app_settings, get_table_sorting_settings,
+  save_app_settings, save_table_sorting_settings, should_show_settings_on_startup,
 };
 
 use default_browser::{
@@ -277,7 +276,6 @@ pub fn run() {
       download_browser,
       delete_profile,
       check_browser_exists,
-
       create_browser_profile_new,
       list_browser_profiles,
       launch_browser_profile,
