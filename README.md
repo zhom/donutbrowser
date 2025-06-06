@@ -25,6 +25,13 @@
 
 ![Donut Browser Preview](assets/preview.png)
 
+## Features
+
+- Create unlimited number of local browser profiles completely isolated from each other
+- Proxy support with basic auth for all browsers except for TOR Browser
+- Import profiles from your existing browsers
+- Set Donut Browser as your default browser to control in which profile to open links
+
 ## Download
 
 > As of right now, the app is not signed by Apple. You need to have Gatekeeper disabled to run it. The app automatically checks for updates on each launch.
