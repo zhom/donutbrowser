@@ -435,11 +435,16 @@ impl BrowserVersionService {
 
     match browser {
       "firefox" => {
-        let os_param = match (&os[..], &arch[..]) {
-          ("windows", _) => "win64",
-          ("linux", "x64") => "linux64",
-          ("linux", "arm64") => "linux64-aarch64",
-          ("macos", _) => "osx",
+        let (platform_path, filename, is_archive) = match (&os[..], &arch[..]) {
+          ("windows", "x64") => ("win64", format!("Firefox Setup {version}.exe"), false),
+          ("windows", "arm64") => (
+            "win64-aarch64",
+            format!("Firefox Setup {version}.exe"),
+            false,
+          ),
+          ("linux", "x64") => ("linux-x86_64", format!("firefox-{version}.tar.bz2"), true),
+          ("linux", "arm64") => ("linux-aarch64", format!("firefox-{version}.tar.bz2"), true),
+          ("macos", _) => ("mac", format!("Firefox {version}.dmg"), true),
           _ => {
             return Err(
               format!("Unsupported platform/architecture for Firefox: {os}/{arch}").into(),
@@ -447,27 +452,25 @@ impl BrowserVersionService {
           }
         };
 
-        let (filename, is_archive) = match os.as_str() {
-          "windows" => (format!("firefox-{version}.exe"), false),
-          "linux" => (format!("firefox-{version}.tar.xz"), true),
-          "macos" => (format!("firefox-{version}.dmg"), true),
-          _ => return Err(format!("Unsupported platform for Firefox: {os}").into()),
-        };
-
         Ok(DownloadInfo {
           url: format!(
-            "https://download.mozilla.org/?product=firefox-{version}&os={os_param}&lang=en-US"
+            "https://download-installer.cdn.mozilla.net/pub/firefox/releases/{version}/{platform_path}/en-US/{filename}"
           ),
           filename,
           is_archive,
         })
       }
       "firefox-developer" => {
-        let os_param = match (&os[..], &arch[..]) {
-          ("windows", _) => "win64",
-          ("linux", "x64") => "linux64",
-          ("linux", "arm64") => "linux64-aarch64",
-          ("macos", _) => "osx",
+        let (platform_path, filename, is_archive) = match (&os[..], &arch[..]) {
+          ("windows", "x64") => ("win64", format!("Firefox Setup {version}.exe"), false),
+          ("windows", "arm64") => (
+            "win64-aarch64",
+            format!("Firefox Setup {version}.exe"),
+            false,
+          ),
+          ("linux", "x64") => ("linux-x86_64", format!("firefox-{version}.tar.bz2"), true),
+          ("linux", "arm64") => ("linux-aarch64", format!("firefox-{version}.tar.bz2"), true),
+          ("macos", _) => ("mac", format!("Firefox {version}.dmg"), true),
           _ => {
             return Err(
               format!("Unsupported platform/architecture for Firefox Developer: {os}/{arch}")
@@ -476,16 +479,9 @@ impl BrowserVersionService {
           }
         };
 
-        let (filename, is_archive) = match os.as_str() {
-          "windows" => (format!("firefox-developer-{version}.exe"), false),
-          "linux" => (format!("firefox-developer-{version}.tar.xz"), true),
-          "macos" => (format!("firefox-developer-{version}.dmg"), true),
-          _ => return Err(format!("Unsupported platform for Firefox Developer: {os}").into()),
-        };
-
         Ok(DownloadInfo {
           url: format!(
-            "https://download.mozilla.org/?product=firefox-devedition-{version}&os={os_param}&lang=en-US"
+            "https://download-installer.cdn.mozilla.net/pub/devedition/releases/{version}/{platform_path}/en-US/{filename}"
           ),
           filename,
           is_archive,
@@ -1479,16 +1475,24 @@ mod tests {
 
     // Test Firefox
     let firefox_info = service.get_download_info("firefox", "139.0").unwrap();
-    assert_eq!(firefox_info.filename, "firefox-139.0.dmg");
-    assert!(firefox_info.url.contains("firefox-139.0"));
+    assert_eq!(firefox_info.filename, "Firefox 139.0.dmg");
+    assert!(firefox_info
+      .url
+      .contains("download-installer.cdn.mozilla.net"));
+    assert!(firefox_info.url.contains("/pub/firefox/releases/139.0/"));
     assert!(firefox_info.is_archive);
 
     // Test Firefox Developer
     let firefox_dev_info = service
       .get_download_info("firefox-developer", "139.0b1")
       .unwrap();
-    assert_eq!(firefox_dev_info.filename, "firefox-developer-139.0b1.dmg");
-    assert!(firefox_dev_info.url.contains("devedition-139.0b1"));
+    assert_eq!(firefox_dev_info.filename, "Firefox 139.0b1.dmg");
+    assert!(firefox_dev_info
+      .url
+      .contains("download-installer.cdn.mozilla.net"));
+    assert!(firefox_dev_info
+      .url
+      .contains("/pub/devedition/releases/139.0b1/"));
     assert!(firefox_dev_info.is_archive);
 
     // Test Mullvad Browser

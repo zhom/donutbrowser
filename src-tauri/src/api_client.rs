@@ -255,9 +255,7 @@ pub fn is_browser_version_nightly(
       // This will be handled in the API parsing, so this fallback is for cached versions
       is_nightly_version(version)
     }
-    "mullvad-browser" | "tor-browser" => {
-      is_nightly_version(version)
-    }
+    "mullvad-browser" | "tor-browser" => is_nightly_version(version),
     "chromium" => {
       // Chromium builds are generally stable snapshots
       false
