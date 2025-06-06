@@ -1,13 +1,27 @@
-# Donut Browser
+<div align="center">
+  <img src="assets/logo.png" alt="Donut Browser Logo" width="150">
+  <h1>Donut Browser</h1>
+  <strong>A powerful browser orchestrator that puts you in control of your browsing experience. 🍩</strong>
+</div>
+<br>
 
-![Donut Browser Logo](assets/logo.png)
+<p align="center">
+  <a style="text-decoration: none;" href="https://github.com/zhom/donutbrowser/releases/latest" target="_blank"><img alt="GitHub release" src="https://img.shields.io/github/v/release/zhom/donutbrowser">
+  </a>
+  <a style="text-decoration: none;" href="https://github.com/zhom/donutbrowser/issues" target="_blank">
+    <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat" alt="PRs Welcome">
+  </a>
+  <a style="text-decoration: none;" href="https://github.com/zhom/donutbrowser/blob/main/LICENSE" target="_blank">
+    <img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License">
+  </a>
+  <a style="text-decoration: none;" href="https://github.com/zhom/donutbrowser/stargazers" target="_blank">
+    <img src="https://img.shields.io/github/stars/zhom/donutbrowser?style=social" alt="GitHub stars">
+  </a>
+</p>
 
-> **A powerful browser orchestrator that puts you in control of your browsing experience. 🍩**
+## Donut Browser
 
-[![GitHub Release](https://img.shields.io/github/v/release/zhom/donutbrowser)](https://github.com/zhom/donutbrowser/releases/latest)
-[![RPs Welcome!](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat)](https://github.com/zhom/donutbrowser/issues)
-[![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](https://github.com/zhom/donutbrowser/blob/main/LICENSE)
-[![GitHub Stars](https://img.shields.io/github/stars/zhom/donutbrowser?style=social)](https://github.com/zhom/donutbrowser/stargazers)
+> A free and open source browser orchestrator built with [Tauri](https://v2.tauri.app/).
 
 ![Donut Browser Preview](assets/preview.png)
 
@@ -46,6 +60,16 @@ Have questions or want to contribute? We'd love to hear from you!
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=zhom/donutbrowser&type=Date)](https://www.star-history.com/#zhom/donutbrowser&Date)
+
+## Star History
+
+<a href="https://www.star-history.com/#zhom/donutbrowser&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=zhom/donutbrowser&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=zhom/donutbrowser&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=zhom/donutbrowser&type=Date" />
+ </picture>
+</a>
 
 ## Contact
 
