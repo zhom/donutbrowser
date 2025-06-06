@@ -122,7 +122,7 @@ impl BrowserVersionService {
       .map(|version| {
         BrowserVersionInfo {
           version: version.clone(),
-          is_prerelease: crate::api_client::is_nightly_version(&version),
+          is_prerelease: crate::api_client::is_browser_version_nightly(browser, &version, None),
           date: "".to_string(), // Cache doesn't store dates
         }
       })
@@ -240,7 +240,9 @@ impl BrowserVersionService {
             } else {
               BrowserVersionInfo {
                 version: version.clone(),
-                is_prerelease: crate::api_client::is_nightly_version(&version),
+                is_prerelease: crate::api_client::is_browser_version_nightly(
+                  "firefox", &version, None,
+                ),
                 date: "".to_string(),
               }
             }
@@ -261,7 +263,11 @@ impl BrowserVersionService {
             } else {
               BrowserVersionInfo {
                 version: version.clone(),
-                is_prerelease: crate::api_client::is_nightly_version(&version),
+                is_prerelease: crate::api_client::is_browser_version_nightly(
+                  "firefox-developer",
+                  &version,
+                  None,
+                ),
                 date: "".to_string(),
               }
             }
@@ -303,7 +309,7 @@ impl BrowserVersionService {
             } else {
               BrowserVersionInfo {
                 version: version.clone(),
-                is_prerelease: false, // Zen Browser releases are usually stable
+                is_prerelease: crate::api_client::is_browser_version_nightly("zen", &version, None),
                 date: "".to_string(),
               }
             }
@@ -324,7 +330,9 @@ impl BrowserVersionService {
             } else {
               BrowserVersionInfo {
                 version: version.clone(),
-                is_prerelease: version.contains("beta") || version.contains("dev"),
+                is_prerelease: crate::api_client::is_browser_version_nightly(
+                  "brave", &version, None,
+                ),
                 date: "".to_string(),
               }
             }
@@ -360,7 +368,11 @@ impl BrowserVersionService {
             if let Some(release) = releases.iter().find(|r| r.version == version) {
               BrowserVersionInfo {
                 version: release.version.clone(),
-                is_prerelease: crate::api_client::is_nightly_version(&version),
+                is_prerelease: crate::api_client::is_browser_version_nightly(
+                  "tor-browser",
+                  &release.version,
+                  None,
+                ),
                 date: release.date.clone(),
               }
             } else {
@@ -826,7 +838,6 @@ mod tests {
       base_url.clone(), // github_api_base
       base_url.clone(), // chromium_api_base
       base_url.clone(), // tor_archive_base
-      base_url.clone(), // mozilla_download_base
     )
   }
 

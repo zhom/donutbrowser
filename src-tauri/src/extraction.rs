@@ -34,8 +34,15 @@ impl Extractor {
     };
     let _ = app_handle.emit("download-progress", &progress);
 
+    println!(
+      "Starting extraction of {} for browser {}",
+      archive_path.display(),
+      browser_type.as_str()
+    );
+
     // Try to detect the actual file type by reading the file header
     let actual_format = self.detect_file_format(archive_path)?;
+    println!("Detected format: {actual_format}");
 
     match actual_format.as_str() {
       "dmg" => {
@@ -87,6 +94,14 @@ impl Extractor {
   ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     use std::fs::File;
     use std::io::Read;
+
+    // First check file extension for DMG files since they're common on macOS
+    // and can have misleading magic numbers
+    if let Some(ext) = file_path.extension().and_then(|ext| ext.to_str()) {
+      if ext.to_lowercase() == "dmg" {
+        return Ok("dmg".to_string());
+      }
+    }
 
     let mut file = File::open(file_path)?;
     let mut buffer = [0u8; 12]; // Read first 12 bytes for magic number detection
@@ -179,6 +194,12 @@ impl Extractor {
     dmg_path: &Path,
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
+    println!(
+      "Extracting DMG: {} to {}",
+      dmg_path.display(),
+      dest_dir.display()
+    );
+
     // Create a temporary mount point
     let mount_point = std::env::temp_dir().join(format!(
       "donut_mount_{}",
@@ -188,6 +209,8 @@ impl Extractor {
         .as_secs()
     ));
     create_dir_all(&mount_point)?;
+
+    println!("Created mount point: {}", mount_point.display());
 
     // Mount the DMG
     let output = Command::new("hdiutil")
@@ -201,41 +224,108 @@ impl Extractor {
       .output()?;
 
     if !output.status.success() {
-      return Err(
-        format!(
-          "Failed to mount DMG: {}",
-          String::from_utf8_lossy(&output.stderr)
-        )
-        .into(),
-      );
+      let stderr = String::from_utf8_lossy(&output.stderr);
+      let stdout = String::from_utf8_lossy(&output.stdout);
+      println!("Failed to mount DMG. stdout: {stdout}, stderr: {stderr}");
+
+      // Clean up mount point before returning error
+      let _ = fs::remove_dir_all(&mount_point);
+
+      return Err(format!("Failed to mount DMG: {stderr}").into());
     }
 
-    // Find the .app directory in the mount point
-    let app_entry = fs::read_dir(&mount_point)?
-      .filter_map(Result::ok)
-      .find(|entry| entry.path().extension().is_some_and(|ext| ext == "app"))
-      .ok_or("No .app found in DMG")?;
+    println!("Successfully mounted DMG");
+
+    // List the contents for debugging
+    println!("Mount point contents:");
+    if let Ok(entries) = fs::read_dir(&mount_point) {
+      for entry in entries.flatten() {
+        let path = entry.path();
+        println!(
+          "  - {} ({})",
+          path.display(),
+          if path.is_dir() { "dir" } else { "file" }
+        );
+      }
+    }
+
+    // Find the .app directory in the mount point with enhanced search
+    let app_result = self.find_app_in_directory(&mount_point).await;
+
+    let app_entry = match app_result {
+      Ok(app_path) => app_path,
+      Err(e) => {
+        println!("Failed to find .app in mount point: {e}");
+
+        // Enhanced debugging - look for any interesting files/directories
+        if let Ok(entries) = fs::read_dir(&mount_point) {
+          println!("Detailed mount point analysis:");
+          for entry in entries.flatten() {
+            let path = entry.path();
+            let metadata = fs::metadata(&path);
+            println!(
+              "  - {} ({}) - {:?}",
+              path.display(),
+              if path.is_dir() { "dir" } else { "file" },
+              metadata.map(|m| m.len()).unwrap_or(0)
+            );
+
+            // If it's a directory, look one level deep
+            if path.is_dir() {
+              if let Ok(sub_entries) = fs::read_dir(&path) {
+                for sub_entry in sub_entries.flatten().take(5) {
+                  // Limit to first 5 items
+                  let sub_path = sub_entry.path();
+                  println!(
+                    "    - {} ({})",
+                    sub_path.display(),
+                    if sub_path.is_dir() { "dir" } else { "file" }
+                  );
+                }
+              }
+            }
+          }
+        }
+
+        // Try to unmount before returning error
+        let _ = Command::new("hdiutil")
+          .args(["detach", "-force", mount_point.to_str().unwrap()])
+          .output();
+        let _ = fs::remove_dir_all(&mount_point);
+
+        return Err("No .app found after extraction".into());
+      }
+    };
+
+    println!("Found .app bundle: {}", app_entry.display());
 
     // Copy the .app to the destination
-    let app_path = dest_dir.join(app_entry.file_name());
+    let app_path = dest_dir.join(app_entry.file_name().unwrap());
+
+    println!("Copying .app to: {}", app_path.display());
 
     let output = Command::new("cp")
       .args([
         "-R",
-        app_entry.path().to_str().unwrap(),
+        app_entry.to_str().unwrap(),
         app_path.to_str().unwrap(),
       ])
       .output()?;
 
     if !output.status.success() {
-      return Err(
-        format!(
-          "Failed to copy app: {}",
-          String::from_utf8_lossy(&output.stderr)
-        )
-        .into(),
-      );
+      let stderr = String::from_utf8_lossy(&output.stderr);
+      println!("Failed to copy app: {stderr}");
+
+      // Unmount before returning error
+      let _ = Command::new("hdiutil")
+        .args(["detach", "-force", mount_point.to_str().unwrap()])
+        .output();
+      let _ = fs::remove_dir_all(&mount_point);
+
+      return Err(format!("Failed to copy app: {stderr}").into());
     }
+
+    println!("Successfully copied .app bundle");
 
     // Remove quarantine attributes
     let _ = Command::new("xattr")
@@ -246,35 +336,98 @@ impl Extractor {
       .args(["-cr", app_path.to_str().unwrap()])
       .output();
 
-    // Try to unmount the DMG with retries
-    let mut retry_count = 0;
-    let max_retries = 3;
-    let mut unmounted = false;
+    println!("Removed quarantine attributes");
 
-    while retry_count < max_retries && !unmounted {
-      // Wait a bit before trying to unmount
-      tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+    // Unmount the DMG
+    let output = Command::new("hdiutil")
+      .args(["detach", mount_point.to_str().unwrap()])
+      .output()?;
 
-      let output = Command::new("hdiutil")
-        .args(["detach", mount_point.to_str().unwrap()])
-        .output()?;
-
-      if output.status.success() {
-        unmounted = true;
-      } else if retry_count == max_retries - 1 {
-        // Force unmount on last retry
-        let _ = Command::new("hdiutil")
-          .args(["detach", "-force", mount_point.to_str().unwrap()])
-          .output();
-        unmounted = true; // Consider it unmounted even if force fails
-      }
-      retry_count += 1;
+    if !output.status.success() {
+      let stderr = String::from_utf8_lossy(&output.stderr);
+      println!("Warning: Failed to unmount DMG: {stderr}");
+      // Don't fail if unmount fails - the extraction was successful
+    } else {
+      println!("Successfully unmounted DMG");
     }
 
     // Clean up mount point directory
     let _ = fs::remove_dir_all(&mount_point);
 
     Ok(app_path)
+  }
+
+  #[cfg(target_os = "macos")]
+  async fn find_app_in_directory(
+    &self,
+    dir: &Path,
+  ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
+    self.find_app_recursive(dir, 0).await
+  }
+
+  #[cfg(target_os = "macos")]
+  async fn find_app_recursive(
+    &self,
+    dir: &Path,
+    depth: usize,
+  ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
+    // Limit search depth to avoid infinite loops
+    if depth > 4 {
+      return Err("Maximum search depth reached".into());
+    }
+
+    if let Ok(entries) = fs::read_dir(dir) {
+      let mut subdirs = Vec::new();
+      let mut hidden_subdirs = Vec::new();
+
+      // First pass: look for .app bundles directly
+      for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+          if let Some(extension) = path.extension() {
+            if extension == "app" {
+              println!("Found .app bundle at depth {}: {}", depth, path.display());
+              return Ok(path);
+            }
+          }
+
+          // Collect subdirectories for second pass
+          let filename = path.file_name().unwrap_or_default().to_string_lossy();
+          if filename.starts_with('.') {
+            // Hidden directories - search these with lower priority
+            hidden_subdirs.push(path);
+          } else {
+            // Regular directories - search these first
+            subdirs.push(path);
+          }
+        }
+      }
+
+      // Second pass: search regular subdirectories first
+      for subdir in subdirs {
+        // Skip common directories that are unlikely to contain .app files
+        let dirname = subdir.file_name().unwrap_or_default().to_string_lossy();
+        if matches!(
+          dirname.as_ref(),
+          "Documents" | "Downloads" | "Desktop" | "Library" | "System" | "tmp" | "var"
+        ) {
+          continue;
+        }
+
+        if let Ok(result) = Box::pin(self.find_app_recursive(&subdir, depth + 1)).await {
+          return Ok(result);
+        }
+      }
+
+      // Third pass: search hidden directories if nothing found in regular ones
+      for hidden_dir in hidden_subdirs {
+        if let Ok(result) = Box::pin(self.find_app_recursive(&hidden_dir, depth + 1)).await {
+          return Ok(result);
+        }
+      }
+    }
+
+    Err(format!("No .app found in directory: {}", dir.display()).into())
   }
 
   pub async fn extract_zip(
@@ -608,34 +761,65 @@ impl Extractor {
     &self,
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    // First, try to find any .app file in the destination directory
-    if let Ok(entries) = fs::read_dir(dest_dir) {
-      for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().is_some_and(|ext| ext == "app") {
-          return Ok(path);
-        }
-        // For Chromium, check subdirectories (chrome-mac folder)
-        if path.is_dir() {
-          if let Ok(sub_entries) = fs::read_dir(&path) {
-            for sub_entry in sub_entries.flatten() {
-              let sub_path = sub_entry.path();
-              if sub_path.extension().is_some_and(|ext| ext == "app") {
-                // Move the app to the root destination directory
-                let target_path = dest_dir.join(sub_path.file_name().unwrap());
-                fs::rename(&sub_path, &target_path)?;
+    println!("Searching for .app bundle in: {}", dest_dir.display());
 
-                // Clean up the now-empty subdirectory
-                let _ = fs::remove_dir_all(&path);
-                return Ok(target_path);
+    // Use the enhanced recursive search
+    match self.find_app_in_directory(dest_dir).await {
+      Ok(app_path) => {
+        // Check if the app is in a subdirectory and move it to the root if needed
+        let app_parent = app_path.parent().unwrap();
+        if app_parent != dest_dir {
+          println!(
+            "Found .app in subdirectory, moving to root: {} -> {}",
+            app_path.display(),
+            dest_dir.display()
+          );
+          let target_path = dest_dir.join(app_path.file_name().unwrap());
+
+          // Move the app to the root destination directory
+          fs::rename(&app_path, &target_path)?;
+
+          // Try to clean up the now-empty subdirectory (ignore errors)
+          if let Some(parent_dir) = app_path.parent() {
+            if parent_dir != dest_dir {
+              let _ = fs::remove_dir_all(parent_dir);
+            }
+          }
+
+          println!("Successfully moved .app to: {}", target_path.display());
+          Ok(target_path)
+        } else {
+          println!("Found .app at root level: {}", app_path.display());
+          Ok(app_path)
+        }
+      }
+      Err(e) => {
+        println!("Failed to find .app bundle: {e}");
+
+        // List contents for debugging
+        if let Ok(entries) = fs::read_dir(dest_dir) {
+          println!("Destination directory contents:");
+          for entry in entries.flatten() {
+            let path = entry.path();
+            let metadata = if path.is_dir() { "dir" } else { "file" };
+            println!("  - {} ({})", path.display(), metadata);
+
+            // If it's a directory, also list its contents
+            if path.is_dir() {
+              if let Ok(sub_entries) = fs::read_dir(&path) {
+                for sub_entry in sub_entries.flatten() {
+                  let sub_path = sub_entry.path();
+                  let sub_metadata = if sub_path.is_dir() { "dir" } else { "file" };
+                  println!("    - {} ({})", sub_path.display(), sub_metadata);
+                }
               }
             }
           }
         }
+
+        Err("No .app found after extraction".into())
       }
     }
-
-    Err("No .app found after extraction".into())
   }
 
   #[cfg(target_os = "windows")]
@@ -904,7 +1088,8 @@ impl Extractor {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use std::fs::File;
+  use std::fs::{create_dir_all, File};
+  use std::io::Write;
   use tempfile::TempDir;
 
   #[test]
@@ -915,50 +1100,81 @@ mod tests {
 
   #[test]
   fn test_unsupported_archive_format() {
-    let _ = Extractor::new();
+    let extractor = Extractor::new();
     let temp_dir = TempDir::new().unwrap();
     let fake_archive = temp_dir.path().join("test.rar");
-    File::create(&fake_archive).unwrap();
 
-    // Create a mock app handle (this won't work in real tests without Tauri runtime)
-    // For now, we'll just test the logic without the actual extraction
+    // Create a file with invalid header
+    let mut file = File::create(&fake_archive).unwrap();
+    file.write_all(b"invalid content").unwrap();
 
-    // Test that unsupported formats return an error
-    let extension = fake_archive
-      .extension()
-      .and_then(|ext| ext.to_str())
-      .unwrap_or("");
-
-    assert_eq!(extension, "rar");
-    // We know this would fail with "Unsupported archive format: rar"
+    // Test format detection
+    let result = extractor.detect_file_format(&fake_archive);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "unknown");
   }
 
   #[test]
-  fn test_dmg_path_validation() {
-    let temp_dir = TempDir::new().unwrap();
-    let dmg_path = temp_dir.path().join("test.dmg");
-
-    // Test that we can identify DMG files correctly
-    let extension = dmg_path
-      .extension()
-      .and_then(|ext| ext.to_str())
-      .unwrap_or("");
-
-    assert_eq!(extension, "dmg");
-  }
-
-  #[test]
-  fn test_zip_path_validation() {
+  fn test_format_detection_zip() {
+    let extractor = Extractor::new();
     let temp_dir = TempDir::new().unwrap();
     let zip_path = temp_dir.path().join("test.zip");
 
-    // Test that we can identify ZIP files correctly
-    let extension = zip_path
-      .extension()
-      .and_then(|ext| ext.to_str())
-      .unwrap_or("");
+    // Create a file with ZIP magic number
+    let mut file = File::create(&zip_path).unwrap();
+    file.write_all(&[0x50, 0x4B, 0x03, 0x04]).unwrap(); // ZIP magic
+    file.write_all(&[0; 8]).unwrap(); // padding
 
-    assert_eq!(extension, "zip");
+    let result = extractor.detect_file_format(&zip_path);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "zip");
+  }
+
+  #[test]
+  fn test_format_detection_dmg_by_extension() {
+    let extractor = Extractor::new();
+    let temp_dir = TempDir::new().unwrap();
+    let dmg_path = temp_dir.path().join("test.dmg");
+
+    // Create a file (magic number won't match, but extension will)
+    let mut file = File::create(&dmg_path).unwrap();
+    file.write_all(b"fake dmg content").unwrap();
+
+    let result = extractor.detect_file_format(&dmg_path);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "dmg");
+  }
+
+  #[test]
+  fn test_format_detection_exe() {
+    let extractor = Extractor::new();
+    let temp_dir = TempDir::new().unwrap();
+    let exe_path = temp_dir.path().join("test.exe");
+
+    // Create a file with PE header
+    let mut file = File::create(&exe_path).unwrap();
+    file.write_all(&[0x4D, 0x5A]).unwrap(); // PE magic
+    file.write_all(&[0; 10]).unwrap(); // padding
+
+    let result = extractor.detect_file_format(&exe_path);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "exe");
+  }
+
+  #[test]
+  fn test_format_detection_tar_gz() {
+    let extractor = Extractor::new();
+    let temp_dir = TempDir::new().unwrap();
+    let tar_gz_path = temp_dir.path().join("test.tar.gz");
+
+    // Create a file with gzip magic
+    let mut file = File::create(&tar_gz_path).unwrap();
+    file.write_all(&[0x1F, 0x8B, 0x08]).unwrap(); // gzip magic
+    file.write_all(&[0; 9]).unwrap(); // padding
+
+    let result = extractor.detect_file_format(&tar_gz_path);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "tar.gz");
   }
 
   #[test]
@@ -987,56 +1203,247 @@ mod tests {
     assert!(mount_point2.to_string_lossy().contains("donut_mount_"));
   }
 
-  #[test]
-  fn test_app_path_detection() {
+  #[tokio::test]
+  #[cfg(target_os = "macos")]
+  async fn test_find_app_at_root_level() {
+    let extractor = Extractor::new();
     let temp_dir = TempDir::new().unwrap();
 
-    // Create a fake .app directory
-    let app_dir = temp_dir.path().join("TestApp.app");
-    std::fs::create_dir_all(&app_dir).unwrap();
+    // Create a Firefox.app directory
+    let firefox_app = temp_dir.path().join("Firefox.app");
+    create_dir_all(&firefox_app).unwrap();
 
-    // Test finding .app directories
-    let entries: Vec<_> = fs::read_dir(temp_dir.path())
-      .unwrap()
-      .filter_map(Result::ok)
-      .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "app"))
-      .collect();
+    // Create the standard macOS app structure
+    let contents_dir = firefox_app.join("Contents");
+    let macos_dir = contents_dir.join("MacOS");
+    create_dir_all(&macos_dir).unwrap();
 
-    assert_eq!(entries.len(), 1);
-    assert_eq!(entries[0].file_name(), "TestApp.app");
+    // Create the executable
+    let executable = macos_dir.join("firefox");
+    File::create(&executable).unwrap();
+
+    // Test finding the app
+    let result = extractor.find_app_in_directory(temp_dir.path()).await;
+    assert!(result.is_ok());
+
+    let found_app = result.unwrap();
+    assert_eq!(found_app.file_name().unwrap(), "Firefox.app");
+    assert!(found_app.exists());
+  }
+
+  #[tokio::test]
+  #[cfg(target_os = "macos")]
+  async fn test_find_app_in_subdirectory() {
+    let extractor = Extractor::new();
+    let temp_dir = TempDir::new().unwrap();
+
+    // Create a nested structure like some browsers have
+    let subdir = temp_dir.path().join("chrome-mac");
+    create_dir_all(&subdir).unwrap();
+
+    // Create a Brave Browser.app directory
+    let brave_app = subdir.join("Brave Browser.app");
+    create_dir_all(&brave_app).unwrap();
+
+    // Create the standard macOS app structure
+    let contents_dir = brave_app.join("Contents");
+    let macos_dir = contents_dir.join("MacOS");
+    create_dir_all(&macos_dir).unwrap();
+
+    // Create the executable
+    let executable = macos_dir.join("Brave Browser");
+    File::create(&executable).unwrap();
+
+    // Test finding the app
+    let result = extractor.find_app_in_directory(temp_dir.path()).await;
+    assert!(result.is_ok());
+
+    let found_app = result.unwrap();
+    assert_eq!(found_app.file_name().unwrap(), "Brave Browser.app");
+    assert!(found_app.exists());
+  }
+
+  #[tokio::test]
+  #[cfg(target_os = "macos")]
+  async fn test_find_app_multiple_levels_deep() {
+    let extractor = Extractor::new();
+    let temp_dir = TempDir::new().unwrap();
+
+    // Create a deeply nested structure
+    let level1 = temp_dir.path().join("level1");
+    let level2 = level1.join("level2");
+    create_dir_all(&level2).unwrap();
+
+    // Create a Mullvad Browser.app directory
+    let mullvad_app = level2.join("Mullvad Browser.app");
+    create_dir_all(&mullvad_app).unwrap();
+
+    // Create the standard macOS app structure
+    let contents_dir = mullvad_app.join("Contents");
+    let macos_dir = contents_dir.join("MacOS");
+    create_dir_all(&macos_dir).unwrap();
+
+    // Create the executable
+    let executable = macos_dir.join("firefox");
+    File::create(&executable).unwrap();
+
+    // Test finding the app
+    let result = extractor.find_app_in_directory(temp_dir.path()).await;
+    assert!(result.is_ok());
+
+    let found_app = result.unwrap();
+    assert_eq!(found_app.file_name().unwrap(), "Mullvad Browser.app");
+    assert!(found_app.exists());
+  }
+
+  #[tokio::test]
+  #[cfg(target_os = "macos")]
+  async fn test_find_app_no_app_found() {
+    let extractor = Extractor::new();
+    let temp_dir = TempDir::new().unwrap();
+
+    // Create some files and directories that are NOT .app bundles
+    let regular_dir = temp_dir.path().join("regular_directory");
+    create_dir_all(&regular_dir).unwrap();
+
+    let regular_file = temp_dir.path().join("regular_file.txt");
+    File::create(&regular_file).unwrap();
+
+    // Create a directory that looks like an app but isn't (wrong extension)
+    let fake_app = temp_dir.path().join("NotAnApp.app-backup");
+    create_dir_all(&fake_app).unwrap();
+
+    // Test that no app is found
+    let result = extractor.find_app_in_directory(temp_dir.path()).await;
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("No .app found"));
+  }
+
+  #[tokio::test]
+  #[cfg(target_os = "macos")]
+  async fn test_find_app_recursive_depth_limit() {
+    let extractor = Extractor::new();
+    let temp_dir = TempDir::new().unwrap();
+
+    // Create a very deep nested structure (deeper than our limit of 4)
+    let mut current_path = temp_dir.path().to_path_buf();
+    for i in 0..6 {
+      current_path = current_path.join(format!("level{i}"));
+      create_dir_all(&current_path).unwrap();
+    }
+
+    // Create an app at the deepest level
+    let deep_app = current_path.join("Deep.app");
+    create_dir_all(&deep_app).unwrap();
+
+    // Test that the app is NOT found due to depth limit
+    let result = extractor.find_app_in_directory(temp_dir.path()).await;
+    assert!(result.is_err());
+  }
+
+  #[tokio::test]
+  #[cfg(target_os = "macos")]
+  async fn test_find_macos_app_and_move_from_subdir() {
+    let extractor = Extractor::new();
+    let temp_dir = TempDir::new().unwrap();
+
+    // Create a nested structure where the app is in a subdirectory
+    let subdir = temp_dir.path().join("extracted_content");
+    create_dir_all(&subdir).unwrap();
+
+    // Create a Tor Browser.app directory in the subdirectory
+    let tor_app = subdir.join("Tor Browser.app");
+    create_dir_all(&tor_app).unwrap();
+
+    // Create the standard macOS app structure
+    let contents_dir = tor_app.join("Contents");
+    let macos_dir = contents_dir.join("MacOS");
+    create_dir_all(&macos_dir).unwrap();
+
+    // Create the executable
+    let executable = macos_dir.join("firefox");
+    File::create(&executable).unwrap();
+
+    // Test finding and moving the app
+    let result = extractor.find_macos_app(temp_dir.path()).await;
+    assert!(result.is_ok());
+
+    let found_app = result.unwrap();
+    assert_eq!(found_app.file_name().unwrap(), "Tor Browser.app");
+
+    // Verify the app was moved to the root level
+    assert_eq!(found_app.parent().unwrap(), temp_dir.path());
+    assert!(found_app.exists());
+
+    // Verify the original subdirectory structure was cleaned up
+    assert!(!subdir.exists() || fs::read_dir(&subdir).unwrap().count() == 0);
+  }
+
+  #[tokio::test]
+  #[cfg(target_os = "macos")]
+  async fn test_multiple_apps_found_returns_first() {
+    let extractor = Extractor::new();
+    let temp_dir = TempDir::new().unwrap();
+
+    // Create multiple .app directories
+    let firefox_app = temp_dir.path().join("Firefox.app");
+    create_dir_all(&firefox_app).unwrap();
+
+    let chrome_app = temp_dir.path().join("Chrome.app");
+    create_dir_all(&chrome_app).unwrap();
+
+    // Test that we find one of them (implementation should be consistent)
+    let result = extractor.find_app_in_directory(temp_dir.path()).await;
+    assert!(result.is_ok());
+
+    let found_app = result.unwrap();
+    let app_name = found_app.file_name().unwrap().to_str().unwrap();
+    assert!(app_name == "Firefox.app" || app_name == "Chrome.app");
   }
 
   #[test]
-  fn test_nested_app_detection() {
+  fn test_browser_specific_app_names() {
+    // Test that we can identify common browser app names correctly
+    let common_browser_apps = [
+      "Firefox.app",
+      "Firefox Developer Edition.app",
+      "Brave Browser.app",
+      "Mullvad Browser.app",
+      "Tor Browser.app",
+      "Zen Browser.app",
+      "Chromium.app",
+      "Google Chrome.app",
+    ];
+
+    for app_name in &common_browser_apps {
+      let path = std::path::Path::new(app_name);
+      let extension = path.extension().and_then(|ext| ext.to_str());
+      assert_eq!(extension, Some("app"), "Failed for {app_name}");
+    }
+  }
+
+  #[test]
+  fn test_edge_cases_in_path_handling() {
     let temp_dir = TempDir::new().unwrap();
 
-    // Create a nested structure like Chromium
-    let chrome_dir = temp_dir.path().join("chrome-mac");
-    std::fs::create_dir_all(&chrome_dir).unwrap();
+    // Test paths with spaces and special characters
+    let problematic_names = [
+      "Firefox Developer Edition.app",
+      "Brave Browser.app",
+      "App with (parentheses).app",
+      "App-with-dashes.app",
+      "App_with_underscores.app",
+    ];
 
-    let app_dir = chrome_dir.join("Chromium.app");
-    std::fs::create_dir_all(&app_dir).unwrap();
+    for app_name in &problematic_names {
+      let app_path = temp_dir.path().join(app_name);
+      create_dir_all(&app_path).unwrap();
 
-    // Test finding nested .app directories
-    let mut found_app = false;
+      // Verify we can detect the .app extension correctly
+      assert!(app_path.extension().is_some_and(|ext| ext == "app"));
 
-    if let Ok(entries) = fs::read_dir(temp_dir.path()) {
-      for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-          if let Ok(sub_entries) = fs::read_dir(&path) {
-            for sub_entry in sub_entries.flatten() {
-              let sub_path = sub_entry.path();
-              if sub_path.extension().is_some_and(|ext| ext == "app") {
-                found_app = true;
-                break;
-              }
-            }
-          }
-        }
-      }
+      // Verify file_name extraction works
+      assert_eq!(app_path.file_name().unwrap().to_str().unwrap(), *app_name);
     }
-
-    assert!(found_app);
   }
 }

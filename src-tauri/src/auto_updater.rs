@@ -346,12 +346,9 @@ impl AutoUpdater {
   // Helper methods
 
   fn is_nightly_version(&self, version: &str) -> bool {
-    version.contains("alpha")
-      || version.contains("beta")
-      || version.contains("rc")
-      || version.contains("a")
-      || version.contains("b")
-      || version.contains("dev")
+    // Use the centralized nightly detection function
+    // Since we don't have browser context here, use the general fallback
+    crate::api_client::is_nightly_version(version)
   }
 
   fn is_version_newer(&self, version1: &str, version2: &str) -> bool {

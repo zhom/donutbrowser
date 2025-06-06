@@ -229,10 +229,44 @@ pub fn is_nightly_version(version: &str) -> bool {
   version_comp.pre_release.is_some()
 }
 
-// Browser-specific alpha version detection for Zen Browser
-pub fn is_zen_nightly_version(version: &str) -> bool {
-  // For Zen Browser, only "twilight" is considered alpha/pre-release
-  version.to_lowercase() == "twilight"
+/// Centralized function to determine if a browser version/release is nightly/prerelease
+/// This is the single source of truth for nightly detection across the entire codebase
+pub fn is_browser_version_nightly(
+  browser: &str,
+  version: &str,
+  release_name: Option<&str>,
+) -> bool {
+  match browser {
+    "zen" => {
+      // For Zen Browser, only "twilight" is considered nightly
+      version.to_lowercase() == "twilight"
+    }
+    "brave" => {
+      // For Brave Browser, only releases titled "Release" are stable, everything else is nightly
+      if let Some(name) = release_name {
+        !name.starts_with("Release")
+      } else {
+        // Fallback to version string analysis if no release name
+        is_nightly_version(version)
+      }
+    }
+    "firefox" | "firefox-developer" => {
+      // For Firefox, use the category from the API response to determine stability
+      // This will be handled in the API parsing, so this fallback is for cached versions
+      is_nightly_version(version)
+    }
+    "mullvad-browser" | "tor-browser" => {
+      is_nightly_version(version)
+    }
+    "chromium" => {
+      // Chromium builds are generally stable snapshots
+      false
+    }
+    _ => {
+      // Default fallback
+      is_nightly_version(version)
+    }
+  }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -256,7 +290,6 @@ pub struct BrowserRelease {
   pub version: String,
   pub date: String,
   pub is_prerelease: bool,
-  pub download_url: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -278,7 +311,6 @@ pub struct ApiClient {
   github_api_base: String,
   chromium_api_base: String,
   tor_archive_base: String,
-  mozilla_download_base: String,
 }
 
 impl ApiClient {
@@ -291,7 +323,6 @@ impl ApiClient {
       chromium_api_base: "https://commondatastorage.googleapis.com/chromium-browser-snapshots"
         .to_string(),
       tor_archive_base: "https://archive.torproject.org/tor-package-archive/torbrowser".to_string(),
-      mozilla_download_base: "https://download.mozilla.org".to_string(),
     }
   }
 
@@ -302,7 +333,6 @@ impl ApiClient {
     github_api_base: String,
     chromium_api_base: String,
     tor_archive_base: String,
-    mozilla_download_base: String,
   ) -> Self {
     Self {
       client: Client::new(),
@@ -311,7 +341,6 @@ impl ApiClient {
       github_api_base,
       chromium_api_base,
       tor_archive_base,
-      mozilla_download_base,
     }
   }
 
@@ -449,11 +478,7 @@ impl ApiClient {
               BrowserRelease {
                 version: version.clone(),
                 date: "".to_string(), // Cache doesn't store dates
-                is_prerelease: is_nightly_version(&version),
-                download_url: Some(format!(
-                  "{}/?product=firefox-{}&os=osx&lang=en-US",
-                  self.mozilla_download_base, version
-                )),
+                is_prerelease: is_browser_version_nightly("firefox", &version, None),
               }
             })
             .collect(),
@@ -489,10 +514,6 @@ impl ApiClient {
             version: release.version.clone(),
             date: release.date,
             is_prerelease: !is_stable,
-            download_url: Some(format!(
-              "{}/?product=firefox-{}&os=osx&lang=en-US",
-              self.mozilla_download_base, release.version
-            )),
           })
         } else {
           None
@@ -534,11 +555,7 @@ impl ApiClient {
               BrowserRelease {
                 version: version.clone(),
                 date: "".to_string(), // Cache doesn't store dates
-                is_prerelease: is_nightly_version(&version),
-                download_url: Some(format!(
-                  "{}/?product=devedition-{}&os=osx&lang=en-US",
-                  self.mozilla_download_base, version
-                )),
+                is_prerelease: is_browser_version_nightly("firefox-developer", &version, None),
               }
             })
             .collect(),
@@ -580,10 +597,6 @@ impl ApiClient {
             version: release.version.clone(),
             date: release.date,
             is_prerelease: !is_stable,
-            download_url: Some(format!(
-              "{}/?product=devedition-{}&os=osx&lang=en-US",
-              self.mozilla_download_base, release.version
-            )),
           })
         } else {
           None
@@ -685,7 +698,8 @@ impl ApiClient {
     // Check for twilight updates and mark alpha releases
     for release in &mut releases {
       // Use browser-specific alpha detection for Zen Browser - only "twilight" is nightly
-      release.is_nightly = is_zen_nightly_version(&release.tag_name);
+      release.is_nightly =
+        is_browser_version_nightly("zen", &release.tag_name, Some(&release.name));
 
       // Check for twilight update if this is a twilight release
       if release.tag_name.to_lowercase() == "twilight" {
@@ -749,9 +763,9 @@ impl ApiClient {
         let has_compatible_asset = Self::has_compatible_brave_asset(&release.assets, &os, &arch);
 
         if has_compatible_asset {
-          // Set is_nightly based on the release name
-          // Stable releases start with "Release", everything else is nightly
-          release.is_nightly = !release.name.starts_with("Release");
+          // Use the centralized nightly detection function
+          release.is_nightly =
+            is_browser_version_nightly("brave", &release.tag_name, Some(&release.name));
           Some(release)
         } else {
           None
@@ -877,7 +891,6 @@ impl ApiClient {
                 version: version.clone(),
                 date: "".to_string(), // Cache doesn't store dates
                 is_prerelease: false, // Chromium versions are generally stable builds
-                download_url: None,
               }
             })
             .collect(),
@@ -914,7 +927,6 @@ impl ApiClient {
           version: version.clone(),
           date: "".to_string(),
           is_prerelease: false,
-          download_url: None,
         })
         .collect(),
     )
@@ -934,11 +946,7 @@ impl ApiClient {
               BrowserRelease {
                 version: version.clone(),
                 date: "".to_string(), // Cache doesn't store dates
-                is_prerelease: is_nightly_version(&version),
-                download_url: Some(format!(
-                  "{}/{version}/tor-browser-macos-{version}.dmg",
-                  self.tor_archive_base
-                )),
+                is_prerelease: is_browser_version_nightly("tor-browser", &version, None),
               }
             })
             .collect(),
@@ -1013,10 +1021,6 @@ impl ApiClient {
             version: version.clone(),
             date: "".to_string(), // TOR archive doesn't provide structured dates
             is_prerelease: false, // Assume all archived versions are stable
-            download_url: Some(format!(
-              "{}/{version}/tor-browser-macos-{version}.dmg",
-              self.tor_archive_base
-            )),
           }
         })
         .collect(),
@@ -1065,13 +1069,11 @@ impl ApiClient {
     struct TwilightInfo {
       file_size: u64,
       last_updated: u64,
-      download_url: String,
     }
 
     let current_info = TwilightInfo {
       file_size: asset.size,
       last_updated: Self::get_current_timestamp(),
-      download_url: asset.browser_download_url.clone(),
     };
 
     if !twilight_cache_file.exists() {
@@ -1137,7 +1139,6 @@ mod tests {
       base_url.clone(), // github_api_base
       base_url.clone(), // chromium_api_base
       base_url.clone(), // tor_archive_base
-      base_url.clone(), // mozilla_download_base
     )
   }
 
@@ -1317,12 +1318,6 @@ mod tests {
     let releases = result.unwrap();
     assert!(!releases.is_empty());
     assert_eq!(releases[0].version, "139.0");
-    assert!(releases[0].download_url.is_some());
-    assert!(releases[0]
-      .download_url
-      .as_ref()
-      .unwrap()
-      .contains(&server.uri()));
   }
 
   #[tokio::test]
@@ -1365,12 +1360,6 @@ mod tests {
     let releases = result.unwrap();
     assert!(!releases.is_empty());
     assert_eq!(releases[0].version, "140.0b1");
-    assert!(releases[0].download_url.is_some());
-    assert!(releases[0]
-      .download_url
-      .as_ref()
-      .unwrap()
-      .contains(&server.uri()));
   }
 
   #[tokio::test]
@@ -1615,12 +1604,6 @@ mod tests {
     let releases = result.unwrap();
     assert!(!releases.is_empty());
     assert_eq!(releases[0].version, "14.0.4");
-    assert!(releases[0].download_url.is_some());
-    assert!(releases[0]
-      .download_url
-      .as_ref()
-      .unwrap()
-      .contains(&server.uri()));
   }
 
   #[tokio::test]
@@ -1693,13 +1676,13 @@ mod tests {
   #[test]
   fn test_is_zen_nightly_version() {
     // Only "twilight" should be considered nightly for Zen Browser
-    assert!(is_zen_nightly_version("twilight"));
-    assert!(is_zen_nightly_version("TWILIGHT")); // Case insensitive
+    assert!(is_browser_version_nightly("zen", "twilight", None));
+    assert!(is_browser_version_nightly("zen", "TWILIGHT", None)); // Case insensitive
 
     // Versions with "b" should NOT be considered nightly for Zen Browser
-    assert!(!is_zen_nightly_version("1.12.8b"));
-    assert!(!is_zen_nightly_version("1.0.0b1"));
-    assert!(!is_zen_nightly_version("2.0.0"));
+    assert!(!is_browser_version_nightly("zen", "1.12.8b", None));
+    assert!(!is_browser_version_nightly("zen", "1.0.0b1", None));
+    assert!(!is_browser_version_nightly("zen", "2.0.0", None));
   }
 
   #[tokio::test]
