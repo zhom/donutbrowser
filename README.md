@@ -59,10 +59,6 @@ Have questions or want to contribute? We'd love to hear from you!
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=zhom/donutbrowser&type=Date)](https://www.star-history.com/#zhom/donutbrowser&Date)
-
-## Star History
-
 <a href="https://www.star-history.com/#zhom/donutbrowser&Date">
  <picture>
    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=zhom/donutbrowser&type=Date&theme=dark" />
