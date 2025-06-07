@@ -246,8 +246,7 @@ pub fn is_browser_version_nightly(
       if let Some(name) = release_name {
         !name.starts_with("Release")
       } else {
-        // Fallback to version string analysis if no release name
-        is_nightly_version(version)
+        true
       }
     }
     "firefox" | "firefox-developer" => {
