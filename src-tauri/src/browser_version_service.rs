@@ -442,8 +442,8 @@ impl BrowserVersionService {
             format!("Firefox Setup {version}.exe"),
             false,
           ),
-          ("linux", "x64") => ("linux-x86_64", format!("firefox-{version}.tar.bz2"), true),
-          ("linux", "arm64") => ("linux-aarch64", format!("firefox-{version}.tar.bz2"), true),
+          ("linux", "x64") => ("linux-x86_64", format!("firefox-{version}.tar.xz"), true),
+          ("linux", "arm64") => ("linux-aarch64", format!("firefox-{version}.tar.xz"), true),
           ("macos", _) => ("mac", format!("Firefox {version}.dmg"), true),
           _ => {
             return Err(
@@ -468,8 +468,8 @@ impl BrowserVersionService {
             format!("Firefox Setup {version}.exe"),
             false,
           ),
-          ("linux", "x64") => ("linux-x86_64", format!("firefox-{version}.tar.bz2"), true),
-          ("linux", "arm64") => ("linux-aarch64", format!("firefox-{version}.tar.bz2"), true),
+          ("linux", "x64") => ("linux-x86_64", format!("firefox-{version}.tar.xz"), true),
+          ("linux", "arm64") => ("linux-aarch64", format!("firefox-{version}.tar.xz"), true),
           ("macos", _) => ("mac", format!("Firefox {version}.dmg"), true),
           _ => {
             return Err(
