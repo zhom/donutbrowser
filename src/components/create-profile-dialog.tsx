@@ -293,7 +293,7 @@ export function CreateProfileDialog({
                             disabled={true}
                             className="opacity-50"
                           >
-                            {displayName} (Not supported on this platform)
+                            {displayName} (Not supported)
                           </SelectItem>
                         </TooltipTrigger>
                         <TooltipContent>

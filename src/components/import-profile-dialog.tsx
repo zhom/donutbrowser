@@ -458,7 +458,7 @@ export function ImportProfileDialog({
                 isLoading
               }
             >
-              Import Detected Profile
+              Import Profile
             </LoadingButton>
           ) : (
             <LoadingButton
@@ -472,7 +472,7 @@ export function ImportProfileDialog({
                 !manualProfileName.trim()
               }
             >
-              Import Manual Profile
+              Import Profile
             </LoadingButton>
           )}
         </DialogFooter>
