@@ -568,8 +568,6 @@ impl BrowserVersionService {
         })
       }
       "brave" => {
-        // Brave uses different asset naming conventions
-        // The actual URL will be resolved dynamically in the download service
         let (filename, is_archive) = match (&os[..], &arch[..]) {
           ("windows", _) => (format!("brave-{version}.exe"), false),
           ("linux", "x64") => (format!("brave-browser-{version}-linux-amd64.zip"), true),
@@ -582,7 +580,7 @@ impl BrowserVersionService {
 
         Ok(DownloadInfo {
           url: format!(
-            "https://github.com/brave/brave-browser/releases/download/{version}/brave-placeholder"
+            "https://github.com/brave/brave-browser/releases/download/{version}/{filename}"
           ),
           filename,
           is_archive,
@@ -1524,7 +1522,7 @@ mod tests {
     // Test Brave
     let brave_info = service.get_download_info("brave", "v1.81.9").unwrap();
     assert_eq!(brave_info.filename, "Brave-Browser-universal.dmg");
-    assert!(brave_info.url.contains("brave-placeholder"));
+    assert_eq!(brave_info.url, "https://github.com/brave/brave-browser/releases/download/v1.81.9/Brave-Browser-universal.dmg");
     assert!(brave_info.is_archive);
 
     // Test unsupported browser
