@@ -307,6 +307,8 @@ mod linux {
       BrowserType::Brave => vec![
         browser_subdir.join("brave"),
         browser_subdir.join("brave-browser"),
+        browser_subdir.join("brave-browser-nightly"),
+        browser_subdir.join("brave-browser-beta"),
       ],
       _ => vec![],
     };
