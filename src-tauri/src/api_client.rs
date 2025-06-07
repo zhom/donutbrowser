@@ -805,22 +805,17 @@ impl ApiClient {
         }) || assets.iter().any(|asset| asset.name.ends_with(".dmg"))
       }
       "linux" => {
-        // For Linux, check for architecture-specific packages (prefer ZIP for stable releases)
+        // For Linux, be strict about architecture matching - only allow assets that explicitly match the current architecture
         let arch_pattern = if arch == "arm64" { "arm64" } else { "amd64" };
 
-        assets.iter().any(|asset| {
+        if assets.iter().any(|asset| {
           let name = asset.name.to_lowercase();
           name.contains("linux") && name.contains(arch_pattern) && name.ends_with(".zip")
-        }) || assets.iter().any(|asset| {
-          let name = asset.name.to_lowercase();
-          name.contains(arch_pattern) && (name.ends_with(".deb") || name.ends_with(".rpm"))
-        }) || assets.iter().any(|asset| {
-          let name = asset.name.to_lowercase();
-          name.contains("linux") && name.ends_with(".zip")
-        }) || assets.iter().any(|asset| {
-          let name = asset.name.to_lowercase();
-          name.ends_with(".deb") || name.ends_with(".rpm")
-        })
+        }) {
+          return true;
+        }
+
+        false
       }
       _ => false,
     }

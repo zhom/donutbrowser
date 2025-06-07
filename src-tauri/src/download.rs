@@ -195,7 +195,7 @@ impl Downloader {
           })
       }
       "linux" => {
-        // For Linux, prefer ZIP files matching architecture (new format for stable releases)
+        // For Linux, be strict about architecture matching - same logic as has_compatible_brave_asset
         let arch_pattern = if arch == "arm64" { "arm64" } else { "amd64" };
 
         assets
@@ -203,31 +203,6 @@ impl Downloader {
           .find(|asset| {
             let name = asset.name.to_lowercase();
             name.contains("linux") && name.contains(arch_pattern) && name.ends_with(".zip")
-          })
-          .or_else(|| {
-            // Fallback to DEB packages
-            assets.iter().find(|asset| {
-              let name = asset.name.to_lowercase();
-              name.contains(arch_pattern) && name.ends_with(".deb")
-            })
-          })
-          .or_else(|| {
-            // Fallback to any ZIP
-            assets.iter().find(|asset| {
-              let name = asset.name.to_lowercase();
-              name.contains("linux") && name.ends_with(".zip")
-            })
-          })
-          .or_else(|| {
-            // Fallback to any DEB
-            assets.iter().find(|asset| asset.name.ends_with(".deb"))
-          })
-          .or_else(|| {
-            // Last fallback to RPM if no ZIP or DEB found
-            assets.iter().find(|asset| {
-              let name = asset.name.to_lowercase();
-              name.contains("x86_64") && name.ends_with(".rpm")
-            })
           })
       }
       _ => None,

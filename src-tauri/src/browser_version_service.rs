@@ -1519,7 +1519,7 @@ mod tests {
     assert!(chromium_info.url.contains("chrome-mac.zip"));
     assert!(chromium_info.is_archive);
 
-    // Test Brave
+    // Test Brave - Note: Brave uses dynamic URL resolution, so get_download_info provides a template URL
     let brave_info = service.get_download_info("brave", "v1.81.9").unwrap();
     assert_eq!(brave_info.filename, "Brave-Browser-universal.dmg");
     assert_eq!(brave_info.url, "https://github.com/brave/brave-browser/releases/download/v1.81.9/Brave-Browser-universal.dmg");

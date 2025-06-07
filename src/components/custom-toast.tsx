@@ -116,31 +116,31 @@ type ToastProps =
 function getToastIcon(type: ToastProps["type"], stage?: string) {
   switch (type) {
     case "success":
-      return <LuCheckCheck className="h-4 w-4 text-green-500 flex-shrink-0" />;
+      return <LuCheckCheck className="flex-shrink-0 w-4 h-4 text-green-500" />;
     case "error":
-      return <LuTriangleAlert className="h-4 w-4 text-red-500 flex-shrink-0" />;
+      return <LuTriangleAlert className="flex-shrink-0 w-4 h-4 text-red-500" />;
     case "download":
       if (stage === "completed") {
         return (
-          <LuCheckCheck className="h-4 w-4 text-green-500 flex-shrink-0" />
+          <LuCheckCheck className="flex-shrink-0 w-4 h-4 text-green-500" />
         );
       }
-      return <LuDownload className="h-4 w-4 text-blue-500 flex-shrink-0" />;
+      return <LuDownload className="flex-shrink-0 w-4 h-4 text-blue-500" />;
     case "version-update":
       return (
-        <LuRefreshCw className="h-4 w-4 text-blue-500 animate-spin flex-shrink-0" />
+        <LuRefreshCw className="flex-shrink-0 w-4 h-4 text-blue-500 animate-spin" />
       );
     case "fetching":
       return (
-        <LuRefreshCw className="h-4 w-4 text-blue-500 animate-spin flex-shrink-0" />
+        <LuRefreshCw className="flex-shrink-0 w-4 h-4 text-blue-500 animate-spin" />
       );
     case "twilight-update":
       return (
-        <LuRefreshCw className="h-4 w-4 text-purple-500 animate-spin flex-shrink-0" />
+        <LuRefreshCw className="flex-shrink-0 w-4 h-4 text-purple-500 animate-spin" />
       );
     default:
       return (
-        <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent flex-shrink-0" />
+        <div className="flex-shrink-0 w-4 h-4 rounded-full border-2 border-blue-500 animate-spin border-t-transparent" />
       );
   }
 }
@@ -151,10 +151,10 @@ export function UnifiedToast(props: ToastProps) {
   const progress = "progress" in props ? props.progress : undefined;
 
   return (
-    <div className="flex items-start w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 shadow-lg">
+    <div className="flex items-start p-3 w-full bg-white rounded-lg border border-gray-200 shadow-lg dark:bg-gray-800 dark:border-gray-700">
       <div className="mr-3 mt-0.5">{getToastIcon(type, stage)}</div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-900 dark:text-white leading-tight">
+        <p className="text-sm font-medium leading-tight text-gray-900 dark:text-white">
           {title}
         </p>
 
@@ -165,7 +165,7 @@ export function UnifiedToast(props: ToastProps) {
           stage === "downloading" && (
             <div className="mt-2 space-y-1">
               <div className="flex justify-between items-center">
-                <p className="text-xs text-gray-600 dark:text-gray-300 min-w-0 flex-1">
+                <p className="flex-1 min-w-0 text-xs text-gray-600 dark:text-gray-300">
                   {progress.percentage.toFixed(1)}%
                   {progress.speed && ` • ${progress.speed} MB/s`}
                   {progress.eta && ` • ${progress.eta} remaining`}
@@ -195,7 +195,7 @@ export function UnifiedToast(props: ToastProps) {
                   }}
                 />
               </div>
-              <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap shrink-0 w-8 text-right">
+              <span className="w-8 text-xs text-right text-gray-500 whitespace-nowrap dark:text-gray-400 shrink-0">
                 {progress.current}/{progress.total}
               </span>
             </div>
@@ -211,7 +211,7 @@ export function UnifiedToast(props: ToastProps) {
                 : "Checking for twilight updates..."}
             </p>
             {props.browserName && (
-              <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
+              <p className="mt-1 text-xs text-purple-600 dark:text-purple-400">
                 {props.browserName} • Rolling Release
               </p>
             )}
@@ -220,7 +220,7 @@ export function UnifiedToast(props: ToastProps) {
 
         {/* Description */}
         {description && (
-          <p className="mt-1 text-xs text-gray-600 dark:text-gray-300 leading-tight">
+          <p className="mt-1 text-xs leading-tight text-gray-600 dark:text-gray-300">
             {description}
           </p>
         )}
@@ -235,7 +235,7 @@ export function UnifiedToast(props: ToastProps) {
             )}
             {stage === "verifying" && (
               <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
-                Verifying installation...
+                Verifying browser files...
               </p>
             )}
             {stage === "downloading (twilight rolling release)" && (
