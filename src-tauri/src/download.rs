@@ -198,12 +198,10 @@ impl Downloader {
         // For Linux, be strict about architecture matching - same logic as has_compatible_brave_asset
         let arch_pattern = if arch == "arm64" { "arm64" } else { "amd64" };
 
-        assets
-          .iter()
-          .find(|asset| {
-            let name = asset.name.to_lowercase();
-            name.contains("linux") && name.contains(arch_pattern) && name.ends_with(".zip")
-          })
+        assets.iter().find(|asset| {
+          let name = asset.name.to_lowercase();
+          name.contains("linux") && name.contains(arch_pattern) && name.ends_with(".zip")
+        })
       }
       _ => None,
     };
