@@ -3,6 +3,7 @@
 import { ChangeVersionDialog } from "@/components/change-version-dialog";
 import { CreateProfileDialog } from "@/components/create-profile-dialog";
 import { ImportProfileDialog } from "@/components/import-profile-dialog";
+import { PermissionDialog } from "@/components/permission-dialog";
 import { ProfilesDataTable } from "@/components/profile-data-table";
 import { ProfileSelectorDialog } from "@/components/profile-selector-dialog";
 import { ProxySettingsDialog } from "@/components/proxy-settings-dialog";
@@ -21,6 +22,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAppUpdateNotifications } from "@/hooks/use-app-update-notifications";
+import { usePermissions } from "@/hooks/use-permissions";
+import type { PermissionType } from "@/hooks/use-permissions";
 import { useUpdateNotifications } from "@/hooks/use-update-notifications";
 import { showErrorToast } from "@/lib/toast-utils";
 import type { BrowserProfile, ProxySettings } from "@/types";
@@ -58,6 +61,11 @@ export default function Home() {
   const [currentProfileForVersionChange, setCurrentProfileForVersionChange] =
     useState<BrowserProfile | null>(null);
   const [hasCheckedStartupPrompt, setHasCheckedStartupPrompt] = useState(false);
+  const [permissionDialogOpen, setPermissionDialogOpen] = useState(false);
+  const [currentPermissionType, setCurrentPermissionType] =
+    useState<PermissionType>("microphone");
+  const { isMicrophoneAccessGranted, isCameraAccessGranted, isInitialized } =
+    usePermissions();
 
   // Simple profiles loader without updates check (for use as callback)
   const loadProfiles = useCallback(async () => {
@@ -119,6 +127,13 @@ export default function Home() {
     };
   }, [loadProfilesWithUpdateCheck, checkForUpdates]);
 
+  // Check permissions when they are initialized
+  useEffect(() => {
+    if (isInitialized) {
+      void checkAllPermissions();
+    }
+  }, [isInitialized]);
+
   const checkStartupPrompt = async () => {
     // Only check once during app startup to prevent reopening after dismissing notifications
     if (hasCheckedStartupPrompt) return;
@@ -134,6 +149,42 @@ export default function Home() {
     } catch (error) {
       console.error("Failed to check startup prompt:", error);
       setHasCheckedStartupPrompt(true);
+    }
+  };
+
+  const checkAllPermissions = async () => {
+    try {
+      // Wait for permissions to be initialized before checking
+      if (!isInitialized) {
+        return;
+      }
+
+      // Check if any permissions are not granted - prioritize missing permissions
+      if (!isMicrophoneAccessGranted) {
+        setCurrentPermissionType("microphone");
+        setPermissionDialogOpen(true);
+      } else if (!isCameraAccessGranted) {
+        setCurrentPermissionType("camera");
+        setPermissionDialogOpen(true);
+      }
+    } catch (error) {
+      console.error("Failed to check permissions:", error);
+    }
+  };
+
+  const checkNextPermission = () => {
+    try {
+      if (!isMicrophoneAccessGranted) {
+        setCurrentPermissionType("microphone");
+        setPermissionDialogOpen(true);
+      } else if (!isCameraAccessGranted) {
+        setCurrentPermissionType("camera");
+        setPermissionDialogOpen(true);
+      } else {
+        setPermissionDialogOpen(false);
+      }
+    } catch (error) {
+      console.error("Failed to check next permission:", error);
     }
   };
 
@@ -533,6 +584,15 @@ export default function Home() {
           runningProfiles={runningProfiles}
         />
       ))}
+
+      <PermissionDialog
+        isOpen={permissionDialogOpen}
+        onClose={() => {
+          setPermissionDialogOpen(false);
+        }}
+        permissionType={currentPermissionType}
+        onPermissionGranted={checkNextPermission}
+      />
     </div>
   );
 }

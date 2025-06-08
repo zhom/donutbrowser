@@ -19,10 +19,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { usePermissions } from "@/hooks/use-permissions";
+import type { PermissionType } from "@/hooks/use-permissions";
 import { showSuccessToast } from "@/lib/toast-utils";
 import { invoke } from "@tauri-apps/api/core";
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { BsCamera, BsMic } from "react-icons/bs";
 
 interface AppSettings {
   set_as_default_browser: boolean;
@@ -30,6 +33,12 @@ interface AppSettings {
   theme: string;
   auto_updates_enabled: boolean;
   auto_delete_unused_binaries: boolean;
+}
+
+interface PermissionInfo {
+  permission_type: PermissionType;
+  isGranted: boolean;
+  description: string;
 }
 
 interface SettingsDialogProps {
@@ -57,18 +66,46 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isSettingDefault, setIsSettingDefault] = useState(false);
   const [isClearingCache, setIsClearingCache] = useState(false);
+  const [permissions, setPermissions] = useState<PermissionInfo[]>([]);
+  const [isLoadingPermissions, setIsLoadingPermissions] = useState(false);
+  const [requestingPermission, setRequestingPermission] =
+    useState<PermissionType | null>(null);
+  const [isMacOS, setIsMacOS] = useState(false);
 
   const { setTheme } = useTheme();
+  const {
+    requestPermission,
+    isMicrophoneAccessGranted,
+    isCameraAccessGranted,
+  } = usePermissions();
+
+  const getPermissionDescription = useCallback((type: PermissionType) => {
+    switch (type) {
+      case "microphone":
+        return "Access to microphone for browser applications";
+      case "camera":
+        return "Access to camera for browser applications";
+    }
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
-      void loadSettings();
-      void checkDefaultBrowserStatus();
+      loadSettings().catch(console.error);
+      checkDefaultBrowserStatus().catch(console.error);
+
+      // Check if we're on macOS
+      const userAgent = navigator.userAgent;
+      const isMac = userAgent.includes("Mac");
+      setIsMacOS(isMac);
+
+      if (isMac) {
+        loadPermissions().catch(console.error);
+      }
 
       // Set up interval to check default browser status
       const intervalId = setInterval(() => {
-        void checkDefaultBrowserStatus();
-      }, 500); // Check every 2 seconds
+        checkDefaultBrowserStatus().catch(console.error);
+      }, 500); // Check every 500ms
 
       // Cleanup interval on component unmount or dialog close
       return () => {
@@ -76,6 +113,32 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
       };
     }
   }, [isOpen]);
+
+  // Update permissions when the permission states change
+  useEffect(() => {
+    if (isMacOS) {
+      const permissionList: PermissionInfo[] = [
+        {
+          permission_type: "microphone",
+          isGranted: isMicrophoneAccessGranted,
+          description: getPermissionDescription("microphone"),
+        },
+        {
+          permission_type: "camera",
+          isGranted: isCameraAccessGranted,
+          description: getPermissionDescription("camera"),
+        },
+      ];
+      setPermissions(permissionList);
+    } else {
+      setPermissions([]);
+    }
+  }, [
+    isMacOS,
+    isMicrophoneAccessGranted,
+    isCameraAccessGranted,
+    getPermissionDescription,
+  ]);
 
   const loadSettings = async () => {
     setIsLoading(true);
@@ -87,6 +150,36 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
       console.error("Failed to load settings:", error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadPermissions = async () => {
+    setIsLoadingPermissions(true);
+    try {
+      if (!isMacOS) {
+        // On non-macOS platforms, don't show permissions
+        setPermissions([]);
+        return;
+      }
+
+      const permissionList: PermissionInfo[] = [
+        {
+          permission_type: "microphone",
+          isGranted: isMicrophoneAccessGranted,
+          description: getPermissionDescription("microphone"),
+        },
+        {
+          permission_type: "camera",
+          isGranted: isCameraAccessGranted,
+          description: getPermissionDescription("camera"),
+        },
+      ];
+
+      setPermissions(permissionList);
+    } catch (error) {
+      console.error("Failed to load permissions:", error);
+    } finally {
+      setIsLoadingPermissions(false);
     }
   };
 
@@ -125,6 +218,49 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     } finally {
       setIsClearingCache(false);
     }
+  };
+
+  const handleRequestPermission = async (permissionType: PermissionType) => {
+    setRequestingPermission(permissionType);
+    try {
+      await requestPermission(permissionType);
+      showSuccessToast(
+        `${getPermissionDisplayName(permissionType)} access requested`,
+      );
+    } catch (error) {
+      console.error("Failed to request permission:", error);
+    } finally {
+      setRequestingPermission(null);
+    }
+  };
+
+  const getPermissionIcon = (type: PermissionType) => {
+    switch (type) {
+      case "microphone":
+        return <BsMic className="h-4 w-4" />;
+      case "camera":
+        return <BsCamera className="h-4 w-4" />;
+    }
+  };
+
+  const getPermissionDisplayName = (type: PermissionType) => {
+    switch (type) {
+      case "microphone":
+        return "Microphone";
+      case "camera":
+        return "Camera";
+    }
+  };
+
+  const getStatusBadge = (isGranted: boolean) => {
+    if (isGranted) {
+      return (
+        <Badge variant="default" className="bg-green-100 text-green-800">
+          Granted
+        </Badge>
+      );
+    }
+    return <Badge variant="secondary">Not Granted</Badge>;
   };
 
   const handleSave = async () => {
@@ -204,7 +340,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
             <LoadingButton
               isLoading={isSettingDefault}
               onClick={() => {
-                void handleSetDefaultBrowser();
+                handleSetDefaultBrowser().catch(console.error);
               }}
               disabled={isDefaultBrowser}
               variant={isDefaultBrowser ? "outline" : "default"}
@@ -284,6 +420,69 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
             </p>
           </div>
 
+          {/* Permissions Section - Only show on macOS */}
+          {isMacOS && (
+            <div className="space-y-4">
+              <Label className="text-base font-medium">
+                System Permissions
+              </Label>
+
+              {isLoadingPermissions ? (
+                <div className="text-sm text-muted-foreground">
+                  Loading permissions...
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {permissions.map((permission) => (
+                    <div
+                      key={permission.permission_type}
+                      className="flex items-center justify-between p-3 border rounded-lg"
+                    >
+                      <div className="flex items-center space-x-3">
+                        {getPermissionIcon(permission.permission_type)}
+                        <div>
+                          <div className="text-sm font-medium">
+                            {getPermissionDisplayName(
+                              permission.permission_type,
+                            )}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {permission.description}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        {getStatusBadge(permission.isGranted)}
+                        {!permission.isGranted && (
+                          <LoadingButton
+                            size="sm"
+                            isLoading={
+                              requestingPermission ===
+                              permission.permission_type
+                            }
+                            onClick={() => {
+                              handleRequestPermission(
+                                permission.permission_type,
+                              ).catch(console.error);
+                            }}
+                          >
+                            Grant
+                          </LoadingButton>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <p className="text-xs text-muted-foreground">
+                These permissions allow browsers launched from Donut Browser to
+                access system resources. Each website will still ask for your
+                permission individually.
+              </p>
+            </div>
+          )}
+
           {/* Advanced Section */}
           <div className="space-y-4">
             <Label className="text-base font-medium">Advanced</Label>
@@ -291,7 +490,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
             <LoadingButton
               isLoading={isClearingCache}
               onClick={() => {
-                void handleClearCache();
+                handleClearCache().catch(console.error);
               }}
               variant="outline"
               className="w-full"
@@ -314,7 +513,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
           <LoadingButton
             isLoading={isSaving}
             onClick={() => {
-              void handleSave();
+              handleSave().catch(console.error);
             }}
             disabled={isLoading || !hasChanges}
           >

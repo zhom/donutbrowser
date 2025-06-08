@@ -172,6 +172,7 @@ pub fn run() {
     .plugin(tauri_plugin_shell::init())
     .plugin(tauri_plugin_deep_link::init())
     .plugin(tauri_plugin_dialog::init())
+    .plugin(tauri_plugin_macos_permissions::init())
     .setup(|app| {
       // Create the main window programmatically
       #[allow(unused_variables)]

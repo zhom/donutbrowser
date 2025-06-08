@@ -2,47 +2,27 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Donut Browser needs camera access to enable camera functionality in web browsers. Each website will still ask for your permission individually.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Donut Browser needs microphone access to enable microphone functionality in web browsers. Each website will still ask for your permission individually.</string>
 	<key>CFBundleDisplayName</key>
 	<string>Donut Browser</string>
 	<key>CFBundleName</key>
 	<string>Donut Browser</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.donutbrowser</string>
+    <key>CFBundleURLName</key>
+    <string>com.donutbrowser</string>
 	<key>CFBundleExecutable</key>
 	<string>donutbrowser</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
-	<key>CFBundleShortVersionString</key>
-	<string>0.3.2</string>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
 	<key>CFBundleIconFile</key>
 	<string>icon.icns</string>
-	<key>CFBundleSignature</key>
-	<string>????</string>
-	<key>CFBundleIconFile</key>
-	<string>icon.icns</string>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleURLName</key>
-			<string>Web Browser</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>http</string>
-				<string>https</string>
-			</array>
-			<key>CFBundleURLIconFile</key>
-			<string>icon.icns</string>
-			<key>LSHandlerRank</key>
-			<string>Owner</string>
-		</dict>
-	</array>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.productivity</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2025 Donut Browser</string>
-	<key>LSMinimumSystemVersion</key>
-	<string>10.13</string>
 </dict>
 </plist> 

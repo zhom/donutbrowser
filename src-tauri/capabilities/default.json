@@ -20,6 +20,11 @@
     "shell:allow-stdin-write",
     "deep-link:default",
     "dialog:default",
-    "dialog:allow-open"
+    "dialog:allow-open",
+    "macos-permissions:default",
+    "macos-permissions:allow-request-microphone-permission",
+    "macos-permissions:allow-request-camera-permission",
+    "macos-permissions:allow-check-microphone-permission",
+    "macos-permissions:allow-check-camera-permission"
   ]
 }
