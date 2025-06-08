@@ -216,17 +216,16 @@ mod linux {
     install_dir: &Path,
     browser_type: &BrowserType,
   ) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    // Expected structure: install_dir/<browser>/<binary>
-    let browser_subdir = install_dir.join(browser_type.as_str());
-
     let possible_executables = match browser_type {
       BrowserType::Chromium => vec![
-        browser_subdir.join("chromium"),
-        browser_subdir.join("chrome"),
+        install_dir.join("chromium"),
+        install_dir.join("chrome"),
       ],
       BrowserType::Brave => vec![
-        browser_subdir.join("brave"),
-        browser_subdir.join("brave-browser"),
+        install_dir.join("brave"),
+        install_dir.join("brave-browser"),
+        install_dir.join("brave-browser-nightly"),
+        install_dir.join("brave-browser-beta"),
       ],
       _ => vec![],
     };
