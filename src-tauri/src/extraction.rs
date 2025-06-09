@@ -1018,9 +1018,9 @@ impl Extractor {
   }
 
   #[cfg(target_os = "windows")]
-  fn find_windows_executable_recursive(
-    &self,
-    dir: &Path,
+  fn find_windows_executable_recursive<'a>(
+    &'a self,
+    dir: &'a Path,
     depth: usize,
     max_depth: usize,
   ) -> std::pin::Pin<
