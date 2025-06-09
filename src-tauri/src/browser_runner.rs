@@ -642,12 +642,12 @@ mod windows {
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // On Windows, TOR and Mullvad browsers can sometimes accept URLs via command line
     // even with -no-remote, by launching a new instance that hands off to existing one
-    let browser = create_browser(browser_type);
+    let browser = create_browser(browser_type.clone());
     let executable_path = browser
       .get_executable_path(browser_dir)
       .map_err(|e| format!("Failed to get executable path: {}", e))?;
 
-    let mut cmd = Command::new(executable_path);
+    let mut cmd = Command::new(&executable_path);
     cmd.args(["-profile", &profile.profile_path, url]);
 
     // Set working directory
@@ -704,7 +704,7 @@ mod windows {
 
     if !output.status.success() {
       // Try fallback without --new-window
-      let mut fallback_cmd = Command::new(executable_path);
+      let mut fallback_cmd = Command::new(&executable_path);
       fallback_cmd.args([&format!("--user-data-dir={}", profile.profile_path), url]);
 
       if let Some(parent_dir) = browser_dir

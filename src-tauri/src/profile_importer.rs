@@ -84,17 +84,15 @@ impl ProfileImporter {
     #[cfg(target_os = "windows")]
     {
       // Primary location in AppData\Roaming
-      if let Some(app_data) = self.base_dirs.data_dir() {
-        let firefox_dir = app_data.join("Mozilla/Firefox/Profiles");
-        profiles.extend(self.scan_firefox_profiles_dir(&firefox_dir, "firefox")?);
-      }
+      let app_data = self.base_dirs.data_dir();
+      let firefox_dir = app_data.join("Mozilla/Firefox/Profiles");
+      profiles.extend(self.scan_firefox_profiles_dir(&firefox_dir, "firefox")?);
 
       // Also check AppData\Local for portable installations
-      if let Some(local_app_data) = self.base_dirs.data_local_dir() {
-        let firefox_local_dir = local_app_data.join("Mozilla/Firefox/Profiles");
-        if firefox_local_dir.exists() {
-          profiles.extend(self.scan_firefox_profiles_dir(&firefox_local_dir, "firefox")?);
-        }
+      let local_app_data = self.base_dirs.data_local_dir();
+      let firefox_local_dir = local_app_data.join("Mozilla/Firefox/Profiles");
+      if firefox_local_dir.exists() {
+        profiles.extend(self.scan_firefox_profiles_dir(&firefox_local_dir, "firefox")?);
       }
     }
 
@@ -129,12 +127,11 @@ impl ProfileImporter {
 
     #[cfg(target_os = "windows")]
     {
-      if let Some(app_data) = self.base_dirs.data_dir() {
-        // Firefox Developer Edition on Windows typically uses separate directories
-        let firefox_dev_dir = app_data.join("Mozilla/Firefox Developer Edition/Profiles");
-        if firefox_dev_dir.exists() {
-          profiles.extend(self.scan_firefox_profiles_dir(&firefox_dev_dir, "firefox-developer")?);
-        }
+      let app_data = self.base_dirs.data_dir();
+      // Firefox Developer Edition on Windows typically uses separate directories
+      let firefox_dev_dir = app_data.join("Mozilla/Firefox Developer Edition/Profiles");
+      if firefox_dev_dir.exists() {
+        profiles.extend(self.scan_firefox_profiles_dir(&firefox_dev_dir, "firefox-developer")?);
       }
     }
 
@@ -168,10 +165,9 @@ impl ProfileImporter {
 
     #[cfg(target_os = "windows")]
     {
-      if let Some(local_app_data) = self.base_dirs.data_local_dir() {
-        let chrome_dir = local_app_data.join("Google/Chrome/User Data");
-        profiles.extend(self.scan_chrome_profiles_dir(&chrome_dir, "chromium")?);
-      }
+      let local_app_data = self.base_dirs.data_local_dir();
+      let chrome_dir = local_app_data.join("Google/Chrome/User Data");
+      profiles.extend(self.scan_chrome_profiles_dir(&chrome_dir, "chromium")?);
     }
 
     #[cfg(target_os = "linux")]
@@ -198,10 +194,9 @@ impl ProfileImporter {
 
     #[cfg(target_os = "windows")]
     {
-      if let Some(local_app_data) = self.base_dirs.data_local_dir() {
-        let chromium_dir = local_app_data.join("Chromium/User Data");
-        profiles.extend(self.scan_chrome_profiles_dir(&chromium_dir, "chromium")?);
-      }
+      let local_app_data = self.base_dirs.data_local_dir();
+      let chromium_dir = local_app_data.join("Chromium/User Data");
+      profiles.extend(self.scan_chrome_profiles_dir(&chromium_dir, "chromium")?);
     }
 
     #[cfg(target_os = "linux")]
@@ -228,10 +223,9 @@ impl ProfileImporter {
 
     #[cfg(target_os = "windows")]
     {
-      if let Some(local_app_data) = self.base_dirs.data_local_dir() {
-        let brave_dir = local_app_data.join("BraveSoftware/Brave-Browser/User Data");
-        profiles.extend(self.scan_chrome_profiles_dir(&brave_dir, "brave")?);
-      }
+      let local_app_data = self.base_dirs.data_local_dir();
+      let brave_dir = local_app_data.join("BraveSoftware/Brave-Browser/User Data");
+      profiles.extend(self.scan_chrome_profiles_dir(&brave_dir, "brave")?);
     }
 
     #[cfg(target_os = "linux")]
@@ -264,17 +258,15 @@ impl ProfileImporter {
     #[cfg(target_os = "windows")]
     {
       // Primary location in AppData\Roaming
-      if let Some(app_data) = self.base_dirs.data_dir() {
-        let mullvad_dir = app_data.join("MullvadBrowser/Profiles");
-        profiles.extend(self.scan_firefox_profiles_dir(&mullvad_dir, "mullvad-browser")?);
-      }
+      let app_data = self.base_dirs.data_dir();
+      let mullvad_dir = app_data.join("MullvadBrowser/Profiles");
+      profiles.extend(self.scan_firefox_profiles_dir(&mullvad_dir, "mullvad-browser")?);
 
       // Also check common installation locations
-      if let Some(local_app_data) = self.base_dirs.data_local_dir() {
-        let mullvad_local_dir = local_app_data.join("MullvadBrowser/Profiles");
-        if mullvad_local_dir.exists() {
-          profiles.extend(self.scan_firefox_profiles_dir(&mullvad_local_dir, "mullvad-browser")?);
-        }
+      let local_app_data = self.base_dirs.data_local_dir();
+      let mullvad_local_dir = local_app_data.join("MullvadBrowser/Profiles");
+      if mullvad_local_dir.exists() {
+        profiles.extend(self.scan_firefox_profiles_dir(&mullvad_local_dir, "mullvad-browser")?);
       }
     }
 
@@ -304,10 +296,9 @@ impl ProfileImporter {
 
     #[cfg(target_os = "windows")]
     {
-      if let Some(app_data) = self.base_dirs.data_dir() {
-        let zen_dir = app_data.join("Zen/Profiles");
-        profiles.extend(self.scan_firefox_profiles_dir(&zen_dir, "zen")?);
-      }
+      let app_data = self.base_dirs.data_dir();
+      let zen_dir = app_data.join("Zen/Profiles");
+      profiles.extend(self.scan_firefox_profiles_dir(&zen_dir, "zen")?);
     }
 
     #[cfg(target_os = "linux")]
@@ -378,17 +369,16 @@ impl ProfileImporter {
       }
 
       // Also check AppData directories if available
-      if let Some(app_data) = self.base_dirs.data_dir() {
-        let tor_app_data =
-          app_data.join("TorBrowser/Browser/TorBrowser/Data/Browser/profile.default");
-        if tor_app_data.exists() {
-          profiles.push(DetectedProfile {
-            browser: "tor-browser".to_string(),
-            name: "TOR Browser - AppData Profile".to_string(),
-            path: tor_app_data.to_string_lossy().to_string(),
-            description: "TOR Browser profile from AppData".to_string(),
-          });
-        }
+      let app_data = self.base_dirs.data_dir();
+      let tor_app_data =
+        app_data.join("TorBrowser/Browser/TorBrowser/Data/Browser/profile.default");
+      if tor_app_data.exists() {
+        profiles.push(DetectedProfile {
+          browser: "tor-browser".to_string(),
+          name: "TOR Browser - AppData Profile".to_string(),
+          path: tor_app_data.to_string_lossy().to_string(),
+          description: "TOR Browser profile from AppData".to_string(),
+        });
       }
     }
 
