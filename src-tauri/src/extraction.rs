@@ -1018,78 +1018,86 @@ impl Extractor {
   }
 
   #[cfg(target_os = "windows")]
-  async fn find_windows_executable_recursive(
+  fn find_windows_executable_recursive(
     &self,
     dir: &Path,
     depth: usize,
     max_depth: usize,
-  ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    if depth > max_depth {
-      return Err("Maximum search depth reached".into());
-    }
-
-    if let Ok(entries) = fs::read_dir(dir) {
-      let mut dirs_to_search = Vec::new();
-
-      // First pass: look for .exe files in current directory
-      for entry in entries.flatten() {
-        let path = entry.path();
-
-        if path.is_file()
-          && path
-            .extension()
-            .is_some_and(|ext| ext.to_string_lossy().to_lowercase() == "exe")
-        {
-          let file_name = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("")
-            .to_lowercase();
-
-          // Check if it's a browser executable
-          if file_name.contains("firefox")
-            || file_name.contains("chrome")
-            || file_name.contains("chromium")
-            || file_name.contains("zen")
-            || file_name.contains("brave")
-            || file_name.contains("tor")
-            || file_name.contains("mullvad")
-            || file_name.contains("browser")
-          {
-            return Ok(path);
-          }
-        } else if path.is_dir() {
-          // Collect directories for later search
-          dirs_to_search.push(path);
-        }
+  ) -> std::pin::Pin<
+    Box<
+      dyn std::future::Future<Output = Result<PathBuf, Box<dyn std::error::Error + Send + Sync>>>
+        + Send
+        + '_,
+    >,
+  > {
+    Box::pin(async move {
+      if depth > max_depth {
+        return Err("Maximum search depth reached".into());
       }
 
-      // Second pass: search subdirectories
-      for subdir in dirs_to_search {
-        if let Ok(result) = self
-          .find_windows_executable_recursive(&subdir, depth + 1, max_depth)
-          .await
-        {
-          return Ok(result);
-        }
-      }
-
-      // Third pass: if no browser-specific executable found, return any .exe
       if let Ok(entries) = fs::read_dir(dir) {
+        let mut dirs_to_search = Vec::new();
+
+        // First pass: look for .exe files in current directory
         for entry in entries.flatten() {
           let path = entry.path();
+
           if path.is_file()
             && path
               .extension()
               .is_some_and(|ext| ext.to_string_lossy().to_lowercase() == "exe")
           {
-            return Ok(path);
+            let file_name = path
+              .file_name()
+              .and_then(|n| n.to_str())
+              .unwrap_or("")
+              .to_lowercase();
+
+            // Check if it's a browser executable
+            if file_name.contains("firefox")
+              || file_name.contains("chrome")
+              || file_name.contains("chromium")
+              || file_name.contains("zen")
+              || file_name.contains("brave")
+              || file_name.contains("tor")
+              || file_name.contains("mullvad")
+              || file_name.contains("browser")
+            {
+              return Ok(path);
+            }
+          } else if path.is_dir() {
+            // Collect directories for later search
+            dirs_to_search.push(path);
+          }
+        }
+
+        // Second pass: search subdirectories
+        for subdir in dirs_to_search {
+          if let Ok(result) = self
+            .find_windows_executable_recursive(&subdir, depth + 1, max_depth)
+            .await
+          {
+            return Ok(result);
+          }
+        }
+
+        // Third pass: if no browser-specific executable found, return any .exe
+        if let Ok(entries) = fs::read_dir(dir) {
+          for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file()
+              && path
+                .extension()
+                .is_some_and(|ext| ext.to_string_lossy().to_lowercase() == "exe")
+            {
+              return Ok(path);
+            }
           }
         }
       }
-    }
 
-    Err("No executable found".into())
+      Err("No executable found".into())
+    })
   }
 
   #[cfg(target_os = "linux")]

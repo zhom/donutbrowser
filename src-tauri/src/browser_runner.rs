@@ -685,7 +685,7 @@ mod windows {
       .get_executable_path(browser_dir)
       .map_err(|e| format!("Failed to get executable path: {}", e))?;
 
-    let mut cmd = Command::new(executable_path);
+    let mut cmd = Command::new(&executable_path);
     cmd.args([
       &format!("--user-data-dir={}", profile.profile_path),
       "--new-window",

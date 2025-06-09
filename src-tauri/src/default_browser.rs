@@ -279,7 +279,7 @@ mod windows {
     Ok(())
   }
 
-  fn register_html_file_association(exe_path: &str) -> Result<(), String> {
+  fn register_html_file_association(_exe_path: &str) -> Result<(), String> {
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
 
     // Register .html and .htm file associations
