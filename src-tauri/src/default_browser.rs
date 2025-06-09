@@ -70,7 +70,6 @@ mod windows {
   use winreg::RegKey;
 
   const APP_NAME: &str = "DonutBrowser";
-  const APP_EXECUTABLE: &str = "DonutBrowser.exe";
   const PROG_ID: &str = "DonutBrowser.HTML";
 
   pub fn is_default_browser() -> Result<bool, String> {

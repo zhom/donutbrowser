@@ -1027,7 +1027,7 @@ impl Extractor {
     Box<
       dyn std::future::Future<Output = Result<PathBuf, Box<dyn std::error::Error + Send + Sync>>>
         + Send
-        + '_,
+        + 'a,
     >,
   > {
     Box::pin(async move {
