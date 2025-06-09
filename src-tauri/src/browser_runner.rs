@@ -3,7 +3,6 @@ use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, create_dir_all};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 use sysinfo::{Pid, System};
 use tauri::Emitter;
@@ -35,6 +34,7 @@ pub struct BrowserProfile {
 mod macos {
   use super::*;
   use std::ffi::OsString;
+  use std::process::Command;
 
   pub fn is_tor_or_mullvad_browser(exe_name: &str, cmd: &[OsString], browser_type: &str) -> bool {
     match browser_type {
@@ -605,7 +605,10 @@ mod windows {
 
     if !output.status.success() {
       // Fallback: try without -requestPending
-      let mut fallback_cmd = Command::new(browser.get_executable_path(browser_dir)?);
+      let executable_path = browser
+        .get_executable_path(browser_dir)
+        .map_err(|e| format!("Failed to get executable path: {}", e))?;
+      let mut fallback_cmd = Command::new(executable_path);
       fallback_cmd.args(["-profile", &profile.profile_path, "-new-tab", url]);
 
       if let Some(parent_dir) = browser_dir
@@ -677,7 +680,7 @@ mod windows {
     browser_type: BrowserType,
     browser_dir: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let browser = create_browser(browser_type);
+    let browser = create_browser(browser_type.clone());
     let executable_path = browser
       .get_executable_path(browser_dir)
       .map_err(|e| format!("Failed to get executable path: {}", e))?;
@@ -772,6 +775,7 @@ mod windows {
 mod linux {
   use super::*;
   use std::ffi::OsString;
+  use std::process::Command;
 
   pub fn is_tor_or_mullvad_browser(
     _exe_name: &str,

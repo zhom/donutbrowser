@@ -305,7 +305,6 @@ mod windows {
     // This helps refresh the system's understanding of the changes
     unsafe {
       use std::ffi::c_void;
-      use std::ptr;
 
       // Declare the Windows API functions
       type UINT = u32;

@@ -453,8 +453,6 @@ impl Extractor {
     zip_path: &Path,
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    use std::io::Read;
-
     println!("Extracting ZIP archive on Windows: {}", zip_path.display());
 
     // Create destination directory if it doesn't exist
@@ -500,8 +498,6 @@ impl Extractor {
     zip_path: &Path,
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    use std::io::Read;
-
     println!("Using Rust zip crate for extraction (Windows 7+ compatibility)");
 
     let file = fs::File::open(zip_path)?;
