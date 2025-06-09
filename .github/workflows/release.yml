@@ -69,7 +69,7 @@ jobs:
             target: "aarch64-unknown-linux-gnu"
             pkg_target: "latest-linux-arm64"
             nodecar_script: "build:linux-arm64"
-          - platform: "windows-11"
+          - platform: "windows-latest"
             args: "--target x86_64-pc-windows-msvc"
             arch: "x86_64"
             target: "x86_64-pc-windows-msvc"
