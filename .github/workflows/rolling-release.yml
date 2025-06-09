@@ -136,25 +136,25 @@ jobs:
       - name: Build frontend
         run: pnpm build
 
-      - name: Get commit hash
-        id: commit
+      - name: Generate nightly timestamp
+        id: timestamp
         shell: bash
         run: |
-          COMMIT_HASH=$(echo "${GITHUB_SHA}" | cut -c1-7)
-          echo "hash=${COMMIT_HASH}" >> $GITHUB_OUTPUT
-          echo "Generated commit hash: ${COMMIT_HASH}"
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S")
+          echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
+          echo "Generated timestamp: ${TIMESTAMP}"
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BUILD_TAG: "nightly-${{ steps.commit.outputs.hash }}"
-          GITHUB_REF_NAME: "nightly-${{ steps.commit.outputs.hash }}"
+          BUILD_TAG: "nightly-${{ steps.timestamp.outputs.timestamp }}"
+          GITHUB_REF_NAME: "nightly-${{ steps.timestamp.outputs.timestamp }}"
           GITHUB_SHA: ${{ github.sha }}
         with:
-          tagName: "nightly-${{ steps.commit.outputs.hash }}"
-          releaseName: "Donut Browser Nightly (Build ${{ steps.commit.outputs.hash }})"
-          releaseBody: "⚠️ **Nightly Release** - This is an automatically generated pre-release build from the latest main branch. Use with caution.\n\nCommit: ${{ github.sha }}\nBuild: ${{ steps.commit.outputs.hash }}"
+          tagName: "nightly-${{ steps.timestamp.outputs.timestamp }}"
+          releaseName: "Donut Browser Nightly (Build ${{ steps.timestamp.outputs.timestamp }})"
+          releaseBody: "⚠️ **Nightly Release** - This is an automatically generated pre-release build from the latest main branch. Use with caution.\n\nCommit: ${{ github.sha }}\nBuild: ${{ steps.timestamp.outputs.timestamp }}"
           releaseDraft: false
           prerelease: true
           args: ${{ matrix.args }}

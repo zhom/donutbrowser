@@ -17,7 +17,7 @@ fn main() {
     let version = std::env::var("CARGO_PKG_VERSION").unwrap_or_else(|_| "0.1.0".to_string());
     println!("cargo:rustc-env=BUILD_VERSION=v{version}");
   } else if let Ok(commit_hash) = std::env::var("GITHUB_SHA") {
-    // For nightly builds, use commit hash
+    // For nightly builds, use timestamp format or fallback to commit hash
     let short_hash = &commit_hash[0..7.min(commit_hash.len())];
     println!("cargo:rustc-env=BUILD_VERSION=nightly-{short_hash}");
   } else {
