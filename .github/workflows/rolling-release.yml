@@ -138,7 +138,11 @@ jobs:
 
       - name: Get commit hash
         id: commit
-        run: echo "hash=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+        shell: bash
+        run: |
+          COMMIT_HASH=$(echo "${GITHUB_SHA}" | cut -c1-7)
+          echo "hash=${COMMIT_HASH}" >> $GITHUB_OUTPUT
+          echo "Generated commit hash: ${COMMIT_HASH}"
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
