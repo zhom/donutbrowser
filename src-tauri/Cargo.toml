@@ -61,6 +61,11 @@ windows = { version = "0.61", features = [
 tempfile = "3.13.0"
 tokio-test = "0.4.4"
 wiremock = "0.6"
+hyper = { version = "1.0", features = ["full"] }
+hyper-util = { version = "0.1", features = ["full"] }
+http-body-util = "0.1"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["fs", "trace"] }
 
 [features]
 # by default Tauri runs in production mode
