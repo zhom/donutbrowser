@@ -30,6 +30,8 @@ interface ProxySettings {
   proxy_type: string;
   host: string;
   port: number;
+  username?: string;
+  password?: string;
 }
 
 interface ProxySettingsDialogProps {
@@ -52,6 +54,8 @@ export function ProxySettingsDialog({
     proxy_type: initialSettings?.proxy_type ?? "http",
     host: initialSettings?.host ?? "",
     port: initialSettings?.port ?? 8080,
+    username: initialSettings?.username ?? "",
+    password: initialSettings?.password ?? "",
   });
 
   const [initialSettingsState, setInitialSettingsState] =
@@ -60,6 +64,8 @@ export function ProxySettingsDialog({
       proxy_type: "http",
       host: "",
       port: 8080,
+      username: "",
+      password: "",
     });
 
   useEffect(() => {
@@ -69,6 +75,8 @@ export function ProxySettingsDialog({
         proxy_type: initialSettings.proxy_type,
         host: initialSettings.host,
         port: initialSettings.port,
+        username: initialSettings.username ?? "",
+        password: initialSettings.password ?? "",
       };
       setSettings(newSettings);
       setInitialSettingsState(newSettings);
@@ -78,6 +86,8 @@ export function ProxySettingsDialog({
         proxy_type: "http",
         host: "",
         port: 80,
+        username: "",
+        password: "",
       };
       setSettings(defaultSettings);
       setInitialSettingsState(defaultSettings);
@@ -94,7 +104,9 @@ export function ProxySettingsDialog({
       settings.enabled !== initialSettingsState.enabled ||
       settings.proxy_type !== initialSettingsState.proxy_type ||
       settings.host !== initialSettingsState.host ||
-      settings.port !== initialSettingsState.port
+      settings.port !== initialSettingsState.port ||
+      settings.username !== initialSettingsState.username ||
+      settings.password !== initialSettingsState.password
     );
   };
 
@@ -212,6 +224,31 @@ export function ProxySettingsDialog({
                   placeholder="e.g. 8080"
                   min="1"
                   max="65535"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="username">Username (optional)</Label>
+                <Input
+                  id="username"
+                  value={settings.username}
+                  onChange={(e) => {
+                    setSettings({ ...settings, username: e.target.value });
+                  }}
+                  placeholder="Proxy username"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="password">Password (optional)</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={settings.password}
+                  onChange={(e) => {
+                    setSettings({ ...settings, password: e.target.value });
+                  }}
+                  placeholder="Proxy password"
                 />
               </div>
             </>

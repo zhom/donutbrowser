@@ -9,6 +9,8 @@ pub struct ProxySettings {
   pub proxy_type: String, // "http", "https", "socks4", or "socks5"
   pub host: String,
   pub port: u16,
+  pub username: Option<String>,
+  pub password: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -860,6 +862,8 @@ mod tests {
       proxy_type: "http".to_string(),
       host: "127.0.0.1".to_string(),
       port: 8080,
+      username: None,
+      password: None,
     };
 
     assert!(proxy.enabled);
@@ -873,6 +877,8 @@ mod tests {
       proxy_type: "socks5".to_string(),
       host: "proxy.example.com".to_string(),
       port: 1080,
+      username: None,
+      password: None,
     };
 
     assert_eq!(socks_proxy.proxy_type, "socks5");
@@ -949,6 +955,8 @@ mod tests {
       proxy_type: "http".to_string(),
       host: "127.0.0.1".to_string(),
       port: 8080,
+      username: None,
+      password: None,
     };
 
     // Test that it can be serialized (implements Serialize)

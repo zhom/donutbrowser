@@ -11,7 +11,9 @@ use crate::browser::ProxySettings;
 pub struct ProxyInfo {
   pub id: String,
   pub local_url: String,
-  pub upstream_url: String,
+  pub upstream_host: String,
+  pub upstream_port: u16,
+  pub upstream_type: String,
   pub local_port: u16,
 }
 
@@ -19,7 +21,7 @@ pub struct ProxyInfo {
 pub struct ProxyManager {
   active_proxies: Mutex<HashMap<u32, ProxyInfo>>, // Maps browser process ID to proxy info
   // Store proxy info by profile name for persistence across browser restarts
-  profile_proxies: Mutex<HashMap<String, (String, u16)>>, // Maps profile name to (upstream_url, port)
+  profile_proxies: Mutex<HashMap<String, ProxySettings>>, // Maps profile name to proxy settings
 }
 
 impl ProxyManager {
@@ -30,11 +32,11 @@ impl ProxyManager {
     }
   }
 
-  // Start a proxy for a given upstream URL and associate it with a browser process ID
+  // Start a proxy for given proxy settings and associate it with a browser process ID
   pub async fn start_proxy(
     &self,
     app_handle: tauri::AppHandle,
-    upstream_url: &str,
+    proxy_settings: &ProxySettings,
     browser_pid: u32,
     profile_name: Option<&str>,
   ) -> Result<ProxySettings, String> {
@@ -44,9 +46,11 @@ impl ProxyManager {
       if let Some(proxy) = proxies.get(&browser_pid) {
         return Ok(ProxySettings {
           enabled: true,
-          proxy_type: "http".to_string(),
+          proxy_type: proxy.upstream_type.clone(),
           host: "localhost".to_string(),
           port: proxy.local_port,
+          username: None,
+          password: None,
         });
       }
     }
@@ -54,7 +58,18 @@ impl ProxyManager {
     // Check if we have a preferred port for this profile
     let preferred_port = if let Some(name) = profile_name {
       let profile_proxies = self.profile_proxies.lock().unwrap();
-      profile_proxies.get(name).map(|(_, port)| *port)
+      profile_proxies.get(name).and_then(|settings| {
+        // Find existing proxy with same settings to reuse port
+        let active_proxies = self.active_proxies.lock().unwrap();
+        active_proxies
+          .values()
+          .find(|p| {
+            p.upstream_host == settings.host
+              && p.upstream_port == settings.port
+              && p.upstream_type == settings.proxy_type
+          })
+          .map(|p| p.local_port)
+      })
     } else {
       None
     };
@@ -66,8 +81,20 @@ impl ProxyManager {
       .unwrap()
       .arg("proxy")
       .arg("start")
-      .arg("-u")
-      .arg(upstream_url);
+      .arg("-h")
+      .arg(&proxy_settings.host)
+      .arg("-P")
+      .arg(proxy_settings.port.to_string())
+      .arg("-t")
+      .arg(&proxy_settings.proxy_type);
+
+    // Add credentials if provided
+    if let Some(username) = &proxy_settings.username {
+      nodecar = nodecar.arg("-u").arg(username);
+    }
+    if let Some(password) = &proxy_settings.password {
+      nodecar = nodecar.arg("-w").arg(password);
+    }
 
     // If we have a preferred port, use it
     if let Some(port) = preferred_port {
@@ -95,15 +122,13 @@ impl ProxyManager {
       .as_str()
       .ok_or("Missing local URL")?
       .to_string();
-    let upstream_url_str = json["upstreamUrl"]
-      .as_str()
-      .ok_or("Missing upstream URL")?
-      .to_string();
 
     let proxy_info = ProxyInfo {
       id: id.to_string(),
       local_url,
-      upstream_url: upstream_url_str.clone(),
+      upstream_host: proxy_settings.host.clone(),
+      upstream_port: proxy_settings.port,
+      upstream_type: proxy_settings.proxy_type.clone(),
       local_port,
     };
 
@@ -116,7 +141,7 @@ impl ProxyManager {
     // Store the profile proxy info for persistence
     if let Some(name) = profile_name {
       let mut profile_proxies = self.profile_proxies.lock().unwrap();
-      profile_proxies.insert(name.to_string(), (upstream_url_str, local_port));
+      profile_proxies.insert(name.to_string(), proxy_settings.clone());
     }
 
     // Return proxy settings for the browser
@@ -125,6 +150,8 @@ impl ProxyManager {
       proxy_type: "http".to_string(),
       host: "localhost".to_string(),
       port: proxy_info.local_port,
+      username: None,
+      password: None,
     })
   }
 
@@ -171,11 +198,13 @@ impl ProxyManager {
       proxy_type: "http".to_string(),
       host: "localhost".to_string(),
       port: proxy.local_port,
+      username: None,
+      password: None,
     })
   }
 
   // Get stored proxy info for a profile
-  pub fn get_profile_proxy_info(&self, profile_name: &str) -> Option<(String, u16)> {
+  pub fn get_profile_proxy_info(&self, profile_name: &str) -> Option<ProxySettings> {
     let profile_proxies = self.profile_proxies.lock().unwrap();
     profile_proxies.get(profile_name).cloned()
   }

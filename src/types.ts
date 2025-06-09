@@ -3,6 +3,8 @@ export interface ProxySettings {
   proxy_type: string; // "http", "https", "socks4", or "socks5"
   host: string;
   port: number;
+  username?: string;
+  password?: string;
 }
 
 export interface TableSortingSettings {

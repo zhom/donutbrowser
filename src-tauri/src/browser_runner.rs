@@ -1988,14 +1988,13 @@ impl BrowserRunner {
 
           if !proxy_active {
             // Browser is running but proxy is not - restart the proxy
-            if let Some((upstream_url, _preferred_port)) =
-              PROXY_MANAGER.get_profile_proxy_info(&inner_profile.name)
+            if let Some(proxy_settings) = PROXY_MANAGER.get_profile_proxy_info(&inner_profile.name)
             {
               // Restart the proxy with the same configuration
               match PROXY_MANAGER
                 .start_proxy(
                   app_handle,
-                  &upstream_url,
+                  &proxy_settings,
                   inner_profile.process_id.unwrap(),
                   Some(&inner_profile.name),
                 )
@@ -2171,12 +2170,9 @@ pub async fn launch_browser_profile(
     if proxy.enabled {
       // Get the process ID
       if let Some(pid) = updated_profile.process_id {
-        // Start a proxy for the upstream URL
-        let upstream_url = format!("{}://{}:{}", proxy.proxy_type, proxy.host, proxy.port);
-
         // Start the proxy
         match PROXY_MANAGER
-          .start_proxy(app_handle.clone(), &upstream_url, pid, Some(&profile.name))
+          .start_proxy(app_handle.clone(), proxy, pid, Some(&profile.name))
           .await
         {
           Ok(internal_proxy_settings) => {
@@ -2628,6 +2624,8 @@ mod tests {
       proxy_type: "http".to_string(),
       host: "127.0.0.1".to_string(),
       port: 8080,
+      username: None,
+      password: None,
     };
 
     let profile = runner
@@ -2683,6 +2681,8 @@ mod tests {
       proxy_type: "socks5".to_string(),
       host: "192.168.1.1".to_string(),
       port: 1080,
+      username: None,
+      password: None,
     };
 
     let updated_profile = runner
@@ -2838,6 +2838,8 @@ mod tests {
       proxy_type: "http".to_string(),
       host: "127.0.0.1".to_string(),
       port: 8080,
+      username: None,
+      password: None,
     };
 
     let profile_with_proxy = runner
