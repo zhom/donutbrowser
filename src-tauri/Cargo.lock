@@ -1018,6 +1018,8 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-test",
+ "windows",
+ "winreg",
  "wiremock",
  "zip",
 ]

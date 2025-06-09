@@ -217,10 +217,7 @@ mod linux {
     browser_type: &BrowserType,
   ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let possible_executables = match browser_type {
-      BrowserType::Chromium => vec![
-        install_dir.join("chromium"),
-        install_dir.join("chrome"),
-      ],
+      BrowserType::Chromium => vec![install_dir.join("chromium"), install_dir.join("chrome")],
       BrowserType::Brave => vec![
         install_dir.join("brave"),
         install_dir.join("brave-browser"),
@@ -292,10 +289,7 @@ mod linux {
 
   pub fn is_chromium_version_downloaded(install_dir: &Path, browser_type: &BrowserType) -> bool {
     let possible_executables = match browser_type {
-      BrowserType::Chromium => vec![
-        install_dir.join("chromium"),
-        install_dir.join("chrome"),
-      ],
+      BrowserType::Chromium => vec![install_dir.join("chromium"), install_dir.join("chrome")],
       BrowserType::Brave => vec![
         install_dir.join("brave"),
         install_dir.join("brave-browser"),

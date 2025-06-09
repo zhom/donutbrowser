@@ -65,13 +65,284 @@ mod macos {
 
 #[cfg(target_os = "windows")]
 mod windows {
+  use std::path::Path;
+  use winreg::enums::*;
+  use winreg::RegKey;
+
+  const APP_NAME: &str = "DonutBrowser";
+  const APP_EXECUTABLE: &str = "DonutBrowser.exe";
+  const PROG_ID: &str = "DonutBrowser.HTML";
+
   pub fn is_default_browser() -> Result<bool, String> {
-    // Windows implementation would go here
-    Err("Windows support not implemented yet".to_string())
+    let schemes = ["http", "https"];
+
+    for scheme in schemes {
+      // Check if our browser is set as the default handler for this scheme
+      if !is_default_for_scheme(scheme)? {
+        return Ok(false);
+      }
+    }
+
+    Ok(true)
   }
 
   pub fn set_as_default_browser() -> Result<(), String> {
-    Err("Windows support not implemented yet".to_string())
+    // Get the current executable path
+    let exe_path = std::env::current_exe()
+      .map_err(|e| format!("Failed to get current executable path: {}", e))?;
+
+    let exe_path_str = exe_path
+      .to_str()
+      .ok_or("Failed to convert executable path to string")?;
+
+    // Verify the executable exists
+    if !Path::new(exe_path_str).exists() {
+      return Err(format!("Executable not found at: {}", exe_path_str));
+    }
+
+    // Register the application
+    register_application(exe_path_str)?;
+
+    // Set as default for HTTP and HTTPS
+    set_default_for_scheme("http")?;
+    set_default_for_scheme("https")?;
+
+    // Register file associations for HTML files
+    register_html_file_association(exe_path_str)?;
+
+    // Notify the system of changes
+    notify_system_of_changes();
+
+    Ok(())
+  }
+
+  fn is_default_for_scheme(scheme: &str) -> Result<bool, String> {
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+
+    // Check Software\Microsoft\Windows\Shell\Associations\UrlAssociations\{scheme}\UserChoice
+    let path = format!(
+      "Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\{}\\UserChoice",
+      scheme
+    );
+
+    match hkcu.open_subkey(&path) {
+      Ok(key) => match key.get_value::<String, _>("ProgId") {
+        Ok(prog_id) => Ok(prog_id == PROG_ID),
+        Err(_) => Ok(false),
+      },
+      Err(_) => Ok(false),
+    }
+  }
+
+  fn register_application(exe_path: &str) -> Result<(), String> {
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+
+    // Register in Software\RegisteredApplications
+    let (registered_apps, _) = hkcu
+      .create_subkey("Software\\RegisteredApplications")
+      .map_err(|e| format!("Failed to create RegisteredApplications key: {}", e))?;
+
+    registered_apps
+      .set_value(APP_NAME, &format!("Software\\{}", APP_NAME))
+      .map_err(|e| format!("Failed to set registered application: {}", e))?;
+
+    // Create application key
+    let (app_key, _) = hkcu
+      .create_subkey(&format!("Software\\{}", APP_NAME))
+      .map_err(|e| format!("Failed to create application key: {}", e))?;
+
+    // Set application properties
+    app_key
+      .set_value("ApplicationName", &APP_NAME)
+      .map_err(|e| format!("Failed to set ApplicationName: {}", e))?;
+
+    app_key
+      .set_value(
+        "ApplicationDescription",
+        &"Donut Browser - Simple Yet Powerful Browser Orchestrator",
+      )
+      .map_err(|e| format!("Failed to set ApplicationDescription: {}", e))?;
+
+    app_key
+      .set_value("ApplicationIcon", &format!("{},0", exe_path))
+      .map_err(|e| format!("Failed to set ApplicationIcon: {}", e))?;
+
+    // Create Capabilities key
+    let (capabilities, _) = app_key
+      .create_subkey("Capabilities")
+      .map_err(|e| format!("Failed to create Capabilities key: {}", e))?;
+
+    capabilities
+      .set_value(
+        "ApplicationDescription",
+        &"Donut Browser - Simple Yet Powerful Browser Orchestrator",
+      )
+      .map_err(|e| format!("Failed to set Capabilities description: {}", e))?;
+
+    // Set URL associations
+    let (url_assoc, _) = capabilities
+      .create_subkey("URLAssociations")
+      .map_err(|e| format!("Failed to create URLAssociations key: {}", e))?;
+
+    url_assoc
+      .set_value("http", &PROG_ID)
+      .map_err(|e| format!("Failed to set http association: {}", e))?;
+
+    url_assoc
+      .set_value("https", &PROG_ID)
+      .map_err(|e| format!("Failed to set https association: {}", e))?;
+
+    // Set file associations
+    let (file_assoc, _) = capabilities
+      .create_subkey("FileAssociations")
+      .map_err(|e| format!("Failed to create FileAssociations key: {}", e))?;
+
+    file_assoc
+      .set_value(".html", &PROG_ID)
+      .map_err(|e| format!("Failed to set .html association: {}", e))?;
+
+    file_assoc
+      .set_value(".htm", &PROG_ID)
+      .map_err(|e| format!("Failed to set .htm association: {}", e))?;
+
+    // Register the ProgID
+    register_prog_id(exe_path)?;
+
+    Ok(())
+  }
+
+  fn register_prog_id(exe_path: &str) -> Result<(), String> {
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+
+    // Create ProgID key
+    let (prog_id_key, _) = hkcu
+      .create_subkey(&format!("Software\\Classes\\{}", PROG_ID))
+      .map_err(|e| format!("Failed to create ProgID key: {}", e))?;
+
+    prog_id_key
+      .set_value("", &"Donut Browser Document")
+      .map_err(|e| format!("Failed to set ProgID default value: {}", e))?;
+
+    prog_id_key
+      .set_value("FriendlyTypeName", &"Donut Browser Document")
+      .map_err(|e| format!("Failed to set FriendlyTypeName: {}", e))?;
+
+    // Create DefaultIcon key
+    let (icon_key, _) = prog_id_key
+      .create_subkey("DefaultIcon")
+      .map_err(|e| format!("Failed to create DefaultIcon key: {}", e))?;
+
+    icon_key
+      .set_value("", &format!("{},0", exe_path))
+      .map_err(|e| format!("Failed to set default icon: {}", e))?;
+
+    // Create shell\open\command key
+    let (command_key, _) = prog_id_key
+      .create_subkey("shell\\open\\command")
+      .map_err(|e| format!("Failed to create command key: {}", e))?;
+
+    command_key
+      .set_value("", &format!("\"{}\" \"%1\"", exe_path))
+      .map_err(|e| format!("Failed to set command: {}", e))?;
+
+    Ok(())
+  }
+
+  fn set_default_for_scheme(scheme: &str) -> Result<(), String> {
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+
+    // Set in Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.html\UserChoice
+    // Note: On Windows 10+, this might require elevated permissions or user interaction
+    // through the Settings app due to security restrictions
+
+    // Try to set the association in the user's choice
+    let user_choice_path = format!(
+      "Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\{}\\UserChoice",
+      scheme
+    );
+
+    // Note: Setting UserChoice directly may not work on Windows 10+ due to hash verification
+    // The user may need to manually set the default browser through Windows Settings
+    match hkcu.create_subkey(&user_choice_path) {
+      Ok((user_choice, _)) => {
+        // Attempt to set the ProgId
+        if let Err(_) = user_choice.set_value("ProgId", &PROG_ID) {
+          // If we can't set UserChoice, that's expected on newer Windows versions
+          // The registration is still valuable for the "Open with" menu
+        }
+      }
+      Err(_) => {
+        // Expected on newer Windows versions - user must set manually
+      }
+    }
+
+    Ok(())
+  }
+
+  fn register_html_file_association(exe_path: &str) -> Result<(), String> {
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+
+    // Register .html and .htm file associations
+    for ext in &[".html", ".htm"] {
+      let ext_path = format!("Software\\Classes\\{}", ext);
+
+      match hkcu.create_subkey(&ext_path) {
+        Ok((ext_key, _)) => {
+          // Set the default value to our ProgID
+          let _ = ext_key.set_value("", &PROG_ID);
+        }
+        Err(_) => {
+          // Continue if we can't set the file association
+        }
+      }
+    }
+
+    Ok(())
+  }
+
+  fn notify_system_of_changes() {
+    // Use Windows API to notify the system of association changes
+    // This helps refresh the system's understanding of the changes
+    unsafe {
+      use std::ffi::c_void;
+      use std::ptr;
+
+      // Declare the Windows API functions
+      type UINT = u32;
+      type DWORD = u32;
+      type LPARAM = isize;
+      type WPARAM = usize;
+
+      const HWND_BROADCAST: *mut c_void = 0xffff as *mut c_void;
+      const WM_SETTINGCHANGE: UINT = 0x001A;
+      const SMTO_ABORTIFHUNG: UINT = 0x0002;
+
+      // Link to user32.dll functions
+      extern "system" {
+        fn SendMessageTimeoutA(
+          hWnd: *mut c_void,
+          Msg: UINT,
+          wParam: WPARAM,
+          lParam: LPARAM,
+          fuFlags: UINT,
+          uTimeout: UINT,
+          lpdwResult: *mut DWORD,
+        ) -> isize;
+      }
+
+      let mut result: DWORD = 0;
+
+      // Notify about file associations change
+      SendMessageTimeoutA(
+        HWND_BROADCAST,
+        WM_SETTINGCHANGE,
+        0,
+        "Software\\Classes\0".as_ptr() as LPARAM,
+        SMTO_ABORTIFHUNG,
+        1000,
+        &mut result,
+      );
+    }
   }
 }
 

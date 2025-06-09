@@ -453,8 +453,15 @@ impl Extractor {
     zip_path: &Path,
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    // Use PowerShell's Expand-Archive on Windows
-    let output = Command::new("powershell")
+    use std::io::Read;
+
+    println!("Extracting ZIP archive on Windows: {}", zip_path.display());
+
+    // Create destination directory if it doesn't exist
+    fs::create_dir_all(dest_dir)?;
+
+    // First try PowerShell's Expand-Archive (Windows 10+)
+    let powershell_result = Command::new("powershell")
       .args([
         "-Command",
         &format!(
@@ -463,18 +470,80 @@ impl Extractor {
           dest_dir.display()
         ),
       ])
-      .output()?;
+      .output();
 
-    if !output.status.success() {
-      return Err(
-        format!(
-          "Failed to extract zip with PowerShell: {}",
+    match powershell_result {
+      Ok(output) if output.status.success() => {
+        println!("Successfully extracted using PowerShell");
+      }
+      Ok(output) => {
+        println!(
+          "PowerShell extraction failed: {}, trying Rust zip crate fallback",
           String::from_utf8_lossy(&output.stderr)
-        )
-        .into(),
-      );
+        );
+        // Fallback to Rust zip crate for Windows 7 compatibility
+        return self.extract_zip_with_rust_crate(zip_path, dest_dir).await;
+      }
+      Err(e) => {
+        println!("PowerShell not available: {}, using Rust zip crate", e);
+        // Fallback to Rust zip crate for Windows 7 compatibility
+        return self.extract_zip_with_rust_crate(zip_path, dest_dir).await;
+      }
     }
 
+    self.find_extracted_executable(dest_dir).await
+  }
+
+  #[cfg(target_os = "windows")]
+  async fn extract_zip_with_rust_crate(
+    &self,
+    zip_path: &Path,
+    dest_dir: &Path,
+  ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
+    use std::io::Read;
+
+    println!("Using Rust zip crate for extraction (Windows 7+ compatibility)");
+
+    let file = fs::File::open(zip_path)?;
+    let mut archive = zip::ZipArchive::new(file)?;
+
+    for i in 0..archive.len() {
+      let mut file = archive.by_index(i)?;
+      let outpath = match file.enclosed_name() {
+        Some(path) => dest_dir.join(path),
+        None => continue,
+      };
+
+      // Handle directory creation
+      if file.name().ends_with('/') {
+        fs::create_dir_all(&outpath)?;
+      } else {
+        // Create parent directories
+        if let Some(p) = outpath.parent() {
+          if !p.exists() {
+            fs::create_dir_all(p)?;
+          }
+        }
+
+        // Extract file
+        let mut outfile = fs::File::create(&outpath)?;
+        std::io::copy(&mut file, &mut outfile)?;
+
+        // On Windows, verify executable files
+        if outpath
+          .extension()
+          .is_some_and(|ext| ext.to_string_lossy().to_lowercase() == "exe")
+        {
+          if let Ok(metadata) = fs::metadata(&outpath) {
+            if metadata.len() > 0 {
+              println!("Extracted executable: {}", outpath.display());
+            }
+          }
+        }
+      }
+    }
+
+    println!("ZIP extraction completed. Searching for executable...");
     self.find_extracted_executable(dest_dir).await
   }
 
@@ -514,24 +583,60 @@ impl Extractor {
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     create_dir_all(dest_dir)?;
 
-    // Use tar command for more reliable extraction
-    let output = Command::new("tar")
-      .args([
-        "-xf",
-        tar_path.to_str().unwrap(),
-        "-C",
-        dest_dir.to_str().unwrap(),
-      ])
-      .output()?;
+    #[cfg(target_os = "windows")]
+    {
+      // On Windows, try multiple extraction methods for better compatibility
+      // First try using tar if available (Windows 10+)
+      let tar_result = Command::new("tar")
+        .args([
+          "-xf",
+          tar_path.to_str().unwrap(),
+          "-C",
+          dest_dir.to_str().unwrap(),
+        ])
+        .output();
 
-    if !output.status.success() {
-      return Err(
-        format!(
-          "Failed to extract tar.xz: {}",
-          String::from_utf8_lossy(&output.stderr)
-        )
-        .into(),
-      );
+      match tar_result {
+        Ok(output) if output.status.success() => {
+          println!("Successfully extracted tar.xz using tar command");
+        }
+        Ok(output) => {
+          println!(
+            "tar command failed: {}, trying 7-Zip fallback",
+            String::from_utf8_lossy(&output.stderr)
+          );
+          // Try 7-Zip as fallback
+          return self.extract_with_7zip(tar_path, dest_dir).await;
+        }
+        Err(_) => {
+          println!("tar command not available, trying 7-Zip");
+          // Try 7-Zip as fallback
+          return self.extract_with_7zip(tar_path, dest_dir).await;
+        }
+      }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+      // Use tar command for Unix-like systems
+      let output = Command::new("tar")
+        .args([
+          "-xf",
+          tar_path.to_str().unwrap(),
+          "-C",
+          dest_dir.to_str().unwrap(),
+        ])
+        .output()?;
+
+      if !output.status.success() {
+        return Err(
+          format!(
+            "Failed to extract tar.xz: {}",
+            String::from_utf8_lossy(&output.stderr)
+          )
+          .into(),
+        );
+      }
     }
 
     // Find the extracted executable and set proper permissions
@@ -543,6 +648,44 @@ impl Extractor {
     }
 
     Ok(executable_path)
+  }
+
+  #[cfg(target_os = "windows")]
+  async fn extract_with_7zip(
+    &self,
+    archive_path: &Path,
+    dest_dir: &Path,
+  ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
+    // Try to use 7-Zip for extraction (common on Windows)
+    let seven_zip_paths = [
+      "7z", // If 7z is in PATH
+      "C:\\Program Files\\7-Zip\\7z.exe",
+      "C:\\Program Files (x86)\\7-Zip\\7z.exe",
+    ];
+
+    for seven_zip_path in &seven_zip_paths {
+      let result = Command::new(seven_zip_path)
+        .args([
+          "x", // Extract with full paths
+          archive_path.to_str().unwrap(),
+          &format!("-o{}", dest_dir.display()), // Output directory
+          "-y",                                 // Yes to all
+        ])
+        .output();
+
+      match result {
+        Ok(output) if output.status.success() => {
+          println!("Successfully extracted using 7-Zip: {}", seven_zip_path);
+          return self.find_extracted_executable(dest_dir).await;
+        }
+        Ok(_) => continue,
+        Err(_) => continue,
+      }
+    }
+
+    Err(
+      "No suitable extraction tool found. Please install 7-Zip or ensure tar is available.".into(),
+    )
   }
 
   pub async fn extract_tar_bz2(
@@ -827,40 +970,130 @@ impl Extractor {
     &self,
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
+    println!(
+      "Searching for Windows executable in: {}",
+      dest_dir.display()
+    );
+
     // Look for .exe files, preferring main browser executables
-    let exe_names = [
-      "chrome.exe",
+    let priority_exe_names = [
       "firefox.exe",
+      "chrome.exe",
+      "chromium.exe",
       "zen.exe",
       "brave.exe",
+      "tor-browser.exe",
       "tor.exe",
+      "mullvad-browser.exe",
     ];
 
-    for exe_name in &exe_names {
+    // First try priority executable names
+    for exe_name in &priority_exe_names {
       let exe_path = dest_dir.join(exe_name);
       if exe_path.exists() {
+        println!("Found priority executable: {}", exe_path.display());
         return Ok(exe_path);
       }
     }
 
-    // If no specific executable found, look for any .exe file
-    if let Ok(entries) = fs::read_dir(dest_dir) {
-      for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().is_some_and(|ext| ext == "exe") {
-          return Ok(path);
+    // Recursively search for executables with depth limit
+    match self.find_windows_executable_recursive(dest_dir, 0, 3).await {
+      Ok(exe_path) => {
+        println!(
+          "Found executable via recursive search: {}",
+          exe_path.display()
+        );
+        Ok(exe_path)
+      }
+      Err(_) => {
+        // List directory contents for debugging
+        if let Ok(entries) = fs::read_dir(dest_dir) {
+          println!("Directory contents:");
+          for entry in entries.flatten() {
+            let path = entry.path();
+            let metadata = if path.is_dir() { "dir" } else { "file" };
+            println!("  - {} ({})", path.display(), metadata);
+          }
         }
 
-        // Check subdirectories
-        if path.is_dir() {
-          if let Ok(sub_result) = self.find_windows_executable(&path).await {
-            return Ok(sub_result);
+        Err("No executable found after extraction".into())
+      }
+    }
+  }
+
+  #[cfg(target_os = "windows")]
+  async fn find_windows_executable_recursive(
+    &self,
+    dir: &Path,
+    depth: usize,
+    max_depth: usize,
+  ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
+    if depth > max_depth {
+      return Err("Maximum search depth reached".into());
+    }
+
+    if let Ok(entries) = fs::read_dir(dir) {
+      let mut dirs_to_search = Vec::new();
+
+      // First pass: look for .exe files in current directory
+      for entry in entries.flatten() {
+        let path = entry.path();
+
+        if path.is_file()
+          && path
+            .extension()
+            .is_some_and(|ext| ext.to_string_lossy().to_lowercase() == "exe")
+        {
+          let file_name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+
+          // Check if it's a browser executable
+          if file_name.contains("firefox")
+            || file_name.contains("chrome")
+            || file_name.contains("chromium")
+            || file_name.contains("zen")
+            || file_name.contains("brave")
+            || file_name.contains("tor")
+            || file_name.contains("mullvad")
+            || file_name.contains("browser")
+          {
+            return Ok(path);
+          }
+        } else if path.is_dir() {
+          // Collect directories for later search
+          dirs_to_search.push(path);
+        }
+      }
+
+      // Second pass: search subdirectories
+      for subdir in dirs_to_search {
+        if let Ok(result) = self
+          .find_windows_executable_recursive(&subdir, depth + 1, max_depth)
+          .await
+        {
+          return Ok(result);
+        }
+      }
+
+      // Third pass: if no browser-specific executable found, return any .exe
+      if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+          let path = entry.path();
+          if path.is_file()
+            && path
+              .extension()
+              .is_some_and(|ext| ext.to_string_lossy().to_lowercase() == "exe")
+          {
+            return Ok(path);
           }
         }
       }
     }
 
-    Err("No executable found after extraction".into())
+    Err("No executable found".into())
   }
 
   #[cfg(target_os = "linux")]

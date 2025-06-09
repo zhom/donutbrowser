@@ -482,14 +482,42 @@ end try
 mod windows {
   use super::*;
   use std::ffi::OsString;
+  use std::process::Command;
 
-  pub fn is_tor_or_mullvad_browser(
-    _exe_name: &str,
-    _cmd: &[OsString],
-    _browser_type: &str,
-  ) -> bool {
-    // Windows implementation would go here
-    false
+  pub fn is_tor_or_mullvad_browser(exe_name: &str, cmd: &[OsString], browser_type: &str) -> bool {
+    let exe_lower = exe_name.to_lowercase();
+
+    // Check for Firefox-based browsers first by executable name
+    let is_firefox_family = exe_lower.contains("firefox") || exe_lower.contains(".exe");
+
+    if !is_firefox_family {
+      return false;
+    }
+
+    // Check command arguments for profile paths and browser-specific indicators
+    let cmd_line = cmd
+      .iter()
+      .map(|s| s.to_string_lossy().to_lowercase())
+      .collect::<Vec<_>>()
+      .join(" ");
+
+    match browser_type {
+      "tor-browser" => {
+        // Check for TOR browser specific paths and arguments
+        cmd_line.contains("tor")
+          || cmd_line.contains("browser\\torbrowser")
+          || cmd_line.contains("tor-browser")
+          || cmd_line.contains("profile") && (cmd_line.contains("tor") || cmd_line.contains("tbb"))
+      }
+      "mullvad-browser" => {
+        // Check for Mullvad browser specific paths and arguments
+        cmd_line.contains("mullvad")
+          || cmd_line.contains("browser\\mullvadbrowser")
+          || cmd_line.contains("mullvad-browser")
+          || cmd_line.contains("profile") && cmd_line.contains("mullvad")
+      }
+      _ => false,
+    }
   }
 
   pub async fn launch_browser_process(
@@ -500,7 +528,48 @@ mod windows {
       "Launching browser on Windows: {:?} with args: {:?}",
       executable_path, args
     );
-    Ok(Command::new(executable_path).args(args).spawn()?)
+
+    // Check if the executable exists
+    if !executable_path.exists() {
+      return Err(format!("Browser executable not found: {:?}", executable_path).into());
+    }
+
+    // On Windows, set up the command with proper working directory
+    let mut cmd = Command::new(executable_path);
+    cmd.args(args);
+
+    // Set working directory to the executable's directory for better compatibility
+    if let Some(parent_dir) = executable_path.parent() {
+      cmd.current_dir(parent_dir);
+    }
+
+    // For Windows 7 compatibility, set some environment variables
+    cmd.env(
+      "PROCESSOR_ARCHITECTURE",
+      std::env::var("PROCESSOR_ARCHITECTURE").unwrap_or_else(|_| "x86".to_string()),
+    );
+
+    // Ensure proper PATH for DLL loading
+    if let Some(exe_dir) = executable_path.parent() {
+      let mut path_var = std::env::var("PATH").unwrap_or_default();
+      if !path_var.is_empty() {
+        path_var = format!("{};{}", exe_dir.display(), path_var);
+      } else {
+        path_var = exe_dir.display().to_string();
+      }
+      cmd.env("PATH", path_var);
+    }
+
+    // Launch the process
+    let child = cmd
+      .spawn()
+      .map_err(|e| format!("Failed to launch browser process: {}", e))?;
+
+    println!(
+      "Successfully launched browser process with PID: {}",
+      child.id()
+    );
+    Ok(child)
   }
 
   pub async fn open_url_in_existing_browser_firefox_like(
@@ -514,14 +583,85 @@ mod windows {
       .get_executable_path(browser_dir)
       .map_err(|e| format!("Failed to get executable path: {}", e))?;
 
-    let output = Command::new(executable_path)
-      .args(["-profile", &profile.profile_path, "-new-tab", url])
-      .output()?;
+    // For Windows, try using the -requestPending approach for Firefox
+    let mut cmd = Command::new(executable_path);
+    cmd.args([
+      "-profile",
+      &profile.profile_path,
+      "-requestPending",
+      "-new-tab",
+      url,
+    ]);
+
+    // Set working directory
+    if let Some(parent_dir) = browser_dir
+      .parent()
+      .or_else(|| browser_dir.ancestors().nth(1))
+    {
+      cmd.current_dir(parent_dir);
+    }
+
+    let output = cmd.output()?;
+
+    if !output.status.success() {
+      // Fallback: try without -requestPending
+      let mut fallback_cmd = Command::new(browser.get_executable_path(browser_dir)?);
+      fallback_cmd.args(["-profile", &profile.profile_path, "-new-tab", url]);
+
+      if let Some(parent_dir) = browser_dir
+        .parent()
+        .or_else(|| browser_dir.ancestors().nth(1))
+      {
+        fallback_cmd.current_dir(parent_dir);
+      }
+
+      let fallback_output = fallback_cmd.output()?;
+
+      if !fallback_output.status.success() {
+        return Err(
+          format!(
+            "Failed to open URL in existing browser: {}",
+            String::from_utf8_lossy(&fallback_output.stderr)
+          )
+          .into(),
+        );
+      }
+    }
+
+    Ok(())
+  }
+
+  pub async fn open_url_in_existing_browser_tor_mullvad(
+    profile: &BrowserProfile,
+    url: &str,
+    browser_type: BrowserType,
+    browser_dir: &Path,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // On Windows, TOR and Mullvad browsers can sometimes accept URLs via command line
+    // even with -no-remote, by launching a new instance that hands off to existing one
+    let browser = create_browser(browser_type);
+    let executable_path = browser
+      .get_executable_path(browser_dir)
+      .map_err(|e| format!("Failed to get executable path: {}", e))?;
+
+    let mut cmd = Command::new(executable_path);
+    cmd.args(["-profile", &profile.profile_path, url]);
+
+    // Set working directory
+    if let Some(parent_dir) = browser_dir
+      .parent()
+      .or_else(|| browser_dir.ancestors().nth(1))
+    {
+      cmd.current_dir(parent_dir);
+    }
+
+    let output = cmd.output()?;
 
     if !output.status.success() {
       return Err(
         format!(
-          "Failed to open URL in existing browser: {}",
+          "Failed to open URL in existing {}: {}. Note: TOR and Mullvad browsers may require manual URL opening for security reasons.",
+          browser_type.as_str(),
           String::from_utf8_lossy(&output.stderr)
         )
         .into(),
@@ -529,15 +669,6 @@ mod windows {
     }
 
     Ok(())
-  }
-
-  pub async fn open_url_in_existing_browser_tor_mullvad(
-    _profile: &BrowserProfile,
-    _url: &str,
-    _browser_type: BrowserType,
-    _browser_dir: &Path,
-  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    Err("Opening URLs in existing Firefox-based browsers is not supported on Windows when using -no-remote".into())
   }
 
   pub async fn open_url_in_existing_browser_chromium(
@@ -551,18 +682,46 @@ mod windows {
       .get_executable_path(browser_dir)
       .map_err(|e| format!("Failed to get executable path: {}", e))?;
 
-    let output = Command::new(executable_path)
-      .args([&format!("--user-data-dir={}", profile.profile_path), url])
-      .output()?;
+    let mut cmd = Command::new(executable_path);
+    cmd.args([
+      &format!("--user-data-dir={}", profile.profile_path),
+      "--new-window",
+      url,
+    ]);
+
+    // Set working directory
+    if let Some(parent_dir) = browser_dir
+      .parent()
+      .or_else(|| browser_dir.ancestors().nth(1))
+    {
+      cmd.current_dir(parent_dir);
+    }
+
+    let output = cmd.output()?;
 
     if !output.status.success() {
-      return Err(
-        format!(
-          "Failed to open URL in existing Chromium-based browser: {}",
-          String::from_utf8_lossy(&output.stderr)
-        )
-        .into(),
-      );
+      // Try fallback without --new-window
+      let mut fallback_cmd = Command::new(executable_path);
+      fallback_cmd.args([&format!("--user-data-dir={}", profile.profile_path), url]);
+
+      if let Some(parent_dir) = browser_dir
+        .parent()
+        .or_else(|| browser_dir.ancestors().nth(1))
+      {
+        fallback_cmd.current_dir(parent_dir);
+      }
+
+      let fallback_output = fallback_cmd.output()?;
+
+      if !fallback_output.status.success() {
+        return Err(
+          format!(
+            "Failed to open URL in existing Chromium-based browser: {}",
+            String::from_utf8_lossy(&fallback_output.stderr)
+          )
+          .into(),
+        );
+      }
     }
 
     Ok(())
@@ -571,17 +730,41 @@ mod windows {
   pub async fn kill_browser_process_impl(
     pid: u32,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // First try using sysinfo (cross-platform approach)
     let system = System::new_all();
     if let Some(process) = system.process(Pid::from(pid as usize)) {
-      if !process.kill() {
-        return Err(format!("Failed to kill process {}", pid).into());
+      if process.kill() {
+        println!("Successfully killed browser process with PID: {pid}");
+        return Ok(());
       }
-    } else {
-      return Err(format!("Process {} not found", pid).into());
     }
 
-    println!("Successfully killed browser process with PID: {pid}");
-    Ok(())
+    // Fallback to Windows-specific process termination
+    use std::process::Command;
+
+    // Try taskkill command as fallback
+    let output = Command::new("taskkill")
+      .args(["/F", "/PID", &pid.to_string()])
+      .output();
+
+    match output {
+      Ok(result) => {
+        if result.status.success() {
+          println!("Successfully killed browser process with PID: {pid} using taskkill");
+          Ok(())
+        } else {
+          Err(
+            format!(
+              "Failed to kill process {} with taskkill: {}",
+              pid,
+              String::from_utf8_lossy(&result.stderr)
+            )
+            .into(),
+          )
+        }
+      }
+      Err(e) => Err(format!("Failed to execute taskkill for process {}: {}", pid, e).into()),
+    }
   }
 }
 

@@ -398,6 +398,30 @@ impl AppAutoUpdater {
           Err("DMG extraction is only supported on macOS".into())
         }
       }
+      "msi" => {
+        #[cfg(target_os = "windows")]
+        {
+          // For MSI files on Windows, we need to run the installer
+          // MSI files can't be extracted like archives, they need to be executed
+          // Return the path to the MSI file itself for installation
+          Ok(archive_path.to_path_buf())
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+          Err("MSI installation is only supported on Windows".into())
+        }
+      }
+      "exe" => {
+        #[cfg(target_os = "windows")]
+        {
+          // For exe installers on Windows, return the path for execution
+          Ok(archive_path.to_path_buf())
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+          Err("EXE installation is only supported on Windows".into())
+        }
+      }
       "zip" => extractor.extract_zip(archive_path, dest_dir).await,
       _ => Err(format!("Unsupported archive format: {extension}").into()),
     }
@@ -406,71 +430,282 @@ impl AppAutoUpdater {
   /// Install the update by replacing the current app
   async fn install_update(
     &self,
-    new_app_path: &Path,
+    installer_path: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Get the current application bundle path
-    let current_app_path = self.get_current_app_path()?;
+    #[cfg(target_os = "macos")]
+    {
+      // Get the current application bundle path
+      let current_app_path = self.get_current_app_path()?;
 
-    // Create a backup of the current app
-    let backup_path = current_app_path.with_extension("app.backup");
-    if backup_path.exists() {
-      fs::remove_dir_all(&backup_path)?;
+      // Create a backup of the current app
+      let backup_path = current_app_path.with_extension("app.backup");
+      if backup_path.exists() {
+        fs::remove_dir_all(&backup_path)?;
+      }
+
+      // Move current app to backup
+      fs::rename(&current_app_path, &backup_path)?;
+
+      // Move new app to current location
+      fs::rename(installer_path, &current_app_path)?;
+
+      // Remove quarantine attributes from the new app
+      let _ = Command::new("xattr")
+        .args([
+          "-dr",
+          "com.apple.quarantine",
+          current_app_path.to_str().unwrap(),
+        ])
+        .output();
+
+      let _ = Command::new("xattr")
+        .args(["-cr", current_app_path.to_str().unwrap()])
+        .output();
+
+      // Clean up backup after successful installation
+      let _ = fs::remove_dir_all(&backup_path);
+
+      Ok(())
     }
 
-    // Move current app to backup
-    fs::rename(&current_app_path, &backup_path)?;
+    #[cfg(target_os = "windows")]
+    {
+      let extension = installer_path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("");
 
-    // Move new app to current location
-    fs::rename(new_app_path, &current_app_path)?;
+      println!("Installing Windows update with extension: {extension}");
 
-    // Remove quarantine attributes from the new app
-    let _ = Command::new("xattr")
-      .args([
-        "-dr",
-        "com.apple.quarantine",
-        current_app_path.to_str().unwrap(),
-      ])
-      .output();
+      match extension {
+        "msi" => {
+          // Install MSI silently with enhanced error handling
+          println!("Running MSI installer: {}", installer_path.display());
 
-    let _ = Command::new("xattr")
-      .args(["-cr", current_app_path.to_str().unwrap()])
-      .output();
+          let mut cmd = Command::new("msiexec");
+          cmd.args([
+            "/i",
+            installer_path.to_str().unwrap(),
+            "/quiet",
+            "/norestart",
+            "REBOOT=ReallySuppress",
+            "/l*v", // Enable verbose logging
+            &format!("{}.log", installer_path.to_str().unwrap()),
+          ]);
 
-    // Clean up backup after successful installation
-    let _ = fs::remove_dir_all(&backup_path);
+          let output = cmd.output()?;
 
-    Ok(())
+          if !output.status.success() {
+            let error_msg = String::from_utf8_lossy(&output.stderr);
+            let exit_code = output.status.code().unwrap_or(-1);
+
+            // Try to read the log file for more details
+            let log_path = format!("{}.log", installer_path.to_str().unwrap());
+            let log_content = fs::read_to_string(&log_path).unwrap_or_default();
+
+            println!("MSI installation failed with exit code: {exit_code}");
+            println!("Error output: {error_msg}");
+            if !log_content.is_empty() {
+              println!(
+                "Log file content (last 500 chars): {}",
+                &log_content
+                  .chars()
+                  .rev()
+                  .take(500)
+                  .collect::<String>()
+                  .chars()
+                  .rev()
+                  .collect::<String>()
+              );
+            }
+
+            return Err(
+              format!("MSI installation failed (exit code {exit_code}): {error_msg}").into(),
+            );
+          }
+
+          println!("MSI installation completed successfully");
+        }
+        "exe" => {
+          // Run exe installer silently with multiple fallback options
+          println!("Running EXE installer: {}", installer_path.display());
+
+          // Try NSIS silent flag first (most common for Tauri)
+          let mut success = false;
+          let mut last_error = String::new();
+
+          // NSIS installer flags (used by Tauri)
+          let nsis_args = vec![
+            vec!["/S"],                                             // Standard NSIS silent flag
+            vec!["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"], // Inno Setup flags
+            vec!["/quiet"],                                         // Generic quiet flag
+            vec!["/silent"],                                        // Alternative silent flag
+          ];
+
+          for args in nsis_args {
+            println!("Trying installer with args: {:?}", args);
+            let output = Command::new(installer_path).args(&args).output();
+
+            match output {
+              Ok(output) if output.status.success() => {
+                println!(
+                  "EXE installation completed successfully with args: {:?}",
+                  args
+                );
+                success = true;
+                break;
+              }
+              Ok(output) => {
+                let error_msg = String::from_utf8_lossy(&output.stderr);
+                last_error = format!(
+                  "Exit code {}: {}",
+                  output.status.code().unwrap_or(-1),
+                  error_msg
+                );
+                println!("Installer failed with args {:?}: {}", args, last_error);
+              }
+              Err(e) => {
+                last_error = format!("Failed to execute installer: {e}");
+                println!(
+                  "Failed to execute installer with args {:?}: {}",
+                  args, last_error
+                );
+              }
+            }
+          }
+
+          if !success {
+            return Err(
+              format!(
+                "EXE installation failed after trying multiple methods. Last error: {last_error}"
+              )
+              .into(),
+            );
+          }
+        }
+        "zip" => {
+          // Handle ZIP files by extracting and replacing the current executable
+          println!("Handling ZIP update: {}", installer_path.display());
+
+          let temp_extract_dir = installer_path.parent().unwrap().join("extracted");
+          fs::create_dir_all(&temp_extract_dir)?;
+
+          // Extract ZIP file
+          let extractor = crate::extraction::Extractor::new();
+          let extracted_path = extractor
+            .extract_zip(installer_path, &temp_extract_dir)
+            .await?;
+
+          // Find the executable in the extracted files
+          let current_exe = self.get_current_app_path()?;
+          let current_exe_name = current_exe.file_name().unwrap();
+
+          // Look for the new executable
+          let new_exe_path =
+            if extracted_path.is_file() && extracted_path.file_name() == Some(current_exe_name) {
+              extracted_path
+            } else {
+              // Search in extracted directory
+              let mut found_exe = None;
+              if let Ok(entries) = fs::read_dir(&extracted_path) {
+                for entry in entries.flatten() {
+                  let path = entry.path();
+                  if path.file_name() == Some(current_exe_name) {
+                    found_exe = Some(path);
+                    break;
+                  }
+                }
+              }
+              found_exe.ok_or("Could not find executable in ZIP file")?
+            };
+
+          // Create backup of current executable
+          let backup_path = current_exe.with_extension("exe.backup");
+          if backup_path.exists() {
+            fs::remove_file(&backup_path)?;
+          }
+          fs::copy(&current_exe, &backup_path)?;
+
+          // Replace current executable
+          fs::copy(&new_exe_path, &current_exe)?;
+
+          // Clean up
+          let _ = fs::remove_dir_all(&temp_extract_dir);
+
+          println!("ZIP update completed successfully");
+        }
+        _ => {
+          return Err(format!("Unsupported installer format: {extension}").into());
+        }
+      }
+
+      Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+      // For Linux, we would handle different package formats here
+      // This implementation would depend on the specific package type
+      Err("Linux auto-update installation not yet implemented".into())
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+      Err("Auto-update installation not supported on this platform".into())
+    }
   }
 
   /// Get the current application bundle path
   fn get_current_app_path(&self) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    // Get the current executable path
-    let exe_path = std::env::current_exe()?;
+    #[cfg(target_os = "macos")]
+    {
+      // Get the current executable path
+      let exe_path = std::env::current_exe()?;
 
-    // Navigate up to find the .app bundle
-    let mut current = exe_path.as_path();
-    while let Some(parent) = current.parent() {
-      if parent.extension().is_some_and(|ext| ext == "app") {
-        return Ok(parent.to_path_buf());
+      // Navigate up to find the .app bundle
+      let mut current = exe_path.as_path();
+      while let Some(parent) = current.parent() {
+        if parent.extension().is_some_and(|ext| ext == "app") {
+          return Ok(parent.to_path_buf());
+        }
+        current = parent;
       }
-      current = parent;
+
+      Err("Could not find application bundle".into())
     }
 
-    Err("Could not find application bundle".into())
+    #[cfg(target_os = "windows")]
+    {
+      // On Windows, just return the current executable path
+      std::env::current_exe().map_err(|e| e.into())
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+      // On Linux, return the current executable path
+      std::env::current_exe().map_err(|e| e.into())
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+      Err("Platform not supported".into())
+    }
   }
 
   /// Restart the application
   async fn restart_application(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let app_path = self.get_current_app_path()?;
-    let current_pid = std::process::id();
+    #[cfg(target_os = "macos")]
+    {
+      let app_path = self.get_current_app_path()?;
+      let current_pid = std::process::id();
 
-    // Create a temporary restart script
-    let temp_dir = std::env::temp_dir();
-    let script_path = temp_dir.join("donut_restart.sh");
+      // Create a temporary restart script
+      let temp_dir = std::env::temp_dir();
+      let script_path = temp_dir.join("donut_restart.sh");
 
-    // Create the restart script content
-    let script_content = format!(
-      r#"#!/bin/bash
+      // Create the restart script content
+      let script_content = format!(
+        r#"#!/bin/bash
 # Wait for the current process to exit
 while kill -0 {} 2>/dev/null; do
   sleep 0.5
@@ -485,37 +720,146 @@ open "{}"
 # Clean up this script
 rm "{}"
 "#,
-      current_pid,
-      app_path.to_str().unwrap(),
-      script_path.to_str().unwrap()
-    );
+        current_pid,
+        app_path.to_str().unwrap(),
+        script_path.to_str().unwrap()
+      );
 
-    // Write the script to file
-    fs::write(&script_path, script_content)?;
+      // Write the script to file
+      fs::write(&script_path, script_content)?;
 
-    // Make the script executable
-    let _ = Command::new("chmod")
-      .args(["+x", script_path.to_str().unwrap()])
-      .output();
+      // Make the script executable
+      let _ = Command::new("chmod")
+        .args(["+x", script_path.to_str().unwrap()])
+        .output();
 
-    // Execute the restart script in the background
-    let mut cmd = Command::new("bash");
-    cmd.arg(script_path.to_str().unwrap());
+      // Execute the restart script in the background
+      let mut cmd = Command::new("bash");
+      cmd.arg(script_path.to_str().unwrap());
 
-    // Detach the process completely
-    #[cfg(unix)]
-    {
+      // Detach the process completely
       use std::os::unix::process::CommandExt;
       cmd.process_group(0);
+
+      let _child = cmd.spawn()?;
+
+      // Give the script a moment to start
+      tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+      // Exit the current process
+      std::process::exit(0);
     }
 
-    let _child = cmd.spawn()?;
+    #[cfg(target_os = "windows")]
+    {
+      let app_path = self.get_current_app_path()?;
+      let current_pid = std::process::id();
 
-    // Give the script a moment to start
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+      // Create a temporary restart batch script
+      let temp_dir = std::env::temp_dir();
+      let script_path = temp_dir.join("donut_restart.bat");
 
-    // Exit the current process
-    std::process::exit(0);
+      // Create the restart script content
+      let script_content = format!(
+        r#"@echo off
+rem Wait for the current process to exit
+:wait_loop
+tasklist /fi "PID eq {}" >nul 2>&1
+if %errorlevel% equ 0 (
+    timeout /t 1 /nobreak >nul
+    goto wait_loop
+)
+
+rem Wait a bit more to ensure clean exit
+timeout /t 2 /nobreak >nul
+
+rem Start the new application
+start "" "{}"
+
+rem Clean up this script
+del "%~f0"
+"#,
+        current_pid,
+        app_path.to_str().unwrap()
+      );
+
+      // Write the script to file
+      fs::write(&script_path, script_content)?;
+
+      // Execute the restart script in the background
+      let mut cmd = Command::new("cmd");
+      cmd.args(["/C", script_path.to_str().unwrap()]);
+
+      // Start the process detached
+      let _child = cmd.spawn()?;
+
+      // Give the script a moment to start
+      tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+      // Exit the current process
+      std::process::exit(0);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+      let app_path = self.get_current_app_path()?;
+      let current_pid = std::process::id();
+
+      // Create a temporary restart script
+      let temp_dir = std::env::temp_dir();
+      let script_path = temp_dir.join("donut_restart.sh");
+
+      // Create the restart script content
+      let script_content = format!(
+        r#"#!/bin/bash
+# Wait for the current process to exit
+while kill -0 {} 2>/dev/null; do
+  sleep 0.5
+done
+
+# Wait a bit more to ensure clean exit
+sleep 1
+
+# Start the new application
+"{}" &
+
+# Clean up this script
+rm "{}"
+"#,
+        current_pid,
+        app_path.to_str().unwrap(),
+        script_path.to_str().unwrap()
+      );
+
+      // Write the script to file
+      fs::write(&script_path, script_content)?;
+
+      // Make the script executable
+      let _ = Command::new("chmod")
+        .args(["+x", script_path.to_str().unwrap()])
+        .output();
+
+      // Execute the restart script in the background
+      let mut cmd = Command::new("bash");
+      cmd.arg(script_path.to_str().unwrap());
+
+      // Detach the process completely
+      use std::os::unix::process::CommandExt;
+      cmd.process_group(0);
+
+      let _child = cmd.spawn()?;
+
+      // Give the script a moment to start
+      tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+      // Exit the current process
+      std::process::exit(0);
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+      Err("Application restart not supported on this platform".into())
+    }
   }
 }
 

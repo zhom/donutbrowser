@@ -55,6 +55,9 @@ impl ProfileImporter {
     // Detect Zen Browser profiles
     detected_profiles.extend(self.detect_zen_browser_profiles()?);
 
+    // Detect TOR Browser profiles
+    detected_profiles.extend(self.detect_tor_browser_profiles()?);
+
     // Remove duplicates based on path
     let mut seen_paths = HashSet::new();
     let unique_profiles: Vec<DetectedProfile> = detected_profiles
@@ -80,9 +83,18 @@ impl ProfileImporter {
 
     #[cfg(target_os = "windows")]
     {
+      // Primary location in AppData\Roaming
       if let Some(app_data) = self.base_dirs.data_dir() {
         let firefox_dir = app_data.join("Mozilla/Firefox/Profiles");
         profiles.extend(self.scan_firefox_profiles_dir(&firefox_dir, "firefox")?);
+      }
+
+      // Also check AppData\Local for portable installations
+      if let Some(local_app_data) = self.base_dirs.data_local_dir() {
+        let firefox_local_dir = local_app_data.join("Mozilla/Firefox/Profiles");
+        if firefox_local_dir.exists() {
+          profiles.extend(self.scan_firefox_profiles_dir(&firefox_local_dir, "firefox")?);
+        }
       }
     }
 
@@ -251,9 +263,18 @@ impl ProfileImporter {
 
     #[cfg(target_os = "windows")]
     {
+      // Primary location in AppData\Roaming
       if let Some(app_data) = self.base_dirs.data_dir() {
         let mullvad_dir = app_data.join("MullvadBrowser/Profiles");
         profiles.extend(self.scan_firefox_profiles_dir(&mullvad_dir, "mullvad-browser")?);
+      }
+
+      // Also check common installation locations
+      if let Some(local_app_data) = self.base_dirs.data_local_dir() {
+        let mullvad_local_dir = local_app_data.join("MullvadBrowser/Profiles");
+        if mullvad_local_dir.exists() {
+          profiles.extend(self.scan_firefox_profiles_dir(&mullvad_local_dir, "mullvad-browser")?);
+        }
       }
     }
 
@@ -293,6 +314,108 @@ impl ProfileImporter {
     {
       let zen_dir = self.base_dirs.home_dir().join(".zen");
       profiles.extend(self.scan_firefox_profiles_dir(&zen_dir, "zen")?);
+    }
+
+    Ok(profiles)
+  }
+
+  /// Detect TOR Browser profiles
+  fn detect_tor_browser_profiles(
+    &self,
+  ) -> Result<Vec<DetectedProfile>, Box<dyn std::error::Error>> {
+    let mut profiles = Vec::new();
+
+    #[cfg(target_os = "macos")]
+    {
+      // TOR Browser on macOS is typically in Applications
+      let tor_dir = self
+        .base_dirs
+        .home_dir()
+        .join("Library/Application Support/TorBrowser-Data/Browser/profile.default");
+
+      if tor_dir.exists() {
+        profiles.push(DetectedProfile {
+          browser: "tor-browser".to_string(),
+          name: "TOR Browser - Default Profile".to_string(),
+          path: tor_dir.to_string_lossy().to_string(),
+          description: "Default TOR Browser profile".to_string(),
+        });
+      }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+      // Check common TOR Browser installation locations on Windows
+      let possible_paths = [
+        // Default installation in user directory
+        (
+          "Desktop",
+          "Desktop/Tor Browser/Browser/TorBrowser/Data/Browser/profile.default",
+        ),
+        // AppData locations
+        (
+          "AppData/Roaming",
+          "TorBrowser/Browser/TorBrowser/Data/Browser/profile.default",
+        ),
+        (
+          "AppData/Local",
+          "TorBrowser/Browser/TorBrowser/Data/Browser/profile.default",
+        ),
+      ];
+
+      let home_dir = self.base_dirs.home_dir();
+
+      for (location_name, relative_path) in &possible_paths {
+        let tor_dir = home_dir.join(relative_path);
+        if tor_dir.exists() {
+          profiles.push(DetectedProfile {
+            browser: "tor-browser".to_string(),
+            name: format!("TOR Browser - {} Profile", location_name),
+            path: tor_dir.to_string_lossy().to_string(),
+            description: format!("TOR Browser profile from {}", location_name),
+          });
+        }
+      }
+
+      // Also check AppData directories if available
+      if let Some(app_data) = self.base_dirs.data_dir() {
+        let tor_app_data =
+          app_data.join("TorBrowser/Browser/TorBrowser/Data/Browser/profile.default");
+        if tor_app_data.exists() {
+          profiles.push(DetectedProfile {
+            browser: "tor-browser".to_string(),
+            name: "TOR Browser - AppData Profile".to_string(),
+            path: tor_app_data.to_string_lossy().to_string(),
+            description: "TOR Browser profile from AppData".to_string(),
+          });
+        }
+      }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+      // Common TOR Browser locations on Linux
+      let possible_paths = [
+        ".local/share/torbrowser/tbb/x86_64/tor-browser_en-US/Browser/TorBrowser/Data/Browser/profile.default",
+        "tor-browser_en-US/Browser/TorBrowser/Data/Browser/profile.default",
+        ".tor-browser/Browser/TorBrowser/Data/Browser/profile.default",
+        "Downloads/tor-browser_en-US/Browser/TorBrowser/Data/Browser/profile.default",
+      ];
+
+      let home_dir = self.base_dirs.home_dir();
+
+      for relative_path in &possible_paths {
+        let tor_dir = home_dir.join(relative_path);
+        if tor_dir.exists() {
+          profiles.push(DetectedProfile {
+            browser: "tor-browser".to_string(),
+            name: "TOR Browser - Default Profile".to_string(),
+            path: tor_dir.to_string_lossy().to_string(),
+            description: "TOR Browser profile".to_string(),
+          });
+          break; // Only add the first one found to avoid duplicates
+        }
+      }
     }
 
     Ok(profiles)
