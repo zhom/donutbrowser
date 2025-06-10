@@ -3,12 +3,12 @@ import path from "node:path";
 import getPort from "get-port";
 import {
   type ProxyConfig,
-  saveProxyConfig,
-  getProxyConfig,
   deleteProxyConfig,
-  isProcessRunning,
   generateProxyId,
+  getProxyConfig,
+  isProcessRunning,
   listProxyConfigs,
+  saveProxyConfig,
 } from "./proxy-storage";
 
 /**
@@ -19,50 +19,53 @@ import {
  */
 export async function startProxyProcess(
   upstreamUrl: string,
-  options: { port?: number; ignoreProxyCertificate?: boolean } = {}
+  options: { port?: number; ignoreProxyCertificate?: boolean } = {},
 ): Promise<ProxyConfig> {
   // Generate a unique ID for this proxy
   const id = generateProxyId();
 
   // Get a random available port if not specified
-  const port = options.port || (await getPort());
+  const port = options.port ?? (await getPort());
 
   // Create the proxy configuration
   const config: ProxyConfig = {
     id,
     upstreamUrl,
     localPort: port,
-    ignoreProxyCertificate: options.ignoreProxyCertificate || false,
+    ignoreProxyCertificate: options.ignoreProxyCertificate ?? false,
   };
 
   // Save the configuration before starting the process
   saveProxyConfig(config);
 
   // Build the command arguments
-  const args = ["proxy-worker", "start", "--id", id];
+  const args = [
+    path.join(__dirname, "index.js"),
+    "proxy-worker",
+    "start",
+    "--id",
+    id,
+  ];
 
-  // Spawn the process
-  const child = spawn(
-    process.execPath,
-    [path.join(__dirname, "index.js"), ...args],
-    {
-      detached: true,
-      stdio: "ignore",
-    }
-  );
+  // Spawn the process with proper detachment
+  const child = spawn(process.execPath, args, {
+    detached: true,
+    stdio: ["ignore", "ignore", "ignore"], // Completely ignore all stdio
+    cwd: process.cwd(),
+  });
 
   // Unref the child to allow the parent to exit independently
   child.unref();
 
-  // Store the process ID
+  // Store the process ID and local URL
   config.pid = child.pid;
-  config.localUrl = `http://localhost:${port}`;
+  config.localUrl = `http://127.0.0.1:${port}`;
 
   // Update the configuration with the process ID
   saveProxyConfig(config);
 
-  // Wait a bit to ensure the proxy has started
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  // Give the worker a moment to start before returning
+  await new Promise((resolve) => setTimeout(resolve, 100));
 
   return config;
 }
@@ -76,6 +79,8 @@ export async function stopProxyProcess(id: string): Promise<boolean> {
   const config = getProxyConfig(id);
 
   if (!config || !config.pid) {
+    // Try to delete the config anyway in case it exists without a PID
+    deleteProxyConfig(id);
     return false;
   }
 
@@ -83,10 +88,16 @@ export async function stopProxyProcess(id: string): Promise<boolean> {
     // Check if the process is running
     if (isProcessRunning(config.pid)) {
       // Send SIGTERM to the process
-      process.kill(config.pid);
+      process.kill(config.pid, "SIGTERM");
 
       // Wait a bit to ensure the process has terminated
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // If still running, send SIGKILL
+      if (isProcessRunning(config.pid)) {
+        process.kill(config.pid, "SIGKILL");
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
     }
 
     // Delete the configuration
@@ -95,6 +106,8 @@ export async function stopProxyProcess(id: string): Promise<boolean> {
     return true;
   } catch (error) {
     console.error(`Error stopping proxy ${id}:`, error);
+    // Delete the configuration even if stopping failed
+    deleteProxyConfig(id);
     return false;
   }
 }
@@ -106,7 +119,6 @@ export async function stopProxyProcess(id: string): Promise<boolean> {
 export async function stopAllProxyProcesses(): Promise<void> {
   const configs = listProxyConfigs();
 
-  for (const config of configs) {
-    await stopProxyProcess(config.id);
-  }
+  const stopPromises = configs.map((config) => stopProxyProcess(config.id));
+  await Promise.all(stopPromises);
 }

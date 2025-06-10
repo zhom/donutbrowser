@@ -6,6 +6,8 @@
 	<string>Donut Browser needs camera access to enable camera functionality in web browsers. Each website will still ask for your permission individually.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Donut Browser needs microphone access to enable microphone functionality in web browsers. Each website will still ask for your permission individually.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Donut Browser has proxy functionality that requires local network access. You can deny this functionality if you don't plan on setting proxies for browser profiles.</string>
 	<key>CFBundleDisplayName</key>
 	<string>Donut Browser</string>
 	<key>CFBundleName</key>

@@ -76,7 +76,7 @@
   },
   "packageManager": "pnpm@10.11.1",
   "lint-staged": {
-    "src/**/*.{js,jsx,ts,tsx,json,css,md}": [
+    "**/*.{js,jsx,ts,tsx,json,css,md}": [
       "biome check --fix",
       "eslint --cache --fix"
     ],

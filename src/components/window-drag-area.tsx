@@ -40,7 +40,7 @@ export function WindowDragArea() {
 
   return (
     <div
-      className="fixed top-0 right-0 left-0 z-50 h-8 cursor-move"
+      className="fixed top-0 right-0 left-0 h-10 z-9999"
       style={{
         // Ensure it's above all other content
         zIndex: 9999,
