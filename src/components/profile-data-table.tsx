@@ -164,7 +164,7 @@ export function ProfilesDataTable({
           const isDisabled = shouldDisableTorStart || isBrowserUpdating;
 
           return (
-            <div className="flex items-center gap-2">
+            <div className="flex gap-2 items-center">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -206,21 +206,34 @@ export function ProfilesDataTable({
               onClick={() => {
                 column.toggleSorting(column.getIsSorted() === "asc");
               }}
-              className="h-auto p-0 font-semibold hover:bg-transparent"
+              className="p-0 h-auto font-semibold hover:bg-transparent"
             >
               Profile
-              {isSorted === "asc" && <LuChevronUp className="ml-2 h-4 w-4" />}
+              {isSorted === "asc" && <LuChevronUp className="ml-2 w-4 h-4" />}
               {isSorted === "desc" && (
-                <LuChevronDown className="ml-2 h-4 w-4" />
+                <LuChevronDown className="ml-2 w-4 h-4" />
               )}
               {!isSorted && (
-                <LuChevronDown className="ml-2 h-4 w-4 opacity-50" />
+                <LuChevronDown className="ml-2 w-4 h-4 opacity-50" />
               )}
             </Button>
           );
         },
         enableSorting: true,
         sortingFn: "alphanumeric",
+        cell: ({ row }) => {
+          const profile = row.original;
+          return profile.name.length > 15 ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="truncate">{profile.name.slice(0, 15)}...</span>
+              </TooltipTrigger>
+              <TooltipContent>{profile.name}</TooltipContent>
+            </Tooltip>
+          ) : (
+            profile.name
+          );
+        },
       },
       {
         accessorKey: "browser",
@@ -232,15 +245,15 @@ export function ProfilesDataTable({
               onClick={() => {
                 column.toggleSorting(column.getIsSorted() === "asc");
               }}
-              className="h-auto p-0 font-semibold hover:bg-transparent"
+              className="p-0 h-auto font-semibold hover:bg-transparent"
             >
               Browser
-              {isSorted === "asc" && <LuChevronUp className="ml-2 h-4 w-4" />}
+              {isSorted === "asc" && <LuChevronUp className="ml-2 w-4 h-4" />}
               {isSorted === "desc" && (
-                <LuChevronDown className="ml-2 h-4 w-4" />
+                <LuChevronDown className="ml-2 w-4 h-4" />
               )}
               {!isSorted && (
-                <LuChevronDown className="ml-2 h-4 w-4 opacity-50" />
+                <LuChevronDown className="ml-2 w-4 h-4 opacity-50" />
               )}
             </Button>
           );
@@ -249,8 +262,8 @@ export function ProfilesDataTable({
           const browser: string = row.getValue("browser");
           const IconComponent = getBrowserIcon(browser);
           return (
-            <div className="flex items-center gap-2">
-              {IconComponent && <IconComponent className="h-4 w-4" />}
+            <div className="flex gap-2 items-center">
+              {IconComponent && <IconComponent className="w-4 h-4" />}
               <span>{getBrowserDisplayName(browser)}</span>
             </div>
           );
@@ -276,15 +289,15 @@ export function ProfilesDataTable({
               onClick={() => {
                 column.toggleSorting(column.getIsSorted() === "asc");
               }}
-              className="h-auto p-0 font-semibold hover:bg-transparent"
+              className="p-0 h-auto font-semibold hover:bg-transparent"
             >
               Status
-              {isSorted === "asc" && <LuChevronUp className="ml-2 h-4 w-4" />}
+              {isSorted === "asc" && <LuChevronUp className="ml-2 w-4 h-4" />}
               {isSorted === "desc" && (
-                <LuChevronDown className="ml-2 h-4 w-4" />
+                <LuChevronDown className="ml-2 w-4 h-4" />
               )}
               {!isSorted && (
-                <LuChevronDown className="ml-2 h-4 w-4 opacity-50" />
+                <LuChevronDown className="ml-2 w-4 h-4 opacity-50" />
               )}
             </Button>
           );
@@ -335,9 +348,9 @@ export function ProfilesDataTable({
           return (
             <Tooltip>
               <TooltipTrigger>
-                <div className="flex items-center gap-2">
+                <div className="flex gap-2 items-center">
                   {hasProxy && (
-                    <CiCircleCheck className="h-4 w-4 text-green-500" />
+                    <CiCircleCheck className="w-4 h-4 text-green-500" />
                   )}
                   <span className="text-sm text-muted-foreground">
                     {hasProxy ? profile.proxy?.proxy_type : "Disabled"}
@@ -363,16 +376,16 @@ export function ProfilesDataTable({
           const isRunning = isClient && runningProfiles.has(profile.name);
           const isBrowserUpdating = isClient && isUpdating(profile.browser);
           return (
-            <div className="flex items-center justify-end">
+            <div className="flex justify-end items-center">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="ghost"
-                    className="h-8 w-8 p-0"
+                    className="p-0 w-8 h-8"
                     disabled={!isClient}
                   >
                     <span className="sr-only">Open menu</span>
-                    <IoEllipsisHorizontal className="h-4 w-4" />
+                    <IoEllipsisHorizontal className="w-4 h-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -511,7 +524,7 @@ export function ProfilesDataTable({
             <DialogTitle>Rename Profile</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
+            <div className="grid grid-cols-4 gap-4 items-center">
               <Label htmlFor="name" className="text-right">
                 Name
               </Label>
