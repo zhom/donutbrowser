@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Before finishing the task and showing summary, always run "pnpm format && pnpm lint && pnpm test" at the root of the project to ensure that you don't finish with broken application.
