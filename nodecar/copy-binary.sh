@@ -21,5 +21,8 @@ if [ -z "$TARGET_TRIPLE" ]; then
     exit 1
 fi
 
-# Copy the file
+# Copy the file with target triple suffix
 cp "dist/nodecar${EXT}" "../src-tauri/binaries/nodecar-${TARGET_TRIPLE}${EXT}"
+
+# Also copy a generic version for Tauri to find
+cp "dist/nodecar${EXT}" "../src-tauri/binaries/nodecar${EXT}"

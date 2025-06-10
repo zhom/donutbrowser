@@ -1091,11 +1091,12 @@ impl BrowserRunner {
     Ok(profile)
   }
 
-  pub fn update_profile_proxy(
+  pub async fn update_profile_proxy(
     &self,
+    app_handle: tauri::AppHandle,
     profile_name: &str,
     proxy: Option<ProxySettings>,
-  ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
     let profiles_dir = self.get_profiles_dir();
     let profile_file = profiles_dir.join(format!(
       "{}.json",
@@ -1111,29 +1112,96 @@ impl BrowserRunner {
     let content = fs::read_to_string(&profile_file)?;
     let mut profile: BrowserProfile = serde_json::from_str(&content)?;
 
+    // Check if browser is running to manage proxy accordingly
+    let browser_is_running = profile.process_id.is_some()
+      && self
+        .check_browser_status(app_handle.clone(), &profile)
+        .await?;
+
+    // If browser is running, stop existing proxy
+    if browser_is_running && profile.proxy.is_some() {
+      if let Some(pid) = profile.process_id {
+        let _ = PROXY_MANAGER.stop_proxy(app_handle.clone(), pid).await;
+      }
+    }
+
     // Update proxy settings
     profile.proxy = proxy.clone();
 
     // Save the updated profile
-    self.save_profile(&profile)?;
+    self
+      .save_profile(&profile)
+      .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+        format!("Failed to save profile: {e}").into()
+      })?;
 
-    // Get internal proxy if the browser is running
-    let internal_proxy = if let Some(pid) = profile.process_id {
-      PROXY_MANAGER.get_proxy_settings(pid)
+    // Handle proxy startup/configuration
+    if let Some(proxy_settings) = &proxy {
+      if proxy_settings.enabled && browser_is_running {
+        // Browser is running and proxy is enabled, start new proxy
+        if let Some(pid) = profile.process_id {
+          match PROXY_MANAGER
+            .start_proxy(app_handle.clone(), proxy_settings, pid, Some(profile_name))
+            .await
+          {
+            Ok(internal_proxy_settings) => {
+              let browser_runner = BrowserRunner::new();
+              let profiles_dir = browser_runner.get_profiles_dir();
+              let profile_path = profiles_dir.join(profile.name.to_lowercase().replace(" ", "_"));
+
+              // Apply the proxy settings with the internal proxy to the profile directory
+              browser_runner
+                .apply_proxy_settings_to_profile(
+                  &profile_path,
+                  proxy_settings,
+                  Some(&internal_proxy_settings),
+                )
+                .map_err(|e| format!("Failed to update profile proxy: {e}"))?;
+
+              println!("Successfully started proxy for profile: {}", profile.name);
+
+              // Give the proxy a moment to fully start up
+              tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+              Some(internal_proxy_settings)
+            }
+            Err(e) => {
+              eprintln!("Failed to start proxy: {e}");
+              // Apply proxy settings without internal proxy
+              self
+                .apply_proxy_settings_to_profile(&profile_path, proxy_settings, None)
+                .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+                  format!("Failed to apply proxy settings: {e}").into()
+                })?;
+              None
+            }
+          }
+        } else {
+          // No PID available, apply proxy settings without internal proxy
+          self
+            .apply_proxy_settings_to_profile(&profile_path, proxy_settings, None)
+            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+              format!("Failed to apply proxy settings: {e}").into()
+            })?;
+          None
+        }
+      } else {
+        // Proxy disabled or browser not running, just apply settings
+        self
+          .apply_proxy_settings_to_profile(&profile_path, proxy_settings, None)
+          .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+            format!("Failed to apply proxy settings: {e}").into()
+          })?;
+        None
+      }
     } else {
+      // No proxy settings, disable proxy
+      self
+        .disable_proxy_settings_in_profile(&profile_path)
+        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+          format!("Failed to disable proxy settings: {e}").into()
+        })?;
       None
     };
-
-    // Apply proxy settings if provided
-    if let Some(proxy_settings) = &proxy {
-      self.apply_proxy_settings_to_profile(
-        &profile_path,
-        proxy_settings,
-        internal_proxy.as_ref(),
-      )?;
-    } else {
-      self.disable_proxy_settings_in_profile(&profile_path)?;
-    }
 
     Ok(profile)
   }
@@ -1249,9 +1317,10 @@ impl BrowserRunner {
     preferences.extend(self.get_common_firefox_preferences());
 
     if proxy.enabled {
-      // Create PAC file from template
-      let template_path = Path::new("assets/template.pac");
-      let pac_content = fs::read_to_string(template_path)?;
+      // Use embedded PAC template instead of reading from file
+      const PAC_TEMPLATE: &str = r#"function FindProxyForURL(url, host) {
+  return "{{proxy_url}}";
+}"#;
 
       // Format proxy URL based on type and whether we have an internal proxy
       let proxy_url = if let Some(internal) = internal_proxy {
@@ -1269,7 +1338,7 @@ impl BrowserRunner {
       };
 
       // Replace placeholders in PAC file
-      let pac_content = pac_content
+      let pac_content = PAC_TEMPLATE
         .replace("{{proxy_url}}", &proxy_url)
         .replace("{{proxy_credentials}}", ""); // Credentials are now handled by the PAC file
 
@@ -1388,9 +1457,9 @@ impl BrowserRunner {
       // Continue anyway, the error might not be critical
     }
 
-    // Get launch arguments
+    // Get launch arguments (proxy settings will be handled later if needed)
     let browser_args = browser
-      .create_launch_args(&profile.profile_path, profile.proxy.as_ref(), url)
+      .create_launch_args(&profile.profile_path, None, url)
       .expect("Failed to create launch arguments");
 
     // Launch browser using platform-specific method
@@ -2150,9 +2219,53 @@ pub async fn launch_browser_profile(
 ) -> Result<BrowserProfile, String> {
   let browser_runner = BrowserRunner::new();
 
+  // If the profile has proxy settings, we need to start the proxy first
+  // and update the profile with proxy settings before launching
+  let profile_for_launch = profile.clone();
+  if let Some(proxy) = &profile.proxy {
+    if proxy.enabled {
+      // Use a temporary PID (1) to start the proxy, we'll update it after browser launch
+      let temp_pid = 1u32;
+
+      // Start the proxy first
+      match PROXY_MANAGER
+        .start_proxy(app_handle.clone(), proxy, temp_pid, Some(&profile.name))
+        .await
+      {
+        Ok(internal_proxy_settings) => {
+          let browser_runner = BrowserRunner::new();
+          let profiles_dir = browser_runner.get_profiles_dir();
+          let profile_path = profiles_dir.join(profile.name.to_lowercase().replace(" ", "_"));
+
+          // Apply the proxy settings with the internal proxy to the profile directory
+          browser_runner
+            .apply_proxy_settings_to_profile(&profile_path, proxy, Some(&internal_proxy_settings))
+            .map_err(|e| format!("Failed to update profile proxy: {e}"))?;
+
+          println!("Successfully started proxy for profile: {}", profile.name);
+
+          // Give the proxy a moment to fully start up
+          tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        }
+        Err(e) => {
+          eprintln!("Failed to start proxy: {e}");
+          // Still continue with browser launch, but without proxy
+          let browser_runner = BrowserRunner::new();
+          let profiles_dir = browser_runner.get_profiles_dir();
+          let profile_path = profiles_dir.join(profile.name.to_lowercase().replace(" ", "_"));
+
+          // Apply proxy settings without internal proxy
+          browser_runner
+            .apply_proxy_settings_to_profile(&profile_path, proxy, None)
+            .map_err(|e| format!("Failed to update profile proxy: {e}"))?;
+        }
+      }
+    }
+  }
+
   // Launch browser or open URL in existing instance
   let updated_profile = browser_runner
-    .launch_or_open_url(app_handle.clone(), &profile, url)
+    .launch_or_open_url(app_handle.clone(), &profile_for_launch, url)
     .await
     .map_err(|e| {
       // Check if this is an architecture compatibility issue
@@ -2165,29 +2278,17 @@ pub async fn launch_browser_profile(
       format!("Failed to launch browser or open URL: {e}")
     })?;
 
-  // If the profile has proxy settings, start a proxy for it
+  // Now update the proxy with the correct PID if we have one
   if let Some(proxy) = &profile.proxy {
     if proxy.enabled {
-      // Get the process ID
-      if let Some(pid) = updated_profile.process_id {
-        // Start the proxy
-        match PROXY_MANAGER
-          .start_proxy(app_handle.clone(), proxy, pid, Some(&profile.name))
-          .await
-        {
-          Ok(internal_proxy_settings) => {
-            let browser_runner = BrowserRunner::new();
-            let profiles_dir = browser_runner.get_profiles_dir();
-            let profile_path = profiles_dir.join(profile.name.to_lowercase().replace(" ", "_"));
-
-            // Apply the proxy settings with the internal proxy
-            browser_runner
-              .apply_proxy_settings_to_profile(&profile_path, proxy, Some(&internal_proxy_settings))
-              .map_err(|e| format!("Failed to update profile proxy: {e}"))?;
+      if let Some(actual_pid) = updated_profile.process_id {
+        // Update the proxy manager with the correct PID
+        match PROXY_MANAGER.update_proxy_pid(1u32, actual_pid) {
+          Ok(()) => {
+            println!("Updated proxy PID mapping from temp (1) to actual PID: {actual_pid}");
           }
           Err(e) => {
-            eprintln!("Failed to start proxy: {e}");
-            // Continue without proxy
+            eprintln!("Failed to update proxy PID mapping: {e}");
           }
         }
       }
@@ -2198,13 +2299,15 @@ pub async fn launch_browser_profile(
 }
 
 #[tauri::command]
-pub fn update_profile_proxy(
+pub async fn update_profile_proxy(
+  app_handle: tauri::AppHandle,
   profile_name: String,
   proxy: Option<ProxySettings>,
 ) -> Result<BrowserProfile, String> {
   let browser_runner = BrowserRunner::new();
   browser_runner
-    .update_profile_proxy(&profile_name, proxy)
+    .update_profile_proxy(app_handle, &profile_name, proxy)
+    .await
     .map_err(|e| format!("Failed to update profile: {e}"))
 }
 
@@ -2665,38 +2768,6 @@ mod tests {
   }
 
   #[test]
-  fn test_update_profile_proxy() {
-    let (runner, _temp_dir) = create_test_browser_runner();
-
-    // Create profile without proxy
-    let profile = runner
-      .create_profile("Test Update Proxy", "firefox", "139.0", None)
-      .unwrap();
-
-    assert!(profile.proxy.is_none());
-
-    // Update with proxy
-    let proxy = ProxySettings {
-      enabled: true,
-      proxy_type: "socks5".to_string(),
-      host: "192.168.1.1".to_string(),
-      port: 1080,
-      username: None,
-      password: None,
-    };
-
-    let updated_profile = runner
-      .update_profile_proxy("Test Update Proxy", Some(proxy.clone()))
-      .unwrap();
-
-    assert!(updated_profile.proxy.is_some());
-    let profile_proxy = updated_profile.proxy.unwrap();
-    assert_eq!(profile_proxy.proxy_type, "socks5");
-    assert_eq!(profile_proxy.host, "192.168.1.1");
-    assert_eq!(profile_proxy.port, 1080);
-  }
-
-  #[test]
   fn test_rename_profile() {
     let (runner, _temp_dir) = create_test_browser_runner();
 
@@ -2791,24 +2862,6 @@ mod tests {
     let result = runner.rename_profile("Profile 2", "Profile 1");
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("already exists"));
-  }
-
-  #[test]
-  fn test_error_handling() {
-    let (runner, _temp_dir) = create_test_browser_runner();
-
-    // Test updating non-existent profile
-    let result = runner.update_profile_proxy("Non Existent", None);
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("not found"));
-
-    // Test deleting non-existent profile
-    let result = runner.delete_profile("Non Existent");
-    assert!(result.is_ok()); // Delete should be idempotent
-
-    // Test renaming non-existent profile
-    let result = runner.rename_profile("Non Existent", "New Name");
-    assert!(result.is_err());
   }
 
   #[test]

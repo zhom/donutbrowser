@@ -216,6 +216,17 @@ impl ProxyManager {
     let profile_proxies = self.profile_proxies.lock().unwrap();
     profile_proxies.get(profile_name).cloned()
   }
+
+  // Update the PID mapping for an existing proxy
+  pub fn update_proxy_pid(&self, old_pid: u32, new_pid: u32) -> Result<(), String> {
+    let mut proxies = self.active_proxies.lock().unwrap();
+    if let Some(proxy_info) = proxies.remove(&old_pid) {
+      proxies.insert(new_pid, proxy_info);
+      Ok(())
+    } else {
+      Err(format!("No proxy found for PID {old_pid}"))
+    }
+  }
 }
 
 // Create a singleton instance of the proxy manager
@@ -618,7 +629,7 @@ mod tests {
         if cmd_output.status.success() {
           let stdout = String::from_utf8(cmd_output.stdout)?;
           let config: serde_json::Value = serde_json::from_str(&stdout)?;
-          
+
           // Clean up - try to stop the proxy
           if let Some(proxy_id) = config["id"].as_str() {
             let mut stop_cmd = Command::new(&nodecar_path);
