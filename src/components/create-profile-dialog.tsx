@@ -72,6 +72,8 @@ export function CreateProfileDialog({
   const [proxyType, setProxyType] = useState("http");
   const [proxyHost, setProxyHost] = useState("");
   const [proxyPort, setProxyPort] = useState(8080);
+  const [proxyUsername, setProxyUsername] = useState("");
+  const [proxyPassword, setProxyPassword] = useState("");
 
   const {
     availableVersions,
@@ -194,6 +196,8 @@ export function CreateProfileDialog({
               proxy_type: proxyType,
               host: proxyHost,
               port: proxyPort,
+              username: proxyUsername || undefined,
+              password: proxyPassword || undefined,
             }
           : undefined;
 
@@ -210,6 +214,8 @@ export function CreateProfileDialog({
       setProxyEnabled(false);
       setProxyHost("");
       setProxyPort(8080);
+      setProxyUsername("");
+      setProxyPassword("");
       onClose();
     } catch (error) {
       console.error("Failed to create profile:", error);
@@ -231,12 +237,12 @@ export function CreateProfileDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
+      <DialogContent className="max-w-md max-h-[80vh] my-8 flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>Create New Profile</DialogTitle>
         </DialogHeader>
 
-        <div className="grid gap-4 py-4">
+        <div className="grid overflow-y-scroll flex-1 gap-6 py-4 min-h-0">
           {/* Profile Name */}
           <div className="grid gap-2">
             <Label htmlFor="profile-name">Profile Name</Label>
@@ -412,6 +418,31 @@ export function CreateProfileDialog({
                     placeholder="e.g. 8080"
                     min="1"
                     max="65535"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="proxy-username">Username (optional)</Label>
+                  <Input
+                    id="proxy-username"
+                    value={proxyUsername}
+                    onChange={(e) => {
+                      setProxyUsername(e.target.value);
+                    }}
+                    placeholder="Proxy username"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="proxy-password">Password (optional)</Label>
+                  <Input
+                    id="proxy-password"
+                    type="password"
+                    value={proxyPassword}
+                    onChange={(e) => {
+                      setProxyPassword(e.target.value);
+                    }}
+                    placeholder="Proxy password"
                   />
                 </div>
               </>
