@@ -78,7 +78,7 @@ export async function startProxyProcess(
 export async function stopProxyProcess(id: string): Promise<boolean> {
   const config = getProxyConfig(id);
 
-  if (!config || !config.pid) {
+  if (!config?.pid) {
     // Try to delete the config anyway in case it exists without a PID
     deleteProxyConfig(id);
     return false;

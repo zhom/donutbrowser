@@ -127,7 +127,6 @@ const eslintConfig = tseslint.config(
         tsconfigRootDir: import.meta.dirname,
       },
     },
-  },
-);
+  });
 
 export default eslintConfig;
