@@ -140,9 +140,10 @@ jobs:
         id: timestamp
         shell: bash
         run: |
-          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S")
-          echo "timestamp=${TIMESTAMP}" >> $GITHUB_OUTPUT
-          echo "Generated timestamp: ${TIMESTAMP}"
+          TIMESTAMP=$(date -u +"%Y-%m-%d")
+          COMMIT_HASH=$(echo "${GITHUB_SHA}" | cut -c1-7)
+          echo "timestamp=${TIMESTAMP}-${COMMIT_HASH}" >> $GITHUB_OUTPUT
+          echo "Generated timestamp: ${TIMESTAMP}-${COMMIT_HASH}"
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
