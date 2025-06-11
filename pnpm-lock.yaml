@@ -183,6 +183,9 @@ importers:
       typescript:
         specifier: ^5.8.3
         version: 5.8.3
+      typescript-eslint:
+        specifier: ^8.33.1
+        version: 8.33.1(eslint@9.28.0(jiti@2.4.2))(typescript@5.8.3)
 
 packages:
 
