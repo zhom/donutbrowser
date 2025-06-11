@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { getBrowserDisplayName } from "@/lib/browser-utils";
 import React from "react";
 import { FaDownload, FaTimes } from "react-icons/fa";
-import { LuDownload } from "react-icons/lu";
 
 interface UpdateNotification {
   id: string;

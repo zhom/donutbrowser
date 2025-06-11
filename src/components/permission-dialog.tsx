@@ -1,7 +1,6 @@
 "use client";
 
 import { LoadingButton } from "@/components/loading-button";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -88,17 +87,6 @@ export function PermissionDialog({
       case "camera":
         return "Donut Browser needs access to your camera to enable camera functionality in web browsers. Each website that wants to use your camera will still ask for your permission individually.";
     }
-  };
-
-  const getStatusBadge = (isGranted: boolean) => {
-    if (isGranted) {
-      return (
-        <Badge variant="default" className="text-green-800 bg-green-100">
-          Granted
-        </Badge>
-      );
-    }
-    return <Badge variant="secondary">Not Granted</Badge>;
   };
 
   const handleRequestPermission = async () => {

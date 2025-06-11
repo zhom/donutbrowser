@@ -103,7 +103,6 @@ export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
         const currentSystemTheme = await getNativeSystemTheme();
         // Force re-evaluation by toggling the theme
         const html = document.documentElement;
-        const currentClass = html.className;
 
         // Apply the system theme class
         if (currentSystemTheme === "dark") {

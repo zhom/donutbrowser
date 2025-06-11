@@ -24,11 +24,11 @@ import { ScrollArea } from "./ui/scroll-area";
 
 interface GithubRelease {
   tag_name: string;
-  assets: Array<{
+  assets: {
     name: string;
     browser_download_url: string;
     hash?: string;
-  }>;
+  }[];
   published_at: string;
   is_nightly: boolean;
 }

@@ -1,9 +1,5 @@
 import { getBrowserDisplayName } from "@/lib/browser-utils";
-import {
-  dismissToast,
-  showLoadingToast,
-  showVersionUpdateToast,
-} from "@/lib/toast-utils";
+import { showLoadingToast, showVersionUpdateToast } from "@/lib/toast-utils";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";

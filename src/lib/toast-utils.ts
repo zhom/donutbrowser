@@ -134,7 +134,7 @@ export function showToast(props: ToastProps & { id?: string }) {
       },
     });
   } else {
-    sonnerToast.custom((id) => React.createElement(UnifiedToast, props), {
+    sonnerToast.custom(() => React.createElement(UnifiedToast, props), {
       id: toastId,
       duration,
       style: {

@@ -138,10 +138,6 @@ export function ProfileSelectorDialog({
     const isRunning = runningProfiles.has(profile.name);
 
     if (profile.browser === "tor-browser") {
-      const runningTorProfiles = profiles.filter(
-        (p) => p.browser === "tor-browser" && runningProfiles.has(p.name),
-      );
-
       // If another TOR profile is running, this one is not available
       return "Only 1 instance can run at a time";
     }
@@ -195,9 +191,6 @@ export function ProfileSelectorDialog({
   };
 
   const selectedProfileData = profiles.find((p) => p.name === selectedProfile);
-  const isSelectedProfileRunning = selectedProfile
-    ? runningProfiles.has(selectedProfile)
-    : false;
 
   // Check if the selected profile can be used for opening links
   const canOpenWithSelectedProfile = () => {
@@ -225,19 +218,19 @@ export function ProfileSelectorDialog({
         <div className="grid gap-4 py-4">
           {url && (
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
+              <div className="flex justify-between items-center">
                 <Label className="text-sm font-medium">Opening URL:</Label>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => void handleCopyUrl()}
-                  className="flex items-center gap-2"
+                  className="flex gap-2 items-center"
                 >
-                  <LuCopy className="h-3 w-3" />
+                  <LuCopy className="w-3 h-3" />
                   Copy
                 </Button>
               </div>
-              <div className="p-2 bg-muted rounded text-sm break-all">
+              <div className="p-2 text-sm break-all rounded bg-muted">
                 {url}
               </div>
             </div>
@@ -290,14 +283,14 @@ export function ProfileSelectorDialog({
                                   !canUseForLinks ? "opacity-50" : ""
                                 }`}
                               >
-                                <div className="flex items-center gap-3 py-1 px-2 rounded-lg hover:bg-accent cursor-pointer">
-                                  <div className="flex items-center gap-2">
+                                <div className="flex gap-3 items-center px-2 py-1 rounded-lg cursor-pointer hover:bg-accent">
+                                  <div className="flex gap-2 items-center">
                                     {(() => {
                                       const IconComponent = getBrowserIcon(
                                         profile.browser,
                                       );
                                       return IconComponent ? (
-                                        <IconComponent className="h-4 w-4" />
+                                        <IconComponent className="w-4 h-4" />
                                       ) : null;
                                     })()}
                                   </div>

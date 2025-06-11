@@ -13,11 +13,11 @@ import { toast } from "sonner";
 
 interface GithubRelease {
   tag_name: string;
-  assets: Array<{
+  assets: {
     name: string;
     browser_download_url: string;
     hash?: string;
-  }>;
+  }[];
   published_at: string;
   is_nightly: boolean;
 }
@@ -53,22 +53,6 @@ interface VersionUpdateProgress {
   browser_new_versions: number;
   status: string;
 }
-
-const isAlphaVersion = (version: string): boolean => {
-  // Check for common alpha/beta/dev indicators
-  const lowerVersion = version.toLowerCase();
-  return (
-    lowerVersion.includes("a") ||
-    lowerVersion.includes("b") ||
-    lowerVersion.includes("alpha") ||
-    lowerVersion.includes("beta") ||
-    lowerVersion.includes("dev") ||
-    lowerVersion.includes("rc") ||
-    lowerVersion.includes("pre") ||
-    // Check for patterns like "139.0b1" or "140.0a1"
-    /\d+\.\d+[ab]\d+/.test(lowerVersion)
-  );
-};
 
 export function useBrowserDownload() {
   const [availableVersions, setAvailableVersions] = useState<GithubRelease[]>(
