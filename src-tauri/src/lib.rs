@@ -1,4 +1,5 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+use std::env;
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_deep_link::DeepLinkExt;
@@ -111,20 +112,16 @@ async fn handle_url_open(app: tauri::AppHandle, url: String) -> Result<(), Strin
 
   // Check if the main window exists and is ready
   if let Some(window) = app.get_webview_window("main") {
-    if window.is_visible().unwrap_or(false) {
-      // Window is visible, emit event directly
-      println!("Main window is visible, emitting show-profile-selector event");
-      app
-        .emit("show-profile-selector", url.clone())
-        .map_err(|e| format!("Failed to emit URL open event: {e}"))?;
-      let _ = window.show();
-      let _ = window.set_focus();
-    } else {
-      // Window not visible yet - add to pending URLs
-      println!("Main window not visible, adding URL to pending list");
-      let mut pending = PENDING_URLS.lock().unwrap();
-      pending.push(url);
-    }
+    println!("Main window exists");
+
+    // Try to show and focus the window first
+    let _ = window.show();
+    let _ = window.set_focus();
+    let _ = window.unminimize();
+
+    app
+      .emit("show-profile-selector", url.clone())
+      .map_err(|e| format!("Failed to emit URL open event: {e}"))?;
   } else {
     // Window doesn't exist yet - add to pending URLs
     println!("Main window doesn't exist, adding URL to pending list");
@@ -137,6 +134,8 @@ async fn handle_url_open(app: tauri::AppHandle, url: String) -> Result<(), Strin
 
 #[tauri::command]
 async fn check_and_handle_startup_url(app_handle: tauri::AppHandle) -> Result<bool, String> {
+  println!("check_and_handle_startup_url called");
+
   let pending_urls = {
     let mut pending = PENDING_URLS.lock().unwrap();
     let urls = pending.clone();
@@ -144,11 +143,23 @@ async fn check_and_handle_startup_url(app_handle: tauri::AppHandle) -> Result<bo
     urls
   };
 
+  println!("Found {} pending URLs", pending_urls.len());
+
   if !pending_urls.is_empty() {
     println!(
       "Handling {} pending URLs from frontend request",
       pending_urls.len()
     );
+
+    // Ensure the main window is visible and focused
+    if let Some(window) = app_handle.get_webview_window("main") {
+      let _ = window.show();
+      let _ = window.set_focus();
+      let _ = window.unminimize();
+
+      // Give the window a moment to become visible
+      tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+    }
 
     for url in pending_urls {
       println!("Emitting show-profile-selector event for URL: {url}");
@@ -166,11 +177,23 @@ async fn check_and_handle_startup_url(app_handle: tauri::AppHandle) -> Result<bo
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+  let args: Vec<String> = env::args().collect();
+  let startup_url = args.iter().find(|arg| arg.starts_with("http")).cloned();
+
+  if let Some(url) = startup_url.clone() {
+    println!("Found startup URL in command line: {url}");
+    let mut pending = PENDING_URLS.lock().unwrap();
+    pending.push(url.clone());
+  }
+
   tauri::Builder::default()
+    .plugin(tauri_plugin_single_instance::init(|_, args, _cwd| {
+      println!("Single instance triggered with args: {args:?}");
+    }))
+    .plugin(tauri_plugin_deep_link::init())
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_shell::init())
-    .plugin(tauri_plugin_deep_link::init())
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_macos_permissions::init())
     .setup(|app| {
@@ -180,7 +203,10 @@ pub fn run() {
         .title("Donut Browser")
         .inner_size(900.0, 600.0)
         .resizable(false)
-        .fullscreen(false);
+        .fullscreen(false)
+        .center()
+        .focused(true)
+        .visible(true);
 
       #[allow(unused_variables)]
       let window = win_builder.build().unwrap();
@@ -199,16 +225,27 @@ pub fn run() {
       #[cfg(any(windows, target_os = "linux"))]
       {
         // For Windows and Linux, register all deep links at runtime for development
-        app.deep_link().register_all()?;
+        if let Err(e) = app.deep_link().register_all() {
+          eprintln!("Failed to register deep links: {e}");
+        }
       }
 
-      // Handle deep links - this works for both scenarios:
-      // 1. App is running and URL is opened
-      // 2. App is not running and URL causes app to launch
+      #[cfg(target_os = "macos")]
+      {
+        // On macOS, try to register deep links for development builds
+        if let Err(e) = app.deep_link().register_all() {
+          eprintln!(
+            "Note: Deep link registration failed on macOS (this is normal for production): {e}"
+          );
+        }
+      }
+
       app.deep_link().on_open_url({
         let handle = handle.clone();
         move |event| {
           let urls = event.urls();
+          println!("Deep link event received with {} URLs", urls.len());
+
           for url in urls {
             let url_string = url.to_string();
             println!("Deep link received: {url_string}");
@@ -225,6 +262,16 @@ pub fn run() {
           }
         }
       });
+
+      if let Some(startup_url) = startup_url {
+        let handle_clone = handle.clone();
+        tauri::async_runtime::spawn(async move {
+          println!("Processing startup URL from command line: {startup_url}");
+          if let Err(e) = handle_url_open(handle_clone, startup_url.clone()).await {
+            eprintln!("Failed to handle startup URL: {e}");
+          }
+        });
+      }
 
       // Initialize and start background version updater
       let app_handle = app.handle().clone();

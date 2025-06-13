@@ -29,6 +29,7 @@ import { showErrorToast } from "@/lib/toast-utils";
 import type { BrowserProfile, ProxySettings } from "@/types";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrent } from "@tauri-apps/plugin-deep-link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FaDownload } from "react-icons/fa";
 import { GoGear, GoKebabHorizontal, GoPlus } from "react-icons/go";
@@ -102,6 +103,18 @@ export default function Home() {
 
   useAppUpdateNotifications();
 
+  // For some reason, app.deep_link().get_current() is not working properly
+  const checkCurrentUrl = useCallback(async () => {
+    try {
+      const currentUrl = await getCurrent();
+      if (currentUrl && currentUrl.length > 0) {
+        void handleUrlOpen(currentUrl[0]);
+      }
+    } catch (error) {
+      console.error("Failed to check current URL:", error);
+    }
+  }, []);
+
   useEffect(() => {
     void loadProfilesWithUpdateCheck();
 
@@ -113,6 +126,7 @@ export default function Home() {
 
     // Check for startup URLs (when app was launched as default browser)
     void checkStartupUrls();
+    void checkCurrentUrl();
 
     // Set up periodic update checks (every 30 minutes)
     const updateInterval = setInterval(
@@ -125,7 +139,7 @@ export default function Home() {
     return () => {
       clearInterval(updateInterval);
     };
-  }, [loadProfilesWithUpdateCheck, checkForUpdates]);
+  }, [loadProfilesWithUpdateCheck, checkForUpdates, checkCurrentUrl]);
 
   // Check permissions when they are initialized
   useEffect(() => {
