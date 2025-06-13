@@ -19,6 +19,7 @@
     "shell:allow-spawn",
     "shell:allow-stdin-write",
     "deep-link:default",
+    "deep-link:allow-register",
     "dialog:default",
     "dialog:allow-open",
     "macos-permissions:default",
