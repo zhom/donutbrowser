@@ -345,6 +345,12 @@ export function ProfilesDataTable({
         cell: ({ row }) => {
           const profile = row.original;
           const hasProxy = profile.proxy?.enabled;
+          const regularText = hasProxy ? profile.proxy?.proxy_type : "Disabled";
+          const regularTooltipText = hasProxy
+            ? `${profile.proxy?.proxy_type.toUpperCase()} proxy enabled (${
+                profile.proxy?.host
+              }:${profile.proxy?.port})`
+            : "No proxy configured";
           return (
             <Tooltip>
               <TooltipTrigger>
@@ -353,16 +359,16 @@ export function ProfilesDataTable({
                     <CiCircleCheck className="w-4 h-4 text-green-500" />
                   )}
                   <span className="text-sm text-muted-foreground">
-                    {hasProxy ? profile.proxy?.proxy_type : "Disabled"}
+                    {profile.browser === "tor-browser"
+                      ? "Not supported"
+                      : regularText}
                   </span>
                 </div>
               </TooltipTrigger>
               <TooltipContent>
-                {hasProxy
-                  ? `${profile.proxy?.proxy_type.toUpperCase()} proxy enabled (${
-                      profile.proxy?.host
-                    }:${profile.proxy?.port})`
-                  : "No proxy configured"}
+                {profile.browser === "tor-browser"
+                  ? "Proxies are not supported for TOR browser"
+                  : regularTooltipText}
               </TooltipContent>
             </Tooltip>
           );
