@@ -10,6 +10,7 @@
  * - Progress bars for downloads/updates
  * - Success/error states
  * - Customizable icons and content
+ * - Auto-update notifications
  *
  * Usage Examples:
  *
@@ -21,6 +22,11 @@
  *   title: "Loading...",
  *   description: "Please wait..."
  * });
+ * ```
+ *
+ * Auto-update toast:
+ * ```
+ * showAutoUpdateToast("Firefox", "125.0.1");
  * ```
  *
  * Download progress toast:
@@ -47,6 +53,7 @@ import {
   LuCheckCheck,
   LuDownload,
   LuRefreshCw,
+  LuRocket,
   LuTriangleAlert,
 } from "react-icons/lu";
 
@@ -139,6 +146,10 @@ function getToastIcon(type: ToastProps["type"], stage?: string) {
       return (
         <LuRefreshCw className="flex-shrink-0 w-4 h-4 text-purple-500 animate-spin" />
       );
+    case "loading":
+      return (
+        <div className="flex-shrink-0 w-4 h-4 rounded-full border-2 border-blue-500 animate-spin border-t-transparent" />
+      );
     default:
       return (
         <div className="flex-shrink-0 w-4 h-4 rounded-full border-2 border-blue-500 animate-spin border-t-transparent" />
@@ -151,11 +162,33 @@ export function UnifiedToast(props: ToastProps) {
   const stage = "stage" in props ? props.stage : undefined;
   const progress = "progress" in props ? props.progress : undefined;
 
+  // Check if this is an auto-update toast
+  const isAutoUpdate = title.includes("update started");
+
   return (
-    <div className="flex items-start p-3 w-96 bg-white rounded-lg border border-gray-200 shadow-lg dark:bg-gray-800 dark:border-gray-700">
-      <div className="mr-3 mt-0.5">{getToastIcon(type, stage)}</div>
+    <div
+      className={`flex items-start p-3 w-96 rounded-lg border shadow-lg ${
+        isAutoUpdate
+          ? "bg-emerald-50 border-emerald-200 dark:bg-emerald-950 dark:border-emerald-800"
+          : "bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700"
+      }`}
+      data-toast-type={isAutoUpdate ? "auto-update" : "default"}
+    >
+      <div className="mr-3 mt-0.5">
+        {isAutoUpdate ? (
+          <LuRocket className="flex-shrink-0 w-4 h-4 text-emerald-500" />
+        ) : (
+          getToastIcon(type, stage)
+        )}
+      </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium leading-tight text-gray-900 dark:text-white">
+        <p
+          className={`text-sm font-medium leading-tight ${
+            isAutoUpdate
+              ? "text-emerald-900 dark:text-emerald-100"
+              : "text-gray-900 dark:text-white"
+          }`}
+        >
           {title}
         </p>
 
@@ -225,7 +258,13 @@ export function UnifiedToast(props: ToastProps) {
 
         {/* Description */}
         {description && (
-          <p className="mt-1 text-xs leading-tight text-gray-600 dark:text-gray-300">
+          <p
+            className={`mt-1 text-xs leading-tight ${
+              isAutoUpdate
+                ? "text-emerald-700 dark:text-emerald-300"
+                : "text-gray-600 dark:text-gray-300"
+            }`}
+          >
             {description}
           </p>
         )}

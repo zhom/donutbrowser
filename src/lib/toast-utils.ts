@@ -294,6 +294,26 @@ export function showTwilightUpdateToast(
   });
 }
 
+export function showAutoUpdateToast(
+  browserName: string,
+  version: string,
+  options?: {
+    id?: string;
+    description?: string;
+    duration?: number;
+  },
+) {
+  return showToast({
+    type: "loading",
+    title: `${browserName} update started`,
+    description:
+      options?.description ??
+      `Automatically downloading ${browserName} ${version}. Progress will be shown in download notifications.`,
+    id: options?.id ?? `auto-update-${browserName.toLowerCase()}-${version}`,
+    duration: options?.duration ?? 4000,
+  });
+}
+
 // Generic helper for dismissing toasts
 export function dismissToast(id: string) {
   sonnerToast.dismiss(id);

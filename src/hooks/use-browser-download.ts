@@ -3,9 +3,7 @@ import {
   dismissToast,
   showDownloadToast,
   showErrorToast,
-  showFetchingToast,
   showSuccessToast,
-  showUnifiedVersionUpdateToast,
 } from "@/lib/toast-utils";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -45,15 +43,6 @@ interface BrowserVersionsResult {
   total_versions_count: number;
 }
 
-interface VersionUpdateProgress {
-  current_browser: string;
-  total_browsers: number;
-  completed_browsers: number;
-  new_versions_found: number;
-  browser_new_versions: number;
-  status: string;
-}
-
 export function useBrowserDownload() {
   const [availableVersions, setAvailableVersions] = useState<GithubRelease[]>(
     [],
@@ -62,7 +51,6 @@ export function useBrowserDownload() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] =
     useState<DownloadProgress | null>(null);
-  const [isUpdatingVersions, setIsUpdatingVersions] = useState(false);
 
   // Listen for download progress events
   useEffect(() => {
@@ -128,70 +116,6 @@ export function useBrowserDownload() {
     };
   }, []);
 
-  // Listen for version update progress events
-  useEffect(() => {
-    const unlisten = listen<VersionUpdateProgress>(
-      "version-update-progress",
-      (event) => {
-        const progress = event.payload;
-
-        if (progress.status === "updating") {
-          setIsUpdatingVersions(true);
-
-          // Show unified progress toast
-          const currentBrowserName = progress.current_browser
-            ? getBrowserDisplayName(progress.current_browser)
-            : undefined;
-
-          showUnifiedVersionUpdateToast("Checking for browser updates...", {
-            description: currentBrowserName
-              ? `Fetching ${currentBrowserName} release information...`
-              : "Initializing version check...",
-            progress: {
-              current: progress.completed_browsers,
-              total: progress.total_browsers,
-              found: progress.new_versions_found,
-              current_browser: currentBrowserName,
-            },
-          });
-        } else if (progress.status === "completed") {
-          setIsUpdatingVersions(false);
-          dismissToast("unified-version-update");
-
-          if (progress.new_versions_found > 0) {
-            showSuccessToast(
-              `Found ${progress.new_versions_found} new browser versions!`,
-              {
-                duration: 4000,
-                description:
-                  "Version information has been updated in the background",
-              },
-            );
-          } else {
-            showSuccessToast("No new browser versions found", {
-              duration: 3000,
-              description: "All browser versions are up to date",
-            });
-          }
-        } else if (progress.status === "error") {
-          setIsUpdatingVersions(false);
-          dismissToast("unified-version-update");
-
-          showErrorToast("Failed to check for new versions", {
-            duration: 4000,
-            description: "Check your internet connection and try again",
-          });
-        }
-      },
-    );
-
-    return () => {
-      void unlisten.then((fn) => {
-        fn();
-      });
-    };
-  }, []);
-
   const formatTime = (seconds: number): string => {
     if (seconds < 60) {
       return `${Math.round(seconds)}s`;
@@ -217,10 +141,8 @@ export function useBrowserDownload() {
   const loadVersions = useCallback(async (browserStr: string) => {
     const browserName = getBrowserDisplayName(browserStr);
 
-    // Show fetching toast
-    const toastId = showFetchingToast(browserName, {
-      id: `fetch-${browserStr}`,
-    });
+    // Use a simple loading state instead of toast for version fetching
+    console.log(`Fetching ${browserName} versions...`);
 
     try {
       const versionInfos = await invoke<BrowserVersionInfo[]>(
@@ -239,11 +161,9 @@ export function useBrowserDownload() {
       );
 
       setAvailableVersions(githubReleases);
-      dismissToast(toastId);
       return githubReleases;
     } catch (error) {
       console.error("Failed to load versions:", error);
-      dismissToast(toastId);
       showErrorToast(`Failed to fetch ${browserName} versions`, {
         description:
           error instanceof Error ? error.message : "Unknown error occurred",
@@ -377,7 +297,6 @@ export function useBrowserDownload() {
     downloadedVersions,
     isDownloading,
     downloadProgress,
-    isUpdatingVersions,
     loadVersions,
     loadVersionsWithNewCount,
     loadDownloadedVersions,

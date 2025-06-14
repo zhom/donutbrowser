@@ -68,14 +68,11 @@ export function useVersionUpdater() {
           dismissToast("unified-version-update");
 
           if (progress.new_versions_found > 0) {
-            toast.success(
-              `Found ${progress.new_versions_found} new browser versions!`,
-              {
-                duration: 4000,
-                description:
-                  "Version information has been updated in the background",
-              },
-            );
+            toast.success("Browser versions updated successfully", {
+              duration: 4000,
+              description:
+                "Version information has been updated in the background",
+            });
           } else {
             toast.success("No new browser versions found", {
               duration: 3000,

@@ -1,9 +1,7 @@
-import { UpdateNotificationComponent } from "@/components/update-notification";
 import { getBrowserDisplayName } from "@/lib/browser-utils";
-import { showToast } from "@/lib/toast-utils";
+import { showAutoUpdateToast, showToast } from "@/lib/toast-utils";
 import { invoke } from "@tauri-apps/api/core";
-import React, { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface UpdateNotification {
   id: string;
@@ -23,73 +21,82 @@ export function useUpdateNotifications(
   const [updatingBrowsers, setUpdatingBrowsers] = useState<Set<string>>(
     new Set(),
   );
-  const [dismissedNotifications, setDismissedNotifications] = useState<
+  const [processedNotifications, setProcessedNotifications] = useState<
     Set<string>
   >(new Set());
 
+  // Add refs to track ongoing operations to prevent duplicates
+  const isCheckingForUpdates = useRef(false);
+  const activeDownloads = useRef<Set<string>>(new Set()); // Track "browser-version" keys
+
   const checkForUpdates = useCallback(async () => {
+    // Prevent multiple simultaneous calls
+    if (isCheckingForUpdates.current) {
+      console.log("Already checking for updates, skipping duplicate call");
+      return;
+    }
+
+    isCheckingForUpdates.current = true;
+
     try {
       const updates = await invoke<UpdateNotification[]>(
         "check_for_browser_updates",
       );
 
-      // Filter out dismissed notifications unless they're for a newer version
-      const filteredUpdates = updates.filter((notification) => {
-        // Check if this exact notification was dismissed
-        if (dismissedNotifications.has(notification.id)) {
-          return false;
-        }
-
-        // Check if we dismissed an older version for this browser
-        const dismissedForBrowser = Array.from(dismissedNotifications).find(
-          (dismissedId) => {
-            const parts = dismissedId.split("_");
-            if (parts.length >= 2) {
-              const browser = parts[0];
-              return browser === notification.browser;
-            }
-            return false;
-          },
-        );
-
-        if (dismissedForBrowser) {
-          // Extract the dismissed version to compare
-          const dismissedParts = dismissedForBrowser.split("_to_");
-          if (dismissedParts.length === 2) {
-            const dismissedToVersion = dismissedParts[1];
-            // Only show if this is a newer version than what was dismissed
-            return notification.new_version !== dismissedToVersion;
-          }
-        }
-
-        return true;
+      // Filter out already processed notifications
+      const newUpdates = updates.filter((notification) => {
+        return !processedNotifications.has(notification.id);
       });
 
-      setNotifications(filteredUpdates);
+      setNotifications(newUpdates);
 
-      // Show toasts for new notifications - we'll define handleUpdate and handleDismiss separately
-      // to avoid circular dependencies
+      // Automatically start downloads for new update notifications
+      for (const notification of newUpdates) {
+        if (!processedNotifications.has(notification.id)) {
+          setProcessedNotifications((prev) =>
+            new Set(prev).add(notification.id),
+          );
+          // Start automatic update without user interaction
+          void handleAutoUpdate(
+            notification.browser,
+            notification.new_version,
+            notification.id,
+          );
+        }
+      }
     } catch (error) {
       console.error("Failed to check for updates:", error);
+    } finally {
+      isCheckingForUpdates.current = false;
     }
-  }, [dismissedNotifications]);
+  }, [processedNotifications]);
 
-  const handleUpdate = useCallback(
-    async (browser: string, newVersion: string) => {
+  const handleAutoUpdate = useCallback(
+    async (browser: string, newVersion: string, notificationId: string) => {
+      const downloadKey = `${browser}-${newVersion}`;
+
+      // Check if this download is already in progress
+      if (activeDownloads.current.has(downloadKey)) {
+        console.log(
+          `Download already in progress for ${downloadKey}, skipping duplicate`,
+        );
+        return;
+      }
+
+      // Mark download as active
+      activeDownloads.current.add(downloadKey);
+
       try {
         setUpdatingBrowsers((prev) => new Set(prev).add(browser));
         const browserDisplayName = getBrowserDisplayName(browser);
 
-        // Dismiss all notifications for this browser first
-        const browserNotifications = notifications.filter(
-          (n) => n.browser === browser,
-        );
-        for (const notification of browserNotifications) {
-          toast.dismiss(notification.id);
-          await invoke("dismiss_update_notification", {
-            notificationId: notification.id,
-          });
-        }
+        // Dismiss the notification in the backend
+        await invoke("dismiss_update_notification", {
+          notificationId,
+        });
+
+        // Show auto-update started toast
+        showAutoUpdateToast(browserDisplayName, newVersion);
 
         try {
           // Check if browser already exists before downloading
@@ -134,17 +141,19 @@ export function useUpdateNotifications(
                 : `${updatedProfiles.length} profiles have been updated`;
 
             showToast({
+              id: `auto-update-success-${browser}-${newVersion}`,
               type: "success",
               title: `${browserDisplayName} update completed`,
-              description: `${profileText} to version ${newVersion}. Running profiles were not updated and can be updated manually.`,
+              description: `${profileText} to version ${newVersion}. To update running profiles, restart them.`,
               duration: 5000,
             });
           } else {
             showToast({
+              id: `auto-update-success-${browser}-${newVersion}`,
               type: "success",
               title: `${browserDisplayName} update ready`,
               description:
-                "All affected profiles are currently running. Stop them and manually update their versions to use the new version.",
+                "All affected profiles are currently running. To update them, restart them.",
               duration: 5000,
             });
           }
@@ -167,6 +176,7 @@ export function useUpdateNotifications(
           }
 
           showToast({
+            id: `auto-update-error-${browser}-${newVersion}`,
             type: "error",
             title: `Failed to download ${browserDisplayName} ${newVersion}`,
             description: String(downloadError),
@@ -175,18 +185,21 @@ export function useUpdateNotifications(
           throw downloadError;
         }
 
-        // Refresh notifications to clear any remaining ones
-        await checkForUpdates();
+        // Don't call checkForUpdates() again here as it can cause recursion and duplicates
+        // The periodic checks will handle finding any remaining updates
       } catch (error) {
-        console.error("Failed to start update:", error);
+        console.error("Failed to start auto-update:", error);
         const browserDisplayName = getBrowserDisplayName(browser);
         showToast({
+          id: `auto-update-error-${browser}-${newVersion}`,
           type: "error",
           title: `Failed to update ${browserDisplayName}`,
           description: String(error),
           duration: 6000,
         });
       } finally {
+        // Remove from active downloads and updating browsers
+        activeDownloads.current.delete(downloadKey);
         setUpdatingBrowsers((prev) => {
           const next = new Set(prev);
           next.delete(browser);
@@ -194,52 +207,18 @@ export function useUpdateNotifications(
         });
       }
     },
-    [notifications, checkForUpdates, onProfilesUpdated],
+    [onProfilesUpdated],
   );
 
-  const handleDismiss = useCallback(
-    async (notificationId: string) => {
-      try {
-        toast.dismiss(notificationId);
-        await invoke("dismiss_update_notification", { notificationId });
-
-        // Track this notification as dismissed to prevent showing it again
-        setDismissedNotifications((prev) => new Set(prev).add(notificationId));
-
-        await checkForUpdates();
-      } catch (error) {
-        console.error("Failed to dismiss notification:", error);
-      }
-    },
-    [checkForUpdates],
-  );
-
-  // Separate effect to show toasts when notifications change
+  // Clean up notifications when they're no longer needed
   useEffect(() => {
-    for (const notification of notifications) {
-      const isUpdating = updatingBrowsers.has(notification.browser);
-
-      toast.custom(
-        () => (
-          <UpdateNotificationComponent
-            notification={notification}
-            onUpdate={handleUpdate}
-            onDismiss={handleDismiss}
-            isUpdating={isUpdating}
-          />
-        ),
-        {
-          id: notification.id,
-          duration: Number.POSITIVE_INFINITY, // Persistent until user action
-          position: "top-right",
-          style: {
-            zIndex: 99999, // Ensure notifications appear above dialogs
-            pointerEvents: "auto", // Ensure notifications remain interactive
-          },
-        },
-      );
-    }
-  }, [notifications, updatingBrowsers, handleUpdate, handleDismiss]);
+    // Remove notifications that have been processed
+    setNotifications((prev) =>
+      prev.filter(
+        (notification) => !processedNotifications.has(notification.id),
+      ),
+    );
+  }, [processedNotifications]);
 
   return {
     notifications,

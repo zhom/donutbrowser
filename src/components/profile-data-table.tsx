@@ -1,6 +1,5 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -273,70 +272,6 @@ export function ProfilesDataTable({
           const browserA = getBrowserDisplayName(rowA.getValue(columnId));
           const browserB = getBrowserDisplayName(rowB.getValue(columnId));
           return browserA.localeCompare(browserB);
-        },
-      },
-      {
-        accessorKey: "version",
-        header: "Version",
-      },
-      {
-        id: "status",
-        header: ({ column }) => {
-          const isSorted = column.getIsSorted();
-          return (
-            <Button
-              variant="ghost"
-              onClick={() => {
-                column.toggleSorting(column.getIsSorted() === "asc");
-              }}
-              className="p-0 h-auto font-semibold hover:bg-transparent"
-            >
-              Status
-              {isSorted === "asc" && <LuChevronUp className="ml-2 w-4 h-4" />}
-              {isSorted === "desc" && (
-                <LuChevronDown className="ml-2 w-4 h-4" />
-              )}
-              {!isSorted && (
-                <LuChevronDown className="ml-2 w-4 h-4 opacity-50" />
-              )}
-            </Button>
-          );
-        },
-        cell: ({ row }) => {
-          const profile = row.original;
-          const isRunning = isClient && runningProfiles.has(profile.name);
-          return (
-            <div className="flex flex-col gap-1">
-              <Badge
-                variant={isRunning ? "default" : "secondary"}
-                className="text-xs w-fit"
-              >
-                {isClient ? (isRunning ? "Running" : "Stopped") : "Loading..."}
-              </Badge>
-              {isClient && isRunning && profile.process_id && (
-                <span className="text-xs text-muted-foreground">
-                  PID: {profile.process_id}
-                </span>
-              )}
-            </div>
-          );
-        },
-        enableSorting: true,
-        sortingFn: (rowA, rowB) => {
-          // If not on client, sort by name only to ensure consistency
-          if (!isClient) {
-            return rowA.original.name.localeCompare(rowB.original.name);
-          }
-
-          const isRunningA = runningProfiles.has(rowA.original.name);
-          const isRunningB = runningProfiles.has(rowB.original.name);
-
-          // Running profiles come first, then stopped ones
-          // Secondary sort by profile name
-          if (isRunningA === isRunningB) {
-            return rowA.original.name.localeCompare(rowB.original.name);
-          }
-          return isRunningA ? -1 : 1;
         },
       },
       {
