@@ -1443,7 +1443,7 @@ mod tests {
     let mock_response = r#"[
       {
         "tag_name": "v1.81.9",
-        "name": "Brave Release 1.81.9",
+        "name": "Release v1.81.9 (Chromium 137.0.7151.104)",
         "prerelease": false,
         "published_at": "2024-01-15T10:00:00Z",
         "assets": [
@@ -1476,7 +1476,7 @@ mod tests {
     let releases = result.unwrap();
     assert!(!releases.is_empty());
     assert_eq!(releases[0].tag_name, "v1.81.9");
-    assert!(releases[0].is_nightly);
+    assert!(!releases[0].is_nightly); // "Release v1.81.9 (Chromium 137.0.7151.104)" starts with "Release" so it should be stable
   }
 
   #[tokio::test]
