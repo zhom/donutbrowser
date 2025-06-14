@@ -3,6 +3,7 @@
  * Centralized helpers for browser name mapping, icons, etc.
  */
 
+import { ZenBrowser } from "@/components/icons/zen-browser";
 import { FaChrome, FaFirefox } from "react-icons/fa";
 import { SiBrave, SiMullvad, SiTorbrowser } from "react-icons/si";
 
@@ -38,7 +39,7 @@ export function getBrowserIcon(browserType: string) {
     case "firefox-developer":
       return FaFirefox;
     case "zen":
-      return FaFirefox;
+      return ZenBrowser;
     case "tor-browser":
       return SiTorbrowser;
     default:
