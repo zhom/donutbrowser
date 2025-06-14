@@ -152,7 +152,7 @@ impl AppAutoUpdater {
   async fn fetch_app_releases(
     &self,
   ) -> Result<Vec<AppRelease>, Box<dyn std::error::Error + Send + Sync>> {
-    let url = "https://api.github.com/repos/zhom/donutbrowser/releases";
+    let url = "https://api.github.com/repos/zhom/donutbrowser/releases?per_page=100";
     let response = self
       .client
       .get(url)
