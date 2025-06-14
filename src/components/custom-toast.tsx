@@ -90,6 +90,7 @@ interface VersionUpdateToastProps extends BaseToastProps {
     current: number;
     total: number;
     found: number;
+    current_browser?: string;
   };
 }
 
@@ -151,7 +152,7 @@ export function UnifiedToast(props: ToastProps) {
   const progress = "progress" in props ? props.progress : undefined;
 
   return (
-    <div className="flex items-start p-3 w-full bg-white rounded-lg border border-gray-200 shadow-lg dark:bg-gray-800 dark:border-gray-700">
+    <div className="flex items-start p-3 w-96 bg-white rounded-lg border border-gray-200 shadow-lg dark:bg-gray-800 dark:border-gray-700">
       <div className="mr-3 mt-0.5">{getToastIcon(type, stage)}</div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium leading-tight text-gray-900 dark:text-white">
@@ -181,26 +182,30 @@ export function UnifiedToast(props: ToastProps) {
           )}
 
         {/* Version update progress */}
-        {type === "version-update" && progress && "found" in progress && (
-          <div className="mt-2 space-y-1">
-            <p className="text-xs text-gray-600 dark:text-gray-300">
-              {progress.found} new versions found so far
-            </p>
-            <div className="flex items-center space-x-2">
-              <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 min-w-0">
-                <div
-                  className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
-                  style={{
-                    width: `${(progress.current / progress.total) * 100}%`,
-                  }}
-                />
+        {type === "version-update" &&
+          progress &&
+          "current_browser" in progress && (
+            <div className="mt-2 space-y-1">
+              <p className="text-xs text-gray-600 dark:text-gray-300">
+                {progress.current_browser && (
+                  <>Looking for updates for {progress.current_browser}</>
+                )}
+              </p>
+              <div className="flex items-center space-x-2">
+                <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 min-w-0">
+                  <div
+                    className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
+                    style={{
+                      width: `${(progress.current / progress.total) * 100}%`,
+                    }}
+                  />
+                </div>
+                <span className="w-8 text-xs text-right text-gray-500 whitespace-nowrap dark:text-gray-400 shrink-0">
+                  {progress.current}/{progress.total}
+                </span>
               </div>
-              <span className="w-8 text-xs text-right text-gray-500 whitespace-nowrap dark:text-gray-400 shrink-0">
-                {progress.current}/{progress.total}
-              </span>
             </div>
-          </div>
-        )}
+          )}
 
         {/* Twilight update progress */}
         {type === "twilight-update" && (

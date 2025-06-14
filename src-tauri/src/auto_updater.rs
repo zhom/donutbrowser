@@ -54,23 +54,32 @@ impl AutoUpdater {
       return Ok(Vec::new());
     }
 
+    let mut notifications = Vec::new();
+    let mut browser_versions: HashMap<String, Vec<BrowserVersionInfo>> = HashMap::new();
+
+    // Group profiles by browser
     let profiles = self
       .browser_runner
       .list_profiles()
       .map_err(|e| format!("Failed to list profiles: {e}"))?;
-    let mut notifications = Vec::new();
-    let mut browser_versions: HashMap<String, Vec<BrowserVersionInfo>> = HashMap::new();
-
-    // Group profiles by browser type
     let mut browser_profiles: HashMap<String, Vec<BrowserProfile>> = HashMap::new();
+
     for profile in profiles {
+      // Only check supported browsers
+      if !self
+        .version_service
+        .is_browser_supported(&profile.browser)
+        .unwrap_or(false)
+      {
+        continue;
+      }
+
       browser_profiles
         .entry(profile.browser.clone())
         .or_default()
         .push(profile);
     }
 
-    // Check each browser type
     for (browser, profiles) in browser_profiles {
       // Get cached versions first, then try to fetch if needed
       let versions = if let Some(cached) = self
@@ -97,7 +106,23 @@ impl AutoUpdater {
       // Check each profile for updates
       for profile in profiles {
         if let Some(update) = self.check_profile_update(&profile, &versions)? {
-          notifications.push(update);
+          // Apply chromium threshold logic
+          if browser == "chromium" {
+            // For chromium, only show notifications if there are 100+ new versions
+            // Count how many versions are newer than the current profile version
+            let newer_versions_count = versions
+              .iter()
+              .filter(|v| self.is_version_newer(&v.version, &profile.version))
+              .count();
+
+            if newer_versions_count >= 100 {
+              notifications.push(update);
+            } else {
+              println!("Skipping chromium update notification: only {newer_versions_count} new versions (need 100+)");
+            }
+          } else {
+            notifications.push(update);
+          }
         }
       }
     }

@@ -43,6 +43,7 @@ export interface VersionUpdateToastProps extends BaseToastProps {
     current: number;
     total: number;
     found: number;
+    current_browser?: string;
   };
 }
 
@@ -214,6 +215,7 @@ export function showVersionUpdateToast(
       current: number;
       total: number;
       found: number;
+      current_browser?: string;
     };
     duration?: number;
   },
@@ -300,4 +302,28 @@ export function dismissToast(id: string) {
 // Dismiss all toasts
 export function dismissAllToasts() {
   sonnerToast.dismiss();
+}
+
+// Add a specific function for unified version update progress
+export function showUnifiedVersionUpdateToast(
+  title: string,
+  options?: {
+    id?: string;
+    description?: string;
+    progress?: {
+      current: number;
+      total: number;
+      found: number;
+      current_browser?: string;
+    };
+    duration?: number;
+  },
+) {
+  return showToast({
+    type: "version-update",
+    title,
+    id: "unified-version-update",
+    duration: Number.POSITIVE_INFINITY, // Keep showing until completed
+    ...options,
+  });
 }

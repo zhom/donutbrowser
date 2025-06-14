@@ -259,7 +259,7 @@ impl VersionUpdater {
   ) -> Result<Vec<BackgroundUpdateResult>, Box<dyn std::error::Error + Send + Sync>> {
     println!("Starting background version update for all browsers");
 
-    let browsers = [
+    let all_browsers = [
       "firefox",
       "firefox-developer",
       "mullvad-browser",
@@ -269,9 +269,27 @@ impl VersionUpdater {
       "tor-browser",
     ];
 
+    // Filter browsers to only include those supported on the current platform
+    let browsers: Vec<&str> = all_browsers
+      .iter()
+      .filter(|browser| {
+        self
+          .version_service
+          .is_browser_supported(browser)
+          .unwrap_or(false)
+      })
+      .copied()
+      .collect();
+
     let total_browsers = browsers.len();
     let mut results = Vec::new();
     let mut total_new_versions = 0;
+
+    println!(
+      "Updating {} supported browsers (filtered from {} total)",
+      browsers.len(),
+      all_browsers.len()
+    );
 
     // Emit start event
     let progress = VersionUpdateProgress {

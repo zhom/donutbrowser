@@ -31,8 +31,8 @@ export function VersionUpdateSettings() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <LuRefreshCw className="h-5 w-5" />
+        <CardTitle className="flex gap-2 items-center">
+          <LuRefreshCw className="w-5 h-5" />
           Background Version Updates
         </CardTitle>
         <CardDescription>
@@ -44,8 +44,8 @@ export function VersionUpdateSettings() {
         {/* Current Status */}
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <LuClock className="h-4 w-4" />
+            <div className="flex gap-2 items-center text-sm font-medium">
+              <LuClock className="w-4 h-4" />
               Last Update
             </div>
             <div className="text-sm text-muted-foreground">
@@ -54,8 +54,8 @@ export function VersionUpdateSettings() {
           </div>
 
           <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <LuCheckCheck className="h-4 w-4" />
+            <div className="flex gap-2 items-center text-sm font-medium">
+              <LuCheckCheck className="w-4 h-4" />
               Next Update
             </div>
             <div className="text-sm text-muted-foreground">
@@ -69,16 +69,14 @@ export function VersionUpdateSettings() {
         {/* Progress indicator */}
         {isUpdating && updateProgress && (
           <Alert>
-            <LuRefreshCw className="h-4 w-4 animate-spin" />
+            <LuRefreshCw className="w-4 h-4 animate-spin" />
             <AlertTitle>Updating Browser Versions</AlertTitle>
             <AlertDescription>
               {updateProgress.current_browser ? (
                 <>
-                  Checking {updateProgress.current_browser} (
+                  Looking for updates for {updateProgress.current_browser} (
                   {updateProgress.completed_browsers}/
                   {updateProgress.total_browsers})
-                  <br />
-                  {updateProgress.new_versions_found} new versions found so far
                 </>
               ) : (
                 "Starting version update..."
@@ -88,7 +86,7 @@ export function VersionUpdateSettings() {
         )}
 
         {/* Manual update button */}
-        <div className="flex items-center justify-between pt-2 border-t">
+        <div className="flex justify-between items-center pt-2 border-t">
           <div className="space-y-1">
             <div className="text-sm font-medium">Manual Update</div>
             <div className="text-xs text-muted-foreground">
@@ -104,14 +102,14 @@ export function VersionUpdateSettings() {
             size="sm"
             disabled={isUpdating}
           >
-            <LuRefreshCw className="h-4 w-4 mr-2" />
+            <LuRefreshCw className="mr-2 w-4 h-4" />
             {isUpdating ? "Updating..." : "Check Now"}
           </LoadingButton>
         </div>
 
         {/* Information about background updates */}
         <Alert>
-          <LuCircleAlert className="h-4 w-4" />
+          <LuCircleAlert className="w-4 h-4" />
           <AlertTitle>How it works</AlertTitle>
           <AlertDescription className="text-xs">
             • Version information is checked automatically every 3 hours

@@ -5,11 +5,11 @@ import {
   showErrorToast,
   showFetchingToast,
   showSuccessToast,
+  showUnifiedVersionUpdateToast,
 } from "@/lib/toast-utils";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
 
 interface GithubRelease {
   tag_name: string;
@@ -137,31 +137,50 @@ export function useBrowserDownload() {
 
         if (progress.status === "updating") {
           setIsUpdatingVersions(true);
-          if (progress.current_browser) {
-            const browserName = getBrowserDisplayName(progress.current_browser);
-            showFetchingToast(browserName, {
-              id: `version-update-${progress.current_browser}`,
-              description: "Fetching latest release information...",
-            });
-          }
+
+          // Show unified progress toast
+          const currentBrowserName = progress.current_browser
+            ? getBrowserDisplayName(progress.current_browser)
+            : undefined;
+
+          showUnifiedVersionUpdateToast("Checking for browser updates...", {
+            description: currentBrowserName
+              ? `Fetching ${currentBrowserName} release information...`
+              : "Initializing version check...",
+            progress: {
+              current: progress.completed_browsers,
+              total: progress.total_browsers,
+              found: progress.new_versions_found,
+              current_browser: currentBrowserName,
+            },
+          });
         } else if (progress.status === "completed") {
           setIsUpdatingVersions(false);
+          dismissToast("unified-version-update");
+
           if (progress.new_versions_found > 0) {
             showSuccessToast(
               `Found ${progress.new_versions_found} new browser versions!`,
               {
-                duration: 3000,
+                duration: 4000,
+                description:
+                  "Version information has been updated in the background",
               },
             );
+          } else {
+            showSuccessToast("No new browser versions found", {
+              duration: 3000,
+              description: "All browser versions are up to date",
+            });
           }
-          // Dismiss any update toasts
-          toast.dismiss();
         } else if (progress.status === "error") {
           setIsUpdatingVersions(false);
+          dismissToast("unified-version-update");
+
           showErrorToast("Failed to check for new versions", {
             duration: 4000,
+            description: "Check your internet connection and try again",
           });
-          toast.dismiss();
         }
       },
     );

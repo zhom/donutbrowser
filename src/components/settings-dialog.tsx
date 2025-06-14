@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { usePermissions } from "@/hooks/use-permissions";
 import type { PermissionType } from "@/hooks/use-permissions";
-import { showSuccessToast } from "@/lib/toast-utils";
+import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { invoke } from "@tauri-apps/api/core";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useState } from "react";
@@ -210,11 +210,16 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
       await invoke("clear_all_version_cache_and_refetch");
       showSuccessToast("Cache cleared successfully", {
         description:
-          "All browser version cache has been cleared and browsers are being refreshed",
+          "All browser version cache has been cleared and browsers are being refreshed.",
         duration: 4000,
       });
     } catch (error) {
       console.error("Failed to clear cache:", error);
+      showErrorToast("Failed to clear cache", {
+        description:
+          error instanceof Error ? error.message : "Unknown error occurred",
+        duration: 4000,
+      });
     } finally {
       setIsClearingCache(false);
     }
@@ -237,9 +242,9 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   const getPermissionIcon = (type: PermissionType) => {
     switch (type) {
       case "microphone":
-        return <BsMic className="h-4 w-4" />;
+        return <BsMic className="w-4 h-4" />;
       case "camera":
-        return <BsCamera className="h-4 w-4" />;
+        return <BsCamera className="w-4 h-4" />;
     }
   };
 
@@ -255,7 +260,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   const getStatusBadge = (isGranted: boolean) => {
     if (isGranted) {
       return (
-        <Badge variant="default" className="bg-green-100 text-green-800">
+        <Badge variant="default" className="text-green-800 bg-green-100">
           Granted
         </Badge>
       );
@@ -436,7 +441,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                   {permissions.map((permission) => (
                     <div
                       key={permission.permission_type}
-                      className="flex items-center justify-between p-3 border rounded-lg"
+                      className="flex justify-between items-center p-3 rounded-lg border"
                     >
                       <div className="flex items-center space-x-3">
                         {getPermissionIcon(permission.permission_type)}

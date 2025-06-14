@@ -224,12 +224,12 @@ pub async fn clear_all_version_cache_and_refetch() -> Result<(), String> {
     .clear_all_cache()
     .map_err(|e| format!("Failed to clear version cache: {e}"))?;
 
-  // Trigger auto-fetch for all supported browsers
+  // Trigger auto-fetch for only supported browsers
   let service = BrowserVersionService::new();
   let supported_browsers = service.get_supported_browsers();
 
   for browser in supported_browsers {
-    // Start background fetch for each browser (don't wait for completion)
+    // Start background fetch for each supported browser (don't wait for completion)
     let service_clone = BrowserVersionService::new();
     let browser_clone = browser.clone();
     tokio::spawn(async move {
