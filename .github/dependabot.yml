@@ -20,23 +20,6 @@ updates:
       prefix: "deps"
       include: "scope"
 
-  # Nodecar dependencies
-  - package-ecosystem: "npm"
-    directory: "/nodecar"
-    schedule:
-      interval: "weekly"
-      day: "saturday"
-      time: "09:00"
-    allow:
-      - dependency-type: "all"
-    groups:
-      nodecar-dependencies:
-        patterns:
-          - "*"
-    commit-message:
-      prefix: "deps(nodecar)"
-      include: "scope"
-
   # Rust dependencies
   - package-ecosystem: "cargo"
     directory: "/src-tauri"
