@@ -301,6 +301,7 @@ export default function Home() {
       name: string;
       browserStr: BrowserTypeString;
       version: string;
+      releaseType: string;
       proxy?: ProxySettings;
     }) => {
       setError(null);
@@ -312,6 +313,7 @@ export default function Home() {
             name: profileData.name,
             browserStr: profileData.browserStr,
             version: profileData.version,
+            releaseType: profileData.releaseType,
           },
         );
 
@@ -474,7 +476,7 @@ export default function Home() {
   );
 
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 gap-8 sm:p-12 font-[family-name:var(--font-geist-sans)]  bg-white dark:bg-black">
+    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen gap-8 font-[family-name:var(--font-geist-sans)]  bg-white dark:bg-black">
       <main className="flex flex-col row-start-2 gap-8 items-center w-full max-w-3xl">
         <Card className="w-full">
           <CardHeader>
@@ -527,7 +529,7 @@ export default function Home() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent>
             <ProfilesDataTable
               data={profiles}
               onLaunchProfile={launchProfile}

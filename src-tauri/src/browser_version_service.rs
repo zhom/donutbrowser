@@ -18,6 +18,12 @@ pub struct BrowserVersionsResult {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BrowserReleaseTypes {
+  pub stable: Option<String>,
+  pub nightly: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DownloadInfo {
   pub url: String,
   pub filename: String,
@@ -134,6 +140,39 @@ impl BrowserVersionService {
   /// Check if cache should be updated (expired or doesn't exist)
   pub fn should_update_cache(&self, browser: &str) -> bool {
     self.api_client.is_cache_expired(browser)
+  }
+
+  /// Get latest stable and nightly versions for a browser
+  pub async fn get_browser_release_types(
+    &self,
+    browser: &str,
+  ) -> Result<BrowserReleaseTypes, Box<dyn std::error::Error + Send + Sync>> {
+    // For Chromium, only return stable since all releases are stable
+    if browser == "chromium" {
+      let detailed_versions = self.fetch_browser_versions_detailed(browser, false).await?;
+      let latest_stable = detailed_versions.first().map(|v| v.version.clone());
+      return Ok(BrowserReleaseTypes {
+        stable: latest_stable,
+        nightly: None,
+      });
+    }
+
+    let detailed_versions = self.fetch_browser_versions_detailed(browser, false).await?;
+
+    let latest_stable = detailed_versions
+      .iter()
+      .find(|v| !v.is_prerelease)
+      .map(|v| v.version.clone());
+
+    let latest_nightly = detailed_versions
+      .iter()
+      .find(|v| v.is_prerelease)
+      .map(|v| v.version.clone());
+
+    Ok(BrowserReleaseTypes {
+      stable: latest_stable,
+      nightly: latest_nightly,
+    })
   }
 
   /// Fetch browser versions with optional caching

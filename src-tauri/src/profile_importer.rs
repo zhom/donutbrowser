@@ -686,6 +686,7 @@ impl ProfileImporter {
       proxy: None,
       process_id: None,
       last_launch: None,
+      release_type: "stable".to_string(),
     };
 
     // Save the profile metadata

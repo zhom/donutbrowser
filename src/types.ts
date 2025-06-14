@@ -20,6 +20,7 @@ export interface BrowserProfile {
   proxy?: ProxySettings;
   process_id?: number;
   last_launch?: number;
+  release_type: string; // "stable" or "nightly"
 }
 
 export interface DetectedProfile {
@@ -27,6 +28,11 @@ export interface DetectedProfile {
   name: string;
   path: string;
   description: string;
+}
+
+export interface BrowserReleaseTypes {
+  stable?: string;
+  nightly?: string;
 }
 
 export interface AppUpdateInfo {

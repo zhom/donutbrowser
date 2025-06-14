@@ -27,6 +27,12 @@ pub struct BrowserProfile {
   pub process_id: Option<u32>,
   #[serde(default)]
   pub last_launch: Option<u64>,
+  #[serde(default = "default_release_type")]
+  pub release_type: String, // "stable" or "nightly"
+}
+
+fn default_release_type() -> String {
+  "stable".to_string()
 }
 
 // Platform-specific modules
@@ -1049,6 +1055,7 @@ impl BrowserRunner {
     name: &str,
     browser: &str,
     version: &str,
+    release_type: &str,
     proxy: Option<ProxySettings>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
     // Check if a profile with this name already exists (case insensitive)
@@ -1075,6 +1082,7 @@ impl BrowserRunner {
       proxy: proxy.clone(),
       process_id: None,
       last_launch: None,
+      release_type: release_type.to_string(),
     };
 
     // Save profile info
@@ -1244,6 +1252,14 @@ impl BrowserRunner {
 
     // Update version
     profile.version = version.to_string();
+
+    // Update the release_type based on the version and browser
+    profile.release_type =
+      if crate::api_client::is_browser_version_nightly(&profile.browser, version, None) {
+        "nightly".to_string()
+      } else {
+        "stable".to_string()
+      };
 
     // Save the updated profile
     self.save_profile(&profile)?;
@@ -2195,11 +2211,12 @@ pub fn create_browser_profile(
   name: String,
   browser: String,
   version: String,
+  release_type: String,
   proxy: Option<ProxySettings>,
 ) -> Result<BrowserProfile, String> {
   let browser_runner = BrowserRunner::new();
   browser_runner
-    .create_profile(&name, &browser, &version, proxy)
+    .create_profile(&name, &browser, &version, &release_type, proxy)
     .map_err(|e| format!("Failed to create profile: {e}"))
 }
 
@@ -2638,11 +2655,18 @@ pub fn create_browser_profile_new(
   name: String,
   browser_str: String,
   version: String,
+  release_type: String,
   proxy: Option<ProxySettings>,
 ) -> Result<BrowserProfile, String> {
   let browser_type =
     BrowserType::from_str(&browser_str).map_err(|e| format!("Invalid browser type: {e}"))?;
-  create_browser_profile(name, browser_type.as_str().to_string(), version, proxy)
+  create_browser_profile(
+    name,
+    browser_type.as_str().to_string(),
+    version,
+    release_type,
+    proxy,
+  )
 }
 
 #[tauri::command]
@@ -2661,6 +2685,17 @@ pub fn get_downloaded_browser_versions(browser_str: String) -> Result<Vec<String
   let registry = DownloadedBrowsersRegistry::load()
     .map_err(|e| format!("Failed to load browser registry: {e}"))?;
   Ok(registry.get_downloaded_versions(&browser_str))
+}
+
+#[tauri::command]
+pub async fn get_browser_release_types(
+  browser_str: String,
+) -> Result<crate::browser_version_service::BrowserReleaseTypes, String> {
+  let service = BrowserVersionService::new();
+  service
+    .get_browser_release_types(&browser_str)
+    .await
+    .map_err(|e| format!("Failed to get browser release types: {e}"))
 }
 
 #[cfg(test)]
@@ -2708,7 +2743,7 @@ mod tests {
     let (runner, _temp_dir) = create_test_browser_runner();
 
     let profile = runner
-      .create_profile("Test Profile", "firefox", "139.0", None)
+      .create_profile("Test Profile", "firefox", "139.0", "stable", None)
       .unwrap();
 
     assert_eq!(profile.name, "Test Profile");
@@ -2736,6 +2771,7 @@ mod tests {
         "Test Profile with Proxy",
         "firefox",
         "139.0",
+        "stable",
         Some(proxy.clone()),
       )
       .unwrap();
@@ -2753,7 +2789,7 @@ mod tests {
     let (runner, _temp_dir) = create_test_browser_runner();
 
     let profile = runner
-      .create_profile("Test Save Load", "firefox", "139.0", None)
+      .create_profile("Test Save Load", "firefox", "139.0", "stable", None)
       .unwrap();
 
     // Save the profile
@@ -2773,7 +2809,7 @@ mod tests {
 
     // Create profile
     let _ = runner
-      .create_profile("Original Name", "firefox", "139.0", None)
+      .create_profile("Original Name", "firefox", "139.0", "stable", None)
       .unwrap();
 
     // Rename profile
@@ -2793,7 +2829,7 @@ mod tests {
 
     // Create profile
     let _ = runner
-      .create_profile("To Delete", "firefox", "139.0", None)
+      .create_profile("To Delete", "firefox", "139.0", "stable", None)
       .unwrap();
 
     // Verify profile exists
@@ -2814,7 +2850,13 @@ mod tests {
 
     // Create profile with spaces and special characters
     let profile = runner
-      .create_profile("Test Profile With Spaces", "firefox", "139.0", None)
+      .create_profile(
+        "Test Profile With Spaces",
+        "firefox",
+        "139.0",
+        "stable",
+        None,
+      )
       .unwrap();
 
     // Profile path should use snake_case
@@ -2827,13 +2869,13 @@ mod tests {
 
     // Create multiple profiles
     let _ = runner
-      .create_profile("Profile 1", "firefox", "139.0", None)
+      .create_profile("Profile 1", "firefox", "139.0", "stable", None)
       .unwrap();
     let _ = runner
-      .create_profile("Profile 2", "chromium", "1465660", None)
+      .create_profile("Profile 2", "chromium", "1465660", "stable", None)
       .unwrap();
     let _ = runner
-      .create_profile("Profile 3", "brave", "v1.81.9", None)
+      .create_profile("Profile 3", "brave", "v1.81.9", "stable", None)
       .unwrap();
 
     // List profiles
@@ -2852,10 +2894,10 @@ mod tests {
 
     // Test that we can't rename to an existing profile name
     let _ = runner
-      .create_profile("Profile 1", "firefox", "139.0", None)
+      .create_profile("Profile 1", "firefox", "139.0", "stable", None)
       .unwrap();
     let _ = runner
-      .create_profile("Profile 2", "firefox", "139.0", None)
+      .create_profile("Profile 2", "firefox", "139.0", "stable", None)
       .unwrap();
 
     // Try to rename profile2 to profile1's name (should fail)
@@ -2870,7 +2912,7 @@ mod tests {
 
     // Create profile without proxy
     let profile = runner
-      .create_profile("Test Firefox Prefs", "firefox", "139.0", None)
+      .create_profile("Test Firefox Prefs", "firefox", "139.0", "stable", None)
       .unwrap();
 
     // Check that user.js file was created with default browser preference
@@ -2896,7 +2938,13 @@ mod tests {
     };
 
     let profile_with_proxy = runner
-      .create_profile("Test Firefox Prefs Proxy", "firefox", "139.0", Some(proxy))
+      .create_profile(
+        "Test Firefox Prefs Proxy",
+        "firefox",
+        "139.0",
+        "stable",
+        Some(proxy),
+      )
       .unwrap();
 
     // Check that user.js file contains both proxy settings and default browser preference

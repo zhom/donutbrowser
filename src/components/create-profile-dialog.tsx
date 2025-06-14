@@ -1,6 +1,7 @@
 "use client";
 
 import { LoadingButton } from "@/components/loading-button";
+import { ReleaseTypeSelector } from "@/components/release-type-selector";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -24,11 +25,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { VersionSelector } from "@/components/version-selector";
 import { useBrowserDownload } from "@/hooks/use-browser-download";
 import { useBrowserSupport } from "@/hooks/use-browser-support";
 import { getBrowserDisplayName } from "@/lib/browser-utils";
-import type { BrowserProfile, ProxySettings } from "@/types";
+import type {
+  BrowserProfile,
+  BrowserReleaseTypes,
+  ProxySettings,
+} from "@/types";
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -49,6 +53,7 @@ interface CreateProfileDialogProps {
     name: string;
     browserStr: BrowserTypeString;
     version: string;
+    releaseType: string;
     proxy?: ProxySettings;
   }) => Promise<void>;
 }
@@ -61,11 +66,18 @@ export function CreateProfileDialog({
   const [profileName, setProfileName] = useState("");
   const [selectedBrowser, setSelectedBrowser] =
     useState<BrowserTypeString | null>("mullvad-browser");
-  const [selectedVersion, setSelectedVersion] = useState<string | null>(null);
+  const [selectedReleaseType, setSelectedReleaseType] = useState<
+    "stable" | "nightly" | null
+  >(null);
+  const [releaseTypes, setReleaseTypes] = useState<BrowserReleaseTypes>({
+    stable: undefined,
+    nightly: undefined,
+  });
   const [isCreating, setIsCreating] = useState(false);
   const [existingProfiles, setExistingProfiles] = useState<BrowserProfile[]>(
     [],
   );
+  const [isLoadingReleaseTypes, setIsLoadingReleaseTypes] = useState(false);
 
   // Proxy settings
   const [proxyEnabled, setProxyEnabled] = useState(false);
@@ -76,13 +88,10 @@ export function CreateProfileDialog({
   const [proxyPassword, setProxyPassword] = useState("");
 
   const {
-    availableVersions,
-    downloadedVersions,
-    isDownloading,
-    loadVersions,
-    loadDownloadedVersions,
     downloadBrowser,
-    isVersionDownloaded,
+    isDownloading,
+    downloadedVersions,
+    loadDownloadedVersions,
   } = useBrowserDownload();
 
   const {
@@ -110,29 +119,26 @@ export function CreateProfileDialog({
 
   useEffect(() => {
     if (isOpen && selectedBrowser) {
-      // Reset selected version when browser changes
-      setSelectedVersion(null);
-      void loadVersions(selectedBrowser);
+      // Reset selected release type when browser changes
+      setSelectedReleaseType(null);
+      void loadReleaseTypes(selectedBrowser);
       void loadDownloadedVersions(selectedBrowser);
     }
-  }, [isOpen, selectedBrowser, loadVersions, loadDownloadedVersions]);
+  }, [isOpen, selectedBrowser, loadDownloadedVersions]);
 
-  // Set default version when versions are loaded and no version is selected
+  // Set default release type when release types are loaded
   useEffect(() => {
-    if (availableVersions.length > 0 && selectedBrowser) {
-      // Always reset version when browser changes or versions are loaded
-      // Find the latest stable version (not alpha/beta)
-      const stableVersions = availableVersions.filter((v) => !v.is_nightly);
-
-      if (stableVersions.length > 0) {
-        // Select the first stable version (they're already sorted newest first)
-        setSelectedVersion(stableVersions[0].tag_name);
-      } else if (availableVersions.length > 0) {
-        // If no stable version found, select the first available version
-        setSelectedVersion(availableVersions[0].tag_name);
+    if (!selectedReleaseType && Object.keys(releaseTypes).length > 0) {
+      // First try to set stable if it exists
+      if (releaseTypes.stable) {
+        setSelectedReleaseType("stable");
+      }
+      // If stable doesn't exist but nightly does, set nightly as default
+      else if (releaseTypes.nightly && selectedBrowser !== "chromium") {
+        setSelectedReleaseType("nightly");
       }
     }
-  }, [availableVersions, selectedBrowser]);
+  }, [releaseTypes, selectedReleaseType, selectedBrowser]);
 
   const loadExistingProfiles = async () => {
     try {
@@ -143,9 +149,34 @@ export function CreateProfileDialog({
     }
   };
 
+  const loadReleaseTypes = async (browser: string) => {
+    try {
+      setIsLoadingReleaseTypes(true);
+      const types = await invoke<BrowserReleaseTypes>(
+        "get_browser_release_types",
+        {
+          browserStr: browser,
+        },
+      );
+      setReleaseTypes(types);
+    } catch (error) {
+      console.error("Failed to load release types:", error);
+      toast.error("Failed to load available versions");
+    } finally {
+      setIsLoadingReleaseTypes(false);
+    }
+  };
+
   const handleDownload = async () => {
-    if (!selectedBrowser || !selectedVersion) return;
-    await downloadBrowser(selectedBrowser, selectedVersion);
+    if (!selectedBrowser || !selectedReleaseType) return;
+
+    const version =
+      selectedReleaseType === "stable"
+        ? releaseTypes.stable
+        : releaseTypes.nightly;
+    if (!version) return;
+
+    await downloadBrowser(selectedBrowser, version);
   };
 
   const validateProfileName = (name: string): string | null => {
@@ -178,12 +209,21 @@ export function CreateProfileDialog({
   }, [selectedBrowser, proxyEnabled]);
 
   const handleCreate = async () => {
-    if (!profileName.trim() || !selectedBrowser || !selectedVersion) return;
+    if (!profileName.trim() || !selectedBrowser || !selectedReleaseType) return;
 
     // Validate profile name
     const nameError = validateProfileName(profileName);
     if (nameError) {
       toast.error(nameError);
+      return;
+    }
+
+    const version =
+      selectedReleaseType === "stable"
+        ? releaseTypes.stable
+        : releaseTypes.nightly;
+    if (!version) {
+      toast.error("Selected release type is not available");
       return;
     }
 
@@ -204,13 +244,14 @@ export function CreateProfileDialog({
       await onCreateProfile({
         name: profileName.trim(),
         browserStr: selectedBrowser,
-        version: selectedVersion,
+        version,
+        releaseType: selectedReleaseType,
         proxy,
       });
 
       // Reset form
       setProfileName("");
-      setSelectedVersion(null);
+      setSelectedReleaseType(null);
       setProxyEnabled(false);
       setProxyHost("");
       setProxyPort(8080);
@@ -227,11 +268,17 @@ export function CreateProfileDialog({
   const nameError = profileName.trim()
     ? validateProfileName(profileName)
     : null;
+
+  const selectedVersion =
+    selectedReleaseType === "stable"
+      ? releaseTypes.stable
+      : releaseTypes.nightly;
+
   const canCreate =
     profileName.trim() &&
     selectedBrowser &&
+    selectedReleaseType &&
     selectedVersion &&
-    isVersionDownloaded(selectedVersion) &&
     (!proxyEnabled || isProxyDisabled || (proxyHost && proxyPort)) &&
     !nameError;
 
@@ -322,20 +369,27 @@ export function CreateProfileDialog({
             </Select>
           </div>
 
-          {/* Version Selection */}
+          {/* Release Type Selection */}
           <div className="grid gap-2">
-            <Label>Version</Label>
-            <VersionSelector
-              selectedVersion={selectedVersion}
-              onVersionSelect={setSelectedVersion}
-              availableVersions={availableVersions}
-              downloadedVersions={downloadedVersions}
-              isDownloading={isDownloading}
-              onDownload={() => {
-                void handleDownload();
-              }}
-              placeholder="Select version..."
-            />
+            <Label>Release Type</Label>
+            {isLoadingReleaseTypes ? (
+              <div className="text-sm text-muted-foreground">
+                Loading release types...
+              </div>
+            ) : (
+              <ReleaseTypeSelector
+                selectedReleaseType={selectedReleaseType}
+                onReleaseTypeSelect={setSelectedReleaseType}
+                availableReleaseTypes={releaseTypes}
+                browser={selectedBrowser ?? ""}
+                isDownloading={isDownloading}
+                onDownload={() => {
+                  void handleDownload();
+                }}
+                placeholder="Select release type..."
+                downloadedVersions={downloadedVersions}
+              />
+            )}
           </div>
 
           {/* Proxy Settings */}

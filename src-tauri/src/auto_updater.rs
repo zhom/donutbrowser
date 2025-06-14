@@ -509,6 +509,7 @@ mod tests {
       process_id: None,
       proxy: None,
       last_launch: None,
+      release_type: "stable".to_string(),
     }
   }
 

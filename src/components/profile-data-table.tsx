@@ -260,10 +260,21 @@ export function ProfilesDataTable({
         cell: ({ row }) => {
           const browser: string = row.getValue("browser");
           const IconComponent = getBrowserIcon(browser);
-          return (
+          const browserDisplayName = getBrowserDisplayName(browser);
+          return browserDisplayName.length > 15 ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex gap-2 items-center">
+                  {IconComponent && <IconComponent className="w-4 h-4" />}
+                  <span>{browserDisplayName.slice(0, 15)}...</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>{browserDisplayName}</TooltipContent>
+            </Tooltip>
+          ) : (
             <div className="flex gap-2 items-center">
               {IconComponent && <IconComponent className="w-4 h-4" />}
-              <span>{getBrowserDisplayName(browser)}</span>
+              <span>{browserDisplayName}</span>
             </div>
           );
         },
@@ -272,6 +283,36 @@ export function ProfilesDataTable({
           const browserA = getBrowserDisplayName(rowA.getValue(columnId));
           const browserB = getBrowserDisplayName(rowB.getValue(columnId));
           return browserA.localeCompare(browserB);
+        },
+      },
+      {
+        accessorKey: "release_type",
+        header: "Release",
+        cell: ({ row }) => {
+          const releaseType: string = row.getValue("release_type");
+          const isNightly = releaseType === "nightly";
+          return (
+            <div className="flex items-center">
+              <span
+                className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                  isNightly
+                    ? "text-yellow-800 bg-yellow-100 dark:bg-yellow-900 dark:text-yellow-200"
+                    : "text-green-800 bg-green-100 dark:bg-green-900 dark:text-green-200"
+                }`}
+              >
+                {isNightly ? "Nightly" : "Stable"}
+              </span>
+            </div>
+          );
+        },
+        enableSorting: true,
+        sortingFn: (rowA, rowB, columnId) => {
+          const releaseA: string = rowA.getValue(columnId);
+          const releaseB: string = rowB.getValue(columnId);
+          // Sort with "stable" before "nightly"
+          if (releaseA === "stable" && releaseB === "nightly") return -1;
+          if (releaseA === "nightly" && releaseB === "stable") return 1;
+          return 0;
         },
       },
       {
@@ -346,7 +387,7 @@ export function ProfilesDataTable({
                     }}
                     disabled={!isClient || isRunning || isBrowserUpdating}
                   >
-                    Change version
+                    Switch Release
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => {
@@ -526,6 +567,11 @@ export function ProfilesDataTable({
                 onChange={(e) => {
                   setDeleteConfirmationName(e.target.value);
                   setDeleteError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    void handleDelete();
+                  }
                 }}
                 placeholder="Type the profile name here"
               />
