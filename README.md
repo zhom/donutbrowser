@@ -29,7 +29,11 @@
 
 > A free and open source browser orchestrator built with [Tauri](https://v2.tauri.app/).
 
-![Donut Browser Preview](assets/preview.png)
+<picture>
+ <source media="(prefers-color-scheme: dark)" srcset="assets/preview-dark.png" />
+ <source media="(prefers-color-scheme: light)" srcset="assets/preview.png" />
+ <img alt="Preview" src="assets/preview.png" />
+</picture>
 
 ## Features
 
