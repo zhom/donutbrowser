@@ -36,6 +36,11 @@ jobs:
     uses: ./.github/workflows/lint-rs.yml
     secrets: inherit
 
+  codeql:
+    name: CodeQL
+    uses: ./.github/workflows/codeql.yml
+    secrets: inherit
+
   rolling-release:
     needs: [security-scan, lint-js, lint-rust]
     permissions:
