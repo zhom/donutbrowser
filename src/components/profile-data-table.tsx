@@ -379,7 +379,7 @@ export function ProfilesDataTable({
                     }}
                     disabled={!isClient || isBrowserUpdating}
                   >
-                    Configure proxy
+                    Configure Proxy
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => {
