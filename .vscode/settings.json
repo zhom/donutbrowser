@@ -10,6 +10,7 @@
     "cdylib",
     "CFURL",
     "checkin",
+    "CLICOLOR",
     "clippy",
     "cmdk",
     "codegen",

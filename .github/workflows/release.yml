@@ -42,6 +42,11 @@ jobs:
     uses: ./.github/workflows/codeql.yml
     secrets: inherit
 
+  spellcheck:
+    name: Spell Check
+    uses: ./.github/workflows/spellcheck.yml
+    secrets: inherit
+
   release:
     needs: [security-scan, lint-js, lint-rust]
     permissions:
