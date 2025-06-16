@@ -45,15 +45,6 @@ impl AutoUpdater {
   pub async fn check_for_updates(
     &self,
   ) -> Result<Vec<UpdateNotification>, Box<dyn std::error::Error + Send + Sync>> {
-    // Check if auto-updates are enabled
-    let settings = self
-      .settings_manager
-      .load_settings()
-      .map_err(|e| format!("Failed to load settings: {e}"))?;
-    if !settings.auto_updates_enabled {
-      return Ok(Vec::new());
-    }
-
     let mut notifications = Vec::new();
     let mut browser_versions: HashMap<String, Vec<BrowserVersionInfo>> = HashMap::new();
 

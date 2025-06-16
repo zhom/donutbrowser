@@ -2619,6 +2619,26 @@ pub async fn download_browser(
 }
 
 #[tauri::command]
+pub fn is_browser_downloaded(browser_str: String, version: String) -> bool {
+  if let Ok(registry) = DownloadedBrowsersRegistry::load() {
+    if registry.is_browser_downloaded(&browser_str, &version) {
+      return true;
+    }
+  }
+  let browser_type = BrowserType::from_str(&browser_str).expect("Invalid browser type");
+  let browser_runner = BrowserRunner::new();
+  let browser = create_browser(browser_type.clone());
+  let binaries_dir = browser_runner.get_binaries_dir();
+  browser.is_version_downloaded(&version, &binaries_dir)
+}
+
+#[tauri::command]
+pub fn check_browser_exists(browser_str: String, version: String) -> bool {
+  // This is an alias for is_browser_downloaded to provide clearer semantics for auto-updates
+  is_browser_downloaded(browser_str, version)
+}
+
+#[tauri::command]
 pub async fn kill_browser_profile(
   app_handle: tauri::AppHandle,
   profile: BrowserProfile,

@@ -25,11 +25,11 @@ impl Default for TableSortingSettings {
 pub struct AppSettings {
   #[serde(default)]
   pub set_as_default_browser: bool,
-  #[serde(default = "default_show_settings_on_startup")]
+  #[serde(default)]
   pub show_settings_on_startup: bool,
   #[serde(default = "default_theme")]
   pub theme: String, // "light", "dark", or "system"
-  #[serde(default = "default_auto_delete_unused_binaries")]
+  #[serde(default)]
   pub auto_delete_unused_binaries: bool,
 }
 
