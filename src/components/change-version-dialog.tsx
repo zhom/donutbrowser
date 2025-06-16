@@ -164,7 +164,6 @@ export function ChangeVersionDialog({
             </div>
           </div>
 
-          {/* Release Type Selection - only show if multiple release types are available */}
           {!releaseTypes.stable || !releaseTypes.nightly ? (
             <Alert>
               <AlertDescription>

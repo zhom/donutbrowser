@@ -36,6 +36,7 @@ import type {
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Alert, AlertDescription } from "./ui/alert";
 
 type BrowserTypeString =
   | "mullvad-browser"
@@ -369,28 +370,37 @@ export function CreateProfileDialog({
             </Select>
           </div>
 
-          {/* Release Type Selection */}
-          <div className="grid gap-2">
-            <Label>Release Type</Label>
-            {isLoadingReleaseTypes ? (
-              <div className="text-sm text-muted-foreground">
-                Loading release types...
-              </div>
-            ) : (
-              <ReleaseTypeSelector
-                selectedReleaseType={selectedReleaseType}
-                onReleaseTypeSelect={setSelectedReleaseType}
-                availableReleaseTypes={releaseTypes}
-                browser={selectedBrowser ?? ""}
-                isDownloading={isDownloading}
-                onDownload={() => {
-                  void handleDownload();
-                }}
-                placeholder="Select release type..."
-                downloadedVersions={downloadedVersions}
-              />
-            )}
-          </div>
+          {selectedBrowser &&
+          (!releaseTypes.stable || !releaseTypes.nightly) ? (
+            <Alert>
+              <AlertDescription>
+                Only {releaseTypes.stable ?? releaseTypes.nightly} releases are
+                available for {getBrowserDisplayName(selectedBrowser)}.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <div className="grid gap-2">
+              <Label>Release Type</Label>
+              {isLoadingReleaseTypes ? (
+                <div className="text-sm text-muted-foreground">
+                  Loading release types...
+                </div>
+              ) : (
+                <ReleaseTypeSelector
+                  selectedReleaseType={selectedReleaseType}
+                  onReleaseTypeSelect={setSelectedReleaseType}
+                  availableReleaseTypes={releaseTypes}
+                  browser={selectedBrowser ?? ""}
+                  isDownloading={isDownloading}
+                  onDownload={() => {
+                    void handleDownload();
+                  }}
+                  placeholder="Select release type..."
+                  downloadedVersions={downloadedVersions}
+                />
+              )}
+            </div>
+          )}
 
           {/* Proxy Settings */}
           <div className="grid gap-4 pt-4 border-t">
