@@ -35,6 +35,18 @@ export function useVersionUpdater() {
   const [updateProgress, setUpdateProgress] =
     useState<VersionUpdateProgress | null>(null);
 
+  const loadUpdateStatus = useCallback(async () => {
+    try {
+      const [lastUpdate, timeUntilNext] = await invoke<[number | null, number]>(
+        "get_version_update_status",
+      );
+      setLastUpdateTime(lastUpdate);
+      setTimeUntilNextUpdate(timeUntilNext);
+    } catch (error) {
+      console.error("Failed to load version update status:", error);
+    }
+  }, []);
+
   // Listen for version update progress events
   useEffect(() => {
     const unlisten = listen<VersionUpdateProgress>(
@@ -69,9 +81,8 @@ export function useVersionUpdater() {
 
           if (progress.new_versions_found > 0) {
             toast.success("Browser versions updated successfully", {
-              duration: 4000,
-              description:
-                "Version information has been updated in the background",
+              duration: 5000,
+              description: `Found ${progress.new_versions_found} new browser versions. Update notifications will appear shortly.`,
             });
           } else {
             toast.success("No new browser versions found", {
@@ -88,7 +99,7 @@ export function useVersionUpdater() {
           dismissToast("unified-version-update");
 
           toast.error("Failed to update browser versions", {
-            duration: 4000,
+            duration: 6000,
             description: "Check your internet connection and try again",
           });
         }
@@ -100,7 +111,7 @@ export function useVersionUpdater() {
         fn();
       });
     };
-  }, []);
+  }, [loadUpdateStatus]);
 
   // Load update status on mount and periodically
   useEffect(() => {
@@ -114,19 +125,7 @@ export function useVersionUpdater() {
     return () => {
       clearInterval(interval);
     };
-  }, []);
-
-  const loadUpdateStatus = useCallback(async () => {
-    try {
-      const [lastUpdate, timeUntilNext] = await invoke<[number | null, number]>(
-        "get_version_update_status",
-      );
-      setLastUpdateTime(lastUpdate);
-      setTimeUntilNextUpdate(timeUntilNext);
-    } catch (error) {
-      console.error("Failed to load version update status:", error);
-    }
-  }, []);
+  }, [loadUpdateStatus]);
 
   const triggerManualUpdate = useCallback(async () => {
     try {

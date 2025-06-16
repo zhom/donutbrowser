@@ -197,43 +197,6 @@ impl AutoUpdater {
     result
   }
 
-  /// Mark download as auto-update
-  pub fn mark_auto_update_download(
-    &self,
-    browser: &str,
-    version: &str,
-  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let mut state = self.load_auto_update_state()?;
-    let download_key = format!("{browser}-{version}");
-    state.auto_update_downloads.insert(download_key);
-    self.save_auto_update_state(&state)?;
-    Ok(())
-  }
-
-  /// Remove auto-update download tracking
-  pub fn remove_auto_update_download(
-    &self,
-    browser: &str,
-    version: &str,
-  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let mut state = self.load_auto_update_state()?;
-    let download_key = format!("{browser}-{version}");
-    state.auto_update_downloads.remove(&download_key);
-    self.save_auto_update_state(&state)?;
-    Ok(())
-  }
-
-  /// Check if download is marked as auto-update
-  pub fn is_auto_update_download(
-    &self,
-    browser: &str,
-    version: &str,
-  ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-    let state = self.load_auto_update_state()?;
-    let download_key = format!("{browser}-{version}");
-    Ok(state.auto_update_downloads.contains(&download_key))
-  }
-
   /// Automatically update all affected profile versions after browser download
   pub async fn auto_update_profile_versions(
     &self,
@@ -461,30 +424,6 @@ pub async fn complete_browser_update_with_auto_update(
     .complete_browser_update_with_auto_update(&browser, &new_version)
     .await
     .map_err(|e| format!("Failed to complete browser update: {e}"))
-}
-
-#[tauri::command]
-pub async fn mark_auto_update_download(browser: String, version: String) -> Result<(), String> {
-  let updater = AutoUpdater::new();
-  updater
-    .mark_auto_update_download(&browser, &version)
-    .map_err(|e| format!("Failed to mark auto-update download: {e}"))
-}
-
-#[tauri::command]
-pub async fn remove_auto_update_download(browser: String, version: String) -> Result<(), String> {
-  let updater = AutoUpdater::new();
-  updater
-    .remove_auto_update_download(&browser, &version)
-    .map_err(|e| format!("Failed to remove auto-update download: {e}"))
-}
-
-#[tauri::command]
-pub async fn is_auto_update_download(browser: String, version: String) -> Result<bool, String> {
-  let updater = AutoUpdater::new();
-  updater
-    .is_auto_update_download(&browser, &version)
-    .map_err(|e| format!("Failed to check auto-update download: {e}"))
 }
 
 #[cfg(test)]

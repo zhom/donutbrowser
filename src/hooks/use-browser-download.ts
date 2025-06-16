@@ -60,53 +60,29 @@ export function useBrowserDownload() {
 
       const browserName = getBrowserDisplayName(progress.browser);
 
-      // Check if this is an auto-update download to suppress completion toast
-      const checkAutoUpdate = async () => {
-        let isAutoUpdate = false;
-        try {
-          isAutoUpdate = await invoke<boolean>("is_auto_update_download", {
-            browser: progress.browser,
-            version: progress.version,
-          });
-        } catch (error) {
-          console.error("Failed to check auto-update status:", error);
-        }
+      // Show toast with progress
+      if (progress.stage === "downloading") {
+        const speedMBps = (
+          progress.speed_bytes_per_sec /
+          (1024 * 1024)
+        ).toFixed(1);
+        const etaText = progress.eta_seconds
+          ? formatTime(progress.eta_seconds)
+          : "calculating...";
 
-        // Show toast with progress
-        if (progress.stage === "downloading") {
-          const speedMBps = (
-            progress.speed_bytes_per_sec /
-            (1024 * 1024)
-          ).toFixed(1);
-          const etaText = progress.eta_seconds
-            ? formatTime(progress.eta_seconds)
-            : "calculating...";
-
-          showDownloadToast(browserName, progress.version, "downloading", {
-            percentage: progress.percentage,
-            speed: speedMBps,
-            eta: etaText,
-          });
-        } else if (progress.stage === "extracting") {
-          showDownloadToast(browserName, progress.version, "extracting");
-        } else if (progress.stage === "verifying") {
-          showDownloadToast(browserName, progress.version, "verifying");
-        } else if (progress.stage === "completed") {
-          // Suppress completion toast for auto-updates
-          showDownloadToast(
-            browserName,
-            progress.version,
-            "completed",
-            undefined,
-            {
-              suppressCompletionToast: isAutoUpdate,
-            },
-          );
-          setDownloadProgress(null);
-        }
-      };
-
-      void checkAutoUpdate();
+        showDownloadToast(browserName, progress.version, "downloading", {
+          percentage: progress.percentage,
+          speed: speedMBps,
+          eta: etaText,
+        });
+      } else if (progress.stage === "extracting") {
+        showDownloadToast(browserName, progress.version, "extracting");
+      } else if (progress.stage === "verifying") {
+        showDownloadToast(browserName, progress.version, "verifying");
+      } else if (progress.stage === "completed") {
+        showDownloadToast(browserName, progress.version, "completed");
+        setDownloadProgress(null);
+      }
     });
 
     return () => {

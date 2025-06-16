@@ -49,8 +49,7 @@ use version_updater::{
 
 use auto_updater::{
   check_for_browser_updates, complete_browser_update_with_auto_update, dismiss_update_notification,
-  is_auto_update_download, is_browser_disabled_for_update, mark_auto_update_download,
-  remove_auto_update_download,
+  is_browser_disabled_for_update,
 };
 
 use app_auto_updater::{
@@ -354,9 +353,6 @@ pub fn run() {
       is_browser_disabled_for_update,
       dismiss_update_notification,
       complete_browser_update_with_auto_update,
-      mark_auto_update_download,
-      remove_auto_update_download,
-      is_auto_update_download,
       check_for_app_updates,
       check_for_app_updates_manual,
       download_and_install_app_update,

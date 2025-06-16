@@ -1,5 +1,5 @@
 import { getBrowserDisplayName } from "@/lib/browser-utils";
-import { showAutoUpdateToast, showToast } from "@/lib/toast-utils";
+import { showToast } from "@/lib/toast-utils";
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -95,8 +95,14 @@ export function useUpdateNotifications(
           notificationId,
         });
 
-        // Show auto-update started toast
-        showAutoUpdateToast(browserDisplayName, newVersion);
+        // Show update available toast and start download immediately
+        showToast({
+          id: `auto-update-started-${browser}-${newVersion}`,
+          type: "loading",
+          title: `${browserDisplayName} update available`,
+          description: `Version ${newVersion} is now being downloaded. Browser launch will be disabled until update completes.`,
+          duration: 4000,
+        });
 
         try {
           // Check if browser already exists before downloading
@@ -111,12 +117,7 @@ export function useUpdateNotifications(
               `${browserDisplayName} ${newVersion} already exists, skipping download`,
             );
           } else {
-            // Mark download as auto-update in the backend for toast suppression
-            await invoke("mark_auto_update_download", {
-              browser,
-              version: newVersion,
-            });
-
+            // Don't mark as auto-update - we want to show full download progress
             // Download the browser (progress will be handled by use-browser-download hook)
             await invoke("download_browser", {
               browserStr: browser,
@@ -144,17 +145,16 @@ export function useUpdateNotifications(
               id: `auto-update-success-${browser}-${newVersion}`,
               type: "success",
               title: `${browserDisplayName} update completed`,
-              description: `${profileText} to version ${newVersion}. To update running profiles, restart them.`,
-              duration: 5000,
+              description: `${profileText} to version ${newVersion}. You can now launch your browsers with the latest version.`,
+              duration: 6000,
             });
           } else {
             showToast({
               id: `auto-update-success-${browser}-${newVersion}`,
               type: "success",
-              title: `${browserDisplayName} update ready`,
-              description:
-                "All affected profiles are currently running. To update them, restart them.",
-              duration: 5000,
+              title: `${browserDisplayName} update completed`,
+              description: `Version ${newVersion} is now available. Running profiles will use the new version when restarted.`,
+              duration: 6000,
             });
           }
 
@@ -165,22 +165,12 @@ export function useUpdateNotifications(
         } catch (downloadError) {
           console.error("Failed to download browser:", downloadError);
 
-          // Clean up auto-update tracking on error
-          try {
-            await invoke("remove_auto_update_download", {
-              browser,
-              version: newVersion,
-            });
-          } catch (e) {
-            console.error("Failed to clean up auto-update tracking:", e);
-          }
-
           showToast({
             id: `auto-update-error-${browser}-${newVersion}`,
             type: "error",
             title: `Failed to download ${browserDisplayName} ${newVersion}`,
             description: String(downloadError),
-            duration: 6000,
+            duration: 8000,
           });
           throw downloadError;
         }
@@ -195,7 +185,7 @@ export function useUpdateNotifications(
           type: "error",
           title: `Failed to update ${browserDisplayName}`,
           description: String(error),
-          duration: 6000,
+          duration: 8000,
         });
       } finally {
         // Remove from active downloads and updating browsers
