@@ -381,14 +381,16 @@ export function ProfilesDataTable({
                   >
                     Configure Proxy
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      onChangeVersion(profile);
-                    }}
-                    disabled={!isClient || isRunning || isBrowserUpdating}
-                  >
-                    Switch Release
-                  </DropdownMenuItem>
+                  {["chromium", "zen"].includes(profile.browser) && (
+                    <DropdownMenuItem
+                      onClick={() => {
+                        onChangeVersion(profile);
+                      }}
+                      disabled={!isClient || isRunning || isBrowserUpdating}
+                    >
+                      Switch Release
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem
                     onClick={() => {
                       setProfileToRename(profile);
