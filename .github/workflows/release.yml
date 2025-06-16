@@ -48,7 +48,7 @@ jobs:
     secrets: inherit
 
   release:
-    needs: [security-scan, lint-js, lint-rust]
+    needs: [security-scan, lint-js, lint-rust, codeql, spellcheck]
     permissions:
       contents: write
     strategy:
