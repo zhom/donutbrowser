@@ -633,6 +633,7 @@ impl Browser for ChromiumBrowser {
       "--disable-component-update".to_string(),
       "--disable-background-timer-throttling".to_string(),
       "--crash-server-url=".to_string(),
+      "--disable-updater".to_string(),
     ];
 
     // Add proxy configuration if provided

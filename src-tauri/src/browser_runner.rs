@@ -1277,9 +1277,13 @@ impl BrowserRunner {
   }
 
   /// Internal method to cleanup unused binaries (used by auto-cleanup)
-  fn cleanup_unused_binaries_internal(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+  fn cleanup_unused_binaries_internal(
+    &self,
+  ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
     // Load current profiles
-    let profiles = self.list_profiles()?;
+    let profiles = self
+      .list_profiles()
+      .map_err(|e| format!("Failed to list profiles: {e}"))?;
 
     // Load registry
     let mut registry = crate::downloaded_browsers::DownloadedBrowsersRegistry::load()?;
@@ -1300,23 +1304,19 @@ impl BrowserRunner {
     vec![
       // Disable default browser check
       "user_pref(\"browser.shell.checkDefaultBrowser\", false);".to_string(),
-      // Disable automatic updates
       "user_pref(\"app.update.enabled\", false);".to_string(),
       "user_pref(\"app.update.auto\", false);".to_string(),
       "user_pref(\"app.update.mode\", 0);".to_string(),
       "user_pref(\"app.update.service.enabled\", false);".to_string(),
       "user_pref(\"app.update.silent\", false);".to_string(),
-      // Disable update checking entirely
       "user_pref(\"app.update.checkInstallTime\", false);".to_string(),
       "user_pref(\"app.update.url\", \"\");".to_string(),
       "user_pref(\"app.update.url.manual\", \"\");".to_string(),
       "user_pref(\"app.update.url.details\", \"\");".to_string(),
-      // Disable background update downloads
+      "user_pref(\"app.update.url.override\", \"\");".to_string(),
+      "user_pref(\"app.update.background.interval\", 9999999999);".to_string(),
       "user_pref(\"app.update.download.attemptOnce\", false);".to_string(),
       "user_pref(\"app.update.idletime\", -1);".to_string(),
-      // Additional update-related preferences for completeness
-      "user_pref(\"security.tls.insecure_fallback_hosts\", \"\");".to_string(),
-      "user_pref(\"app.update.staging.enabled\", false);".to_string(),
     ]
   }
 
@@ -2616,26 +2616,6 @@ pub async fn download_browser(
   let _ = app_handle.emit("download-progress", &progress);
 
   Ok(version)
-}
-
-#[tauri::command]
-pub fn is_browser_downloaded(browser_str: String, version: String) -> bool {
-  if let Ok(registry) = DownloadedBrowsersRegistry::load() {
-    if registry.is_browser_downloaded(&browser_str, &version) {
-      return true;
-    }
-  }
-  let browser_type = BrowserType::from_str(&browser_str).expect("Invalid browser type");
-  let browser_runner = BrowserRunner::new();
-  let browser = create_browser(browser_type.clone());
-  let binaries_dir = browser_runner.get_binaries_dir();
-  browser.is_version_downloaded(&version, &binaries_dir)
-}
-
-#[tauri::command]
-pub fn check_browser_exists(browser_str: String, version: String) -> bool {
-  // This is an alias for is_browser_downloaded to provide clearer semantics for auto-updates
-  is_browser_downloaded(browser_str, version)
 }
 
 #[tauri::command]
