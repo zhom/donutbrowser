@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useBrowserDownload } from "@/hooks/use-browser-download";
+import { getBrowserDisplayName } from "@/lib/browser-utils";
 import type { BrowserProfile, BrowserReleaseTypes } from "@/types";
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
@@ -153,43 +154,52 @@ export function ChangeVersionDialog({
         <div className="grid gap-4 py-4">
           <div className="space-y-2">
             <Label className="text-sm font-medium">Profile:</Label>
-            <div className="p-2 bg-muted rounded text-sm">{profile.name}</div>
+            <div className="p-2 text-sm rounded bg-muted">{profile.name}</div>
           </div>
 
           <div className="space-y-2">
             <Label className="text-sm font-medium">Current Release:</Label>
-            <div className="p-2 bg-muted rounded text-sm capitalize">
+            <div className="p-2 text-sm capitalize rounded bg-muted">
               {profile.release_type} ({profile.version})
             </div>
           </div>
 
-          {/* Release Type Selection */}
-          <div className="grid gap-2">
-            <Label>New Release Type</Label>
-            {isLoadingReleaseTypes ? (
-              <div className="text-sm text-muted-foreground">
-                Loading release types...
-              </div>
-            ) : (
-              <ReleaseTypeSelector
-                selectedReleaseType={selectedReleaseType}
-                onReleaseTypeSelect={setSelectedReleaseType}
-                availableReleaseTypes={releaseTypes}
-                browser={profile.browser}
-                isDownloading={isDownloading}
-                onDownload={() => {
-                  void handleDownload();
-                }}
-                placeholder="Select release type..."
-                downloadedVersions={downloadedVersions}
-              />
-            )}
-          </div>
+          {/* Release Type Selection - only show if multiple release types are available */}
+          {!releaseTypes.stable || !releaseTypes.nightly ? (
+            <Alert>
+              <AlertDescription>
+                Only {profile.release_type} releases are available for{" "}
+                {getBrowserDisplayName(profile.browser)}.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <div className="grid gap-2">
+              <Label>New Release Type</Label>
+              {isLoadingReleaseTypes ? (
+                <div className="text-sm text-muted-foreground">
+                  Loading release types...
+                </div>
+              ) : (
+                <ReleaseTypeSelector
+                  selectedReleaseType={selectedReleaseType}
+                  onReleaseTypeSelect={setSelectedReleaseType}
+                  availableReleaseTypes={releaseTypes}
+                  browser={profile.browser}
+                  isDownloading={isDownloading}
+                  onDownload={() => {
+                    void handleDownload();
+                  }}
+                  placeholder="Select release type..."
+                  downloadedVersions={downloadedVersions}
+                />
+              )}
+            </div>
+          )}
 
           {/* Downgrade Warning */}
           {showDowngradeWarning && (
             <Alert className="border-orange-700">
-              <LuTriangleAlert className="h-4 w-4 text-orange-700" />
+              <LuTriangleAlert className="w-4 h-4 text-orange-700" />
               <AlertTitle className="text-orange-700">
                 Stability Warning
               </AlertTitle>
@@ -197,7 +207,7 @@ export function ChangeVersionDialog({
                 You are about to switch from stable to nightly releases. Nightly
                 versions may be less stable and could contain bugs or incomplete
                 features.
-                <div className="flex items-center space-x-2 mt-3">
+                <div className="flex items-center mt-3 space-x-2">
                   <Checkbox
                     id="acknowledge-downgrade"
                     checked={acknowledgeDowngrade}
