@@ -1307,6 +1307,7 @@ impl BrowserRunner {
       "user_pref(\"app.update.enabled\", false);".to_string(),
       "user_pref(\"app.update.auto\", false);".to_string(),
       "user_pref(\"app.update.mode\", 2);".to_string(),
+      "user_pref(\"app.update.promptWaitTime\", 0);".to_string(),
       "user_pref(\"app.update.service.enabled\", false);".to_string(),
       "user_pref(\"app.update.silent\", true);".to_string(),
       "user_pref(\"app.update.checkInstallTime\", false);".to_string(),
@@ -2913,7 +2914,13 @@ mod tests {
 
     // Create profile without proxy
     let profile = runner
-      .create_profile("Test Firefox Preferences", "firefox", "139.0", "stable", None)
+      .create_profile(
+        "Test Firefox Preferences",
+        "firefox",
+        "139.0",
+        "stable",
+        None,
+      )
       .unwrap();
 
     // Check that user.js file was created with default browser preference
