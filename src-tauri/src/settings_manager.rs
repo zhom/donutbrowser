@@ -29,36 +29,21 @@ pub struct AppSettings {
   pub show_settings_on_startup: bool,
   #[serde(default = "default_theme")]
   pub theme: String, // "light", "dark", or "system"
-  #[serde(default = "default_auto_updates_enabled")]
-  pub auto_updates_enabled: bool,
   #[serde(default = "default_auto_delete_unused_binaries")]
   pub auto_delete_unused_binaries: bool,
-}
-
-fn default_show_settings_on_startup() -> bool {
-  true
 }
 
 fn default_theme() -> String {
   "system".to_string()
 }
 
-fn default_auto_updates_enabled() -> bool {
-  true
-}
-
-fn default_auto_delete_unused_binaries() -> bool {
-  true
-}
-
 impl Default for AppSettings {
   fn default() -> Self {
     Self {
       set_as_default_browser: false,
-      show_settings_on_startup: default_show_settings_on_startup(),
-      theme: default_theme(),
-      auto_updates_enabled: default_auto_updates_enabled(),
-      auto_delete_unused_binaries: default_auto_delete_unused_binaries(),
+      show_settings_on_startup: true,
+      theme: "system".to_string(),
+      auto_delete_unused_binaries: true,
     }
   }
 }

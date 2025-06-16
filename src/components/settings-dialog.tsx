@@ -31,7 +31,6 @@ interface AppSettings {
   set_as_default_browser: boolean;
   show_settings_on_startup: boolean;
   theme: string;
-  auto_updates_enabled: boolean;
   auto_delete_unused_binaries: boolean;
 }
 
@@ -51,14 +50,12 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     set_as_default_browser: false,
     show_settings_on_startup: true,
     theme: "system",
-    auto_updates_enabled: true,
     auto_delete_unused_binaries: true,
   });
   const [originalSettings, setOriginalSettings] = useState<AppSettings>({
     set_as_default_browser: false,
     show_settings_on_startup: true,
     theme: "system",
-    auto_updates_enabled: true,
     auto_delete_unused_binaries: true,
   });
   const [isDefaultBrowser, setIsDefaultBrowser] = useState(false);
@@ -291,7 +288,6 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     settings.show_settings_on_startup !==
       originalSettings.show_settings_on_startup ||
     settings.theme !== originalSettings.theme ||
-    settings.auto_updates_enabled !== originalSettings.auto_updates_enabled ||
     settings.auto_delete_unused_binaries !==
       originalSettings.auto_delete_unused_binaries;
 
@@ -365,19 +361,6 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
           {/* Auto-Update Section */}
           <div className="space-y-4">
             <Label className="text-base font-medium">Auto-Updates</Label>
-
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="auto-updates"
-                checked={settings.auto_updates_enabled}
-                onCheckedChange={(checked) => {
-                  updateSetting("auto_updates_enabled", checked as boolean);
-                }}
-              />
-              <Label htmlFor="auto-updates" className="text-sm">
-                Enable automatic browser updates
-              </Label>
-            </div>
 
             <div className="flex items-center space-x-2">
               <Checkbox
