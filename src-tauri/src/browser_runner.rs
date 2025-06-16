@@ -1308,7 +1308,7 @@ impl BrowserRunner {
       "user_pref(\"app.update.auto\", false);".to_string(),
       "user_pref(\"app.update.mode\", 2);".to_string(),
       "user_pref(\"app.update.service.enabled\", false);".to_string(),
-      "user_pref(\"app.update.silent\", false);".to_string(),
+      "user_pref(\"app.update.silent\", true);".to_string(),
       "user_pref(\"app.update.checkInstallTime\", false);".to_string(),
       "user_pref(\"app.update.url\", \"\");".to_string(),
       "user_pref(\"app.update.url.manual\", \"\");".to_string(),
