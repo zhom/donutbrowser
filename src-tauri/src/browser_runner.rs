@@ -1314,6 +1314,7 @@ impl BrowserRunner {
       "user_pref(\"app.update.url.manual\", \"\");".to_string(),
       "user_pref(\"app.update.url.details\", \"\");".to_string(),
       "user_pref(\"app.update.url.override\", \"\");".to_string(),
+      "user_pref(\"app.update.interval\", 9999999999);".to_string(),
       "user_pref(\"app.update.background.interval\", 9999999999);".to_string(),
       "user_pref(\"app.update.download.attemptOnce\", false);".to_string(),
       "user_pref(\"app.update.idletime\", -1);".to_string(),
