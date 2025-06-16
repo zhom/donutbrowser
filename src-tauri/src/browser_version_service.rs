@@ -142,11 +142,39 @@ impl BrowserVersionService {
     self.api_client.is_cache_expired(browser)
   }
 
-  /// Get latest stable and nightly versions for a browser
+  /// Get latest stable and nightly versions for a browser (cached first)
   pub async fn get_browser_release_types(
     &self,
     browser: &str,
   ) -> Result<BrowserReleaseTypes, Box<dyn std::error::Error + Send + Sync>> {
+    // Try to get from cache first
+    if let Some(cached_versions) = self.get_cached_browser_versions_detailed(browser) {
+      // For Chromium, only return stable since all releases are stable
+      if browser == "chromium" {
+        let latest_stable = cached_versions.first().map(|v| v.version.clone());
+        return Ok(BrowserReleaseTypes {
+          stable: latest_stable,
+          nightly: None,
+        });
+      }
+
+      let latest_stable = cached_versions
+        .iter()
+        .find(|v| !v.is_prerelease)
+        .map(|v| v.version.clone());
+
+      let latest_nightly = cached_versions
+        .iter()
+        .find(|v| v.is_prerelease)
+        .map(|v| v.version.clone());
+
+      return Ok(BrowserReleaseTypes {
+        stable: latest_stable,
+        nightly: latest_nightly,
+      });
+    }
+
+    // Fallback to fetching if not cached
     // For Chromium, only return stable since all releases are stable
     if browser == "chromium" {
       let detailed_versions = self.fetch_browser_versions_detailed(browser, false).await?;
@@ -338,6 +366,8 @@ impl BrowserVersionService {
         let releases = self.fetch_zen_releases_detailed(true).await?;
         merged_versions
           .into_iter()
+          // Filter out twilight releases at the detailed level too
+          .filter(|version| version.to_lowercase() != "twilight")
           .map(|version| {
             if let Some(release) = releases.iter().find(|r| r.tag_name == version) {
               BrowserVersionInfo {
@@ -424,7 +454,9 @@ impl BrowserVersionService {
           })
           .collect()
       }
-      _ => return Err(format!("Unsupported browser: {browser}").into()),
+      _ => {
+        return Err(format!("Unsupported browser: {browser}").into());
+      }
     };
 
     Ok(detailed_info)
@@ -785,7 +817,13 @@ impl BrowserVersionService {
     no_caching: bool,
   ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
     let releases = self.fetch_zen_releases_detailed(no_caching).await?;
-    Ok(releases.into_iter().map(|r| r.tag_name).collect())
+    Ok(
+      releases
+        .into_iter()
+        .filter(|r| r.tag_name.to_lowercase() != "twilight")
+        .map(|r| r.tag_name)
+        .collect(),
+    )
   }
 
   async fn fetch_zen_releases_detailed(
