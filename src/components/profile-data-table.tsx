@@ -381,7 +381,7 @@ export function ProfilesDataTable({
                   >
                     Configure Proxy
                   </DropdownMenuItem>
-                  {["chromium", "zen"].includes(profile.browser) && (
+                  {!["chromium", "zen"].includes(profile.browser) && (
                     <DropdownMenuItem
                       onClick={() => {
                         onChangeVersion(profile);
