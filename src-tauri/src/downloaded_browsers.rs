@@ -27,7 +27,7 @@ impl DownloadedBrowsersRegistry {
     Self::default()
   }
 
-  pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
+  pub fn load() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
     let registry_path = Self::get_registry_path()?;
 
     if !registry_path.exists() {
@@ -39,7 +39,7 @@ impl DownloadedBrowsersRegistry {
     Ok(registry)
   }
 
-  pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
+  pub fn save(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let registry_path = Self::get_registry_path()?;
 
     // Ensure parent directory exists
@@ -52,7 +52,7 @@ impl DownloadedBrowsersRegistry {
     Ok(())
   }
 
-  fn get_registry_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
+  fn get_registry_path() -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     let base_dirs = BaseDirs::new().ok_or("Failed to get base directories")?;
     let mut path = base_dirs.data_local_dir().to_path_buf();
     path.push(if cfg!(debug_assertions) {
@@ -146,7 +146,7 @@ impl DownloadedBrowsersRegistry {
     &mut self,
     browser: &str,
     version: &str,
-  ) -> Result<(), Box<dyn std::error::Error>> {
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     if let Some(info) = self.remove_browser(browser, version) {
       // Clean up any files that might have been left behind
       if info.file_path.exists() {
@@ -180,7 +180,7 @@ impl DownloadedBrowsersRegistry {
   pub fn cleanup_unused_binaries(
     &mut self,
     active_profiles: &[(String, String)], // (browser, version) pairs
-  ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+  ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
     let active_set: std::collections::HashSet<(String, String)> =
       active_profiles.iter().cloned().collect();
     let mut cleaned_up = Vec::new();
