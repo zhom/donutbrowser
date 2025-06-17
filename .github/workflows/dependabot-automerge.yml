@@ -1,0 +1,82 @@
+name: Dependabot Automerge
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  pull-requests: write
+  contents: write
+  checks: read
+
+jobs:
+  security-scan:
+    name: Security Vulnerability Scan
+    if: ${{ github.actor == 'dependabot[bot]' }}
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@e69cc6c86b31f1e7e23935bbe7031b50e51082de" # v2.0.2
+    with:
+      scan-args: |-
+        -r
+        --skip-git
+        --lockfile=pnpm-lock.yaml
+        --lockfile=src-tauri/Cargo.lock
+        --lockfile=nodecar/pnpm-lock.yaml
+        ./
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+
+  lint-js:
+    name: Lint JavaScript/TypeScript
+    if: ${{ github.actor == 'dependabot[bot]' }}
+    uses: ./.github/workflows/lint-js.yml
+    secrets: inherit
+    permissions:
+      contents: read
+
+  lint-rust:
+    name: Lint Rust
+    if: ${{ github.actor == 'dependabot[bot]' }}
+    uses: ./.github/workflows/lint-rs.yml
+    secrets: inherit
+    permissions:
+      contents: read
+
+  codeql:
+    name: CodeQL
+    uses: ./.github/workflows/codeql.yml
+    secrets: inherit
+    permissions:
+      security-events: write
+      contents: read
+      packages: read
+      actions: read
+
+  spellcheck:
+    name: Spell Check
+    uses: ./.github/workflows/spellcheck.yml
+    secrets: inherit
+    permissions:
+      contents: read
+
+  dependabot-automerge:
+    name: Dependabot Automerge
+    if: ${{ github.actor == 'dependabot[bot]' }}
+    needs: [security-scan, lint-js, lint-rust, codeql, spellcheck]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@08eff52bf64351f401fb50d4972fa95b9f2c2d1b #v2.4.0
+        with:
+          compat-lookup: true
+          github-token: "${{ secrets.SECRET_DEPENDABOT_GITHUB_TOKEN }}"
+
+      - name: Auto-merge minor and patch updates
+        uses: ridedott/merge-me-action@338053c6f9b9311a6be80208f6f0723981e40627 #v2.10.122
+        with:
+          GITHUB_TOKEN: ${{ secrets.SECRET_DEPENDABOT_GITHUB_TOKEN }}
+          PRESET: DEPENDABOT_MINOR
+          MERGE_METHOD: SQUASH
+    timeout-minutes: 10
