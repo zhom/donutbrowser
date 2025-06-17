@@ -385,7 +385,10 @@ impl VersionUpdater {
       tokio::time::sleep(Duration::from_millis(200)).await;
     }
 
-    self.auto_updater.check_for_updates_with_progress(app_handle).await;
+    self
+      .auto_updater
+      .check_for_updates_with_progress(app_handle)
+      .await;
 
     // Emit completion event
     let progress = VersionUpdateProgress {
