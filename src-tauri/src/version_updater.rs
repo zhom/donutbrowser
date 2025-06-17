@@ -300,9 +300,36 @@ impl VersionUpdater {
       browser_new_versions: 0,
       status: "updating".to_string(),
     };
-    let _ = app_handle.emit("version-update-progress", &progress);
+    if let Err(e) = app_handle.emit("version-update-progress", &progress) {
+      eprintln!("Failed to emit start progress: {e}");
+    } else {
+      println!("Emitted start progress event");
+    }
 
     for (index, browser) in browsers.iter().enumerate() {
+      println!(
+        "Processing browser {} ({}/{}): {}",
+        browser,
+        index + 1,
+        total_browsers,
+        browser
+      );
+
+      // Emit progress for current browser
+      let progress = VersionUpdateProgress {
+        current_browser: browser.to_string(),
+        total_browsers,
+        completed_browsers: index,
+        new_versions_found: total_new_versions,
+        browser_new_versions: 0,
+        status: "updating".to_string(),
+      };
+      if let Err(e) = app_handle.emit("version-update-progress", &progress) {
+        eprintln!("Failed to emit progress for {browser}: {e}");
+      } else {
+        println!("Emitted progress event for browser: {browser}");
+      }
+
       // Check if individual browser cache is expired before updating
       if !self.version_service.should_update_cache(browser) {
         println!("Skipping {browser} - cache is still fresh");
@@ -318,18 +345,7 @@ impl VersionUpdater {
         continue;
       }
 
-      println!("Updating versions for browser: {browser}");
-
-      // Emit progress for current browser
-      let progress = VersionUpdateProgress {
-        current_browser: browser.to_string(),
-        total_browsers,
-        completed_browsers: index,
-        new_versions_found: total_new_versions,
-        browser_new_versions: 0,
-        status: "updating".to_string(),
-      };
-      let _ = app_handle.emit("version-update-progress", &progress);
+      println!("Fetching new versions for browser: {browser}");
 
       let result = self.update_browser_versions(browser).await;
 
@@ -373,7 +389,11 @@ impl VersionUpdater {
       browser_new_versions: 0,
       status: "completed".to_string(),
     };
-    let _ = app_handle.emit("version-update-progress", &progress);
+    if let Err(e) = app_handle.emit("version-update-progress", &progress) {
+      eprintln!("Failed to emit completion progress: {e}");
+    } else {
+      println!("Emitted completion progress event");
+    }
 
     println!("Background version update completed. Found {total_new_versions} new versions total");
 

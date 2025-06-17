@@ -278,19 +278,12 @@ pub fn run() {
         let version_updater = get_version_updater();
         let mut updater_guard = version_updater.lock().await;
 
-        // Set the app handle
-        updater_guard.set_app_handle(app_handle).await;
-
-        // Start the background updates
+        updater_guard.set_app_handle(app_handle.clone()).await;
         updater_guard.start_background_updates().await;
       });
 
-      // Check for app updates at startup
       let app_handle_update = app.handle().clone();
       tauri::async_runtime::spawn(async move {
-        // Add a small delay to ensure the app is fully loaded
-        tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-
         println!("Starting app update check at startup...");
         let updater = app_auto_updater::AppAutoUpdater::new();
         match updater.check_for_updates().await {

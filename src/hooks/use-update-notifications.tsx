@@ -1,5 +1,5 @@
 import { getBrowserDisplayName } from "@/lib/browser-utils";
-import { showToast } from "@/lib/toast-utils";
+import { dismissToast, showToast } from "@/lib/toast-utils";
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -83,10 +83,11 @@ export function useUpdateNotifications(
         return;
       }
 
-      // Mark download as active
+      // Mark download as active and disable browser
       activeDownloads.current.add(downloadKey);
 
       try {
+        // Set browser as updating FIRST before any async operations
         setUpdatingBrowsers((prev) => new Set(prev).add(browser));
         const browserDisplayName = getBrowserDisplayName(browser);
 
@@ -95,12 +96,12 @@ export function useUpdateNotifications(
           notificationId,
         });
 
-        // Show update available toast and start download immediately
+        // Show update started notification
         showToast({
           id: `auto-update-started-${browser}-${newVersion}`,
           type: "loading",
-          title: `${browserDisplayName} update available`,
-          description: `Version ${newVersion} is now being downloaded. Browser launch will be disabled until update completes.`,
+          title: `${browserDisplayName} update started`,
+          description: `Version ${newVersion} download will begin shortly. Browser launch is disabled until update completes.`,
           duration: 4000,
         });
 
@@ -116,9 +117,26 @@ export function useUpdateNotifications(
             console.log(
               `${browserDisplayName} ${newVersion} already exists, skipping download`,
             );
+
+            showToast({
+              id: `auto-update-skip-download-${browser}-${newVersion}`,
+              type: "success",
+              title: `${browserDisplayName} ${newVersion} already available`,
+              description: "Updating profile configurations...",
+              duration: 3000,
+            });
           } else {
-            // Don't mark as auto-update - we want to show full download progress
-            // Download the browser (progress will be handled by use-browser-download hook)
+            // Show download starting notification
+            showToast({
+              id: `auto-update-download-starting-${browser}-${newVersion}`,
+              type: "loading",
+              title: `Starting ${browserDisplayName} ${newVersion} download`,
+              description: "Download progress will be shown below...",
+              duration: 4000,
+            });
+
+            // Download the browser - this will trigger download progress events automatically
+            // The use-browser-download hook will handle showing the download progress toasts
             await invoke("download_browser", {
               browserStr: browser,
               version: newVersion,
@@ -158,12 +176,13 @@ export function useUpdateNotifications(
             });
           }
 
-          // Trigger profile refresh to update UI with new versions
           if (onProfilesUpdated) {
-            void onProfilesUpdated();
+            await onProfilesUpdated();
           }
         } catch (downloadError) {
           console.error("Failed to download browser:", downloadError);
+
+          dismissToast(`download-${browser}-${newVersion}`);
 
           showToast({
             id: `auto-update-error-${browser}-${newVersion}`,
