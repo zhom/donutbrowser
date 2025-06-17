@@ -24,6 +24,9 @@ on:
       - "tsconfig.json"
       - "biome.json"
 
+permissions:
+  contents: read
+
 jobs:
   build:
     strategy:

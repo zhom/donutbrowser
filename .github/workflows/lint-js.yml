@@ -16,6 +16,9 @@ on:
       - ".github/workflows/lint-rs.yml"
       - ".github/workflows/osv.yml"
 
+permissions:
+  contents: read
+
 jobs:
   build:
     strategy:
