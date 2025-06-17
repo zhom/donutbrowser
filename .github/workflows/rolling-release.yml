@@ -40,6 +40,9 @@ jobs:
     name: CodeQL
     uses: ./.github/workflows/codeql.yml
     secrets: inherit
+    permissions:
+      security-events: write
+      actions: read
 
   spellcheck:
     name: Spell Check
