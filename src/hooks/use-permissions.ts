@@ -20,7 +20,7 @@ const loadMacOSPermissions = async () => {
 
 export type PermissionType = "microphone" | "camera";
 
-export interface UsePermissionsReturn {
+interface UsePermissionsReturn {
   requestPermission: (type: PermissionType) => Promise<void>;
   isMicrophoneAccessGranted: boolean;
   isCameraAccessGranted: boolean;

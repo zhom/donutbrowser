@@ -43,22 +43,3 @@ export interface AppUpdateInfo {
   is_nightly: boolean;
   published_at: string;
 }
-
-export interface AppVersionInfo {
-  version: string;
-  is_nightly: boolean;
-}
-
-export type PermissionType = "microphone" | "camera" | "location";
-
-export type PermissionStatus =
-  | "granted"
-  | "denied"
-  | "not_determined"
-  | "restricted";
-
-export interface PermissionInfo {
-  permission_type: PermissionType;
-  status: PermissionStatus;
-  description: string;
-}

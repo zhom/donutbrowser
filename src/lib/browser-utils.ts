@@ -46,14 +46,3 @@ export function getBrowserIcon(browserType: string) {
       return null;
   }
 }
-
-/**
- * Format browser name by capitalizing words and joining with spaces
- * (fallback method for simple transformations)
- */
-export function formatBrowserName(browserType: string): string {
-  return browserType
-    .split("-")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-}

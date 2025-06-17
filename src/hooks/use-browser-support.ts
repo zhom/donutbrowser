@@ -1,12 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 
-export interface BrowserSupportInfo {
-  supportedBrowsers: string[];
-  isLoading: boolean;
-  error: string | null;
-}
-
 export function useBrowserSupport() {
   const [supportedBrowsers, setSupportedBrowsers] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);

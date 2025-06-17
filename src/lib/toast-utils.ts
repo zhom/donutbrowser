@@ -2,27 +2,26 @@ import { UnifiedToast } from "@/components/custom-toast";
 import React from "react";
 import { toast as sonnerToast } from "sonner";
 
-// Define toast types locally
-export interface BaseToastProps {
+interface BaseToastProps {
   id?: string;
   title: string;
   description?: string;
   duration?: number;
 }
 
-export interface LoadingToastProps extends BaseToastProps {
+interface LoadingToastProps extends BaseToastProps {
   type: "loading";
 }
 
-export interface SuccessToastProps extends BaseToastProps {
+interface SuccessToastProps extends BaseToastProps {
   type: "success";
 }
 
-export interface ErrorToastProps extends BaseToastProps {
+interface ErrorToastProps extends BaseToastProps {
   type: "error";
 }
 
-export interface DownloadToastProps extends BaseToastProps {
+interface DownloadToastProps extends BaseToastProps {
   type: "download";
   stage?:
     | "downloading"
@@ -37,7 +36,7 @@ export interface DownloadToastProps extends BaseToastProps {
   };
 }
 
-export interface VersionUpdateToastProps extends BaseToastProps {
+interface VersionUpdateToastProps extends BaseToastProps {
   type: "version-update";
   progress?: {
     current: number;
@@ -47,39 +46,23 @@ export interface VersionUpdateToastProps extends BaseToastProps {
   };
 }
 
-export interface FetchingToastProps extends BaseToastProps {
-  type: "fetching";
-  browserName?: string;
-}
-
-export interface TwilightUpdateToastProps extends BaseToastProps {
-  type: "twilight-update";
-  browserName?: string;
-  hasUpdate?: boolean;
-}
-
-export type ToastProps =
-  | LoadingToastProps
+type ToastProps =
   | SuccessToastProps
   | ErrorToastProps
   | DownloadToastProps
-  | VersionUpdateToastProps
-  | FetchingToastProps
-  | TwilightUpdateToastProps;
+  | LoadingToastProps
+  | VersionUpdateToastProps;
 
-// Unified toast function
 export function showToast(props: ToastProps & { id?: string }) {
   const toastId = props.id ?? `toast-${props.type}-${Date.now()}`;
 
-  // Improved duration logic - make toasts disappear more quickly
   let duration: number;
   if (props.duration !== undefined) {
     duration = props.duration;
   } else {
     switch (props.type) {
       case "loading":
-      case "fetching":
-        duration = 10000; // 10 seconds instead of infinite
+        duration = 10000;
         break;
       case "download":
         // Only keep infinite for active downloading, others get shorter durations
@@ -91,17 +74,14 @@ export function showToast(props: ToastProps & { id?: string }) {
           duration = 20000;
         }
         break;
-      case "version-update":
-        duration = 15000;
-        break;
-      case "twilight-update":
-        duration = 10000;
-        break;
       case "success":
         duration = 3000;
         break;
       case "error":
         duration = 10000;
+        break;
+      case "version-update":
+        duration = 15000;
         break;
       default:
         duration = 5000;
@@ -152,22 +132,6 @@ export function showToast(props: ToastProps & { id?: string }) {
   return toastId;
 }
 
-// Convenience functions for common use cases
-export function showLoadingToast(
-  title: string,
-  options?: {
-    id?: string;
-    description?: string;
-    duration?: number;
-  },
-) {
-  return showToast({
-    type: "loading",
-    title,
-    ...options,
-  });
-}
-
 export function showDownloadToast(
   browserName: string,
   version: string,
@@ -206,45 +170,6 @@ export function showDownloadToast(
   });
 }
 
-export function showVersionUpdateToast(
-  title: string,
-  options?: {
-    id?: string;
-    description?: string;
-    progress?: {
-      current: number;
-      total: number;
-      found: number;
-      current_browser?: string;
-    };
-    duration?: number;
-  },
-) {
-  return showToast({
-    type: "version-update",
-    title,
-    ...options,
-  });
-}
-
-export function showFetchingToast(
-  browserName: string,
-  options?: {
-    id?: string;
-    description?: string;
-    duration?: number;
-  },
-) {
-  return showToast({
-    type: "fetching",
-    title: `Checking for new ${browserName} versions...`,
-    description:
-      options?.description ?? "Fetching latest release information...",
-    browserName,
-    ...options,
-  });
-}
-
 export function showSuccessToast(
   title: string,
   options?: {
@@ -275,25 +200,6 @@ export function showErrorToast(
   });
 }
 
-export function showTwilightUpdateToast(
-  browserName: string,
-  options?: {
-    id?: string;
-    description?: string;
-    hasUpdate?: boolean;
-    duration?: number;
-  },
-) {
-  return showToast({
-    type: "twilight-update",
-    title: options?.hasUpdate
-      ? `${browserName} twilight update available`
-      : `Checking for ${browserName} twilight updates...`,
-    browserName,
-    ...options,
-  });
-}
-
 export function showAutoUpdateToast(
   browserName: string,
   version: string,
@@ -314,17 +220,10 @@ export function showAutoUpdateToast(
   });
 }
 
-// Generic helper for dismissing toasts
 export function dismissToast(id: string) {
   sonnerToast.dismiss(id);
 }
 
-// Dismiss all toasts
-export function dismissAllToasts() {
-  sonnerToast.dismiss();
-}
-
-// Add a specific function for unified version update progress
 export function showUnifiedVersionUpdateToast(
   title: string,
   options?: {

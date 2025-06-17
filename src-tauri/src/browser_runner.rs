@@ -1465,6 +1465,7 @@ impl BrowserRunner {
     browser_dir.push(&profile.browser);
     browser_dir.push(&profile.version);
 
+    println!("Browser directory: {browser_dir:?}");
     let executable_path = browser
       .get_executable_path(&browser_dir)
       .expect("Failed to get executable path");
