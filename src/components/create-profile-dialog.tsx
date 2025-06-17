@@ -374,8 +374,8 @@ export function CreateProfileDialog({
           (!releaseTypes.stable || !releaseTypes.nightly) ? (
             <Alert>
               <AlertDescription>
-                Only {releaseTypes.stable ?? releaseTypes.nightly} releases are
-                available for {getBrowserDisplayName(selectedBrowser)}.
+                Only {(releaseTypes.stable && "Stable") ?? "Nightly"} releases
+                are available for {getBrowserDisplayName(selectedBrowser)}.
               </AlertDescription>
             </Alert>
           ) : (
