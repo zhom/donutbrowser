@@ -35,20 +35,20 @@ export function AppUpdateToast({
   };
 
   return (
-    <div className="flex items-start w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-lg max-w-md">
+    <div className="flex items-start p-4 w-full max-w-md bg-white rounded-lg border border-gray-200 shadow-lg dark:bg-gray-800 dark:border-gray-700">
       <div className="mr-3 mt-0.5">
         {isUpdating ? (
-          <LuRefreshCw className="h-5 w-5 text-blue-500 animate-spin flex-shrink-0" />
+          <LuRefreshCw className="flex-shrink-0 w-5 h-5 text-blue-500 animate-spin" />
         ) : (
-          <FaDownload className="h-5 w-5 text-blue-500 flex-shrink-0" />
+          <FaDownload className="flex-shrink-0 w-5 h-5 text-blue-500" />
         )}
       </div>
 
       <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-2">
+        <div className="flex gap-2 justify-between items-start">
           <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-foreground text-sm">
+            <div className="flex gap-2 items-center">
+              <span className="text-sm font-semibold text-foreground">
                 Donut Browser Update Available
               </span>
               <Badge
@@ -69,9 +69,9 @@ export function AppUpdateToast({
               variant="ghost"
               size="sm"
               onClick={onDismiss}
-              className="h-6 w-6 p-0 shrink-0"
+              className="p-0 w-6 h-6 shrink-0"
             >
-              <FaTimes className="h-3 w-3" />
+              <FaTimes className="w-3 h-3" />
             </Button>
           )}
         </div>
@@ -83,13 +83,13 @@ export function AppUpdateToast({
         )}
 
         {!isUpdating && (
-          <div className="flex items-center gap-2 mt-3">
+          <div className="flex gap-2 items-center mt-3">
             <Button
               onClick={() => void handleUpdateClick()}
               size="sm"
-              className="flex items-center gap-2 text-xs"
+              className="flex gap-2 items-center text-xs"
             >
-              <FaDownload className="h-3 w-3" />
+              <FaDownload className="w-3 h-3" />
               Update Now
             </Button>
             <Button
@@ -100,21 +100,6 @@ export function AppUpdateToast({
             >
               Later
             </Button>
-          </div>
-        )}
-
-        {updateInfo.release_notes && !isUpdating && (
-          <div className="mt-2">
-            <details className="text-xs">
-              <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-                Release Notes
-              </summary>
-              <div className="mt-1 text-muted-foreground whitespace-pre-wrap max-h-32 overflow-y-auto">
-                {updateInfo.release_notes.length > 200
-                  ? `${updateInfo.release_notes.substring(0, 200)}...`
-                  : updateInfo.release_notes}
-              </div>
-            </details>
           </div>
         )}
       </div>
