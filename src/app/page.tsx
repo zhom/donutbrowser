@@ -25,6 +25,7 @@ import { useAppUpdateNotifications } from "@/hooks/use-app-update-notifications"
 import { usePermissions } from "@/hooks/use-permissions";
 import type { PermissionType } from "@/hooks/use-permissions";
 import { useUpdateNotifications } from "@/hooks/use-update-notifications";
+import { useVersionUpdater } from "@/hooks/use-version-updater";
 import { showErrorToast } from "@/lib/toast-utils";
 import type { BrowserProfile, ProxySettings } from "@/types";
 import { invoke } from "@tauri-apps/api/core";
@@ -84,6 +85,9 @@ export default function Home() {
   // Auto-update functionality - pass loadProfiles to refresh profiles after updates
   const updateNotifications = useUpdateNotifications(loadProfiles);
   const { checkForUpdates, isUpdating } = updateNotifications;
+
+  // Version updater for handling version fetching progress events
+  useVersionUpdater();
 
   // Profiles loader with update check (for initial load and manual refresh)
   const loadProfilesWithUpdateCheck = useCallback(async () => {

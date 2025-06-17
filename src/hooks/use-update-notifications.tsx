@@ -1,7 +1,7 @@
 import { getBrowserDisplayName } from "@/lib/browser-utils";
 import { dismissToast, showToast } from "@/lib/toast-utils";
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 interface UpdateNotification {
   id: string;
@@ -24,6 +24,11 @@ export function useUpdateNotifications(
   const [processedNotifications, setProcessedNotifications] = useState<
     Set<string>
   >(new Set());
+
+  const isUpdating = useCallback(
+    (browser: string) => updatingBrowsers.has(browser),
+    [updatingBrowsers],
+  );
 
   // Add refs to track ongoing operations to prevent duplicates
   const isCheckingForUpdates = useRef(false);
@@ -85,10 +90,9 @@ export function useUpdateNotifications(
 
       // Mark download as active and disable browser
       activeDownloads.current.add(downloadKey);
+      setUpdatingBrowsers((prev) => new Set(prev).add(browser));
 
       try {
-        // Set browser as updating FIRST before any async operations
-        setUpdatingBrowsers((prev) => new Set(prev).add(browser));
         const browserDisplayName = getBrowserDisplayName(browser);
 
         // Dismiss the notification in the backend
@@ -136,7 +140,6 @@ export function useUpdateNotifications(
             });
 
             // Download the browser - this will trigger download progress events automatically
-            // The use-browser-download hook will handle showing the download progress toasts
             await invoke("download_browser", {
               browserStr: browser,
               version: newVersion,
@@ -193,21 +196,11 @@ export function useUpdateNotifications(
           });
           throw downloadError;
         }
-
-        // Don't call checkForUpdates() again here as it can cause recursion and duplicates
-        // The periodic checks will handle finding any remaining updates
       } catch (error) {
         console.error("Failed to start auto-update:", error);
-        const browserDisplayName = getBrowserDisplayName(browser);
-        showToast({
-          id: `auto-update-error-${browser}-${newVersion}`,
-          type: "error",
-          title: `Failed to update ${browserDisplayName}`,
-          description: String(error),
-          duration: 8000,
-        });
+        throw error;
       } finally {
-        // Remove from active downloads and updating browsers
+        // Clean up
         activeDownloads.current.delete(downloadKey);
         setUpdatingBrowsers((prev) => {
           const next = new Set(prev);
@@ -219,19 +212,9 @@ export function useUpdateNotifications(
     [onProfilesUpdated],
   );
 
-  // Clean up notifications when they're no longer needed
-  useEffect(() => {
-    // Remove notifications that have been processed
-    setNotifications((prev) =>
-      prev.filter(
-        (notification) => !processedNotifications.has(notification.id),
-      ),
-    );
-  }, [processedNotifications]);
-
   return {
     notifications,
+    isUpdating,
     checkForUpdates,
-    isUpdating: (browser: string) => updatingBrowsers.has(browser),
   };
 }

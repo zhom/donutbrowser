@@ -276,10 +276,25 @@ pub fn run() {
       let app_handle = app.handle().clone();
       tauri::async_runtime::spawn(async move {
         let version_updater = get_version_updater();
-        let mut updater_guard = version_updater.lock().await;
 
-        updater_guard.set_app_handle(app_handle.clone()).await;
-        updater_guard.start_background_updates().await;
+        // Set the app handle
+        {
+          let mut updater_guard = version_updater.lock().await;
+          updater_guard.set_app_handle(app_handle);
+        }
+
+        // Run startup check without holding the lock
+        {
+          let updater_guard = version_updater.lock().await;
+          if let Err(e) = updater_guard.start_background_updates().await {
+            eprintln!("Failed to start background updates: {e}");
+          }
+        }
+      });
+
+      // Start the background update task separately
+      tauri::async_runtime::spawn(async move {
+        version_updater::VersionUpdater::run_background_task().await;
       });
 
       let app_handle_update = app.handle().clone();

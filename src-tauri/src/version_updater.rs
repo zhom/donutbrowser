@@ -1,4 +1,3 @@
-use crate::browser_version_service::BrowserVersionService;
 use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -8,7 +7,9 @@ use std::sync::OnceLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
 use tokio::sync::Mutex;
-use tokio::time::{interval, Interval};
+use tokio::time::interval;
+
+use crate::browser_version_service::BrowserVersionService;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct VersionUpdateProgress {
@@ -46,20 +47,19 @@ impl Default for BackgroundUpdateState {
 
 pub struct VersionUpdater {
   version_service: BrowserVersionService,
-  app_handle: Arc<Mutex<Option<tauri::AppHandle>>>,
-  update_interval: Interval,
+  app_handle: Option<tauri::AppHandle>,
 }
 
 impl VersionUpdater {
   pub fn new() -> Self {
-    let mut update_interval = interval(Duration::from_secs(5 * 60)); // Check every 5 minutes
-    update_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
     Self {
       version_service: BrowserVersionService::new(),
-      app_handle: Arc::new(Mutex::new(None)),
-      update_interval,
+      app_handle: None,
     }
+  }
+
+  pub fn set_app_handle(&mut self, app_handle: tauri::AppHandle) {
+    self.app_handle = Some(app_handle);
   }
 
   fn get_cache_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
@@ -143,11 +143,6 @@ impl VersionUpdater {
     should_update
   }
 
-  pub async fn set_app_handle(&self, app_handle: tauri::AppHandle) {
-    let mut handle = self.app_handle.lock().await;
-    *handle = Some(app_handle);
-  }
-
   pub async fn check_and_run_startup_update(
     &self,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -157,15 +152,10 @@ impl VersionUpdater {
       return Ok(());
     }
 
-    let app_handle = {
-      let handle_guard = self.app_handle.lock().await;
-      handle_guard.clone()
-    };
-
-    if let Some(handle) = app_handle {
+    if let Some(ref app_handle) = self.app_handle {
       println!("Running startup version update...");
 
-      match self.update_all_browser_versions(&handle).await {
+      match self.update_all_browser_versions(app_handle).await {
         Ok(_) => {
           // Update the persistent state after successful update
           let state = BackgroundUpdateState {
@@ -191,7 +181,9 @@ impl VersionUpdater {
     Ok(())
   }
 
-  pub async fn start_background_updates(&mut self) {
+  pub async fn start_background_updates(
+    &self,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!(
       "Starting background version update service (checking every 5 minutes for 3-hour intervals)"
     );
@@ -201,41 +193,54 @@ impl VersionUpdater {
       eprintln!("Startup version update failed: {e}");
     }
 
+    Ok(())
+  }
+
+  pub async fn run_background_task() {
+    let mut update_interval = interval(Duration::from_secs(5 * 60)); // Check every 5 minutes
+    update_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
     loop {
-      self.update_interval.tick().await;
+      update_interval.tick().await;
 
       // Check if we should run an update based on persistent state
       if !Self::should_run_background_update() {
         continue;
       }
 
-      // Check if we have an app handle
-      let app_handle = {
-        let handle_guard = self.app_handle.lock().await;
-        handle_guard.clone()
-      };
+      println!("Starting background version update...");
 
-      if let Some(handle) = app_handle {
-        println!("Starting background version update...");
+      // Get the updater instance for this update cycle
+      let updater = get_version_updater();
+      let result = {
+        let updater_guard = updater.lock().await;
+        if let Some(ref app_handle) = updater_guard.app_handle {
+          updater_guard.update_all_browser_versions(app_handle).await
+        } else {
+          Err("App handle not available for background update".into())
+        }
+      }; // Release the lock here
 
-        match self.update_all_browser_versions(&handle).await {
-          Ok(_) => {
-            // Update the persistent state after successful update
-            let state = BackgroundUpdateState {
-              last_update_time: Self::get_current_timestamp(),
-              update_interval_hours: 3,
-            };
+      match result {
+        Ok(_) => {
+          // Update the persistent state after successful update
+          let state = BackgroundUpdateState {
+            last_update_time: Self::get_current_timestamp(),
+            update_interval_hours: 3,
+          };
 
-            if let Err(e) = Self::save_background_update_state(&state) {
-              eprintln!("Failed to save background update state: {e}");
-            } else {
-              println!("Background version update completed successfully");
-            }
+          if let Err(e) = Self::save_background_update_state(&state) {
+            eprintln!("Failed to save background update state: {e}");
+          } else {
+            println!("Background version update completed successfully");
           }
-          Err(e) => {
-            eprintln!("Background version update failed: {e}");
+        }
+        Err(e) => {
+          eprintln!("Background version update failed: {e}");
 
-            // Emit error event
+          // Try to emit error event if we have an app handle
+          let updater_guard = updater.lock().await;
+          if let Some(ref app_handle) = updater_guard.app_handle {
             let progress = VersionUpdateProgress {
               current_browser: "".to_string(),
               total_browsers: 0,
@@ -244,11 +249,9 @@ impl VersionUpdater {
               browser_new_versions: 0,
               status: "error".to_string(),
             };
-            let _ = handle.emit("version-update-progress", &progress);
+            let _ = app_handle.emit("version-update-progress", &progress);
           }
         }
-      } else {
-        println!("App handle not available, skipping background update");
       }
     }
   }
@@ -330,7 +333,6 @@ impl VersionUpdater {
         println!("Emitted progress event for browser: {browser}");
       }
 
-      // Check if individual browser cache is expired before updating
       if !self.version_service.should_update_cache(browser) {
         println!("Skipping {browser} - cache is still fresh");
 
@@ -395,7 +397,7 @@ impl VersionUpdater {
       println!("Emitted completion progress event");
     }
 
-    println!("Background version update completed. Found {total_new_versions} new versions total");
+    println!("Version update completed. Found {total_new_versions} new versions total");
 
     Ok(results)
   }

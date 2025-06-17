@@ -4,6 +4,7 @@ use std::fs::{self, create_dir_all};
 use std::path::PathBuf;
 
 use crate::api_client::ApiClient;
+use crate::version_updater;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TableSortingSettings {
@@ -210,9 +211,7 @@ pub async fn clear_all_version_cache_and_refetch(
     .clear_all_cache()
     .map_err(|e| format!("Failed to clear version cache: {e}"))?;
 
-  // Use the version updater to trigger a proper update with progress events
-  use crate::version_updater::get_version_updater;
-  let updater = get_version_updater();
+  let updater = version_updater::get_version_updater();
   let updater_guard = updater.lock().await;
 
   updater_guard

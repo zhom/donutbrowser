@@ -1,9 +1,13 @@
 import { getBrowserDisplayName } from "@/lib/browser-utils";
-import { dismissToast, showUnifiedVersionUpdateToast } from "@/lib/toast-utils";
+import {
+  dismissToast,
+  showErrorToast,
+  showSuccessToast,
+  showUnifiedVersionUpdateToast,
+} from "@/lib/toast-utils";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
 
 interface VersionUpdateProgress {
   current_browser: string;
@@ -80,12 +84,12 @@ export function useVersionUpdater() {
           dismissToast("unified-version-update");
 
           if (progress.new_versions_found > 0) {
-            toast.success("Browser versions updated successfully", {
+            showSuccessToast("Browser versions updated successfully", {
               duration: 5000,
-              description: `Found ${progress.new_versions_found} new browser versions. Update notifications will appear shortly.`,
+              description: "Updates will start automatically.",
             });
           } else {
-            toast.success("No new browser versions found", {
+            showSuccessToast("No new browser versions found", {
               duration: 3000,
               description: "All browser versions are up to date",
             });
@@ -98,7 +102,7 @@ export function useVersionUpdater() {
           setUpdateProgress(null);
           dismissToast("unified-version-update");
 
-          toast.error("Failed to update browser versions", {
+          showErrorToast("Failed to update browser versions", {
             duration: 6000,
             description: "Check your internet connection and try again",
           });
@@ -146,17 +150,17 @@ export function useVersionUpdater() {
       ).length;
 
       if (failedUpdates > 0) {
-        toast.warning("Update completed with some errors", {
+        showErrorToast("Update completed with some errors", {
           description: `${totalNewVersions} new versions found, ${failedUpdates} browsers failed to update`,
           duration: 5000,
         });
       } else if (totalNewVersions > 0) {
-        toast.success("Browser versions updated successfully", {
-          description: `Updated ${successfulUpdates} browsers successfully`,
+        showSuccessToast("Browser versions updated successfully", {
+          description: `Found ${totalNewVersions} new versions across ${successfulUpdates} browsers. Updates will start automatically.`,
           duration: 4000,
         });
       } else {
-        toast.success("No new browser versions found", {
+        showSuccessToast("No new browser versions found", {
           description: "All browser versions are up to date",
           duration: 3000,
         });
@@ -166,7 +170,7 @@ export function useVersionUpdater() {
       return results;
     } catch (error) {
       console.error("Failed to trigger manual update:", error);
-      toast.error("Failed to update browser versions", {
+      showErrorToast("Failed to update browser versions", {
         description:
           error instanceof Error ? error.message : "Unknown error occurred",
         duration: 4000,
@@ -188,7 +192,7 @@ export function useVersionUpdater() {
         // Show notification about new versions if any were found
         if (result.new_versions_count && result.new_versions_count > 0) {
           const browserName = getBrowserDisplayName(browserStr);
-          toast.success(
+          showSuccessToast(
             `Found ${result.new_versions_count} new ${browserName} versions!`,
             {
               duration: 3000,
@@ -207,18 +211,15 @@ export function useVersionUpdater() {
   );
 
   const formatTimeUntilUpdate = useCallback((seconds: number): string => {
-    if (seconds <= 0) return "Update overdue";
-
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`;
+    if (seconds < 60) {
+      return `${seconds} seconds`;
     }
-    if (minutes > 0) {
-      return `${minutes}m`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) {
+      return `${minutes} minute${minutes === 1 ? "" : "s"}`;
     }
-    return "< 1m";
+    const hours = Math.floor(minutes / 60);
+    return `${hours} hour${hours === 1 ? "" : "s"}`;
   }, []);
 
   const formatLastUpdateTime = useCallback(
