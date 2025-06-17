@@ -1,8 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
+import tmp from "tmp";
 
-// Define the proxy configuration type
 export interface ProxyConfig {
   id: string;
   upstreamUrl: string;
@@ -12,10 +11,11 @@ export interface ProxyConfig {
   pid?: number;
 }
 
-// Path to store proxy configurations
-const STORAGE_DIR = path.join(os.tmpdir(), "donutbrowser", "proxies");
+const STORAGE_DIR = tmp.dirSync({
+  prefix: "donutbrowser-proxies-",
+  unsafeCleanup: true,
+}).name;
 
-// Ensure storage directory exists
 if (!fs.existsSync(STORAGE_DIR)) {
   fs.mkdirSync(STORAGE_DIR, { recursive: true });
 }
@@ -88,7 +88,7 @@ export function listProxyConfigs(): ProxyConfig[] {
         try {
           const content = fs.readFileSync(
             path.join(STORAGE_DIR, file),
-            "utf-8"
+            "utf-8",
           );
           return JSON.parse(content) as ProxyConfig;
         } catch (error) {
@@ -111,14 +111,18 @@ export function listProxyConfigs(): ProxyConfig[] {
 export function updateProxyConfig(config: ProxyConfig): boolean {
   const filePath = path.join(STORAGE_DIR, `${config.id}.json`);
 
-  if (!fs.existsSync(filePath)) {
-    return false;
-  }
-
   try {
+    fs.readFileSync(filePath, "utf-8");
     fs.writeFileSync(filePath, JSON.stringify(config, null, 2));
     return true;
   } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      console.error(
+        `Config ${config.id} was deleted while the app was running`,
+      );
+      return false;
+    }
+
     console.error(`Error updating proxy config ${config.id}:`, error);
     return false;
   }
@@ -135,7 +139,7 @@ export function isProcessRunning(pid: number): boolean {
     // but checks if it exists
     process.kill(pid, 0);
     return true;
-  } catch (error) {
+  } catch {
     return false;
   }
 }
