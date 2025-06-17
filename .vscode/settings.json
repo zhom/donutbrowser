@@ -38,6 +38,7 @@
     "libpango",
     "librsvg",
     "libwebkit",
+    "libxdo",
     "mountpoint",
     "msvc",
     "msys",
