@@ -164,13 +164,60 @@ export function ChangeVersionDialog({
             </div>
           </div>
 
-          {!releaseTypes.stable || !releaseTypes.nightly ? (
+          {!releaseTypes.stable && !releaseTypes.nightly ? (
             <Alert>
               <AlertDescription>
-                Only {profile.release_type} releases are available for{" "}
+                No releases are available for{" "}
                 {getBrowserDisplayName(profile.browser)}.
               </AlertDescription>
             </Alert>
+          ) : !releaseTypes.stable || !releaseTypes.nightly ? (
+            <div className="space-y-4">
+              <Alert>
+                <AlertDescription>
+                  Only {profile.release_type} releases are available for{" "}
+                  {getBrowserDisplayName(profile.browser)}.
+                </AlertDescription>
+              </Alert>
+              <div className="grid gap-2">
+                <Label>New Release Type</Label>
+                {isLoadingReleaseTypes ? (
+                  <div className="text-sm text-muted-foreground">
+                    Loading release types...
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {selectedReleaseType &&
+                      selectedReleaseType !== profile.release_type &&
+                      selectedVersion &&
+                      !isVersionDownloaded(selectedVersion) && (
+                        <Alert>
+                          <AlertDescription>
+                            You must download{" "}
+                            {getBrowserDisplayName(profile.browser)}{" "}
+                            {selectedVersion} before switching to this release
+                            type. Use the download button above to get the
+                            latest version.
+                          </AlertDescription>
+                        </Alert>
+                      )}
+
+                    <ReleaseTypeSelector
+                      selectedReleaseType={selectedReleaseType}
+                      onReleaseTypeSelect={setSelectedReleaseType}
+                      availableReleaseTypes={releaseTypes}
+                      browser={profile.browser}
+                      isDownloading={isDownloading}
+                      onDownload={() => {
+                        void handleDownload();
+                      }}
+                      placeholder="Select release type..."
+                      downloadedVersions={downloadedVersions}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
           ) : (
             <div className="grid gap-2">
               <Label>New Release Type</Label>
@@ -179,18 +226,35 @@ export function ChangeVersionDialog({
                   Loading release types...
                 </div>
               ) : (
-                <ReleaseTypeSelector
-                  selectedReleaseType={selectedReleaseType}
-                  onReleaseTypeSelect={setSelectedReleaseType}
-                  availableReleaseTypes={releaseTypes}
-                  browser={profile.browser}
-                  isDownloading={isDownloading}
-                  onDownload={() => {
-                    void handleDownload();
-                  }}
-                  placeholder="Select release type..."
-                  downloadedVersions={downloadedVersions}
-                />
+                <div className="space-y-4">
+                  {selectedReleaseType &&
+                    selectedReleaseType !== profile.release_type &&
+                    selectedVersion &&
+                    !isVersionDownloaded(selectedVersion) && (
+                      <Alert>
+                        <AlertDescription>
+                          You must download{" "}
+                          {getBrowserDisplayName(profile.browser)}{" "}
+                          {selectedVersion} before switching to this release
+                          type. Use the download button above to get the latest
+                          version.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                  <ReleaseTypeSelector
+                    selectedReleaseType={selectedReleaseType}
+                    onReleaseTypeSelect={setSelectedReleaseType}
+                    availableReleaseTypes={releaseTypes}
+                    browser={profile.browser}
+                    isDownloading={isDownloading}
+                    onDownload={() => {
+                      void handleDownload();
+                    }}
+                    placeholder="Select release type..."
+                    downloadedVersions={downloadedVersions}
+                  />
+                </div>
               )}
             </div>
           )}

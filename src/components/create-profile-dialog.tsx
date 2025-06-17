@@ -93,6 +93,7 @@ export function CreateProfileDialog({
     isDownloading,
     downloadedVersions,
     loadDownloadedVersions,
+    isVersionDownloaded,
   } = useBrowserDownload();
 
   const {
@@ -280,6 +281,7 @@ export function CreateProfileDialog({
     selectedBrowser &&
     selectedReleaseType &&
     selectedVersion &&
+    isVersionDownloaded(selectedVersion) &&
     (!proxyEnabled || isProxyDisabled || (proxyHost && proxyPort)) &&
     !nameError;
 
@@ -370,37 +372,48 @@ export function CreateProfileDialog({
             </Select>
           </div>
 
-          {selectedBrowser &&
-          (!releaseTypes.stable || !releaseTypes.nightly) ? (
-            <Alert>
-              <AlertDescription>
-                Only {(releaseTypes.stable && "Stable") ?? "Nightly"} releases
-                are available for {getBrowserDisplayName(selectedBrowser)}.
-              </AlertDescription>
-            </Alert>
-          ) : (
+          {selectedBrowser ? (
             <div className="grid gap-2">
               <Label>Release Type</Label>
               {isLoadingReleaseTypes ? (
                 <div className="text-sm text-muted-foreground">
                   Loading release types...
                 </div>
+              ) : Object.keys(releaseTypes).length === 0 ? (
+                <Alert>
+                  <AlertDescription>
+                    No releases are available for{" "}
+                    {getBrowserDisplayName(selectedBrowser)}.
+                  </AlertDescription>
+                </Alert>
               ) : (
-                <ReleaseTypeSelector
-                  selectedReleaseType={selectedReleaseType}
-                  onReleaseTypeSelect={setSelectedReleaseType}
-                  availableReleaseTypes={releaseTypes}
-                  browser={selectedBrowser ?? ""}
-                  isDownloading={isDownloading}
-                  onDownload={() => {
-                    void handleDownload();
-                  }}
-                  placeholder="Select release type..."
-                  downloadedVersions={downloadedVersions}
-                />
+                <div className="space-y-4">
+                  {(!releaseTypes.stable || !releaseTypes.nightly) && (
+                    <Alert>
+                      <AlertDescription>
+                        Only {(releaseTypes.stable && "Stable") ?? "Nightly"}{" "}
+                        releases are available for{" "}
+                        {getBrowserDisplayName(selectedBrowser)}.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  <ReleaseTypeSelector
+                    selectedReleaseType={selectedReleaseType}
+                    onReleaseTypeSelect={setSelectedReleaseType}
+                    availableReleaseTypes={releaseTypes}
+                    browser={selectedBrowser}
+                    isDownloading={isDownloading}
+                    onDownload={() => {
+                      void handleDownload();
+                    }}
+                    placeholder="Select release type..."
+                    downloadedVersions={downloadedVersions}
+                  />
+                </div>
               )}
             </div>
-          )}
+          ) : null}
 
           {/* Proxy Settings */}
           <div className="grid gap-4 pt-4 border-t">
