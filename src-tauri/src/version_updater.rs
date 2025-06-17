@@ -263,149 +263,108 @@ impl VersionUpdater {
     &self,
     app_handle: &tauri::AppHandle,
   ) -> Result<Vec<BackgroundUpdateResult>, Box<dyn std::error::Error + Send + Sync>> {
-    println!("Starting background version update for all browsers");
-
-    let all_browsers = [
-      "firefox",
-      "firefox-developer",
-      "mullvad-browser",
-      "zen",
-      "brave",
-      "chromium",
-      "tor-browser",
-    ];
-
-    // Filter browsers to only include those supported on the current platform
-    let browsers: Vec<&str> = all_browsers
-      .iter()
-      .filter(|browser| {
-        self
-          .version_service
-          .is_browser_supported(browser)
-          .unwrap_or(false)
-      })
-      .copied()
-      .collect();
-
-    let total_browsers = browsers.len();
+    let supported_browsers = self.version_service.get_supported_browsers();
+    let total_browsers = supported_browsers.len();
     let mut results = Vec::new();
     let mut total_new_versions = 0;
 
-    println!(
-      "Updating {} supported browsers (filtered from {} total)",
-      browsers.len(),
-      all_browsers.len()
-    );
-
-    // Emit start event
-    let progress = VersionUpdateProgress {
-      current_browser: "".to_string(),
+    // Emit initial progress
+    let initial_progress = VersionUpdateProgress {
+      current_browser: String::new(),
       total_browsers,
       completed_browsers: 0,
       new_versions_found: 0,
       browser_new_versions: 0,
       status: "updating".to_string(),
     };
-    if let Err(e) = app_handle.emit("version-update-progress", &progress) {
-      eprintln!("Failed to emit start progress: {e}");
-    } else {
-      println!("Emitted start progress event");
+
+    if let Err(e) = app_handle.emit("version-update-progress", &initial_progress) {
+      eprintln!("Failed to emit initial progress: {e}");
     }
 
-    for (index, browser) in browsers.iter().enumerate() {
-      println!(
-        "Processing browser {} ({}/{}): {}",
-        browser,
-        index + 1,
-        total_browsers,
-        browser
-      );
+    for (index, browser) in supported_browsers.iter().enumerate() {
+      println!("Updating browser versions for: {browser}");
 
-      // Emit progress for current browser
+      // Emit progress update for current browser
       let progress = VersionUpdateProgress {
-        current_browser: browser.to_string(),
+        current_browser: browser.clone(),
         total_browsers,
         completed_browsers: index,
         new_versions_found: total_new_versions,
         browser_new_versions: 0,
         status: "updating".to_string(),
       };
+
       if let Err(e) = app_handle.emit("version-update-progress", &progress) {
         eprintln!("Failed to emit progress for {browser}: {e}");
-      } else {
-        println!("Emitted progress event for browser: {browser}");
       }
 
-      if !self.version_service.should_update_cache(browser) {
-        println!("Skipping {browser} - cache is still fresh");
-
-        let browser_result = BackgroundUpdateResult {
-          browser: browser.to_string(),
-          new_versions_count: 0,
-          total_versions_count: 0,
-          updated_successfully: true,
-          error: None,
-        };
-        results.push(browser_result);
-        continue;
-      }
-
-      println!("Fetching new versions for browser: {browser}");
-
-      let result = self.update_browser_versions(browser).await;
-
-      match result {
-        Ok(new_count) => {
-          total_new_versions += new_count;
-          let browser_result = BackgroundUpdateResult {
-            browser: browser.to_string(),
-            new_versions_count: new_count,
-            total_versions_count: 0, // We'll update this if needed
+      match self.update_browser_versions(browser).await {
+        Ok(new_versions_count) => {
+          results.push(BackgroundUpdateResult {
+            browser: browser.clone(),
+            new_versions_count,
+            total_versions_count: 0, // We don't track total for background updates
             updated_successfully: true,
             error: None,
-          };
-          results.push(browser_result);
+          });
 
-          println!("Found {new_count} new versions for {browser}");
+          total_new_versions += new_versions_count;
+
+          // Emit progress update with new versions found
+          let progress = VersionUpdateProgress {
+            current_browser: browser.clone(),
+            total_browsers,
+            completed_browsers: index,
+            new_versions_found: total_new_versions,
+            browser_new_versions: new_versions_count,
+            status: "updating".to_string(),
+          };
+
+          if let Err(e) = app_handle.emit("version-update-progress", &progress) {
+            eprintln!("Failed to emit progress with versions for {browser}: {e}");
+          }
         }
         Err(e) => {
-          eprintln!("Failed to update versions for {browser}: {e}");
-          let browser_result = BackgroundUpdateResult {
-            browser: browser.to_string(),
+          results.push(BackgroundUpdateResult {
+            browser: browser.clone(),
             new_versions_count: 0,
             total_versions_count: 0,
             updated_successfully: false,
             error: Some(e.to_string()),
-          };
-          results.push(browser_result);
+          });
         }
       }
-
-      // Small delay between browsers to avoid overwhelming APIs
-      tokio::time::sleep(Duration::from_millis(200)).await;
     }
 
-    self
-      .auto_updater
-      .check_for_updates_with_progress(app_handle)
-      .await;
-
-    // Emit completion event
-    let progress = VersionUpdateProgress {
-      current_browser: "".to_string(),
+    // Emit completion
+    let final_progress = VersionUpdateProgress {
+      current_browser: String::new(),
       total_browsers,
       completed_browsers: total_browsers,
       new_versions_found: total_new_versions,
       browser_new_versions: 0,
       status: "completed".to_string(),
     };
-    if let Err(e) = app_handle.emit("version-update-progress", &progress) {
+
+    if let Err(e) = app_handle.emit("version-update-progress", &final_progress) {
       eprintln!("Failed to emit completion progress: {e}");
-    } else {
-      println!("Emitted completion progress event");
     }
 
-    println!("Version update completed. Found {total_new_versions} new versions total");
+    // After all version updates are complete, trigger auto-update check
+    if total_new_versions > 0 {
+      println!(
+        "Found {total_new_versions} new versions across all browsers. Checking for auto-updates..."
+      );
+
+      // Trigger auto-update check which will automatically download browsers
+      self
+        .auto_updater
+        .check_for_updates_with_progress(app_handle)
+        .await;
+    } else {
+      println!("No new versions found, skipping auto-update check");
+    }
 
     Ok(results)
   }

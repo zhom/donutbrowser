@@ -1,3 +1,4 @@
+use crate::api_client::is_browser_version_nightly;
 use crate::browser_runner::{BrowserProfile, BrowserRunner};
 use crate::browser_version_service::{BrowserVersionInfo, BrowserVersionService};
 use crate::settings_manager::SettingsManager;
@@ -101,16 +102,19 @@ impl AutoUpdater {
           // Apply chromium threshold logic
           if browser == "chromium" {
             // For chromium, only show notifications if there are 50+ new versions
-            // Count how many versions are newer than the current profile version
-            let newer_versions_count = versions
-              .iter()
-              .filter(|v| self.is_version_newer(&v.version, &profile.version))
-              .count();
+            let current_version = &profile.version.parse::<u32>().unwrap();
+            let new_version = &update.new_version.parse::<u32>().unwrap();
 
-            if newer_versions_count >= 50 {
+            let result = new_version - current_version;
+            println!(
+              "Current version: {current_version}, New version: {new_version}, Result: {result}"
+            );
+            if result > 50 {
               notifications.push(update);
             } else {
-              println!("Skipping chromium update notification: only {newer_versions_count} new versions (need 50+)");
+              println!(
+                "Skipping chromium update notification: only {result} new versions (need 50+)"
+              );
             }
           } else {
             notifications.push(update);
@@ -123,6 +127,8 @@ impl AutoUpdater {
   }
 
   pub async fn check_for_updates_with_progress(&self, app_handle: &tauri::AppHandle) {
+    println!("Starting auto-update check with progress...");
+
     // Check for browser updates and trigger auto-downloads
     match self.check_for_updates().await {
       Ok(update_notifications) => {
@@ -139,22 +145,63 @@ impl AutoUpdater {
               notification.browser, notification.new_version
             );
 
-            // Emit a custom event to trigger auto-download
-            let auto_update_event = serde_json::json!({
-              "browser": notification.browser,
-              "new_version": notification.new_version,
-              "notification_id": notification.id,
-              "affected_profiles": notification.affected_profiles
-            });
+            // Clone app_handle for the async task
+            let app_handle_clone = app_handle.clone();
+            let browser = notification.browser.clone();
+            let new_version = notification.new_version.clone();
+            let notification_id = notification.id.clone();
+            let affected_profiles = notification.affected_profiles.clone();
 
-            if let Err(e) = app_handle.emit("browser-auto-update-available", &auto_update_event) {
-              eprintln!(
-                "Failed to emit auto-update event for {}: {e}",
-                notification.browser
-              );
-            } else {
-              println!("Emitted auto-update event for {}", notification.browser);
-            }
+            // Spawn async task to handle the download and auto-update
+            tokio::spawn(async move {
+              // First, check if browser already exists
+              match crate::browser_runner::is_browser_downloaded(
+                browser.clone(),
+                new_version.clone(),
+              ) {
+                true => {
+                  println!("Browser {browser} {new_version} already downloaded, proceeding to auto-update profiles");
+
+                  // Browser already exists, go straight to profile update
+                  match crate::auto_updater::complete_browser_update_with_auto_update(
+                    browser.clone(),
+                    new_version.clone(),
+                  )
+                  .await
+                  {
+                    Ok(updated_profiles) => {
+                      println!(
+                        "Auto-update completed for {} profiles: {:?}",
+                        updated_profiles.len(),
+                        updated_profiles
+                      );
+                    }
+                    Err(e) => {
+                      eprintln!("Failed to complete auto-update for {browser}: {e}");
+                    }
+                  }
+                }
+                false => {
+                  println!("Downloading browser {browser} version {new_version}...");
+
+                  // Emit the auto-update event to trigger frontend handling
+                  let auto_update_event = serde_json::json!({
+                    "browser": browser,
+                    "new_version": new_version,
+                    "notification_id": notification_id,
+                    "affected_profiles": affected_profiles
+                  });
+
+                  if let Err(e) =
+                    app_handle_clone.emit("browser-auto-update-available", &auto_update_event)
+                  {
+                    eprintln!("Failed to emit auto-update event for {browser}: {e}");
+                  } else {
+                    println!("Emitted auto-update event for {browser}");
+                  }
+                }
+              }
+            });
           }
         } else {
           println!("No browser updates needed");
@@ -173,16 +220,15 @@ impl AutoUpdater {
     available_versions: &[BrowserVersionInfo],
   ) -> Result<Option<UpdateNotification>, Box<dyn std::error::Error + Send + Sync>> {
     let current_version = &profile.version;
-    let is_current_stable = !self.is_nightly_version(current_version);
+    let is_current_nightly = is_browser_version_nightly(&profile.browser, current_version, None);
 
     // Find the best available update
     let best_update = available_versions
       .iter()
       .filter(|v| {
         // Only consider versions newer than current
-        self.is_version_newer(&v.version, current_version) &&
-                // Respect version type preference
-                is_current_stable != v.is_prerelease
+        self.is_version_newer(&v.version, current_version)
+          && is_browser_version_nightly(&profile.browser, &v.version, None) == is_current_nightly
       })
       .max_by(|a, b| self.compare_versions(&a.version, &b.version));
 
@@ -367,14 +413,6 @@ impl AutoUpdater {
     Ok(())
   }
 
-  // Helper methods
-
-  fn is_nightly_version(&self, version: &str) -> bool {
-    // Use the centralized nightly detection function
-    // Since we don't have browser context here, use the general fallback
-    crate::api_client::is_nightly_version(version)
-  }
-
   fn is_version_newer(&self, version1: &str, version2: &str) -> bool {
     self.compare_versions(version1, version2) == std::cmp::Ordering::Greater
   }
@@ -500,21 +538,6 @@ mod tests {
       is_prerelease,
       date: "2024-01-01".to_string(),
     }
-  }
-
-  #[test]
-  fn test_is_nightly_version() {
-    let updater = AutoUpdater::new();
-
-    assert!(updater.is_nightly_version("1.0.0-alpha"));
-    assert!(updater.is_nightly_version("1.0.0-beta"));
-    assert!(updater.is_nightly_version("1.0.0-rc"));
-    assert!(updater.is_nightly_version("1.0.0a1"));
-    assert!(updater.is_nightly_version("1.0.0b1"));
-    assert!(updater.is_nightly_version("1.0.0-dev"));
-
-    assert!(!updater.is_nightly_version("1.0.0"));
-    assert!(!updater.is_nightly_version("1.2.3"));
   }
 
   #[test]
