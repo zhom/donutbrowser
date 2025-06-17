@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
+use tauri::Emitter;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UpdateNotification {
@@ -119,6 +120,53 @@ impl AutoUpdater {
     }
 
     Ok(notifications)
+  }
+  
+  pub async fn check_for_updates_with_progress(
+    &self,
+    app_handle: &tauri::AppHandle,
+  ) {
+      // Check for browser updates and trigger auto-downloads
+      match self.check_for_updates().await {
+        Ok(update_notifications) => {
+          if !update_notifications.is_empty() {
+            println!(
+              "Found {} browser updates to auto-download",
+              update_notifications.len()
+            );
+
+            // Trigger automatic downloads for each update
+            for notification in update_notifications {
+              println!(
+                "Auto-downloading {} version {}",
+                notification.browser, notification.new_version
+              );
+
+              // Emit a custom event to trigger auto-download
+              let auto_update_event = serde_json::json!({
+                "browser": notification.browser,
+                "new_version": notification.new_version,
+                "notification_id": notification.id,
+                "affected_profiles": notification.affected_profiles
+              });
+
+              if let Err(e) = app_handle.emit("browser-auto-update-available", &auto_update_event) {
+                eprintln!(
+                  "Failed to emit auto-update event for {}: {e}",
+                  notification.browser
+                );
+              } else {
+                println!("Emitted auto-update event for {}", notification.browser);
+              }
+            }
+          } else {
+            println!("No browser updates needed");
+          }
+        }
+        Err(e) => {
+          eprintln!("Failed to check for browser updates: {e}");
+        }
+    }
   }
 
   /// Check if a specific profile has an available update
@@ -424,6 +472,14 @@ pub async fn complete_browser_update_with_auto_update(
     .complete_browser_update_with_auto_update(&browser, &new_version)
     .await
     .map_err(|e| format!("Failed to complete browser update: {e}"))
+}
+
+#[tauri::command]
+pub async fn check_for_updates_with_progress(
+  app_handle: tauri::AppHandle,
+) {
+  let updater = AutoUpdater::new();
+  updater.check_for_updates_with_progress(&app_handle).await;
 }
 
 #[cfg(test)]

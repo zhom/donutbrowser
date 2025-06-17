@@ -297,6 +297,13 @@ pub fn run() {
         version_updater::VersionUpdater::run_background_task().await;
       });
 
+      let app_handle_auto_updater = app.handle().clone();
+      
+      // Start the auto-update check task separately
+      tauri::async_runtime::spawn(async move {
+        auto_updater::check_for_updates_with_progress(app_handle_auto_updater).await;
+      });
+
       let app_handle_update = app.handle().clone();
       tauri::async_runtime::spawn(async move {
         println!("Starting app update check at startup...");

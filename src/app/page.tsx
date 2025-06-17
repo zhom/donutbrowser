@@ -82,12 +82,12 @@ export default function Home() {
     }
   }, []);
 
-  // Auto-update functionality - pass loadProfiles to refresh profiles after updates
+  // Version updater for handling version fetching progress events and auto-updates
+  useVersionUpdater();
+
+  // Auto-update functionality - use the existing hook for compatibility
   const updateNotifications = useUpdateNotifications(loadProfiles);
   const { checkForUpdates, isUpdating } = updateNotifications;
-
-  // Version updater for handling version fetching progress events
-  useVersionUpdater();
 
   // Profiles loader with update check (for initial load and manual refresh)
   const loadProfilesWithUpdateCheck = useCallback(async () => {

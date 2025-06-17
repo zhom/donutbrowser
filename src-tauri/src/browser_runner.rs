@@ -1913,7 +1913,10 @@ impl BrowserRunner {
     if let Ok(settings) = settings_manager.load_settings() {
       if settings.auto_delete_unused_binaries {
         // Perform cleanup in the background after profile deletion
-        let _ = self.cleanup_unused_binaries_internal();
+        // Ignore errors since this is not critical for profile deletion
+        if let Err(e) = self.cleanup_unused_binaries_internal() {
+          println!("Warning: Failed to cleanup unused binaries: {e}");
+        }
       }
     }
 

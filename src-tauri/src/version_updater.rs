@@ -9,6 +9,7 @@ use tauri::Emitter;
 use tokio::sync::Mutex;
 use tokio::time::interval;
 
+use crate::auto_updater::AutoUpdater;
 use crate::browser_version_service::BrowserVersionService;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -47,6 +48,7 @@ impl Default for BackgroundUpdateState {
 
 pub struct VersionUpdater {
   version_service: BrowserVersionService,
+  auto_updater: AutoUpdater,
   app_handle: Option<tauri::AppHandle>,
 }
 
@@ -54,6 +56,7 @@ impl VersionUpdater {
   pub fn new() -> Self {
     Self {
       version_service: BrowserVersionService::new(),
+      auto_updater: AutoUpdater::new(),
       app_handle: None,
     }
   }
@@ -379,8 +382,10 @@ impl VersionUpdater {
       }
 
       // Small delay between browsers to avoid overwhelming APIs
-      tokio::time::sleep(Duration::from_millis(500)).await;
+      tokio::time::sleep(Duration::from_millis(200)).await;
     }
+
+    self.auto_updater.check_for_updates_with_progress(app_handle).await;
 
     // Emit completion event
     let progress = VersionUpdateProgress {

@@ -1,6 +1,7 @@
 import { getBrowserDisplayName } from "@/lib/browser-utils";
 import {
   dismissToast,
+  showAutoUpdateToast,
   showErrorToast,
   showSuccessToast,
   showUnifiedVersionUpdateToast,
@@ -30,6 +31,13 @@ interface BrowserVersionsResult {
   versions: string[];
   new_versions_count?: number;
   total_versions_count: number;
+}
+
+interface AutoUpdateEvent {
+  browser: string;
+  new_version: string;
+  notification_id: string;
+  affected_profiles: string[];
 }
 
 export function useVersionUpdater() {
@@ -86,7 +94,8 @@ export function useVersionUpdater() {
           if (progress.new_versions_found > 0) {
             showSuccessToast("Browser versions updated successfully", {
               duration: 5000,
-              description: "Updates will start automatically.",
+              description:
+                "Auto-downloads will start shortly for available updates.",
             });
           } else {
             showSuccessToast("No new browser versions found", {
@@ -116,6 +125,105 @@ export function useVersionUpdater() {
       });
     };
   }, [loadUpdateStatus]);
+
+  // Listen for browser auto-update events
+  useEffect(() => {
+    const unlisten = listen<AutoUpdateEvent>(
+      "browser-auto-update-available",
+      (event) => {
+        const handleAutoUpdate = async () => {
+          const { browser, new_version, notification_id } = event.payload;
+          console.log("Browser auto-update event received:", event.payload);
+
+          const browserDisplayName = getBrowserDisplayName(browser);
+
+          try {
+            // Show auto-update start notification
+            showAutoUpdateToast(browserDisplayName, new_version, {
+              description: `Downloading ${browserDisplayName} ${new_version} automatically. Progress will be shown below.`,
+            });
+
+            // Dismiss the update notification in the backend
+            await invoke("dismiss_update_notification", {
+              notificationId: notification_id,
+            });
+
+            // Check if browser already exists before downloading
+            const isDownloaded = await invoke<boolean>("check_browser_exists", {
+              browserStr: browser,
+              version: new_version,
+            });
+
+            if (isDownloaded) {
+              // Browser already exists, skip download and go straight to profile update
+              console.log(
+                `${browserDisplayName} ${new_version} already exists, skipping download`,
+              );
+
+              showSuccessToast(
+                `${browserDisplayName} ${new_version} already available`,
+                {
+                  description: "Updating profile configurations...",
+                  duration: 3000,
+                },
+              );
+            } else {
+              // Download the browser - this will trigger download progress events automatically
+              await invoke("download_browser", {
+                browserStr: browser,
+                version: new_version,
+              });
+            }
+
+            // Complete the update with auto-update of profile versions
+            const updatedProfiles = await invoke<string[]>(
+              "complete_browser_update_with_auto_update",
+              {
+                browser,
+                newVersion: new_version,
+              },
+            );
+
+            // Show success message based on whether profiles were updated
+            if (updatedProfiles.length > 0) {
+              const profileText =
+                updatedProfiles.length === 1
+                  ? `Profile "${updatedProfiles[0]}" has been updated`
+                  : `${updatedProfiles.length} profiles have been updated`;
+
+              showSuccessToast(`${browserDisplayName} update completed`, {
+                description: `${profileText} to version ${new_version}. You can now launch your browsers with the latest version.`,
+                duration: 6000,
+              });
+            } else {
+              showSuccessToast(`${browserDisplayName} update completed`, {
+                description: `Version ${new_version} is now available. Running profiles will use the new version when restarted.`,
+                duration: 6000,
+              });
+            }
+          } catch (error) {
+            console.error("Failed to handle browser auto-update:", error);
+            showErrorToast(`Failed to auto-update ${browserDisplayName}`, {
+              description:
+                error instanceof Error
+                  ? error.message
+                  : "Unknown error occurred",
+              duration: 8000,
+            });
+          }
+        };
+
+        // Call the async handler
+        void handleAutoUpdate();
+      },
+    );
+
+    return () => {
+      void unlisten.then((fn) => {
+        fn();
+      });
+    };
+  }, []);
 
   // Load update status on mount and periodically
   useEffect(() => {
@@ -156,7 +264,7 @@ export function useVersionUpdater() {
         });
       } else if (totalNewVersions > 0) {
         showSuccessToast("Browser versions updated successfully", {
-          description: `Found ${totalNewVersions} new versions across ${successfulUpdates} browsers. Updates will start automatically.`,
+          description: `Found ${totalNewVersions} new versions across ${successfulUpdates} browsers. Auto-downloads will start shortly.`,
           duration: 4000,
         });
       } else {
