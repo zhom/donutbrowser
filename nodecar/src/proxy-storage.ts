@@ -11,10 +11,7 @@ export interface ProxyConfig {
   pid?: number;
 }
 
-const STORAGE_DIR = tmp.dirSync({
-  prefix: "donutbrowser-proxies-",
-  unsafeCleanup: true,
-}).name;
+const STORAGE_DIR = path.join(tmp.tmpdir, "donutbrowser", "proxies");
 
 if (!fs.existsSync(STORAGE_DIR)) {
   fs.mkdirSync(STORAGE_DIR, { recursive: true });
