@@ -43,6 +43,8 @@ jobs:
     secrets: inherit
     permissions:
       security-events: write
+      contents: read
+      packages: read
       actions: read
 
   spellcheck:
