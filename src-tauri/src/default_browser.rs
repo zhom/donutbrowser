@@ -535,7 +535,7 @@ pub async fn open_url_with_profile(
 
   // Use launch_or_open_url which handles both launching new instances and opening in existing ones
   runner
-    .launch_or_open_url(app_handle, &profile, Some(url.clone()))
+    .launch_or_open_url(app_handle, &profile, Some(url.clone()), None)
     .await
     .map_err(|e| {
       println!("Failed to open URL with profile '{profile_name}': {e}");
@@ -612,7 +612,7 @@ pub async fn smart_open_url(
 
       // Try to open the URL with this running profile
       match runner
-        .launch_or_open_url(app_handle.clone(), profile, Some(url.clone()))
+        .launch_or_open_url(app_handle.clone(), profile, Some(url.clone()), None)
         .await
       {
         Ok(_) => {

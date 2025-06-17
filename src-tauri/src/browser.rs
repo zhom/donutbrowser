@@ -1,6 +1,4 @@
-use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
-use std::fs;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -56,7 +54,7 @@ pub trait Browser: Send + Sync {
   fn create_launch_args(
     &self,
     profile_path: &str,
-    _proxy_settings: Option<&ProxySettings>,
+    proxy_settings: Option<&ProxySettings>,
     url: Option<String>,
   ) -> Result<Vec<String>, Box<dyn std::error::Error>>;
   fn is_version_downloaded(&self, version: &str, binaries_dir: &Path) -> bool;
@@ -639,14 +637,10 @@ impl Browser for ChromiumBrowser {
     // Add proxy configuration if provided
     if let Some(proxy) = proxy_settings {
       if proxy.enabled {
-        let pac_path = Path::new(profile_path).join("proxy.pac");
-        if pac_path.exists() {
-          let pac_content = fs::read(&pac_path)?;
-          let pac_base64 = general_purpose::STANDARD.encode(&pac_content);
-          args.push(format!(
-            "--proxy-pac-url=data:application/x-javascript-config;base64,{pac_base64}"
-          ));
-        }
+        args.push(format!(
+          "--proxy-server=http://{}:{}",
+          proxy.host, proxy.port
+        ));
       }
     }
 

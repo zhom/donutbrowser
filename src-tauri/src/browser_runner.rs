@@ -1454,6 +1454,7 @@ impl BrowserRunner {
     &self,
     profile: &BrowserProfile,
     url: Option<String>,
+    local_proxy_settings: Option<&ProxySettings>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
     // Create browser instance
     let browser_type = BrowserType::from_str(&profile.browser)
@@ -1476,9 +1477,16 @@ impl BrowserRunner {
       // Continue anyway, the error might not be critical
     }
 
-    // Get launch arguments (proxy settings will be handled later if needed)
+    // For Chromium browsers, use local proxy settings if available
+    // For Firefox browsers, continue using original proxy settings (handled via PAC files)
+    let proxy_for_launch_args = match browser_type {
+      BrowserType::Chromium | BrowserType::Brave => local_proxy_settings.or(profile.proxy.as_ref()),
+      _ => profile.proxy.as_ref(),
+    };
+
+    // Get launch arguments
     let browser_args = browser
-      .create_launch_args(&profile.profile_path, None, url)
+      .create_launch_args(&profile.profile_path, proxy_for_launch_args, url)
       .expect("Failed to create launch arguments");
 
     // Launch browser using platform-specific method
@@ -1606,6 +1614,7 @@ impl BrowserRunner {
     app_handle: tauri::AppHandle,
     profile: &BrowserProfile,
     url: &str,
+    _internal_proxy_settings: Option<&ProxySettings>,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Use the comprehensive browser status check
     let is_running = self.check_browser_status(app_handle, profile).await?;
@@ -1736,6 +1745,7 @@ impl BrowserRunner {
     app_handle: tauri::AppHandle,
     profile: &BrowserProfile,
     url: Option<String>,
+    internal_proxy_settings: Option<&ProxySettings>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
     // Get the most up-to-date profile data
     let profiles = self.list_profiles().expect("Failed to list profiles");
@@ -1780,7 +1790,12 @@ impl BrowserRunner {
           }
         }
         match self
-          .open_url_in_existing_browser(app_handle, &final_profile, url_ref)
+          .open_url_in_existing_browser(
+            app_handle,
+            &final_profile,
+            url_ref,
+            internal_proxy_settings,
+          )
           .await
         {
           Ok(()) => {
@@ -1805,7 +1820,7 @@ impl BrowserRunner {
                   final_profile.browser
                 );
                 // Fallback to launching a new instance for other browsers
-                self.launch_browser(&final_profile, url).await
+                self.launch_browser(&final_profile, url, internal_proxy_settings).await
               }
             }
           }
@@ -1813,7 +1828,9 @@ impl BrowserRunner {
       } else {
         // This case shouldn't happen since we checked is_some() above, but handle it gracefully
         println!("URL was unexpectedly None, launching new browser instance");
-        self.launch_browser(&final_profile, url).await
+        self
+          .launch_browser(&final_profile, url, internal_proxy_settings)
+          .await
       }
     } else {
       // Browser is not running or no URL provided, launch new instance
@@ -1822,7 +1839,9 @@ impl BrowserRunner {
       } else {
         println!("Launching new browser instance - no URL provided");
       }
-      self.launch_browser(&final_profile, url).await
+      self
+        .launch_browser(&final_profile, url, internal_proxy_settings)
+        .await
     }
   }
 
@@ -2242,6 +2261,9 @@ pub async fn launch_browser_profile(
 ) -> Result<BrowserProfile, String> {
   let browser_runner = BrowserRunner::new();
 
+  // Store the internal proxy settings for passing to launch_browser
+  let mut internal_proxy_settings: Option<ProxySettings> = None;
+
   // If the profile has proxy settings, we need to start the proxy first
   // and update the profile with proxy settings before launching
   let profile_for_launch = profile.clone();
@@ -2255,14 +2277,17 @@ pub async fn launch_browser_profile(
         .start_proxy(app_handle.clone(), proxy, temp_pid, Some(&profile.name))
         .await
       {
-        Ok(internal_proxy_settings) => {
+        Ok(internal_proxy) => {
           let browser_runner = BrowserRunner::new();
           let profiles_dir = browser_runner.get_profiles_dir();
           let profile_path = profiles_dir.join(profile.name.to_lowercase().replace(" ", "_"));
 
+          // Store the internal proxy settings for later use
+          internal_proxy_settings = Some(internal_proxy.clone());
+
           // Apply the proxy settings with the internal proxy to the profile directory
           browser_runner
-            .apply_proxy_settings_to_profile(&profile_path, proxy, Some(&internal_proxy_settings))
+            .apply_proxy_settings_to_profile(&profile_path, proxy, Some(&internal_proxy))
             .map_err(|e| format!("Failed to update profile proxy: {e}"))?;
 
           println!("Successfully started proxy for profile: {}", profile.name);
@@ -2288,7 +2313,7 @@ pub async fn launch_browser_profile(
 
   // Launch browser or open URL in existing instance
   let updated_profile = browser_runner
-    .launch_or_open_url(app_handle.clone(), &profile_for_launch, url)
+    .launch_or_open_url(app_handle.clone(), &profile_for_launch, url, internal_proxy_settings.as_ref())
     .await
     .map_err(|e| {
       // Check if this is an architecture compatibility issue
