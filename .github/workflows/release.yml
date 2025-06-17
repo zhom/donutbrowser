@@ -31,11 +31,15 @@ jobs:
     name: Lint JavaScript/TypeScript
     uses: ./.github/workflows/lint-js.yml
     secrets: inherit
+    permissions:
+      contents: read
 
   lint-rust:
     name: Lint Rust
     uses: ./.github/workflows/lint-rs.yml
     secrets: inherit
+    permissions:
+      contents: read
 
   codeql:
     name: CodeQL
@@ -51,6 +55,8 @@ jobs:
     name: Spell Check
     uses: ./.github/workflows/spellcheck.yml
     secrets: inherit
+    permissions:
+      contents: read
 
   release:
     needs: [security-scan, lint-js, lint-rust, codeql, spellcheck]

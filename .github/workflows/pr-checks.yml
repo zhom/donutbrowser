@@ -16,11 +16,15 @@ jobs:
     name: Lint JavaScript/TypeScript
     uses: ./.github/workflows/lint-js.yml
     secrets: inherit
+    permissions:
+      contents: read
 
   lint-rust:
     name: Lint Rust
     uses: ./.github/workflows/lint-rs.yml
     secrets: inherit
+    permissions:
+      contents: read
 
   security-scan:
     name: Security Vulnerability Scan
