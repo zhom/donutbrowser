@@ -1,0 +1,21 @@
+name: Mark stale issues and pull requests
+
+on:
+  schedule:
+    - cron: "35 23 * * *"
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/stale@5bef64f19d7facfb25b37b414482c7164d639639 # v9.1.0
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          stale-issue-message: "This issue has been inactive for 60 days. Please respond to keep it open."
+          stale-pr-message: "This pull request has been inactive for 60 days. Please respond to keep it open."
+          stale-issue-label: "stale"
+          stale-pr-label: "stale"
