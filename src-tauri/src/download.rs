@@ -79,15 +79,29 @@ impl Downloader {
       }
       BrowserType::Zen => {
         // For Zen, verify the asset exists and handle different naming patterns
-        let releases = self
-          .api_client
-          .fetch_zen_releases_with_caching(true)
-          .await?;
+        let releases = match self.api_client.fetch_zen_releases_with_caching(true).await {
+          Ok(releases) => releases,
+          Err(e) => {
+            eprintln!("Failed to fetch Zen releases: {e}");
+            return Err(format!("Failed to fetch Zen releases from GitHub API: {e}. This might be due to GitHub API rate limiting or network issues. Please try again later.").into());
+          }
+        };
 
         let release = releases
           .iter()
           .find(|r| r.tag_name == version)
-          .ok_or(format!("Zen version {version} not found"))?;
+          .ok_or_else(|| {
+            format!(
+              "Zen version {} not found. Available versions: {}",
+              version,
+              releases
+                .iter()
+                .take(5)
+                .map(|r| r.tag_name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+            )
+          })?;
 
         // Get platform and architecture info
         let (os, arch) = Self::get_platform_info();
@@ -95,9 +109,17 @@ impl Downloader {
         // Find the appropriate asset
         let asset_url = self
           .find_zen_asset(&release.assets, &os, &arch)
-          .ok_or(format!(
-            "No compatible asset found for Zen version {version} on {os}/{arch}"
-          ))?;
+          .ok_or_else(|| {
+            let available_assets: Vec<&str> =
+              release.assets.iter().map(|a| a.name.as_str()).collect();
+            format!(
+              "No compatible asset found for Zen version {} on {}/{}. Available assets: {}",
+              version,
+              os,
+              arch,
+              available_assets.join(", ")
+            )
+          })?;
 
         Ok(asset_url)
       }

@@ -348,16 +348,9 @@ impl AutoUpdater {
     state.auto_update_downloads.remove(&download_key);
     self.save_auto_update_state(&state)?;
 
-    // Check if auto-delete of unused binaries is enabled and perform cleanup
-    let settings = self
-      .settings_manager
-      .load_settings()
-      .map_err(|e| format!("Failed to load settings: {e}"))?;
-    if settings.auto_delete_unused_binaries {
-      // Perform cleanup in the background - don't fail the update if cleanup fails
-      if let Err(e) = self.cleanup_unused_binaries_internal() {
-        eprintln!("Warning: Failed to cleanup unused binaries after auto-update: {e}");
-      }
+    // Always perform cleanup after auto-update - don't fail the update if cleanup fails
+    if let Err(e) = self.cleanup_unused_binaries_internal() {
+      eprintln!("Warning: Failed to cleanup unused binaries after auto-update: {e}");
     }
 
     Ok(updated_profiles)

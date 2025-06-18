@@ -637,14 +637,38 @@ impl ApiClient {
       "{}/repos/mullvad/mullvad-browser/releases?per_page=100",
       self.github_api_base
     );
-    let releases = self
+
+    let response = self
       .client
       .get(url)
       .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
       .send()
-      .await?
-      .json::<Vec<GithubRelease>>()
       .await?;
+
+    if !response.status().is_success() {
+      return Err(format!("GitHub API returned status: {}", response.status()).into());
+    }
+
+    // Get the response text first for better error reporting
+    let response_text = response.text().await?;
+
+    // Try to parse the JSON with better error handling
+    let releases: Vec<GithubRelease> = match serde_json::from_str(&response_text) {
+      Ok(releases) => releases,
+      Err(e) => {
+        eprintln!("Failed to parse GitHub API response for Mullvad releases:");
+        eprintln!("Error: {e}");
+        eprintln!(
+          "Response text (first 500 chars): {}",
+          if response_text.len() > 500 {
+            &response_text[..500]
+          } else {
+            &response_text
+          }
+        );
+        return Err(format!("Failed to parse GitHub API response: {e}").into());
+      }
+    };
 
     let mut releases: Vec<GithubRelease> = releases
       .into_iter()
@@ -683,14 +707,38 @@ impl ApiClient {
       "{}/repos/zen-browser/desktop/releases?per_page=100",
       self.github_api_base
     );
-    let mut releases = self
+
+    let response = self
       .client
       .get(url)
       .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
       .send()
-      .await?
-      .json::<Vec<GithubRelease>>()
       .await?;
+
+    if !response.status().is_success() {
+      return Err(format!("GitHub API returned status: {}", response.status()).into());
+    }
+
+    // Get the response text first for better error reporting
+    let response_text = response.text().await?;
+
+    // Try to parse the JSON with better error handling
+    let mut releases: Vec<GithubRelease> = match serde_json::from_str(&response_text) {
+      Ok(releases) => releases,
+      Err(e) => {
+        eprintln!("Failed to parse GitHub API response for Zen releases:");
+        eprintln!("Error: {e}");
+        eprintln!(
+          "Response text (first 500 chars): {}",
+          if response_text.len() > 500 {
+            &response_text[..500]
+          } else {
+            &response_text
+          }
+        );
+        return Err(format!("Failed to parse GitHub API response: {e}").into());
+      }
+    };
 
     // Check for twilight updates and mark alpha releases
     for release in &mut releases {
@@ -740,14 +788,38 @@ impl ApiClient {
       "{}/repos/brave/brave-browser/releases?per_page=100",
       self.github_api_base
     );
-    let releases = self
+
+    let response = self
       .client
       .get(url)
       .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
       .send()
-      .await?
-      .json::<Vec<GithubRelease>>()
       .await?;
+
+    if !response.status().is_success() {
+      return Err(format!("GitHub API returned status: {}", response.status()).into());
+    }
+
+    // Get the response text first for better error reporting
+    let response_text = response.text().await?;
+
+    // Try to parse the JSON with better error handling
+    let releases: Vec<GithubRelease> = match serde_json::from_str(&response_text) {
+      Ok(releases) => releases,
+      Err(e) => {
+        eprintln!("Failed to parse GitHub API response for Brave releases:");
+        eprintln!("Error: {e}");
+        eprintln!(
+          "Response text (first 500 chars): {}",
+          if response_text.len() > 500 {
+            &response_text[..500]
+          } else {
+            &response_text
+          }
+        );
+        return Err(format!("Failed to parse GitHub API response: {e}").into());
+      }
+    };
 
     // Get platform info to filter appropriate releases
     let (os, arch) = Self::get_platform_info();

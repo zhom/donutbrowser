@@ -31,7 +31,6 @@ interface AppSettings {
   set_as_default_browser: boolean;
   show_settings_on_startup: boolean;
   theme: string;
-  auto_delete_unused_binaries: boolean;
 }
 
 interface PermissionInfo {
@@ -50,13 +49,11 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     set_as_default_browser: false,
     show_settings_on_startup: true,
     theme: "system",
-    auto_delete_unused_binaries: true,
   });
   const [originalSettings, setOriginalSettings] = useState<AppSettings>({
     set_as_default_browser: false,
     show_settings_on_startup: true,
     theme: "system",
-    auto_delete_unused_binaries: true,
   });
   const [isDefaultBrowser, setIsDefaultBrowser] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -287,9 +284,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   const hasChanges =
     settings.show_settings_on_startup !==
       originalSettings.show_settings_on_startup ||
-    settings.theme !== originalSettings.theme ||
-    settings.auto_delete_unused_binaries !==
-      originalSettings.auto_delete_unused_binaries;
+    settings.theme !== originalSettings.theme;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -355,33 +350,6 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
             <p className="text-xs text-muted-foreground">
               When set as default, Donut Browser will handle web links and allow
               you to choose which profile to use.
-            </p>
-          </div>
-
-          {/* Auto-Update Section */}
-          <div className="space-y-4">
-            <Label className="text-base font-medium">Auto-Updates</Label>
-
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="auto-delete-binaries"
-                checked={settings.auto_delete_unused_binaries}
-                onCheckedChange={(checked) => {
-                  updateSetting(
-                    "auto_delete_unused_binaries",
-                    checked as boolean,
-                  );
-                }}
-              />
-              <Label htmlFor="auto-delete-binaries" className="text-sm">
-                Automatically delete unused browser binaries
-              </Label>
-            </div>
-
-            <p className="text-xs text-muted-foreground">
-              When enabled, Donut Browser will check for browser updates and
-              notify you when updates are available for your profiles. Unused
-              binaries will be automatically deleted to save disk space.
             </p>
           </div>
 

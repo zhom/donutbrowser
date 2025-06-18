@@ -720,6 +720,24 @@ pub struct GithubRelease {
   pub is_nightly: bool,
   #[serde(default)]
   pub prerelease: bool,
+  #[serde(default)]
+  pub draft: bool,
+  #[serde(default)]
+  pub body: Option<String>,
+  #[serde(default)]
+  pub html_url: Option<String>,
+  #[serde(default)]
+  pub id: Option<u64>,
+  #[serde(default)]
+  pub node_id: Option<String>,
+  #[serde(default)]
+  pub target_commitish: Option<String>,
+  #[serde(default)]
+  pub created_at: Option<String>,
+  #[serde(default)]
+  pub tarball_url: Option<String>,
+  #[serde(default)]
+  pub zipball_url: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -728,6 +746,22 @@ pub struct GithubAsset {
   pub browser_download_url: String,
   #[serde(default)]
   pub size: u64,
+  #[serde(default)]
+  pub download_count: Option<u64>,
+  #[serde(default)]
+  pub id: Option<u64>,
+  #[serde(default)]
+  pub node_id: Option<String>,
+  #[serde(default)]
+  pub label: Option<String>,
+  #[serde(default)]
+  pub content_type: Option<String>,
+  #[serde(default)]
+  pub state: Option<String>,
+  #[serde(default)]
+  pub created_at: Option<String>,
+  #[serde(default)]
+  pub updated_at: Option<String>,
 }
 
 #[cfg(test)]

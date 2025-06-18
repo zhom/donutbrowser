@@ -76,9 +76,56 @@ export default function Home() {
         "list_browser_profiles",
       );
       setProfiles(profileList);
+
+      // Check for missing binaries after loading profiles
+      await checkMissingBinaries();
     } catch (err: unknown) {
       console.error("Failed to load profiles:", err);
       setError(`Failed to load profiles: ${JSON.stringify(err)}`);
+    }
+  }, []);
+
+  // Check for missing binaries and offer to download them
+  const checkMissingBinaries = useCallback(async () => {
+    try {
+      const missingBinaries = await invoke<[string, string, string][]>(
+        "check_missing_binaries",
+      );
+
+      if (missingBinaries.length > 0) {
+        console.log("Found missing binaries:", missingBinaries);
+
+        // Show a toast notification about missing binaries and auto-download them
+        const missingList = missingBinaries
+          .map(
+            ([profileName, browser, version]) =>
+              `${browser} ${version} (for ${profileName})`,
+          )
+          .join(", ");
+
+        console.log(`Downloading missing binaries: ${missingList}`);
+
+        try {
+          const downloaded = await invoke<string[]>(
+            "ensure_all_binaries_exist",
+          );
+          if (downloaded.length > 0) {
+            console.log(
+              "Successfully downloaded missing binaries:",
+              downloaded,
+            );
+          }
+        } catch (downloadError) {
+          console.error("Failed to download missing binaries:", downloadError);
+          setError(
+            `Failed to download missing binaries: ${JSON.stringify(
+              downloadError,
+            )}`,
+          );
+        }
+      }
+    } catch (err: unknown) {
+      console.error("Failed to check missing binaries:", err);
     }
   }, []);
 
@@ -99,11 +146,12 @@ export default function Home() {
 
       // Check for updates after loading profiles
       await checkForUpdates();
+      await checkMissingBinaries();
     } catch (err: unknown) {
       console.error("Failed to load profiles:", err);
       setError(`Failed to load profiles: ${JSON.stringify(err)}`);
     }
-  }, [checkForUpdates]);
+  }, [checkForUpdates, checkMissingBinaries]);
 
   useAppUpdateNotifications();
 
@@ -439,12 +487,36 @@ export default function Home() {
   const handleDeleteProfile = useCallback(
     async (profile: BrowserProfile) => {
       setError(null);
+      console.log("Attempting to delete profile:", profile.name);
+
       try {
+        // First check if the browser is running for this profile
+        const isRunning = await invoke<boolean>("check_browser_status", {
+          profile,
+        });
+
+        if (isRunning) {
+          setError(
+            "Cannot delete profile while browser is running. Please stop the browser first.",
+          );
+          return;
+        }
+
+        // Attempt to delete the profile
         await invoke("delete_profile", { profileName: profile.name });
+        console.log("Profile deletion command completed successfully");
+
+        // Give a small delay to ensure file system operations complete
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        // Reload profiles to ensure UI is updated
         await loadProfiles();
+
+        console.log("Profile deleted and profiles reloaded successfully");
       } catch (err: unknown) {
         console.error("Failed to delete profile:", err);
-        setError(`Failed to delete profile: ${JSON.stringify(err)}`);
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        setError(`Failed to delete profile: ${errorMessage}`);
       }
     },
     [loadProfiles],

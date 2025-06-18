@@ -189,8 +189,22 @@ impl DownloadedBrowsersRegistry {
     let mut to_remove = Vec::new();
     for (browser, versions) in &self.browsers {
       for (version, info) in versions {
+        // Only remove verified downloads that are not used by any active profile
         if info.verified && !active_set.contains(&(browser.clone(), version.clone())) {
-          to_remove.push((browser.clone(), version.clone()));
+          // Double-check that this browser+version is truly not in use
+          // by looking for exact matches in the active profiles
+          let is_in_use = active_profiles
+            .iter()
+            .any(|(active_browser, active_version)| {
+              active_browser == browser && active_version == version
+            });
+
+          if !is_in_use {
+            to_remove.push((browser.clone(), version.clone()));
+            println!("Marking for removal: {browser} {version} (not used by any profile)");
+          } else {
+            println!("Keeping: {browser} {version} (in use by profile)");
+          }
         }
       }
     }
@@ -201,7 +215,14 @@ impl DownloadedBrowsersRegistry {
         eprintln!("Failed to cleanup unused binary {browser}:{version}: {e}");
       } else {
         cleaned_up.push(format!("{browser} {version}"));
+        println!("Successfully removed unused binary: {browser} {version}");
       }
+    }
+
+    if cleaned_up.is_empty() {
+      println!("No unused binaries found to clean up");
+    } else {
+      println!("Cleaned up {} unused binaries", cleaned_up.len());
     }
 
     Ok(cleaned_up)
@@ -216,6 +237,45 @@ impl DownloadedBrowsersRegistry {
       .iter()
       .map(|profile| (profile.browser.clone(), profile.version.clone()))
       .collect()
+  }
+
+  /// Verify that all registered browsers actually exist on disk and clean up stale entries
+  pub fn verify_and_cleanup_stale_entries(
+    &mut self,
+    browser_runner: &crate::browser_runner::BrowserRunner,
+  ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    use crate::browser::{create_browser, BrowserType};
+    let mut cleaned_up = Vec::new();
+    let binaries_dir = browser_runner.get_binaries_dir();
+
+    let browsers_to_check: Vec<(String, String)> = self
+      .browsers
+      .iter()
+      .flat_map(|(browser, versions)| {
+        versions
+          .keys()
+          .map(|version| (browser.clone(), version.clone()))
+      })
+      .collect();
+
+    for (browser_str, version) in browsers_to_check {
+      if let Ok(browser_type) = BrowserType::from_str(&browser_str) {
+        let browser = create_browser(browser_type);
+        if !browser.is_version_downloaded(&version, &binaries_dir) {
+          // Files don't exist, remove from registry
+          if let Some(_removed) = self.remove_browser(&browser_str, &version) {
+            cleaned_up.push(format!("{browser_str} {version}"));
+            println!("Removed stale registry entry for {browser_str} {version}");
+          }
+        }
+      }
+    }
+
+    if !cleaned_up.is_empty() {
+      self.save()?;
+    }
+
+    Ok(cleaned_up)
   }
 }
 

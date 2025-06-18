@@ -29,8 +29,6 @@ pub struct AppSettings {
   pub show_settings_on_startup: bool,
   #[serde(default = "default_theme")]
   pub theme: String, // "light", "dark", or "system"
-  #[serde(default)]
-  pub auto_delete_unused_binaries: bool,
 }
 
 fn default_theme() -> String {
@@ -43,7 +41,6 @@ impl Default for AppSettings {
       set_as_default_browser: false,
       show_settings_on_startup: true,
       theme: "system".to_string(),
-      auto_delete_unused_binaries: true,
     }
   }
 }

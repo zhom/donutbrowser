@@ -26,12 +26,12 @@ mod version_updater;
 extern crate lazy_static;
 
 use browser_runner::{
-  check_browser_exists, check_browser_status, create_browser_profile_new, delete_profile,
-  download_browser, fetch_browser_versions_cached_first, fetch_browser_versions_with_count,
-  fetch_browser_versions_with_count_cached_first, get_browser_release_types,
-  get_downloaded_browser_versions, get_supported_browsers, is_browser_supported_on_platform,
-  kill_browser_profile, launch_browser_profile, list_browser_profiles, rename_profile,
-  update_profile_proxy, update_profile_version,
+  check_browser_exists, check_browser_status, check_missing_binaries, create_browser_profile_new,
+  delete_profile, download_browser, ensure_all_binaries_exist, fetch_browser_versions_cached_first,
+  fetch_browser_versions_with_count, fetch_browser_versions_with_count_cached_first,
+  get_browser_release_types, get_downloaded_browser_versions, get_supported_browsers,
+  is_browser_supported_on_platform, kill_browser_profile, launch_browser_profile,
+  list_browser_profiles, rename_profile, update_profile_proxy, update_profile_version,
 };
 
 use settings_manager::{
@@ -374,6 +374,8 @@ pub fn run() {
       get_system_theme,
       detect_existing_profiles,
       import_browser_profile,
+      check_missing_binaries,
+      ensure_all_binaries_exist,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

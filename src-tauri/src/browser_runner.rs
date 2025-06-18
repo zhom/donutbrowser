@@ -1058,6 +1058,8 @@ impl BrowserRunner {
     release_type: &str,
     proxy: Option<ProxySettings>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+    println!("Attempting to create profile: {name}");
+
     // Check if a profile with this name already exists (case insensitive)
     let existing_profiles = self.list_profiles()?;
     if existing_profiles
@@ -1068,10 +1070,16 @@ impl BrowserRunner {
     }
 
     let snake_case_name = name.to_lowercase().replace(" ", "_");
+    let profiles_dir = self.get_profiles_dir();
+    let profile_file = profiles_dir.join(format!("{snake_case_name}.json"));
+    let profile_path = profiles_dir.join(&snake_case_name);
+
+    // Double-check that the profile file doesn't exist
+    if profile_file.exists() {
+      return Err(format!("Profile file for '{name}' already exists").into());
+    }
 
     // Create profile directory
-    let mut profile_path = self.get_profiles_dir();
-    profile_path.push(&snake_case_name);
     create_dir_all(&profile_path)?;
 
     let profile = BrowserProfile {
@@ -1087,6 +1095,13 @@ impl BrowserRunner {
 
     // Save profile info
     self.save_profile(&profile)?;
+
+    // Verify the profile was saved correctly
+    if !profile_file.exists() {
+      return Err(format!("Failed to create profile file for '{name}'").into());
+    }
+
+    println!("Profile '{name}' created successfully");
 
     // Create user.js with common Firefox preferences and apply proxy settings if provided
     if let Some(proxy_settings) = &proxy {
@@ -1264,14 +1279,8 @@ impl BrowserRunner {
     // Save the updated profile
     self.save_profile(&profile)?;
 
-    // Check if auto-delete of unused binaries is enabled
-    let settings_manager = crate::settings_manager::SettingsManager::new();
-    if let Ok(settings) = settings_manager.load_settings() {
-      if settings.auto_delete_unused_binaries {
-        // Perform cleanup in the background
-        let _ = self.cleanup_unused_binaries_internal();
-      }
-    }
+    // Always perform cleanup after profile version update to remove unused binaries
+    let _ = self.cleanup_unused_binaries_internal();
 
     Ok(profile)
   }
@@ -1911,33 +1920,53 @@ impl BrowserRunner {
   }
 
   pub fn delete_profile(&self, profile_name: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let profiles_dir = self.get_profiles_dir();
-    let profile_file = profiles_dir.join(format!(
-      "{}.json",
-      profile_name.to_lowercase().replace(" ", "_")
-    ));
-    let profile_path = profiles_dir.join(profile_name.to_lowercase().replace(" ", "_"));
+    println!("Attempting to delete profile: {profile_name}");
 
-    // Delete profile directory
+    let profiles_dir = self.get_profiles_dir();
+    let snake_case_name = profile_name.to_lowercase().replace(" ", "_");
+    let profile_file = profiles_dir.join(format!("{snake_case_name}.json"));
+    let profile_path = profiles_dir.join(&snake_case_name);
+
+    // Verify the profile exists before attempting to delete
+    if !profile_file.exists() {
+      return Err(format!("Profile '{profile_name}' not found").into());
+    }
+
+    // Read the profile to check if browser is running
+    if let Ok(content) = fs::read_to_string(&profile_file) {
+      if let Ok(profile) = serde_json::from_str::<BrowserProfile>(&content) {
+        if profile.process_id.is_some() {
+          return Err(
+            "Cannot delete profile while browser is running. Please stop the browser first.".into(),
+          );
+        }
+      }
+    }
+
+    // Delete profile directory first (if it exists)
     if profile_path.exists() {
-      fs::remove_dir_all(profile_path)?
+      println!("Deleting profile directory: {}", profile_path.display());
+      fs::remove_dir_all(&profile_path)?;
+      println!("Profile directory deleted successfully");
     }
 
     // Delete profile JSON file
     if profile_file.exists() {
-      fs::remove_file(profile_file)?
+      println!("Deleting profile file: {}", profile_file.display());
+      fs::remove_file(&profile_file)?;
+      println!("Profile file deleted successfully");
     }
 
-    // Check if auto-delete of unused binaries is enabled
-    let settings_manager = crate::settings_manager::SettingsManager::new();
-    if let Ok(settings) = settings_manager.load_settings() {
-      if settings.auto_delete_unused_binaries {
-        // Perform cleanup in the background after profile deletion
-        // Ignore errors since this is not critical for profile deletion
-        if let Err(e) = self.cleanup_unused_binaries_internal() {
-          println!("Warning: Failed to cleanup unused binaries: {e}");
-        }
-      }
+    // Verify deletion was successful
+    if profile_file.exists() || profile_path.exists() {
+      return Err(format!("Failed to completely delete profile '{profile_name}'").into());
+    }
+
+    println!("Profile '{profile_name}' deleted successfully");
+
+    // Always perform cleanup after profile deletion to remove unused binaries
+    if let Err(e) = self.cleanup_unused_binaries_internal() {
+      println!("Warning: Failed to cleanup unused binaries: {e}");
     }
 
     Ok(())
@@ -2229,6 +2258,292 @@ impl BrowserRunner {
 
     Ok(())
   }
+
+  /// Check if browser binaries exist for all profiles and return missing binaries
+  pub async fn check_missing_binaries(
+    &self,
+  ) -> Result<Vec<(String, String, String)>, Box<dyn std::error::Error + Send + Sync>> {
+    // Get all profiles
+    let profiles = self
+      .list_profiles()
+      .map_err(|e| format!("Failed to list profiles: {e}"))?;
+    let mut missing_binaries = Vec::new();
+
+    for profile in profiles {
+      let browser_type = match BrowserType::from_str(&profile.browser) {
+        Ok(bt) => bt,
+        Err(_) => {
+          println!(
+            "Warning: Invalid browser type '{}' for profile '{}'",
+            profile.browser, profile.name
+          );
+          continue;
+        }
+      };
+
+      let browser = create_browser(browser_type.clone());
+      let binaries_dir = self.get_binaries_dir();
+      println!(
+        "binaries_dir: {binaries_dir:?} for profile: {}",
+        profile.name
+      );
+
+      // Check if the version is downloaded
+      if !browser.is_version_downloaded(&profile.version, &binaries_dir) {
+        missing_binaries.push((profile.name, profile.browser, profile.version));
+      }
+    }
+
+    Ok(missing_binaries)
+  }
+
+  /// Automatically download missing binaries for all profiles
+  pub async fn ensure_all_binaries_exist(
+    &self,
+    app_handle: &tauri::AppHandle,
+  ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    // First, clean up any stale registry entries
+    if let Ok(mut registry) = DownloadedBrowsersRegistry::load() {
+      if let Ok(cleaned_up) = registry.verify_and_cleanup_stale_entries(self) {
+        if !cleaned_up.is_empty() {
+          println!(
+            "Cleaned up {} stale registry entries: {}",
+            cleaned_up.len(),
+            cleaned_up.join(", ")
+          );
+        }
+      }
+    }
+
+    let missing_binaries = self.check_missing_binaries().await?;
+    let mut downloaded = Vec::new();
+
+    for (profile_name, browser, version) in missing_binaries {
+      println!("Downloading missing binary for profile '{profile_name}': {browser} {version}");
+
+      match self
+        .download_browser_impl(app_handle.clone(), browser.clone(), version.clone())
+        .await
+      {
+        Ok(_) => {
+          downloaded.push(format!(
+            "{browser} {version} (for profile '{profile_name}')"
+          ));
+        }
+        Err(e) => {
+          eprintln!("Failed to download {browser} {version} for profile '{profile_name}': {e}");
+        }
+      }
+    }
+
+    Ok(downloaded)
+  }
+
+  pub async fn download_browser_impl(
+    &self,
+    app_handle: tauri::AppHandle,
+    browser_str: String,
+    version: String,
+  ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let browser_type =
+      BrowserType::from_str(&browser_str).map_err(|e| format!("Invalid browser type: {e}"))?;
+    let browser = create_browser(browser_type.clone());
+
+    // Load registry and check if already downloaded
+    let mut registry = DownloadedBrowsersRegistry::load()
+      .map_err(|e| format!("Failed to load browser registry: {e}"))?;
+
+    // Check if registry thinks it's downloaded, but also verify files actually exist
+    if registry.is_browser_downloaded(&browser_str, &version) {
+      let binaries_dir = self.get_binaries_dir();
+      let actually_exists = browser.is_version_downloaded(&version, &binaries_dir);
+
+      if actually_exists {
+        return Ok(version);
+      } else {
+        // Registry says it's downloaded but files don't exist - clean up registry
+        println!("Registry indicates {browser_str} {version} is downloaded, but files are missing. Cleaning up registry entry.");
+        registry.remove_browser(&browser_str, &version);
+        registry
+          .save()
+          .map_err(|e| format!("Failed to save cleaned registry: {e}"))?;
+      }
+    }
+
+    // Check if browser is supported on current platform before attempting download
+    let version_service = BrowserVersionService::new();
+
+    if !version_service
+      .is_browser_supported(&browser_str)
+      .unwrap_or(false)
+    {
+      return Err(
+        format!(
+          "Browser '{}' is not supported on your platform ({} {}). Supported browsers: {}",
+          browser_str,
+          std::env::consts::OS,
+          std::env::consts::ARCH,
+          version_service.get_supported_browsers().join(", ")
+        )
+        .into(),
+      );
+    }
+
+    let download_info = version_service
+      .get_download_info(&browser_str, &version)
+      .map_err(|e| format!("Failed to get download info: {e}"))?;
+
+    // Create browser directory
+    let mut browser_dir = self.get_binaries_dir();
+    browser_dir.push(browser_type.as_str());
+    browser_dir.push(&version);
+
+    // Clean up any failed previous download
+    if let Err(e) = registry.cleanup_failed_download(&browser_str, &version) {
+      println!("Warning: Failed to cleanup previous download: {e}");
+    }
+
+    create_dir_all(&browser_dir).map_err(|e| format!("Failed to create browser directory: {e}"))?;
+
+    // Mark download as started in registry
+    registry.mark_download_started(&browser_str, &version, browser_dir.clone());
+    registry
+      .save()
+      .map_err(|e| format!("Failed to save registry: {e}"))?;
+
+    // Use the new download module
+    let downloader = Downloader::new();
+    let download_path = match downloader
+      .download_browser(
+        &app_handle,
+        browser_type.clone(),
+        &version,
+        &download_info,
+        &browser_dir,
+      )
+      .await
+    {
+      Ok(path) => path,
+      Err(e) => {
+        // Clean up failed download
+        let _ = registry.cleanup_failed_download(&browser_str, &version);
+        let _ = registry.save();
+        return Err(format!("Failed to download browser: {e}").into());
+      }
+    };
+
+    // Use the new extraction module
+    if download_info.is_archive {
+      let extractor = Extractor::new();
+      match extractor
+        .extract_browser(
+          &app_handle,
+          browser_type.clone(),
+          &version,
+          &download_path,
+          &browser_dir,
+        )
+        .await
+      {
+        Ok(_) => {
+          // Clean up the downloaded archive
+          if let Err(e) = std::fs::remove_file(&download_path) {
+            println!("Warning: Could not delete archive file: {e}");
+          }
+        }
+        Err(e) => {
+          // Clean up failed download
+          let _ = registry.cleanup_failed_download(&browser_str, &version);
+          let _ = registry.save();
+          return Err(format!("Failed to extract browser: {e}").into());
+        }
+      }
+
+      // Give filesystem a moment to settle after extraction
+      tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    }
+
+    // Emit verification progress
+    let progress = DownloadProgress {
+      browser: browser_str.clone(),
+      version: version.clone(),
+      downloaded_bytes: 0,
+      total_bytes: None,
+      percentage: 100.0,
+      speed_bytes_per_sec: 0.0,
+      eta_seconds: None,
+      stage: "verifying".to_string(),
+    };
+    let _ = app_handle.emit("download-progress", &progress);
+
+    // Verify the browser was downloaded correctly
+    println!("Verifying download for browser: {browser_str}, version: {version}");
+
+    // Use the browser's own verification method
+    let binaries_dir = self.get_binaries_dir();
+    if !browser.is_version_downloaded(&version, &binaries_dir) {
+      let _ = registry.cleanup_failed_download(&browser_str, &version);
+      let _ = registry.save();
+      return Err("Browser download completed but verification failed".into());
+    }
+
+    // Mark download as completed in registry
+    let actual_version = if browser_str == "chromium" {
+      Some(version.clone())
+    } else {
+      None
+    };
+
+    registry
+      .mark_download_completed_with_actual_version(&browser_str, &version, actual_version)
+      .map_err(|e| format!("Failed to mark download as completed: {e}"))?;
+    registry
+      .save()
+      .map_err(|e| format!("Failed to save registry: {e}"))?;
+
+    // Emit completion
+    let progress = DownloadProgress {
+      browser: browser_str.clone(),
+      version: version.clone(),
+      downloaded_bytes: 0,
+      total_bytes: None,
+      percentage: 100.0,
+      speed_bytes_per_sec: 0.0,
+      eta_seconds: Some(0.0),
+      stage: "completed".to_string(),
+    };
+    let _ = app_handle.emit("download-progress", &progress);
+
+    Ok(version)
+  }
+
+  /// Check if a browser version is downloaded
+  pub fn is_browser_downloaded(&self, browser_str: &str, version: &str) -> bool {
+    // Always check if files actually exist on disk
+    let browser_type = match BrowserType::from_str(browser_str) {
+      Ok(bt) => bt,
+      Err(_) => {
+        println!("Invalid browser type: {browser_str}");
+        return false;
+      }
+    };
+    let browser = create_browser(browser_type.clone());
+    let binaries_dir = self.get_binaries_dir();
+    let files_exist = browser.is_version_downloaded(version, &binaries_dir);
+
+    // If files don't exist but registry thinks they do, clean up the registry
+    if !files_exist {
+      if let Ok(mut registry) = DownloadedBrowsersRegistry::load() {
+        if registry.is_browser_downloaded(browser_str, version) {
+          println!("Cleaning up stale registry entry for {browser_str} {version}");
+          registry.remove_browser(browser_str, version);
+          let _ = registry.save(); // Don't fail if save fails, just log
+        }
+      }
+    }
+
+    files_exist
+  }
 }
 
 #[tauri::command]
@@ -2493,174 +2808,16 @@ pub async fn download_browser(
   version: String,
 ) -> Result<String, String> {
   let browser_runner = BrowserRunner::new();
-  let browser_type =
-    BrowserType::from_str(&browser_str).map_err(|e| format!("Invalid browser type: {e}"))?;
-  let browser = create_browser(browser_type.clone());
-
-  // Load registry and check if already downloaded
-  let mut registry = DownloadedBrowsersRegistry::load()
-    .map_err(|e| format!("Failed to load browser registry: {e}"))?;
-
-  if registry.is_browser_downloaded(&browser_str, &version) {
-    return Ok(version);
-  }
-
-  // Check if browser is supported on current platform before attempting download
-  let version_service = BrowserVersionService::new();
-
-  if !version_service
-    .is_browser_supported(&browser_str)
-    .unwrap_or(false)
-  {
-    return Err(format!(
-      "Browser '{}' is not supported on your platform ({} {}). Supported browsers: {}",
-      browser_str,
-      std::env::consts::OS,
-      std::env::consts::ARCH,
-      version_service.get_supported_browsers().join(", ")
-    ));
-  }
-
-  let download_info = version_service
-    .get_download_info(&browser_str, &version)
-    .map_err(|e| format!("Failed to get download info: {e}"))?;
-
-  // Create browser directory
-  let mut browser_dir = browser_runner.get_binaries_dir();
-  browser_dir.push(browser_type.as_str());
-  browser_dir.push(&version);
-
-  // Clean up any failed previous download
-  if let Err(e) = registry.cleanup_failed_download(&browser_str, &version) {
-    println!("Warning: Failed to cleanup previous download: {e}");
-  }
-
-  create_dir_all(&browser_dir).map_err(|e| format!("Failed to create browser directory: {e}"))?;
-
-  // Mark download as started in registry
-  registry.mark_download_started(&browser_str, &version, browser_dir.clone());
-  registry
-    .save()
-    .map_err(|e| format!("Failed to save registry: {e}"))?;
-
-  // Use the new download module
-  let downloader = Downloader::new();
-  let download_path = match downloader
-    .download_browser(
-      &app_handle,
-      browser_type.clone(),
-      &version,
-      &download_info,
-      &browser_dir,
-    )
+  browser_runner
+    .download_browser_impl(app_handle, browser_str, version)
     .await
-  {
-    Ok(path) => path,
-    Err(e) => {
-      // Clean up failed download
-      let _ = registry.cleanup_failed_download(&browser_str, &version);
-      let _ = registry.save();
-      return Err(format!("Failed to download browser: {e}"));
-    }
-  };
-
-  // Use the new extraction module
-  if download_info.is_archive {
-    let extractor = Extractor::new();
-    match extractor
-      .extract_browser(
-        &app_handle,
-        browser_type.clone(),
-        &version,
-        &download_path,
-        &browser_dir,
-      )
-      .await
-    {
-      Ok(_) => {
-        // Clean up the downloaded archive
-        if let Err(e) = std::fs::remove_file(&download_path) {
-          println!("Warning: Could not delete archive file: {e}");
-        }
-      }
-      Err(e) => {
-        // Clean up failed download
-        let _ = registry.cleanup_failed_download(&browser_str, &version);
-        let _ = registry.save();
-        return Err(format!("Failed to extract browser: {e}"));
-      }
-    }
-
-    // Give filesystem a moment to settle after extraction
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-  }
-
-  // Emit verification progress
-  let progress = DownloadProgress {
-    browser: browser_str.clone(),
-    version: version.clone(),
-    downloaded_bytes: 0,
-    total_bytes: None,
-    percentage: 100.0,
-    speed_bytes_per_sec: 0.0,
-    eta_seconds: None,
-    stage: "verifying".to_string(),
-  };
-  let _ = app_handle.emit("download-progress", &progress);
-
-  // Verify the browser was downloaded correctly
-  println!("Verifying download for browser: {browser_str}, version: {version}");
-
-  // Use the browser's own verification method
-  let binaries_dir = browser_runner.get_binaries_dir();
-  if !browser.is_version_downloaded(&version, &binaries_dir) {
-    let _ = registry.cleanup_failed_download(&browser_str, &version);
-    let _ = registry.save();
-    return Err("Browser download completed but verification failed".to_string());
-  }
-
-  // Mark download as completed in registry
-  let actual_version = if browser_str == "chromium" {
-    Some(version.clone())
-  } else {
-    None
-  };
-
-  registry
-    .mark_download_completed_with_actual_version(&browser_str, &version, actual_version)
-    .map_err(|e| format!("Failed to mark download as completed: {e}"))?;
-  registry
-    .save()
-    .map_err(|e| format!("Failed to save registry: {e}"))?;
-
-  // Emit completion
-  let progress = DownloadProgress {
-    browser: browser_str.clone(),
-    version: version.clone(),
-    downloaded_bytes: 0,
-    total_bytes: None,
-    percentage: 100.0,
-    speed_bytes_per_sec: 0.0,
-    eta_seconds: Some(0.0),
-    stage: "completed".to_string(),
-  };
-  let _ = app_handle.emit("download-progress", &progress);
-
-  Ok(version)
+    .map_err(|e| format!("Failed to download browser: {e}"))
 }
 
 #[tauri::command]
 pub fn is_browser_downloaded(browser_str: String, version: String) -> bool {
-  if let Ok(registry) = DownloadedBrowsersRegistry::load() {
-    if registry.is_browser_downloaded(&browser_str, &version) {
-      return true;
-    }
-  }
-  let browser_type = BrowserType::from_str(&browser_str).expect("Invalid browser type");
   let browser_runner = BrowserRunner::new();
-  let browser = create_browser(browser_type.clone());
-  let binaries_dir = browser_runner.get_binaries_dir();
-  browser.is_version_downloaded(&version, &binaries_dir)
+  browser_runner.is_browser_downloaded(&browser_str, &version)
 }
 
 #[tauri::command]
@@ -2726,7 +2883,27 @@ pub async fn get_browser_release_types(
   service
     .get_browser_release_types(&browser_str)
     .await
-    .map_err(|e| format!("Failed to get browser release types: {e}"))
+    .map_err(|e| format!("Failed to get release types: {e}"))
+}
+
+#[tauri::command]
+pub async fn check_missing_binaries() -> Result<Vec<(String, String, String)>, String> {
+  let browser_runner = BrowserRunner::new();
+  browser_runner
+    .check_missing_binaries()
+    .await
+    .map_err(|e| format!("Failed to check missing binaries: {e}"))
+}
+
+#[tauri::command]
+pub async fn ensure_all_binaries_exist(
+  app_handle: tauri::AppHandle,
+) -> Result<Vec<String>, String> {
+  let browser_runner = BrowserRunner::new();
+  browser_runner
+    .ensure_all_binaries_exist(&app_handle)
+    .await
+    .map_err(|e| format!("Failed to ensure all binaries exist: {e}"))
 }
 
 #[cfg(test)]
