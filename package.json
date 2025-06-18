@@ -2,7 +2,7 @@
   "name": "donutbrowser",
   "private": true,
   "license": "AGPL-3.0",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "type": "module",
   "scripts": {
     "dev": "next dev --turbopack",
