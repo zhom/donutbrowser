@@ -83,6 +83,11 @@ Have questions or want to contribute? We'd love to hear from you!
  </picture>
 </a>
 
+## Contributors
+
+<!-- readme: collaborators,contributors -start -->
+<!-- readme: collaborators,contributors -end -->
+
 ## Contact
 
 Have an urgent question or want to report a security vulnerability? Send an email to contact at donutbrowser dot com and we'll get back to you as fast as possible.
