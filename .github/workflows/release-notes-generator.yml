@@ -1,0 +1,118 @@
+name: Generate Release Notes
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  models: read
+
+jobs:
+  generate-release-notes:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') && !github.event.release.prerelease
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 #v4.2.2
+        with:
+          fetch-depth: 0 # Fetch full history to compare with previous release
+
+      - name: Get previous release tag
+        id: get-previous-tag
+        run: |
+          # Get the previous release tag (excluding the current one)
+          CURRENT_TAG="${{ github.ref_name }}"
+          PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -v "$CURRENT_TAG" | head -n 1)
+
+          if [ -z "$PREVIOUS_TAG" ]; then
+            echo "No previous release found, using initial commit"
+            PREVIOUS_TAG=$(git rev-list --max-parents=0 HEAD)
+          fi
+
+          echo "current-tag=$CURRENT_TAG" >> $GITHUB_OUTPUT
+          echo "previous-tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
+          echo "Previous release: $PREVIOUS_TAG"
+          echo "Current release: $CURRENT_TAG"
+
+      - name: Get commit messages between releases
+        id: get-commits
+        run: |
+          # Get commit messages between previous and current release
+          PREVIOUS_TAG="${{ steps.get-previous-tag.outputs.previous-tag }}"
+          CURRENT_TAG="${{ steps.get-previous-tag.outputs.current-tag }}"
+
+          # Get commit log with detailed format
+          COMMIT_LOG=$(git log --pretty=format:"- %s (%h by %an)" $PREVIOUS_TAG..$CURRENT_TAG --no-merges)
+
+          # Get changed files summary
+          CHANGED_FILES=$(git diff --name-status $PREVIOUS_TAG..$CURRENT_TAG | head -20)
+
+          # Save to files for AI processing
+          echo "$COMMIT_LOG" > commits.txt
+          echo "$CHANGED_FILES" > changes.txt
+
+          echo "commits-file=commits.txt" >> $GITHUB_OUTPUT
+          echo "changes-file=changes.txt" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes with AI
+        id: generate-notes
+        uses: actions/ai-inference@d645f067d89ee1d5d736a5990e327e504d1c5a4a # v1.1.0
+        with:
+          prompt-file: commits.txt
+          system-prompt: |
+            You are an expert technical writer tasked with generating comprehensive release notes for Donut Browser, a powerful browser orchestrator application.
+
+            Analyze the provided commit messages and generate well-structured release notes following this format:
+
+            ## What's New in ${{ steps.get-previous-tag.outputs.current-tag }}
+
+            [Brief 1-2 sentence overview of the release]
+
+            ### ✨ New Features
+            [List new features with brief descriptions]
+
+            ### 🐛 Bug Fixes  
+            [List bug fixes]
+
+            ### 🔧 Improvements
+            [List improvements and enhancements]
+
+            ### 📚 Documentation
+            [List documentation updates if any]
+
+            ### 🔄 Dependencies
+            [List dependency updates if any]
+
+            ### 🛠️ Developer Experience
+            [List development-related changes if any]
+
+            Guidelines:
+            - Use clear, user-friendly language
+            - Group related commits logically
+            - Omit minor commits like formatting, typos unless significant
+            - Focus on user-facing changes
+            - Use emojis sparingly and consistently
+            - Keep descriptions concise but informative
+            - If commits are unclear, infer the purpose from the context
+
+            The application is a desktop app built with Tauri + Next.js that helps users manage multiple browser profiles with proxy support.
+          model: gpt-4o
+
+      - name: Update release with generated notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get the generated release notes
+          RELEASE_NOTES="${{ steps.generate-notes.outputs.response }}"
+
+          # Update the release with the generated notes
+          gh api --method PATCH /repos/${{ github.repository }}/releases/${{ github.event.release.id }} \
+            --field body="$RELEASE_NOTES"
+
+          echo "✅ Release notes updated successfully!"
+
+      - name: Cleanup
+        run: |
+          rm -f commits.txt changes.txt
