@@ -149,43 +149,6 @@ Refs #00000
 
 - Ensure that "Allow edits from maintainers" option is checked
 
-## Types of Contributions
-
-### Bug Reports
-
-When filing bug reports, please include:
-
-- Clear description of the issue
-- Steps to reproduce
-- Expected vs actual behavior
-- Environment details (OS, version, etc.)
-- Screenshots or error logs if applicable
-
-### Feature Requests
-
-When suggesting new features:
-
-- Explain the use case and why it's valuable
-- Describe the desired behavior
-- Consider alternatives you've thought of
-- Check if it aligns with our roadmap
-
-### Code Contributions
-
-- Bug fixes
-- New features
-- Performance improvements
-- Documentation updates
-- Test coverage improvements
-
-### Documentation
-
-- README improvements
-- Code comments
-- API documentation
-- Tutorial content
-- Translation work
-
 ## Architecture Overview
 
 Donut Browser is built with:
