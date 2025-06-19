@@ -30,16 +30,20 @@ jobs:
 
       - name: Create issue analysis prompt
         id: create-prompt
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_LABELS: ${{ join(github.event.issue.labels.*.name, ', ') }}
         run: |
-          cat > issue_analysis.txt << 'EOF'
+          cat > issue_analysis.txt << EOF
           ## Issue Content to Analyze:
 
-          **Title:** ${{ github.event.issue.title }}
+          **Title:** $ISSUE_TITLE
 
           **Body:**
-          ${{ github.event.issue.body }}
+          $ISSUE_BODY
 
-          **Labels:** ${{ join(github.event.issue.labels.*.name, ', ') }}
+          **Labels:** $ISSUE_LABELS
           EOF
 
       - name: Validate issue with AI
