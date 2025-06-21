@@ -21,7 +21,7 @@
   "author": "",
   "license": "AGPL-3.0",
   "dependencies": {
-    "@types/node": "^24.0.1",
+    "@types/node": "^24.0.3",
     "@yao-pkg/pkg": "^6.5.1",
     "commander": "^14.0.0",
     "dotenv": "^16.5.0",
@@ -31,7 +31,7 @@
     "tmp": "^0.2.3",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.34.0"
+    "typescript-eslint": "^8.34.1"
   },
   "devDependencies": {
     "@types/tmp": "^0.2.6"
