@@ -1,5 +1,4 @@
 version: 2
-github-token: "${{ secrets.GITHUB_TOKEN }}"
 
 updates:
   # Frontend dependencies (root package.json)

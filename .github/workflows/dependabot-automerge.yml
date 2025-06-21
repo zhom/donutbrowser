@@ -71,7 +71,6 @@ jobs:
         uses: dependabot/fetch-metadata@08eff52bf64351f401fb50d4972fa95b9f2c2d1b #v2.4.0
         with:
           compat-lookup: true
-          github-token: "${{ secrets.SECRET_DEPENDABOT_GITHUB_TOKEN }}"
 
       - name: Auto-merge minor and patch updates
         uses: ridedott/merge-me-action@338053c6f9b9311a6be80208f6f0723981e40627 #v2.10.122
