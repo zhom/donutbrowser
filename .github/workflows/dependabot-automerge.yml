@@ -13,7 +13,7 @@ jobs:
   security-scan:
     name: Security Vulnerability Scan
     if: ${{ github.actor == 'dependabot[bot]' }}
-    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@e69cc6c86b31f1e7e23935bbe7031b50e51082de" # v2.0.2
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@40a8940a65eab1544a6af759e43d936201a131a2" # v2.0.3
     with:
       scan-args: |-
         -r
