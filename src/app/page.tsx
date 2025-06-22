@@ -1,5 +1,11 @@
 "use client";
 
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { getCurrent } from "@tauri-apps/plugin-deep-link";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { FaDownload } from "react-icons/fa";
+import { GoGear, GoKebabHorizontal, GoPlus } from "react-icons/go";
 import { ChangeVersionDialog } from "@/components/change-version-dialog";
 import { CreateProfileDialog } from "@/components/create-profile-dialog";
 import { ImportProfileDialog } from "@/components/import-profile-dialog";
@@ -22,18 +28,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAppUpdateNotifications } from "@/hooks/use-app-update-notifications";
-import { usePermissions } from "@/hooks/use-permissions";
 import type { PermissionType } from "@/hooks/use-permissions";
+import { usePermissions } from "@/hooks/use-permissions";
 import { useUpdateNotifications } from "@/hooks/use-update-notifications";
 import { useVersionUpdater } from "@/hooks/use-version-updater";
 import { showErrorToast } from "@/lib/toast-utils";
 import type { BrowserProfile, ProxySettings } from "@/types";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { getCurrent } from "@tauri-apps/plugin-deep-link";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { FaDownload } from "react-icons/fa";
-import { GoGear, GoKebabHorizontal, GoPlus } from "react-icons/go";
 
 type BrowserTypeString =
   | "mullvad-browser"
@@ -68,22 +68,6 @@ export default function Home() {
     useState<PermissionType>("microphone");
   const { isMicrophoneAccessGranted, isCameraAccessGranted, isInitialized } =
     usePermissions();
-
-  // Simple profiles loader without updates check (for use as callback)
-  const loadProfiles = useCallback(async () => {
-    try {
-      const profileList = await invoke<BrowserProfile[]>(
-        "list_browser_profiles",
-      );
-      setProfiles(profileList);
-
-      // Check for missing binaries after loading profiles
-      await checkMissingBinaries();
-    } catch (err: unknown) {
-      console.error("Failed to load profiles:", err);
-      setError(`Failed to load profiles: ${JSON.stringify(err)}`);
-    }
-  }, []);
 
   // Check for missing binaries and offer to download them
   const checkMissingBinaries = useCallback(async () => {
@@ -129,6 +113,42 @@ export default function Home() {
     }
   }, []);
 
+  // Simple profiles loader without updates check (for use as callback)
+  const loadProfiles = useCallback(async () => {
+    try {
+      const profileList = await invoke<BrowserProfile[]>(
+        "list_browser_profiles",
+      );
+      setProfiles(profileList);
+
+      // Check for missing binaries after loading profiles
+      await checkMissingBinaries();
+    } catch (err: unknown) {
+      console.error("Failed to load profiles:", err);
+      setError(`Failed to load profiles: ${JSON.stringify(err)}`);
+    }
+  }, [checkMissingBinaries]);
+
+  const handleUrlOpen = useCallback(async (url: string) => {
+    try {
+      // Use smart profile selection
+      const result = await invoke<string>("smart_open_url", {
+        url,
+      });
+      console.log("Smart URL opening succeeded:", result);
+      // URL was handled successfully, no need to show selector
+    } catch (error: unknown) {
+      console.log(
+        "Smart URL opening failed or requires profile selection:",
+        error,
+      );
+
+      // Show profile selector for manual selection
+      // Replace any existing pending URL with the new one
+      setPendingUrls([{ id: Date.now().toString(), url }]);
+    }
+  }, []);
+
   // Version updater for handling version fetching progress events and auto-updates
   useVersionUpdater();
 
@@ -165,42 +185,9 @@ export default function Home() {
     } catch (error) {
       console.error("Failed to check current URL:", error);
     }
-  }, []);
+  }, [handleUrlOpen]);
 
-  useEffect(() => {
-    void loadProfilesWithUpdateCheck();
-
-    // Check for startup default browser prompt
-    void checkStartupPrompt();
-
-    // Listen for URL open events
-    void listenForUrlEvents();
-
-    // Check for startup URLs (when app was launched as default browser)
-    void checkStartupUrls();
-    void checkCurrentUrl();
-
-    // Set up periodic update checks (every 30 minutes)
-    const updateInterval = setInterval(
-      () => {
-        void checkForUpdates();
-      },
-      30 * 60 * 1000,
-    );
-
-    return () => {
-      clearInterval(updateInterval);
-    };
-  }, [loadProfilesWithUpdateCheck, checkForUpdates, checkCurrentUrl]);
-
-  // Check permissions when they are initialized
-  useEffect(() => {
-    if (isInitialized) {
-      void checkAllPermissions();
-    }
-  }, [isInitialized]);
-
-  const checkStartupPrompt = async () => {
+  const checkStartupPrompt = useCallback(async () => {
     // Only check once during app startup to prevent reopening after dismissing notifications
     if (hasCheckedStartupPrompt) return;
 
@@ -216,9 +203,9 @@ export default function Home() {
       console.error("Failed to check startup prompt:", error);
       setHasCheckedStartupPrompt(true);
     }
-  };
+  }, [hasCheckedStartupPrompt]);
 
-  const checkAllPermissions = async () => {
+  const checkAllPermissions = useCallback(async () => {
     try {
       // Wait for permissions to be initialized before checking
       if (!isInitialized) {
@@ -236,9 +223,9 @@ export default function Home() {
     } catch (error) {
       console.error("Failed to check permissions:", error);
     }
-  };
+  }, [isMicrophoneAccessGranted, isCameraAccessGranted, isInitialized]);
 
-  const checkNextPermission = () => {
+  const checkNextPermission = useCallback(() => {
     try {
       if (!isMicrophoneAccessGranted) {
         setCurrentPermissionType("microphone");
@@ -252,9 +239,9 @@ export default function Home() {
     } catch (error) {
       console.error("Failed to check next permission:", error);
     }
-  };
+  }, [isMicrophoneAccessGranted, isCameraAccessGranted]);
 
-  const checkStartupUrls = async () => {
+  const checkStartupUrls = useCallback(async () => {
     try {
       const hasStartupUrl = await invoke<boolean>(
         "check_and_handle_startup_url",
@@ -265,9 +252,9 @@ export default function Home() {
     } catch (error) {
       console.error("Failed to check startup URLs:", error);
     }
-  };
+  }, []);
 
-  const listenForUrlEvents = async () => {
+  const listenForUrlEvents = useCallback(async () => {
     try {
       // Listen for URL open events from the deep link handler (when app is already running)
       await listen<string>("url-open-request", (event) => {
@@ -295,27 +282,7 @@ export default function Home() {
     } catch (error) {
       console.error("Failed to setup URL listener:", error);
     }
-  };
-
-  const handleUrlOpen = async (url: string) => {
-    try {
-      // Use smart profile selection
-      const result = await invoke<string>("smart_open_url", {
-        url,
-      });
-      console.log("Smart URL opening succeeded:", result);
-      // URL was handled successfully, no need to show selector
-    } catch (error: unknown) {
-      console.log(
-        "Smart URL opening failed or requires profile selection:",
-        error,
-      );
-
-      // Show profile selector for manual selection
-      // Replace any existing pending URL with the new one
-      setPendingUrls([{ id: Date.now().toString(), url }]);
-    }
-  };
+  }, [handleUrlOpen]);
 
   const openProxyDialog = useCallback((profile: BrowserProfile | null) => {
     setCurrentProfileForProxy(profile);
@@ -459,31 +426,6 @@ export default function Home() {
     [loadProfiles, checkBrowserStatus, isUpdating],
   );
 
-  useEffect(() => {
-    if (profiles.length === 0) return;
-
-    const interval = setInterval(() => {
-      for (const profile of profiles) {
-        void checkBrowserStatus(profile);
-      }
-    }, 500);
-
-    return () => {
-      clearInterval(interval);
-    };
-  }, [profiles, checkBrowserStatus]);
-
-  useEffect(() => {
-    runningProfilesRef.current = runningProfiles;
-  }, [runningProfiles]);
-
-  useEffect(() => {
-    if (error) {
-      showErrorToast(error);
-      setError(null);
-    }
-  }, [error]);
-
   const handleDeleteProfile = useCallback(
     async (profile: BrowserProfile) => {
       setError(null);
@@ -550,6 +492,71 @@ export default function Home() {
     },
     [loadProfiles],
   );
+
+  useEffect(() => {
+    void loadProfilesWithUpdateCheck();
+
+    // Check for startup default browser prompt
+    void checkStartupPrompt();
+
+    // Listen for URL open events
+    void listenForUrlEvents();
+
+    // Check for startup URLs (when app was launched as default browser)
+    void checkStartupUrls();
+    void checkCurrentUrl();
+
+    // Set up periodic update checks (every 30 minutes)
+    const updateInterval = setInterval(
+      () => {
+        void checkForUpdates();
+      },
+      30 * 60 * 1000,
+    );
+
+    return () => {
+      clearInterval(updateInterval);
+    };
+  }, [
+    loadProfilesWithUpdateCheck,
+    checkForUpdates,
+    checkCurrentUrl,
+    checkStartupPrompt,
+    listenForUrlEvents,
+    checkStartupUrls,
+  ]);
+
+  useEffect(() => {
+    if (profiles.length === 0) return;
+
+    const interval = setInterval(() => {
+      for (const profile of profiles) {
+        void checkBrowserStatus(profile);
+      }
+    }, 500);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [profiles, checkBrowserStatus]);
+
+  useEffect(() => {
+    runningProfilesRef.current = runningProfiles;
+  }, [runningProfiles]);
+
+  useEffect(() => {
+    if (error) {
+      showErrorToast(error);
+      setError(null);
+    }
+  }, [error]);
+
+  // Check permissions when they are initialized
+  useEffect(() => {
+    if (isInitialized) {
+      void checkAllPermissions();
+    }
+  }, [isInitialized, checkAllPermissions]);
 
   return (
     <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen gap-8 font-[family-name:var(--font-geist-sans)]  bg-white dark:bg-black">

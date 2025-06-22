@@ -1,10 +1,9 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import React from "react";
 import { FaDownload, FaTimes } from "react-icons/fa";
 import { LuRefreshCw } from "react-icons/lu";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 interface AppUpdateInfo {
   current_version: string;

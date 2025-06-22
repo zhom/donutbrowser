@@ -1,5 +1,8 @@
 "use client";
 
+import { invoke } from "@tauri-apps/api/core";
+import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { LoadingButton } from "@/components/loading-button";
 import { ReleaseTypeSelector } from "@/components/release-type-selector";
 import { Button } from "@/components/ui/button";
@@ -33,9 +36,6 @@ import type {
   BrowserReleaseTypes,
   ProxySettings,
 } from "@/types";
-import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { Alert, AlertDescription } from "./ui/alert";
 
 type BrowserTypeString =
@@ -103,12 +103,6 @@ export function CreateProfileDialog({
   } = useBrowserSupport();
 
   useEffect(() => {
-    if (isOpen) {
-      void loadExistingProfiles();
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
     if (supportedBrowsers.length > 0) {
       // Set default browser to first supported browser
       if (supportedBrowsers.includes("mullvad-browser")) {
@@ -118,15 +112,6 @@ export function CreateProfileDialog({
       }
     }
   }, [supportedBrowsers]);
-
-  useEffect(() => {
-    if (isOpen && selectedBrowser) {
-      // Reset selected release type when browser changes
-      setSelectedReleaseType(null);
-      void loadReleaseTypes(selectedBrowser);
-      void loadDownloadedVersions(selectedBrowser);
-    }
-  }, [isOpen, selectedBrowser, loadDownloadedVersions]);
 
   // Set default release type when release types are loaded
   useEffect(() => {
@@ -142,16 +127,16 @@ export function CreateProfileDialog({
     }
   }, [releaseTypes, selectedReleaseType, selectedBrowser]);
 
-  const loadExistingProfiles = async () => {
+  const loadExistingProfiles = useCallback(async () => {
     try {
       const profiles = await invoke<BrowserProfile[]>("list_browser_profiles");
       setExistingProfiles(profiles);
     } catch (error) {
       console.error("Failed to load existing profiles:", error);
     }
-  };
+  }, []);
 
-  const loadReleaseTypes = async (browser: string) => {
+  const loadReleaseTypes = useCallback(async (browser: string) => {
     try {
       setIsLoadingReleaseTypes(true);
       const types = await invoke<BrowserReleaseTypes>(
@@ -167,9 +152,9 @@ export function CreateProfileDialog({
     } finally {
       setIsLoadingReleaseTypes(false);
     }
-  };
+  }, []);
 
-  const handleDownload = async () => {
+  const handleDownload = useCallback(async () => {
     if (!selectedBrowser || !selectedReleaseType) return;
 
     const version =
@@ -179,26 +164,29 @@ export function CreateProfileDialog({
     if (!version) return;
 
     await downloadBrowser(selectedBrowser, version);
-  };
+  }, [selectedBrowser, selectedReleaseType, downloadBrowser, releaseTypes]);
 
-  const validateProfileName = (name: string): string | null => {
-    const trimmedName = name.trim();
+  const validateProfileName = useCallback(
+    (name: string): string | null => {
+      const trimmedName = name.trim();
 
-    if (!trimmedName) {
-      return "Profile name cannot be empty";
-    }
+      if (!trimmedName) {
+        return "Profile name cannot be empty";
+      }
 
-    // Check for duplicate names (case insensitive)
-    const isDuplicate = existingProfiles.some(
-      (profile) => profile.name.toLowerCase() === trimmedName.toLowerCase(),
-    );
+      // Check for duplicate names (case insensitive)
+      const isDuplicate = existingProfiles.some(
+        (profile) => profile.name.toLowerCase() === trimmedName.toLowerCase(),
+      );
 
-    if (isDuplicate) {
-      return "A profile with this name already exists";
-    }
+      if (isDuplicate) {
+        return "A profile with this name already exists";
+      }
 
-    return null;
-  };
+      return null;
+    },
+    [existingProfiles],
+  );
 
   // Helper to determine if proxy should be disabled for the selected browser
   const isProxyDisabled = selectedBrowser === "tor-browser";
@@ -210,7 +198,7 @@ export function CreateProfileDialog({
     }
   }, [selectedBrowser, proxyEnabled]);
 
-  const handleCreate = async () => {
+  const handleCreate = useCallback(async () => {
     if (!profileName.trim() || !selectedBrowser || !selectedReleaseType) return;
 
     // Validate profile name
@@ -265,7 +253,23 @@ export function CreateProfileDialog({
     } finally {
       setIsCreating(false);
     }
-  };
+  }, [
+    profileName,
+    selectedBrowser,
+    selectedReleaseType,
+    onCreateProfile,
+    proxyEnabled,
+    isProxyDisabled,
+    onClose,
+    proxyHost,
+    proxyPassword,
+    proxyPort,
+    proxyType,
+    proxyUsername,
+    releaseTypes.nightly,
+    releaseTypes.stable,
+    validateProfileName,
+  ]);
 
   const nameError = profileName.trim()
     ? validateProfileName(profileName)
@@ -284,6 +288,21 @@ export function CreateProfileDialog({
     isVersionDownloaded(selectedVersion) &&
     (!proxyEnabled || isProxyDisabled || (proxyHost && proxyPort)) &&
     !nameError;
+
+  useEffect(() => {
+    if (isOpen) {
+      void loadExistingProfiles();
+    }
+  }, [isOpen, loadExistingProfiles]);
+
+  useEffect(() => {
+    if (isOpen && selectedBrowser) {
+      // Reset selected release type when browser changes
+      setSelectedReleaseType(null);
+      void loadReleaseTypes(selectedBrowser);
+      void loadDownloadedVersions(selectedBrowser);
+    }
+  }, [isOpen, selectedBrowser, loadDownloadedVersions, loadReleaseTypes]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>

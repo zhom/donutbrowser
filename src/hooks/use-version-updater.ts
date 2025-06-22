@@ -1,3 +1,6 @@
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { useCallback, useEffect, useState } from "react";
 import { getBrowserDisplayName } from "@/lib/browser-utils";
 import {
   dismissToast,
@@ -6,9 +9,6 @@ import {
   showSuccessToast,
   showUnifiedVersionUpdateToast,
 } from "@/lib/toast-utils";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { useCallback, useEffect, useState } from "react";
 
 interface VersionUpdateProgress {
   current_browser: string;

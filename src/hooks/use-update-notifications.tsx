@@ -1,7 +1,7 @@
-import { getBrowserDisplayName } from "@/lib/browser-utils";
-import { dismissToast, showToast } from "@/lib/toast-utils";
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useRef, useState } from "react";
+import { getBrowserDisplayName } from "@/lib/browser-utils";
+import { dismissToast, showToast } from "@/lib/toast-utils";
 
 interface UpdateNotification {
   id: string;
@@ -33,48 +33,6 @@ export function useUpdateNotifications(
   // Add refs to track ongoing operations to prevent duplicates
   const isCheckingForUpdates = useRef(false);
   const activeDownloads = useRef<Set<string>>(new Set()); // Track "browser-version" keys
-
-  const checkForUpdates = useCallback(async () => {
-    // Prevent multiple simultaneous calls
-    if (isCheckingForUpdates.current) {
-      console.log("Already checking for updates, skipping duplicate call");
-      return;
-    }
-
-    isCheckingForUpdates.current = true;
-
-    try {
-      const updates = await invoke<UpdateNotification[]>(
-        "check_for_browser_updates",
-      );
-
-      // Filter out already processed notifications
-      const newUpdates = updates.filter((notification) => {
-        return !processedNotifications.has(notification.id);
-      });
-
-      setNotifications(newUpdates);
-
-      // Automatically start downloads for new update notifications
-      for (const notification of newUpdates) {
-        if (!processedNotifications.has(notification.id)) {
-          setProcessedNotifications((prev) =>
-            new Set(prev).add(notification.id),
-          );
-          // Start automatic update without user interaction
-          void handleAutoUpdate(
-            notification.browser,
-            notification.new_version,
-            notification.id,
-          );
-        }
-      }
-    } catch (error) {
-      console.error("Failed to check for updates:", error);
-    } finally {
-      isCheckingForUpdates.current = false;
-    }
-  }, [processedNotifications]);
 
   const handleAutoUpdate = useCallback(
     async (browser: string, newVersion: string, notificationId: string) => {
@@ -211,6 +169,48 @@ export function useUpdateNotifications(
     },
     [onProfilesUpdated],
   );
+
+  const checkForUpdates = useCallback(async () => {
+    // Prevent multiple simultaneous calls
+    if (isCheckingForUpdates.current) {
+      console.log("Already checking for updates, skipping duplicate call");
+      return;
+    }
+
+    isCheckingForUpdates.current = true;
+
+    try {
+      const updates = await invoke<UpdateNotification[]>(
+        "check_for_browser_updates",
+      );
+
+      // Filter out already processed notifications
+      const newUpdates = updates.filter((notification) => {
+        return !processedNotifications.has(notification.id);
+      });
+
+      setNotifications(newUpdates);
+
+      // Automatically start downloads for new update notifications
+      for (const notification of newUpdates) {
+        if (!processedNotifications.has(notification.id)) {
+          setProcessedNotifications((prev) =>
+            new Set(prev).add(notification.id),
+          );
+          // Start automatic update without user interaction
+          void handleAutoUpdate(
+            notification.browser,
+            notification.new_version,
+            notification.id,
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Failed to check for updates:", error);
+    } finally {
+      isCheckingForUpdates.current = false;
+    }
+  }, [processedNotifications, handleAutoUpdate]);
 
   return {
     notifications,

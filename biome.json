@@ -6,16 +6,12 @@
     "useIgnoreFile": false
   },
   "files": {
-    "ignoreUnknown": false,
-    "ignore": []
+    "ignoreUnknown": false
   },
   "formatter": {
     "enabled": true,
     "indentStyle": "space",
     "indentWidth": 2
-  },
-  "organizeImports": {
-    "enabled": true
   },
   "linter": {
     "enabled": true,
@@ -25,17 +21,7 @@
         "useHookAtTopLevel": "error"
       },
       "nursery": {
-        "useGoogleFontDisplay": "error",
-        "noDocumentImportInPage": "error",
-        "noHeadElement": "error",
-        "noHeadImportInDocument": "error",
-        "noImgElement": "off",
-        "useComponentExportOnlyModules": {
-          "level": "error",
-          "options": {
-            "allowExportNames": ["metadata", "badgeVariants", "buttonVariants"]
-          }
-        }
+        "useUniqueElementIds": "off"
       },
       "a11y": {
         "useSemanticElements": "off"

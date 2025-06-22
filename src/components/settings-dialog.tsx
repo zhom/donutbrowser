@@ -1,5 +1,9 @@
 "use client";
 
+import { invoke } from "@tauri-apps/api/core";
+import { useTheme } from "next-themes";
+import { useCallback, useEffect, useState } from "react";
+import { BsCamera, BsMic } from "react-icons/bs";
 import { LoadingButton } from "@/components/loading-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,13 +23,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { usePermissions } from "@/hooks/use-permissions";
 import type { PermissionType } from "@/hooks/use-permissions";
+import { usePermissions } from "@/hooks/use-permissions";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
-import { invoke } from "@tauri-apps/api/core";
-import { useTheme } from "next-themes";
-import { useCallback, useEffect, useState } from "react";
-import { BsCamera, BsMic } from "react-icons/bs";
 
 interface AppSettings {
   set_as_default_browser: boolean;
@@ -73,6 +73,35 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     isCameraAccessGranted,
   } = usePermissions();
 
+  const getPermissionIcon = useCallback((type: PermissionType) => {
+    switch (type) {
+      case "microphone":
+        return <BsMic className="w-4 h-4" />;
+      case "camera":
+        return <BsCamera className="w-4 h-4" />;
+    }
+  }, []);
+
+  const getPermissionDisplayName = useCallback((type: PermissionType) => {
+    switch (type) {
+      case "microphone":
+        return "Microphone";
+      case "camera":
+        return "Camera";
+    }
+  }, []);
+
+  const getStatusBadge = useCallback((isGranted: boolean) => {
+    if (isGranted) {
+      return (
+        <Badge variant="default" className="text-green-800 bg-green-100">
+          Granted
+        </Badge>
+      );
+    }
+    return <Badge variant="secondary">Not Granted</Badge>;
+  }, []);
+
   const getPermissionDescription = useCallback((type: PermissionType) => {
     switch (type) {
       case "microphone":
@@ -81,60 +110,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
         return "Access to camera for browser applications";
     }
   }, []);
-
-  useEffect(() => {
-    if (isOpen) {
-      loadSettings().catch(console.error);
-      checkDefaultBrowserStatus().catch(console.error);
-
-      // Check if we're on macOS
-      const userAgent = navigator.userAgent;
-      const isMac = userAgent.includes("Mac");
-      setIsMacOS(isMac);
-
-      if (isMac) {
-        loadPermissions().catch(console.error);
-      }
-
-      // Set up interval to check default browser status
-      const intervalId = setInterval(() => {
-        checkDefaultBrowserStatus().catch(console.error);
-      }, 500); // Check every 500ms
-
-      // Cleanup interval on component unmount or dialog close
-      return () => {
-        clearInterval(intervalId);
-      };
-    }
-  }, [isOpen]);
-
-  // Update permissions when the permission states change
-  useEffect(() => {
-    if (isMacOS) {
-      const permissionList: PermissionInfo[] = [
-        {
-          permission_type: "microphone",
-          isGranted: isMicrophoneAccessGranted,
-          description: getPermissionDescription("microphone"),
-        },
-        {
-          permission_type: "camera",
-          isGranted: isCameraAccessGranted,
-          description: getPermissionDescription("camera"),
-        },
-      ];
-      setPermissions(permissionList);
-    } else {
-      setPermissions([]);
-    }
-  }, [
-    isMacOS,
-    isMicrophoneAccessGranted,
-    isCameraAccessGranted,
-    getPermissionDescription,
-  ]);
-
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     setIsLoading(true);
     try {
       const appSettings = await invoke<AppSettings>("get_app_settings");
@@ -145,9 +121,9 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const loadPermissions = async () => {
+  const loadPermissions = useCallback(async () => {
     setIsLoadingPermissions(true);
     try {
       if (!isMacOS) {
@@ -175,18 +151,23 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     } finally {
       setIsLoadingPermissions(false);
     }
-  };
+  }, [
+    getPermissionDescription,
+    isCameraAccessGranted,
+    isMacOS,
+    isMicrophoneAccessGranted,
+  ]);
 
-  const checkDefaultBrowserStatus = async () => {
+  const checkDefaultBrowserStatus = useCallback(async () => {
     try {
       const isDefault = await invoke<boolean>("is_default_browser");
       setIsDefaultBrowser(isDefault);
     } catch (error) {
       console.error("Failed to check default browser status:", error);
     }
-  };
+  }, []);
 
-  const handleSetDefaultBrowser = async () => {
+  const handleSetDefaultBrowser = useCallback(async () => {
     setIsSettingDefault(true);
     try {
       await invoke("set_as_default_browser");
@@ -196,9 +177,9 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     } finally {
       setIsSettingDefault(false);
     }
-  };
+  }, [checkDefaultBrowserStatus]);
 
-  const handleClearCache = async () => {
+  const handleClearCache = useCallback(async () => {
     setIsClearingCache(true);
     try {
       await invoke("clear_all_version_cache_and_refetch");
@@ -217,52 +198,25 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     } finally {
       setIsClearingCache(false);
     }
-  };
+  }, []);
 
-  const handleRequestPermission = async (permissionType: PermissionType) => {
-    setRequestingPermission(permissionType);
-    try {
-      await requestPermission(permissionType);
-      showSuccessToast(
-        `${getPermissionDisplayName(permissionType)} access requested`,
-      );
-    } catch (error) {
-      console.error("Failed to request permission:", error);
-    } finally {
-      setRequestingPermission(null);
-    }
-  };
-
-  const getPermissionIcon = (type: PermissionType) => {
-    switch (type) {
-      case "microphone":
-        return <BsMic className="w-4 h-4" />;
-      case "camera":
-        return <BsCamera className="w-4 h-4" />;
-    }
-  };
-
-  const getPermissionDisplayName = (type: PermissionType) => {
-    switch (type) {
-      case "microphone":
-        return "Microphone";
-      case "camera":
-        return "Camera";
-    }
-  };
-
-  const getStatusBadge = (isGranted: boolean) => {
-    if (isGranted) {
-      return (
-        <Badge variant="default" className="text-green-800 bg-green-100">
-          Granted
-        </Badge>
-      );
-    }
-    return <Badge variant="secondary">Not Granted</Badge>;
-  };
-
-  const handleSave = async () => {
+  const handleRequestPermission = useCallback(
+    async (permissionType: PermissionType) => {
+      setRequestingPermission(permissionType);
+      try {
+        await requestPermission(permissionType);
+        showSuccessToast(
+          `${getPermissionDisplayName(permissionType)} access requested`,
+        );
+      } catch (error) {
+        console.error("Failed to request permission:", error);
+      } finally {
+        setRequestingPermission(null);
+      }
+    },
+    [getPermissionDisplayName, requestPermission],
+  );
+  const handleSave = useCallback(async () => {
     setIsSaving(true);
     try {
       await invoke("save_app_settings", { settings });
@@ -274,11 +228,66 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [onClose, setTheme, settings]);
 
-  const updateSetting = (key: keyof AppSettings, value: boolean | string) => {
-    setSettings((prev) => ({ ...prev, [key]: value }));
-  };
+  const updateSetting = useCallback(
+    (key: keyof AppSettings, value: boolean | string) => {
+      setSettings((prev) => ({ ...prev, [key]: value }));
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (isOpen) {
+      loadSettings().catch(console.error);
+      checkDefaultBrowserStatus().catch(console.error);
+
+      // Check if we're on macOS
+      const userAgent = navigator.userAgent;
+      const isMac = userAgent.includes("Mac");
+      setIsMacOS(isMac);
+
+      if (isMac) {
+        loadPermissions().catch(console.error);
+      }
+
+      // Set up interval to check default browser status
+      const intervalId = setInterval(() => {
+        checkDefaultBrowserStatus().catch(console.error);
+      }, 500); // Check every 500ms
+
+      // Cleanup interval on component unmount or dialog close
+      return () => {
+        clearInterval(intervalId);
+      };
+    }
+  }, [isOpen, loadPermissions, checkDefaultBrowserStatus, loadSettings]);
+
+  // Update permissions when the permission states change
+  useEffect(() => {
+    if (isMacOS) {
+      const permissionList: PermissionInfo[] = [
+        {
+          permission_type: "microphone",
+          isGranted: isMicrophoneAccessGranted,
+          description: getPermissionDescription("microphone"),
+        },
+        {
+          permission_type: "camera",
+          isGranted: isCameraAccessGranted,
+          description: getPermissionDescription("camera"),
+        },
+      ];
+      setPermissions(permissionList);
+    } else {
+      setPermissions([]);
+    }
+  }, [
+    isMacOS,
+    isMicrophoneAccessGranted,
+    isCameraAccessGranted,
+    getPermissionDescription,
+  ]);
 
   // Check if settings have changed (excluding default browser setting)
   const hasChanges =

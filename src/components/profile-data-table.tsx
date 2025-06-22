@@ -1,5 +1,17 @@
 "use client";
 
+import {
+  type ColumnDef,
+  flexRender,
+  getCoreRowModel,
+  getSortedRowModel,
+  type SortingState,
+  useReactTable,
+} from "@tanstack/react-table";
+import * as React from "react";
+import { CiCircleCheck } from "react-icons/ci";
+import { IoEllipsisHorizontal } from "react-icons/io5";
+import { LuChevronDown, LuChevronUp } from "react-icons/lu";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -33,18 +45,6 @@ import {
 import { useTableSorting } from "@/hooks/use-table-sorting";
 import { getBrowserDisplayName, getBrowserIcon } from "@/lib/browser-utils";
 import type { BrowserProfile } from "@/types";
-import {
-  type ColumnDef,
-  type SortingState,
-  flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
-  useReactTable,
-} from "@tanstack/react-table";
-import * as React from "react";
-import { CiCircleCheck } from "react-icons/ci";
-import { IoEllipsisHorizontal } from "react-icons/io5";
-import { LuChevronDown, LuChevronUp } from "react-icons/lu";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 

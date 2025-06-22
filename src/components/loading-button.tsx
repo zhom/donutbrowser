@@ -1,5 +1,6 @@
 import { LuLoaderCircle } from "react-icons/lu";
 import { type ButtonProps, Button as UIButton } from "./ui/button";
+
 type Props = ButtonProps & {
   isLoading: boolean;
   "aria-label"?: string;

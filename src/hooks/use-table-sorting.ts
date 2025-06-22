@@ -1,7 +1,7 @@
-import type { TableSortingSettings } from "@/types";
 import type { SortingState } from "@tanstack/react-table";
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
+import type { TableSortingSettings } from "@/types";
 
 export function useTableSorting() {
   const [sortingSettings, setSortingSettings] = useState<TableSortingSettings>({

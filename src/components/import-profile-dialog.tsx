@@ -1,5 +1,10 @@
 "use client";
 
+import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
+import { useCallback, useEffect, useState } from "react";
+import { FaFolder } from "react-icons/fa";
+import { toast } from "sonner";
 import { LoadingButton } from "@/components/loading-button";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,11 +26,6 @@ import {
 import { useBrowserSupport } from "@/hooks/use-browser-support";
 import { getBrowserDisplayName, getBrowserIcon } from "@/lib/browser-utils";
 import type { DetectedProfile } from "@/types";
-import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
-import { useEffect, useState } from "react";
-import { FaFolder } from "react-icons/fa";
-import { toast } from "sonner";
 
 interface ImportProfileDialogProps {
   isOpen: boolean;
@@ -63,13 +63,7 @@ export function ImportProfileDialog({
   const { supportedBrowsers, isLoading: isLoadingSupport } =
     useBrowserSupport();
 
-  useEffect(() => {
-    if (isOpen) {
-      void loadDetectedProfiles();
-    }
-  }, [isOpen]);
-
-  const loadDetectedProfiles = async () => {
+  const loadDetectedProfiles = useCallback(async () => {
     setIsLoading(true);
     try {
       const profiles = await invoke<DetectedProfile[]>(
@@ -96,7 +90,7 @@ export function ImportProfileDialog({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   const handleBrowseFolder = async () => {
     try {
@@ -115,7 +109,7 @@ export function ImportProfileDialog({
     }
   };
 
-  const handleAutoDetectImport = async () => {
+  const handleAutoDetectImport = useCallback(async () => {
     if (!selectedDetectedProfile || !autoDetectProfileName.trim()) {
       toast.error("Please select a profile and provide a name");
       return;
@@ -152,9 +146,15 @@ export function ImportProfileDialog({
     } finally {
       setIsImporting(false);
     }
-  };
+  }, [
+    selectedDetectedProfile,
+    autoDetectProfileName,
+    detectedProfiles,
+    onImportComplete,
+    onClose,
+  ]);
 
-  const handleManualImport = async () => {
+  const handleManualImport = useCallback(async () => {
     if (
       !manualBrowserType ||
       !manualProfilePath.trim() ||
@@ -187,7 +187,13 @@ export function ImportProfileDialog({
     } finally {
       setIsImporting(false);
     }
-  };
+  }, [
+    manualBrowserType,
+    manualProfilePath,
+    manualProfileName,
+    onImportComplete,
+    onClose,
+  ]);
 
   const handleClose = () => {
     setSelectedDetectedProfile(null);
@@ -221,6 +227,12 @@ export function ImportProfileDialog({
   const selectedProfile = detectedProfiles.find(
     (p) => p.path === selectedDetectedProfile,
   );
+
+  useEffect(() => {
+    if (isOpen) {
+      void loadDetectedProfiles();
+    }
+  }, [isOpen, loadDetectedProfiles]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>

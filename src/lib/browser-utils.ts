@@ -3,9 +3,9 @@
  * Centralized helpers for browser name mapping, icons, etc.
  */
 
-import { ZenBrowser } from "@/components/icons/zen-browser";
 import { FaChrome, FaFirefox } from "react-icons/fa";
 import { SiBrave, SiMullvad, SiTorbrowser } from "react-icons/si";
+import { ZenBrowser } from "@/components/icons/zen-browser";
 
 /**
  * Map internal browser names to display names

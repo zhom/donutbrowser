@@ -1,12 +1,12 @@
 "use client";
 
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { AppUpdateToast } from "@/components/app-update-toast";
 import { showToast } from "@/lib/toast-utils";
 import type { AppUpdateInfo } from "@/types";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import React, { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
 
 export function useAppUpdateNotifications() {
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);

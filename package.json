@@ -17,7 +17,7 @@
     "shadcn:add": "pnpm dlx shadcn@latest add",
     "prepare": "husky && husky install",
     "format:rust": "cd src-tauri && cargo clippy --fix --allow-dirty --all-targets --all-features -- -D warnings -D clippy::all && cargo fmt --all",
-    "format:js": "biome check src/ --fix",
+    "format:js": "biome check src/ --write --unsafe",
     "format": "pnpm format:js && pnpm format:rust",
     "cargo": "cd src-tauri && cargo",
     "unused-exports:js": "ts-unused-exports tsconfig.json",

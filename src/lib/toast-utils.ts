@@ -1,6 +1,6 @@
-import { UnifiedToast } from "@/components/custom-toast";
 import React from "react";
 import { toast as sonnerToast } from "sonner";
+import { UnifiedToast } from "@/components/custom-toast";
 
 interface BaseToastProps {
   id?: string;

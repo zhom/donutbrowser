@@ -1,3 +1,6 @@
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { useCallback, useEffect, useState } from "react";
 import { getBrowserDisplayName } from "@/lib/browser-utils";
 import {
   dismissToast,
@@ -5,9 +8,6 @@ import {
   showErrorToast,
   showSuccessToast,
 } from "@/lib/toast-utils";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { useCallback, useEffect, useState } from "react";
 
 interface GithubRelease {
   tag_name: string;
@@ -52,47 +52,7 @@ export function useBrowserDownload() {
   const [downloadProgress, setDownloadProgress] =
     useState<DownloadProgress | null>(null);
 
-  // Listen for download progress events
-  useEffect(() => {
-    const unlisten = listen<DownloadProgress>("download-progress", (event) => {
-      const progress = event.payload;
-      setDownloadProgress(progress);
-
-      const browserName = getBrowserDisplayName(progress.browser);
-
-      // Show toast with progress
-      if (progress.stage === "downloading") {
-        const speedMBps = (
-          progress.speed_bytes_per_sec /
-          (1024 * 1024)
-        ).toFixed(1);
-        const etaText = progress.eta_seconds
-          ? formatTime(progress.eta_seconds)
-          : "calculating...";
-
-        showDownloadToast(browserName, progress.version, "downloading", {
-          percentage: progress.percentage,
-          speed: speedMBps,
-          eta: etaText,
-        });
-      } else if (progress.stage === "extracting") {
-        showDownloadToast(browserName, progress.version, "extracting");
-      } else if (progress.stage === "verifying") {
-        showDownloadToast(browserName, progress.version, "verifying");
-      } else if (progress.stage === "completed") {
-        showDownloadToast(browserName, progress.version, "completed");
-        setDownloadProgress(null);
-      }
-    });
-
-    return () => {
-      void unlisten.then((fn) => {
-        fn();
-      });
-    };
-  }, []);
-
-  const formatTime = (seconds: number): string => {
+  const formatTime = useCallback((seconds: number): string => {
     if (seconds < 60) {
       return `${Math.round(seconds)}s`;
     }
@@ -104,15 +64,15 @@ export function useBrowserDownload() {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     return `${hours}h ${minutes}m`;
-  };
+  }, []);
 
-  const formatBytes = (bytes: number): string => {
+  const formatBytes = useCallback((bytes: number): string => {
     if (bytes === 0) return "0 B";
     const k = 1024;
     const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return `${Number.parseFloat((bytes / k ** i).toFixed(1))} ${sizes[i]}`;
-  };
+  }, []);
 
   const loadVersions = useCallback(async (browserStr: string) => {
     const browserName = getBrowserDisplayName(browserStr);
@@ -267,6 +227,46 @@ export function useBrowserDownload() {
     },
     [downloadedVersions],
   );
+
+  // Listen for download progress events
+  useEffect(() => {
+    const unlisten = listen<DownloadProgress>("download-progress", (event) => {
+      const progress = event.payload;
+      setDownloadProgress(progress);
+
+      const browserName = getBrowserDisplayName(progress.browser);
+
+      // Show toast with progress
+      if (progress.stage === "downloading") {
+        const speedMBps = (
+          progress.speed_bytes_per_sec /
+          (1024 * 1024)
+        ).toFixed(1);
+        const etaText = progress.eta_seconds
+          ? formatTime(progress.eta_seconds)
+          : "calculating...";
+
+        showDownloadToast(browserName, progress.version, "downloading", {
+          percentage: progress.percentage,
+          speed: speedMBps,
+          eta: etaText,
+        });
+      } else if (progress.stage === "extracting") {
+        showDownloadToast(browserName, progress.version, "extracting");
+      } else if (progress.stage === "verifying") {
+        showDownloadToast(browserName, progress.version, "verifying");
+      } else if (progress.stage === "completed") {
+        showDownloadToast(browserName, progress.version, "completed");
+        setDownloadProgress(null);
+      }
+    });
+
+    return () => {
+      void unlisten.then((fn) => {
+        fn();
+      });
+    };
+  }, [formatTime]);
 
   return {
     availableVersions,

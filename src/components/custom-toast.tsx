@@ -48,7 +48,6 @@
  * ```
  */
 
-import React from "react";
 import {
   LuCheckCheck,
   LuDownload,

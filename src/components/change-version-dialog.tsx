@@ -1,5 +1,8 @@
 "use client";
 
+import { invoke } from "@tauri-apps/api/core";
+import { useCallback, useEffect, useState } from "react";
+import { LuTriangleAlert } from "react-icons/lu";
 import { LoadingButton } from "@/components/loading-button";
 import { ReleaseTypeSelector } from "@/components/release-type-selector";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -16,9 +19,6 @@ import { Label } from "@/components/ui/label";
 import { useBrowserDownload } from "@/hooks/use-browser-download";
 import { getBrowserDisplayName } from "@/lib/browser-utils";
 import type { BrowserProfile, BrowserReleaseTypes } from "@/types";
-import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useState } from "react";
-import { LuTriangleAlert } from "react-icons/lu";
 
 interface ChangeVersionDialogProps {
   isOpen: boolean;
@@ -50,17 +50,7 @@ export function ChangeVersionDialog({
     isVersionDownloaded,
   } = useBrowserDownload();
 
-  useEffect(() => {
-    if (isOpen && profile) {
-      // Set current release type based on profile
-      setSelectedReleaseType(profile.release_type as "stable" | "nightly");
-      setAcknowledgeDowngrade(false);
-      void loadReleaseTypes(profile.browser);
-      void loadDownloadedVersions(profile.browser);
-    }
-  }, [isOpen, profile, loadDownloadedVersions]);
-
-  const loadReleaseTypes = async (browser: string) => {
+  const loadReleaseTypes = useCallback(async (browser: string) => {
     setIsLoadingReleaseTypes(true);
     try {
       const releaseTypes = await invoke<BrowserReleaseTypes>(
@@ -73,7 +63,7 @@ export function ChangeVersionDialog({
     } finally {
       setIsLoadingReleaseTypes(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (
@@ -93,7 +83,7 @@ export function ChangeVersionDialog({
     }
   }, [selectedReleaseType, profile]);
 
-  const handleDownload = async () => {
+  const handleDownload = useCallback(async () => {
     if (!profile || !selectedReleaseType) return;
 
     const version =
@@ -103,9 +93,9 @@ export function ChangeVersionDialog({
     if (!version) return;
 
     await downloadBrowser(profile.browser, version);
-  };
+  }, [profile, selectedReleaseType, downloadBrowser, releaseTypes]);
 
-  const handleVersionChange = async () => {
+  const handleVersionChange = useCallback(async () => {
     if (!profile || !selectedReleaseType) return;
 
     const version =
@@ -127,7 +117,7 @@ export function ChangeVersionDialog({
     } finally {
       setIsUpdating(false);
     }
-  };
+  }, [profile, selectedReleaseType, releaseTypes, onVersionChanged, onClose]);
 
   const selectedVersion =
     selectedReleaseType === "stable"
@@ -141,6 +131,16 @@ export function ChangeVersionDialog({
     selectedVersion &&
     isVersionDownloaded(selectedVersion) &&
     (!showDowngradeWarning || acknowledgeDowngrade);
+
+  useEffect(() => {
+    if (isOpen && profile) {
+      // Set current release type based on profile
+      setSelectedReleaseType(profile.release_type as "stable" | "nightly");
+      setAcknowledgeDowngrade(false);
+      void loadReleaseTypes(profile.browser);
+      void loadDownloadedVersions(profile.browser);
+    }
+  }, [isOpen, profile, loadDownloadedVersions, loadReleaseTypes]);
 
   if (!profile) return null;
 

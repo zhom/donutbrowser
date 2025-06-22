@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { BsCamera, BsMic } from "react-icons/bs";
 import { LoadingButton } from "@/components/loading-button";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,11 +12,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { usePermissions } from "@/hooks/use-permissions";
 import type { PermissionType } from "@/hooks/use-permissions";
+import { usePermissions } from "@/hooks/use-permissions";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
-import { useEffect, useState } from "react";
-import { BsCamera, BsMic } from "react-icons/bs";
 
 interface PermissionDialogProps {
   isOpen: boolean;

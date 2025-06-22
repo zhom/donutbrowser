@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { LuCheck, LuChevronsUpDown, LuDownload } from "react-icons/lu";
 import { LoadingButton } from "@/components/loading-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,9 +19,6 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import type { BrowserReleaseTypes } from "@/types";
-import { useState } from "react";
-import { LuDownload } from "react-icons/lu";
-import { LuCheck, LuChevronsUpDown } from "react-icons/lu";
 
 interface ReleaseTypeSelectorProps {
   selectedReleaseType: "stable" | "nightly" | null;
