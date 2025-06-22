@@ -1,8 +1,10 @@
 use crate::proxy_manager::PROXY_MANAGER;
 use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::fs::{self, create_dir_all};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use sysinfo::{Pid, System};
 use tauri::Emitter;
@@ -33,6 +35,11 @@ pub struct BrowserProfile {
 
 fn default_release_type() -> String {
   "stable".to_string()
+}
+
+// Global state to track currently downloading browsers
+lazy_static::lazy_static! {
+  static ref DOWNLOADING_BROWSERS: Arc<Mutex<HashSet<String>>> = Arc::new(Mutex::new(HashSet::new()));
 }
 
 // Platform-specific modules
@@ -2345,6 +2352,18 @@ impl BrowserRunner {
     browser_str: String,
     version: String,
   ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    // Check if this browser type is already being downloaded
+    {
+      let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
+      if downloading.contains(&browser_str) {
+        return Err(format!(
+          "Browser '{browser_str}' is already being downloaded. Please wait for the current download to complete."
+        ).into());
+      }
+      // Mark this browser as being downloaded
+      downloading.insert(browser_str.clone());
+    }
+
     let browser_type =
       BrowserType::from_str(&browser_str).map_err(|e| format!("Invalid browser type: {e}"))?;
     let browser = create_browser(browser_type.clone());
@@ -2428,6 +2447,11 @@ impl BrowserRunner {
         // Clean up failed download
         let _ = registry.cleanup_failed_download(&browser_str, &version);
         let _ = registry.save();
+        // Remove browser from downloading set on error
+        {
+          let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
+          downloading.remove(&browser_str);
+        }
         return Err(format!("Failed to download browser: {e}").into());
       }
     };
@@ -2455,6 +2479,11 @@ impl BrowserRunner {
           // Clean up failed download
           let _ = registry.cleanup_failed_download(&browser_str, &version);
           let _ = registry.save();
+          // Remove browser from downloading set on error
+          {
+            let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
+            downloading.remove(&browser_str);
+          }
           return Err(format!("Failed to extract browser: {e}").into());
         }
       }
@@ -2484,6 +2513,11 @@ impl BrowserRunner {
     if !browser.is_version_downloaded(&version, &binaries_dir) {
       let _ = registry.cleanup_failed_download(&browser_str, &version);
       let _ = registry.save();
+      // Remove browser from downloading set on verification failure
+      {
+        let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
+        downloading.remove(&browser_str);
+      }
       return Err("Browser download completed but verification failed".into());
     }
 
@@ -2513,6 +2547,12 @@ impl BrowserRunner {
       stage: "completed".to_string(),
     };
     let _ = app_handle.emit("download-progress", &progress);
+
+    // Remove browser from downloading set
+    {
+      let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
+      downloading.remove(&browser_str);
+    }
 
     Ok(version)
   }

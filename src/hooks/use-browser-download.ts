@@ -48,7 +48,9 @@ export function useBrowserDownload() {
     [],
   );
   const [downloadedVersions, setDownloadedVersions] = useState<string[]>([]);
-  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadingBrowsers, setDownloadingBrowsers] = useState<Set<string>>(
+    new Set(),
+  );
   const [downloadProgress, setDownloadProgress] =
     useState<DownloadProgress | null>(null);
 
@@ -181,7 +183,7 @@ export function useBrowserDownload() {
       suppressNotifications = false,
     ) => {
       const browserName = getBrowserDisplayName(browserStr);
-      setIsDownloading(true);
+      setDownloadingBrowsers((prev) => new Set(prev).add(browserStr));
 
       try {
         // Check browser compatibility before attempting download
@@ -215,7 +217,11 @@ export function useBrowserDownload() {
         }
         throw error;
       } finally {
-        setIsDownloading(false);
+        setDownloadingBrowsers((prev) => {
+          const next = new Set(prev);
+          next.delete(browserStr);
+          return next;
+        });
       }
     },
     [loadDownloadedVersions],
@@ -227,6 +233,17 @@ export function useBrowserDownload() {
     },
     [downloadedVersions],
   );
+
+  // Check if a browser type is currently downloading
+  const isBrowserDownloading = useCallback(
+    (browserStr: string) => {
+      return downloadingBrowsers.has(browserStr);
+    },
+    [downloadingBrowsers],
+  );
+
+  // Legacy isDownloading for backwards compatibility
+  const isDownloading = downloadingBrowsers.size > 0;
 
   // Listen for download progress events
   useEffect(() => {
@@ -272,6 +289,8 @@ export function useBrowserDownload() {
     availableVersions,
     downloadedVersions,
     isDownloading,
+    isBrowserDownloading,
+    downloadingBrowsers,
     downloadProgress,
     loadVersions,
     loadVersionsWithNewCount,

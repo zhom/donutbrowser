@@ -79,17 +79,27 @@ export default function Home() {
       if (missingBinaries.length > 0) {
         console.log("Found missing binaries:", missingBinaries);
 
+        // Group missing binaries by browser type to avoid concurrent downloads
+        const browserMap = new Map<string, string[]>();
+        for (const [profileName, browser, version] of missingBinaries) {
+          if (!browserMap.has(browser)) {
+            browserMap.set(browser, []);
+          }
+          const versions = browserMap.get(browser);
+          if (versions) {
+            versions.push(`${version} (for ${profileName})`);
+          }
+        }
+
         // Show a toast notification about missing binaries and auto-download them
-        const missingList = missingBinaries
-          .map(
-            ([profileName, browser, version]) =>
-              `${browser} ${version} (for ${profileName})`,
-          )
+        const missingList = Array.from(browserMap.entries())
+          .map(([browser, versions]) => `${browser}: ${versions.join(", ")}`)
           .join(", ");
 
         console.log(`Downloading missing binaries: ${missingList}`);
 
         try {
+          // Download missing binaries sequentially by browser type to prevent conflicts
           const downloaded = await invoke<string[]>(
             "ensure_all_binaries_exist",
           );

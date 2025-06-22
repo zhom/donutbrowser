@@ -32,22 +32,21 @@ export function useUpdateNotifications(
 
   // Add refs to track ongoing operations to prevent duplicates
   const isCheckingForUpdates = useRef(false);
-  const activeDownloads = useRef<Set<string>>(new Set()); // Track "browser-version" keys
+  // Track browser types being downloaded (not browser-version pairs)
+  const activeDownloads = useRef<Set<string>>(new Set()); // Track browser types
 
   const handleAutoUpdate = useCallback(
     async (browser: string, newVersion: string, notificationId: string) => {
-      const downloadKey = `${browser}-${newVersion}`;
-
-      // Check if this download is already in progress
-      if (activeDownloads.current.has(downloadKey)) {
+      // Check if this browser type is already being downloaded
+      if (activeDownloads.current.has(browser)) {
         console.log(
-          `Download already in progress for ${downloadKey}, skipping duplicate`,
+          `Download already in progress for browser type ${browser}, skipping duplicate auto-update`,
         );
         return;
       }
 
-      // Mark download as active and disable browser
-      activeDownloads.current.add(downloadKey);
+      // Mark browser type as active and disable browser
+      activeDownloads.current.add(browser);
       setUpdatingBrowsers((prev) => new Set(prev).add(browser));
 
       try {
@@ -158,8 +157,8 @@ export function useUpdateNotifications(
         console.error("Failed to start auto-update:", error);
         throw error;
       } finally {
-        // Clean up
-        activeDownloads.current.delete(downloadKey);
+        // Clean up - remove browser type from active downloads
+        activeDownloads.current.delete(browser);
         setUpdatingBrowsers((prev) => {
           const next = new Set(prev);
           next.delete(browser);
