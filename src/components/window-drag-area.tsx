@@ -33,7 +33,7 @@ export function WindowDragArea() {
     void startDrag();
   };
 
-  // Only render on macOS
+  // Only render on macOS and when no dialogs are open
   if (!isMacOS) {
     return null;
   }
@@ -41,20 +41,11 @@ export function WindowDragArea() {
   return (
     <button
       type="button"
-      className="fixed top-0 right-0 left-0 h-10 bg-transparent border-0 z-9999"
-      style={{
-        // Ensure it's above all other content
-        zIndex: 9999,
-        // Make it transparent but still capture mouse events
-        backgroundColor: "transparent",
-        // Prevent text selection during drag
-        userSelect: "none",
-        WebkitUserSelect: "none",
-      }}
+      className="fixed top-0 right-0 left-0 h-10 bg-transparent border-0 z-[9999] select-none"
       onMouseDown={handleMouseDown}
-      // Prevent context menu
       onContextMenu={(e) => {
         e.preventDefault();
+        e.stopPropagation();
       }}
     />
   );
