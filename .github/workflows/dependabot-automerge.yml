@@ -72,13 +72,10 @@ jobs:
         with:
           compat-lookup: true
           github-token: "${{ secrets.GITHUB_TOKEN }}"
-          token: "${{ secrets.GITHUB_TOKEN }}"
-
       - name: Auto-merge minor and patch updates
         uses: ridedott/merge-me-action@338053c6f9b9311a6be80208f6f0723981e40627 #v2.10.122
         with:
-          token: "${{ secrets.SECRET_DEPENDABOT_GITHUB_TOKEN }}"
-          GITHUB_TOKEN: ${{ secrets.SECRET_DEPENDABOT_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PRESET: DEPENDABOT_MINOR
           MERGE_METHOD: SQUASH
     timeout-minutes: 10
