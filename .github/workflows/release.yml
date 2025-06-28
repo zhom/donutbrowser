@@ -128,7 +128,7 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev pkg-config xdg-utils
 
       - name: Rust cache
-        uses: swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 #v2.7.8
+        uses: swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 #v2.8.0
         with:
           workdir: ./src-tauri
 
@@ -160,7 +160,7 @@ jobs:
         run: pnpm build
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@42e9df6c59070d114bf90dcd3943a1b8f138b113 #v0.5.20
+        uses: tauri-apps/tauri-action@8c94c894075e92c8a2b668b2d35c57e1e38cfdfb #v0.5.21
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
