@@ -65,6 +65,7 @@ jobs:
     if: ${{ github.actor == 'dependabot[bot]' }}
     needs: [security-scan, lint-js, lint-rust, codeql, spellcheck]
     runs-on: ubuntu-latest
+    secrets: inherit
     steps:
       - name: Dependabot metadata
         id: metadata
