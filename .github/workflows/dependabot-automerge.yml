@@ -79,4 +79,6 @@ jobs:
         with:
           GITHUB_TOKEN: ${{ secrets.SECRET_DEPENDABOT_GITHUB_TOKEN }}
           MERGE_METHOD: SQUASH
+          PRESET: DEPENDABOT_MINOR
+          MAXIMUM_RETRIES: 5
     timeout-minutes: 10
