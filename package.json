@@ -11,7 +11,7 @@
     "test": "pnpm test:rust",
     "test:rust": "cd src-tauri && cargo test",
     "lint": "pnpm lint:js && pnpm lint:rust",
-    "lint:js": "biome check src/ && tsc --noEmit && next lint",
+    "lint:js": "biome check src/ && tsc --noEmit",
     "lint:rust": "cd src-tauri && cargo clippy --all-targets --all-features -- -D warnings -D clippy::all && cargo fmt --all",
     "tauri": "tauri",
     "shadcn:add": "pnpm dlx shadcn@latest add",
@@ -55,33 +55,23 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.0.6",
-    "@eslint/eslintrc": "^3.3.1",
-    "@eslint/js": "^9.30.0",
-    "@next/eslint-plugin-next": "^15.3.4",
     "@tailwindcss/postcss": "^4.1.11",
     "@tauri-apps/cli": "^2.6.1",
     "@types/node": "^24.0.7",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
-    "@typescript-eslint/eslint-plugin": "^8.35.0",
-    "@typescript-eslint/parser": "^8.35.0",
     "@vitejs/plugin-react": "^4.6.0",
-    "eslint": "^9.29.0",
-    "eslint-config-next": "^15.3.4",
-    "eslint-plugin-react-hooks": "^5.2.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.1.2",
     "tailwindcss": "^4.1.11",
     "ts-unused-exports": "^11.0.1",
     "tw-animate-css": "^1.3.4",
-    "typescript": "~5.8.3",
-    "typescript-eslint": "^8.35.0"
+    "typescript": "~5.8.3"
   },
   "packageManager": "pnpm@10.11.1",
   "lint-staged": {
     "**/*.{js,jsx,ts,tsx,json,css,md}": [
-      "biome check --fix",
-      "eslint --cache --fix"
+      "biome check --fix"
     ],
     "src-tauri/**/*.rs": [
       "cd src-tauri && cargo fmt --all",

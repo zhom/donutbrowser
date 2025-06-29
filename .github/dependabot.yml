@@ -14,9 +14,6 @@ updates:
       frontend-dependencies:
         patterns:
           - "*"
-    ignore:
-      - dependency-name: "eslint"
-        versions: ">= 9"
     commit-message:
       prefix: "deps"
       include: "scope"
