@@ -95,7 +95,7 @@ export function ReleaseTypeSelector({
               <LuChevronsUpDown className="ml-2 w-4 h-4 opacity-50 shrink-0" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-[300px] p-0">
+          <PopoverContent className="p-0">
             <Command>
               <CommandEmpty>No release types available.</CommandEmpty>
               <CommandList>
@@ -155,8 +155,8 @@ export function ReleaseTypeSelector({
       ) : (
         // Show a simple display when only one release type is available
         releaseOptions.length === 1 && (
-          <div className="flex gap-2 items-center justify-center p-3 border rounded-md bg-muted/50">
-            <span className="capitalize text-sm font-medium">
+          <div className="flex gap-2 justify-center items-center p-3 rounded-md border bg-muted/50">
+            <span className="text-sm font-medium capitalize">
               {releaseOptions[0].type}
             </span>
             {releaseOptions[0].type === "nightly" && (
