@@ -30,6 +30,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Table,
   TableBody,
@@ -510,7 +511,7 @@ export function ProfilesDataTable({
 
   return (
     <>
-      <div className="rounded-md border">
+      <ScrollArea className="h-[400px] rounded-md border">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -559,7 +560,7 @@ export function ProfilesDataTable({
             )}
           </TableBody>
         </Table>
-      </div>
+      </ScrollArea>
 
       <Dialog
         open={profileToRename !== null}
