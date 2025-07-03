@@ -992,6 +992,7 @@ mod linux {
     _url: &str,
     _browser_type: BrowserType,
     _browser_dir: &Path,
+    _profiles_dir: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     Err("Opening URLs in existing Firefox-based browsers is not supported on Linux when using -no-remote".into())
   }
