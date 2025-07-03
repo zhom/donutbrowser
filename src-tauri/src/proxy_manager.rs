@@ -1,6 +1,9 @@
+use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri_plugin_shell::ShellExt;
 
@@ -17,19 +20,237 @@ pub struct ProxyInfo {
   pub local_port: u16,
 }
 
-// Global proxy manager to track active proxies
+// Stored proxy configuration with name and ID for reuse
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoredProxy {
+  pub id: String,
+  pub name: String,
+  pub proxy_settings: ProxySettings,
+}
+
+impl StoredProxy {
+  pub fn new(name: String, proxy_settings: ProxySettings) -> Self {
+    Self {
+      id: uuid::Uuid::new_v4().to_string(),
+      name,
+      proxy_settings,
+    }
+  }
+
+  pub fn update_settings(&mut self, proxy_settings: ProxySettings) {
+    self.proxy_settings = proxy_settings;
+  }
+
+  pub fn update_name(&mut self, name: String) {
+    self.name = name;
+  }
+}
+
+// Global proxy manager to track active proxies and stored proxy configurations
 pub struct ProxyManager {
   active_proxies: Mutex<HashMap<u32, ProxyInfo>>, // Maps browser process ID to proxy info
   // Store proxy info by profile name for persistence across browser restarts
   profile_proxies: Mutex<HashMap<String, ProxySettings>>, // Maps profile name to proxy settings
+  stored_proxies: Mutex<HashMap<String, StoredProxy>>,    // Maps proxy ID to stored proxy
+  base_dirs: BaseDirs,
 }
 
 impl ProxyManager {
   pub fn new() -> Self {
-    Self {
+    let base_dirs = BaseDirs::new().expect("Failed to get base directories");
+    let manager = Self {
       active_proxies: Mutex::new(HashMap::new()),
       profile_proxies: Mutex::new(HashMap::new()),
+      stored_proxies: Mutex::new(HashMap::new()),
+      base_dirs,
+    };
+
+    // Load stored proxies on initialization
+    if let Err(e) = manager.load_stored_proxies() {
+      eprintln!("Warning: Failed to load stored proxies: {e}");
     }
+
+    manager
+  }
+
+  // Get the path to the proxies directory
+  fn get_proxies_dir(&self) -> PathBuf {
+    let mut path = self.base_dirs.data_local_dir().to_path_buf();
+    path.push(if cfg!(debug_assertions) {
+      "DonutBrowserDev"
+    } else {
+      "DonutBrowser"
+    });
+    path.push("proxies");
+    path
+  }
+
+  // Get the path to a specific proxy file
+  fn get_proxy_file_path(&self, proxy_id: &str) -> PathBuf {
+    self.get_proxies_dir().join(format!("{proxy_id}.json"))
+  }
+
+  // Load stored proxies from disk
+  fn load_stored_proxies(&self) -> Result<(), Box<dyn std::error::Error>> {
+    let proxies_dir = self.get_proxies_dir();
+
+    if !proxies_dir.exists() {
+      return Ok(()); // No proxies directory yet
+    }
+
+    let mut stored_proxies = self.stored_proxies.lock().unwrap();
+
+    // Read all JSON files from the proxies directory
+    for entry in fs::read_dir(&proxies_dir)? {
+      let entry = entry?;
+      let path = entry.path();
+
+      if path.extension().is_some_and(|ext| ext == "json") {
+        let content = fs::read_to_string(&path)?;
+        let proxy: StoredProxy = serde_json::from_str(&content)?;
+        stored_proxies.insert(proxy.id.clone(), proxy);
+      }
+    }
+
+    Ok(())
+  }
+
+  // Save a single proxy to disk
+  fn save_proxy(&self, proxy: &StoredProxy) -> Result<(), Box<dyn std::error::Error>> {
+    let proxies_dir = self.get_proxies_dir();
+
+    // Ensure directory exists
+    fs::create_dir_all(&proxies_dir)?;
+
+    let proxy_file = self.get_proxy_file_path(&proxy.id);
+    let content = serde_json::to_string_pretty(proxy)?;
+    fs::write(&proxy_file, content)?;
+
+    Ok(())
+  }
+
+  // Delete a proxy file from disk
+  fn delete_proxy_file(&self, proxy_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let proxy_file = self.get_proxy_file_path(proxy_id);
+    if proxy_file.exists() {
+      fs::remove_file(proxy_file)?;
+    }
+    Ok(())
+  }
+
+  // Create a new stored proxy
+  pub fn create_stored_proxy(
+    &self,
+    name: String,
+    proxy_settings: ProxySettings,
+  ) -> Result<StoredProxy, String> {
+    // Check if name already exists
+    {
+      let stored_proxies = self.stored_proxies.lock().unwrap();
+      if stored_proxies.values().any(|p| p.name == name) {
+        return Err(format!("Proxy with name '{name}' already exists"));
+      }
+    }
+
+    let stored_proxy = StoredProxy::new(name, proxy_settings);
+
+    {
+      let mut stored_proxies = self.stored_proxies.lock().unwrap();
+      stored_proxies.insert(stored_proxy.id.clone(), stored_proxy.clone());
+    }
+
+    if let Err(e) = self.save_proxy(&stored_proxy) {
+      eprintln!("Warning: Failed to save proxy: {e}");
+    }
+
+    Ok(stored_proxy)
+  }
+
+  // Get all stored proxies
+  pub fn get_stored_proxies(&self) -> Vec<StoredProxy> {
+    let stored_proxies = self.stored_proxies.lock().unwrap();
+    stored_proxies.values().cloned().collect()
+  }
+
+  // Get a stored proxy by ID
+  #[allow(dead_code)]
+  pub fn get_stored_proxy(&self, proxy_id: &str) -> Option<StoredProxy> {
+    let stored_proxies = self.stored_proxies.lock().unwrap();
+    stored_proxies.get(proxy_id).cloned()
+  }
+
+  // Update a stored proxy
+  pub fn update_stored_proxy(
+    &self,
+    proxy_id: &str,
+    name: Option<String>,
+    proxy_settings: Option<ProxySettings>,
+  ) -> Result<StoredProxy, String> {
+    // First, check for conflicts without holding a mutable reference
+    {
+      let stored_proxies = self.stored_proxies.lock().unwrap();
+
+      // Check if proxy exists
+      if !stored_proxies.contains_key(proxy_id) {
+        return Err(format!("Proxy with ID '{proxy_id}' not found"));
+      }
+
+      // Check if new name conflicts with existing proxies
+      if let Some(ref new_name) = name {
+        if stored_proxies
+          .values()
+          .any(|p| p.id != proxy_id && p.name == *new_name)
+        {
+          return Err(format!("Proxy with name '{new_name}' already exists"));
+        }
+      }
+    } // Release the lock here
+
+    // Now get mutable access for updates
+    let updated_proxy = {
+      let mut stored_proxies = self.stored_proxies.lock().unwrap();
+      let stored_proxy = stored_proxies.get_mut(proxy_id).unwrap(); // Safe because we checked above
+
+      if let Some(new_name) = name {
+        stored_proxy.update_name(new_name);
+      }
+
+      if let Some(new_settings) = proxy_settings {
+        stored_proxy.update_settings(new_settings);
+      }
+
+      stored_proxy.clone()
+    };
+
+    if let Err(e) = self.save_proxy(&updated_proxy) {
+      eprintln!("Warning: Failed to save proxy: {e}");
+    }
+
+    Ok(updated_proxy)
+  }
+
+  // Delete a stored proxy
+  pub fn delete_stored_proxy(&self, proxy_id: &str) -> Result<(), String> {
+    {
+      let mut stored_proxies = self.stored_proxies.lock().unwrap();
+      if stored_proxies.remove(proxy_id).is_none() {
+        return Err(format!("Proxy with ID '{proxy_id}' not found"));
+      }
+    }
+
+    if let Err(e) = self.delete_proxy_file(proxy_id) {
+      eprintln!("Warning: Failed to delete proxy file: {e}");
+    }
+
+    Ok(())
+  }
+
+  // Get proxy settings for a stored proxy ID
+  pub fn get_proxy_settings_by_id(&self, proxy_id: &str) -> Option<ProxySettings> {
+    let stored_proxies = self.stored_proxies.lock().unwrap();
+    stored_proxies
+      .get(proxy_id)
+      .map(|p| p.proxy_settings.clone())
   }
 
   // Start a proxy for given proxy settings and associate it with a browser process ID
@@ -45,8 +266,7 @@ impl ProxyManager {
       let proxies = self.active_proxies.lock().unwrap();
       if let Some(proxy) = proxies.get(&browser_pid) {
         return Ok(ProxySettings {
-          enabled: true,
-          proxy_type: proxy.upstream_type.clone(),
+          proxy_type: "http".to_string(),
           host: "127.0.0.1".to_string(), // Use 127.0.0.1 instead of localhost for better compatibility
           port: proxy.local_port,
           username: None,
@@ -154,7 +374,6 @@ impl ProxyManager {
 
     // Return proxy settings for the browser
     Ok(ProxySettings {
-      enabled: true,
       proxy_type: "http".to_string(),
       host: "127.0.0.1".to_string(), // Use 127.0.0.1 instead of localhost for better compatibility
       port: proxy_info.local_port,
@@ -202,7 +421,6 @@ impl ProxyManager {
   pub fn get_proxy_settings(&self, browser_pid: u32) -> Option<ProxySettings> {
     let proxies = self.active_proxies.lock().unwrap();
     proxies.get(&browser_pid).map(|proxy| ProxySettings {
-      enabled: true,
       proxy_type: "http".to_string(),
       host: "127.0.0.1".to_string(), // Use 127.0.0.1 instead of localhost for better compatibility
       port: proxy.local_port,
@@ -212,6 +430,7 @@ impl ProxyManager {
   }
 
   // Get stored proxy info for a profile
+  #[allow(dead_code)]
   pub fn get_profile_proxy_info(&self, profile_name: &str) -> Option<ProxySettings> {
     let profile_proxies = self.profile_proxies.lock().unwrap();
     profile_proxies.get(profile_name).cloned()
@@ -321,7 +540,6 @@ mod tests {
     let proxy_manager = ProxyManager::new();
 
     let proxy_settings = ProxySettings {
-      enabled: true,
       proxy_type: "socks5".to_string(),
       host: "127.0.0.1".to_string(),
       port: 1080,
@@ -373,9 +591,8 @@ mod tests {
     let proxy_settings = proxy_manager.get_proxy_settings(browser_pid);
     assert!(proxy_settings.is_some());
     let settings = proxy_settings.unwrap();
-    assert!(settings.enabled);
-    assert_eq!(settings.host, "127.0.0.1");
-    assert_eq!(settings.port, 8080);
+    assert!(settings.host == "127.0.0.1");
+    assert!(settings.port == 8080);
 
     // Test non-existent browser PID
     let non_existent = proxy_manager.get_proxy_settings(99999);
@@ -386,7 +603,6 @@ mod tests {
   fn test_proxy_settings_validation() {
     // Test valid proxy settings
     let valid_settings = ProxySettings {
-      enabled: true,
       proxy_type: "http".to_string(),
       host: "127.0.0.1".to_string(),
       port: 8080,
@@ -394,14 +610,11 @@ mod tests {
       password: Some("pass".to_string()),
     };
 
-    assert!(valid_settings.enabled);
-    assert_eq!(valid_settings.proxy_type, "http");
     assert!(!valid_settings.host.is_empty());
     assert!(valid_settings.port > 0);
 
-    // Test disabled proxy settings
-    let disabled_settings = ProxySettings {
-      enabled: false,
+    // Test proxy settings with empty values
+    let empty_settings = ProxySettings {
       proxy_type: "http".to_string(),
       host: "".to_string(),
       port: 0,
@@ -409,7 +622,7 @@ mod tests {
       password: None,
     };
 
-    assert!(!disabled_settings.enabled);
+    assert!(empty_settings.host.is_empty());
   }
 
   #[tokio::test]
@@ -563,7 +776,6 @@ mod tests {
   #[test]
   fn test_proxy_command_construction() {
     let proxy_settings = ProxySettings {
-      enabled: true,
       proxy_type: "http".to_string(),
       host: "proxy.example.com".to_string(),
       port: 8080,

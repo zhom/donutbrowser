@@ -2,11 +2,12 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
+import { FiPlus } from "react-icons/fi";
 import { toast } from "sonner";
 import { LoadingButton } from "@/components/loading-button";
+import { ProxyFormDialog } from "@/components/proxy-form-dialog";
 import { ReleaseTypeSelector } from "@/components/release-type-selector";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -31,11 +32,7 @@ import {
 import { useBrowserDownload } from "@/hooks/use-browser-download";
 import { useBrowserSupport } from "@/hooks/use-browser-support";
 import { getBrowserDisplayName } from "@/lib/browser-utils";
-import type {
-  BrowserProfile,
-  BrowserReleaseTypes,
-  ProxySettings,
-} from "@/types";
+import type { BrowserProfile, BrowserReleaseTypes, StoredProxy } from "@/types";
 import { Alert, AlertDescription } from "./ui/alert";
 
 type BrowserTypeString =
@@ -55,7 +52,7 @@ interface CreateProfileDialogProps {
     browserStr: BrowserTypeString;
     version: string;
     releaseType: string;
-    proxy?: ProxySettings;
+    proxyId?: string;
   }) => Promise<void>;
 }
 
@@ -80,13 +77,11 @@ export function CreateProfileDialog({
   );
   const [isLoadingReleaseTypes, setIsLoadingReleaseTypes] = useState(false);
 
-  // Proxy settings
-  const [proxyEnabled, setProxyEnabled] = useState(false);
-  const [proxyType, setProxyType] = useState("http");
-  const [proxyHost, setProxyHost] = useState("");
-  const [proxyPort, setProxyPort] = useState(8080);
-  const [proxyUsername, setProxyUsername] = useState("");
-  const [proxyPassword, setProxyPassword] = useState("");
+  // Proxy settings - now using stored proxy selection
+  const [selectedProxyId, setSelectedProxyId] = useState<string | null>(null);
+  const [storedProxies, setStoredProxies] = useState<StoredProxy[]>([]);
+  const [isLoadingProxies, setIsLoadingProxies] = useState(false);
+  const [showProxyForm, setShowProxyForm] = useState(false);
 
   const {
     downloadBrowser,
@@ -133,6 +128,19 @@ export function CreateProfileDialog({
       setExistingProfiles(profiles);
     } catch (error) {
       console.error("Failed to load existing profiles:", error);
+    }
+  }, []);
+
+  const loadStoredProxies = useCallback(async () => {
+    try {
+      setIsLoadingProxies(true);
+      const proxies = await invoke<StoredProxy[]>("get_stored_proxies");
+      setStoredProxies(proxies);
+    } catch (error) {
+      console.error("Failed to load stored proxies:", error);
+      toast.error("Failed to load available proxies");
+    } finally {
+      setIsLoadingProxies(false);
     }
   }, []);
 
@@ -191,12 +199,37 @@ export function CreateProfileDialog({
   // Helper to determine if proxy should be disabled for the selected browser
   const isProxyDisabled = selectedBrowser === "tor-browser";
 
-  // Update proxy enabled state when browser changes to tor-browser
+  // Update proxy selection when browser changes to tor-browser
   useEffect(() => {
-    if (selectedBrowser === "tor-browser" && proxyEnabled) {
-      setProxyEnabled(false);
+    if (selectedBrowser === "tor-browser" && selectedProxyId) {
+      setSelectedProxyId(null);
     }
-  }, [selectedBrowser, proxyEnabled]);
+  }, [selectedBrowser, selectedProxyId]);
+
+  const handleCreateProxy = useCallback(() => {
+    setShowProxyForm(true);
+  }, []);
+
+  const handleProxySaved = useCallback((savedProxy: StoredProxy) => {
+    setStoredProxies((prev) => {
+      const existingIndex = prev.findIndex((p) => p.id === savedProxy.id);
+      if (existingIndex >= 0) {
+        // Update existing proxy
+        const updated = [...prev];
+        updated[existingIndex] = savedProxy;
+        return updated;
+      } else {
+        // Add new proxy
+        return [...prev, savedProxy];
+      }
+    });
+    setSelectedProxyId(savedProxy.id);
+    setShowProxyForm(false);
+  }, []);
+
+  const handleProxyFormClose = useCallback(() => {
+    setShowProxyForm(false);
+  }, []);
 
   const handleCreate = useCallback(async () => {
     if (!profileName.trim() || !selectedBrowser || !selectedReleaseType) return;
@@ -219,34 +252,18 @@ export function CreateProfileDialog({
 
     setIsCreating(true);
     try {
-      const proxy =
-        proxyEnabled && !isProxyDisabled
-          ? {
-              enabled: true,
-              proxy_type: proxyType,
-              host: proxyHost,
-              port: proxyPort,
-              username: proxyUsername || undefined,
-              password: proxyPassword || undefined,
-            }
-          : undefined;
-
       await onCreateProfile({
         name: profileName.trim(),
         browserStr: selectedBrowser,
         version,
         releaseType: selectedReleaseType,
-        proxy,
+        proxyId: isProxyDisabled ? undefined : (selectedProxyId ?? undefined),
       });
 
       // Reset form
       setProfileName("");
       setSelectedReleaseType(null);
-      setProxyEnabled(false);
-      setProxyHost("");
-      setProxyPort(8080);
-      setProxyUsername("");
-      setProxyPassword("");
+      setSelectedProxyId(null);
       onClose();
     } catch (error) {
       console.error("Failed to create profile:", error);
@@ -258,14 +275,9 @@ export function CreateProfileDialog({
     selectedBrowser,
     selectedReleaseType,
     onCreateProfile,
-    proxyEnabled,
     isProxyDisabled,
+    selectedProxyId,
     onClose,
-    proxyHost,
-    proxyPassword,
-    proxyPort,
-    proxyType,
-    proxyUsername,
     releaseTypes.nightly,
     releaseTypes.stable,
     validateProfileName,
@@ -286,14 +298,14 @@ export function CreateProfileDialog({
     selectedReleaseType &&
     selectedVersion &&
     isVersionDownloaded(selectedVersion) &&
-    (!proxyEnabled || isProxyDisabled || (proxyHost && proxyPort)) &&
     !nameError;
 
   useEffect(() => {
     if (isOpen) {
       void loadExistingProfiles();
+      void loadStoredProxies();
     }
-  }, [isOpen, loadExistingProfiles]);
+  }, [isOpen, loadExistingProfiles, loadStoredProxies]);
 
   useEffect(() => {
     if (isOpen && selectedBrowser) {
@@ -305,260 +317,239 @@ export function CreateProfileDialog({
   }, [isOpen, selectedBrowser, loadDownloadedVersions, loadReleaseTypes]);
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md max-h-[80vh] my-8 flex flex-col">
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle>Create New Profile</DialogTitle>
-        </DialogHeader>
+    <>
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="max-w-md max-h-[80vh] my-8 flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle>Create New Profile</DialogTitle>
+          </DialogHeader>
 
-        <div className="grid overflow-y-scroll flex-1 gap-6 py-4 min-h-0">
-          {/* Profile Name */}
-          <div className="grid gap-2">
-            <Label htmlFor="profile-name">Profile Name</Label>
-            <Input
-              id="profile-name"
-              value={profileName}
-              onChange={(e) => {
-                setProfileName(e.target.value);
-              }}
-              placeholder="Enter profile name"
-              className={nameError ? "border-red-500" : ""}
-            />
-            {nameError && <p className="text-sm text-red-600">{nameError}</p>}
-          </div>
-
-          {/* Browser Selection */}
-          <div className="grid gap-2">
-            <Label>Browser</Label>
-            <Select
-              value={selectedBrowser ?? undefined}
-              onValueChange={(value) => {
-                setSelectedBrowser(value as BrowserTypeString);
-              }}
-              disabled={isLoadingSupport}
-            >
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={
-                    isLoadingSupport ? "Loading browsers..." : "Select browser"
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {(
-                  [
-                    "mullvad-browser",
-                    "firefox",
-                    "firefox-developer",
-                    "chromium",
-                    "brave",
-                    "zen",
-                    "tor-browser",
-                  ] as BrowserTypeString[]
-                ).map((browser) => {
-                  const isSupported = isBrowserSupported(browser);
-                  const displayName = getBrowserDisplayName(browser);
-
-                  if (!isSupported) {
-                    return (
-                      <Tooltip key={browser}>
-                        <TooltipTrigger asChild>
-                          <SelectItem
-                            value={browser}
-                            disabled={true}
-                            className="opacity-50"
-                          >
-                            {displayName} (Not supported)
-                          </SelectItem>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>
-                            {displayName} is not supported on your current
-                            platform or architecture.
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    );
-                  }
-
-                  return (
-                    <SelectItem key={browser} value={browser}>
-                      {displayName}
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {selectedBrowser ? (
+          <div className="grid overflow-y-scroll flex-1 gap-6 py-4 min-h-0">
+            {/* Profile Name */}
             <div className="grid gap-2">
-              <Label>Release Type</Label>
-              {isLoadingReleaseTypes ? (
-                <div className="text-sm text-muted-foreground">
-                  Loading release types...
-                </div>
-              ) : Object.keys(releaseTypes).length === 0 ? (
-                <Alert>
-                  <AlertDescription>
-                    No releases are available for{" "}
-                    {getBrowserDisplayName(selectedBrowser)}.
-                  </AlertDescription>
-                </Alert>
-              ) : (
-                <div className="space-y-4">
-                  {(!releaseTypes.stable || !releaseTypes.nightly) && (
-                    <Alert>
-                      <AlertDescription>
-                        Only {(releaseTypes.stable && "Stable") ?? "Nightly"}{" "}
-                        releases are available for{" "}
-                        {getBrowserDisplayName(selectedBrowser)}.
-                      </AlertDescription>
-                    </Alert>
+              <Label htmlFor="profile-name">Profile Name</Label>
+              <Input
+                id="profile-name"
+                value={profileName}
+                onChange={(e) => {
+                  setProfileName(e.target.value);
+                }}
+                placeholder="Enter profile name"
+                className={nameError ? "border-red-500" : ""}
+              />
+              {nameError && <p className="text-sm text-red-600">{nameError}</p>}
+            </div>
+
+            {/* Browser Selection */}
+            <div className="grid gap-2">
+              <Label>Browser</Label>
+              <Select
+                value={selectedBrowser ?? undefined}
+                onValueChange={(value) => {
+                  setSelectedBrowser(value as BrowserTypeString);
+                }}
+                disabled={isLoadingSupport}
+              >
+                <SelectTrigger>
+                  <SelectValue
+                    placeholder={
+                      isLoadingSupport
+                        ? "Loading browsers..."
+                        : "Select browser"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {(
+                    [
+                      "mullvad-browser",
+                      "firefox",
+                      "firefox-developer",
+                      "chromium",
+                      "brave",
+                      "zen",
+                      "tor-browser",
+                    ] as BrowserTypeString[]
+                  ).map((browser) => {
+                    const isSupported = isBrowserSupported(browser);
+                    const displayName = getBrowserDisplayName(browser);
+
+                    if (!isSupported) {
+                      return (
+                        <Tooltip key={browser}>
+                          <TooltipTrigger asChild>
+                            <SelectItem
+                              value={browser}
+                              disabled={true}
+                              className="opacity-50"
+                            >
+                              {displayName} (Not supported)
+                            </SelectItem>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>
+                              {displayName} is not supported on your current
+                              platform or architecture.
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      );
+                    }
+
+                    return (
+                      <SelectItem key={browser} value={browser}>
+                        {displayName}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {selectedBrowser ? (
+              <div className="grid gap-2">
+                <Label>Release Type</Label>
+                {isLoadingReleaseTypes ? (
+                  <div className="text-sm text-muted-foreground">
+                    Loading release types...
+                  </div>
+                ) : Object.keys(releaseTypes).length === 0 ? (
+                  <Alert>
+                    <AlertDescription>
+                      No releases are available for{" "}
+                      {getBrowserDisplayName(selectedBrowser)}.
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <div className="space-y-4">
+                    {(!releaseTypes.stable || !releaseTypes.nightly) && (
+                      <Alert>
+                        <AlertDescription>
+                          Only {(releaseTypes.stable && "Stable") ?? "Nightly"}{" "}
+                          releases are available for{" "}
+                          {getBrowserDisplayName(selectedBrowser)}.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    <ReleaseTypeSelector
+                      selectedReleaseType={selectedReleaseType}
+                      onReleaseTypeSelect={setSelectedReleaseType}
+                      availableReleaseTypes={releaseTypes}
+                      browser={selectedBrowser}
+                      isDownloading={isDownloading}
+                      onDownload={() => {
+                        void handleDownload();
+                      }}
+                      placeholder="Select release type..."
+                      downloadedVersions={downloadedVersions}
+                    />
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {/* Proxy Settings */}
+            <div className="grid gap-4 pt-4 border-t">
+              <div className="grid gap-2">
+                <div className="flex justify-between items-center">
+                  <Label>Proxy Settings</Label>
+                  {!isProxyDisabled && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleCreateProxy}
+                          className="flex gap-2 items-center"
+                        >
+                          <FiPlus className="w-4 h-4" />
+                          Create Proxy
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Create a new proxy configuration</p>
+                      </TooltipContent>
+                    </Tooltip>
                   )}
-
-                  <ReleaseTypeSelector
-                    selectedReleaseType={selectedReleaseType}
-                    onReleaseTypeSelect={setSelectedReleaseType}
-                    availableReleaseTypes={releaseTypes}
-                    browser={selectedBrowser}
-                    isDownloading={isDownloading}
-                    onDownload={() => {
-                      void handleDownload();
-                    }}
-                    placeholder="Select release type..."
-                    downloadedVersions={downloadedVersions}
-                  />
                 </div>
-              )}
-            </div>
-          ) : null}
 
-          {/* Proxy Settings */}
-          <div className="grid gap-4 pt-4 border-t">
-            <div className="flex items-center space-x-2">
-              {isProxyDisabled ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="flex items-center space-x-2 opacity-50">
-                      <Checkbox
-                        id="proxy-enabled"
-                        checked={false}
-                        disabled={true}
-                      />
-                      <Label htmlFor="proxy-enabled" className="text-gray-500">
-                        Enable Proxy
-                      </Label>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>
-                      Tor Browser has its own built-in proxy system and
-                      doesn&apos;t support additional proxy configuration
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <>
-                  <Checkbox
-                    id="proxy-enabled"
-                    checked={proxyEnabled}
-                    onCheckedChange={(checked) => {
-                      setProxyEnabled(checked as boolean);
+                {isProxyDisabled ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="p-3 bg-yellow-50 rounded-md border border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-800">
+                        <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                          Tor Browser has its own built-in proxy system and
+                          doesn&apos;t support additional proxy configuration.
+                        </p>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>
+                        Tor Browser manages its own proxy routing automatically
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <Select
+                    value={selectedProxyId ?? "none"}
+                    onValueChange={(value) => {
+                      setSelectedProxyId(value === "none" ? null : value);
                     }}
-                  />
-                  <Label htmlFor="proxy-enabled">Enable Proxy</Label>
-                </>
-              )}
-            </div>
-
-            {proxyEnabled && !isProxyDisabled && (
-              <>
-                <div className="grid gap-2">
-                  <Label>Proxy Type</Label>
-                  <Select value={proxyType} onValueChange={setProxyType}>
+                    disabled={isLoadingProxies}
+                  >
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue
+                        placeholder={
+                          isLoadingProxies
+                            ? "Loading proxies..."
+                            : "Select proxy (optional)"
+                        }
+                      />
                     </SelectTrigger>
                     <SelectContent>
-                      {["http", "https", "socks4", "socks5"].map((type) => (
-                        <SelectItem key={type} value={type}>
-                          {type.toUpperCase()}
+                      <SelectItem value="none">No Proxy</SelectItem>
+                      {storedProxies.map((proxy) => (
+                        <SelectItem key={proxy.id} value={proxy.id}>
+                          {proxy.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
+                )}
 
-                <div className="grid gap-2">
-                  <Label htmlFor="proxy-host">Host</Label>
-                  <Input
-                    id="proxy-host"
-                    value={proxyHost}
-                    onChange={(e) => {
-                      setProxyHost(e.target.value);
-                    }}
-                    placeholder="e.g. 127.0.0.1"
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="proxy-port">Port</Label>
-                  <Input
-                    id="proxy-port"
-                    type="number"
-                    value={proxyPort}
-                    onChange={(e) => {
-                      setProxyPort(Number.parseInt(e.target.value, 10) || 0);
-                    }}
-                    placeholder="e.g. 8080"
-                    min="1"
-                    max="65535"
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="proxy-username">Username (optional)</Label>
-                  <Input
-                    id="proxy-username"
-                    value={proxyUsername}
-                    onChange={(e) => {
-                      setProxyUsername(e.target.value);
-                    }}
-                    placeholder="Proxy username"
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="proxy-password">Password (optional)</Label>
-                  <Input
-                    id="proxy-password"
-                    type="password"
-                    value={proxyPassword}
-                    onChange={(e) => {
-                      setProxyPassword(e.target.value);
-                    }}
-                    placeholder="Proxy password"
-                  />
-                </div>
-              </>
-            )}
+                {!isProxyDisabled &&
+                  storedProxies.length === 0 &&
+                  !isLoadingProxies && (
+                    <p className="text-sm text-muted-foreground">
+                      No saved proxies available. Use the "Create Proxy" button
+                      above to create proxy configurations.
+                    </p>
+                  )}
+              </div>
+            </div>
           </div>
-        </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <LoadingButton
-            isLoading={isCreating}
-            onClick={() => void handleCreate()}
-            disabled={!canCreate}
-          >
-            Create Profile
-          </LoadingButton>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <LoadingButton
+              isLoading={isCreating}
+              onClick={() => void handleCreate()}
+              disabled={!canCreate}
+            >
+              Create Profile
+            </LoadingButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ProxyFormDialog
+        isOpen={showProxyForm}
+        onClose={handleProxyFormClose}
+        onSave={handleProxySaved}
+      />
+    </>
   );
 }

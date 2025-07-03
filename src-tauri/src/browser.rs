@@ -1,9 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxySettings {
-  pub enabled: bool,
   pub proxy_type: String, // "http", "https", "socks4", or "socks5"
   pub host: String,
   pub port: u16,
@@ -636,12 +635,11 @@ impl Browser for ChromiumBrowser {
 
     // Add proxy configuration if provided
     if let Some(proxy) = proxy_settings {
-      if proxy.enabled {
-        args.push(format!(
-          "--proxy-server=http://{}:{}",
-          proxy.host, proxy.port
-        ));
-      }
+      // Apply proxy settings
+      args.push(format!(
+        "--proxy-server=http://{}:{}",
+        proxy.host, proxy.port
+      ));
     }
 
     if let Some(url) = url {
@@ -887,7 +885,6 @@ mod tests {
   #[test]
   fn test_proxy_settings_creation() {
     let proxy = ProxySettings {
-      enabled: true,
       proxy_type: "http".to_string(),
       host: "127.0.0.1".to_string(),
       port: 8080,
@@ -895,14 +892,12 @@ mod tests {
       password: None,
     };
 
-    assert!(proxy.enabled);
     assert_eq!(proxy.proxy_type, "http");
     assert_eq!(proxy.host, "127.0.0.1");
     assert_eq!(proxy.port, 8080);
 
     // Test different proxy types
     let socks_proxy = ProxySettings {
-      enabled: true,
       proxy_type: "socks5".to_string(),
       host: "proxy.example.com".to_string(),
       port: 1080,
@@ -980,7 +975,6 @@ mod tests {
   #[test]
   fn test_proxy_settings_serialization() {
     let proxy = ProxySettings {
-      enabled: true,
       proxy_type: "http".to_string(),
       host: "127.0.0.1".to_string(),
       port: 8080,
@@ -996,7 +990,6 @@ mod tests {
 
     // Test that it can be deserialized (implements Deserialize)
     let deserialized: ProxySettings = serde_json::from_str(&json).unwrap();
-    assert_eq!(deserialized.enabled, proxy.enabled);
     assert_eq!(deserialized.proxy_type, proxy.proxy_type);
     assert_eq!(deserialized.host, proxy.host);
     assert_eq!(deserialized.port, proxy.port);

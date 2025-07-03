@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrent } from "@tauri-apps/plugin-deep-link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FaDownload } from "react-icons/fa";
+import { FiWifi } from "react-icons/fi";
 import { GoGear, GoKebabHorizontal, GoPlus } from "react-icons/go";
 import { ChangeVersionDialog } from "@/components/change-version-dialog";
 import { CreateProfileDialog } from "@/components/create-profile-dialog";
@@ -12,6 +13,7 @@ import { ImportProfileDialog } from "@/components/import-profile-dialog";
 import { PermissionDialog } from "@/components/permission-dialog";
 import { ProfilesDataTable } from "@/components/profile-data-table";
 import { ProfileSelectorDialog } from "@/components/profile-selector-dialog";
+import { ProxyManagementDialog } from "@/components/proxy-management-dialog";
 import { ProxySettingsDialog } from "@/components/proxy-settings-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { Button } from "@/components/ui/button";
@@ -34,7 +36,7 @@ import { useUpdateNotifications } from "@/hooks/use-update-notifications";
 import { useVersionUpdater } from "@/hooks/use-version-updater";
 import { showErrorToast } from "@/lib/toast-utils";
 import { sleep } from "@/lib/utils";
-import type { BrowserProfile, ProxySettings } from "@/types";
+import type { BrowserProfile } from "@/types";
 
 type BrowserTypeString =
   | "mullvad-browser"
@@ -58,6 +60,8 @@ export default function Home() {
   const [changeVersionDialogOpen, setChangeVersionDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [importProfileDialogOpen, setImportProfileDialogOpen] = useState(false);
+  const [proxyManagementDialogOpen, setProxyManagementDialogOpen] =
+    useState(false);
   const [pendingUrls, setPendingUrls] = useState<PendingUrl[]>([]);
   const [currentProfileForProxy, setCurrentProfileForProxy] =
     useState<BrowserProfile | null>(null);
@@ -67,6 +71,7 @@ export default function Home() {
   const [permissionDialogOpen, setPermissionDialogOpen] = useState(false);
   const [currentPermissionType, setCurrentPermissionType] =
     useState<PermissionType>("microphone");
+  const [proxyDataReloadTrigger, setProxyDataReloadTrigger] = useState(0);
   const { isMicrophoneAccessGranted, isCameraAccessGranted, isInitialized } =
     usePermissions();
 
@@ -139,6 +144,11 @@ export default function Home() {
       setError(`Failed to load profiles: ${JSON.stringify(err)}`);
     }
   }, [checkMissingBinaries]);
+
+  // Trigger proxy data reload in ProfilesDataTable
+  const triggerProxyDataReload = useCallback(() => {
+    setProxyDataReloadTrigger((prev) => prev + 1);
+  }, []);
 
   const handleUrlOpen = useCallback(async (url: string) => {
     try {
@@ -317,7 +327,7 @@ export default function Home() {
   }, []);
 
   const handleSaveProxy = useCallback(
-    async (proxySettings: ProxySettings) => {
+    async (proxyId: string | null) => {
       setProxyDialogOpen(false);
       setError(null);
 
@@ -325,16 +335,18 @@ export default function Home() {
         if (currentProfileForProxy) {
           await invoke("update_profile_proxy", {
             profileName: currentProfileForProxy.name,
-            proxy: proxySettings,
+            proxyId: proxyId,
           });
         }
         await loadProfiles();
+        // Trigger proxy data reload in the table
+        triggerProxyDataReload();
       } catch (err: unknown) {
         console.error("Failed to update proxy settings:", err);
         setError(`Failed to update proxy settings: ${JSON.stringify(err)}`);
       }
     },
-    [currentProfileForProxy, loadProfiles],
+    [currentProfileForProxy, loadProfiles, triggerProxyDataReload],
   );
 
   const handleCreateProfile = useCallback(
@@ -343,30 +355,25 @@ export default function Home() {
       browserStr: BrowserTypeString;
       version: string;
       releaseType: string;
-      proxy?: ProxySettings;
+      proxyId?: string;
     }) => {
       setError(null);
 
       try {
-        const profile = await invoke<BrowserProfile>(
+        const _profile = await invoke<BrowserProfile>(
           "create_browser_profile_new",
           {
             name: profileData.name,
             browserStr: profileData.browserStr,
             version: profileData.version,
             releaseType: profileData.releaseType,
+            proxyId: profileData.proxyId,
           },
         );
 
-        // Update proxy if provided
-        if (profileData.proxy) {
-          await invoke("update_profile_proxy", {
-            profileName: profile.name,
-            proxy: profileData.proxy,
-          });
-        }
-
         await loadProfiles();
+        // Trigger proxy data reload in the table
+        triggerProxyDataReload();
       } catch (error) {
         setError(
           `Failed to create profile: ${
@@ -376,7 +383,7 @@ export default function Home() {
         throw error;
       }
     },
-    [loadProfiles],
+    [loadProfiles, triggerProxyDataReload],
   );
 
   const [runningProfiles, setRunningProfiles] = useState<Set<string>>(
@@ -609,6 +616,14 @@ export default function Home() {
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => {
+                        setProxyManagementDialogOpen(true);
+                      }}
+                    >
+                      <FiWifi className="mr-2 w-4 h-4" />
+                      Proxies
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => {
                         setImportProfileDialogOpen(true);
                       }}
                     >
@@ -645,6 +660,9 @@ export default function Home() {
               onChangeVersion={openChangeVersionDialog}
               runningProfiles={runningProfiles}
               isUpdating={isUpdating}
+              onReloadProxyData={
+                proxyDataReloadTrigger > 0 ? triggerProxyDataReload : undefined
+              }
             />
           </CardContent>
         </Card>
@@ -655,8 +673,8 @@ export default function Home() {
         onClose={() => {
           setProxyDialogOpen(false);
         }}
-        onSave={(proxy: ProxySettings) => void handleSaveProxy(proxy)}
-        initialSettings={currentProfileForProxy?.proxy}
+        onSave={handleSaveProxy}
+        initialProxyId={currentProfileForProxy?.proxy_id}
         browserType={currentProfileForProxy?.browser}
       />
 
@@ -690,6 +708,13 @@ export default function Home() {
           setImportProfileDialogOpen(false);
         }}
         onImportComplete={() => void loadProfiles()}
+      />
+
+      <ProxyManagementDialog
+        isOpen={proxyManagementDialogOpen}
+        onClose={() => {
+          setProxyManagementDialogOpen(false);
+        }}
       />
 
       {pendingUrls.map((pendingUrl) => (

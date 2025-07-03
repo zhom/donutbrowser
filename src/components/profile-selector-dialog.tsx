@@ -28,7 +28,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { getBrowserDisplayName, getBrowserIcon } from "@/lib/browser-utils";
-import type { BrowserProfile } from "@/types";
+import type { BrowserProfile, StoredProxy } from "@/types";
 
 interface ProfileSelectorDialogProps {
   isOpen: boolean;
@@ -47,6 +47,17 @@ export function ProfileSelectorDialog({
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLaunching, setIsLaunching] = useState(false);
+  const [storedProxies, setStoredProxies] = useState<StoredProxy[]>([]);
+
+  // Helper function to check if a profile has a proxy
+  const hasProxy = useCallback(
+    (profile: BrowserProfile): boolean => {
+      if (!profile.proxy_id) return false;
+      const proxy = storedProxies.find((p) => p.id === profile.proxy_id);
+      return proxy !== undefined;
+    },
+    [storedProxies],
+  );
 
   // Helper function to determine if a profile can be used for opening links
   const canUseProfileForLinks = useCallback(
@@ -86,15 +97,18 @@ export function ProfileSelectorDialog({
   const loadProfiles = useCallback(async () => {
     setIsLoading(true);
     try {
-      const profileList = await invoke<BrowserProfile[]>(
-        "list_browser_profiles",
-      );
+      // Load both profiles and stored proxies
+      const [profileList, proxiesList] = await Promise.all([
+        invoke<BrowserProfile[]>("list_browser_profiles"),
+        invoke<StoredProxy[]>("get_stored_proxies"),
+      ]);
 
       // Sort profiles by name
       profileList.sort((a, b) => a.name.localeCompare(b.name));
 
-      // Don't filter any profiles, show all of them
+      // Set both profiles and proxies
       setProfiles(profileList);
+      setStoredProxies(proxiesList);
 
       // Auto-select first available profile for link opening
       if (profileList.length > 0) {
@@ -305,7 +319,7 @@ export function ProfileSelectorDialog({
                               <Badge variant="secondary" className="text-xs">
                                 {getBrowserDisplayName(profile.browser)}
                               </Badge>
-                              {profile.proxy?.enabled && (
+                              {hasProxy(profile) && (
                                 <Badge variant="outline" className="text-xs">
                                   Proxy
                                 </Badge>

@@ -24,7 +24,7 @@ pub struct BrowserProfile {
   pub browser: String,
   pub version: String,
   #[serde(default)]
-  pub proxy: Option<ProxySettings>,
+  pub proxy_id: Option<String>, // Reference to stored proxy
   #[serde(default)]
   pub process_id: Option<u32>,
   #[serde(default)]
@@ -1150,6 +1150,79 @@ impl BrowserRunner {
         // Now update the profile with UUID (no need to store profile_path anymore)
         old_profile["id"] = serde_json::Value::String(profile_id.to_string());
 
+        // Handle proxy migration - extract proxy to separate storage if it exists
+        if let Some(proxy_value) = old_profile.get("proxy").cloned() {
+          if !proxy_value.is_null() {
+            // Try to deserialize the proxy settings
+            if let Ok(proxy_settings) = serde_json::from_value::<ProxySettings>(proxy_value) {
+              // Create a stored proxy with the profile name (all proxies are now enabled by default)
+              let proxy_name = format!("{profile_name} Proxy");
+              match PROXY_MANAGER.create_stored_proxy(proxy_name.clone(), proxy_settings.clone()) {
+                Ok(stored_proxy) => {
+                  // Update profile to reference the stored proxy
+                  old_profile["proxy_id"] = serde_json::Value::String(stored_proxy.id);
+                  println!(
+                    "Migrated proxy for profile '{}' to stored proxy '{}'",
+                    profile_name, stored_proxy.name
+                  );
+                }
+                Err(e) => {
+                  println!("Warning: Failed to migrate proxy for profile '{profile_name}': {e}");
+                  // If creation fails (e.g., name collision), try to find existing proxy with same settings
+                  let existing_proxies = PROXY_MANAGER.get_stored_proxies();
+                  if let Some(existing_proxy) = existing_proxies.iter().find(|p| {
+                    p.proxy_settings.proxy_type == proxy_settings.proxy_type
+                      && p.proxy_settings.host == proxy_settings.host
+                      && p.proxy_settings.port == proxy_settings.port
+                      && p.proxy_settings.username == proxy_settings.username
+                      && p.proxy_settings.password == proxy_settings.password
+                  }) {
+                    old_profile["proxy_id"] = serde_json::Value::String(existing_proxy.id.clone());
+                    println!(
+                      "Reused existing proxy '{}' for profile '{}'",
+                      existing_proxy.name, profile_name
+                    );
+                  } else {
+                    // Try with a different name if the original failed due to name collision
+                    let alt_proxy_name = format!(
+                      "{profile_name} Proxy {}",
+                      &uuid::Uuid::new_v4().to_string()[..8]
+                    );
+                    match PROXY_MANAGER
+                      .create_stored_proxy(alt_proxy_name.clone(), proxy_settings.clone())
+                    {
+                      Ok(stored_proxy) => {
+                        old_profile["proxy_id"] = serde_json::Value::String(stored_proxy.id);
+                        println!(
+                          "Migrated proxy for profile '{}' to stored proxy '{}' with fallback name",
+                          profile_name, stored_proxy.name
+                        );
+                      }
+                      Err(e2) => {
+                        println!("Error: Could not migrate proxy for profile '{profile_name}' even with fallback name: {e2}");
+                      }
+                    }
+                  }
+                }
+              }
+            } else {
+              println!(
+                "Warning: Could not deserialize proxy settings for profile '{profile_name}'"
+              );
+            }
+          }
+        }
+
+        // Always remove the old proxy field after migration attempt, whether successful or not
+        if old_profile
+          .as_object_mut()
+          .unwrap()
+          .remove("proxy")
+          .is_some()
+        {
+          println!("Removed legacy proxy field from profile '{profile_name}'");
+        }
+
         // Move old profile directory contents to new UUID/profile directory if it exists
         if old_profile_dir.exists() && old_profile_dir.is_dir() {
           // Copy all contents from old directory to new profile subdirectory
@@ -1272,7 +1345,7 @@ impl BrowserRunner {
     browser: &str,
     version: &str,
     release_type: &str,
-    proxy: Option<ProxySettings>,
+    proxy_id: Option<String>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
     println!("Attempting to create profile: {name}");
 
@@ -1301,7 +1374,7 @@ impl BrowserRunner {
       name: name.to_string(),
       browser: browser.to_string(),
       version: version.to_string(),
-      proxy: proxy.clone(),
+      proxy_id: proxy_id.clone(),
       process_id: None,
       last_launch: None,
       release_type: release_type.to_string(),
@@ -1318,8 +1391,13 @@ impl BrowserRunner {
     println!("Profile '{name}' created successfully with ID: {profile_id}");
 
     // Create user.js with common Firefox preferences and apply proxy settings if provided
-    if let Some(proxy_settings) = &proxy {
-      self.apply_proxy_settings_to_profile(&profile_data_dir, proxy_settings, None)?;
+    if let Some(proxy_id_ref) = &proxy_id {
+      if let Some(proxy_settings) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id_ref) {
+        self.apply_proxy_settings_to_profile(&profile_data_dir, &proxy_settings, None)?;
+      } else {
+        // Proxy ID provided but not found, disable proxy
+        self.disable_proxy_settings_in_profile(&profile_data_dir)?;
+      }
     } else {
       // Create user.js with common Firefox preferences but no proxy
       self.disable_proxy_settings_in_profile(&profile_data_dir)?;
@@ -1332,7 +1410,7 @@ impl BrowserRunner {
     &self,
     app_handle: tauri::AppHandle,
     profile_name: &str,
-    proxy: Option<ProxySettings>,
+    proxy_id: Option<String>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
     // Find the profile by name
     let profiles =
@@ -1356,14 +1434,14 @@ impl BrowserRunner {
         .await?;
 
     // If browser is running, stop existing proxy
-    if browser_is_running && profile.proxy.is_some() {
+    if browser_is_running && profile.proxy_id.is_some() {
       if let Some(pid) = profile.process_id {
         let _ = PROXY_MANAGER.stop_proxy(app_handle.clone(), pid).await;
       }
     }
 
     // Update proxy settings
-    profile.proxy = proxy.clone();
+    profile.proxy_id = proxy_id.clone();
 
     // Save the updated profile
     self
@@ -1373,71 +1451,78 @@ impl BrowserRunner {
       })?;
 
     // Handle proxy startup/configuration
-    if let Some(proxy_settings) = &proxy {
-      if proxy_settings.enabled && browser_is_running {
-        // Browser is running and proxy is enabled, start new proxy
-        if let Some(pid) = profile.process_id {
-          match PROXY_MANAGER
-            .start_proxy(app_handle.clone(), proxy_settings, pid, Some(profile_name))
-            .await
-          {
-            Ok(internal_proxy_settings) => {
-              let browser_runner = BrowserRunner::new();
-              let profiles_dir = browser_runner.get_profiles_dir();
-              let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
+    if let Some(proxy_id_ref) = &proxy_id {
+      if let Some(proxy_settings) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id_ref) {
+        if browser_is_running {
+          // Browser is running and proxy is enabled, start new proxy
+          if let Some(pid) = profile.process_id {
+            match PROXY_MANAGER
+              .start_proxy(app_handle.clone(), &proxy_settings, pid, Some(profile_name))
+              .await
+            {
+              Ok(internal_proxy_settings) => {
+                let browser_runner = BrowserRunner::new();
+                let profiles_dir = browser_runner.get_profiles_dir();
+                let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
 
-              // Apply the proxy settings with the internal proxy to the profile directory
-              browser_runner
-                .apply_proxy_settings_to_profile(
-                  &profile_path,
-                  proxy_settings,
-                  Some(&internal_proxy_settings),
-                )
-                .map_err(|e| format!("Failed to update profile proxy: {e}"))?;
+                // Apply the proxy settings with the internal proxy to the profile directory
+                browser_runner
+                  .apply_proxy_settings_to_profile(
+                    &profile_path,
+                    &proxy_settings,
+                    Some(&internal_proxy_settings),
+                  )
+                  .map_err(|e| format!("Failed to update profile proxy: {e}"))?;
 
-              println!("Successfully started proxy for profile: {}", profile.name);
+                println!("Successfully started proxy for profile: {}", profile.name);
 
-              // Give the proxy a moment to fully start up
-              tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-              Some(internal_proxy_settings)
+                // Give the proxy a moment to fully start up
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+              }
+              Err(e) => {
+                eprintln!("Failed to start proxy: {e}");
+                // Apply proxy settings without internal proxy
+                let profiles_dir = self.get_profiles_dir();
+                let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
+                self
+                  .apply_proxy_settings_to_profile(&profile_path, &proxy_settings, None)
+                  .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+                    format!("Failed to apply proxy settings: {e}").into()
+                  })?;
+              }
             }
-            Err(e) => {
-              eprintln!("Failed to start proxy: {e}");
-              // Apply proxy settings without internal proxy
-              let profiles_dir = self.get_profiles_dir();
-              let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
-              self
-                .apply_proxy_settings_to_profile(&profile_path, proxy_settings, None)
-                .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
-                  format!("Failed to apply proxy settings: {e}").into()
-                })?;
-              None
-            }
+          } else {
+            // No PID available, apply proxy settings without internal proxy
+            let profiles_dir = self.get_profiles_dir();
+            let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
+            self
+              .apply_proxy_settings_to_profile(&profile_path, &proxy_settings, None)
+              .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+                format!("Failed to apply proxy settings: {e}").into()
+              })?;
           }
         } else {
-          // No PID available, apply proxy settings without internal proxy
+          // Proxy disabled or browser not running, just apply settings
           let profiles_dir = self.get_profiles_dir();
           let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
           self
-            .apply_proxy_settings_to_profile(&profile_path, proxy_settings, None)
+            .apply_proxy_settings_to_profile(&profile_path, &proxy_settings, None)
             .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
               format!("Failed to apply proxy settings: {e}").into()
             })?;
-          None
         }
       } else {
-        // Proxy disabled or browser not running, just apply settings
+        // Proxy ID provided but proxy not found, disable proxy
         let profiles_dir = self.get_profiles_dir();
         let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
         self
-          .apply_proxy_settings_to_profile(&profile_path, proxy_settings, None)
+          .disable_proxy_settings_in_profile(&profile_path)
           .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
-            format!("Failed to apply proxy settings: {e}").into()
+            format!("Failed to disable proxy settings: {e}").into()
           })?;
-        None
       }
     } else {
-      // No proxy settings, disable proxy
+      // No proxy ID provided, disable proxy
       let profiles_dir = self.get_profiles_dir();
       let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
       self
@@ -1445,8 +1530,7 @@ impl BrowserRunner {
         .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
           format!("Failed to disable proxy settings: {e}").into()
         })?;
-      None
-    };
+    }
 
     Ok(profile)
   }
@@ -1563,63 +1647,50 @@ impl BrowserRunner {
     // Add common Firefox preferences (like disabling default browser check)
     preferences.extend(self.get_common_firefox_preferences());
 
-    if proxy.enabled {
-      // Use embedded PAC template instead of reading from file
-      const PAC_TEMPLATE: &str = r#"function FindProxyForURL(url, host) {
+    // Use embedded PAC template instead of reading from file
+    const PAC_TEMPLATE: &str = r#"function FindProxyForURL(url, host) {
   return "{{proxy_url}}";
 }"#;
 
-      // Format proxy URL based on type and whether we have an internal proxy
-      let proxy_url = if let Some(internal) = internal_proxy {
-        // Use internal proxy as the primary proxy
-        format!("HTTP {}:{}", internal.host, internal.port)
-      } else {
-        // Use user-configured proxy directly
-        match proxy.proxy_type.as_str() {
-          "http" => format!("HTTP {}:{}", proxy.host, proxy.port),
-          "https" => format!("HTTPS {}:{}", proxy.host, proxy.port),
-          "socks4" => format!("SOCKS4 {}:{}", proxy.host, proxy.port),
-          "socks5" => format!("SOCKS5 {}:{}", proxy.host, proxy.port),
-          _ => return Err(format!("Unsupported proxy type: {}", proxy.proxy_type).into()),
-        }
-      };
-
-      // Replace placeholders in PAC file
-      let pac_content = PAC_TEMPLATE
-        .replace("{{proxy_url}}", &proxy_url)
-        .replace("{{proxy_credentials}}", ""); // Credentials are now handled by the PAC file
-
-      // Save PAC file in UUID directory
-      let pac_path = uuid_dir.join("proxy.pac");
-      fs::write(&pac_path, pac_content)?;
-
-      // Configure Firefox to use the PAC file
-      preferences.extend([
-        "user_pref(\"network.proxy.type\", 2);".to_string(),
-        format!(
-          "user_pref(\"network.proxy.autoconfig_url\", \"file://{}\");",
-          pac_path.to_string_lossy()
-        ),
-        "user_pref(\"network.proxy.failover_direct\", false);".to_string(),
-        "user_pref(\"network.proxy.socks_remote_dns\", true);".to_string(),
-        "user_pref(\"network.proxy.no_proxies_on\", \"\");".to_string(),
-        "user_pref(\"signon.autologin.proxy\", true);".to_string(),
-        "user_pref(\"network.proxy.share_proxy_settings\", false);".to_string(),
-        "user_pref(\"network.automatic-ntlm-auth.allow-proxies\", false);".to_string(),
-        "user_pref(\"network.auth-use-sspi\", false);".to_string(),
-      ]);
+    // Format proxy URL based on type and whether we have an internal proxy
+    let proxy_url = if let Some(internal) = internal_proxy {
+      // Use internal proxy as the primary proxy
+      format!("HTTP {}:{}", internal.host, internal.port)
     } else {
-      preferences.push("user_pref(\"network.proxy.type\", 0);".to_string());
-      preferences.push("user_pref(\"network.proxy.failover_direct\", true);".to_string());
+      // Use user-configured proxy directly
+      match proxy.proxy_type.as_str() {
+        "http" => format!("HTTP {}:{}", proxy.host, proxy.port),
+        "https" => format!("HTTPS {}:{}", proxy.host, proxy.port),
+        "socks4" => format!("SOCKS4 {}:{}", proxy.host, proxy.port),
+        "socks5" => format!("SOCKS5 {}:{}", proxy.host, proxy.port),
+        _ => return Err(format!("Unsupported proxy type: {}", proxy.proxy_type).into()),
+      }
+    };
 
-      let pac_content = "function FindProxyForURL(url, host) { return 'DIRECT'; }";
-      let pac_path = uuid_dir.join("proxy.pac");
-      fs::write(&pac_path, pac_content)?;
-      preferences.push(format!(
+    // Replace placeholders in PAC file
+    let pac_content = PAC_TEMPLATE
+      .replace("{{proxy_url}}", &proxy_url)
+      .replace("{{proxy_credentials}}", ""); // Credentials are now handled by the PAC file
+
+    // Save PAC file in UUID directory
+    let pac_path = uuid_dir.join("proxy.pac");
+    fs::write(&pac_path, pac_content)?;
+
+    // Configure Firefox to use the PAC file
+    preferences.extend([
+      "user_pref(\"network.proxy.type\", 2);".to_string(),
+      format!(
         "user_pref(\"network.proxy.autoconfig_url\", \"file://{}\");",
         pac_path.to_string_lossy()
-      ));
-    }
+      ),
+      "user_pref(\"network.proxy.failover_direct\", false);".to_string(),
+      "user_pref(\"network.proxy.socks_remote_dns\", true);".to_string(),
+      "user_pref(\"network.proxy.no_proxies_on\", \"\");".to_string(),
+      "user_pref(\"signon.autologin.proxy\", true);".to_string(),
+      "user_pref(\"network.proxy.share_proxy_settings\", false);".to_string(),
+      "user_pref(\"network.automatic-ntlm-auth.allow-proxies\", false);".to_string(),
+      "user_pref(\"network.auth-use-sspi\", false);".to_string(),
+    ]);
 
     // Write settings to user.js file
     fs::write(user_js_path, preferences.join("\n"))?;
@@ -1726,10 +1797,16 @@ impl BrowserRunner {
     }
 
     // For Chromium browsers, use local proxy settings if available
-    // For Firefox browsers, continue using original proxy settings (handled via PAC files)
+    // For Firefox browsers, proxy settings are handled via PAC files
+    let stored_proxy_settings = profile
+      .proxy_id
+      .as_ref()
+      .and_then(|id| PROXY_MANAGER.get_proxy_settings_by_id(id));
     let proxy_for_launch_args = match browser_type {
-      BrowserType::Chromium | BrowserType::Brave => local_proxy_settings.or(profile.proxy.as_ref()),
-      _ => profile.proxy.as_ref(),
+      BrowserType::Chromium | BrowserType::Brave => {
+        local_proxy_settings.or(stored_proxy_settings.as_ref())
+      }
+      _ => None, // Firefox browsers use PAC files, not launch args
     };
 
     // Get profile data path and launch arguments
@@ -2362,8 +2439,8 @@ impl BrowserRunner {
     }
 
     // Handle proxy management based on browser status
-    if let Some(proxy) = &inner_profile.proxy {
-      if proxy.enabled {
+    if let Some(proxy_id) = &inner_profile.proxy_id {
+      if let Some(proxy) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id) {
         if is_running {
           // Browser is running, check if proxy is active
           let proxy_active = PROXY_MANAGER
@@ -2372,27 +2449,23 @@ impl BrowserRunner {
 
           if !proxy_active {
             // Browser is running but proxy is not - restart the proxy
-            if let Some(proxy_settings) = PROXY_MANAGER.get_profile_proxy_info(&inner_profile.name)
+            match PROXY_MANAGER
+              .start_proxy(
+                app_handle,
+                &proxy,
+                inner_profile.process_id.unwrap(),
+                Some(&inner_profile.name),
+              )
+              .await
             {
-              // Restart the proxy with the same configuration
-              match PROXY_MANAGER
-                .start_proxy(
-                  app_handle,
-                  &proxy_settings,
-                  inner_profile.process_id.unwrap(),
-                  Some(&inner_profile.name),
-                )
-                .await
-              {
-                Ok(_) => {
-                  println!("Restarted proxy for profile {}", inner_profile.name);
-                }
-                Err(e) => {
-                  eprintln!(
-                    "Failed to restart proxy for profile {}: {}",
-                    inner_profile.name, e
-                  );
-                }
+              Ok(_) => {
+                println!("Restarted proxy for profile {}", inner_profile.name);
+              }
+              Err(e) => {
+                eprintln!(
+                  "Failed to restart proxy for profile {}: {}",
+                  inner_profile.name, e
+                );
               }
             }
           }
@@ -2840,11 +2913,11 @@ pub fn create_browser_profile(
   browser: String,
   version: String,
   release_type: String,
-  proxy: Option<ProxySettings>,
+  proxy_id: Option<String>,
 ) -> Result<BrowserProfile, String> {
   let browser_runner = BrowserRunner::new();
   browser_runner
-    .create_profile(&name, &browser, &version, &release_type, proxy)
+    .create_profile(&name, &browser, &version, &release_type, proxy_id)
     .map_err(|e| format!("Failed to create profile: {e}"))
 }
 
@@ -2870,14 +2943,14 @@ pub async fn launch_browser_profile(
   // If the profile has proxy settings, we need to start the proxy first
   // and update the profile with proxy settings before launching
   let profile_for_launch = profile.clone();
-  if let Some(proxy) = &profile.proxy {
-    if proxy.enabled {
+  if let Some(proxy_id) = &profile.proxy_id {
+    if let Some(proxy) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id) {
       // Use a temporary PID (1) to start the proxy, we'll update it after browser launch
       let temp_pid = 1u32;
 
       // Start the proxy first
       match PROXY_MANAGER
-        .start_proxy(app_handle.clone(), proxy, temp_pid, Some(&profile.name))
+        .start_proxy(app_handle.clone(), &proxy, temp_pid, Some(&profile.name))
         .await
       {
         Ok(internal_proxy) => {
@@ -2890,7 +2963,7 @@ pub async fn launch_browser_profile(
 
           // Apply the proxy settings with the internal proxy to the profile directory
           browser_runner
-            .apply_proxy_settings_to_profile(&profile_path, proxy, Some(&internal_proxy))
+            .apply_proxy_settings_to_profile(&profile_path, &proxy, Some(&internal_proxy))
             .map_err(|e| format!("Failed to update profile proxy: {e}"))?;
 
           println!("Successfully started proxy for profile: {}", profile.name);
@@ -2907,7 +2980,7 @@ pub async fn launch_browser_profile(
 
           // Apply proxy settings without internal proxy
           browser_runner
-            .apply_proxy_settings_to_profile(&profile_path, proxy, None)
+            .apply_proxy_settings_to_profile(&profile_path, &proxy, None)
             .map_err(|e| format!("Failed to update profile proxy: {e}"))?;
         }
       }
@@ -2930,8 +3003,8 @@ pub async fn launch_browser_profile(
     })?;
 
   // Now update the proxy with the correct PID if we have one
-  if let Some(proxy) = &profile.proxy {
-    if proxy.enabled {
+  if let Some(proxy_id) = &profile.proxy_id {
+    if PROXY_MANAGER.get_proxy_settings_by_id(proxy_id).is_some() {
       if let Some(actual_pid) = updated_profile.process_id {
         // Update the proxy manager with the correct PID
         match PROXY_MANAGER.update_proxy_pid(1u32, actual_pid) {
@@ -2953,11 +3026,11 @@ pub async fn launch_browser_profile(
 pub async fn update_profile_proxy(
   app_handle: tauri::AppHandle,
   profile_name: String,
-  proxy: Option<ProxySettings>,
+  proxy_id: Option<String>,
 ) -> Result<BrowserProfile, String> {
   let browser_runner = BrowserRunner::new();
   browser_runner
-    .update_profile_proxy(app_handle, &profile_name, proxy)
+    .update_profile_proxy(app_handle, &profile_name, proxy_id)
     .await
     .map_err(|e| format!("Failed to update profile: {e}"))
 }
@@ -3132,7 +3205,7 @@ pub fn create_browser_profile_new(
   browser_str: String,
   version: String,
   release_type: String,
-  proxy: Option<ProxySettings>,
+  proxy_id: Option<String>,
 ) -> Result<BrowserProfile, String> {
   let browser_type =
     BrowserType::from_str(&browser_str).map_err(|e| format!("Invalid browser type: {e}"))?;
@@ -3141,7 +3214,7 @@ pub fn create_browser_profile_new(
     browser_type.as_str().to_string(),
     version,
     release_type,
-    proxy,
+    proxy_id,
   )
 }
 
@@ -3245,7 +3318,7 @@ mod tests {
     assert_eq!(profile.name, "Test Profile");
     assert_eq!(profile.browser, "firefox");
     assert_eq!(profile.version, "139.0");
-    assert!(profile.proxy.is_none());
+    assert!(profile.proxy_id.is_none());
     assert!(profile.process_id.is_none());
   }
 
@@ -3253,8 +3326,7 @@ mod tests {
   fn test_create_profile_with_proxy() {
     let (runner, _temp_dir) = create_test_browser_runner();
 
-    let proxy = ProxySettings {
-      enabled: true,
+    let _proxy = ProxySettings {
       proxy_type: "http".to_string(),
       host: "127.0.0.1".to_string(),
       port: 8080,
@@ -3268,16 +3340,13 @@ mod tests {
         "firefox",
         "139.0",
         "stable",
-        Some(proxy.clone()),
+        None, // Tests now use separate proxy storage system
       )
       .unwrap();
 
     assert_eq!(profile.name, "Test Profile with Proxy");
-    assert!(profile.proxy.is_some());
-    let profile_proxy = profile.proxy.unwrap();
-    assert_eq!(profile_proxy.proxy_type, "http");
-    assert_eq!(profile_proxy.host, "127.0.0.1");
-    assert_eq!(profile_proxy.port, 8080);
+    // Note: Proxy settings are now stored separately in the proxy storage system
+    assert!(profile.proxy_id.is_none()); // No proxy assigned in this test
   }
 
   #[test]
@@ -3440,9 +3509,8 @@ mod tests {
     assert!(user_js_content.contains("app.update.enabled"));
     assert!(user_js_content.contains("app.update.auto"));
 
-    // Create profile with proxy
-    let proxy = ProxySettings {
-      enabled: true,
+    // Create profile with proxy (proxy object unused in new architecture)
+    let _proxy = ProxySettings {
       proxy_type: "http".to_string(),
       host: "127.0.0.1".to_string(),
       port: 8080,
@@ -3456,7 +3524,7 @@ mod tests {
         "firefox",
         "139.0",
         "stable",
-        Some(proxy),
+        None, // Tests now use separate proxy storage system
       )
       .unwrap();
 

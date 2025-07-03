@@ -174,6 +174,39 @@ async fn check_and_handle_startup_url(app_handle: tauri::AppHandle) -> Result<bo
   Ok(false)
 }
 
+#[tauri::command]
+async fn create_stored_proxy(
+  name: String,
+  proxy_settings: crate::browser::ProxySettings,
+) -> Result<crate::proxy_manager::StoredProxy, String> {
+  crate::proxy_manager::PROXY_MANAGER
+    .create_stored_proxy(name, proxy_settings)
+    .map_err(|e| format!("Failed to create stored proxy: {e}"))
+}
+
+#[tauri::command]
+async fn get_stored_proxies() -> Result<Vec<crate::proxy_manager::StoredProxy>, String> {
+  Ok(crate::proxy_manager::PROXY_MANAGER.get_stored_proxies())
+}
+
+#[tauri::command]
+async fn update_stored_proxy(
+  proxy_id: String,
+  name: Option<String>,
+  proxy_settings: Option<crate::browser::ProxySettings>,
+) -> Result<crate::proxy_manager::StoredProxy, String> {
+  crate::proxy_manager::PROXY_MANAGER
+    .update_stored_proxy(&proxy_id, name, proxy_settings)
+    .map_err(|e| format!("Failed to update stored proxy: {e}"))
+}
+
+#[tauri::command]
+async fn delete_stored_proxy(proxy_id: String) -> Result<(), String> {
+  crate::proxy_manager::PROXY_MANAGER
+    .delete_stored_proxy(&proxy_id)
+    .map_err(|e| format!("Failed to delete stored proxy: {e}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   let args: Vec<String> = env::args().collect();
@@ -396,6 +429,10 @@ pub fn run() {
       import_browser_profile,
       check_missing_binaries,
       ensure_all_binaries_exist,
+      create_stored_proxy,
+      get_stored_proxies,
+      update_stored_proxy,
+      delete_stored_proxy,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

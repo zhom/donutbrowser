@@ -8,6 +8,7 @@ import {
   type SortingState,
   useReactTable,
 } from "@tanstack/react-table";
+import { invoke } from "@tauri-apps/api/core";
 import * as React from "react";
 import { CiCircleCheck } from "react-icons/ci";
 import { IoEllipsisHorizontal } from "react-icons/io5";
@@ -44,7 +45,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useTableSorting } from "@/hooks/use-table-sorting";
 import { getBrowserDisplayName, getBrowserIcon } from "@/lib/browser-utils";
-import type { BrowserProfile } from "@/types";
+import type { BrowserProfile, StoredProxy } from "@/types";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 
@@ -58,6 +59,7 @@ interface ProfilesDataTableProps {
   onChangeVersion: (profile: BrowserProfile) => void;
   runningProfiles: Set<string>;
   isUpdating?: (browser: string) => boolean;
+  onReloadProxyData?: () => void | Promise<void>;
 }
 
 export function ProfilesDataTable({
@@ -70,6 +72,7 @@ export function ProfilesDataTable({
   onChangeVersion,
   runningProfiles,
   isUpdating = () => false,
+  onReloadProxyData,
 }: ProfilesDataTableProps) {
   const { getTableSorting, updateSorting, isLoaded } = useTableSorting();
   const [sorting, setSorting] = React.useState<SortingState>([]);
@@ -83,11 +86,64 @@ export function ProfilesDataTable({
     React.useState("");
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
   const [isClient, setIsClient] = React.useState(false);
+  const [storedProxies, setStoredProxies] = React.useState<StoredProxy[]>([]);
+
+  // Helper function to check if a profile has a proxy
+  const hasProxy = React.useCallback(
+    (profile: BrowserProfile): boolean => {
+      if (!profile.proxy_id) return false;
+      const proxy = storedProxies.find((p) => p.id === profile.proxy_id);
+      return proxy !== undefined;
+    },
+    [storedProxies],
+  );
+
+  // Helper function to get proxy info for a profile
+  const getProxyInfo = React.useCallback(
+    (profile: BrowserProfile): StoredProxy | null => {
+      if (!profile.proxy_id) return null;
+      return storedProxies.find((p) => p.id === profile.proxy_id) ?? null;
+    },
+    [storedProxies],
+  );
+
+  // Helper function to get proxy name for display
+  const getProxyDisplayName = React.useCallback(
+    (profile: BrowserProfile): string => {
+      if (!profile.proxy_id) return "Disabled";
+      const proxy = storedProxies.find((p) => p.id === profile.proxy_id);
+      return proxy?.name ?? "Unknown Proxy";
+    },
+    [storedProxies],
+  );
 
   // Ensure we're on the client side to prevent hydration mismatches
   React.useEffect(() => {
     setIsClient(true);
   }, []);
+
+  // Load stored proxies
+  const loadStoredProxies = React.useCallback(async () => {
+    try {
+      const proxiesList = await invoke<StoredProxy[]>("get_stored_proxies");
+      setStoredProxies(proxiesList);
+    } catch (error) {
+      console.error("Failed to load stored proxies:", error);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (isClient) {
+      void loadStoredProxies();
+    }
+  }, [isClient, loadStoredProxies]);
+
+  // Reload proxy data when requested from parent
+  React.useEffect(() => {
+    if (onReloadProxyData) {
+      void loadStoredProxies();
+    }
+  }, [onReloadProxyData, loadStoredProxies]);
 
   // Update local sorting state when settings are loaded
   React.useEffect(() => {
@@ -320,32 +376,41 @@ export function ProfilesDataTable({
         header: "Proxy",
         cell: ({ row }) => {
           const profile = row.original;
-          const hasProxy = profile.proxy?.enabled;
-          const regularText = hasProxy ? profile.proxy?.proxy_type : "Disabled";
-          const regularTooltipText = hasProxy
-            ? `${profile.proxy?.proxy_type.toUpperCase()} proxy enabled (${
-                profile.proxy?.host
-              }:${profile.proxy?.port})`
-            : "No proxy configured";
+          const profileHasProxy = hasProxy(profile);
+          const proxyDisplayName = getProxyDisplayName(profile);
+          const proxyInfo = getProxyInfo(profile);
+
+          const tooltipText =
+            profile.browser === "tor-browser"
+              ? "Proxies are not supported for TOR browser"
+              : profileHasProxy && proxyInfo
+                ? `${proxyDisplayName}, ${proxyInfo.proxy_settings.proxy_type.toUpperCase()} (${
+                    proxyInfo.proxy_settings.host
+                  }:${proxyInfo.proxy_settings.port})`
+                : "No proxy configured";
+
           return (
             <Tooltip>
               <TooltipTrigger>
                 <div className="flex gap-2 items-center">
-                  {hasProxy && (
+                  {profileHasProxy && (
                     <CiCircleCheck className="w-4 h-4 text-green-500" />
                   )}
-                  <span className="text-sm text-muted-foreground">
-                    {profile.browser === "tor-browser"
-                      ? "Not supported"
-                      : regularText}
-                  </span>
+
+                  {proxyDisplayName.length > 10 ? (
+                    <span className="text-sm truncate text-muted-foreground">
+                      {proxyDisplayName.slice(0, 10)}...
+                    </span>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">
+                      {profile.browser === "tor-browser"
+                        ? "Not supported"
+                        : proxyDisplayName}
+                    </span>
+                  )}
                 </div>
               </TooltipTrigger>
-              <TooltipContent>
-                {profile.browser === "tor-browser"
-                  ? "Proxies are not supported for TOR browser"
-                  : regularTooltipText}
-              </TooltipContent>
+              <TooltipContent>{tooltipText}</TooltipContent>
             </Tooltip>
           );
         },
@@ -426,6 +491,9 @@ export function ProfilesDataTable({
       onKillProfile,
       onProxySettings,
       onChangeVersion,
+      getProxyInfo,
+      hasProxy,
+      getProxyDisplayName,
     ],
   );
 

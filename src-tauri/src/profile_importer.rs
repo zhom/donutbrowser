@@ -685,7 +685,7 @@ impl ProfileImporter {
       name: new_profile_name.to_string(),
       browser: browser_type.to_string(),
       version: available_versions,
-      proxy: None,
+      proxy_id: None,
       process_id: None,
       last_launch: None,
       release_type: "stable".to_string(),
