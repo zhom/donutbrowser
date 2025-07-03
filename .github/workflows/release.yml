@@ -135,11 +135,6 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install nodecar dependencies
-        working-directory: ./nodecar
-        run: |
-          pnpm install --frozen-lockfile
-
       - name: Build nodecar sidecar
         shell: bash
         working-directory: ./nodecar
