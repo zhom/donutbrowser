@@ -19,10 +19,10 @@ use crate::extraction::Extractor;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BrowserProfile {
+  pub id: uuid::Uuid,
   pub name: String,
   pub browser: String,
   pub version: String,
-  pub profile_path: String,
   #[serde(default)]
   pub proxy: Option<ProxySettings>,
   #[serde(default)]
@@ -96,8 +96,10 @@ mod macos {
     url: &str,
     browser_type: BrowserType,
     browser_dir: &Path,
+    profiles_dir: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let pid = profile.process_id.unwrap();
+    let profile_data_path = profile.get_profile_data_path(profiles_dir);
 
     // First try: Use Firefox remote command
     println!("Trying Firefox remote command for PID: {pid}");
@@ -105,7 +107,7 @@ mod macos {
     if let Ok(executable_path) = browser.get_executable_path(browser_dir) {
       let remote_args = vec![
         "-profile".to_string(),
-        profile.profile_path.clone(),
+        profile_data_path.to_string_lossy().to_string(),
         "-new-tab".to_string(),
         url.to_string(),
       ];
@@ -226,6 +228,7 @@ end try
     url: &str,
     browser_type: BrowserType,
     browser_dir: &Path,
+    _profiles_dir: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let pid = profile.process_id.unwrap();
 
@@ -341,6 +344,7 @@ end try
     url: &str,
     browser_type: BrowserType,
     browser_dir: &Path,
+    _profiles_dir: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let pid = profile.process_id.unwrap();
 
@@ -349,8 +353,12 @@ end try
 
     let browser = create_browser(browser_type);
     if let Ok(executable_path) = browser.get_executable_path(browser_dir) {
+      let profile_data_path = profile.get_profile_data_path(_profiles_dir);
       let remote_output = Command::new(executable_path)
-        .args([&format!("--user-data-dir={}", profile.profile_path), url])
+        .args([
+          &format!("--user-data-dir={}", profile_data_path.to_string_lossy()),
+          url,
+        ])
         .output();
 
       match remote_output {
@@ -590,17 +598,20 @@ mod windows {
     url: &str,
     browser_type: BrowserType,
     browser_dir: &Path,
+    profiles_dir: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let browser = create_browser(browser_type);
     let executable_path = browser
       .get_executable_path(browser_dir)
       .map_err(|e| format!("Failed to get executable path: {}", e))?;
 
+    let profile_data_path = profile.get_profile_data_path(profiles_dir);
+
     // For Windows, try using the -requestPending approach for Firefox
     let mut cmd = Command::new(executable_path);
     cmd.args([
       "-profile",
-      &profile.profile_path,
+      &profile_data_path.to_string_lossy(),
       "-requestPending",
       "-new-tab",
       url,
@@ -622,7 +633,13 @@ mod windows {
         .get_executable_path(browser_dir)
         .map_err(|e| format!("Failed to get executable path: {}", e))?;
       let mut fallback_cmd = Command::new(executable_path);
-      fallback_cmd.args(["-profile", &profile.profile_path, "-new-tab", url]);
+      let profile_data_path = profile.get_profile_data_path(profiles_dir);
+      fallback_cmd.args([
+        "-profile",
+        &profile_data_path.to_string_lossy(),
+        "-new-tab",
+        url,
+      ]);
 
       if let Some(parent_dir) = browser_dir
         .parent()
@@ -652,6 +669,7 @@ mod windows {
     url: &str,
     browser_type: BrowserType,
     browser_dir: &Path,
+    profiles_dir: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // On Windows, TOR and Mullvad browsers can sometimes accept URLs via command line
     // even with -no-remote, by launching a new instance that hands off to existing one
@@ -661,7 +679,8 @@ mod windows {
       .map_err(|e| format!("Failed to get executable path: {}", e))?;
 
     let mut cmd = Command::new(&executable_path);
-    cmd.args(["-profile", &profile.profile_path, url]);
+    let profile_data_path = profile.get_profile_data_path(profiles_dir);
+    cmd.args(["-profile", &profile_data_path.to_string_lossy(), url]);
 
     // Set working directory
     if let Some(parent_dir) = browser_dir
@@ -692,6 +711,7 @@ mod windows {
     url: &str,
     browser_type: BrowserType,
     browser_dir: &Path,
+    profiles_dir: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let browser = create_browser(browser_type.clone());
     let executable_path = browser
@@ -700,7 +720,12 @@ mod windows {
 
     let mut cmd = Command::new(&executable_path);
     cmd.args([
-      &format!("--user-data-dir={}", profile.profile_path),
+      &format!(
+        "--user-data-dir={}",
+        profile
+          .get_profile_data_path(profiles_dir)
+          .to_string_lossy()
+      ),
       "--new-window",
       url,
     ]);
@@ -718,7 +743,15 @@ mod windows {
     if !output.status.success() {
       // Try fallback without --new-window
       let mut fallback_cmd = Command::new(&executable_path);
-      fallback_cmd.args([&format!("--user-data-dir={}", profile.profile_path), url]);
+      fallback_cmd.args([
+        &format!(
+          "--user-data-dir={}",
+          profile
+            .get_profile_data_path(profiles_dir)
+            .to_string_lossy()
+        ),
+        url,
+      ]);
 
       if let Some(parent_dir) = browser_dir
         .parent()
@@ -924,14 +957,21 @@ mod linux {
     url: &str,
     browser_type: BrowserType,
     browser_dir: &Path,
+    profiles_dir: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let browser = create_browser(browser_type);
     let executable_path = browser
       .get_executable_path(browser_dir)
       .map_err(|e| format!("Failed to get executable path: {}", e))?;
 
+    let profile_data_path = profile.get_profile_data_path(profiles_dir);
     let output = Command::new(executable_path)
-      .args(["-profile", &profile.profile_path, "-new-tab", url])
+      .args([
+        "-profile",
+        &profile_data_path.to_string_lossy(),
+        "-new-tab",
+        url,
+      ])
       .output()?;
 
     if !output.status.success() {
@@ -961,14 +1001,19 @@ mod linux {
     url: &str,
     browser_type: BrowserType,
     browser_dir: &Path,
+    profiles_dir: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let browser = create_browser(browser_type);
     let executable_path = browser
       .get_executable_path(browser_dir)
       .map_err(|e| format!("Failed to get executable path: {}", e))?;
 
+    let profile_data_path = profile.get_profile_data_path(profiles_dir);
     let output = Command::new(executable_path)
-      .args([&format!("--user-data-dir={}", profile.profile_path), url])
+      .args([
+        &format!("--user-data-dir={}", profile_data_path.to_string_lossy()),
+        url,
+      ])
       .output()?;
 
     if !output.status.success() {
@@ -1010,6 +1055,170 @@ impl BrowserRunner {
     Self {
       base_dirs: BaseDirs::new().expect("Failed to get base directories"),
     }
+  }
+
+  /// Helper function to kill a browser process by PID only (used during migration)
+  async fn kill_browser_process_by_pid(
+    pid: u32,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("Attempting to kill browser process with PID: {pid} during migration");
+
+    // Kill the process using platform-specific implementation
+    #[cfg(target_os = "macos")]
+    macos::kill_browser_process_impl(pid).await?;
+
+    #[cfg(target_os = "windows")]
+    windows::kill_browser_process_impl(pid).await?;
+
+    #[cfg(target_os = "linux")]
+    linux::kill_browser_process_impl(pid).await?;
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    return Err("Unsupported platform".into());
+
+    println!("Successfully killed browser process with PID: {pid} during migration");
+    Ok(())
+  }
+
+  /// Migrate old profile structure to new UUID-based structure
+  pub async fn migrate_profiles_to_uuid(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    let profiles_dir = self.get_profiles_dir();
+    if !profiles_dir.exists() {
+      return Ok(vec![]);
+    }
+
+    let mut migrated_profiles = Vec::new();
+
+    // Scan for old-format profile files (*.json files directly in profiles directory)
+    for entry in fs::read_dir(&profiles_dir)? {
+      let entry = entry?;
+      let path = entry.path();
+
+      // Look for .json files that are NOT in UUID directories
+      if path.is_file() && path.extension().is_some_and(|ext| ext == "json") {
+        let content = fs::read_to_string(&path)?;
+
+        // Try to parse as old profile format (without UUID)
+        let mut old_profile: serde_json::Value = serde_json::from_str(&content)?;
+
+        // Skip if it already has an id field (already migrated)
+        if old_profile.get("id").is_some() {
+          continue;
+        }
+
+        // Generate new UUID for this profile
+        let profile_id = uuid::Uuid::new_v4();
+
+        // Extract profile name before mutating
+        let profile_name = old_profile["name"]
+          .as_str()
+          .unwrap_or("unknown")
+          .to_string();
+
+        // Check if there's a running browser process for this profile and kill it
+        if let Some(process_id_value) = old_profile.get("process_id") {
+          if let Some(pid) = process_id_value.as_u64() {
+            let pid = pid as u32;
+            println!("Found running browser process (PID: {pid}) for profile '{profile_name}' during migration");
+
+            // Kill the process before migration
+            if let Err(e) = Self::kill_browser_process_by_pid(pid).await {
+              println!(
+                "Warning: Failed to kill browser process (PID: {pid}) during migration: {e}"
+              );
+              // Continue with migration even if kill fails - the process might already be dead
+            } else {
+              println!(
+                "Successfully killed browser process (PID: {pid}) for profile '{profile_name}'"
+              );
+            }
+
+            // Clear the process_id since we killed it
+            old_profile["process_id"] = serde_json::Value::Null;
+          }
+        }
+
+        let snake_case_name = profile_name.to_lowercase().replace(" ", "_");
+        let old_profile_dir = profiles_dir.join(&snake_case_name);
+
+        // Create new UUID directory and profile subdirectory
+        let new_profile_dir = profiles_dir.join(profile_id.to_string());
+        let new_profile_data_dir = new_profile_dir.join("profile");
+        create_dir_all(&new_profile_dir)?;
+        create_dir_all(&new_profile_data_dir)?;
+
+        // Now update the profile with UUID (no need to store profile_path anymore)
+        old_profile["id"] = serde_json::Value::String(profile_id.to_string());
+
+        // Move old profile directory contents to new UUID/profile directory if it exists
+        if old_profile_dir.exists() && old_profile_dir.is_dir() {
+          // Copy all contents from old directory to new profile subdirectory
+          for entry in fs::read_dir(&old_profile_dir)? {
+            let entry = entry?;
+            let source_path = entry.path();
+            let dest_path = new_profile_data_dir.join(entry.file_name());
+
+            if source_path.is_dir() {
+              Self::copy_directory_recursive(&source_path, &dest_path)?;
+            } else {
+              fs::copy(&source_path, &dest_path)?;
+            }
+          }
+
+          // Remove old profile directory
+          fs::remove_dir_all(&old_profile_dir)?;
+          println!(
+            "Migrated profile directory: {} -> {}",
+            old_profile_dir.display(),
+            new_profile_data_dir.display()
+          );
+        }
+
+        // Save migrated profile as metadata.json in UUID directory
+        let metadata_file = new_profile_dir.join("metadata.json");
+        let json = serde_json::to_string_pretty(&old_profile)?;
+        fs::write(&metadata_file, json)?;
+
+        // Remove old profile JSON file
+        fs::remove_file(&path)?;
+
+        migrated_profiles.push(profile_name.clone());
+        println!("Migrated profile '{profile_name}' to UUID: {profile_id}");
+      }
+    }
+
+    if !migrated_profiles.is_empty() {
+      println!(
+        "Successfully migrated {} profiles to UUID format",
+        migrated_profiles.len()
+      );
+    }
+
+    Ok(migrated_profiles)
+  }
+
+  /// Recursively copy directory contents
+  fn copy_directory_recursive(
+    source: &Path,
+    destination: &Path,
+  ) -> Result<(), Box<dyn std::error::Error>> {
+    if !destination.exists() {
+      create_dir_all(destination)?;
+    }
+
+    for entry in fs::read_dir(source)? {
+      let entry = entry?;
+      let source_path = entry.path();
+      let dest_path = destination.join(entry.file_name());
+
+      if source_path.is_dir() {
+        Self::copy_directory_recursive(&source_path, &dest_path)?;
+      } else {
+        fs::copy(&source_path, &dest_path)?;
+      }
+    }
+
+    Ok(())
   }
 
   // Helper function to check if a process matches TOR/Mullvad browser
@@ -1076,24 +1285,22 @@ impl BrowserRunner {
       return Err(format!("Profile with name '{name}' already exists").into());
     }
 
-    let snake_case_name = name.to_lowercase().replace(" ", "_");
+    // Generate a new UUID for this profile
+    let profile_id = uuid::Uuid::new_v4();
     let profiles_dir = self.get_profiles_dir();
-    let profile_file = profiles_dir.join(format!("{snake_case_name}.json"));
-    let profile_path = profiles_dir.join(&snake_case_name);
+    let profile_uuid_dir = profiles_dir.join(profile_id.to_string());
+    let profile_data_dir = profile_uuid_dir.join("profile");
+    let profile_file = profile_uuid_dir.join("metadata.json");
 
-    // Double-check that the profile file doesn't exist
-    if profile_file.exists() {
-      return Err(format!("Profile file for '{name}' already exists").into());
-    }
-
-    // Create profile directory
-    create_dir_all(&profile_path)?;
+    // Create profile directory with UUID and profile subdirectory
+    create_dir_all(&profile_uuid_dir)?;
+    create_dir_all(&profile_data_dir)?;
 
     let profile = BrowserProfile {
+      id: profile_id,
       name: name.to_string(),
       browser: browser.to_string(),
       version: version.to_string(),
-      profile_path: profile_path.to_string_lossy().to_string(),
       proxy: proxy.clone(),
       process_id: None,
       last_launch: None,
@@ -1108,14 +1315,14 @@ impl BrowserRunner {
       return Err(format!("Failed to create profile file for '{name}'").into());
     }
 
-    println!("Profile '{name}' created successfully");
+    println!("Profile '{name}' created successfully with ID: {profile_id}");
 
     // Create user.js with common Firefox preferences and apply proxy settings if provided
     if let Some(proxy_settings) = &proxy {
-      self.apply_proxy_settings_to_profile(&profile_path, proxy_settings, None)?;
+      self.apply_proxy_settings_to_profile(&profile_data_dir, proxy_settings, None)?;
     } else {
       // Create user.js with common Firefox preferences but no proxy
-      self.disable_proxy_settings_in_profile(&profile_path)?;
+      self.disable_proxy_settings_in_profile(&profile_data_dir)?;
     }
 
     Ok(profile)
@@ -1127,20 +1334,20 @@ impl BrowserRunner {
     profile_name: &str,
     proxy: Option<ProxySettings>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
-    let profiles_dir = self.get_profiles_dir();
-    let profile_file = profiles_dir.join(format!(
-      "{}.json",
-      profile_name.to_lowercase().replace(" ", "_")
-    ));
-    let profile_path = profiles_dir.join(profile_name.to_lowercase().replace(" ", "_"));
+    // Find the profile by name
+    let profiles =
+      self
+        .list_profiles()
+        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+          format!("Failed to list profiles: {e}").into()
+        })?;
 
-    if !profile_file.exists() {
-      return Err(format!("Profile {profile_name} not found").into());
-    }
-
-    // Read the profile
-    let content = fs::read_to_string(&profile_file)?;
-    let mut profile: BrowserProfile = serde_json::from_str(&content)?;
+    let mut profile = profiles
+      .into_iter()
+      .find(|p| p.name == profile_name)
+      .ok_or_else(|| -> Box<dyn std::error::Error + Send + Sync> {
+        format!("Profile {profile_name} not found").into()
+      })?;
 
     // Check if browser is running to manage proxy accordingly
     let browser_is_running = profile.process_id.is_some()
@@ -1177,7 +1384,7 @@ impl BrowserRunner {
             Ok(internal_proxy_settings) => {
               let browser_runner = BrowserRunner::new();
               let profiles_dir = browser_runner.get_profiles_dir();
-              let profile_path = profiles_dir.join(profile.name.to_lowercase().replace(" ", "_"));
+              let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
 
               // Apply the proxy settings with the internal proxy to the profile directory
               browser_runner
@@ -1197,6 +1404,8 @@ impl BrowserRunner {
             Err(e) => {
               eprintln!("Failed to start proxy: {e}");
               // Apply proxy settings without internal proxy
+              let profiles_dir = self.get_profiles_dir();
+              let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
               self
                 .apply_proxy_settings_to_profile(&profile_path, proxy_settings, None)
                 .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
@@ -1207,6 +1416,8 @@ impl BrowserRunner {
           }
         } else {
           // No PID available, apply proxy settings without internal proxy
+          let profiles_dir = self.get_profiles_dir();
+          let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
           self
             .apply_proxy_settings_to_profile(&profile_path, proxy_settings, None)
             .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
@@ -1216,6 +1427,8 @@ impl BrowserRunner {
         }
       } else {
         // Proxy disabled or browser not running, just apply settings
+        let profiles_dir = self.get_profiles_dir();
+        let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
         self
           .apply_proxy_settings_to_profile(&profile_path, proxy_settings, None)
           .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
@@ -1225,6 +1438,8 @@ impl BrowserRunner {
       }
     } else {
       // No proxy settings, disable proxy
+      let profiles_dir = self.get_profiles_dir();
+      let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
       self
         .disable_proxy_settings_in_profile(&profile_path)
         .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
@@ -1241,19 +1456,12 @@ impl BrowserRunner {
     profile_name: &str,
     version: &str,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
-    let profiles_dir = self.get_profiles_dir();
-    let profile_file = profiles_dir.join(format!(
-      "{}.json",
-      profile_name.to_lowercase().replace(" ", "_")
-    ));
-
-    if !profile_file.exists() {
-      return Err(format!("Profile {profile_name} not found").into());
-    }
-
-    // Read the profile
-    let content = fs::read_to_string(&profile_file)?;
-    let mut profile: BrowserProfile = serde_json::from_str(&content)?;
+    // Find the profile by name
+    let profiles = self.list_profiles()?;
+    let mut profile = profiles
+      .into_iter()
+      .find(|p| p.name == profile_name)
+      .ok_or_else(|| format!("Profile {profile_name} not found"))?;
 
     // Check if the browser is currently running
     if profile.process_id.is_some() {
@@ -1340,12 +1548,17 @@ impl BrowserRunner {
 
   fn apply_proxy_settings_to_profile(
     &self,
-    profile_path: &Path,
+    profile_data_path: &Path,
     proxy: &ProxySettings,
     internal_proxy: Option<&ProxySettings>,
   ) -> Result<(), Box<dyn std::error::Error>> {
-    let user_js_path = profile_path.join("user.js");
+    let user_js_path = profile_data_path.join("user.js");
     let mut preferences = Vec::new();
+
+    // Get the UUID directory (parent of profile data directory)
+    let uuid_dir = profile_data_path
+      .parent()
+      .ok_or("Invalid profile path - cannot find UUID directory")?;
 
     // Add common Firefox preferences (like disabling default browser check)
     preferences.extend(self.get_common_firefox_preferences());
@@ -1376,8 +1589,8 @@ impl BrowserRunner {
         .replace("{{proxy_url}}", &proxy_url)
         .replace("{{proxy_credentials}}", ""); // Credentials are now handled by the PAC file
 
-      // Save PAC file in profile directory
-      let pac_path = profile_path.join("proxy.pac");
+      // Save PAC file in UUID directory
+      let pac_path = uuid_dir.join("proxy.pac");
       fs::write(&pac_path, pac_content)?;
 
       // Configure Firefox to use the PAC file
@@ -1400,7 +1613,7 @@ impl BrowserRunner {
       preferences.push("user_pref(\"network.proxy.failover_direct\", true);".to_string());
 
       let pac_content = "function FindProxyForURL(url, host) { return 'DIRECT'; }";
-      let pac_path = profile_path.join("proxy.pac");
+      let pac_path = uuid_dir.join("proxy.pac");
       fs::write(&pac_path, pac_content)?;
       preferences.push(format!(
         "user_pref(\"network.proxy.autoconfig_url\", \"file://{}\");",
@@ -1416,16 +1629,30 @@ impl BrowserRunner {
 
   pub fn disable_proxy_settings_in_profile(
     &self,
-    profile_path: &Path,
+    profile_data_path: &Path,
   ) -> Result<(), Box<dyn std::error::Error>> {
-    let user_js_path = profile_path.join("user.js");
+    let user_js_path = profile_data_path.join("user.js");
     let mut preferences = Vec::new();
+
+    // Get the UUID directory (parent of profile data directory)
+    let uuid_dir = profile_data_path
+      .parent()
+      .ok_or("Invalid profile path - cannot find UUID directory")?;
 
     // Add common Firefox preferences (like disabling default browser check)
     preferences.extend(self.get_common_firefox_preferences());
 
     preferences.push("user_pref(\"network.proxy.type\", 0);".to_string());
     preferences.push("user_pref(\"network.proxy.failover_direct\", true);".to_string());
+
+    // Create a direct proxy PAC file in UUID directory
+    let pac_content = "function FindProxyForURL(url, host) { return 'DIRECT'; }";
+    let pac_path = uuid_dir.join("proxy.pac");
+    fs::write(&pac_path, pac_content)?;
+    preferences.push(format!(
+      "user_pref(\"network.proxy.autoconfig_url\", \"file://{}\");",
+      pac_path.to_string_lossy()
+    ));
 
     fs::write(user_js_path, preferences.join("\n"))?;
 
@@ -1434,10 +1661,11 @@ impl BrowserRunner {
 
   pub fn save_profile(&self, profile: &BrowserProfile) -> Result<(), Box<dyn std::error::Error>> {
     let profiles_dir = self.get_profiles_dir();
-    let profile_file = profiles_dir.join(format!(
-      "{}.json",
-      profile.name.to_lowercase().replace(" ", "_")
-    ));
+    let profile_uuid_dir = profiles_dir.join(profile.id.to_string());
+    let profile_file = profile_uuid_dir.join("metadata.json");
+
+    // Ensure the UUID directory exists
+    create_dir_all(&profile_uuid_dir)?;
 
     let json = serde_json::to_string_pretty(profile)?;
     fs::write(profile_file, json)?;
@@ -1456,10 +1684,14 @@ impl BrowserRunner {
       let entry = entry?;
       let path = entry.path();
 
-      if path.extension().is_some_and(|ext| ext == "json") {
-        let content = fs::read_to_string(path)?;
-        let profile: BrowserProfile = serde_json::from_str(&content)?;
-        profiles.push(profile);
+      // Look for UUID directories containing metadata.json
+      if path.is_dir() {
+        let metadata_file = path.join("metadata.json");
+        if metadata_file.exists() {
+          let content = fs::read_to_string(metadata_file)?;
+          let profile: BrowserProfile = serde_json::from_str(&content)?;
+          profiles.push(profile);
+        }
       }
     }
 
@@ -1500,9 +1732,15 @@ impl BrowserRunner {
       _ => profile.proxy.as_ref(),
     };
 
-    // Get launch arguments
+    // Get profile data path and launch arguments
+    let profiles_dir = self.get_profiles_dir();
+    let profile_data_path = profile.get_profile_data_path(&profiles_dir);
     let browser_args = browser
-      .create_launch_args(&profile.profile_path, proxy_for_launch_args, url)
+      .create_launch_args(
+        &profile_data_path.to_string_lossy(),
+        proxy_for_launch_args,
+        url,
+      )
       .expect("Failed to create launch arguments");
 
     // Launch browser using platform-specific method
@@ -1574,12 +1812,12 @@ impl BrowserRunner {
             // Check for profile path match
             let profile_path_match = cmd.iter().any(|s| {
               let arg = s.to_str().unwrap_or("");
-              arg == profile.profile_path
-                || arg == format!("-profile={}", profile.profile_path)
+              arg == profile_data_path.to_string_lossy()
+                || arg == format!("-profile={}", profile_data_path.to_string_lossy())
                 || (arg == "-profile"
                   && cmd
                     .iter()
-                    .any(|s2| s2.to_str().unwrap_or("") == profile.profile_path))
+                    .any(|s2| s2.to_str().unwrap_or("") == profile_data_path.to_string_lossy()))
             });
 
             if profile_path_match {
@@ -1662,93 +1900,129 @@ impl BrowserRunner {
     match browser_type {
       BrowserType::Firefox | BrowserType::FirefoxDeveloper | BrowserType::Zen => {
         #[cfg(target_os = "macos")]
-        return macos::open_url_in_existing_browser_firefox_like(
-          &updated_profile,
-          url,
-          browser_type,
-          &browser_dir,
-        )
-        .await;
+        {
+          let profiles_dir = self.get_profiles_dir();
+          return macos::open_url_in_existing_browser_firefox_like(
+            &updated_profile,
+            url,
+            browser_type,
+            &browser_dir,
+            &profiles_dir,
+          )
+          .await;
+        }
 
         #[cfg(target_os = "windows")]
-        return windows::open_url_in_existing_browser_firefox_like(
-          &updated_profile,
-          url,
-          browser_type,
-          &browser_dir,
-        )
-        .await;
+        {
+          let profiles_dir = self.get_profiles_dir();
+          return windows::open_url_in_existing_browser_firefox_like(
+            &updated_profile,
+            url,
+            browser_type,
+            &browser_dir,
+            &profiles_dir,
+          )
+          .await;
+        }
 
         #[cfg(target_os = "linux")]
-        return linux::open_url_in_existing_browser_firefox_like(
-          &updated_profile,
-          url,
-          browser_type,
-          &browser_dir,
-        )
-        .await;
+        {
+          let profiles_dir = self.get_profiles_dir();
+          return linux::open_url_in_existing_browser_firefox_like(
+            &updated_profile,
+            url,
+            browser_type,
+            &browser_dir,
+            &profiles_dir,
+          )
+          .await;
+        }
 
         #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
         return Err("Unsupported platform".into());
       }
       BrowserType::MullvadBrowser | BrowserType::TorBrowser => {
         #[cfg(target_os = "macos")]
-        return macos::open_url_in_existing_browser_tor_mullvad(
-          &updated_profile,
-          url,
-          browser_type,
-          &browser_dir,
-        )
-        .await;
+        {
+          let profiles_dir = self.get_profiles_dir();
+          return macos::open_url_in_existing_browser_tor_mullvad(
+            &updated_profile,
+            url,
+            browser_type,
+            &browser_dir,
+            &profiles_dir,
+          )
+          .await;
+        }
 
         #[cfg(target_os = "windows")]
-        return windows::open_url_in_existing_browser_tor_mullvad(
-          &updated_profile,
-          url,
-          browser_type,
-          &browser_dir,
-        )
-        .await;
+        {
+          let profiles_dir = self.get_profiles_dir();
+          return windows::open_url_in_existing_browser_tor_mullvad(
+            &updated_profile,
+            url,
+            browser_type,
+            &browser_dir,
+            &profiles_dir,
+          )
+          .await;
+        }
 
         #[cfg(target_os = "linux")]
-        return linux::open_url_in_existing_browser_tor_mullvad(
-          &updated_profile,
-          url,
-          browser_type,
-          &browser_dir,
-        )
-        .await;
+        {
+          let profiles_dir = self.get_profiles_dir();
+          return linux::open_url_in_existing_browser_tor_mullvad(
+            &updated_profile,
+            url,
+            browser_type,
+            &browser_dir,
+            &profiles_dir,
+          )
+          .await;
+        }
 
         #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
         return Err("Unsupported platform".into());
       }
       BrowserType::Chromium | BrowserType::Brave => {
         #[cfg(target_os = "macos")]
-        return macos::open_url_in_existing_browser_chromium(
-          &updated_profile,
-          url,
-          browser_type,
-          &browser_dir,
-        )
-        .await;
+        {
+          let profiles_dir = self.get_profiles_dir();
+          return macos::open_url_in_existing_browser_chromium(
+            &updated_profile,
+            url,
+            browser_type,
+            &browser_dir,
+            &profiles_dir,
+          )
+          .await;
+        }
 
         #[cfg(target_os = "windows")]
-        return windows::open_url_in_existing_browser_chromium(
-          &updated_profile,
-          url,
-          browser_type,
-          &browser_dir,
-        )
-        .await;
+        {
+          let profiles_dir = self.get_profiles_dir();
+          return windows::open_url_in_existing_browser_chromium(
+            &updated_profile,
+            url,
+            browser_type,
+            &browser_dir,
+            &profiles_dir,
+          )
+          .await;
+        }
 
         #[cfg(target_os = "linux")]
-        return linux::open_url_in_existing_browser_chromium(
-          &updated_profile,
-          url,
-          browser_type,
-          &browser_dir,
-        )
-        .await;
+        {
+          let profiles_dir = self.get_profiles_dir();
+          return linux::open_url_in_existing_browser_chromium(
+            &updated_profile,
+            url,
+            browser_type,
+            &browser_dir,
+            &profiles_dir,
+          )
+          .await;
+        }
 
         #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
         return Err("Unsupported platform".into());
@@ -1866,13 +2140,6 @@ impl BrowserRunner {
     old_name: &str,
     new_name: &str,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
-    let profiles_dir = self.get_profiles_dir();
-    let old_profile_file = profiles_dir.join(format!(
-      "{}.json",
-      old_name.to_lowercase().replace(" ", "_")
-    ));
-    let old_profile_path = profiles_dir.join(old_name.to_lowercase().replace(" ", "_"));
-
     // Check if new name already exists (case insensitive)
     let existing_profiles = self.list_profiles()?;
     if existing_profiles
@@ -1882,90 +2149,55 @@ impl BrowserRunner {
       return Err(format!("Profile with name '{new_name}' already exists").into());
     }
 
-    // Read the profile
-    let content = fs::read_to_string(&old_profile_file)?;
-    let mut profile: BrowserProfile = serde_json::from_str(&content)?;
+    // Find the profile by old name
+    let mut profile = existing_profiles
+      .into_iter()
+      .find(|p| p.name == old_name)
+      .ok_or_else(|| format!("Profile '{old_name}' not found"))?;
 
-    // Update profile name
+    // Update profile name (no need to move directories since we use UUID)
     profile.name = new_name.to_string();
-
-    // Create new paths
-    let _ = profiles_dir.join(format!(
-      "{}.json",
-      new_name.to_lowercase().replace(" ", "_")
-    ));
-    let new_profile_path = profiles_dir.join(new_name.to_lowercase().replace(" ", "_"));
-
-    // Rename directory
-    if old_profile_path.exists() {
-      fs::rename(&old_profile_path, &new_profile_path)?;
-    }
-
-    // Update profile path
-    profile.profile_path = new_profile_path.to_string_lossy().to_string();
 
     // Save profile with new name
     self.save_profile(&profile)?;
-
-    // Delete old profile file
-    if old_profile_file.exists() {
-      fs::remove_file(old_profile_file)?;
-    }
 
     Ok(profile)
   }
 
   fn save_process_info(&self, profile: &BrowserProfile) -> Result<(), Box<dyn std::error::Error>> {
-    let profiles_dir = self.get_profiles_dir();
-    let profile_file = profiles_dir.join(format!(
-      "{}.json",
-      profile.name.to_lowercase().replace(" ", "_")
-    ));
-    let json = serde_json::to_string_pretty(&profile)?;
-    fs::write(profile_file, json)?;
-    Ok(())
+    // Use the regular save_profile method which handles the UUID structure
+    self.save_profile(profile)
   }
 
   pub fn delete_profile(&self, profile_name: &str) -> Result<(), Box<dyn std::error::Error>> {
     println!("Attempting to delete profile: {profile_name}");
 
+    // Find the profile by name
+    let profiles = self.list_profiles()?;
+    let profile = profiles
+      .into_iter()
+      .find(|p| p.name == profile_name)
+      .ok_or_else(|| format!("Profile '{profile_name}' not found"))?;
+
+    // Check if browser is running
+    if profile.process_id.is_some() {
+      return Err(
+        "Cannot delete profile while browser is running. Please stop the browser first.".into(),
+      );
+    }
+
     let profiles_dir = self.get_profiles_dir();
-    let snake_case_name = profile_name.to_lowercase().replace(" ", "_");
-    let profile_file = profiles_dir.join(format!("{snake_case_name}.json"));
-    let profile_path = profiles_dir.join(&snake_case_name);
+    let profile_uuid_dir = profiles_dir.join(profile.id.to_string());
 
-    // Verify the profile exists before attempting to delete
-    if !profile_file.exists() {
-      return Err(format!("Profile '{profile_name}' not found").into());
-    }
-
-    // Read the profile to check if browser is running
-    if let Ok(content) = fs::read_to_string(&profile_file) {
-      if let Ok(profile) = serde_json::from_str::<BrowserProfile>(&content) {
-        if profile.process_id.is_some() {
-          return Err(
-            "Cannot delete profile while browser is running. Please stop the browser first.".into(),
-          );
-        }
-      }
-    }
-
-    // Delete profile directory first (if it exists)
-    if profile_path.exists() {
-      println!("Deleting profile directory: {}", profile_path.display());
-      fs::remove_dir_all(&profile_path)?;
+    // Delete the entire UUID directory (contains both metadata.json and profile data)
+    if profile_uuid_dir.exists() {
+      println!("Deleting profile directory: {}", profile_uuid_dir.display());
+      fs::remove_dir_all(&profile_uuid_dir)?;
       println!("Profile directory deleted successfully");
     }
 
-    // Delete profile JSON file
-    if profile_file.exists() {
-      println!("Deleting profile file: {}", profile_file.display());
-      fs::remove_file(&profile_file)?;
-      println!("Profile file deleted successfully");
-    }
-
     // Verify deletion was successful
-    if profile_file.exists() || profile_path.exists() {
+    if profile_uuid_dir.exists() {
       return Err(format!("Failed to completely delete profile '{profile_name}'").into());
     }
 
@@ -1994,6 +2226,9 @@ impl BrowserRunner {
       if let Some(process) = system.process(Pid::from(pid as usize)) {
         let cmd = process.cmd();
         // Verify this process is actually our browser with the correct profile
+        let profiles_dir = self.get_profiles_dir();
+        let profile_data_path = profile.get_profile_data_path(&profiles_dir);
+        let profile_data_path_str = profile_data_path.to_string_lossy();
         let profile_path_match = cmd.iter().any(|s| {
           let arg = s.to_str().unwrap_or("");
           // For Firefox-based browsers, check for exact profile path match
@@ -2003,16 +2238,16 @@ impl BrowserRunner {
             || profile.browser == "mullvad-browser"
             || profile.browser == "zen"
           {
-            arg == profile.profile_path
-              || arg == format!("-profile={}", profile.profile_path)
+            arg == profile_data_path_str
+              || arg == format!("-profile={profile_data_path_str}")
               || (arg == "-profile"
                 && cmd
                   .iter()
-                  .any(|s2| s2.to_str().unwrap_or("") == profile.profile_path))
+                  .any(|s2| s2.to_str().unwrap_or("") == profile_data_path_str))
           } else {
             // For Chromium-based browsers, check for user-data-dir
-            arg.contains(&format!("--user-data-dir={}", profile.profile_path))
-              || arg == profile.profile_path
+            arg.contains(&format!("--user-data-dir={profile_data_path_str}"))
+              || arg == profile_data_path_str
           }
         });
 
@@ -2059,6 +2294,9 @@ impl BrowserRunner {
           }
 
           // Check for profile path match
+          let profiles_dir = self.get_profiles_dir();
+          let profile_data_path = profile.get_profile_data_path(&profiles_dir);
+          let profile_data_path_str = profile_data_path.to_string_lossy();
           let profile_path_match = cmd.iter().any(|s| {
             let arg = s.to_str().unwrap_or("");
             // For Firefox-based browsers, check for exact profile path match
@@ -2068,16 +2306,16 @@ impl BrowserRunner {
               || profile.browser == "mullvad-browser"
               || profile.browser == "zen"
             {
-              arg == profile.profile_path
-                || arg == format!("-profile={}", profile.profile_path)
+              arg == profile_data_path_str
+                || arg == format!("-profile={profile_data_path_str}")
                 || (arg == "-profile"
                   && cmd
                     .iter()
-                    .any(|s2| s2.to_str().unwrap_or("") == profile.profile_path))
+                    .any(|s2| s2.to_str().unwrap_or("") == profile_data_path_str))
             } else {
               // For Chromium-based browsers, check for user-data-dir
-              arg.contains(&format!("--user-data-dir={}", profile.profile_path))
-                || arg == profile.profile_path
+              arg.contains(&format!("--user-data-dir={profile_data_path_str}"))
+                || arg == profile_data_path_str
             }
           });
 
@@ -2209,6 +2447,9 @@ impl BrowserRunner {
           }
 
           // Check for profile path match
+          let profiles_dir = self.get_profiles_dir();
+          let profile_data_path = profile.get_profile_data_path(&profiles_dir);
+          let profile_data_path_str = profile_data_path.to_string_lossy();
           let profile_path_match = cmd.iter().any(|s| {
             let arg = s.to_str().unwrap_or("");
             // For Firefox-based browsers, check for exact profile path match
@@ -2218,11 +2459,11 @@ impl BrowserRunner {
               || profile.browser == "mullvad-browser"
               || profile.browser == "zen"
             {
-              arg == profile.profile_path || arg == format!("-profile={}", profile.profile_path)
+              arg == profile_data_path_str || arg == format!("-profile={profile_data_path_str}")
             } else {
               // For Chromium-based browsers, check for user-data-dir
-              arg.contains(&format!("--user-data-dir={}", profile.profile_path))
-                || arg == profile.profile_path
+              arg.contains(&format!("--user-data-dir={profile_data_path_str}"))
+                || arg == profile_data_path_str
             }
           });
 
@@ -2586,6 +2827,19 @@ impl BrowserRunner {
   }
 }
 
+impl BrowserProfile {
+  /// Get the path to the profile data directory (profiles/{uuid}/profile)
+  pub fn get_profile_data_path(&self, profiles_dir: &Path) -> PathBuf {
+    profiles_dir.join(self.id.to_string()).join("profile")
+  }
+
+  /// Get the path to the profile UUID directory (profiles/{uuid})
+  #[allow(dead_code)]
+  pub fn get_profile_uuid_dir(&self, profiles_dir: &Path) -> PathBuf {
+    profiles_dir.join(self.id.to_string())
+  }
+}
+
 #[tauri::command]
 pub fn create_browser_profile(
   name: String,
@@ -2635,7 +2889,7 @@ pub async fn launch_browser_profile(
         Ok(internal_proxy) => {
           let browser_runner = BrowserRunner::new();
           let profiles_dir = browser_runner.get_profiles_dir();
-          let profile_path = profiles_dir.join(profile.name.to_lowercase().replace(" ", "_"));
+          let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
 
           // Store the internal proxy settings for later use
           internal_proxy_settings = Some(internal_proxy.clone());
@@ -2655,7 +2909,7 @@ pub async fn launch_browser_profile(
           // Still continue with browser launch, but without proxy
           let browser_runner = BrowserRunner::new();
           let profiles_dir = browser_runner.get_profiles_dir();
-          let profile_path = profiles_dir.join(profile.name.to_lowercase().replace(" ", "_"));
+          let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
 
           // Apply proxy settings without internal proxy
           browser_runner
@@ -3107,8 +3361,17 @@ mod tests {
       )
       .unwrap();
 
-    // Profile path should use snake_case
-    assert!(profile.profile_path.contains("test_profile_with_spaces"));
+    // Profile path should contain UUID and end with /profile
+    let profiles_dir = runner.get_profiles_dir();
+    let profile_data_path = profile.get_profile_data_path(&profiles_dir);
+    assert!(profile_data_path
+      .to_string_lossy()
+      .contains(&profile.id.to_string()));
+    assert!(profile_data_path.to_string_lossy().ends_with("/profile"));
+    // Profile name should remain unchanged
+    assert_eq!(profile.name, "Test Profile With Spaces");
+    // Profile should have a valid UUID
+    assert!(uuid::Uuid::parse_str(&profile.id.to_string()).is_ok());
   }
 
   #[test]
@@ -3170,7 +3433,9 @@ mod tests {
       .unwrap();
 
     // Check that user.js file was created with default browser preference
-    let user_js_path = std::path::Path::new(&profile.profile_path).join("user.js");
+    let profiles_dir = runner.get_profiles_dir();
+    let profile_data_path = profile.get_profile_data_path(&profiles_dir);
+    let user_js_path = profile_data_path.join("user.js");
     assert!(user_js_path.exists());
 
     let user_js_content = std::fs::read_to_string(user_js_path).unwrap();
@@ -3202,7 +3467,8 @@ mod tests {
       .unwrap();
 
     // Check that user.js file contains both proxy settings and default browser preference
-    let user_js_path_proxy = std::path::Path::new(&profile_with_proxy.profile_path).join("user.js");
+    let profile_with_proxy_data_path = profile_with_proxy.get_profile_data_path(&profiles_dir);
+    let user_js_path_proxy = profile_with_proxy_data_path.join("user.js");
     assert!(user_js_path_proxy.exists());
 
     let user_js_content_proxy = std::fs::read_to_string(user_js_path_proxy).unwrap();

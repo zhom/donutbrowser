@@ -514,10 +514,10 @@ mod tests {
 
   fn create_test_profile(name: &str, browser: &str, version: &str) -> BrowserProfile {
     BrowserProfile {
+      id: uuid::Uuid::new_v4(),
       name: name.to_string(),
       browser: browser.to_string(),
       version: version.to_string(),
-      profile_path: format!("/tmp/{name}"),
       process_id: None,
       proxy: None,
       last_launch: None,

@@ -1025,6 +1025,7 @@ dependencies = [
  "tower",
  "tower-http",
  "urlencoding",
+ "uuid",
  "windows",
  "winreg",
  "wiremock",

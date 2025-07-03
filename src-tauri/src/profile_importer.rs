@@ -664,25 +664,27 @@ impl ProfileImporter {
       return Err(format!("Profile with name '{new_profile_name}' already exists").into());
     }
 
-    // Create the new profile directory
-    let snake_case_name = new_profile_name.to_lowercase().replace(' ', "_");
+    // Generate UUID for new profile and create the directory structure
+    let profile_id = uuid::Uuid::new_v4();
     let profiles_dir = self.browser_runner.get_profiles_dir();
-    let new_profile_path = profiles_dir.join(&snake_case_name);
+    let new_profile_uuid_dir = profiles_dir.join(profile_id.to_string());
+    let new_profile_data_dir = new_profile_uuid_dir.join("profile");
 
-    create_dir_all(&new_profile_path)?;
+    create_dir_all(&new_profile_uuid_dir)?;
+    create_dir_all(&new_profile_data_dir)?;
 
-    // Copy all files from source to destination
-    Self::copy_directory_recursive(source_path, &new_profile_path)?;
+    // Copy all files from source to destination profile subdirectory
+    Self::copy_directory_recursive(source_path, &new_profile_data_dir)?;
 
     // Create the profile metadata without overwriting the imported data
     // We need to find a suitable version for this browser type
     let available_versions = self.get_default_version_for_browser(browser_type)?;
 
     let profile = crate::browser_runner::BrowserProfile {
+      id: profile_id,
       name: new_profile_name.to_string(),
       browser: browser_type.to_string(),
       version: available_versions,
-      profile_path: new_profile_path.to_string_lossy().to_string(),
       proxy: None,
       process_id: None,
       last_launch: None,
