@@ -43,3 +43,11 @@ export interface AppUpdateInfo {
   is_nightly: boolean;
   published_at: string;
 }
+
+export interface AppUpdateProgress {
+  stage: string; // "downloading", "extracting", "installing", "completed"
+  percentage?: number;
+  speed?: string; // MB/s
+  eta?: string; // estimated time remaining
+  message: string;
+}

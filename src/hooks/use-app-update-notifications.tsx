@@ -6,12 +6,13 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AppUpdateToast } from "@/components/app-update-toast";
 import { showToast } from "@/lib/toast-utils";
-import type { AppUpdateInfo } from "@/types";
+import type { AppUpdateInfo, AppUpdateProgress } from "@/types";
 
 export function useAppUpdateNotifications() {
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [updateProgress, setUpdateProgress] = useState<string>("");
+  const [updateProgress, setUpdateProgress] =
+    useState<AppUpdateProgress | null>(null);
   const [isClient, setIsClient] = useState(false);
   const [dismissedVersion, setDismissedVersion] = useState<string | null>(null);
 
@@ -59,7 +60,13 @@ export function useAppUpdateNotifications() {
   const handleAppUpdate = useCallback(async (appUpdateInfo: AppUpdateInfo) => {
     try {
       setIsUpdating(true);
-      setUpdateProgress("Starting update...");
+      setUpdateProgress({
+        stage: "downloading",
+        percentage: 0,
+        speed: undefined,
+        eta: undefined,
+        message: "Starting update...",
+      });
 
       await invoke("download_and_install_app_update", {
         updateInfo: appUpdateInfo,
@@ -73,7 +80,7 @@ export function useAppUpdateNotifications() {
         duration: 6000,
       });
       setIsUpdating(false);
-      setUpdateProgress("");
+      setUpdateProgress(null);
     }
   }, []);
 
@@ -102,10 +109,21 @@ export function useAppUpdateNotifications() {
       },
     );
 
-    const unlistenProgress = listen<string>("app-update-progress", (event) => {
-      console.log("App update progress:", event.payload);
-      setUpdateProgress(event.payload);
-    });
+    const unlistenProgress = listen<AppUpdateProgress>(
+      "app-update-progress",
+      (event) => {
+        console.log("App update progress:", event.payload);
+        setUpdateProgress(event.payload);
+
+        // If update is completed, mark as no longer updating after a delay
+        if (event.payload.stage === "completed") {
+          setTimeout(() => {
+            setIsUpdating(false);
+            setUpdateProgress(null);
+          }, 2000);
+        }
+      },
+    );
 
     return () => {
       void unlistenUpdate.then((unlisten) => {
@@ -161,6 +179,7 @@ export function useAppUpdateNotifications() {
   return {
     updateInfo,
     isUpdating,
+    updateProgress,
     checkForAppUpdates,
     checkForAppUpdatesManual,
     dismissAppUpdate,

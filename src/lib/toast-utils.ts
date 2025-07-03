@@ -46,12 +46,23 @@ interface VersionUpdateToastProps extends BaseToastProps {
   };
 }
 
+interface AppUpdateToastProps extends BaseToastProps {
+  type: "app-update";
+  stage?: "downloading" | "extracting" | "installing" | "completed";
+  progress?: {
+    percentage: number;
+    speed?: string;
+    eta?: string;
+  };
+}
+
 type ToastProps =
   | SuccessToastProps
   | ErrorToastProps
   | DownloadToastProps
   | LoadingToastProps
-  | VersionUpdateToastProps;
+  | VersionUpdateToastProps
+  | AppUpdateToastProps;
 
 export function showToast(props: ToastProps & { id?: string }) {
   const toastId = props.id ?? `toast-${props.type}-${Date.now()}`;
@@ -243,6 +254,30 @@ export function showUnifiedVersionUpdateToast(
     title,
     id: "unified-version-update",
     duration: Number.POSITIVE_INFINITY, // Keep showing until completed
+    ...options,
+  });
+}
+
+export function showAppUpdateToast(
+  title: string,
+  stage: "downloading" | "extracting" | "installing" | "completed",
+  options?: {
+    id?: string;
+    description?: string;
+    progress?: {
+      percentage: number;
+      speed?: string;
+      eta?: string;
+    };
+    duration?: number;
+  },
+) {
+  return showToast({
+    type: "app-update",
+    title,
+    stage,
+    id: options?.id ?? "app-update-progress",
+    duration: stage === "downloading" ? Number.POSITIVE_INFINITY : 5000,
     ...options,
   });
 }

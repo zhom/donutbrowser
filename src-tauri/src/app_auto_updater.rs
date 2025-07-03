@@ -35,6 +35,15 @@ pub struct AppUpdateInfo {
   pub published_at: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AppUpdateProgress {
+  pub stage: String, // "downloading", "extracting", "installing", "completed"
+  pub percentage: Option<f64>,
+  pub speed: Option<String>, // MB/s
+  pub eta: Option<String>,   // estimated time remaining
+  pub message: String,
+}
+
 pub struct AppAutoUpdater {
   client: Client,
 }
@@ -98,9 +107,7 @@ impl AppAutoUpdater {
       // For stable builds, look for stable releases (semver format)
       let stable_releases: Vec<&AppRelease> = releases
         .iter()
-        .filter(|release| {
-          release.tag_name.starts_with('v') && !release.tag_name.starts_with("nightly-")
-        })
+        .filter(|release| release.tag_name.starts_with('v'))
         .collect();
       println!("Found {} stable releases", stable_releases.len());
       stable_releases
@@ -311,21 +318,48 @@ impl AppAutoUpdater {
       .to_string();
 
     // Emit download start event
-    let _ = app_handle.emit("app-update-progress", "Downloading update...");
+    let _ = app_handle.emit(
+      "app-update-progress",
+      AppUpdateProgress {
+        stage: "downloading".to_string(),
+        percentage: Some(0.0),
+        speed: None,
+        eta: None,
+        message: "Starting download...".to_string(),
+      },
+    );
 
-    // Download the update
+    // Download the update with progress tracking
     let download_path = self
-      .download_update(&update_info.download_url, &temp_dir, &filename)
+      .download_update_with_progress(&update_info.download_url, &temp_dir, &filename, app_handle)
       .await?;
 
     // Emit extraction start event
-    let _ = app_handle.emit("app-update-progress", "Preparing update...");
+    let _ = app_handle.emit(
+      "app-update-progress",
+      AppUpdateProgress {
+        stage: "extracting".to_string(),
+        percentage: None,
+        speed: None,
+        eta: None,
+        message: "Preparing update...".to_string(),
+      },
+    );
 
     // Extract the update
     let extracted_app_path = self.extract_update(&download_path, &temp_dir).await?;
 
     // Emit installation start event
-    let _ = app_handle.emit("app-update-progress", "Installing update...");
+    let _ = app_handle.emit(
+      "app-update-progress",
+      AppUpdateProgress {
+        stage: "installing".to_string(),
+        percentage: None,
+        speed: None,
+        eta: None,
+        message: "Installing update...".to_string(),
+      },
+    );
 
     // Install the update (overwrite current app)
     self.install_update(&extracted_app_path).await?;
@@ -334,7 +368,16 @@ impl AppAutoUpdater {
     let _ = fs::remove_dir_all(&temp_dir);
 
     // Emit completion event
-    let _ = app_handle.emit("app-update-progress", "Update completed. Restarting...");
+    let _ = app_handle.emit(
+      "app-update-progress",
+      AppUpdateProgress {
+        stage: "completed".to_string(),
+        percentage: Some(100.0),
+        speed: None,
+        eta: None,
+        message: "Update completed. Restarting...".to_string(),
+      },
+    );
 
     // Restart the application
     self.restart_application().await?;
@@ -342,12 +385,13 @@ impl AppAutoUpdater {
     Ok(())
   }
 
-  /// Download the update file
-  async fn download_update(
+  /// Download the update file with progress tracking
+  async fn download_update_with_progress(
     &self,
     download_url: &str,
     dest_dir: &Path,
     filename: &str,
+    app_handle: &tauri::AppHandle,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     let file_path = dest_dir.join(filename);
 
@@ -362,14 +406,74 @@ impl AppAutoUpdater {
       return Err(format!("Download failed with status: {}", response.status()).into());
     }
 
+    let total_size = response.content_length().unwrap_or(0);
     let mut file = fs::File::create(&file_path)?;
     let mut stream = response.bytes_stream();
+    let mut downloaded = 0u64;
+    let start_time = std::time::Instant::now();
+    let mut last_update = std::time::Instant::now();
 
     use futures_util::StreamExt;
     while let Some(chunk) = stream.next().await {
       let chunk = chunk?;
       file.write_all(&chunk)?;
+      downloaded += chunk.len() as u64;
+
+      // Update progress every 100ms to avoid overwhelming the UI
+      if last_update.elapsed().as_millis() > 100 {
+        let elapsed = start_time.elapsed().as_secs_f64();
+        let percentage = if total_size > 0 {
+          (downloaded as f64 / total_size as f64) * 100.0
+        } else {
+          0.0
+        };
+
+        let speed = if elapsed > 0.0 {
+          downloaded as f64 / elapsed / 1024.0 / 1024.0 // MB/s
+        } else {
+          0.0
+        };
+
+        let eta = if total_size > 0 && speed > 0.0 {
+          let remaining_bytes = total_size - downloaded;
+          let remaining_seconds = (remaining_bytes as f64 / 1024.0 / 1024.0) / speed;
+          if remaining_seconds < 60.0 {
+            format!("{}s", remaining_seconds as u32)
+          } else {
+            let minutes = remaining_seconds as u32 / 60;
+            let seconds = remaining_seconds as u32 % 60;
+            format!("{minutes}m {seconds}s")
+          }
+        } else {
+          "Unknown".to_string()
+        };
+
+        let _ = app_handle.emit(
+          "app-update-progress",
+          AppUpdateProgress {
+            stage: "downloading".to_string(),
+            percentage: Some(percentage),
+            speed: Some(format!("{speed:.1}")),
+            eta: Some(eta),
+            message: format!("Downloading update... {percentage:.1}%"),
+          },
+        );
+
+        last_update = std::time::Instant::now();
+      }
     }
+
+    // Emit final download completion
+    let _ = app_handle.emit(
+      "app-update-progress",
+      AppUpdateProgress {
+        stage: "downloading".to_string(),
+        percentage: Some(100.0),
+        speed: None,
+        eta: None,
+        message: "Download completed".to_string(),
+      },
+    );
 
     Ok(file_path)
   }
