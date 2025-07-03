@@ -2832,12 +2832,6 @@ impl BrowserProfile {
   pub fn get_profile_data_path(&self, profiles_dir: &Path) -> PathBuf {
     profiles_dir.join(self.id.to_string()).join("profile")
   }
-
-  /// Get the path to the profile UUID directory (profiles/{uuid})
-  #[allow(dead_code)]
-  pub fn get_profile_uuid_dir(&self, profiles_dir: &Path) -> PathBuf {
-    profiles_dir.join(self.id.to_string())
-  }
 }
 
 #[tauri::command]
