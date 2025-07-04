@@ -83,12 +83,21 @@ export function ProfileSelectorDialog({
         return isRunning;
       }
 
-      // For Mullvad browser: never allow if running
-      if (profile.browser === "mullvad-browser" && isRunning) {
-        return false;
+      // For Mullvad browser: Check if any Mullvad browser is running
+      if (profile.browser === "mullvad-browser") {
+        const runningMullvadProfiles = allProfiles.filter(
+          (p) => p.browser === "mullvad-browser" && runningProfiles.has(p.name),
+        );
+
+        // If no Mullvad browser is running, allow any Mullvad profile
+        if (runningMullvadProfiles.length === 0) {
+          return true;
+        }
+
+        // If Mullvad browser(s) are running, only allow the running one(s)
+        return isRunning;
       }
 
-      // For other browsers: always allow
       return true;
     },
     [],
@@ -148,16 +157,12 @@ export function ProfileSelectorDialog({
   const getProfileTooltipContent = (profile: BrowserProfile): string => {
     const isRunning = runningProfiles.has(profile.name);
 
-    if (profile.browser === "tor-browser") {
-      // If another TOR profile is running, this one is not available
+    if (
+      profile.browser === "tor-browser" ||
+      profile.browser === "mullvad-browser"
+    ) {
+      // If another TOR/Mullvad profile is running, this one is not available
       return "Only 1 instance can run at a time";
-    }
-
-    if (profile.browser === "mullvad-browser") {
-      if (isRunning) {
-        return "Only launching the browser is supported, opening them in a running browser is not yet available";
-      }
-      return "Only launching the browser is supported, opening them in a running browser is not yet available";
     }
 
     if (isRunning) {

@@ -605,9 +605,25 @@ pub async fn smart_open_url(
         }
       }
 
-      // For Mullvad browser: skip if running (can't open URLs in running Mullvad)
+      // For Mullvad browser: Check if any other Mullvad browser is running
       if profile.browser == "mullvad-browser" {
-        continue;
+        let mut other_mullvad_running = false;
+        for p in &profiles {
+          if p.browser == "mullvad-browser"
+            && p.name != profile.name
+            && runner
+              .check_browser_status(app_handle.clone(), p)
+              .await
+              .unwrap_or(false)
+          {
+            other_mullvad_running = true;
+            break;
+          }
+        }
+
+        if other_mullvad_running {
+          continue; // Skip this one, can't have multiple Mullvad instances
+        }
       }
 
       // Try to open the URL with this running profile
