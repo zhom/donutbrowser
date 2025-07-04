@@ -708,7 +708,7 @@ impl ProfileImporter {
     &self,
     browser_type: &str,
   ) -> Result<String, Box<dyn std::error::Error>> {
-    // Try to get a downloaded version first, fallback to a reasonable default
+    // Check if any version of the browser is downloaded
     let registry =
       crate::downloaded_browsers::DownloadedBrowsersRegistry::load().unwrap_or_default();
     let downloaded_versions = registry.get_downloaded_versions(browser_type);
@@ -717,17 +717,12 @@ impl ProfileImporter {
       return Ok(version.clone());
     }
 
-    // If no downloaded versions, return a sensible default
-    match browser_type {
-      "firefox" => Ok("latest".to_string()),
-      "firefox-developer" => Ok("latest".to_string()),
-      "chromium" => Ok("latest".to_string()),
-      "brave" => Ok("latest".to_string()),
-      "zen" => Ok("latest".to_string()),
-      "mullvad-browser" => Ok("13.5.16".to_string()), // Mullvad Browser common version
-      "tor-browser" => Ok("latest".to_string()),
-      _ => Ok("latest".to_string()),
-    }
+    // If no downloaded versions found, return an error
+    Err(format!(
+      "No downloaded versions found for browser '{}'. Please download a version of {} first before importing profiles.",
+      browser_type,
+      self.get_browser_display_name(browser_type)
+    ).into())
   }
 
   /// Recursively copy directory contents

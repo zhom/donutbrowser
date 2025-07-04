@@ -142,7 +142,19 @@ export function ImportProfileDialog({
       console.error("Failed to import profile:", error);
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      toast.error(`Failed to import profile: ${errorMessage}`);
+
+      // Check if error is about browser not being downloaded
+      if (errorMessage.includes("No downloaded versions found")) {
+        const browserDisplayName = getBrowserDisplayName(profile.browser);
+        toast.error(
+          `${browserDisplayName} is not installed. Please download ${browserDisplayName} first from the main window, then try importing again.`,
+          {
+            duration: 8000,
+          },
+        );
+      } else {
+        toast.error(`Failed to import profile: ${errorMessage}`);
+      }
     } finally {
       setIsImporting(false);
     }
@@ -183,7 +195,19 @@ export function ImportProfileDialog({
       console.error("Failed to import profile:", error);
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      toast.error(`Failed to import profile: ${errorMessage}`);
+
+      // Check if error is about browser not being downloaded
+      if (errorMessage.includes("No downloaded versions found")) {
+        const browserDisplayName = getBrowserDisplayName(manualBrowserType);
+        toast.error(
+          `${browserDisplayName} is not installed. Please download ${browserDisplayName} first from the main window, then try importing again.`,
+          {
+            duration: 8000,
+          },
+        );
+      } else {
+        toast.error(`Failed to import profile: ${errorMessage}`);
+      }
     } finally {
       setIsImporting(false);
     }
