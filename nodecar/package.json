@@ -21,10 +21,10 @@
   "author": "",
   "license": "AGPL-3.0",
   "dependencies": {
-    "@types/node": "^24.0.7",
+    "@types/node": "^24.0.10",
     "@yao-pkg/pkg": "^6.5.1",
     "commander": "^14.0.0",
-    "dotenv": "^17.0.0",
+    "dotenv": "^17.0.1",
     "get-port": "^7.1.0",
     "nodemon": "^3.1.10",
     "proxy-chain": "^2.5.9",
