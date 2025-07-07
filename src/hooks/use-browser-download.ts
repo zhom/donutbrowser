@@ -247,41 +247,58 @@ export function useBrowserDownload() {
 
   // Listen for download progress events
   useEffect(() => {
-    const unlisten = listen<DownloadProgress>("download-progress", (event) => {
-      const progress = event.payload;
-      setDownloadProgress(progress);
+    let unlistenFn: (() => void) | null = null;
 
-      const browserName = getBrowserDisplayName(progress.browser);
+    const setupListener = async () => {
+      try {
+        unlistenFn = await listen<DownloadProgress>(
+          "download-progress",
+          (event) => {
+            const progress = event.payload;
+            setDownloadProgress(progress);
 
-      // Show toast with progress
-      if (progress.stage === "downloading") {
-        const speedMBps = (
-          progress.speed_bytes_per_sec /
-          (1024 * 1024)
-        ).toFixed(1);
-        const etaText = progress.eta_seconds
-          ? formatTime(progress.eta_seconds)
-          : "calculating...";
+            const browserName = getBrowserDisplayName(progress.browser);
 
-        showDownloadToast(browserName, progress.version, "downloading", {
-          percentage: progress.percentage,
-          speed: speedMBps,
-          eta: etaText,
-        });
-      } else if (progress.stage === "extracting") {
-        showDownloadToast(browserName, progress.version, "extracting");
-      } else if (progress.stage === "verifying") {
-        showDownloadToast(browserName, progress.version, "verifying");
-      } else if (progress.stage === "completed") {
-        showDownloadToast(browserName, progress.version, "completed");
-        setDownloadProgress(null);
+            // Show toast with progress
+            if (progress.stage === "downloading") {
+              const speedMBps = (
+                progress.speed_bytes_per_sec /
+                (1024 * 1024)
+              ).toFixed(1);
+              const etaText = progress.eta_seconds
+                ? formatTime(progress.eta_seconds)
+                : "calculating...";
+
+              showDownloadToast(browserName, progress.version, "downloading", {
+                percentage: progress.percentage,
+                speed: speedMBps,
+                eta: etaText,
+              });
+            } else if (progress.stage === "extracting") {
+              showDownloadToast(browserName, progress.version, "extracting");
+            } else if (progress.stage === "verifying") {
+              showDownloadToast(browserName, progress.version, "verifying");
+            } else if (progress.stage === "completed") {
+              showDownloadToast(browserName, progress.version, "completed");
+              setDownloadProgress(null);
+            }
+          },
+        );
+      } catch (error) {
+        console.error("Failed to setup download progress listener:", error);
       }
-    });
+    };
+
+    setupListener();
 
     return () => {
-      void unlisten.then((fn) => {
-        fn();
-      });
+      if (unlistenFn) {
+        try {
+          unlistenFn();
+        } catch (error) {
+          console.error("Failed to cleanup download progress listener:", error);
+        }
+      }
     };
   }, [formatTime]);
 

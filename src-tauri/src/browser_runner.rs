@@ -13,6 +13,7 @@ use crate::browser::{create_browser, BrowserType, ProxySettings};
 use crate::browser_version_service::{
   BrowserVersionInfo, BrowserVersionService, BrowserVersionsResult,
 };
+use crate::camoufox::CamoufoxConfig;
 use crate::download::{DownloadProgress, Downloader};
 use crate::downloaded_browsers::DownloadedBrowsersRegistry;
 use crate::extraction::Extractor;
@@ -31,13 +32,15 @@ pub struct BrowserProfile {
   pub last_launch: Option<u64>,
   #[serde(default = "default_release_type")]
   pub release_type: String, // "stable" or "nightly"
+  #[serde(default)]
+  pub camoufox_config: Option<CamoufoxConfig>, // Camoufox configuration
 }
 
 fn default_release_type() -> String {
   "stable".to_string()
 }
 
-// Global state to track currently downloading browsers
+// Global state to track currently downloading browser-version pairs
 lazy_static::lazy_static! {
   static ref DOWNLOADING_BROWSERS: Arc<Mutex<HashSet<String>>> = Arc::new(Mutex::new(HashSet::new()));
 }
@@ -1347,6 +1350,7 @@ impl BrowserRunner {
     version: &str,
     release_type: &str,
     proxy_id: Option<String>,
+    camoufox_config: Option<CamoufoxConfig>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
     println!("Attempting to create profile: {name}");
 
@@ -1379,6 +1383,7 @@ impl BrowserRunner {
       process_id: None,
       last_launch: None,
       release_type: release_type.to_string(),
+      camoufox_config: camoufox_config.clone(),
     };
 
     // Save profile info
@@ -1772,10 +1777,109 @@ impl BrowserRunner {
 
   pub async fn launch_browser(
     &self,
+    app_handle: tauri::AppHandle,
     profile: &BrowserProfile,
     url: Option<String>,
     local_proxy_settings: Option<&ProxySettings>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
+    // Handle camoufox profiles specially
+    if profile.browser == "camoufox" {
+      if let Some(mut camoufox_config) = profile.camoufox_config.clone() {
+        // Handle proxy settings for camoufox
+        if let Some(proxy_id) = &profile.proxy_id {
+          if let Some(stored_proxy) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id) {
+            println!("Starting proxy for Camoufox profile: {}", profile.name);
+
+            // Start the proxy and get local proxy settings
+            let local_proxy = PROXY_MANAGER
+              .start_proxy(
+                app_handle.clone(),
+                &stored_proxy,
+                0, // Use 0 as temporary PID, will be updated later
+                Some(&profile.name),
+              )
+              .await
+              .map_err(|e| format!("Failed to start proxy for Camoufox: {e}"))?;
+
+            // Format proxy URL for camoufox
+            let proxy_url = format!(
+              "{}://{}:{}",
+              if stored_proxy.proxy_type == "socks5" || stored_proxy.proxy_type == "socks4" {
+                &stored_proxy.proxy_type
+              } else {
+                "http"
+              },
+              local_proxy.host,
+              local_proxy.port
+            );
+
+            // Add username and password if available
+            let proxy_url = if let (Some(username), Some(password)) =
+              (&stored_proxy.username, &stored_proxy.password)
+            {
+              format!(
+                "{}://{}:{}@{}:{}",
+                if stored_proxy.proxy_type == "socks5" || stored_proxy.proxy_type == "socks4" {
+                  &stored_proxy.proxy_type
+                } else {
+                  "http"
+                },
+                username,
+                password,
+                local_proxy.host,
+                local_proxy.port
+              )
+            } else {
+              proxy_url
+            };
+
+            // Set proxy in camoufox config
+            camoufox_config.proxy = Some(proxy_url);
+
+            println!("Configured proxy for Camoufox: {:?}", camoufox_config.proxy);
+          }
+        }
+
+        // Use the camoufox launcher
+        let camoufox_result = crate::camoufox::launch_camoufox_profile(
+          app_handle.clone(),
+          profile.clone(),
+          camoufox_config,
+          url,
+        )
+        .await
+        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+          format!("Failed to launch camoufox: {e}").into()
+        })?;
+
+        // Update proxy with actual PID if proxy was started
+        if let Some(pid) = camoufox_result.pid {
+          if profile.proxy_id.is_some() {
+            if let Err(e) = PROXY_MANAGER.update_proxy_pid(0, pid) {
+              println!("Warning: Failed to update proxy PID: {e}");
+            }
+          }
+        }
+
+        // Update profile with the process info from camoufox result
+        let mut updated_profile = profile.clone();
+        updated_profile.process_id = camoufox_result.pid;
+        updated_profile.last_launch = Some(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs());
+
+        // Save the updated profile
+        self.save_process_info(&updated_profile)?;
+
+        // Emit profile update event to frontend
+        if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
+          println!("Warning: Failed to emit profile update event: {e}");
+        }
+
+        return Ok(updated_profile);
+      } else {
+        return Err("Camoufox profile missing configuration".into());
+      }
+    }
+
     // Create browser instance
     let browser_type = BrowserType::from_str(&profile.browser)
       .map_err(|_| format!("Invalid browser type: {}", profile.browser))?;
@@ -1853,91 +1957,85 @@ impl BrowserRunner {
 
     // For TOR and Mullvad browsers, we need to find the actual browser process
     // because they use launcher scripts that spawn the real browser process
-    let actual_pid = if matches!(
+    let mut actual_pid = launcher_pid;
+
+    if matches!(
       browser_type,
       BrowserType::TorBrowser | BrowserType::MullvadBrowser
     ) {
-      println!("Waiting for TOR/Mullvad browser to fully start...");
-
-      // Wait a bit for the browser to fully start
+      // Wait a moment for the actual browser process to start
       tokio::time::sleep(tokio::time::Duration::from_millis(3000)).await;
 
-      // Search for the actual browser process
+      // Find the actual browser process
       let system = System::new_all();
-      let mut found_pid: Option<u32> = None;
+      for (pid, process) in system.processes() {
+        let process_name = process.name().to_str().unwrap_or("");
+        let process_cmd = process.cmd();
+        let pid_u32 = pid.as_u32();
 
-      // Try multiple times to find the process as it might take time to start
-      for attempt in 1..=5 {
-        println!("Attempt {attempt} to find actual browser process...");
-
-        for (pid, process) in system.processes() {
-          let cmd = process.cmd();
-          if cmd.len() >= 2 {
-            // Check if this is the right browser executable
-            let exe_name = process.name().to_string_lossy().to_lowercase();
-            let is_correct_browser = match profile.browser.as_str() {
-              "mullvad-browser" => {
-                self.is_tor_or_mullvad_browser(&exe_name, cmd, "mullvad-browser")
-              }
-              "tor-browser" => self.is_tor_or_mullvad_browser(&exe_name, cmd, "tor-browser"),
-              _ => false,
-            };
-
-            if !is_correct_browser {
-              continue;
-            }
-
-            // Check for profile path match
-            let profile_path_match = cmd.iter().any(|s| {
-              let arg = s.to_str().unwrap_or("");
-              arg == profile_data_path.to_string_lossy()
-                || arg == format!("-profile={}", profile_data_path.to_string_lossy())
-                || (arg == "-profile"
-                  && cmd
-                    .iter()
-                    .any(|s2| s2.to_str().unwrap_or("") == profile_data_path.to_string_lossy()))
-            });
-
-            if profile_path_match {
-              found_pid = Some(pid.as_u32());
-              println!(
-                "Found actual browser process with PID: {} for profile: {}",
-                pid.as_u32(),
-                profile.name
-              );
-              break;
-            }
-          }
+        // Skip if this is the launcher process itself
+        if pid_u32 == launcher_pid {
+          continue;
         }
 
-        if found_pid.is_some() {
+        if self.is_tor_or_mullvad_browser(process_name, process_cmd, &profile.browser) {
+          println!(
+            "Found actual {} browser process: PID {} ({})",
+            profile.browser, pid_u32, process_name
+          );
+          actual_pid = pid_u32;
           break;
         }
-
-        // Wait before next attempt
-        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
       }
+    }
 
-      found_pid.unwrap_or(launcher_pid)
-    } else {
-      // For other browsers, the launcher PID is usually the actual browser PID
-      launcher_pid
-    };
-
-    // Update profile with process info
+    // Update profile with process info and save
     let mut updated_profile = profile.clone();
     updated_profile.process_id = Some(actual_pid);
     updated_profile.last_launch = Some(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs());
 
-    // Save the updated profile
-    self
-      .save_process_info(&updated_profile)
-      .expect("Failed to save process info");
+    self.save_process_info(&updated_profile)?;
 
-    println!(
-      "Browser launched successfully with PID: {} for profile: {}",
-      actual_pid, profile.name
-    );
+    // Apply proxy settings if needed (for Firefox-based browsers)
+    if profile.proxy_id.is_some()
+      && matches!(
+        browser_type,
+        BrowserType::Firefox
+          | BrowserType::FirefoxDeveloper
+          | BrowserType::Zen
+          | BrowserType::TorBrowser
+          | BrowserType::MullvadBrowser
+      )
+    {
+      // Proxy settings for Firefox-based browsers are applied via user.js file
+      // which is already handled in the profile creation process
+    }
+
+    // Start proxy if configured and needed (for Chromium-based browsers)
+    if let Some(proxy_id) = &profile.proxy_id {
+      if let Some(stored_proxy) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id) {
+        println!("Starting proxy for profile: {}", profile.name);
+
+        match PROXY_MANAGER
+          .start_proxy(
+            app_handle.clone(),
+            &stored_proxy,
+            actual_pid,
+            Some(&profile.name),
+          )
+          .await
+        {
+          Ok(_) => println!("Proxy started successfully for profile: {}", profile.name),
+          Err(e) => println!("Warning: Failed to start proxy: {e}"),
+        }
+      }
+    }
+
+    // Emit profile update event to frontend
+    if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
+      println!("Warning: Failed to emit profile update event: {e}");
+    }
+
     Ok(updated_profile)
   }
 
@@ -1948,8 +2046,43 @@ impl BrowserRunner {
     url: &str,
     _internal_proxy_settings: Option<&ProxySettings>,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Use the comprehensive browser status check
-    let is_running = self.check_browser_status(app_handle, profile).await?;
+    // Handle camoufox profiles specially
+    if profile.browser == "camoufox" {
+      let camoufox_launcher = crate::camoufox::CamoufoxLauncher::new(app_handle.clone());
+
+      // Get the profile path based on the UUID
+      let profiles_dir = self.get_profiles_dir();
+      let profile_data_path = profile.get_profile_data_path(&profiles_dir);
+      let profile_path_str = profile_data_path.to_string_lossy();
+
+      // Check if the process is running
+      match camoufox_launcher
+        .find_camoufox_by_profile(&profile_path_str)
+        .await
+      {
+        Ok(Some(_camoufox_process)) => {
+          println!(
+            "Opening URL in existing Camoufox process for profile: {}",
+            profile.name
+          );
+
+          // For Camoufox, we need to launch a new instance with the URL since nodecar doesn't support
+          // opening URLs in existing instances. This is a limitation of the anti-detect architecture.
+          return Err("Camoufox does not support opening URLs in existing instances. Please close the browser and relaunch it with the new URL.".into());
+        }
+        Ok(None) => {
+          return Err("Camoufox browser is not running".into());
+        }
+        Err(e) => {
+          return Err(format!("Error checking Camoufox process: {e}").into());
+        }
+      }
+    }
+
+    // Use the comprehensive browser status check for non-camoufox browsers
+    let is_running = self
+      .check_browser_status(app_handle.clone(), profile)
+      .await?;
 
     if !is_running {
       return Err("Browser is not running".into());
@@ -2105,6 +2238,10 @@ impl BrowserRunner {
         #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
         return Err("Unsupported platform".into());
       }
+      BrowserType::Camoufox => {
+        // This should never be reached due to the early return above, but handle it just in case
+        Err("Camoufox does not support opening URLs in existing instances".into())
+      }
     }
   }
 
@@ -2159,7 +2296,7 @@ impl BrowserRunner {
         }
         match self
           .open_url_in_existing_browser(
-            app_handle,
+            app_handle.clone(),
             &final_profile,
             url_ref,
             internal_proxy_settings,
@@ -2188,7 +2325,7 @@ impl BrowserRunner {
                   final_profile.browser
                 );
                 // Fallback to launching a new instance for other browsers
-                self.launch_browser(&final_profile, url, internal_proxy_settings).await
+                self.launch_browser(app_handle.clone(), &final_profile, url, internal_proxy_settings).await
               }
             }
           }
@@ -2197,7 +2334,12 @@ impl BrowserRunner {
         // This case shouldn't happen since we checked is_some() above, but handle it gracefully
         println!("URL was unexpectedly None, launching new browser instance");
         self
-          .launch_browser(&final_profile, url, internal_proxy_settings)
+          .launch_browser(
+            app_handle.clone(),
+            &final_profile,
+            url,
+            internal_proxy_settings,
+          )
           .await
       }
     } else {
@@ -2208,7 +2350,12 @@ impl BrowserRunner {
         println!("Launching new browser instance - no URL provided");
       }
       self
-        .launch_browser(&final_profile, url, internal_proxy_settings)
+        .launch_browser(
+          app_handle.clone(),
+          &final_profile,
+          url,
+          internal_proxy_settings,
+        )
         .await
     }
   }
@@ -2242,9 +2389,15 @@ impl BrowserRunner {
     Ok(profile)
   }
 
-  fn save_process_info(&self, profile: &BrowserProfile) -> Result<(), Box<dyn std::error::Error>> {
+  fn save_process_info(
+    &self,
+    profile: &BrowserProfile,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Use the regular save_profile method which handles the UUID structure
-    self.save_profile(profile)
+    self.save_profile(profile).map_err(|e| {
+      let error_string = e.to_string();
+      Box::new(std::io::Error::other(error_string)) as Box<dyn std::error::Error + Send + Sync>
+    })
   }
 
   pub fn delete_profile(&self, profile_name: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -2294,6 +2447,79 @@ impl BrowserRunner {
     app_handle: tauri::AppHandle,
     profile: &BrowserProfile,
   ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    // Handle camoufox profiles specially using the camoufox launcher
+    if profile.browser == "camoufox" {
+      let camoufox_launcher = crate::camoufox::CamoufoxLauncher::new(app_handle.clone());
+
+      // Get the profile path based on the UUID
+      let profiles_dir = self.get_profiles_dir();
+      let profile_data_path = profile.get_profile_data_path(&profiles_dir);
+      let profile_path_str = profile_data_path.to_string_lossy();
+
+      println!("Checking Camoufox status for profile: {}", profile.name);
+      println!("Profile UUID: {}", profile.id);
+      println!("Profile path: {profile_path_str}");
+
+      match camoufox_launcher
+        .find_camoufox_by_profile(&profile_path_str)
+        .await
+      {
+        Ok(Some(camoufox_process)) => {
+          // Found a running camoufox process for this profile
+          println!(
+            "Found running Camoufox process for profile {}: {:?}",
+            profile.name, camoufox_process
+          );
+
+          // Update the profile with the current PID if it's different
+          if let Some(pid) = camoufox_process.pid {
+            if profile.process_id != Some(pid) {
+              let mut updated_profile = profile.clone();
+              updated_profile.process_id = Some(pid);
+              if let Err(e) = self.save_profile(&updated_profile) {
+                println!("Warning: Failed to update profile PID: {e}");
+              } else {
+                // Emit profile update event to frontend
+                if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
+                  println!("Warning: Failed to emit profile update event: {e}");
+                }
+              }
+            }
+          }
+
+          return Ok(true);
+        }
+        Ok(None) => {
+          // No running camoufox process found for this profile
+          println!(
+            "No running Camoufox process found for profile: {}",
+            profile.name
+          );
+
+          // Clear the PID if one was stored
+          if profile.process_id.is_some() {
+            let mut updated_profile = profile.clone();
+            updated_profile.process_id = None;
+            if let Err(e) = self.save_profile(&updated_profile) {
+              println!("Warning: Failed to clear profile PID: {e}");
+            } else {
+              // Emit profile update event to frontend
+              if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
+                println!("Warning: Failed to emit profile update event: {e}");
+              }
+            }
+          }
+
+          return Ok(false);
+        }
+        Err(e) => {
+          println!("Error checking Camoufox status: {e}");
+          return Ok(false);
+        }
+      }
+    }
+
+    // For non-camoufox browsers, use the existing logic
     let mut inner_profile = profile.clone();
     let system = System::new_all();
     let mut is_running = false;
@@ -2416,67 +2642,21 @@ impl BrowserRunner {
     if let Some(pid) = found_pid {
       if inner_profile.process_id != Some(pid) {
         inner_profile.process_id = Some(pid);
-        if let Err(e) = self.save_process_info(&inner_profile) {
-          println!("Warning: Failed to update process info: {e}");
-        } else {
-          println!(
-            "Updated process ID for profile '{}' to: {}",
-            inner_profile.name, pid
-          );
+        if let Err(e) = self.save_profile(&inner_profile) {
+          println!("Warning: Failed to update profile with new PID: {e}");
         }
       }
-    } else if is_running {
-      println!("Browser is running but no PID found - this shouldn't happen");
-    } else {
-      // Browser is not running, clear the PID if it was set
-      if inner_profile.process_id.is_some() {
-        inner_profile.process_id = None;
-        if let Err(e) = self.save_process_info(&inner_profile) {
-          println!("Warning: Failed to clear process info: {e}");
-        } else {
-          println!("Cleared process ID for profile '{}'", inner_profile.name);
-        }
+    } else if inner_profile.process_id.is_some() {
+      // Clear the PID if no process found
+      inner_profile.process_id = None;
+      if let Err(e) = self.save_profile(&inner_profile) {
+        println!("Warning: Failed to clear profile PID: {e}");
       }
     }
 
-    // Handle proxy management based on browser status
-    if let Some(proxy_id) = &inner_profile.proxy_id {
-      if let Some(proxy) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id) {
-        if is_running {
-          // Browser is running, check if proxy is active
-          let proxy_active = PROXY_MANAGER
-            .get_proxy_settings(inner_profile.process_id.unwrap_or(0))
-            .is_some();
-
-          if !proxy_active {
-            // Browser is running but proxy is not - restart the proxy
-            match PROXY_MANAGER
-              .start_proxy(
-                app_handle,
-                &proxy,
-                inner_profile.process_id.unwrap(),
-                Some(&inner_profile.name),
-              )
-              .await
-            {
-              Ok(_) => {
-                println!("Restarted proxy for profile {}", inner_profile.name);
-              }
-              Err(e) => {
-                eprintln!(
-                  "Failed to restart proxy for profile {}: {}",
-                  inner_profile.name, e
-                );
-              }
-            }
-          }
-        } else {
-          // Browser is not running, stop the proxy if it exists
-          if let Some(pid) = profile.process_id {
-            let _ = PROXY_MANAGER.stop_proxy(app_handle, pid).await;
-          }
-        }
-      }
+    // Emit profile update event to frontend
+    if let Err(e) = app_handle.emit("profile-updated", &inner_profile) {
+      println!("Warning: Failed to emit profile update event: {e}");
     }
 
     Ok(is_running)
@@ -2487,7 +2667,87 @@ impl BrowserRunner {
     app_handle: tauri::AppHandle,
     profile: &BrowserProfile,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Get the current process ID
+    // Handle camoufox profiles specially
+    if profile.browser == "camoufox" {
+      let camoufox_launcher = crate::camoufox::CamoufoxLauncher::new(app_handle.clone());
+
+      // Get the profile path based on the UUID
+      let profiles_dir = self.get_profiles_dir();
+      let profile_data_path = profile.get_profile_data_path(&profiles_dir);
+      let profile_path_str = profile_data_path.to_string_lossy();
+
+      println!(
+        "Attempting to kill Camoufox process for profile: {}",
+        profile.name
+      );
+      println!("Profile UUID: {}", profile.id);
+      println!("Profile path: {profile_path_str}");
+
+      match camoufox_launcher
+        .find_camoufox_by_profile(&profile_path_str)
+        .await
+      {
+        Ok(Some(camoufox_process)) => {
+          println!(
+            "Found running Camoufox process for profile {}: {:?}",
+            profile.name, camoufox_process
+          );
+
+          // Stop the camoufox process using the launcher
+          match camoufox_launcher.stop_camoufox(&camoufox_process.id).await {
+            Ok(stopped) => {
+              if stopped {
+                println!(
+                  "Successfully stopped Camoufox process: {}",
+                  camoufox_process.id
+                );
+              } else {
+                println!("Failed to stop Camoufox process: {}", camoufox_process.id);
+                return Err("Failed to stop Camoufox process".into());
+              }
+            }
+            Err(e) => {
+              println!("Error stopping Camoufox process: {e}");
+              return Err(format!("Error stopping Camoufox process: {e}").into());
+            }
+          }
+        }
+        Ok(None) => {
+          println!(
+            "No running Camoufox process found for profile: {}",
+            profile.name
+          );
+          // Process might already be stopped, just clear the PID
+        }
+        Err(e) => {
+          println!("Error finding Camoufox process: {e}");
+          return Err(format!("Error finding Camoufox process: {e}").into());
+        }
+      }
+
+      // Stop proxy if one was running for this profile
+      if let Some(pid) = profile.process_id {
+        if let Err(e) = PROXY_MANAGER.stop_proxy(app_handle.clone(), pid).await {
+          println!("Warning: Failed to stop proxy for Camoufox profile: {e}");
+        }
+      }
+
+      // Clear the process ID from the profile
+      let mut updated_profile = profile.clone();
+      updated_profile.process_id = None;
+      self
+        .save_process_info(&updated_profile)
+        .map_err(|e| format!("Failed to update profile: {e}"))?;
+
+      // Emit profile update event to frontend
+      if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
+        println!("Warning: Failed to emit profile update event: {e}");
+      }
+
+      return Ok(());
+    }
+
+    // For non-camoufox browsers, use the existing logic
     let pid = if let Some(pid) = profile.process_id {
       pid
     } else {
@@ -2554,7 +2814,7 @@ impl BrowserRunner {
     println!("Attempting to kill browser process with PID: {pid}");
 
     // Stop any associated proxy first
-    if let Err(e) = PROXY_MANAGER.stop_proxy(app_handle, pid).await {
+    if let Err(e) = PROXY_MANAGER.stop_proxy(app_handle.clone(), pid).await {
       println!("Warning: Failed to stop proxy for PID {pid}: {e}");
     }
 
@@ -2667,16 +2927,17 @@ impl BrowserRunner {
     browser_str: String,
     version: String,
   ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    // Check if this browser type is already being downloaded
+    // Check if this browser-version pair is already being downloaded
+    let download_key = format!("{browser_str}-{version}");
     {
       let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
-      if downloading.contains(&browser_str) {
+      if downloading.contains(&download_key) {
         return Err(format!(
-          "Browser '{browser_str}' is already being downloaded. Please wait for the current download to complete."
+          "Browser '{browser_str}' version '{version}' is already being downloaded. Please wait for the current download to complete."
         ).into());
       }
-      // Mark this browser as being downloaded
-      downloading.insert(browser_str.clone());
+      // Mark this browser-version pair as being downloaded
+      downloading.insert(download_key.clone());
     }
 
     let browser_type =
@@ -2762,10 +3023,10 @@ impl BrowserRunner {
         // Clean up failed download
         let _ = registry.cleanup_failed_download(&browser_str, &version);
         let _ = registry.save();
-        // Remove browser from downloading set on error
+        // Remove browser-version pair from downloading set on error
         {
           let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
-          downloading.remove(&browser_str);
+          downloading.remove(&download_key);
         }
         return Err(format!("Failed to download browser: {e}").into());
       }
@@ -2794,10 +3055,10 @@ impl BrowserRunner {
           // Clean up failed download
           let _ = registry.cleanup_failed_download(&browser_str, &version);
           let _ = registry.save();
-          // Remove browser from downloading set on error
+          // Remove browser-version pair from downloading set on error
           {
             let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
-            downloading.remove(&browser_str);
+            downloading.remove(&download_key);
           }
           return Err(format!("Failed to extract browser: {e}").into());
         }
@@ -2828,10 +3089,10 @@ impl BrowserRunner {
     if !browser.is_version_downloaded(&version, &binaries_dir) {
       let _ = registry.cleanup_failed_download(&browser_str, &version);
       let _ = registry.save();
-      // Remove browser from downloading set on verification failure
+      // Remove browser-version pair from downloading set on verification failure
       {
         let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
-        downloading.remove(&browser_str);
+        downloading.remove(&download_key);
       }
       return Err("Browser download completed but verification failed".into());
     }
@@ -2850,6 +3111,26 @@ impl BrowserRunner {
       .save()
       .map_err(|e| format!("Failed to save registry: {e}"))?;
 
+    // If this is Camoufox, automatically download GeoIP database
+    if browser_str == "camoufox" {
+      use crate::geoip_downloader::GeoIPDownloader;
+
+      // Check if GeoIP database is already available
+      if !GeoIPDownloader::is_geoip_database_available() {
+        println!("Downloading GeoIP database for Camoufox...");
+
+        let geoip_downloader = GeoIPDownloader::new();
+        if let Err(e) = geoip_downloader.download_geoip_database(&app_handle).await {
+          eprintln!("Warning: Failed to download GeoIP database: {e}");
+          // Don't fail the browser download if GeoIP download fails
+        } else {
+          println!("GeoIP database downloaded successfully");
+        }
+      } else {
+        println!("GeoIP database already available");
+      }
+    }
+
     // Emit completion
     let progress = DownloadProgress {
       browser: browser_str.clone(),
@@ -2863,10 +3144,10 @@ impl BrowserRunner {
     };
     let _ = app_handle.emit("download-progress", &progress);
 
-    // Remove browser from downloading set
+    // Remove browser-version pair from downloading set
     {
       let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
-      downloading.remove(&browser_str);
+      downloading.remove(&download_key);
     }
 
     Ok(version)
@@ -2899,6 +3180,34 @@ impl BrowserRunner {
 
     files_exist
   }
+
+  /// Update camoufox configuration for a profile
+  pub fn update_camoufox_config(
+    &self,
+    profile_name: &str,
+    config: CamoufoxConfig,
+  ) -> Result<(), Box<dyn std::error::Error>> {
+    let mut profiles = self.list_profiles()?;
+
+    // Find the profile to update
+    let profile = profiles
+      .iter_mut()
+      .find(|p| p.name == profile_name)
+      .ok_or_else(|| format!("Profile '{profile_name}' not found"))?;
+
+    // Ensure the profile is a camoufox profile
+    if profile.browser != "camoufox" {
+      return Err(format!("Profile '{profile_name}' is not a camoufox profile").into());
+    }
+
+    // Update the camoufox configuration
+    profile.camoufox_config = Some(config);
+
+    // Save the updated profile
+    self.save_profile(profile)?;
+
+    Ok(())
+  }
 }
 
 impl BrowserProfile {
@@ -2915,10 +3224,18 @@ pub fn create_browser_profile(
   version: String,
   release_type: String,
   proxy_id: Option<String>,
+  camoufox_config: Option<CamoufoxConfig>,
 ) -> Result<BrowserProfile, String> {
   let browser_runner = BrowserRunner::new();
   browser_runner
-    .create_profile(&name, &browser, &version, &release_type, proxy_id)
+    .create_profile(
+      &name,
+      &browser,
+      &version,
+      &release_type,
+      proxy_id,
+      camoufox_config,
+    )
     .map_err(|e| format!("Failed to create profile: {e}"))
 }
 
@@ -3207,6 +3524,7 @@ pub fn create_browser_profile_new(
   version: String,
   release_type: String,
   proxy_id: Option<String>,
+  camoufox_config: Option<CamoufoxConfig>,
 ) -> Result<BrowserProfile, String> {
   let browser_type =
     BrowserType::from_str(&browser_str).map_err(|e| format!("Invalid browser type: {e}"))?;
@@ -3216,6 +3534,7 @@ pub fn create_browser_profile_new(
     version,
     release_type,
     proxy_id,
+    camoufox_config,
   )
 }
 
@@ -3313,7 +3632,7 @@ mod tests {
     let (runner, _temp_dir) = create_test_browser_runner();
 
     let profile = runner
-      .create_profile("Test Profile", "firefox", "139.0", "stable", None)
+      .create_profile("Test Profile", "firefox", "139.0", "stable", None, None)
       .unwrap();
 
     assert_eq!(profile.name, "Test Profile");
@@ -3342,6 +3661,7 @@ mod tests {
         "139.0",
         "stable",
         None, // Tests now use separate proxy storage system
+        None, // No camoufox config for this test
       )
       .unwrap();
 
@@ -3355,7 +3675,7 @@ mod tests {
     let (runner, _temp_dir) = create_test_browser_runner();
 
     let profile = runner
-      .create_profile("Test Save Load", "firefox", "139.0", "stable", None)
+      .create_profile("Test Save Load", "firefox", "139.0", "stable", None, None)
       .unwrap();
 
     // Save the profile
@@ -3375,7 +3695,7 @@ mod tests {
 
     // Create profile
     let _ = runner
-      .create_profile("Original Name", "firefox", "139.0", "stable", None)
+      .create_profile("Original Name", "firefox", "139.0", "stable", None, None)
       .unwrap();
 
     // Rename profile
@@ -3395,7 +3715,7 @@ mod tests {
 
     // Create profile
     let _ = runner
-      .create_profile("To Delete", "firefox", "139.0", "stable", None)
+      .create_profile("To Delete", "firefox", "139.0", "stable", None, None)
       .unwrap();
 
     // Verify profile exists
@@ -3422,6 +3742,7 @@ mod tests {
         "139.0",
         "stable",
         None,
+        None,
       )
       .unwrap();
 
@@ -3444,13 +3765,13 @@ mod tests {
 
     // Create multiple profiles
     let _ = runner
-      .create_profile("Profile 1", "firefox", "139.0", "stable", None)
+      .create_profile("Profile 1", "firefox", "139.0", "stable", None, None)
       .unwrap();
     let _ = runner
-      .create_profile("Profile 2", "chromium", "1465660", "stable", None)
+      .create_profile("Profile 2", "chromium", "1465660", "stable", None, None)
       .unwrap();
     let _ = runner
-      .create_profile("Profile 3", "brave", "v1.81.9", "stable", None)
+      .create_profile("Profile 3", "brave", "v1.81.9", "stable", None, None)
       .unwrap();
 
     // List profiles
@@ -3469,10 +3790,10 @@ mod tests {
 
     // Test that we can't rename to an existing profile name
     let _ = runner
-      .create_profile("Profile 1", "firefox", "139.0", "stable", None)
+      .create_profile("Profile 1", "firefox", "139.0", "stable", None, None)
       .unwrap();
     let _ = runner
-      .create_profile("Profile 2", "firefox", "139.0", "stable", None)
+      .create_profile("Profile 2", "firefox", "139.0", "stable", None, None)
       .unwrap();
 
     // Try to rename profile2 to profile1's name (should fail)
@@ -3492,6 +3813,7 @@ mod tests {
         "firefox",
         "139.0",
         "stable",
+        None,
         None,
       )
       .unwrap();
@@ -3526,6 +3848,7 @@ mod tests {
         "139.0",
         "stable",
         None, // Tests now use separate proxy storage system
+        None, // No camoufox config for this test
       )
       .unwrap();
 

@@ -173,11 +173,6 @@ impl ProxyManager {
   }
 
   // Get a stored proxy by ID
-  #[allow(dead_code)]
-  pub fn get_stored_proxy(&self, proxy_id: &str) -> Option<StoredProxy> {
-    let stored_proxies = self.stored_proxies.lock().unwrap();
-    stored_proxies.get(proxy_id).cloned()
-  }
 
   // Update a stored proxy
   pub fn update_stored_proxy(
@@ -418,6 +413,7 @@ impl ProxyManager {
   }
 
   // Get proxy settings for a browser process ID
+  #[allow(dead_code)]
   pub fn get_proxy_settings(&self, browser_pid: u32) -> Option<ProxySettings> {
     let proxies = self.active_proxies.lock().unwrap();
     proxies.get(&browser_pid).map(|proxy| ProxySettings {

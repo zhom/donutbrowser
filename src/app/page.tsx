@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { FaDownload } from "react-icons/fa";
 import { FiWifi } from "react-icons/fi";
 import { GoGear, GoKebabHorizontal, GoPlus } from "react-icons/go";
+import { CamoufoxConfigDialog } from "@/components/camoufox-config-dialog";
 import { ChangeVersionDialog } from "@/components/change-version-dialog";
 import { CreateProfileDialog } from "@/components/create-profile-dialog";
 import { ImportProfileDialog } from "@/components/import-profile-dialog";
@@ -36,7 +37,7 @@ import { useUpdateNotifications } from "@/hooks/use-update-notifications";
 import { useVersionUpdater } from "@/hooks/use-version-updater";
 import { showErrorToast } from "@/lib/toast-utils";
 import { sleep } from "@/lib/utils";
-import type { BrowserProfile } from "@/types";
+import type { BrowserProfile, CamoufoxConfig } from "@/types";
 
 type BrowserTypeString =
   | "mullvad-browser"
@@ -45,7 +46,8 @@ type BrowserTypeString =
   | "chromium"
   | "brave"
   | "zen"
-  | "tor-browser";
+  | "tor-browser"
+  | "camoufox";
 
 interface PendingUrl {
   id: string;
@@ -62,10 +64,14 @@ export default function Home() {
   const [importProfileDialogOpen, setImportProfileDialogOpen] = useState(false);
   const [proxyManagementDialogOpen, setProxyManagementDialogOpen] =
     useState(false);
+  const [camoufoxConfigDialogOpen, setCamoufoxConfigDialogOpen] =
+    useState(false);
   const [pendingUrls, setPendingUrls] = useState<PendingUrl[]>([]);
   const [currentProfileForProxy, setCurrentProfileForProxy] =
     useState<BrowserProfile | null>(null);
   const [currentProfileForVersionChange, setCurrentProfileForVersionChange] =
+    useState<BrowserProfile | null>(null);
+  const [currentProfileForCamoufoxConfig, setCurrentProfileForCamoufoxConfig] =
     useState<BrowserProfile | null>(null);
   const [hasCheckedStartupPrompt, setHasCheckedStartupPrompt] = useState(false);
   const [permissionDialogOpen, setPermissionDialogOpen] = useState(false);
@@ -326,6 +332,30 @@ export default function Home() {
     setChangeVersionDialogOpen(true);
   }, []);
 
+  const handleConfigureCamoufox = useCallback((profile: BrowserProfile) => {
+    setCurrentProfileForCamoufoxConfig(profile);
+    setCamoufoxConfigDialogOpen(true);
+  }, []);
+
+  const handleSaveCamoufoxConfig = useCallback(
+    async (profile: BrowserProfile, config: CamoufoxConfig) => {
+      setError(null);
+      try {
+        await invoke("update_camoufox_config", {
+          profileName: profile.name,
+          config,
+        });
+        await loadProfiles();
+        setCamoufoxConfigDialogOpen(false);
+      } catch (err: unknown) {
+        console.error("Failed to update camoufox config:", err);
+        setError(`Failed to update camoufox config: ${JSON.stringify(err)}`);
+        throw err;
+      }
+    },
+    [loadProfiles],
+  );
+
   const handleSaveProxy = useCallback(
     async (proxyId: string | null) => {
       setProxyDialogOpen(false);
@@ -356,6 +386,7 @@ export default function Home() {
       version: string;
       releaseType: string;
       proxyId?: string;
+      camoufoxConfig?: CamoufoxConfig;
     }) => {
       setError(null);
 
@@ -368,6 +399,7 @@ export default function Home() {
             version: profileData.version,
             releaseType: profileData.releaseType,
             proxyId: profileData.proxyId,
+            camoufoxConfig: profileData.camoufoxConfig,
           },
         );
 
@@ -658,6 +690,7 @@ export default function Home() {
               onDeleteProfile={handleDeleteProfile}
               onRenameProfile={handleRenameProfile}
               onChangeVersion={openChangeVersionDialog}
+              onConfigureCamoufox={handleConfigureCamoufox}
               runningProfiles={runningProfiles}
               isUpdating={isUpdating}
               onReloadProxyData={
@@ -738,6 +771,15 @@ export default function Home() {
         }}
         permissionType={currentPermissionType}
         onPermissionGranted={checkNextPermission}
+      />
+
+      <CamoufoxConfigDialog
+        isOpen={camoufoxConfigDialogOpen}
+        onClose={() => {
+          setCamoufoxConfigDialogOpen(false);
+        }}
+        profile={currentProfileForCamoufoxConfig}
+        onSave={handleSaveCamoufoxConfig}
       />
     </div>
   );

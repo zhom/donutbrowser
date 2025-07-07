@@ -19,6 +19,7 @@ pub enum BrowserType {
   Brave,
   Zen,
   TorBrowser,
+  Camoufox,
 }
 
 impl BrowserType {
@@ -31,6 +32,7 @@ impl BrowserType {
       BrowserType::Brave => "brave",
       BrowserType::Zen => "zen",
       BrowserType::TorBrowser => "tor-browser",
+      BrowserType::Camoufox => "camoufox",
     }
   }
 
@@ -43,6 +45,7 @@ impl BrowserType {
       "brave" => Ok(BrowserType::Brave),
       "zen" => Ok(BrowserType::Zen),
       "tor-browser" => Ok(BrowserType::TorBrowser),
+      "camoufox" => Ok(BrowserType::Camoufox),
       _ => Err(format!("Unknown browser type: {s}")),
     }
   }
@@ -89,6 +92,7 @@ mod macos {
           || name.starts_with("mullvad")
           || name.starts_with("zen")
           || name.starts_with("tor")
+          || name.starts_with("camoufox")
           || name.contains("Browser")
       })
       .map(|entry| entry.path())
@@ -192,6 +196,12 @@ mod linux {
           browser_subdir.join("firefox-bin"),
         ]
       }
+      BrowserType::Camoufox => {
+        vec![
+          browser_subdir.join("camoufox"),
+          browser_subdir.join("camoufox-bin"),
+        ]
+      }
       _ => vec![],
     };
 
@@ -272,6 +282,12 @@ mod linux {
           browser_subdir.join("tor-browser"),
           browser_subdir.join("firefox-bin"),
           browser_subdir.join("firefox"),
+        ]
+      }
+      BrowserType::Camoufox => {
+        vec![
+          browser_subdir.join("camoufox-bin"),
+          browser_subdir.join("camoufox"),
         ]
       }
       _ => vec![],
@@ -358,6 +374,7 @@ mod windows {
             || name.starts_with("mullvad")
             || name.starts_with("zen")
             || name.starts_with("tor")
+            || name.starts_with("camoufox")
             || name.contains("browser")
           {
             return Ok(path);
@@ -436,6 +453,7 @@ mod windows {
             || name.starts_with("mullvad")
             || name.starts_with("zen")
             || name.starts_with("tor")
+            || name.starts_with("camoufox")
             || name.contains("browser")
           {
             return true;
@@ -532,7 +550,10 @@ impl Browser for FirefoxBrowser {
       BrowserType::MullvadBrowser | BrowserType::TorBrowser => {
         args.push("-no-remote".to_string());
       }
-      BrowserType::Firefox | BrowserType::FirefoxDeveloper | BrowserType::Zen => {
+      BrowserType::Firefox
+      | BrowserType::FirefoxDeveloper
+      | BrowserType::Zen
+      | BrowserType::Camoufox => {
         // Don't use -no-remote so we can communicate with existing instances
       }
       _ => {}
@@ -693,6 +714,81 @@ impl Browser for ChromiumBrowser {
   }
 }
 
+pub struct CamoufoxBrowser;
+
+impl CamoufoxBrowser {
+  pub fn new() -> Self {
+    Self
+  }
+}
+
+impl Browser for CamoufoxBrowser {
+  fn get_executable_path(&self, install_dir: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    #[cfg(target_os = "macos")]
+    return macos::get_firefox_executable_path(install_dir);
+
+    #[cfg(target_os = "linux")]
+    return linux::get_firefox_executable_path(install_dir, &BrowserType::Camoufox);
+
+    #[cfg(target_os = "windows")]
+    return windows::get_firefox_executable_path(install_dir);
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    Err("Unsupported platform".into())
+  }
+
+  fn create_launch_args(
+    &self,
+    profile_path: &str,
+    _proxy_settings: Option<&ProxySettings>,
+    url: Option<String>,
+  ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    // For Camoufox, we handle launching through the camoufox launcher
+    // This method won't be used directly, but we provide basic Firefox args as fallback
+    let mut args = vec![
+      "-profile".to_string(),
+      profile_path.to_string(),
+      "-no-remote".to_string(),
+    ];
+
+    if let Some(url) = url {
+      args.push(url);
+    }
+
+    Ok(args)
+  }
+
+  fn is_version_downloaded(&self, version: &str, binaries_dir: &Path) -> bool {
+    let install_dir = binaries_dir.join("camoufox").join(version);
+
+    #[cfg(target_os = "macos")]
+    return macos::is_firefox_version_downloaded(&install_dir);
+
+    #[cfg(target_os = "linux")]
+    return linux::is_firefox_version_downloaded(&install_dir, &BrowserType::Camoufox);
+
+    #[cfg(target_os = "windows")]
+    return windows::is_firefox_version_downloaded(&install_dir);
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    false
+  }
+
+  fn prepare_executable(&self, executable_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(target_os = "macos")]
+    return macos::prepare_executable(executable_path);
+
+    #[cfg(target_os = "linux")]
+    return linux::prepare_executable(executable_path);
+
+    #[cfg(target_os = "windows")]
+    return windows::prepare_executable(executable_path);
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    Err("Unsupported platform".into())
+  }
+}
+
 // Factory function to create browser instances
 pub fn create_browser(browser_type: BrowserType) -> Box<dyn Browser> {
   match browser_type {
@@ -702,6 +798,7 @@ pub fn create_browser(browser_type: BrowserType) -> Box<dyn Browser> {
     | BrowserType::Zen
     | BrowserType::TorBrowser => Box::new(FirefoxBrowser::new(browser_type)),
     BrowserType::Chromium | BrowserType::Brave => Box::new(ChromiumBrowser::new(browser_type)),
+    BrowserType::Camoufox => Box::new(CamoufoxBrowser::new()),
   }
 }
 
@@ -778,6 +875,7 @@ mod tests {
     assert_eq!(BrowserType::Brave.as_str(), "brave");
     assert_eq!(BrowserType::Zen.as_str(), "zen");
     assert_eq!(BrowserType::TorBrowser.as_str(), "tor-browser");
+    assert_eq!(BrowserType::Camoufox.as_str(), "camoufox");
 
     // Test from_str
     assert_eq!(
@@ -801,6 +899,10 @@ mod tests {
     assert_eq!(
       BrowserType::from_str("tor-browser").unwrap(),
       BrowserType::TorBrowser
+    );
+    assert_eq!(
+      BrowserType::from_str("camoufox").unwrap(),
+      BrowserType::Camoufox
     );
 
     // Test invalid browser type

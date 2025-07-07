@@ -147,6 +147,30 @@ impl Downloader {
 
         Ok(asset_url)
       }
+      BrowserType::Camoufox => {
+        // For Camoufox, verify the asset exists and find the correct download URL
+        let releases = self
+          .api_client
+          .fetch_camoufox_releases_with_caching(true)
+          .await?;
+
+        let release = releases
+          .iter()
+          .find(|r| r.tag_name == version)
+          .ok_or(format!("Camoufox version {version} not found"))?;
+
+        // Get platform and architecture info
+        let (os, arch) = Self::get_platform_info();
+
+        // Find the appropriate asset
+        let asset_url = self
+          .find_camoufox_asset(&release.assets, &os, &arch)
+          .ok_or(format!(
+            "No compatible asset found for Camoufox version {version} on {os}/{arch}"
+          ))?;
+
+        Ok(asset_url)
+      }
       _ => {
         // For other browsers, use the provided URL
         Ok(download_info.url.clone())
@@ -317,6 +341,35 @@ impl Downloader {
       }
       _ => None,
     };
+
+    asset.map(|a| a.browser_download_url.clone())
+  }
+
+  /// Find the appropriate Camoufox asset for the current platform and architecture
+  fn find_camoufox_asset(
+    &self,
+    assets: &[crate::browser::GithubAsset],
+    os: &str,
+    arch: &str,
+  ) -> Option<String> {
+    // Camoufox asset naming pattern: camoufox-{version}-{release}-{os}.{arch}.zip
+    let (os_name, arch_name) = match (os, arch) {
+      ("windows", "x64") => ("win", "x86_64"),
+      ("windows", "arm64") => ("win", "arm64"),
+      ("linux", "x64") => ("lin", "x86_64"),
+      ("linux", "arm64") => ("lin", "arm64"),
+      ("macos", "x64") => ("mac", "x86_64"),
+      ("macos", "arm64") => ("mac", "arm64"),
+      _ => return None,
+    };
+
+    // Look for assets matching the pattern
+    let asset = assets.iter().find(|asset| {
+      let name = asset.name.to_lowercase();
+      name.starts_with("camoufox-")
+        && name.contains(&format!("-{os_name}.{arch_name}.zip"))
+        && name.ends_with(".zip")
+    });
 
     asset.map(|a| a.browser_download_url.clone())
   }

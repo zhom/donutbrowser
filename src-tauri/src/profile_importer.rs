@@ -689,6 +689,7 @@ impl ProfileImporter {
       process_id: None,
       last_launch: None,
       release_type: "stable".to_string(),
+      camoufox_config: None,
     };
 
     // Save the profile metadata

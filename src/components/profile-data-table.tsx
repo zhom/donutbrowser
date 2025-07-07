@@ -58,6 +58,7 @@ interface ProfilesDataTableProps {
   onDeleteProfile: (profile: BrowserProfile) => void | Promise<void>;
   onRenameProfile: (oldName: string, newName: string) => Promise<void>;
   onChangeVersion: (profile: BrowserProfile) => void;
+  onConfigureCamoufox?: (profile: BrowserProfile) => void;
   runningProfiles: Set<string>;
   isUpdating?: (browser: string) => boolean;
   onReloadProxyData?: () => void | Promise<void>;
@@ -71,6 +72,7 @@ export function ProfilesDataTable({
   onDeleteProfile,
   onRenameProfile,
   onChangeVersion,
+  onConfigureCamoufox,
   runningProfiles,
   isUpdating = () => false,
   onReloadProxyData,
@@ -447,7 +449,19 @@ export function ProfilesDataTable({
                   >
                     Configure Proxy
                   </DropdownMenuItem>
-                  {!["chromium", "zen"].includes(profile.browser) && (
+                  {profile.browser === "camoufox" && onConfigureCamoufox && (
+                    <DropdownMenuItem
+                      onClick={() => {
+                        onConfigureCamoufox(profile);
+                      }}
+                      disabled={!isClient || isBrowserUpdating}
+                    >
+                      Configure Camoufox
+                    </DropdownMenuItem>
+                  )}
+                  {!["chromium", "zen", "camoufox"].includes(
+                    profile.browser,
+                  ) && (
                     <DropdownMenuItem
                       onClick={() => {
                         onChangeVersion(profile);
@@ -492,6 +506,7 @@ export function ProfilesDataTable({
       onKillProfile,
       onProxySettings,
       onChangeVersion,
+      onConfigureCamoufox,
       getProxyInfo,
       hasProxy,
       getProxyDisplayName,

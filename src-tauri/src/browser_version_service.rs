@@ -87,6 +87,10 @@ impl BrowserVersionService {
           Ok(true)
         }
       }
+      "camoufox" => {
+        // Camoufox supports all platforms and architectures according to the JS code
+        Ok(true)
+      }
       _ => Err(format!("Unknown browser: {browser}").into()),
     }
   }
@@ -101,6 +105,7 @@ impl BrowserVersionService {
       "brave",
       "chromium",
       "tor-browser",
+      "camoufox",
     ];
 
     all_browsers
@@ -237,6 +242,7 @@ impl BrowserVersionService {
       "brave" => self.fetch_brave_versions(true).await?,
       "chromium" => self.fetch_chromium_versions(true).await?,
       "tor-browser" => self.fetch_tor_versions(true).await?,
+      "camoufox" => self.fetch_camoufox_versions(true).await?,
       _ => return Err(format!("Unsupported browser: {browser}").into()),
     };
 
@@ -448,6 +454,27 @@ impl BrowserVersionService {
               BrowserVersionInfo {
                 version: version.clone(),
                 is_prerelease: false, // TOR Browser usually stable releases
+                date: "".to_string(),
+              }
+            }
+          })
+          .collect()
+      }
+      "camoufox" => {
+        let releases = self.fetch_camoufox_releases_detailed(true).await?;
+        merged_versions
+          .into_iter()
+          .map(|version| {
+            if let Some(release) = releases.iter().find(|r| r.tag_name == version) {
+              BrowserVersionInfo {
+                version: release.tag_name.clone(),
+                is_prerelease: release.is_nightly,
+                date: release.published_at.clone(),
+              }
+            } else {
+              BrowserVersionInfo {
+                version: version.clone(),
+                is_prerelease: false, // Camoufox usually stable releases
                 date: "".to_string(),
               }
             }
@@ -727,6 +754,32 @@ impl BrowserVersionService {
           is_archive,
         })
       }
+      "camoufox" => {
+        // Camoufox downloads from GitHub releases with pattern: camoufox-{version}-{release}-{os}.{arch}.zip
+        let (os_name, arch_name) = match (&os[..], &arch[..]) {
+          ("windows", "x64") => ("win", "x86_64"),
+          ("windows", "arm64") => ("win", "arm64"),
+          ("linux", "x64") => ("lin", "x86_64"),
+          ("linux", "arm64") => ("lin", "arm64"),
+          ("macos", "x64") => ("mac", "x86_64"),
+          ("macos", "arm64") => ("mac", "arm64"),
+          _ => {
+            return Err(
+              format!("Unsupported platform/architecture for Camoufox: {os}/{arch}").into(),
+            )
+          }
+        };
+
+        // Note: We provide a placeholder URL here since Camoufox requires dynamic resolution
+        // The actual URL will be resolved in download.rs resolve_download_url
+        Ok(DownloadInfo {
+          url: format!(
+            "https://github.com/daijro/camoufox/releases/download/{version}/camoufox-{{version}}-{{release}}-{os_name}.{arch_name}.zip"
+          ),
+          filename: format!("camoufox-{version}-{os_name}.{arch_name}.zip"),
+          is_archive: true,
+        })
+      }
       _ => Err(format!("Unsupported browser: {browser}").into()),
     }
   }
@@ -887,6 +940,24 @@ impl BrowserVersionService {
     self
       .api_client
       .fetch_tor_releases_with_caching(no_caching)
+      .await
+  }
+
+  async fn fetch_camoufox_versions(
+    &self,
+    no_caching: bool,
+  ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    let releases = self.fetch_camoufox_releases_detailed(no_caching).await?;
+    Ok(releases.into_iter().map(|r| r.tag_name).collect())
+  }
+
+  async fn fetch_camoufox_releases_detailed(
+    &self,
+    no_caching: bool,
+  ) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
+    self
+      .api_client
+      .fetch_camoufox_releases_with_caching(no_caching)
       .await
   }
 }

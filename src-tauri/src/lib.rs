@@ -13,13 +13,17 @@ mod auto_updater;
 mod browser;
 mod browser_runner;
 mod browser_version_service;
+mod camoufox;
 mod default_browser;
 mod download;
 mod downloaded_browsers;
 mod extraction;
+mod geoip_downloader;
+
 mod profile_importer;
 mod proxy_manager;
 mod settings_manager;
+mod system_utils;
 mod theme_detector;
 mod version_updater;
 
@@ -59,6 +63,8 @@ use app_auto_updater::{
 use profile_importer::{detect_existing_profiles, import_browser_profile};
 
 use theme_detector::get_system_theme;
+
+use system_utils::{get_system_locale, get_system_timezone};
 
 // Trait to extend WebviewWindow with transparent titlebar functionality
 pub trait WindowExt {
@@ -205,6 +211,17 @@ async fn delete_stored_proxy(proxy_id: String) -> Result<(), String> {
   crate::proxy_manager::PROXY_MANAGER
     .delete_stored_proxy(&proxy_id)
     .map_err(|e| format!("Failed to delete stored proxy: {e}"))
+}
+
+#[tauri::command]
+async fn update_camoufox_config(
+  profile_name: String,
+  config: crate::camoufox::CamoufoxConfig,
+) -> Result<(), String> {
+  let browser_runner = browser_runner::BrowserRunner::new();
+  browser_runner
+    .update_camoufox_config(&profile_name, config)
+    .map_err(|e| format!("Failed to update Camoufox config: {e}"))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -433,6 +450,9 @@ pub fn run() {
       get_stored_proxies,
       update_stored_proxy,
       delete_stored_proxy,
+      update_camoufox_config,
+      get_system_locale,
+      get_system_timezone,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

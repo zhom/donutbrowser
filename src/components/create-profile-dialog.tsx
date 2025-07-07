@@ -2,12 +2,10 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
-import { FiPlus } from "react-icons/fi";
-import { toast } from "sonner";
 import { LoadingButton } from "@/components/loading-button";
-import { ProxyFormDialog } from "@/components/proxy-form-dialog";
-import { ReleaseTypeSelector } from "@/components/release-type-selector";
+import { SharedCamoufoxConfigForm } from "@/components/shared-camoufox-config-form";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -24,16 +23,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useBrowserDownload } from "@/hooks/use-browser-download";
-import { useBrowserSupport } from "@/hooks/use-browser-support";
-import { getBrowserDisplayName } from "@/lib/browser-utils";
-import type { BrowserProfile, BrowserReleaseTypes, StoredProxy } from "@/types";
-import { Alert, AlertDescription } from "./ui/alert";
+import { getBrowserIcon } from "@/lib/browser-utils";
+import type { BrowserReleaseTypes, CamoufoxConfig, StoredProxy } from "@/types";
 
 type BrowserTypeString =
   | "mullvad-browser"
@@ -42,7 +35,8 @@ type BrowserTypeString =
   | "chromium"
   | "brave"
   | "zen"
-  | "tor-browser";
+  | "tor-browser"
+  | "camoufox";
 
 interface CreateProfileDialogProps {
   isOpen: boolean;
@@ -53,8 +47,63 @@ interface CreateProfileDialogProps {
     version: string;
     releaseType: string;
     proxyId?: string;
+    camoufoxConfig?: CamoufoxConfig;
   }) => Promise<void>;
 }
+
+interface BrowserOption {
+  value: BrowserTypeString;
+  label: string;
+  description: string;
+}
+
+const browserOptions: BrowserOption[] = [
+  {
+    value: "firefox",
+    label: "Firefox",
+    description: "Mozilla's main web browser",
+  },
+  {
+    value: "firefox-developer",
+    label: "Firefox Developer Edition",
+    description: "Browser for developers with cutting-edge features",
+  },
+  {
+    value: "chromium",
+    label: "Chromium",
+    description: "Open-source version of Chrome",
+  },
+  {
+    value: "brave",
+    label: "Brave",
+    description: "Privacy-focused browser with ad blocking",
+  },
+  {
+    value: "zen",
+    label: "Zen Browser",
+    description: "Beautiful, customizable Firefox-based browser",
+  },
+  {
+    value: "mullvad-browser",
+    label: "Mullvad Browser",
+    description: "Privacy browser by Mullvad VPN",
+  },
+  {
+    value: "tor-browser",
+    label: "Tor Browser",
+    description: "Browse anonymously through the Tor network",
+  },
+];
+
+const getCurrentOS = () => {
+  if (typeof window !== "undefined") {
+    const userAgent = window.navigator.userAgent;
+    if (userAgent.includes("Win")) return "windows";
+    if (userAgent.includes("Mac")) return "macos";
+    if (userAgent.includes("Linux")) return "linux";
+  }
+  return "unknown";
+};
 
 export function CreateProfileDialog({
   isOpen,
@@ -62,494 +111,367 @@ export function CreateProfileDialog({
   onCreateProfile,
 }: CreateProfileDialogProps) {
   const [profileName, setProfileName] = useState("");
-  const [selectedBrowser, setSelectedBrowser] =
-    useState<BrowserTypeString | null>("mullvad-browser");
-  const [selectedReleaseType, setSelectedReleaseType] = useState<
-    "stable" | "nightly" | null
-  >(null);
-  const [releaseTypes, setReleaseTypes] = useState<BrowserReleaseTypes>({
-    stable: undefined,
-    nightly: undefined,
+  const [activeTab, setActiveTab] = useState("regular");
+
+  // Regular browser states
+  const [selectedBrowser, setSelectedBrowser] = useState<BrowserTypeString>();
+  const [selectedProxyId, setSelectedProxyId] = useState<string>();
+
+  // Camoufox anti-detect states
+  const [camoufoxConfig, setCamoufoxConfig] = useState<CamoufoxConfig>({
+    enable_cache: true, // Cache enabled by default
+    os: [getCurrentOS()], // Default to current OS
   });
-  const [isCreating, setIsCreating] = useState(false);
-  const [existingProfiles, setExistingProfiles] = useState<BrowserProfile[]>(
-    [],
-  );
-  const [isLoadingReleaseTypes, setIsLoadingReleaseTypes] = useState(false);
 
-  // Proxy settings - now using stored proxy selection
-  const [selectedProxyId, setSelectedProxyId] = useState<string | null>(null);
+  // Common states
+  const [availableReleaseTypes, setAvailableReleaseTypes] =
+    useState<BrowserReleaseTypes>({});
+  const [camoufoxReleaseTypes, setCamoufoxReleaseTypes] =
+    useState<BrowserReleaseTypes>({});
+  const [supportedBrowsers, setSupportedBrowsers] = useState<string[]>([]);
   const [storedProxies, setStoredProxies] = useState<StoredProxy[]>([]);
-  const [isLoadingProxies, setIsLoadingProxies] = useState(false);
-  const [showProxyForm, setShowProxyForm] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
+  // Use the browser download hook
   const {
+    isBrowserDownloading,
     downloadBrowser,
-    isDownloading,
-    downloadedVersions,
     loadDownloadedVersions,
     isVersionDownloaded,
   } = useBrowserDownload();
 
-  const {
-    supportedBrowsers,
-    isLoading: isLoadingSupport,
-    isBrowserSupported,
-  } = useBrowserSupport();
-
-  useEffect(() => {
-    if (supportedBrowsers.length > 0) {
-      // Set default browser to first supported browser
-      if (supportedBrowsers.includes("mullvad-browser")) {
-        setSelectedBrowser("mullvad-browser");
-      } else if (supportedBrowsers.length > 0) {
-        setSelectedBrowser(supportedBrowsers[0] as BrowserTypeString);
-      }
-    }
-  }, [supportedBrowsers]);
-
-  // Set default release type when release types are loaded
-  useEffect(() => {
-    if (!selectedReleaseType && Object.keys(releaseTypes).length > 0) {
-      // First try to set stable if it exists
-      if (releaseTypes.stable) {
-        setSelectedReleaseType("stable");
-      }
-      // If stable doesn't exist but nightly does, set nightly as default
-      else if (releaseTypes.nightly && selectedBrowser !== "chromium") {
-        setSelectedReleaseType("nightly");
-      }
-    }
-  }, [releaseTypes, selectedReleaseType, selectedBrowser]);
-
-  const loadExistingProfiles = useCallback(async () => {
+  const loadSupportedBrowsers = useCallback(async () => {
     try {
-      const profiles = await invoke<BrowserProfile[]>("list_browser_profiles");
-      setExistingProfiles(profiles);
+      const browsers = await invoke<string[]>("get_supported_browsers");
+      setSupportedBrowsers(browsers);
     } catch (error) {
-      console.error("Failed to load existing profiles:", error);
+      console.error("Failed to load supported browsers:", error);
     }
   }, []);
 
   const loadStoredProxies = useCallback(async () => {
     try {
-      setIsLoadingProxies(true);
       const proxies = await invoke<StoredProxy[]>("get_stored_proxies");
       setStoredProxies(proxies);
     } catch (error) {
       console.error("Failed to load stored proxies:", error);
-      toast.error("Failed to load available proxies");
-    } finally {
-      setIsLoadingProxies(false);
     }
   }, []);
 
-  const loadReleaseTypes = useCallback(async (browser: string) => {
-    try {
-      setIsLoadingReleaseTypes(true);
-      const types = await invoke<BrowserReleaseTypes>(
-        "get_browser_release_types",
-        {
-          browserStr: browser,
-        },
-      );
-      setReleaseTypes(types);
-    } catch (error) {
-      console.error("Failed to load release types:", error);
-      toast.error("Failed to load available versions");
-    } finally {
-      setIsLoadingReleaseTypes(false);
-    }
-  }, []);
+  const loadReleaseTypes = useCallback(
+    async (browser: string) => {
+      try {
+        const releaseTypes = await invoke<BrowserReleaseTypes>(
+          "get_browser_release_types",
+          { browserStr: browser },
+        );
 
-  const handleDownload = useCallback(async () => {
-    if (!selectedBrowser || !selectedReleaseType) return;
+        if (browser === "camoufox") {
+          setCamoufoxReleaseTypes(releaseTypes);
+        } else {
+          setAvailableReleaseTypes(releaseTypes);
+        }
 
-    const version =
-      selectedReleaseType === "stable"
-        ? releaseTypes.stable
-        : releaseTypes.nightly;
-    if (!version) return;
-
-    await downloadBrowser(selectedBrowser, version);
-  }, [selectedBrowser, selectedReleaseType, downloadBrowser, releaseTypes]);
-
-  const validateProfileName = useCallback(
-    (name: string): string | null => {
-      const trimmedName = name.trim();
-
-      if (!trimmedName) {
-        return "Profile name cannot be empty";
+        // Load downloaded versions for this browser
+        await loadDownloadedVersions(browser);
+      } catch (error) {
+        console.error(`Failed to load release types for ${browser}:`, error);
       }
-
-      // Check for duplicate names (case insensitive)
-      const isDuplicate = existingProfiles.some(
-        (profile) => profile.name.toLowerCase() === trimmedName.toLowerCase(),
-      );
-
-      if (isDuplicate) {
-        return "A profile with this name already exists";
-      }
-
-      return null;
     },
-    [existingProfiles],
+    [loadDownloadedVersions],
   );
 
-  // Helper to determine if proxy should be disabled for the selected browser
-  const isProxyDisabled = selectedBrowser === "tor-browser";
-
-  // Update proxy selection when browser changes to tor-browser
+  // Load data when dialog opens
   useEffect(() => {
-    if (selectedBrowser === "tor-browser" && selectedProxyId) {
-      setSelectedProxyId(null);
+    if (isOpen) {
+      void loadSupportedBrowsers();
+      void loadStoredProxies();
+      // Load camoufox release types when dialog opens
+      void loadReleaseTypes("camoufox");
     }
-  }, [selectedBrowser, selectedProxyId]);
+  }, [isOpen, loadSupportedBrowsers, loadStoredProxies, loadReleaseTypes]);
 
-  const handleCreateProxy = useCallback(() => {
-    setShowProxyForm(true);
-  }, []);
+  // Load release types when browser selection changes
+  useEffect(() => {
+    if (selectedBrowser) {
+      void loadReleaseTypes(selectedBrowser);
+    }
+  }, [selectedBrowser, loadReleaseTypes]);
 
-  const handleProxySaved = useCallback((savedProxy: StoredProxy) => {
-    setStoredProxies((prev) => {
-      const existingIndex = prev.findIndex((p) => p.id === savedProxy.id);
-      if (existingIndex >= 0) {
-        // Update existing proxy
-        const updated = [...prev];
-        updated[existingIndex] = savedProxy;
-        return updated;
-      } else {
-        // Add new proxy
-        return [...prev, savedProxy];
-      }
-    });
-    setSelectedProxyId(savedProxy.id);
-    setShowProxyForm(false);
-  }, []);
+  const handleDownload = async (browserStr: string) => {
+    const releaseTypes =
+      browserStr === "camoufox" ? camoufoxReleaseTypes : availableReleaseTypes;
+    const latestStableVersion = releaseTypes.stable;
 
-  const handleProxyFormClose = useCallback(() => {
-    setShowProxyForm(false);
-  }, []);
-
-  const handleCreate = useCallback(async () => {
-    if (!profileName.trim() || !selectedBrowser || !selectedReleaseType) return;
-
-    // Validate profile name
-    const nameError = validateProfileName(profileName);
-    if (nameError) {
-      toast.error(nameError);
+    if (!latestStableVersion) {
+      console.error("No stable version available for download");
       return;
     }
 
-    const version =
-      selectedReleaseType === "stable"
-        ? releaseTypes.stable
-        : releaseTypes.nightly;
-    if (!version) {
-      toast.error("Selected release type is not available");
-      return;
+    try {
+      await downloadBrowser(browserStr, latestStableVersion);
+    } catch (error) {
+      console.error("Failed to download browser:", error);
     }
+  };
+
+  const handleCreate = async () => {
+    if (!profileName.trim()) return;
 
     setIsCreating(true);
     try {
-      await onCreateProfile({
-        name: profileName.trim(),
-        browserStr: selectedBrowser,
-        version,
-        releaseType: selectedReleaseType,
-        proxyId: isProxyDisabled ? undefined : (selectedProxyId ?? undefined),
-      });
+      if (activeTab === "regular") {
+        if (!selectedBrowser) {
+          console.error("Missing required browser selection");
+          return;
+        }
 
-      // Reset form
-      setProfileName("");
-      setSelectedReleaseType(null);
-      setSelectedProxyId(null);
-      onClose();
+        // Use the latest stable version by default
+        const latestStableVersion = availableReleaseTypes.stable;
+        if (!latestStableVersion) {
+          console.error("No stable version available");
+          return;
+        }
+
+        await onCreateProfile({
+          name: profileName.trim(),
+          browserStr: selectedBrowser,
+          version: latestStableVersion,
+          releaseType: "stable",
+          proxyId: selectedProxyId,
+        });
+      } else {
+        // Anti-detect tab - always use Camoufox with latest version
+        const latestCamoufoxVersion = camoufoxReleaseTypes.stable;
+        if (!latestCamoufoxVersion) {
+          console.error("No Camoufox version available");
+          return;
+        }
+
+        await onCreateProfile({
+          name: profileName.trim(),
+          browserStr: "camoufox" as BrowserTypeString,
+          version: latestCamoufoxVersion,
+          releaseType: "stable",
+          proxyId: selectedProxyId,
+          camoufoxConfig,
+        });
+      }
+
+      handleClose();
     } catch (error) {
       console.error("Failed to create profile:", error);
     } finally {
       setIsCreating(false);
     }
-  }, [
-    profileName,
-    selectedBrowser,
-    selectedReleaseType,
-    onCreateProfile,
-    isProxyDisabled,
-    selectedProxyId,
-    onClose,
-    releaseTypes.nightly,
-    releaseTypes.stable,
-    validateProfileName,
-  ]);
+  };
 
-  const nameError = profileName.trim()
-    ? validateProfileName(profileName)
-    : null;
+  const handleClose = () => {
+    // Reset all states
+    setProfileName("");
+    setSelectedBrowser(undefined);
+    setSelectedProxyId(undefined);
+    setCamoufoxConfig({
+      enable_cache: true,
+      os: [getCurrentOS()], // Reset to current OS
+    });
+    setActiveTab("regular");
+    onClose();
+  };
 
-  const selectedVersion =
-    selectedReleaseType === "stable"
-      ? releaseTypes.stable
-      : releaseTypes.nightly;
+  const isCreateDisabled = () => {
+    if (!profileName.trim()) return true;
 
-  const canCreate =
-    profileName.trim() &&
-    selectedBrowser &&
-    selectedReleaseType &&
-    selectedVersion &&
-    isVersionDownloaded(selectedVersion) &&
-    !nameError;
-
-  useEffect(() => {
-    if (isOpen) {
-      void loadExistingProfiles();
-      void loadStoredProxies();
+    if (activeTab === "regular") {
+      return !selectedBrowser || !availableReleaseTypes.stable;
+    } else {
+      // For anti-detect, we need camoufox to be available
+      return !camoufoxReleaseTypes.stable;
     }
-  }, [isOpen, loadExistingProfiles, loadStoredProxies]);
+  };
 
-  useEffect(() => {
-    if (isOpen && selectedBrowser) {
-      // Reset selected release type when browser changes
-      setSelectedReleaseType(null);
-      void loadReleaseTypes(selectedBrowser);
-      void loadDownloadedVersions(selectedBrowser);
-    }
-  }, [isOpen, selectedBrowser, loadDownloadedVersions, loadReleaseTypes]);
+  const updateCamoufoxConfig = (key: keyof CamoufoxConfig, value: unknown) => {
+    setCamoufoxConfig((prev) => ({ ...prev, [key]: value }));
+  };
+
+  // Check if browser version is downloaded and available
+  const isBrowserVersionAvailable = (browserStr: string) => {
+    const releaseTypes =
+      browserStr === "camoufox" ? camoufoxReleaseTypes : availableReleaseTypes;
+    const latestStableVersion = releaseTypes.stable;
+    return latestStableVersion && isVersionDownloaded(latestStableVersion);
+  };
+
+  // Get the selected OS for warning
+  const selectedOS = camoufoxConfig.os?.[0];
+  const currentOS = getCurrentOS();
+  const _showOSWarning =
+    selectedOS && selectedOS !== currentOS && currentOS !== "unknown";
 
   return (
-    <>
-      <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-md max-h-[80vh] my-8 flex flex-col">
-          <DialogHeader className="flex-shrink-0">
-            <DialogTitle>Create New Profile</DialogTitle>
-          </DialogHeader>
+    <Dialog open={isOpen} onOpenChange={handleClose}>
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
+          <DialogTitle>Create New Profile</DialogTitle>
+        </DialogHeader>
 
-          <div className="grid overflow-y-scroll flex-1 gap-6 py-4 min-h-0">
-            {/* Profile Name */}
-            <div className="grid gap-2">
-              <Label htmlFor="profile-name">Profile Name</Label>
-              <Input
-                id="profile-name"
-                value={profileName}
-                onChange={(e) => {
-                  setProfileName(e.target.value);
-                }}
-                placeholder="Enter profile name"
-                className={nameError ? "border-red-500" : ""}
-              />
-              {nameError && <p className="text-sm text-red-600">{nameError}</p>}
-            </div>
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="flex flex-col flex-1 w-full min-h-0"
+        >
+          <TabsList className="grid flex-shrink-0 grid-cols-2 w-full">
+            <TabsTrigger value="regular">Regular Browsers</TabsTrigger>
+            <TabsTrigger value="anti-detect">Anti-Detect</TabsTrigger>
+          </TabsList>
 
-            {/* Browser Selection */}
-            <div className="grid gap-2">
-              <Label>Browser</Label>
-              <Select
-                value={selectedBrowser ?? undefined}
-                onValueChange={(value) => {
-                  setSelectedBrowser(value as BrowserTypeString);
-                }}
-                disabled={isLoadingSupport}
-              >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={
-                      isLoadingSupport
-                        ? "Loading browsers..."
-                        : "Select browser"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {(
-                    [
-                      "mullvad-browser",
-                      "firefox",
-                      "firefox-developer",
-                      "chromium",
-                      "brave",
-                      "zen",
-                      "tor-browser",
-                    ] as BrowserTypeString[]
-                  ).map((browser) => {
-                    const isSupported = isBrowserSupported(browser);
-                    const displayName = getBrowserDisplayName(browser);
+          <ScrollArea className="flex-1 pr-6 h-[350px]">
+            <div className="py-4 space-y-6">
+              {/* Profile Name - Common to both tabs */}
+              <div className="space-y-2">
+                <Label htmlFor="profile-name">Profile Name</Label>
+                <Input
+                  id="profile-name"
+                  value={profileName}
+                  onChange={(e) => setProfileName(e.target.value)}
+                  placeholder="Enter profile name"
+                />
+              </div>
 
-                    if (!isSupported) {
-                      return (
-                        <Tooltip key={browser}>
-                          <TooltipTrigger asChild>
-                            <SelectItem
-                              value={browser}
-                              disabled={true}
-                              className="opacity-50"
-                            >
-                              {displayName} (Not supported)
-                            </SelectItem>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>
-                              {displayName} is not supported on your current
-                              platform or architecture.
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      );
-                    }
-
-                    return (
-                      <SelectItem key={browser} value={browser}>
-                        {displayName}
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {selectedBrowser ? (
-              <div className="grid gap-2">
-                <Label>Release Type</Label>
-                {isLoadingReleaseTypes ? (
-                  <div className="text-sm text-muted-foreground">
-                    Loading release types...
-                  </div>
-                ) : Object.keys(releaseTypes).length === 0 ? (
-                  <Alert>
-                    <AlertDescription>
-                      No releases are available for{" "}
-                      {getBrowserDisplayName(selectedBrowser)}.
-                    </AlertDescription>
-                  </Alert>
-                ) : (
-                  <div className="space-y-4">
-                    {(!releaseTypes.stable || !releaseTypes.nightly) && (
-                      <Alert>
-                        <AlertDescription>
-                          Only {(releaseTypes.stable && "Stable") ?? "Nightly"}{" "}
-                          releases are available for{" "}
-                          {getBrowserDisplayName(selectedBrowser)}.
-                        </AlertDescription>
-                      </Alert>
-                    )}
-
-                    <ReleaseTypeSelector
-                      selectedReleaseType={selectedReleaseType}
-                      onReleaseTypeSelect={setSelectedReleaseType}
-                      availableReleaseTypes={releaseTypes}
-                      browser={selectedBrowser}
-                      isDownloading={isDownloading}
-                      onDownload={() => {
-                        void handleDownload();
-                      }}
-                      placeholder="Select release type..."
-                      downloadedVersions={downloadedVersions}
+              <TabsContent value="regular" className="mt-0 space-y-6">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Browser</Label>
+                    <Combobox
+                      options={browserOptions
+                        .filter((browser) =>
+                          supportedBrowsers.includes(browser.value),
+                        )
+                        .map((browser) => {
+                          const IconComponent = getBrowserIcon(browser.value);
+                          return {
+                            value: browser.value,
+                            label: browser.label,
+                            icon: IconComponent,
+                          };
+                        })}
+                      value={selectedBrowser || ""}
+                      onValueChange={(value) =>
+                        setSelectedBrowser(value as BrowserTypeString)
+                      }
+                      placeholder="Select a browser..."
+                      searchPlaceholder="Search browsers..."
                     />
                   </div>
-                )}
-              </div>
-            ) : null}
 
-            {/* Proxy Settings */}
-            <div className="grid gap-4 pt-4 border-t">
-              <div className="grid gap-2">
-                <div className="flex justify-between items-center">
-                  <Label>Proxy Settings</Label>
-                  {!isProxyDisabled && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleCreateProxy}
-                          className="flex gap-2 items-center"
-                        >
-                          <FiPlus className="w-4 h-4" />
-                          Create Proxy
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Create a new proxy configuration</p>
-                      </TooltipContent>
-                    </Tooltip>
+                  {selectedBrowser && (
+                    <div className="space-y-3">
+                      {!isBrowserVersionAvailable(selectedBrowser) &&
+                        availableReleaseTypes.stable && (
+                          <div className="flex gap-3 items-center">
+                            <p className="text-sm text-muted-foreground">
+                              Latest stable version (
+                              {availableReleaseTypes.stable}) needs to be
+                              downloaded
+                            </p>
+                            <LoadingButton
+                              onClick={() => handleDownload(selectedBrowser)}
+                              isLoading={isBrowserDownloading(selectedBrowser)}
+                              size="sm"
+                              disabled={isBrowserDownloading(selectedBrowser)}
+                            >
+                              Download
+                            </LoadingButton>
+                          </div>
+                        )}
+                      {isBrowserVersionAvailable(selectedBrowser) && (
+                        <div className="text-sm text-green-600">
+                          ✓ Latest stable version (
+                          {availableReleaseTypes.stable}) is available
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
+              </TabsContent>
 
-                {isProxyDisabled ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="p-3 bg-yellow-50 rounded-md border border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-800">
-                        <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                          Tor Browser has its own built-in proxy system and
-                          doesn&apos;t support additional proxy configuration.
+              <TabsContent value="anti-detect" className="mt-0 space-y-6">
+                <div className="space-y-6">
+                  {/* Camoufox Download Status */}
+                  {!isBrowserVersionAvailable("camoufox") &&
+                    camoufoxReleaseTypes.stable && (
+                      <div className="flex gap-3 items-center p-3 bg-amber-50 rounded-md border border-amber-200">
+                        <p className="text-sm text-amber-800">
+                          Camoufox version ({camoufoxReleaseTypes.stable}) needs
+                          to be downloaded
                         </p>
+                        <LoadingButton
+                          onClick={() => handleDownload("camoufox")}
+                          isLoading={isBrowserDownloading("camoufox")}
+                          size="sm"
+                          disabled={isBrowserDownloading("camoufox")}
+                        >
+                          Download
+                        </LoadingButton>
                       </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>
-                        Tor Browser manages its own proxy routing automatically
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                ) : (
+                    )}
+                  {isBrowserVersionAvailable("camoufox") && (
+                    <div className="p-3 text-sm text-green-600 bg-green-50 rounded-md border border-green-200">
+                      ✓ Camoufox version ({camoufoxReleaseTypes.stable}) is
+                      available
+                    </div>
+                  )}
+
+                  <SharedCamoufoxConfigForm
+                    config={camoufoxConfig}
+                    onConfigChange={updateCamoufoxConfig}
+                  />
+                </div>
+              </TabsContent>
+
+              {/* Proxy Selection - Common to both tabs - Compact without card */}
+              {storedProxies.length > 0 && (
+                <div className="space-y-3">
+                  <Label>Proxy</Label>
                   <Select
-                    value={selectedProxyId ?? "none"}
-                    onValueChange={(value) => {
-                      setSelectedProxyId(value === "none" ? null : value);
-                    }}
-                    disabled={isLoadingProxies}
+                    value={selectedProxyId || "none"}
+                    onValueChange={(value) =>
+                      setSelectedProxyId(value === "none" ? undefined : value)
+                    }
                   >
                     <SelectTrigger>
-                      <SelectValue
-                        placeholder={
-                          isLoadingProxies
-                            ? "Loading proxies..."
-                            : "Select proxy (optional)"
-                        }
-                      />
+                      <SelectValue placeholder="No proxy" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">No Proxy</SelectItem>
+                      <SelectItem value="none">No proxy</SelectItem>
                       {storedProxies.map((proxy) => (
                         <SelectItem key={proxy.id} value={proxy.id}>
-                          {proxy.name}
+                          {proxy.name} ({proxy.proxy_settings.proxy_type}://
+                          {proxy.proxy_settings.host}:
+                          {proxy.proxy_settings.port})
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                )}
-
-                {!isProxyDisabled &&
-                  storedProxies.length === 0 &&
-                  !isLoadingProxies && (
-                    <p className="text-sm text-muted-foreground">
-                      No saved proxies available. Use the "Create Proxy" button
-                      above to create proxy configurations.
-                    </p>
-                  )}
-              </div>
+                </div>
+              )}
             </div>
-          </div>
+          </ScrollArea>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={onClose}>
+          <DialogFooter className="flex-shrink-0 pt-4 border-t">
+            <Button variant="outline" onClick={handleClose}>
               Cancel
             </Button>
             <LoadingButton
+              onClick={handleCreate}
               isLoading={isCreating}
-              onClick={() => void handleCreate()}
-              disabled={!canCreate}
+              disabled={isCreateDisabled()}
             >
               Create Profile
             </LoadingButton>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <ProxyFormDialog
-        isOpen={showProxyForm}
-        onClose={handleProxyFormClose}
-        onSave={handleProxySaved}
-      />
-    </>
+        </Tabs>
+      </DialogContent>
+    </Dialog>
   );
 }
