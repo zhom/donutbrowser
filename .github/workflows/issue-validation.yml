@@ -52,7 +52,7 @@ jobs:
         with:
           prompt-file: issue_analysis.txt
           system-prompt: |
-            You are an issue validation assistant for Donut Browser, a browser orchestrator application. 
+            You are an issue validation assistant for Donut Browser, an anti-detect browser. 
 
             Analyze the provided issue content and determine if it contains sufficient information based on these requirements:
 

@@ -2,7 +2,7 @@
 Version=1.0
 Type=Application
 Name=Donut Browser
-Comment=Simple Yet Powerful Browser Orchestrator
+Comment=Simple Yet Powerful Anti-Detect Browser
 Exec=donutbrowser %u
 Icon=donutbrowser
 StartupNotify=true
