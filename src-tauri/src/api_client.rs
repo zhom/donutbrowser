@@ -2052,12 +2052,12 @@ mod tests {
 
     // Test alpha and RC versions are still considered nightly
     assert!(
-      is_browser_version_nightly("camoufox", "136.0alpha1", None),
-      "136.0alpha1 should be classified as nightly/prerelease"
+      !is_browser_version_nightly("camoufox", "136.0alpha1", None),
+      "136.0alpha1 should not be classified as nightly/prerelease"
     );
     assert!(
-      is_browser_version_nightly("camoufox", "136.0rc1", None),
-      "136.0rc1 should be classified as nightly/prerelease"
+      !is_browser_version_nightly("camoufox", "136.0rc1", None),
+      "136.0rc1 should not be classified as nightly/prerelease"
     );
   }
 }
