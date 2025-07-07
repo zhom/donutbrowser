@@ -65,10 +65,17 @@ export function AppUpdateToast({
     await onUpdate(updateInfo);
   };
 
-  const showProgress =
+  const showDownloadProgress =
     isUpdating &&
     updateProgress?.stage === "downloading" &&
     updateProgress.percentage !== undefined;
+
+  const showOtherStageProgress =
+    isUpdating &&
+    updateProgress &&
+    (updateProgress.stage === "extracting" ||
+      updateProgress.stage === "installing" ||
+      updateProgress.stage === "completed");
 
   return (
     <div className="flex items-start p-4 w-full max-w-md bg-white rounded-lg border border-gray-200 shadow-lg dark:bg-gray-800 dark:border-gray-700">
@@ -117,7 +124,7 @@ export function AppUpdateToast({
         </div>
 
         {/* Download progress */}
-        {showProgress && updateProgress && (
+        {showDownloadProgress && updateProgress && (
           <div className="mt-2 space-y-1">
             <div className="flex justify-between items-center">
               <p className="flex-1 min-w-0 text-xs text-muted-foreground">
@@ -135,31 +142,41 @@ export function AppUpdateToast({
           </div>
         )}
 
-        {/* Other stage progress (without percentage) */}
-        {isUpdating &&
-          updateProgress &&
-          updateProgress.stage !== "downloading" && (
-            <div className="mt-2">
-              <p className="text-xs text-muted-foreground">
-                {updateProgress.message}
-              </p>
-              {updateProgress.stage === "extracting" && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Preparing update files...
-                </p>
-              )}
-              {updateProgress.stage === "installing" && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Installing new version...
-                </p>
-              )}
-              {updateProgress.stage === "completed" && (
-                <p className="mt-1 text-xs text-green-600 dark:text-green-400">
-                  Update completed! Restarting application...
-                </p>
-              )}
+        {/* Other stage progress (with visual indicators) */}
+        {showOtherStageProgress && (
+          <div className="mt-2 space-y-2">
+            <p className="text-xs text-muted-foreground">
+              {updateProgress.message}
+            </p>
+
+            {/* Progress indicator for non-downloading stages */}
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+              <div
+                className={`h-1.5 rounded-full transition-all duration-500 ${
+                  updateProgress.stage === "completed"
+                    ? "bg-green-500 w-full"
+                    : "bg-blue-500 w-full animate-pulse"
+                }`}
+              />
             </div>
-          )}
+
+            {updateProgress.stage === "extracting" && (
+              <p className="text-xs text-muted-foreground">
+                Preparing update files...
+              </p>
+            )}
+            {updateProgress.stage === "installing" && (
+              <p className="text-xs text-muted-foreground">
+                Installing new version...
+              </p>
+            )}
+            {updateProgress.stage === "completed" && (
+              <p className="text-xs text-green-600 dark:text-green-400">
+                Update completed! Restarting application...
+              </p>
+            )}
+          </div>
+        )}
 
         {!isUpdating && (
           <div className="flex gap-2 items-center mt-3">

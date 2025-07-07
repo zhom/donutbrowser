@@ -120,7 +120,7 @@ export function useAppUpdateNotifications() {
           setTimeout(() => {
             setIsUpdating(false);
             setUpdateProgress(null);
-          }, 2000);
+          }, 5000); // Show completion message for 5 seconds instead of 2
         }
       },
     );

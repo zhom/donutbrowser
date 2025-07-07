@@ -327,6 +327,13 @@ export function CreateProfileDialog({
 
           <ScrollArea className="flex-1 pr-6 h-[350px]">
             <div className="py-4 space-y-6">
+              {/* Anti-Detect Description */}
+              <div className="p-3 text-center bg-blue-50 rounded-md border border-blue-200 dark:bg-blue-950 dark:border-blue-800">
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                  Powered by Camoufox
+                </p>
+              </div>
+
               {/* Profile Name - Common to both tabs */}
               <div className="space-y-2">
                 <Label htmlFor="profile-name">Profile Name</Label>

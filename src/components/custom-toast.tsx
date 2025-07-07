@@ -240,26 +240,45 @@ export function UnifiedToast(props: ToastProps) {
           )}
 
         {/* App update progress */}
-        {type === "app-update" &&
-          progress &&
-          "percentage" in progress &&
-          stage === "downloading" && (
-            <div className="mt-2 space-y-1">
-              <div className="flex justify-between items-center">
-                <p className="flex-1 min-w-0 text-xs text-gray-600 dark:text-gray-300">
-                  {progress.percentage.toFixed(1)}%
-                  {progress.speed && ` • ${progress.speed} MB/s`}
-                  {progress.eta && ` • ${progress.eta} remaining`}
-                </p>
-              </div>
+        {type === "app-update" && (
+          <div className="mt-2 space-y-1">
+            {/* Download progress with percentage */}
+            {progress &&
+              "percentage" in progress &&
+              stage === "downloading" && (
+                <>
+                  <div className="flex justify-between items-center">
+                    <p className="flex-1 min-w-0 text-xs text-gray-600 dark:text-gray-300">
+                      {progress.percentage.toFixed(1)}%
+                      {progress.speed && ` • ${progress.speed} MB/s`}
+                      {progress.eta && ` • ${progress.eta} remaining`}
+                    </p>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                    <div
+                      className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
+                      style={{ width: `${progress.percentage}%` }}
+                    />
+                  </div>
+                </>
+              )}
+
+            {/* Progress indicator for other stages */}
+            {(stage === "extracting" ||
+              stage === "installing" ||
+              stage === "completed") && (
               <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
                 <div
-                  className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
-                  style={{ width: `${progress.percentage}%` }}
+                  className={`h-1.5 rounded-full transition-all duration-500 ${
+                    stage === "completed"
+                      ? "bg-green-500 w-full"
+                      : "bg-blue-500 w-full animate-pulse"
+                  }`}
                 />
               </div>
-            </div>
-          )}
+            )}
+          </div>
+        )}
 
         {/* Version update progress */}
         {type === "version-update" &&
