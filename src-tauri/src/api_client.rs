@@ -9,21 +9,21 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::browser::GithubRelease;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct VersionComponent {
-  major: u32,
-  minor: u32,
-  patch: u32,
-  pre_release: Option<PreRelease>,
+pub struct VersionComponent {
+  pub major: u32,
+  pub minor: u32,
+  pub patch: u32,
+  pub pre_release: Option<PreRelease>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct PreRelease {
-  kind: PreReleaseKind,
-  number: Option<u32>,
+pub struct PreRelease {
+  pub kind: PreReleaseKind,
+  pub number: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-enum PreReleaseKind {
+pub enum PreReleaseKind {
   Alpha,
   Beta,
   RC,
@@ -32,7 +32,7 @@ enum PreReleaseKind {
 }
 
 impl VersionComponent {
-  fn parse(version: &str) -> Self {
+  pub fn parse(version: &str) -> Self {
     let version = version.trim();
 
     // Handle special case for Zen Browser twilight releases
@@ -260,12 +260,8 @@ pub fn is_browser_version_nightly(
       false
     }
     "camoufox" => {
-      // For Camoufox, all releases are generally stable unless marked as prerelease
-      if let Some(name) = release_name {
-        name.to_lowercase().contains("alpha")
-      } else {
-        false
-      }
+      // For Camoufox, beta versions are actually the stable releases
+      false
     }
     _ => {
       // Default fallback
@@ -1991,5 +1987,77 @@ mod tests {
     assert_eq!(versions[1], "135.0.5beta23");
     assert_eq!(versions[2], "135.0.5beta22");
     assert_eq!(versions[3], "135.0.5beta21");
+  }
+
+  #[test]
+  fn test_camoufox_user_reported_versions() {
+    // Test the exact versions reported by the user: 135.0.1beta24 vs 135.0beta22
+    let v22 = VersionComponent::parse("135.0beta22");
+    let v24 = VersionComponent::parse("135.0.1beta24");
+
+    println!("User reported v22: {v22:?}");
+    println!("User reported v24: {v24:?}");
+
+    // 135.0.1beta24 should be greater than 135.0beta22 (newer patch version)
+    assert!(
+      v24 > v22,
+      "135.0.1beta24 should be greater than 135.0beta22, but got: v24={v24:?} vs v22={v22:?}"
+    );
+
+    // Test sorting of the exact user-reported versions
+    let mut versions = vec!["135.0beta22".to_string(), "135.0.1beta24".to_string()];
+
+    sort_versions(&mut versions);
+
+    println!("User reported sorted versions: {versions:?}");
+
+    // Should be sorted from newest to oldest
+    assert_eq!(
+      versions[0], "135.0.1beta24",
+      "135.0.1beta24 should be first (newest)"
+    );
+    assert_eq!(
+      versions[1], "135.0beta22",
+      "135.0beta22 should be second (older)"
+    );
+  }
+
+  #[test]
+  fn test_camoufox_version_classification() {
+    // Test that Camoufox beta versions are now correctly classified as stable (not nightly)
+    assert!(
+      !is_browser_version_nightly("camoufox", "135.0beta22", None),
+      "135.0beta22 should be classified as stable for Camoufox"
+    );
+    assert!(
+      !is_browser_version_nightly("camoufox", "135.0.1beta24", None),
+      "135.0.1beta24 should be classified as stable for Camoufox"
+    );
+
+    // Test with release names too - beta releases should be stable
+    assert!(
+      !is_browser_version_nightly("camoufox", "135.0beta22", Some("Release Beta 22")),
+      "Release with 'Beta' in name should be classified as stable for Camoufox"
+    );
+
+    // Test that stable versions are not classified as nightly
+    assert!(
+      !is_browser_version_nightly("camoufox", "135.0", None),
+      "135.0 should be classified as stable"
+    );
+    assert!(
+      !is_browser_version_nightly("camoufox", "135.0.1", None),
+      "135.0.1 should be classified as stable"
+    );
+
+    // Test alpha and RC versions are still considered nightly
+    assert!(
+      is_browser_version_nightly("camoufox", "136.0alpha1", None),
+      "136.0alpha1 should be classified as nightly/prerelease"
+    );
+    assert!(
+      is_browser_version_nightly("camoufox", "136.0rc1", None),
+      "136.0rc1 should be classified as nightly/prerelease"
+    );
   }
 }

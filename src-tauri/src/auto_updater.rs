@@ -407,22 +407,17 @@ impl AutoUpdater {
   }
 
   fn is_version_newer(&self, version1: &str, version2: &str) -> bool {
-    self.compare_versions(version1, version2) == std::cmp::Ordering::Greater
+    // Use the proper VersionComponent comparison from api_client.rs
+    let version_a = crate::api_client::VersionComponent::parse(version1);
+    let version_b = crate::api_client::VersionComponent::parse(version2);
+    version_a > version_b
   }
 
   fn compare_versions(&self, version1: &str, version2: &str) -> std::cmp::Ordering {
-    // Basic semantic version comparison
-    let v1_parts = self.parse_version(version1);
-    let v2_parts = self.parse_version(version2);
-
-    v1_parts.cmp(&v2_parts)
-  }
-
-  fn parse_version(&self, version: &str) -> Vec<u32> {
-    version
-      .split(&['.', 'a', 'b', '-', '_'][..])
-      .filter_map(|part| part.parse::<u32>().ok())
-      .collect()
+    // Use the proper VersionComponent comparison from api_client.rs
+    let version_a = crate::api_client::VersionComponent::parse(version1);
+    let version_b = crate::api_client::VersionComponent::parse(version2);
+    version_a.cmp(&version_b)
   }
 
   fn get_auto_update_state_file(&self) -> PathBuf {
@@ -568,6 +563,68 @@ mod tests {
     assert!(updater.is_version_newer("2.0.0", "1.9.9"));
     assert!(!updater.is_version_newer("1.0.0", "1.0.1"));
     assert!(!updater.is_version_newer("1.0.0", "1.0.0"));
+  }
+
+  #[test]
+  fn test_camoufox_beta_version_comparison() {
+    let updater = AutoUpdater::new();
+
+    // Test the exact user-reported scenario: 135.0.1beta24 vs 135.0beta22
+    assert!(
+      updater.is_version_newer("135.0.1beta24", "135.0beta22"),
+      "135.0.1beta24 should be newer than 135.0beta22"
+    );
+
+    assert_eq!(
+      updater.compare_versions("135.0.1beta24", "135.0beta22"),
+      std::cmp::Ordering::Greater,
+      "135.0.1beta24 should compare as greater than 135.0beta22"
+    );
+
+    // Test other camoufox beta version combinations
+    assert!(
+      updater.is_version_newer("135.0.5beta24", "135.0.5beta22"),
+      "135.0.5beta24 should be newer than 135.0.5beta22"
+    );
+
+    assert!(
+      updater.is_version_newer("135.0.1beta1", "135.0beta1"),
+      "135.0.1beta1 should be newer than 135.0beta1 due to patch version"
+    );
+
+    // Test that older versions are not considered newer
+    assert!(
+      !updater.is_version_newer("135.0beta22", "135.0.1beta24"),
+      "135.0beta22 should NOT be newer than 135.0.1beta24"
+    );
+  }
+
+  #[test]
+  fn test_beta_version_ordering_comprehensive() {
+    let updater = AutoUpdater::new();
+
+    // Test various beta version patterns that could appear in camoufox
+    let test_cases = vec![
+      ("135.0.1beta24", "135.0beta22", true),   // User reported case
+      ("135.0.5beta24", "135.0.5beta22", true), // Same patch, different beta
+      ("135.1beta1", "135.0beta99", true),      // Higher minor beats beta number
+      ("136.0beta1", "135.9.9beta99", true),    // Higher major beats everything
+      ("135.0.1beta1", "135.0beta1", true),     // Patch version matters
+      ("135.0beta22", "135.0.1beta24", false),  // Reverse of user case
+    ];
+
+    for (newer, older, should_be_newer) in test_cases {
+      let result = updater.is_version_newer(newer, older);
+      assert_eq!(
+        result,
+        should_be_newer,
+        "Expected {} {} {} but got {}",
+        newer,
+        if should_be_newer { ">" } else { "<=" },
+        older,
+        if result { "true" } else { "false" }
+      );
+    }
   }
 
   #[test]
@@ -853,16 +910,5 @@ mod tests {
     let content = std::fs::read_to_string(&state_file).unwrap();
     let loaded_state: AutoUpdateState = serde_json::from_str(&content).unwrap();
     assert_eq!(loaded_state.pending_updates.len(), 0);
-  }
-
-  #[test]
-  fn test_parse_version() {
-    let updater = AutoUpdater::new();
-
-    assert_eq!(updater.parse_version("1.2.3"), vec![1, 2, 3]);
-    assert_eq!(updater.parse_version("1.2.3-alpha"), vec![1, 2, 3]);
-    assert_eq!(updater.parse_version("1.2.3a1"), vec![1, 2, 3, 1]);
-    assert_eq!(updater.parse_version("1.2.3b2"), vec![1, 2, 3, 2]);
-    assert_eq!(updater.parse_version("10.0.0"), vec![10, 0, 0]);
   }
 }
