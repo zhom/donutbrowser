@@ -38,6 +38,7 @@
 ## Features
 
 - Create unlimited number of local browser profiles completely isolated from each other
+- Bypass website restrictions and avoid getting banned by using anti-detection features powered by [Camoufox](https://camoufox.com/)
 - Proxy support with basic auth for all browsers except for TOR Browser
 - Import profiles from your existing browsers
 - Automatic updates both for browsers and for the app itself
