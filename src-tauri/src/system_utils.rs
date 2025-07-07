@@ -238,7 +238,7 @@ mod windows {
           let hours = &offset_str[..colon_pos];
           let minutes = &offset_str[colon_pos + 1..];
           if let (Ok(h), Ok(m)) = (hours.parse::<i32>(), minutes.parse::<i32>()) {
-            return format!("{:+03d}:{:02d}", h, m);
+            return format!("{:+03}:{:02}", h, m);
           }
         }
       }
