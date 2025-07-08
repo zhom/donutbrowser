@@ -455,7 +455,7 @@ impl AppAutoUpdater {
             percentage: Some(percentage),
             speed: Some(format!("{speed:.1}")),
             eta: Some(eta),
-            message: format!("Downloading update... {percentage:.1}%"),
+            message: format!("Downloading update..."),
           },
         );
 
