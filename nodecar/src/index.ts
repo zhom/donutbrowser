@@ -277,6 +277,8 @@ program
           camoufoxOptions.geoip =
             options.geoip === "auto" ? true : options.geoip;
         }
+
+        // Combine latitude/longitude into geolocation object if both provided
         if (options.latitude && options.longitude) {
           camoufoxOptions.geolocation = {
             latitude: options.latitude,
@@ -284,6 +286,8 @@ program
             accuracy: 100,
           };
         }
+
+        // Set timezone and country only if explicitly provided
         if (options.country) camoufoxOptions.country = options.country;
         if (options.timezone) camoufoxOptions.timezone = options.timezone;
 
@@ -295,7 +299,7 @@ program
         if (options.locale) {
           camoufoxOptions.locale = options.locale.includes(",")
             ? options.locale.split(",")
-            : options.locale;
+            : [options.locale];
         }
 
         // Extensions and fonts
@@ -305,14 +309,21 @@ program
         if (options.excludeAddons)
           camoufoxOptions.exclude_addons = options.excludeAddons.split(",");
 
-        // Screen and window
-        const screen: any = {};
-        if (options.screenMinWidth) screen.minWidth = options.screenMinWidth;
-        if (options.screenMaxWidth) screen.maxWidth = options.screenMaxWidth;
-        if (options.screenMinHeight) screen.minHeight = options.screenMinHeight;
-        if (options.screenMaxHeight) screen.maxHeight = options.screenMaxHeight;
-        if (Object.keys(screen).length > 0) camoufoxOptions.screen = screen;
+        // Screen dimensions - combine into screen object if any are provided
+        const screenOptions: any = {};
+        if (options.screenMinWidth)
+          screenOptions.minWidth = options.screenMinWidth;
+        if (options.screenMaxWidth)
+          screenOptions.maxWidth = options.screenMaxWidth;
+        if (options.screenMinHeight)
+          screenOptions.minHeight = options.screenMinHeight;
+        if (options.screenMaxHeight)
+          screenOptions.maxHeight = options.screenMaxHeight;
+        if (Object.keys(screenOptions).length > 0) {
+          camoufoxOptions.screen = screenOptions;
+        }
 
+        // Window dimensions - combine into window tuple if both provided
         if (options.windowWidth && options.windowHeight) {
           camoufoxOptions.window = [options.windowWidth, options.windowHeight];
         }
@@ -320,6 +331,8 @@ program
         // Advanced options
         if (options.ffVersion) camoufoxOptions.ff_version = options.ffVersion;
         if (options.mainWorldEval) camoufoxOptions.main_world_eval = true;
+
+        // WebGL - combine vendor and renderer into webgl_config tuple if both provided
         if (options.webglVendor && options.webglRenderer) {
           camoufoxOptions.webgl_config = [
             options.webglVendor,
@@ -390,15 +403,8 @@ program
         process.exit(0);
       } else if (action === "list") {
         const processes = listCamoufoxProcesses();
-        // Convert camelCase to snake_case for Rust compatibility
-        const rustCompatibleProcesses = processes.map((process) => ({
-          id: process.id,
-          pid: process.pid,
-          executable_path: process.executablePath,
-          profile_path: process.profilePath,
-          url: process.url,
-        }));
-        console.log(JSON.stringify(rustCompatibleProcesses));
+        // The processes already have snake_case properties, no conversion needed
+        console.log(JSON.stringify(processes));
         process.exit(0);
       } else if (action === "open-url") {
         if (!options.id || !options.url) {

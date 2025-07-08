@@ -457,9 +457,7 @@ impl CamoufoxLauncher {
         .and_then(|v| v.as_str())
         .or_else(|| process.get("profilePath").and_then(|v| v.as_str()));
 
-      if let (Some(id), Some(executable_path), Some(profile_path)) =
-        (id, executable_path, profile_path)
-      {
+      if let Some(id) = id {
         let pid = process
           .get("pid")
           .and_then(|v| v.as_u64())
@@ -469,6 +467,10 @@ impl CamoufoxLauncher {
           .get("url")
           .and_then(|v| v.as_str())
           .map(|s| s.to_string());
+
+        // Use empty strings if executable_path or profile_path are missing
+        let executable_path = executable_path.unwrap_or("");
+        let profile_path = profile_path.unwrap_or("");
 
         results.push(CamoufoxLaunchResult {
           id: id.to_string(),
