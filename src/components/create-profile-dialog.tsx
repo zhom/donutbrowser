@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useBrowserDownload } from "@/hooks/use-browser-download";
-import { getBrowserIcon } from "@/lib/browser-utils";
+import { getBrowserIcon, getCurrentOS } from "@/lib/browser-utils";
 import type { BrowserReleaseTypes, CamoufoxConfig, StoredProxy } from "@/types";
 
 type BrowserTypeString =
@@ -94,16 +94,6 @@ const browserOptions: BrowserOption[] = [
     description: "Browse anonymously through the Tor network",
   },
 ];
-
-const getCurrentOS = () => {
-  if (typeof window !== "undefined") {
-    const userAgent = window.navigator.userAgent;
-    if (userAgent.includes("Win")) return "windows";
-    if (userAgent.includes("Mac")) return "macos";
-    if (userAgent.includes("Linux")) return "linux";
-  }
-  return "unknown";
-};
 
 export function CreateProfileDialog({
   isOpen,
@@ -325,7 +315,7 @@ export function CreateProfileDialog({
             <TabsTrigger value="anti-detect">Anti-Detect</TabsTrigger>
           </TabsList>
 
-          <ScrollArea className="flex-1 pr-6 h-[350px]">
+          <ScrollArea className="flex-1 pr-6 h-[320px]">
             <div className="py-4 space-y-6">
               {/* Profile Name - Common to both tabs */}
               <div className="space-y-2">

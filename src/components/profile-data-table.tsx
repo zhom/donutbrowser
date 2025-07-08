@@ -45,7 +45,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useTableSorting } from "@/hooks/use-table-sorting";
-import { getBrowserDisplayName, getBrowserIcon } from "@/lib/browser-utils";
+import {
+  getBrowserDisplayName,
+  getBrowserIcon,
+  getCurrentOS,
+} from "@/lib/browser-utils";
+import { cn } from "@/lib/utils";
 import type { BrowserProfile, StoredProxy } from "@/types";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -524,9 +529,16 @@ export function ProfilesDataTable({
     getCoreRowModel: getCoreRowModel(),
   });
 
+  const platform = getCurrentOS();
+
   return (
     <>
-      <ScrollArea className="h-[400px] rounded-md border">
+      <ScrollArea
+        className={cn(
+          "rounded-md border",
+          platform === "macos" ? "h-[380px]" : "h-[320px]",
+        )}
+      >
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (

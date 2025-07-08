@@ -49,3 +49,13 @@ export function getBrowserIcon(browserType: string) {
       return null;
   }
 }
+
+export const getCurrentOS = () => {
+  if (typeof window !== "undefined") {
+    const userAgent = window.navigator.userAgent;
+    if (userAgent.includes("Win")) return "windows";
+    if (userAgent.includes("Mac")) return "macos";
+    if (userAgent.includes("Linux")) return "linux";
+  }
+  return "unknown";
+};
