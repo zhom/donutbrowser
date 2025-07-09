@@ -210,15 +210,17 @@ export async function launchCamoufox(
 
   try {
     // Use camoufox-js launchOptions to generate proper configuration
-    const { launchOptions } = require("camoufox-js");
-    const launchConfig = await launchOptions({
-      ...options,
-      executable_path: executablePath,
-      // Enable debug if requested
-      debug: options.debug || false,
-      // Set i_know_what_im_doing to true to bypass warnings since we're controlling this
-      i_know_what_im_doing: true,
-    });
+    // const { launchOptions } = require("camoufox-js");
+    // const launchConfig = await launchOptions({
+    //   ...options,
+    //   executable_path: executablePath,
+    //   // Enable debug if requested
+    //   debug: options.debug || false,
+    //   // Set i_know_what_im_doing to true to bypass warnings since we're controlling this
+    //   i_know_what_im_doing: true,
+    // });
+    //
+    const launchConfig: any = {};
 
     if (options.debug) {
       console.log(

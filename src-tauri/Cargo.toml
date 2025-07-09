@@ -1,7 +1,7 @@
 [package]
 name = "donutbrowser"
 version = "0.7.1"
-description = "Simple Yet Powerful Anti-Detect Browser"
+description = "Simple Yet Powerful Browser Orchestrator"
 authors = ["zhom@github"]
 edition = "2021"
 default-run = "donutbrowser"

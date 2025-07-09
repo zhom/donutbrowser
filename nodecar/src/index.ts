@@ -154,7 +154,7 @@ program
     }
   });
 
-// Command for Camoufox anti-detect browser
+// Command for Camoufox browser orchestrator
 program
   .command("camoufox")
   .argument("<action>", "launch, stop, list, or open-url for Camoufox browser")
@@ -245,7 +245,7 @@ program
   // Firefox preferences
   .option("--firefox-prefs <prefs>", "Firefox user preferences (JSON string)")
 
-  .description("launch and manage Camoufox anti-detect browser instances")
+  .description("launch and manage Camoufox browser orchestrator instances")
   .action(async (action: string, options: any) => {
     try {
       if (action === "launch") {
