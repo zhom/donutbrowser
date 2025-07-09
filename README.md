@@ -1,7 +1,7 @@
 <div align="center">
   <img src="assets/logo.png" alt="Donut Browser Logo" width="150">
   <h1>Donut Browser</h1>
-  <strong>A powerful anti-detect browser that puts you in control of your browsing experience. 🍩</strong>
+  <strong>A powerful browser orchestrator that puts you in control of your browsing experience. 🍩</strong>
 </div>
 <br>
 
@@ -27,7 +27,7 @@
 
 ## Donut Browser
 
-> A free and open source anti-detect browser built with [Tauri](https://v2.tauri.app/).
+> A free and open source browser orchestrator built with [Tauri](https://v2.tauri.app/).
 
 <picture>
  <source media="(prefers-color-scheme: dark)" srcset="assets/preview-dark.png" />
