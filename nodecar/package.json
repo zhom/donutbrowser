@@ -3,19 +3,20 @@
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
+  "type": "commonjs",
   "scripts": {
     "watch": "nodemon --exec ts-node --esm ./src/index.ts --watch src",
     "dev": "node --loader ts-node/esm ./src/index.ts",
     "start": "tsc && node ./dist/index.js",
     "test": "tsc && node ./dist/test-proxy.js",
     "rename-binary": "sh ./copy-binary.sh",
-    "build": "tsc && pkg ./dist/index.js --targets latest-macos-arm64 --output dist/nodecar && pnpm rename-binary",
-    "build:mac-aarch64": "tsc && pkg ./dist/index.js --targets latest-macos-arm64 --output dist/nodecar && pnpm rename-binary",
-    "build:mac-x86_64": "tsc && pkg ./dist/index.js --targets latest-macos-x64 --output dist/nodecar && pnpm rename-binary",
-    "build:linux-x64": "tsc && pkg ./dist/index.js --targets latest-linux-x64 --output dist/nodecar && pnpm rename-binary",
-    "build:linux-arm64": "tsc && pkg ./dist/index.js --targets latest-linux-arm64 --output dist/nodecar && pnpm rename-binary",
-    "build:win-x64": "tsc && pkg ./dist/index.js --targets latest-win-x64 --output dist/nodecar && pnpm rename-binary",
-    "build:win-arm64": "tsc && pkg ./dist/index.js --targets latest-win-arm64 --output dist/nodecar && pnpm rename-binary"
+    "build": "tsc && pkg ./dist/index.js --targets latest-macos-arm64 --output dist/nodecar --option experimental-require-module --public && pnpm rename-binary",
+    "build:mac-aarch64": "tsc && pkg ./dist/index.js --targets latest-macos-arm64 --output dist/nodecar --option experimental-require-module --public&& pnpm rename-binary",
+    "build:mac-x86_64": "tsc && pkg ./dist/index.js --targets latest-macos-x64 --output dist/nodecar --option experimental-require-module --public && pnpm rename-binary",
+    "build:linux-x64": "tsc && pkg ./dist/index.js --targets latest-linux-x64 --output dist/nodecar --option experimental-require-module --public && pnpm rename-binary",
+    "build:linux-arm64": "tsc && pkg ./dist/index.js --targets latest-linux-arm64 --output dist/nodecar --option experimental-require-module --public && pnpm rename-binary",
+    "build:win-x64": "tsc && pkg ./dist/index.js --targets latest-win-x64 --output dist/nodecar --option experimental-require-module --public && pnpm rename-binary",
+    "build:win-arm64": "tsc && pkg ./dist/index.js --targets latest-win-arm64 --output dist/nodecar --option experimental-require-module --public && pnpm rename-binary"
   },
   "keywords": [],
   "author": "",
@@ -23,7 +24,7 @@
   "dependencies": {
     "@types/node": "^24.0.10",
     "@yao-pkg/pkg": "^6.5.1",
-    "camoufox-js": "^0.6.0",
+    "camoufox-js": "file:../../camoufox-js",
     "commander": "^14.0.0",
     "dotenv": "^17.0.1",
     "get-port": "^7.1.0",
@@ -35,5 +36,13 @@
   },
   "devDependencies": {
     "@types/tmp": "^0.2.6"
+  },
+  "pkg": {
+    "assets": [
+      "node_modules/camoufox-js/**/*"
+    ],
+    "scripts": [
+      "node_modules/camoufox-js/**/*.js"
+    ]
   }
 }

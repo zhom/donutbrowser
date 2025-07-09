@@ -30,6 +30,7 @@ pub struct CamoufoxConfig {
   pub screen_max_height: Option<u32>,
   pub window_width: Option<u32>,
   pub window_height: Option<u32>,
+  pub fingerprint: Option<serde_json::Value>,
   pub ff_version: Option<u32>,
   pub main_world_eval: Option<bool>,
   pub webgl_vendor: Option<String>,
@@ -70,6 +71,7 @@ impl Default for CamoufoxConfig {
       screen_max_height: None,
       window_width: None,
       window_height: None,
+      fingerprint: None,
       ff_version: None,
       main_world_eval: None,
       webgl_vendor: None,
@@ -263,6 +265,13 @@ impl CamoufoxLauncher {
         sidecar = sidecar.arg("--webgl-vendor").arg(vendor);
         sidecar = sidecar.arg("--webgl-renderer").arg(renderer);
       }
+    }
+
+    // Fingerprint
+    if let Some(fingerprint) = &config.fingerprint {
+      let fingerprint_json = serde_json::to_string(fingerprint)
+        .map_err(|e| format!("Failed to serialize fingerprint: {e}"))?;
+      sidecar = sidecar.arg("--fingerprint").arg(fingerprint_json);
     }
 
     if let Some(proxy) = &config.proxy {

@@ -71,7 +71,7 @@ program
             "Error: Either --upstream URL or --host, --proxy-port, and --type are required",
           );
           console.log(
-            "Example: proxy start --host datacenter.proxyempire.io --proxy-port 9000 --type http --username user --password pass",
+            "Example: proxy start --host example.com --proxy-port 9000 --type http --username user --password pass",
           );
           process.exit(1);
           return;
@@ -221,6 +221,12 @@ program
   .option("--webgl-vendor <vendor>", "WebGL vendor string")
   .option("--webgl-renderer <renderer>", "WebGL renderer string")
 
+  // Fingerprint
+  .option(
+    "--fingerprint <fingerprint>",
+    "custom BrowserForge fingerprint (JSON string)",
+  )
+
   // Proxy
   .option(
     "--proxy <proxy>",
@@ -264,6 +270,18 @@ program
             : options.os;
         }
 
+        // Set geolocation from individual latitude/longitude values
+        if (options.latitude && options.longitude) {
+          camoufoxOptions.geolocation = {
+            latitude: options.latitude,
+            longitude: options.longitude,
+          };
+        }
+
+        // Set timezone and country only if explicitly provided
+        if (options.country) camoufoxOptions.country = options.country;
+        if (options.timezone) camoufoxOptions.timezone = options.timezone;
+
         // Blocking options
         if (options.blockImages) camoufoxOptions.block_images = true;
         if (options.blockWebrtc) camoufoxOptions.block_webrtc = true;
@@ -272,24 +290,11 @@ program
         // Security options
         if (options.disableCoop) camoufoxOptions.disable_coop = true;
 
-        // Geolocation
+        // Geolocation IP
         if (options.geoip) {
           camoufoxOptions.geoip =
             options.geoip === "auto" ? true : options.geoip;
         }
-
-        // Combine latitude/longitude into geolocation object if both provided
-        if (options.latitude && options.longitude) {
-          camoufoxOptions.geolocation = {
-            latitude: options.latitude,
-            longitude: options.longitude,
-            accuracy: 100,
-          };
-        }
-
-        // Set timezone and country only if explicitly provided
-        if (options.country) camoufoxOptions.country = options.country;
-        if (options.timezone) camoufoxOptions.timezone = options.timezone;
 
         // UI and behavior
         if (options.humanize) camoufoxOptions.humanize = options.humanize;
@@ -306,24 +311,33 @@ program
         if (options.addons) camoufoxOptions.addons = options.addons.split(",");
         if (options.fonts) camoufoxOptions.fonts = options.fonts.split(",");
         if (options.customFontsOnly) camoufoxOptions.custom_fonts_only = true;
-        if (options.excludeAddons)
-          camoufoxOptions.exclude_addons = options.excludeAddons.split(",");
-
-        // Screen dimensions - combine into screen object if any are provided
-        const screenOptions: any = {};
-        if (options.screenMinWidth)
-          screenOptions.minWidth = options.screenMinWidth;
-        if (options.screenMaxWidth)
-          screenOptions.maxWidth = options.screenMaxWidth;
-        if (options.screenMinHeight)
-          screenOptions.minHeight = options.screenMinHeight;
-        if (options.screenMaxHeight)
-          screenOptions.maxHeight = options.screenMaxHeight;
-        if (Object.keys(screenOptions).length > 0) {
-          camoufoxOptions.screen = screenOptions;
+        if (options.excludeAddons) {
+          // Only support UBO for now as that's what camoufox-js supports
+          const excludeList = options.excludeAddons.split(",");
+          if (excludeList.includes("UBO") || excludeList.includes("ubo")) {
+            camoufoxOptions.exclude_addons = ["UBO"];
+          }
         }
 
-        // Window dimensions - combine into window tuple if both provided
+        // Screen dimensions - combine into screen object
+        if (
+          options.screenMinWidth ||
+          options.screenMaxWidth ||
+          options.screenMinHeight ||
+          options.screenMaxHeight
+        ) {
+          camoufoxOptions.screen = {};
+          if (options.screenMinWidth)
+            camoufoxOptions.screen.minWidth = options.screenMinWidth;
+          if (options.screenMaxWidth)
+            camoufoxOptions.screen.maxWidth = options.screenMaxWidth;
+          if (options.screenMinHeight)
+            camoufoxOptions.screen.minHeight = options.screenMinHeight;
+          if (options.screenMaxHeight)
+            camoufoxOptions.screen.maxHeight = options.screenMaxHeight;
+        }
+
+        // Window dimensions - combine into window tuple
         if (options.windowWidth && options.windowHeight) {
           camoufoxOptions.window = [options.windowWidth, options.windowHeight];
         }
@@ -332,12 +346,23 @@ program
         if (options.ffVersion) camoufoxOptions.ff_version = options.ffVersion;
         if (options.mainWorldEval) camoufoxOptions.main_world_eval = true;
 
-        // WebGL - combine vendor and renderer into webgl_config tuple if both provided
+        // WebGL - combine vendor and renderer into webgl_config tuple
         if (options.webglVendor && options.webglRenderer) {
           camoufoxOptions.webgl_config = [
             options.webglVendor,
             options.webglRenderer,
           ];
+        }
+
+        // Fingerprint
+        if (options.fingerprint) {
+          try {
+            camoufoxOptions.fingerprint = JSON.parse(options.fingerprint);
+          } catch (e) {
+            console.error("Invalid JSON for --fingerprint option");
+            process.exit(1);
+            return;
+          }
         }
 
         // Proxy
@@ -402,7 +427,7 @@ program
         console.log(JSON.stringify({ success }));
         process.exit(0);
       } else if (action === "list") {
-        const processes = listCamoufoxProcesses();
+        const processes = await listCamoufoxProcesses();
         // The processes already have snake_case properties, no conversion needed
         console.log(JSON.stringify(processes));
         process.exit(0);

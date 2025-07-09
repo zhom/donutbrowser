@@ -14,7 +14,7 @@ export interface CamoufoxConfig {
 
 export interface CamoufoxLaunchOptions {
   // Operating system to use for fingerprint generation
-  os?: "windows" | "macos" | "linux" | string[];
+  os?: "windows" | "macos" | "linux" | ("windows" | "macos" | "linux")[];
 
   // Blocking options
   block_images?: boolean;
@@ -37,7 +37,7 @@ export interface CamoufoxLaunchOptions {
   addons?: string[];
   fonts?: string[];
   custom_fonts_only?: boolean;
-  exclude_addons?: string[];
+  exclude_addons?: "UBO"[];
 
   // Screen and window
   screen?: {
@@ -82,7 +82,7 @@ export interface CamoufoxLaunchOptions {
   virtual_display?: string;
   webgl_config?: [string, string];
 
-  // Custom options
+  // Custom options - these may not be directly supported by camoufox-js
   timezone?: string;
   country?: string;
   geolocation?: {
@@ -90,6 +90,12 @@ export interface CamoufoxLaunchOptions {
     longitude: number;
     accuracy?: number;
   };
+
+  // Add i_know_what_im_doing to match camoufox-js
+  i_know_what_im_doing?: boolean;
+
+  // Allow any additional properties that camoufox-js might accept
+  [key: string]: any;
 }
 
 // Store for active Camoufox processes
@@ -187,422 +193,6 @@ function isProcessRunning(pid: number): boolean {
 }
 
 /**
- * Convert Camoufox options to command line arguments
- */
-function buildCamoufoxArgs(
-  options: CamoufoxLaunchOptions,
-  profilePath: string,
-  url?: string,
-): string[] {
-  const args: string[] = [];
-
-  // Always use profile
-  args.push("-profile", profilePath);
-
-  // Cache enabled by default as requested
-  if (options.enable_cache !== false) {
-    // Cache is enabled by default in Camoufox, no special args needed
-  }
-
-  // Headless mode
-  if (options.headless) {
-    args.push("-headless");
-  }
-
-  // No remote for security (anti-detect)
-  args.push("-no-remote");
-
-  // Custom Firefox user preferences will be written to user.js in profile
-
-  // Additional custom args
-  if (options.args) {
-    args.push(...options.args);
-  }
-
-  // URL to open
-  if (url) {
-    args.push(url);
-  }
-
-  return args;
-}
-
-/**
- * Create Camoufox configuration object from launch options
- * This follows the complete Camoufox schema for CAMOU_CONFIG_* environment variables
- */
-function createCamoufoxConfig(options: CamoufoxLaunchOptions): any {
-  const config: any = {};
-
-  // Debug flag
-  if (options.debug !== undefined) {
-    config.debug = options.debug;
-  }
-
-  // Locale settings - parse locale string into language and region
-  if (options.locale) {
-    const localeValue = Array.isArray(options.locale)
-      ? options.locale[0]
-      : options.locale;
-
-    // Parse locale like "en-US" into language and region
-    const localeParts = localeValue.split("-");
-    if (localeParts.length >= 2) {
-      config["locale:language$__LOCALE"] = localeParts[0];
-      config["locale:region$__LOCALE"] = localeParts[1];
-    } else {
-      config["locale:language$__LOCALE"] = localeParts[0];
-      // Default region if not specified
-      config["locale:region$__LOCALE"] = "US";
-    }
-
-    // Set navigator language properties
-    config["navigator.language"] = localeValue;
-    config["navigator.languages"] = Array.isArray(options.locale)
-      ? options.locale
-      : [localeValue];
-    config["headers.Accept-Language"] = localeValue;
-    config["locale:all"] = localeValue;
-  }
-
-  // Screen dimensions from screen options
-  if (options.screen) {
-    if (options.screen.maxWidth) {
-      config["screen.width$__SC"] = options.screen.maxWidth;
-      config["screen.availWidth$__SC"] = options.screen.maxWidth;
-    }
-    if (options.screen.maxHeight) {
-      config["screen.height$__SC"] = options.screen.maxHeight;
-      config["screen.availHeight$__SC"] = options.screen.maxHeight;
-    }
-
-    // Set default screen properties if not specified
-    if (!options.screen.maxWidth) {
-      config["screen.width$__SC"] = 1920;
-      config["screen.availWidth$__SC"] = 1920;
-    }
-    if (!options.screen.maxHeight) {
-      config["screen.height$__SC"] = 1080;
-      config["screen.availHeight$__SC"] = 1080;
-    }
-
-    // Default screen position and color depth
-    config["screen.availTop"] = 0;
-    config["screen.availLeft"] = 0;
-    config["screen.colorDepth"] = 24;
-    config["screen.pixelDepth"] = 24;
-  } else {
-    // Default screen settings if not specified
-    config["screen.width$__SC"] = 1920;
-    config["screen.height$__SC"] = 1080;
-    config["screen.availWidth$__SC"] = 1920;
-    config["screen.availHeight$__SC"] = 1080;
-    config["screen.availTop"] = 0;
-    config["screen.availLeft"] = 0;
-    config["screen.colorDepth"] = 24;
-    config["screen.pixelDepth"] = 24;
-  }
-
-  // Window dimensions
-  if (options.window) {
-    config["window.outerWidth$__W_OUTER"] = options.window[0];
-    config["window.outerHeight$__W_OUTER"] = options.window[1];
-    config["window.innerWidth$__W_INNER"] = options.window[0] - 16; // Account for scrollbars
-    config["window.innerHeight$__W_INNER"] = options.window[1] - 100; // Account for browser chrome
-  } else {
-    // Default window dimensions
-    config["window.outerWidth$__W_OUTER"] = 1280;
-    config["window.outerHeight$__W_OUTER"] = 720;
-    config["window.innerWidth$__W_INNER"] = 1264;
-    config["window.innerHeight$__W_INNER"] = 620;
-  }
-
-  // Window position and properties
-  config["window.screenX"] = 0;
-  config["window.screenY"] = 0;
-  config["window.devicePixelRatio"] = 1.0;
-  config["window.scrollMinX"] = 0;
-  config["window.scrollMinY"] = 0;
-  config["window.scrollMaxX"] = 0;
-  config["window.scrollMaxY"] = 0;
-  config["screen.pageXOffset"] = 0.0;
-  config["screen.pageYOffset"] = 0.0;
-
-  // Document body dimensions
-  config["document.body.clientWidth$__DOC_BODY"] =
-    config["window.innerWidth$__W_INNER"];
-  config["document.body.clientHeight$__DOC_BODY"] =
-    config["window.innerHeight$__W_INNER"];
-  config["document.body.clientTop"] = 0;
-  config["document.body.clientLeft"] = 0;
-
-  // Geolocation
-  if (options.geolocation) {
-    config["geolocation:latitude$__GEO"] = options.geolocation.latitude;
-    config["geolocation:longitude$__GEO"] = options.geolocation.longitude;
-    if (options.geolocation.accuracy) {
-      config["geolocation:accuracy"] = options.geolocation.accuracy;
-    }
-  }
-
-  // Timezone
-  if (options.timezone) {
-    config.timezone = options.timezone;
-  }
-
-  // User Agent based on OS option
-  const osOption = Array.isArray(options.os) ? options.os[0] : options.os;
-  let userAgent: string;
-  let platform: string;
-  let oscpu: string;
-  let appVersion: string;
-
-  switch (osOption) {
-    case "macos":
-      userAgent =
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:135.0) Gecko/20100101 Firefox/135.0";
-      platform = "MacIntel";
-      oscpu = "Intel Mac OS X 10.15";
-      appVersion =
-        "5.0 (Macintosh; Intel Mac OS X 10.15; rv:135.0) Gecko/20100101 Firefox/135.0";
-      break;
-    case "linux":
-      userAgent =
-        "Mozilla/5.0 (X11; Linux x86_64; rv:135.0) Gecko/20100101 Firefox/135.0";
-      platform = "Linux x86_64";
-      oscpu = "Linux x86_64";
-      appVersion =
-        "5.0 (X11; Linux x86_64; rv:135.0) Gecko/20100101 Firefox/135.0";
-      break;
-    case "windows":
-    default:
-      userAgent =
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0";
-      platform = "Win32";
-      oscpu = "Windows NT 10.0; Win64; x64";
-      appVersion =
-        "5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0";
-      break;
-  }
-
-  config["navigator.userAgent"] = userAgent;
-  config["navigator.appVersion"] = appVersion;
-  config["navigator.platform"] = platform;
-  config["navigator.oscpu"] = oscpu;
-  config["headers.User-Agent"] = userAgent;
-
-  // Headers
-  config["headers.Accept-Encoding"] = "gzip, deflate, br";
-
-  // Fonts
-  if (options.fonts && options.fonts.length > 0) {
-    config.fonts = options.fonts;
-  }
-  config["fonts:spacing_seed"] = 0;
-
-  // WebGL configuration
-  if (
-    options.webgl_config &&
-    Array.isArray(options.webgl_config) &&
-    options.webgl_config.length === 2
-  ) {
-    config["webGl:vendor$__WEBGL"] = options.webgl_config[0];
-    config["webGl:renderer$__WEBGL"] = options.webgl_config[1];
-  }
-
-  // WebRTC IP spoofing from geoip
-  if (
-    options.geoip &&
-    typeof options.geoip === "string" &&
-    options.geoip !== "auto"
-  ) {
-    if (options.geoip.includes(":")) {
-      // IPv6
-      config["webrtc:ipv6"] = options.geoip;
-      config["webrtc:localipv6"] = options.geoip;
-    } else {
-      // IPv4
-      config["webrtc:ipv4"] = options.geoip;
-      config["webrtc:localipv4"] = options.geoip;
-    }
-  }
-
-  // Addons
-  if (options.addons && options.addons.length > 0) {
-    config.addons = options.addons;
-  }
-
-  // Humanization
-  if (options.humanize !== undefined) {
-    config.humanize = !!options.humanize;
-    if (typeof options.humanize === "number") {
-      config["humanize:maxTime"] = options.humanize;
-      config["humanize:minTime"] = 0.0;
-    } else {
-      config["humanize:maxTime"] = 5.0;
-      config["humanize:minTime"] = 0.5;
-    }
-  }
-
-  // Cursor visibility
-  config.showcursor = false;
-
-  // Advanced browser settings
-  if (options.main_world_eval) {
-    config.allowMainWorld = options.main_world_eval;
-  }
-
-  config.forceScopeAccess = false;
-  config.enableRemoteSubframes = false;
-  config.disableTheming = false;
-  config.memorysaver = false;
-
-  return config;
-}
-
-/**
- * Create minimal user.js for Firefox-specific settings that are not part of Camoufox fingerprint config
- */
-function createMinimalUserJs(
-  profilePath: string,
-  options: CamoufoxLaunchOptions,
-): void {
-  const preferences: string[] = [];
-
-  // Basic privacy settings
-  preferences.push('user_pref("privacy.resistFingerprinting", false);'); // Let Camoufox handle fingerprinting
-  preferences.push('user_pref("privacy.trackingprotection.enabled", true);');
-
-  // Disable telemetry and data collection
-  preferences.push(
-    'user_pref("datareporting.healthreport.uploadEnabled", false);',
-  );
-  preferences.push(
-    'user_pref("datareporting.policy.dataSubmissionEnabled", false);',
-  );
-  preferences.push('user_pref("toolkit.telemetry.enabled", false);');
-  preferences.push('user_pref("toolkit.telemetry.unified", false);');
-
-  // Block options
-  if (options.block_images) {
-    preferences.push('user_pref("permissions.default.image", 2);');
-  }
-
-  if (options.block_webrtc) {
-    preferences.push('user_pref("media.peerconnection.enabled", false);');
-    preferences.push('user_pref("media.navigator.enabled", false);');
-  }
-
-  if (options.block_webgl) {
-    preferences.push('user_pref("webgl.disabled", true);');
-    preferences.push('user_pref("webgl.disable-extensions", true);');
-  }
-
-  // COOP settings
-  if (options.disable_coop) {
-    preferences.push(
-      'user_pref("browser.tabs.remote.useCrossOriginOpenerPolicy", false);',
-    );
-  }
-
-  // Proxy settings
-  if (options.proxy) {
-    if (typeof options.proxy === "string") {
-      // Parse proxy URL
-      try {
-        const proxyUrl = new URL(options.proxy);
-        const port =
-          parseInt(proxyUrl.port) ||
-          (proxyUrl.protocol === "https:" ? 443 : 80);
-
-        if (proxyUrl.protocol.startsWith("socks")) {
-          preferences.push('user_pref("network.proxy.type", 1);');
-          preferences.push(
-            `user_pref("network.proxy.socks", "${proxyUrl.hostname}");`,
-          );
-          preferences.push(`user_pref("network.proxy.socks_port", ${port});`);
-          if (proxyUrl.protocol === "socks5:") {
-            preferences.push('user_pref("network.proxy.socks_version", 5);');
-          } else {
-            preferences.push('user_pref("network.proxy.socks_version", 4);');
-          }
-        } else {
-          preferences.push('user_pref("network.proxy.type", 1);');
-          preferences.push(
-            `user_pref("network.proxy.http", "${proxyUrl.hostname}");`,
-          );
-          preferences.push(`user_pref("network.proxy.http_port", ${port});`);
-          preferences.push(
-            `user_pref("network.proxy.ssl", "${proxyUrl.hostname}");`,
-          );
-          preferences.push(`user_pref("network.proxy.ssl_port", ${port});`);
-        }
-
-        if (proxyUrl.username && proxyUrl.password) {
-          // Note: Basic auth for proxies is handled differently in modern Firefox
-          preferences.push(
-            'user_pref("network.proxy.allow_hijacking_localhost", true);',
-          );
-        }
-      } catch (error) {
-        console.error(`Invalid proxy URL: ${options.proxy}`);
-      }
-    }
-  }
-
-  // Custom Firefox preferences
-  if (options.firefox_user_prefs) {
-    for (const [key, value] of Object.entries(options.firefox_user_prefs)) {
-      if (typeof value === "string") {
-        preferences.push(`user_pref("${key}", "${value}");`);
-      } else if (typeof value === "boolean") {
-        preferences.push(`user_pref("${key}", ${value});`);
-      } else if (typeof value === "number") {
-        preferences.push(`user_pref("${key}", ${value});`);
-      }
-    }
-  }
-
-  // Cache settings
-  if (options.enable_cache === false) {
-    preferences.push('user_pref("browser.cache.disk.enable", false);');
-    preferences.push('user_pref("browser.cache.memory.enable", false);');
-  }
-
-  // Write user.js file only if we have preferences to set
-  if (preferences.length > 0) {
-    const userJsPath = path.join(profilePath, "user.js");
-    fs.writeFileSync(userJsPath, preferences.join("\n"));
-  }
-}
-
-/**
- * Set Camoufox configuration via environment variables
- */
-function setCamoufoxConfigEnv(config: any, env: NodeJS.ProcessEnv): void {
-  const configJson = JSON.stringify(config);
-  const chunkSize = os.platform() === "win32" ? 2047 : 32767;
-
-  // Clear any existing CAMOU_CONFIG_* variables
-  for (const key in env) {
-    if (key.startsWith("CAMOU_CONFIG_")) {
-      delete env[key];
-    }
-  }
-
-  // Split config into chunks
-  const chunks: string[] = [];
-  for (let i = 0; i < configJson.length; i += chunkSize) {
-    chunks.push(configJson.slice(i, i + chunkSize));
-  }
-
-  // Set environment variables (start from index 1 as expected by Camoufox)
-  for (let i = 0; i < chunks.length; i++) {
-    env[`CAMOU_CONFIG_${i + 1}`] = chunks[i];
-  }
-}
-
-/**
  * Launch Camoufox browser with specified options
  */
 export async function launchCamoufox(
@@ -618,88 +208,128 @@ export async function launchCamoufox(
     fs.mkdirSync(profilePath, { recursive: true });
   }
 
-  // Create Camoufox configuration
-  const camoufoxConfig = createCamoufoxConfig(options);
+  try {
+    // Use camoufox-js launchOptions to generate proper configuration
+    const { launchOptions } = require("camoufox-js");
+    const launchConfig = await launchOptions({
+      ...options,
+      executable_path: executablePath,
+      // Enable debug if requested
+      debug: options.debug || false,
+      // Set i_know_what_im_doing to true to bypass warnings since we're controlling this
+      i_know_what_im_doing: true,
+    });
 
-  // Create minimal user.js for Firefox-specific settings (proxy, blocking, etc.)
-  createMinimalUserJs(profilePath, options);
+    if (options.debug) {
+      console.log(
+        "Generated launch config:",
+        JSON.stringify(launchConfig, null, 2),
+      );
+    }
 
-  // Build command line arguments
-  const args = buildCamoufoxArgs(options, profilePath, url);
+    // Extract the command line args and environment from the launch config
+    const args = [
+      "-profile",
+      profilePath,
+      "-no-remote",
+      ...(launchConfig.args || []),
+    ];
 
-  // Prepare environment variables
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-  };
+    // Add URL if provided
+    if (url) {
+      args.push(url);
+    }
 
-  // Add custom environment variables from options, converting values to strings
-  if (options.env) {
-    for (const [key, value] of Object.entries(options.env)) {
-      if (value !== undefined) {
-        env[key] = String(value);
+    // Use the environment variables and other config from camoufox-js
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      ...(launchConfig.env || {}),
+    };
+
+    if (options.debug) {
+      console.log("Launch args:", args);
+      console.log(
+        "Environment variables set:",
+        Object.keys(env).filter(
+          (key) => key.startsWith("CAMOU_") || key.startsWith("DISPLAY"),
+        ),
+      );
+    }
+
+    // Use the executable path from the launch config if available
+    const finalExecutablePath = launchConfig.executablePath || executablePath;
+
+    // Write Firefox user preferences to user.js if provided
+    if (
+      launchConfig.firefoxUserPrefs &&
+      Object.keys(launchConfig.firefoxUserPrefs).length > 0
+    ) {
+      const userJsPath = path.join(profilePath, "user.js");
+      const preferences: string[] = [];
+
+      for (const [key, value] of Object.entries(
+        launchConfig.firefoxUserPrefs,
+      )) {
+        if (typeof value === "string") {
+          preferences.push(`user_pref("${key}", "${value}");`);
+        } else if (typeof value === "boolean") {
+          preferences.push(`user_pref("${key}", ${value});`);
+        } else if (typeof value === "number") {
+          preferences.push(`user_pref("${key}", ${value});`);
+        }
+      }
+
+      if (preferences.length > 0) {
+        fs.writeFileSync(userJsPath, preferences.join("\n"));
       }
     }
+
+    // Launch the process
+    const child = spawn(finalExecutablePath, args, {
+      env: env as NodeJS.ProcessEnv,
+      detached: true,
+      stdio: options.debug ? "inherit" : "ignore",
+    });
+
+    if (!child.pid) {
+      throw new Error("Failed to launch Camoufox process");
+    }
+
+    const config: CamoufoxConfig = {
+      id,
+      pid: child.pid,
+      executablePath: finalExecutablePath,
+      profilePath,
+      url,
+      options,
+    };
+
+    // Save configuration
+    saveCamoufoxConfig(config);
+
+    // Handle process exit
+    child.on("exit", (code, signal) => {
+      if (options.debug) {
+        console.log(
+          `Camoufox process ${child.pid} exited with code ${code}, signal ${signal}`,
+        );
+      }
+      deleteCamoufoxConfig(id);
+    });
+
+    child.on("error", (error) => {
+      console.error(`Camoufox process error: ${error}`);
+      deleteCamoufoxConfig(id);
+    });
+
+    // Detach the child process so it can continue running independently
+    child.unref();
+
+    return config;
+  } catch (error) {
+    console.error(`Failed to launch Camoufox: ${error}`);
+    throw error;
   }
-
-  // Set Camoufox configuration via environment variables
-  setCamoufoxConfigEnv(camoufoxConfig, env);
-
-  if (options.debug) {
-    console.log(
-      "Camoufox configuration:",
-      JSON.stringify(camoufoxConfig, null, 2),
-    );
-    console.log(
-      "Environment variables set:",
-      Object.keys(env).filter((key) => key.startsWith("CAMOU_CONFIG_")),
-    );
-  }
-
-  // Handle virtual display
-  if (options.virtual_display) {
-    env.DISPLAY = options.virtual_display;
-  }
-
-  // Launch the process
-  const child = spawn(executablePath, args, {
-    env: env as NodeJS.ProcessEnv,
-    detached: true,
-    stdio: options.debug ? "inherit" : "ignore",
-  });
-
-  if (!child.pid) {
-    throw new Error("Failed to launch Camoufox process");
-  }
-
-  const config: CamoufoxConfig = {
-    id,
-    pid: child.pid,
-    executablePath,
-    profilePath,
-    url,
-    options,
-  };
-
-  // Save configuration
-  saveCamoufoxConfig(config);
-
-  // Handle process exit
-  child.on("exit", (code, signal) => {
-    console.log(
-      `Camoufox process ${child.pid} exited with code ${code}, signal ${signal}`,
-    );
-    deleteCamoufoxConfig(id);
-  });
-
-  child.on("error", (error) => {
-    console.error(`Camoufox process error: ${error}`);
-    deleteCamoufoxConfig(id);
-  });
-
-  // Detach the child process so it can continue running independently
-  child.unref();
-
-  return config;
 }
 
 /**
