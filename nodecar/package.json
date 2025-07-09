@@ -24,7 +24,6 @@
   "dependencies": {
     "@types/node": "^24.0.10",
     "@yao-pkg/pkg": "^6.5.1",
-    "camoufox-js": "file:../../camoufox-js",
     "commander": "^14.0.0",
     "dotenv": "^17.0.1",
     "get-port": "^7.1.0",
