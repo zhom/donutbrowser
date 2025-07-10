@@ -95,6 +95,8 @@ const browserOptions: BrowserOption[] = [
   },
 ];
 
+const IS_ANTI_DETECT_SUPPORTED = false;
+
 export function CreateProfileDialog({
   isOpen,
   onClose,
@@ -386,45 +388,54 @@ export function CreateProfileDialog({
               </TabsContent>
 
               <TabsContent value="anti-detect" className="mt-0 space-y-6">
-                {/* Anti-Detect Description */}
                 <div className="p-3 text-center bg-blue-50 rounded-md border border-blue-200 dark:bg-blue-950 dark:border-blue-800">
                   <p className="text-sm text-blue-800 dark:text-blue-200">
-                    Powered by Camoufox
+                    Anti-Detect support is coming soon!
                   </p>
                 </div>
+              </TabsContent>
+              {IS_ANTI_DETECT_SUPPORTED && (
+                <TabsContent value="anti-detect" className="mt-0 space-y-6">
+                  {/* Anti-Detect Description */}
+                  <div className="p-3 text-center bg-blue-50 rounded-md border border-blue-200 dark:bg-blue-950 dark:border-blue-800">
+                    <p className="text-sm text-blue-800 dark:text-blue-200">
+                      Powered by Camoufox
+                    </p>
+                  </div>
 
-                <div className="space-y-6">
-                  {/* Camoufox Download Status */}
-                  {!isBrowserVersionAvailable("camoufox") &&
-                    camoufoxReleaseTypes.stable && (
-                      <div className="flex gap-3 items-center p-3 bg-amber-50 rounded-md border border-amber-200">
-                        <p className="text-sm text-amber-800">
-                          Camoufox version ({camoufoxReleaseTypes.stable}) needs
-                          to be downloaded
-                        </p>
-                        <LoadingButton
-                          onClick={() => handleDownload("camoufox")}
-                          isLoading={isBrowserDownloading("camoufox")}
-                          size="sm"
-                          disabled={isBrowserDownloading("camoufox")}
-                        >
-                          Download
-                        </LoadingButton>
+                  <div className="space-y-6">
+                    {/* Camoufox Download Status */}
+                    {!isBrowserVersionAvailable("camoufox") &&
+                      camoufoxReleaseTypes.stable && (
+                        <div className="flex gap-3 items-center p-3 bg-amber-50 rounded-md border border-amber-200">
+                          <p className="text-sm text-amber-800">
+                            Camoufox version ({camoufoxReleaseTypes.stable})
+                            needs to be downloaded
+                          </p>
+                          <LoadingButton
+                            onClick={() => handleDownload("camoufox")}
+                            isLoading={isBrowserDownloading("camoufox")}
+                            size="sm"
+                            disabled={isBrowserDownloading("camoufox")}
+                          >
+                            Download
+                          </LoadingButton>
+                        </div>
+                      )}
+                    {isBrowserVersionAvailable("camoufox") && (
+                      <div className="p-3 text-sm text-green-600 bg-green-50 rounded-md border border-green-200">
+                        ✓ Camoufox version ({camoufoxReleaseTypes.stable}) is
+                        available
                       </div>
                     )}
-                  {isBrowserVersionAvailable("camoufox") && (
-                    <div className="p-3 text-sm text-green-600 bg-green-50 rounded-md border border-green-200">
-                      ✓ Camoufox version ({camoufoxReleaseTypes.stable}) is
-                      available
-                    </div>
-                  )}
 
-                  <SharedCamoufoxConfigForm
-                    config={camoufoxConfig}
-                    onConfigChange={updateCamoufoxConfig}
-                  />
-                </div>
-              </TabsContent>
+                    <SharedCamoufoxConfigForm
+                      config={camoufoxConfig}
+                      onConfigChange={updateCamoufoxConfig}
+                    />
+                  </div>
+                </TabsContent>
+              )}
 
               {/* Proxy Selection - Common to both tabs - Compact without card */}
               {storedProxies.length > 0 && (
