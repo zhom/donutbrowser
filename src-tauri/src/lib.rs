@@ -137,48 +137,6 @@ async fn handle_url_open(app: tauri::AppHandle, url: String) -> Result<(), Strin
   Ok(())
 }
 
-#[tauri::command]
-async fn check_and_handle_startup_url(app_handle: tauri::AppHandle) -> Result<bool, String> {
-  println!("check_and_handle_startup_url called");
-
-  let pending_urls = {
-    let mut pending = PENDING_URLS.lock().unwrap();
-    let urls = pending.clone();
-    pending.clear(); // Clear after getting them
-    urls
-  };
-
-  println!("Found {} pending URLs", pending_urls.len());
-
-  if !pending_urls.is_empty() {
-    println!(
-      "Handling {} pending URLs from frontend request",
-      pending_urls.len()
-    );
-
-    // Ensure the main window is visible and focused
-    if let Some(window) = app_handle.get_webview_window("main") {
-      let _ = window.show();
-      let _ = window.set_focus();
-      let _ = window.unminimize();
-
-      // Give the window a moment to become visible
-      tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-    }
-
-    for url in pending_urls {
-      println!("Emitting show-profile-selector event for URL: {url}");
-      if let Err(e) = app_handle.emit("show-profile-selector", url.clone()) {
-        eprintln!("Failed to emit URL event: {e}");
-        return Err(format!("Failed to emit URL event: {e}"));
-      }
-    }
-
-    return Ok(true);
-  }
-
-  Ok(false)
-}
 
 #[tauri::command]
 async fn create_stored_proxy(
@@ -456,7 +414,6 @@ pub fn run() {
       open_url_with_profile,
       set_as_default_browser,
       smart_open_url,
-      check_and_handle_startup_url,
       trigger_manual_version_update,
       get_version_update_status,
       check_for_browser_updates,

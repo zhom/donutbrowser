@@ -156,25 +156,47 @@ export default function Home() {
     setProxyDataReloadTrigger((prev) => prev + 1);
   }, []);
 
-  const handleUrlOpen = useCallback(async (url: string) => {
-    try {
-      // Use smart profile selection
-      const result = await invoke<string>("smart_open_url", {
-        url,
-      });
-      console.log("Smart URL opening succeeded:", result);
-      // URL was handled successfully, no need to show selector
-    } catch (error: unknown) {
-      console.log(
-        "Smart URL opening failed or requires profile selection:",
-        error,
-      );
+  const [processingUrls, setProcessingUrls] = useState<Set<string>>(new Set());
 
-      // Show profile selector for manual selection
-      // Replace any existing pending URL with the new one
-      setPendingUrls([{ id: Date.now().toString(), url }]);
-    }
-  }, []);
+  const handleUrlOpen = useCallback(
+    async (url: string) => {
+      // Prevent duplicate processing of the same URL
+      if (processingUrls.has(url)) {
+        console.log("URL already being processed:", url);
+        return;
+      }
+
+      setProcessingUrls((prev) => new Set(prev).add(url));
+
+      try {
+        // Use smart profile selection
+        const result = await invoke<string>("smart_open_url", {
+          url,
+        });
+        console.log("Smart URL opening succeeded:", result);
+        // URL was handled successfully, no need to show selector
+      } catch (error: unknown) {
+        console.log(
+          "Smart URL opening failed or requires profile selection:",
+          error,
+        );
+
+        // Show profile selector for manual selection
+        // Replace any existing pending URL with the new one
+        setPendingUrls([{ id: Date.now().toString(), url }]);
+      } finally {
+        // Remove URL from processing set after a short delay to prevent rapid duplicates
+        setTimeout(() => {
+          setProcessingUrls((prev) => {
+            const next = new Set(prev);
+            next.delete(url);
+            return next;
+          });
+        }, 1000);
+      }
+    },
+    [processingUrls],
+  );
 
   // Version updater for handling version fetching progress events and auto-updates
   useVersionUpdater();
@@ -278,19 +300,6 @@ export default function Home() {
       console.error("Failed to check next permission:", error);
     }
   }, [isMicrophoneAccessGranted, isCameraAccessGranted]);
-
-  const checkStartupUrls = useCallback(async () => {
-    try {
-      const hasStartupUrl = await invoke<boolean>(
-        "check_and_handle_startup_url",
-      );
-      if (hasStartupUrl) {
-        console.log("Handled startup URL successfully");
-      }
-    } catch (error) {
-      console.error("Failed to check startup URLs:", error);
-    }
-  }, []);
 
   const listenForUrlEvents = useCallback(async () => {
     try {
@@ -564,7 +573,6 @@ export default function Home() {
     void listenForUrlEvents();
 
     // Check for startup URLs (when app was launched as default browser)
-    void checkStartupUrls();
     void checkCurrentUrl();
 
     // Set up periodic update checks (every 30 minutes)
@@ -581,10 +589,9 @@ export default function Home() {
   }, [
     loadProfilesWithUpdateCheck,
     checkForUpdates,
-    checkCurrentUrl,
     checkStartupPrompt,
     listenForUrlEvents,
-    checkStartupUrls,
+    checkCurrentUrl,
   ]);
 
   useEffect(() => {
