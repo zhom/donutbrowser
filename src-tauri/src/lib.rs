@@ -137,7 +137,6 @@ async fn handle_url_open(app: tauri::AppHandle, url: String) -> Result<(), Strin
   Ok(())
 }
 
-
 #[tauri::command]
 async fn create_stored_proxy(
   name: String,

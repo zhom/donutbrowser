@@ -47,3 +47,6 @@ yarn-error.log*
 *.tsbuildinfo
 
 !**/.gitkeep
+
+# nodecar
+nodecar/nodecar-bin

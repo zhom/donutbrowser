@@ -154,9 +154,9 @@ jobs:
         run: |
           mkdir -p src-tauri/binaries
           if [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
-            cp nodecar/dist/nodecar.exe src-tauri/binaries/nodecar-${{ matrix.target }}.exe
+            cp nodecar/nodecar-bin.exe src-tauri/binaries/nodecar-${{ matrix.target }}.exe
           else
-            cp nodecar/dist/nodecar src-tauri/binaries/nodecar-${{ matrix.target }}
+            cp nodecar/nodecar-bin src-tauri/binaries/nodecar-${{ matrix.target }}
           fi
 
       - name: Build frontend

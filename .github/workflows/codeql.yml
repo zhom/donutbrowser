@@ -80,7 +80,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p src-tauri/binaries
-          cp nodecar/dist/nodecar src-tauri/binaries/nodecar-x86_64-unknown-linux-gnu
+          cp nodecar/nodecar-bin src-tauri/binaries/nodecar-x86_64-unknown-linux-gnu
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@b1e4dc3db58c9601794e22a9f6d28d45461b9dbf #v3.29.0

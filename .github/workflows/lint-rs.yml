@@ -88,11 +88,11 @@ jobs:
         run: |
           mkdir -p src-tauri/binaries
           if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-            cp nodecar/dist/nodecar src-tauri/binaries/nodecar-x86_64-unknown-linux-gnu
+            cp nodecar/nodecar-bin src-tauri/binaries/nodecar-x86_64-unknown-linux-gnu
           elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-            cp nodecar/dist/nodecar src-tauri/binaries/nodecar-aarch64-apple-darwin
+            cp nodecar/nodecar-bin src-tauri/binaries/nodecar-aarch64-apple-darwin
           elif [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            cp nodecar/dist/nodecar.exe src-tauri/binaries/nodecar-x86_64-pc-windows-msvc.exe
+            cp nodecar/nodecar-bin.exe src-tauri/binaries/nodecar-x86_64-pc-windows-msvc.exe
           fi
 
       - name: Create empty 'dist' directory

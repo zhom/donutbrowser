@@ -476,8 +476,7 @@ mod tests {
       .unwrap()
       .to_path_buf();
     let nodecar_dir = project_root.join("nodecar");
-    let nodecar_dist = nodecar_dir.join("dist");
-    let nodecar_binary = nodecar_dist.join("nodecar");
+    let nodecar_binary = nodecar_dir.join("nodecar-bin");
 
     // Check if binary already exists
     if nodecar_binary.exists() {
