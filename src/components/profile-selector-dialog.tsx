@@ -27,6 +27,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useBrowserState } from "@/hooks/use-browser-support";
 import { getBrowserDisplayName, getBrowserIcon } from "@/lib/browser-utils";
 import type { BrowserProfile, StoredProxy } from "@/types";
 
@@ -49,6 +50,9 @@ export function ProfileSelectorDialog({
   const [isLaunching, setIsLaunching] = useState(false);
   const [storedProxies, setStoredProxies] = useState<StoredProxy[]>([]);
 
+  // Use shared browser state hook
+  const browserState = useBrowserState(profiles, runningProfiles);
+
   // Helper function to check if a profile has a proxy
   const hasProxy = useCallback(
     (profile: BrowserProfile): boolean => {
@@ -57,50 +61,6 @@ export function ProfileSelectorDialog({
       return proxy !== undefined;
     },
     [storedProxies],
-  );
-
-  // Helper function to determine if a profile can be used for opening links
-  const canUseProfileForLinks = useCallback(
-    (
-      profile: BrowserProfile,
-      allProfiles: BrowserProfile[],
-      runningProfiles: Set<string>,
-    ): boolean => {
-      const isRunning = runningProfiles.has(profile.name);
-
-      // For TOR browser: Check if any TOR browser is running
-      if (profile.browser === "tor-browser") {
-        const runningTorProfiles = allProfiles.filter(
-          (p) => p.browser === "tor-browser" && runningProfiles.has(p.name),
-        );
-
-        // If no TOR browser is running, allow any TOR profile
-        if (runningTorProfiles.length === 0) {
-          return true;
-        }
-
-        // If TOR browser(s) are running, only allow the running one(s)
-        return isRunning;
-      }
-
-      // For Mullvad browser: Check if any Mullvad browser is running
-      if (profile.browser === "mullvad-browser") {
-        const runningMullvadProfiles = allProfiles.filter(
-          (p) => p.browser === "mullvad-browser" && runningProfiles.has(p.name),
-        );
-
-        // If no Mullvad browser is running, allow any Mullvad profile
-        if (runningMullvadProfiles.length === 0) {
-          return true;
-        }
-
-        // If Mullvad browser(s) are running, only allow the running one(s)
-        return isRunning;
-      }
-
-      return true;
-    },
-    [],
   );
 
   const loadProfiles = useCallback(async () => {
@@ -124,52 +84,31 @@ export function ProfileSelectorDialog({
         // First, try to find a running profile that can be used for opening links
         const runningAvailableProfile = profileList.find((profile) => {
           const isRunning = runningProfiles.has(profile.name);
-          return (
-            isRunning &&
-            canUseProfileForLinks(profile, profileList, runningProfiles)
-          );
+          return isRunning && browserState.canUseProfileForLinks(profile);
         });
 
         if (runningAvailableProfile) {
           setSelectedProfile(runningAvailableProfile.name);
         } else {
-          // If no running profile is suitable, find the first profile that can be used for opening links
-          const availableProfile = profileList.find((profile) => {
-            return canUseProfileForLinks(profile, profileList, runningProfiles);
-          });
-
+          // If no running profile is available, find the first available profile
+          const availableProfile = profileList.find((profile) =>
+            browserState.canUseProfileForLinks(profile),
+          );
           if (availableProfile) {
             setSelectedProfile(availableProfile.name);
-          } else {
-            // If no suitable profile found, still select the first one to show UI
-            setSelectedProfile(profileList[0].name);
           }
         }
       }
-    } catch (error) {
-      console.error("Failed to load profiles:", error);
+    } catch (err) {
+      console.error("Failed to load profiles:", err);
     } finally {
       setIsLoading(false);
     }
-  }, [runningProfiles, canUseProfileForLinks]);
+  }, [runningProfiles, browserState]);
 
-  // Helper function to get tooltip content for profiles
-  const getProfileTooltipContent = (profile: BrowserProfile): string => {
-    const isRunning = runningProfiles.has(profile.name);
-
-    if (
-      profile.browser === "tor-browser" ||
-      profile.browser === "mullvad-browser"
-    ) {
-      // If another TOR/Mullvad profile is running, this one is not available
-      return "Only 1 instance can run at a time";
-    }
-
-    if (isRunning) {
-      return "URL will open in a new tab in the existing browser window";
-    }
-
-    return "";
+  // Helper function to get tooltip content for profiles - now uses shared hook
+  const getProfileTooltipContent = (profile: BrowserProfile): string | null => {
+    return browserState.getProfileTooltipContent(profile);
   };
 
   const handleOpenUrl = useCallback(async () => {
@@ -211,16 +150,12 @@ export function ProfileSelectorDialog({
   // Check if the selected profile can be used for opening links
   const canOpenWithSelectedProfile = () => {
     if (!selectedProfileData) return false;
-    return canUseProfileForLinks(
-      selectedProfileData,
-      profiles,
-      runningProfiles,
-    );
+    return browserState.canUseProfileForLinks(selectedProfileData);
   };
 
   // Get tooltip content for disabled profiles
   const getTooltipContent = () => {
-    if (!selectedProfileData) return "";
+    if (!selectedProfileData) return null;
     return getProfileTooltipContent(selectedProfileData);
   };
 
@@ -285,65 +220,64 @@ export function ProfileSelectorDialog({
                 <SelectContent>
                   {profiles.map((profile) => {
                     const isRunning = runningProfiles.has(profile.name);
-                    const canUseForLinks = canUseProfileForLinks(
-                      profile,
-                      profiles,
-                      runningProfiles,
-                    );
+                    const canUseForLinks =
+                      browserState.canUseProfileForLinks(profile);
                     const tooltipContent = getProfileTooltipContent(profile);
 
                     return (
                       <Tooltip key={profile.name}>
                         <TooltipTrigger asChild>
-                          <SelectItem
-                            value={profile.name}
-                            disabled={!canUseForLinks}
-                          >
-                            <div
-                              className={`flex items-center gap-2 ${
-                                !canUseForLinks ? "opacity-50" : ""
-                              }`}
+                          <span className="inline-flex">
+                            <SelectItem
+                              value={profile.name}
+                              disabled={!canUseForLinks}
                             >
-                              <div className="flex gap-3 items-center px-2 py-1 rounded-lg cursor-pointer hover:bg-accent">
-                                <div className="flex gap-2 items-center">
-                                  {(() => {
-                                    const IconComponent = getBrowserIcon(
-                                      profile.browser,
-                                    );
-                                    return IconComponent ? (
-                                      <IconComponent className="w-4 h-4" />
-                                    ) : null;
-                                  })()}
-                                </div>
-                                <div className="flex-1 text-right">
-                                  <div className="font-medium">
-                                    {profile.name}
+                              <div
+                                className={`flex items-center gap-2 ${
+                                  !canUseForLinks ? "opacity-50" : ""
+                                }`}
+                              >
+                                <div className="flex gap-3 items-center px-2 py-1 rounded-lg cursor-pointer hover:bg-accent">
+                                  <div className="flex gap-2 items-center">
+                                    {(() => {
+                                      const IconComponent = getBrowserIcon(
+                                        profile.browser,
+                                      );
+                                      return IconComponent ? (
+                                        <IconComponent className="w-4 h-4" />
+                                      ) : null;
+                                    })()}
+                                  </div>
+                                  <div className="flex-1 text-right">
+                                    <div className="font-medium">
+                                      {profile.name}
+                                    </div>
                                   </div>
                                 </div>
+                                <Badge variant="secondary" className="text-xs">
+                                  {getBrowserDisplayName(profile.browser)}
+                                </Badge>
+                                {hasProxy(profile) && (
+                                  <Badge variant="outline" className="text-xs">
+                                    Proxy
+                                  </Badge>
+                                )}
+                                {isRunning && (
+                                  <Badge variant="default" className="text-xs">
+                                    Running
+                                  </Badge>
+                                )}
+                                {!canUseForLinks && (
+                                  <Badge
+                                    variant="destructive"
+                                    className="text-xs"
+                                  >
+                                    Unavailable
+                                  </Badge>
+                                )}
                               </div>
-                              <Badge variant="secondary" className="text-xs">
-                                {getBrowserDisplayName(profile.browser)}
-                              </Badge>
-                              {hasProxy(profile) && (
-                                <Badge variant="outline" className="text-xs">
-                                  Proxy
-                                </Badge>
-                              )}
-                              {isRunning && (
-                                <Badge variant="default" className="text-xs">
-                                  Running
-                                </Badge>
-                              )}
-                              {!canUseForLinks && (
-                                <Badge
-                                  variant="destructive"
-                                  className="text-xs"
-                                >
-                                  Unavailable
-                                </Badge>
-                              )}
-                            </div>
-                          </SelectItem>
+                            </SelectItem>
+                          </span>
                         </TooltipTrigger>
                         {tooltipContent && (
                           <TooltipContent>{tooltipContent}</TooltipContent>
@@ -363,7 +297,7 @@ export function ProfileSelectorDialog({
           </Button>
           <Tooltip>
             <TooltipTrigger asChild>
-              <div>
+              <span className="inline-flex">
                 <LoadingButton
                   isLoading={isLaunching}
                   onClick={() => void handleOpenUrl()}
@@ -375,7 +309,7 @@ export function ProfileSelectorDialog({
                 >
                   Open
                 </LoadingButton>
-              </div>
+              </span>
             </TooltipTrigger>
             {getTooltipContent() && (
               <TooltipContent>{getTooltipContent()}</TooltipContent>

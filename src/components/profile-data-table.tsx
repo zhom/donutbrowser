@@ -10,7 +10,6 @@ import {
 } from "@tanstack/react-table";
 import { invoke } from "@tauri-apps/api/core";
 import * as React from "react";
-import { CiCircleCheck } from "react-icons/ci";
 import { IoEllipsisHorizontal } from "react-icons/io5";
 import { LuChevronDown, LuChevronUp } from "react-icons/lu";
 import { Button } from "@/components/ui/button";
@@ -44,6 +43,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useBrowserState } from "@/hooks/use-browser-support";
 import { useTableSorting } from "@/hooks/use-table-sorting";
 import {
   getBrowserDisplayName,
@@ -93,7 +93,7 @@ export function ProfilesDataTable({
   const [deleteConfirmationName, setDeleteConfirmationName] =
     React.useState("");
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
-  const [isClient, setIsClient] = React.useState(false);
+
   const [storedProxies, setStoredProxies] = React.useState<StoredProxy[]>([]);
 
   // Helper function to check if a profile has a proxy
@@ -125,10 +125,8 @@ export function ProfilesDataTable({
     [storedProxies],
   );
 
-  // Ensure we're on the client side to prevent hydration mismatches
-  React.useEffect(() => {
-    setIsClient(true);
-  }, []);
+  // Use shared browser state hook
+  const browserState = useBrowserState(data, runningProfiles, isUpdating);
 
   // Load stored proxies
   const loadStoredProxies = React.useCallback(async () => {
@@ -141,10 +139,10 @@ export function ProfilesDataTable({
   }, []);
 
   React.useEffect(() => {
-    if (isClient) {
+    if (browserState.isClient) {
       void loadStoredProxies();
     }
-  }, [isClient, loadStoredProxies]);
+  }, [browserState.isClient, loadStoredProxies]);
 
   // Reload proxy data when requested from parent
   React.useEffect(() => {
@@ -155,21 +153,21 @@ export function ProfilesDataTable({
 
   // Update local sorting state when settings are loaded
   React.useEffect(() => {
-    if (isLoaded && isClient) {
+    if (isLoaded && browserState.isClient) {
       setSorting(getTableSorting());
     }
-  }, [isLoaded, getTableSorting, isClient]);
+  }, [isLoaded, getTableSorting, browserState.isClient]);
 
   // Handle sorting changes
   const handleSortingChange = React.useCallback(
     (updater: React.SetStateAction<SortingState>) => {
-      if (!isClient) return;
+      if (!browserState.isClient) return;
       const newSorting =
         typeof updater === "function" ? updater(sorting) : updater;
       setSorting(newSorting);
       updateSorting(newSorting);
     },
-    [sorting, updateSorting, isClient],
+    [browserState.isClient, sorting, updateSorting],
   );
 
   const handleRename = async () => {
@@ -180,18 +178,16 @@ export function ProfilesDataTable({
       setProfileToRename(null);
       setNewProfileName("");
       setRenameError(null);
-    } catch (err) {
-      setRenameError(err as string);
+    } catch (error) {
+      setRenameError(
+        error instanceof Error ? error.message : "Failed to rename profile",
+      );
     }
   };
 
   const handleDelete = async () => {
-    if (!profileToDelete || !deleteConfirmationName.trim()) return;
-
-    if (deleteConfirmationName.trim() !== profileToDelete.name) {
-      setDeleteError(
-        "Profile name doesn't match. Please type the exact name to confirm deletion.",
-      );
+    if (!profileToDelete || deleteConfirmationName !== profileToDelete.name) {
+      setDeleteError("Profile name confirmation does not match");
       return;
     }
 
@@ -200,8 +196,10 @@ export function ProfilesDataTable({
       setProfileToDelete(null);
       setDeleteConfirmationName("");
       setDeleteError(null);
-    } catch (err) {
-      setDeleteError(err as string);
+    } catch (error) {
+      setDeleteError(
+        error instanceof Error ? error.message : "Failed to delete profile",
+      );
     }
   };
 
@@ -211,49 +209,32 @@ export function ProfilesDataTable({
         id: "actions",
         cell: ({ row }) => {
           const profile = row.original;
-          const isRunning = isClient && runningProfiles.has(profile.name);
-          const isBrowserUpdating = isClient && isUpdating(profile.browser);
-
-          // Check if any TOR browser profile is running
-          const isTorBrowser = profile.browser === "tor-browser";
-          const anyTorRunning =
-            isClient &&
-            data.some(
-              (p) => p.browser === "tor-browser" && runningProfiles.has(p.name),
-            );
-          const shouldDisableTorStart =
-            isTorBrowser && !isRunning && anyTorRunning;
-
-          const isDisabled = shouldDisableTorStart || isBrowserUpdating;
+          const isRunning =
+            browserState.isClient && runningProfiles.has(profile.name);
+          const canLaunch = browserState.canLaunchProfile(profile);
+          const tooltipContent = browserState.getLaunchTooltipContent(profile);
 
           return (
             <div className="flex gap-2 items-center">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    variant={isRunning ? "destructive" : "default"}
-                    size="sm"
-                    disabled={!isClient || isDisabled}
-                    onClick={() =>
-                      void (isRunning
-                        ? onKillProfile(profile)
-                        : onLaunchProfile(profile))
-                    }
-                  >
-                    {isRunning ? "Stop" : "Launch"}
-                  </Button>
+                  <span className="inline-flex">
+                    <Button
+                      variant={isRunning ? "destructive" : "default"}
+                      size="sm"
+                      disabled={!canLaunch}
+                      className={!canLaunch ? "opacity-50" : ""}
+                      onClick={() =>
+                        void (isRunning
+                          ? onKillProfile(profile)
+                          : onLaunchProfile(profile))
+                      }
+                    >
+                      {isRunning ? "Stop" : "Launch"}
+                    </Button>
+                  </span>
                 </TooltipTrigger>
-                <TooltipContent>
-                  {!isClient
-                    ? "Loading..."
-                    : isRunning
-                      ? "Click to forcefully stop the browser"
-                      : isBrowserUpdating
-                        ? `${profile.browser} is being updated. Please wait for the update to complete.`
-                        : shouldDisableTorStart
-                          ? "Only one TOR browser instance can run at a time. Stop the running TOR browser first."
-                          : "Click to launch the browser"}
-                </TooltipContent>
+                <TooltipContent>{tooltipContent}</TooltipContent>
               </Tooltip>
             </div>
           );
@@ -262,91 +243,67 @@ export function ProfilesDataTable({
       {
         accessorKey: "name",
         header: ({ column }) => {
-          const isSorted = column.getIsSorted();
           return (
             <Button
               variant="ghost"
-              onClick={() => {
-                column.toggleSorting(column.getIsSorted() === "asc");
-              }}
-              className="p-0 h-auto font-semibold hover:bg-transparent"
+              onClick={() =>
+                column.toggleSorting(column.getIsSorted() === "asc")
+              }
+              className="h-auto p-0 font-semibold text-left justify-start"
             >
-              Profile
-              {isSorted === "asc" && <LuChevronUp className="ml-2 w-4 h-4" />}
-              {isSorted === "desc" && (
-                <LuChevronDown className="ml-2 w-4 h-4" />
-              )}
-              {!isSorted && (
-                <LuChevronDown className="ml-2 w-4 h-4 opacity-50" />
-              )}
+              Name
+              {column.getIsSorted() === "asc" ? (
+                <LuChevronUp className="ml-2 h-4 w-4" />
+              ) : column.getIsSorted() === "desc" ? (
+                <LuChevronDown className="ml-2 h-4 w-4" />
+              ) : null}
             </Button>
           );
         },
         enableSorting: true,
         sortingFn: "alphanumeric",
         cell: ({ row }) => {
-          const profile = row.original;
-          return profile.name.length > 15 ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="truncate">{profile.name.slice(0, 15)}...</span>
-              </TooltipTrigger>
-              <TooltipContent>{profile.name}</TooltipContent>
-            </Tooltip>
-          ) : (
-            profile.name
-          );
+          const name: string = row.getValue("name");
+          return <div className="font-medium text-left">{name}</div>;
         },
       },
       {
         accessorKey: "browser",
         header: ({ column }) => {
-          const isSorted = column.getIsSorted();
           return (
             <Button
               variant="ghost"
-              onClick={() => {
-                column.toggleSorting(column.getIsSorted() === "asc");
-              }}
-              className="p-0 h-auto font-semibold hover:bg-transparent"
+              onClick={() =>
+                column.toggleSorting(column.getIsSorted() === "asc")
+              }
+              className="h-auto p-0 font-semibold text-left justify-start"
             >
               Browser
-              {isSorted === "asc" && <LuChevronUp className="ml-2 w-4 h-4" />}
-              {isSorted === "desc" && (
-                <LuChevronDown className="ml-2 w-4 h-4" />
-              )}
-              {!isSorted && (
-                <LuChevronDown className="ml-2 w-4 h-4 opacity-50" />
-              )}
+              {column.getIsSorted() === "asc" ? (
+                <LuChevronUp className="ml-2 h-4 w-4" />
+              ) : column.getIsSorted() === "desc" ? (
+                <LuChevronDown className="ml-2 h-4 w-4" />
+              ) : null}
             </Button>
           );
         },
         cell: ({ row }) => {
           const browser: string = row.getValue("browser");
           const IconComponent = getBrowserIcon(browser);
-          const browserDisplayName = getBrowserDisplayName(browser);
-          return browserDisplayName.length > 15 ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex gap-2 items-center">
-                  {IconComponent && <IconComponent className="w-4 h-4" />}
-                  <span>{browserDisplayName.slice(0, 15)}...</span>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>{browserDisplayName}</TooltipContent>
-            </Tooltip>
-          ) : (
-            <div className="flex gap-2 items-center">
+          return (
+            <div className="flex items-center gap-2">
               {IconComponent && <IconComponent className="w-4 h-4" />}
-              <span>{browserDisplayName}</span>
+              <span>{getBrowserDisplayName(browser)}</span>
             </div>
           );
         },
         enableSorting: true,
         sortingFn: (rowA, rowB, columnId) => {
-          const browserA = getBrowserDisplayName(rowA.getValue(columnId));
-          const browserB = getBrowserDisplayName(rowB.getValue(columnId));
-          return browserA.localeCompare(browserB);
+          const browserA: string = rowA.getValue(columnId);
+          const browserB: string = rowB.getValue(columnId);
+          return getBrowserDisplayName(browserA).localeCompare(
+            getBrowserDisplayName(browserB),
+          );
         },
       },
       {
@@ -398,38 +355,41 @@ export function ProfilesDataTable({
                 : "No proxy configured";
 
           return (
-            <Tooltip>
-              <TooltipTrigger>
-                <div className="flex gap-2 items-center">
-                  {profileHasProxy && (
-                    <CiCircleCheck className="w-4 h-4 text-green-500" />
-                  )}
-
-                  {proxyDisplayName.length > 10 ? (
-                    <span className="text-sm truncate text-muted-foreground">
-                      {proxyDisplayName.slice(0, 10)}...
-                    </span>
-                  ) : (
-                    <span className="text-sm text-muted-foreground">
-                      {profile.browser === "tor-browser"
-                        ? "Not supported"
-                        : proxyDisplayName}
-                    </span>
-                  )}
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>{tooltipText}</TooltipContent>
-            </Tooltip>
+            <div className="flex items-center gap-2">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onProxySettings(profile)}
+                      disabled={
+                        !browserState.isClient ||
+                        profile.browser === "tor-browser"
+                      }
+                      className={
+                        profile.browser === "tor-browser" ? "opacity-50" : ""
+                      }
+                    >
+                      {profileHasProxy ? "Configured" : "Configure"}
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{tooltipText}</TooltipContent>
+              </Tooltip>
+            </div>
           );
         },
       },
-      // Update the settings column to use the confirmation dialog
       {
         id: "settings",
         cell: ({ row }) => {
           const profile = row.original;
-          const isRunning = isClient && runningProfiles.has(profile.name);
-          const isBrowserUpdating = isClient && isUpdating(profile.browser);
+          const isRunning =
+            browserState.isClient && runningProfiles.has(profile.name);
+          const isBrowserUpdating =
+            browserState.isClient && isUpdating(profile.browser);
+
           return (
             <div className="flex justify-end items-center">
               <DropdownMenu>
@@ -437,7 +397,7 @@ export function ProfilesDataTable({
                   <Button
                     variant="ghost"
                     className="p-0 w-8 h-8"
-                    disabled={!isClient}
+                    disabled={!browserState.isClient}
                   >
                     <span className="sr-only">Open menu</span>
                     <IoEllipsisHorizontal className="w-4 h-4" />
@@ -450,7 +410,7 @@ export function ProfilesDataTable({
                     onClick={() => {
                       onProxySettings(profile);
                     }}
-                    disabled={!isClient || isBrowserUpdating}
+                    disabled={!browserState.isClient || isBrowserUpdating}
                   >
                     Configure Proxy
                   </DropdownMenuItem>
@@ -459,7 +419,9 @@ export function ProfilesDataTable({
                       onClick={() => {
                         onConfigureCamoufox(profile);
                       }}
-                      disabled={!isClient || isRunning || isBrowserUpdating}
+                      disabled={
+                        !browserState.isClient || isRunning || isBrowserUpdating
+                      }
                     >
                       Configure Camoufox
                     </DropdownMenuItem>
@@ -471,7 +433,9 @@ export function ProfilesDataTable({
                       onClick={() => {
                         onChangeVersion(profile);
                       }}
-                      disabled={!isClient || isRunning || isBrowserUpdating}
+                      disabled={
+                        !browserState.isClient || isRunning || isBrowserUpdating
+                      }
                     >
                       Switch Release
                     </DropdownMenuItem>
@@ -481,7 +445,9 @@ export function ProfilesDataTable({
                       setProfileToRename(profile);
                       setNewProfileName(profile.name);
                     }}
-                    disabled={!isClient || isRunning || isBrowserUpdating}
+                    disabled={
+                      !browserState.isClient || isRunning || isBrowserUpdating
+                    }
                   >
                     Rename
                   </DropdownMenuItem>
@@ -490,8 +456,9 @@ export function ProfilesDataTable({
                       setProfileToDelete(profile);
                       setDeleteConfirmationName("");
                     }}
-                    className="text-red-600"
-                    disabled={!isClient || isRunning || isBrowserUpdating}
+                    disabled={
+                      !browserState.isClient || isRunning || isBrowserUpdating
+                    }
                   >
                     Delete
                   </DropdownMenuItem>
@@ -503,18 +470,17 @@ export function ProfilesDataTable({
       },
     ],
     [
-      isClient,
       runningProfiles,
-      isUpdating,
-      data,
-      onLaunchProfile,
-      onKillProfile,
-      onProxySettings,
-      onChangeVersion,
-      onConfigureCamoufox,
-      getProxyInfo,
+      browserState,
       hasProxy,
       getProxyDisplayName,
+      getProxyInfo,
+      onProxySettings,
+      onLaunchProfile,
+      onKillProfile,
+      onConfigureCamoufox,
+      onChangeVersion,
+      isUpdating,
     ],
   );
 
@@ -559,7 +525,7 @@ export function ProfilesDataTable({
             ))}
           </TableHeader>
           <TableBody>
-            {table.getRowModel().rows.length ? (
+            {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
                 <TableRow
                   key={row.id}
