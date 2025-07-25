@@ -62,6 +62,9 @@ jobs:
       - name: Install cargo-audit
         run: cargo install cargo-audit
 
+      - name: Install banderole
+        run: cargo install banderole
+
       - name: Install dependencies (Ubuntu only)
         if: matrix.os == 'ubuntu-latest'
         run: |

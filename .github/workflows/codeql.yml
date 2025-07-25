@@ -59,6 +59,9 @@ jobs:
         with:
           workdir: ./src-tauri
 
+      - name: Install banderole
+        run: cargo install banderole
+
       - name: Install dependencies from lockfile
         run: pnpm install --frozen-lockfile
         
