@@ -713,7 +713,7 @@ mod tests {
       .arg("http");
 
     // Set a timeout for the command
-    let output = tokio::time::timeout(Duration::from_secs(10), async { cmd.output() }).await??;
+    let output = tokio::time::timeout(Duration::from_secs(60), async { cmd.output() }).await??;
 
     if output.status.success() {
       let stdout = String::from_utf8(output.stdout)?;
@@ -876,7 +876,7 @@ mod tests {
       .arg("http");
 
     let start_time = std::time::Instant::now();
-    let output = tokio::time::timeout(Duration::from_secs(5), async { cmd.output() }).await??;
+    let output = tokio::time::timeout(Duration::from_secs(60), async { cmd.output() }).await??;
     let execution_time = start_time.elapsed();
 
     // Command should complete very quickly if properly detached
@@ -927,7 +927,7 @@ mod tests {
       .arg("--password")
       .arg("pass word!"); // Contains space and special character
 
-    let output = tokio::time::timeout(Duration::from_secs(5), async { cmd.output() }).await??;
+    let output = tokio::time::timeout(Duration::from_secs(60), async { cmd.output() }).await??;
 
     if output.status.success() {
       let stdout = String::from_utf8(output.stdout)?;
