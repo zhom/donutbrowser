@@ -510,7 +510,7 @@ export default function Home() {
         console.log("Profile deletion command completed successfully");
 
         // Give a small delay to ensure file system operations complete
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
         // Reload profiles to ensure UI is updated
         await loadProfiles();
