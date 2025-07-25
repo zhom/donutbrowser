@@ -198,8 +198,8 @@ mod linux {
       }
       BrowserType::Camoufox => {
         vec![
-          browser_subdir.join("camoufox"),
           browser_subdir.join("camoufox-bin"),
+          browser_subdir.join("camoufox"),
         ]
       }
       _ => vec![],

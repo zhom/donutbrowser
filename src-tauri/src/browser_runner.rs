@@ -13,7 +13,7 @@ use crate::browser::{create_browser, BrowserType, ProxySettings};
 use crate::browser_version_service::{
   BrowserVersionInfo, BrowserVersionService, BrowserVersionsResult,
 };
-use crate::camoufox::CamoufoxConfig;
+use crate::camoufox_direct::CamoufoxConfig;
 use crate::download::{DownloadProgress, Downloader};
 use crate::downloaded_browsers::DownloadedBrowsersRegistry;
 use crate::extraction::Extractor;
@@ -1782,7 +1782,7 @@ impl BrowserRunner {
     url: Option<String>,
     local_proxy_settings: Option<&ProxySettings>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
-    // Handle camoufox profiles specially
+    // Handle camoufox profiles specially using only the direct launcher
     if profile.browser == "camoufox" {
       if let Some(mut camoufox_config) = profile.camoufox_config.clone() {
         // Handle proxy settings for camoufox
@@ -1840,11 +1840,29 @@ impl BrowserRunner {
           }
         }
 
-        // Use the camoufox launcher
-        let camoufox_result = crate::camoufox::launch_camoufox_profile(
+        // Use the existing config or create a test config if none exists
+        let final_config = if camoufox_config.timezone.is_some()
+          || camoufox_config.screen_min_width.is_some()
+          || camoufox_config.window_width.is_some()
+        {
+          camoufox_config.clone()
+        } else {
+          // No meaningful config provided, use test config to ensure anti-fingerprinting works
+          println!("No Camoufox configuration provided, using test configuration");
+          let mut test_config =
+            crate::camoufox_direct::CamoufoxDirectLauncher::create_test_config();
+          // Preserve any proxy settings from the original config
+          test_config.proxy = camoufox_config.proxy.clone();
+          test_config.headless = camoufox_config.headless;
+          test_config.debug = Some(true); // Enable debug for troubleshooting
+          test_config
+        };
+
+        // Use the direct camoufox launcher
+        let camoufox_result = crate::camoufox_direct::launch_camoufox_profile_direct(
           app_handle.clone(),
           profile.clone(),
-          camoufox_config,
+          final_config,
           url,
         )
         .await
@@ -2046,9 +2064,10 @@ impl BrowserRunner {
     url: &str,
     _internal_proxy_settings: Option<&ProxySettings>,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Handle camoufox profiles specially
+    // Handle camoufox profiles specially using only the direct launcher
     if profile.browser == "camoufox" {
-      let camoufox_launcher = crate::camoufox::CamoufoxLauncher::new(app_handle.clone());
+      let camoufox_launcher =
+        crate::camoufox_direct::CamoufoxDirectLauncher::new(app_handle.clone());
 
       // Get the profile path based on the UUID
       let profiles_dir = self.get_profiles_dir();
@@ -2066,9 +2085,9 @@ impl BrowserRunner {
             profile.name
           );
 
-          // For Camoufox, we need to launch a new instance with the URL since nodecar doesn't support
-          // opening URLs in existing instances. This is a limitation of the anti-detect architecture.
-          return Err("Camoufox does not support opening URLs in existing instances. Please close the browser and relaunch it with the new URL.".into());
+          // For Camoufox, we need to launch a new instance with the URL since it doesn't support remote commands
+          // This is a limitation of Camoufox's architecture
+          return Err("Camoufox doesn't support opening URLs in existing instances. Please close the browser and launch again with the URL.".into());
         }
         Ok(None) => {
           return Err("Camoufox browser is not running".into());
@@ -2240,7 +2259,7 @@ impl BrowserRunner {
       }
       BrowserType::Camoufox => {
         // This should never be reached due to the early return above, but handle it just in case
-        Err("Camoufox does not support opening URLs in existing instances".into())
+        Err("Camoufox URL opening should be handled in the early return above".into())
       }
     }
   }
@@ -2447,77 +2466,8 @@ impl BrowserRunner {
     app_handle: tauri::AppHandle,
     profile: &BrowserProfile,
   ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-    // Handle camoufox profiles specially using the camoufox launcher
-    if profile.browser == "camoufox" {
-      let camoufox_launcher = crate::camoufox::CamoufoxLauncher::new(app_handle.clone());
-
-      // Get the profile path based on the UUID
-      let profiles_dir = self.get_profiles_dir();
-      let profile_data_path = profile.get_profile_data_path(&profiles_dir);
-      let profile_path_str = profile_data_path.to_string_lossy();
-
-      println!("Checking Camoufox status for profile: {}", profile.name);
-      println!("Profile UUID: {}", profile.id);
-      println!("Profile path: {profile_path_str}");
-
-      match camoufox_launcher
-        .find_camoufox_by_profile(&profile_path_str)
-        .await
-      {
-        Ok(Some(camoufox_process)) => {
-          // Found a running camoufox process for this profile
-          println!(
-            "Found running Camoufox process for profile {}: {:?}",
-            profile.name, camoufox_process
-          );
-
-          // Update the profile with the current PID if it's different
-          if let Some(pid) = camoufox_process.pid {
-            if profile.process_id != Some(pid) {
-              let mut updated_profile = profile.clone();
-              updated_profile.process_id = Some(pid);
-              if let Err(e) = self.save_profile(&updated_profile) {
-                println!("Warning: Failed to update profile PID: {e}");
-              } else {
-                // Emit profile update event to frontend
-                if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
-                  println!("Warning: Failed to emit profile update event: {e}");
-                }
-              }
-            }
-          }
-
-          return Ok(true);
-        }
-        Ok(None) => {
-          // No running camoufox process found for this profile
-          println!(
-            "No running Camoufox process found for profile: {}",
-            profile.name
-          );
-
-          // Clear the PID if one was stored
-          if profile.process_id.is_some() {
-            let mut updated_profile = profile.clone();
-            updated_profile.process_id = None;
-            if let Err(e) = self.save_profile(&updated_profile) {
-              println!("Warning: Failed to clear profile PID: {e}");
-            } else {
-              // Emit profile update event to frontend
-              if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
-                println!("Warning: Failed to emit profile update event: {e}");
-              }
-            }
-          }
-
-          return Ok(false);
-        }
-        Err(e) => {
-          println!("Error checking Camoufox status: {e}");
-          return Ok(false);
-        }
-      }
-    }
+    // Handle camoufox profiles using the same fast approach as other browsers
+    // No special handling needed - camoufox uses the same process checking logic
 
     // For non-camoufox browsers, use the existing logic
     let mut inner_profile = profile.clone();
@@ -2535,12 +2485,13 @@ impl BrowserRunner {
         let profile_data_path_str = profile_data_path.to_string_lossy();
         let profile_path_match = cmd.iter().any(|s| {
           let arg = s.to_str().unwrap_or("");
-          // For Firefox-based browsers, check for exact profile path match
+          // For Firefox-based browsers (including camoufox), check for exact profile path match
           if profile.browser == "tor-browser"
             || profile.browser == "firefox"
             || profile.browser == "firefox-developer"
             || profile.browser == "mullvad-browser"
             || profile.browser == "zen"
+            || profile.browser == "camoufox"
           {
             arg == profile_data_path_str
               || arg == format!("-profile={profile_data_path_str}")
@@ -2583,6 +2534,7 @@ impl BrowserRunner {
                 && !exe_name.contains("developer")
                 && !exe_name.contains("tor")
                 && !exe_name.contains("mullvad")
+                && !exe_name.contains("camoufox")
             }
             "firefox-developer" => exe_name.contains("firefox") && exe_name.contains("developer"),
             "mullvad-browser" => self.is_tor_or_mullvad_browser(&exe_name, cmd, "mullvad-browser"),
@@ -2590,6 +2542,13 @@ impl BrowserRunner {
             "zen" => exe_name.contains("zen"),
             "chromium" => exe_name.contains("chromium"),
             "brave" => exe_name.contains("brave"),
+            "camoufox" => {
+              exe_name.contains("camoufox")
+                || (exe_name.contains("firefox")
+                  && cmd
+                    .iter()
+                    .any(|arg| arg.to_str().unwrap_or("").contains("camoufox")))
+            }
             _ => false,
           };
 
@@ -2662,66 +2621,99 @@ impl BrowserRunner {
     Ok(is_running)
   }
 
+  pub fn update_camoufox_config(
+    &self,
+    profile_name: &str,
+    config: crate::camoufox_direct::CamoufoxConfig,
+  ) -> Result<(), Box<dyn std::error::Error>> {
+    // Find the profile by name
+    let profiles = self.list_profiles()?;
+    let mut profile = profiles
+      .into_iter()
+      .find(|p| p.name == profile_name)
+      .ok_or_else(|| format!("Profile {profile_name} not found"))?;
+
+    // Check if the browser is currently running
+    if profile.process_id.is_some() {
+      return Err(
+        "Cannot update Camoufox configuration while browser is running. Please stop the browser first.".into(),
+      );
+    }
+
+    // Update the Camoufox configuration
+    profile.camoufox_config = Some(config);
+
+    // Save the updated profile
+    self.save_profile(&profile)?;
+
+    println!("Camoufox configuration updated for profile '{profile_name}'.");
+
+    Ok(())
+  }
+
   pub async fn kill_browser_process(
     &self,
     app_handle: tauri::AppHandle,
     profile: &BrowserProfile,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Handle camoufox profiles specially
+    // Handle camoufox profiles specially using only the direct launcher
     if profile.browser == "camoufox" {
-      let camoufox_launcher = crate::camoufox::CamoufoxLauncher::new(app_handle.clone());
+      let camoufox_launcher =
+        crate::camoufox_direct::CamoufoxDirectLauncher::new(app_handle.clone());
 
-      // Get the profile path based on the UUID
-      let profiles_dir = self.get_profiles_dir();
-      let profile_data_path = profile.get_profile_data_path(&profiles_dir);
-      let profile_path_str = profile_data_path.to_string_lossy();
-
-      println!(
-        "Attempting to kill Camoufox process for profile: {}",
-        profile.name
-      );
-      println!("Profile UUID: {}", profile.id);
-      println!("Profile path: {profile_path_str}");
-
-      match camoufox_launcher
-        .find_camoufox_by_profile(&profile_path_str)
-        .await
-      {
-        Ok(Some(camoufox_process)) => {
-          println!(
-            "Found running Camoufox process for profile {}: {:?}",
-            profile.name, camoufox_process
-          );
-
-          // Stop the camoufox process using the launcher
-          match camoufox_launcher.stop_camoufox(&camoufox_process.id).await {
-            Ok(stopped) => {
-              if stopped {
-                println!(
-                  "Successfully stopped Camoufox process: {}",
-                  camoufox_process.id
-                );
-              } else {
-                println!("Failed to stop Camoufox process: {}", camoufox_process.id);
-                return Err("Failed to stop Camoufox process".into());
-              }
-            }
-            Err(e) => {
-              println!("Error stopping Camoufox process: {e}");
-              return Err(format!("Error stopping Camoufox process: {e}").into());
+      // Try to stop by PID first (faster)
+      if let Some(stored_pid) = profile.process_id {
+        match camoufox_launcher
+          .stop_camoufox(&stored_pid.to_string())
+          .await
+        {
+          Ok(stopped) => {
+            if stopped {
+              println!("Successfully stopped Camoufox process by PID: {stored_pid}");
+            } else {
+              println!("Failed to stop Camoufox process by PID: {stored_pid}");
             }
           }
+          Err(e) => {
+            println!("Error stopping Camoufox process by PID: {e}");
+          }
         }
-        Ok(None) => {
-          println!(
-            "No running Camoufox process found for profile: {}",
-            profile.name
-          );
-          // Process might already be stopped, just clear the PID
-        }
-        Err(e) => {
-          println!("Error finding Camoufox process: {e}");
-          return Err(format!("Error finding Camoufox process: {e}").into());
+      } else {
+        // Fallback: search by profile path
+        let profiles_dir = self.get_profiles_dir();
+        let profile_data_path = profile.get_profile_data_path(&profiles_dir);
+        let profile_path_str = profile_data_path.to_string_lossy();
+
+        match camoufox_launcher
+          .find_camoufox_by_profile(&profile_path_str)
+          .await
+        {
+          Ok(Some(camoufox_process)) => {
+            match camoufox_launcher.stop_camoufox(&camoufox_process.id).await {
+              Ok(stopped) => {
+                if stopped {
+                  println!(
+                    "Successfully stopped Camoufox process: {}",
+                    camoufox_process.id
+                  );
+                } else {
+                  println!("Failed to stop Camoufox process: {}", camoufox_process.id);
+                }
+              }
+              Err(e) => {
+                println!("Error stopping Camoufox process: {e}");
+              }
+            }
+          }
+          Ok(None) => {
+            println!(
+              "No running Camoufox process found for profile: {}",
+              profile.name
+            );
+          }
+          Err(e) => {
+            println!("Error finding Camoufox process: {e}");
+          }
         }
       }
 
@@ -2766,6 +2758,7 @@ impl BrowserRunner {
                 && !exe_name.contains("developer")
                 && !exe_name.contains("tor")
                 && !exe_name.contains("mullvad")
+                && !exe_name.contains("camoufox")
             }
             "firefox-developer" => exe_name.contains("firefox") && exe_name.contains("developer"),
             "mullvad-browser" => self.is_tor_or_mullvad_browser(&exe_name, cmd, "mullvad-browser"),
@@ -2773,6 +2766,13 @@ impl BrowserRunner {
             "zen" => exe_name.contains("zen"),
             "chromium" => exe_name.contains("chromium"),
             "brave" => exe_name.contains("brave"),
+            "camoufox" => {
+              exe_name.contains("camoufox")
+                || (exe_name.contains("firefox")
+                  && cmd
+                    .iter()
+                    .any(|arg| arg.to_str().unwrap_or("").contains("camoufox")))
+            }
             _ => false,
           };
 
@@ -3179,34 +3179,6 @@ impl BrowserRunner {
     }
 
     files_exist
-  }
-
-  /// Update camoufox configuration for a profile
-  pub fn update_camoufox_config(
-    &self,
-    profile_name: &str,
-    config: CamoufoxConfig,
-  ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut profiles = self.list_profiles()?;
-
-    // Find the profile to update
-    let profile = profiles
-      .iter_mut()
-      .find(|p| p.name == profile_name)
-      .ok_or_else(|| format!("Profile '{profile_name}' not found"))?;
-
-    // Ensure the profile is a camoufox profile
-    if profile.browser != "camoufox" {
-      return Err(format!("Profile '{profile_name}' is not a camoufox profile").into());
-    }
-
-    // Update the camoufox configuration
-    profile.camoufox_config = Some(config);
-
-    // Save the updated profile
-    self.save_profile(profile)?;
-
-    Ok(())
   }
 }
 

@@ -114,6 +114,14 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda #v4.1.0
 
+      - name: Setup Python
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b #v5.9.0
+        with:
+          python-version: '3.11'
+
+      - name: Install PyOxidizer
+        run: pip install pyoxidizer
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@b3b07ba8b418998c39fb20f53e8b695cdcc8de1b #master
         with:

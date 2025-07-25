@@ -1,9 +1,5 @@
 import { program } from "commander";
-import {
-  launchCamoufox,
-  listCamoufoxProcesses,
-  stopCamoufox,
-} from "./camoufox-launcher";
+import { generateCamoufoxConfig } from "./camoufox-launcher.js";
 import {
   startProxyProcess,
   stopAllProxyProcesses,
@@ -71,7 +67,7 @@ program
             "Error: Either --upstream URL or --host, --proxy-port, and --type are required",
           );
           console.log(
-            "Example: proxy start --host datacenter.proxyempire.io --proxy-port 9000 --type http --username user --password pass",
+            "Example: proxy start --host proxy.example.com --proxy-port 9000 --type http --username user --password pass",
           );
           process.exit(1);
           return;
@@ -154,14 +150,10 @@ program
     }
   });
 
-// Command for Camoufox browser orchestrator
+// Command for generating Camoufox configuration
 program
-  .command("camoufox")
-  .argument("<action>", "launch, stop, list, or open-url for Camoufox browser")
-  .requiredOption("--executable-path <path>", "path to Camoufox executable")
-  .requiredOption("--profile-path <path>", "path to browser profile directory")
-  .option("--url <url>", "URL to open")
-  .option("--id <id>", "Camoufox instance ID (for stop/open-url actions)")
+  .command("camoufox-config")
+  .argument("<action>", "generate Camoufox configuration")
 
   // Operating system fingerprinting
   .option(
@@ -239,22 +231,13 @@ program
   // Firefox preferences
   .option("--firefox-prefs <prefs>", "Firefox user preferences (JSON string)")
 
-  .description("launch and manage Camoufox browser orchestrator instances")
+  .description("generate Camoufox configuration using camoufox-js")
   .action(async (action: string, options: any) => {
     try {
-      if (action === "launch") {
-        // Validate required options
-        if (!options.executablePath || !options.profilePath) {
-          console.error(
-            "Error: --executable-path and --profile-path are required for launch",
-          );
-          process.exit(1);
-          return;
-        }
-
+      if (action === "generate") {
         // Build Camoufox options
         const camoufoxOptions: any = {
-          enable_cache: !options.disableCache, // Cache enabled by default as requested
+          enable_cache: !options.disableCache, // Cache enabled by default
         };
 
         // OS fingerprinting
@@ -358,70 +341,19 @@ program
           }
         }
 
-        // Launch Camoufox
-        const config = await launchCamoufox(
-          options.executablePath,
-          options.profilePath,
-          camoufoxOptions,
-          options.url,
-        );
+        // Generate configuration
+        const config = await generateCamoufoxConfig(camoufoxOptions);
 
-        // Output the configuration as JSON for the Rust side to parse
-        console.log(
-          JSON.stringify({
-            id: config.id,
-            pid: config.pid,
-            executable_path: config.executablePath,
-            profile_path: config.profilePath,
-            url: config.url,
-          }),
-        );
-
+        // Output the configuration as JSON
+        console.log(JSON.stringify(config, null, 2));
         process.exit(0);
-      } else if (action === "stop") {
-        if (!options.id) {
-          console.error("Error: --id is required for stop action");
-          process.exit(1);
-          return;
-        }
-
-        const success = await stopCamoufox(options.id);
-        console.log(JSON.stringify({ success }));
-        process.exit(0);
-      } else if (action === "list") {
-        const processes = listCamoufoxProcesses();
-        // Convert camelCase to snake_case for Rust compatibility
-        const rustCompatibleProcesses = processes.map((process) => ({
-          id: process.id,
-          pid: process.pid,
-          executable_path: process.executablePath,
-          profile_path: process.profilePath,
-          url: process.url,
-        }));
-        console.log(JSON.stringify(rustCompatibleProcesses));
-        process.exit(0);
-      } else if (action === "open-url") {
-        if (!options.id || !options.url) {
-          console.error(
-            "Error: --id and --url are required for open-url action",
-          );
-          process.exit(1);
-          return;
-        }
-
-        // This would require implementing URL opening in existing instance
-        // For now, we'll return an error as this feature would need additional implementation
-        console.error("open-url action is not yet implemented");
-        process.exit(1);
       } else {
-        console.error(
-          "Invalid action. Use 'launch', 'stop', 'list', or 'open-url'",
-        );
+        console.error("Invalid action. Use 'generate'");
         process.exit(1);
       }
     } catch (error: unknown) {
       console.error(
-        `Camoufox command failed: ${error instanceof Error ? error.message : JSON.stringify(error)}`,
+        `Camoufox config generation failed: ${error instanceof Error ? error.message : JSON.stringify(error)}`,
       );
       process.exit(1);
     }

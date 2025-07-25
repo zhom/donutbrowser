@@ -141,9 +141,7 @@ export default function Home() {
       const profileList = await invoke<BrowserProfile[]>(
         "list_browser_profiles",
       );
-      setProfiles(
-        profileList.filter((profile) => profile.browser !== "camoufox"),
-      );
+      setProfiles(profileList);
 
       // Check for missing binaries after loading profiles
       await checkMissingBinaries();
@@ -191,9 +189,7 @@ export default function Home() {
       const profileList = await invoke<BrowserProfile[]>(
         "list_browser_profiles",
       );
-      setProfiles(
-        profileList.filter((profile) => profile.browser !== "camoufox"),
-      );
+      setProfiles(profileList);
 
       // TODO: remove after a few version bumps, needed to properly display migrated profiles
       setTimeout(async () => {
@@ -201,9 +197,7 @@ export default function Home() {
           const profiles = await invoke<BrowserProfile[]>(
             "list_browser_profiles",
           );
-          setProfiles(
-            profiles.filter((profile) => profile.browser !== "camoufox"),
-          );
+          setProfiles(profiles);
         }
         await sleep(500);
       }, 0);

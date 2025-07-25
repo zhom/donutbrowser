@@ -13,7 +13,7 @@ mod auto_updater;
 mod browser;
 mod browser_runner;
 mod browser_version_service;
-mod camoufox;
+mod camoufox_direct;
 mod default_browser;
 mod download;
 mod downloaded_browsers;
@@ -216,7 +216,7 @@ async fn delete_stored_proxy(proxy_id: String) -> Result<(), String> {
 #[tauri::command]
 async fn update_camoufox_config(
   profile_name: String,
-  config: crate::camoufox::CamoufoxConfig,
+  config: crate::camoufox_direct::CamoufoxConfig,
 ) -> Result<(), String> {
   let browser_runner = browser_runner::BrowserRunner::new();
   browser_runner
@@ -396,6 +396,31 @@ pub fn run() {
           }
           Err(e) => {
             eprintln!("Failed to check for app updates: {e}");
+          }
+        }
+      });
+
+      // Start Camoufox cleanup task
+      let app_handle_cleanup = app.handle().clone();
+      tauri::async_runtime::spawn(async move {
+        let launcher = crate::camoufox_direct::CamoufoxDirectLauncher::new(app_handle_cleanup);
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
+
+        loop {
+          interval.tick().await;
+
+          match launcher.cleanup_dead_instances().await {
+            Ok(dead_instances) => {
+              if !dead_instances.is_empty() {
+                println!(
+                  "Cleaned up {} dead Camoufox instances",
+                  dead_instances.len()
+                );
+              }
+            }
+            Err(e) => {
+              eprintln!("Error during Camoufox cleanup: {e}");
+            }
           }
         }
       });

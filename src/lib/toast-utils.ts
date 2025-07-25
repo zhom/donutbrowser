@@ -100,7 +100,7 @@ export function showToast(props: ToastProps & { id?: string }) {
   }
 
   if (props.type === "success") {
-    sonnerToast.success(React.createElement(UnifiedToast, props), {
+    sonnerToast.custom(() => React.createElement(UnifiedToast, props), {
       id: toastId,
       duration,
       style: {
@@ -113,7 +113,7 @@ export function showToast(props: ToastProps & { id?: string }) {
       },
     });
   } else if (props.type === "error") {
-    sonnerToast.error(React.createElement(UnifiedToast, props), {
+    sonnerToast.custom(() => React.createElement(UnifiedToast, props), {
       id: toastId,
       duration,
       style: {
