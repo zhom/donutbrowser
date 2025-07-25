@@ -393,10 +393,7 @@ impl CamoufoxDirectLauncher {
     // Get the nodecar binary path
     let nodecar_path = self.get_nodecar_binary_path()?;
 
-    println!(
-      "Executing nodecar command: {:?} with args: {:?}",
-      nodecar_path, args
-    );
+    println!("Executing nodecar command: {nodecar_path:?} with args: {args:?}");
 
     // Execute nodecar command
     let output = tokio::process::Command::new(nodecar_path)
@@ -410,7 +407,7 @@ impl CamoufoxDirectLauncher {
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    println!("nodecar output: {}", stdout);
+    println!("nodecar output: {stdout}");
 
     // Parse the JSON output
     let config_json: serde_json::Value = serde_json::from_str(&stdout)
@@ -886,10 +883,7 @@ impl CamoufoxDirectLauncher {
     let camou_config_str = config_for_env.to_string();
 
     // Set CAMOU_CONFIG environment variable - this is crucial for anti-fingerprinting
-    println!(
-      "Setting CAMOU_CONFIG environment variable: {}",
-      camou_config_str
-    );
+    println!("Setting CAMOU_CONFIG environment variable: {camou_config_str}");
 
     // Build environment variables
     let mut cmd = Command::new(executable_path);
@@ -914,17 +908,14 @@ impl CamoufoxDirectLauncher {
 
     // Multiple cache-busting strategies to ensure config refresh
     cmd.env("CAMOU_CACHE_INVALIDATE", &cache_buster);
-    cmd.env("CAMOU_CONFIG_REFRESH", &timestamp.to_string());
+    cmd.env("CAMOU_CONFIG_REFRESH", timestamp.to_string());
     cmd.env("CAMOU_PROCESS_ISOLATION", &cache_buster);
 
     // Force Camoufox to treat this as a completely new process context
     cmd.env("CAMOU_FORCE_CONFIG_RELOAD", "1");
     cmd.env("CAMOU_DISABLE_CONFIG_CACHE", "1");
 
-    println!(
-      "Setting cache-busting environment variables with timestamp: {}",
-      timestamp
-    );
+    println!("Setting cache-busting environment variables with timestamp: {timestamp}");
 
     // Check if the config string is too large for a single environment variable
     const MAX_ENV_SIZE: usize = 2000;
@@ -956,33 +947,33 @@ impl CamoufoxDirectLauncher {
     // Set working directory to the executable's directory for better compatibility
     if let Some(parent_dir) = std::path::Path::new(executable_path).parent() {
       cmd.current_dir(parent_dir);
-      println!("Set working directory to: {:?}", parent_dir);
+      println!("Set working directory to: {parent_dir:?}");
     }
 
     // Set all environment variables from the generated config
     for (key, value) in &final_env_vars {
-      println!("Setting generated environment variable: {}={}", key, value);
+      println!("Setting generated environment variable: {key}={value}");
       cmd.env(key, value);
     }
 
     // Add user-specified environment variables (they override generated ones)
     if let Some(user_env_vars) = &config.env_vars {
       for (key, value) in user_env_vars {
-        println!("Setting user environment variable: {}={}", key, value);
+        println!("Setting user environment variable: {key}={value}");
         cmd.env(key, value);
       }
     }
 
     // Set virtual display if specified
     if let Some(virtual_display) = &config.virtual_display {
-      println!("Setting DISPLAY environment variable: {}", virtual_display);
+      println!("Setting DISPLAY environment variable: {virtual_display}");
       cmd.env("DISPLAY", virtual_display);
     }
 
     // Debug: Print launch information
     println!("=== Camoufox Launch Debug Info ===");
-    println!("Executable: {}", executable_path);
-    println!("Arguments: {:?}", args);
+    println!("Executable: {executable_path}");
+    println!("Arguments: {args:?}");
     println!("CAMOU_CONFIG length: {} bytes", camou_config_str.len());
 
     // Verify the JSON is valid
@@ -992,12 +983,12 @@ impl CamoufoxDirectLauncher {
         if let Some(obj) = parsed.as_object() {
           println!("📊 Config contains {} keys:", obj.len());
           for key in obj.keys() {
-            println!("   - {}", key);
+            println!("   - {key}");
           }
         }
       }
       Err(e) => {
-        println!("❌ CAMOU_CONFIG JSON is invalid: {}", e);
+        println!("❌ CAMOU_CONFIG JSON is invalid: {e}");
       }
     }
 
@@ -1153,6 +1144,40 @@ impl CamoufoxDirectLauncher {
   }
 }
 
+pub async fn launch_camoufox_profile_direct(
+  app_handle: AppHandle,
+  profile: BrowserProfile,
+  config: CamoufoxConfig,
+  url: Option<String>,
+) -> Result<CamoufoxLaunchResult, String> {
+  let launcher = CamoufoxDirectLauncher::new(app_handle);
+
+  // Get the executable path for Camoufox
+  let browser_runner = crate::browser_runner::BrowserRunner::new();
+  let binaries_dir = browser_runner.get_binaries_dir();
+  let browser_dir = binaries_dir.join("camoufox").join(&profile.version);
+
+  // Get executable path
+  let browser = crate::browser::create_browser(crate::browser::BrowserType::Camoufox);
+  let executable_path = browser
+    .get_executable_path(&browser_dir)
+    .map_err(|e| format!("Failed to get Camoufox executable path: {e}"))?;
+
+  // Get profile path
+  let profiles_dir = browser_runner.get_profiles_dir();
+  let profile_path = profile.get_profile_data_path(&profiles_dir);
+
+  launcher
+    .launch_camoufox(
+      &executable_path.to_string_lossy(),
+      &profile_path.to_string_lossy(),
+      &config,
+      url.as_deref(),
+    )
+    .await
+    .map_err(|e| format!("Failed to launch Camoufox: {e}"))
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -1186,7 +1211,7 @@ mod tests {
       }
       Err(e) => {
         // This is expected if nodecar is not available in test environment
-        println!("⚠️ Nodecar not available in test environment: {}", e);
+        println!("⚠️ Nodecar not available in test environment: {e}");
       }
     }
 
@@ -1213,7 +1238,7 @@ mod tests {
         }
       }
       Err(e) => {
-        println!("⚠️ Nodecar not available for test config: {}", e);
+        println!("⚠️ Nodecar not available for test config: {e}");
       }
     }
   }
@@ -1297,38 +1322,4 @@ mod tests {
     assert_eq!(default_config.debug, None);
     assert_eq!(default_config.headless, None);
   }
-}
-
-pub async fn launch_camoufox_profile_direct(
-  app_handle: AppHandle,
-  profile: BrowserProfile,
-  config: CamoufoxConfig,
-  url: Option<String>,
-) -> Result<CamoufoxLaunchResult, String> {
-  let launcher = CamoufoxDirectLauncher::new(app_handle);
-
-  // Get the executable path for Camoufox
-  let browser_runner = crate::browser_runner::BrowserRunner::new();
-  let binaries_dir = browser_runner.get_binaries_dir();
-  let browser_dir = binaries_dir.join("camoufox").join(&profile.version);
-
-  // Get executable path
-  let browser = crate::browser::create_browser(crate::browser::BrowserType::Camoufox);
-  let executable_path = browser
-    .get_executable_path(&browser_dir)
-    .map_err(|e| format!("Failed to get Camoufox executable path: {e}"))?;
-
-  // Get profile path
-  let profiles_dir = browser_runner.get_profiles_dir();
-  let profile_path = profile.get_profile_data_path(&profiles_dir);
-
-  launcher
-    .launch_camoufox(
-      &executable_path.to_string_lossy(),
-      &profile_path.to_string_lossy(),
-      &config,
-      url.as_deref(),
-    )
-    .await
-    .map_err(|e| format!("Failed to launch Camoufox: {e}"))
 }

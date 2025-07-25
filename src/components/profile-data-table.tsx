@@ -459,7 +459,7 @@ export function ProfilesDataTable({
                       onClick={() => {
                         onConfigureCamoufox(profile);
                       }}
-                      disabled={!isClient || isBrowserUpdating}
+                      disabled={!isClient || isRunning || isBrowserUpdating}
                     >
                       Configure Camoufox
                     </DropdownMenuItem>
