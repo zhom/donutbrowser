@@ -465,7 +465,6 @@ pub fn run() {
       delete_profile_group,
       assign_profiles_to_group,
       delete_selected_profiles,
-      cleanup_unused_binaries,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
