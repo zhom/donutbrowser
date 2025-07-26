@@ -31,12 +31,13 @@ mod version_updater;
 extern crate lazy_static;
 
 use browser_runner::{
-  check_browser_exists, check_browser_status, check_missing_binaries, create_browser_profile_new,
-  delete_profile, download_browser, ensure_all_binaries_exist, fetch_browser_versions_cached_first,
-  fetch_browser_versions_with_count, fetch_browser_versions_with_count_cached_first,
-  get_browser_release_types, get_downloaded_browser_versions, get_supported_browsers,
-  is_browser_supported_on_platform, kill_browser_profile, launch_browser_profile,
-  list_browser_profiles, rename_profile, update_profile_proxy, update_profile_version,
+  check_browser_exists, check_browser_status, check_missing_binaries,
+  create_browser_profile_new, delete_profile, download_browser, ensure_all_binaries_exist,
+  fetch_browser_versions_cached_first, fetch_browser_versions_with_count,
+  fetch_browser_versions_with_count_cached_first, get_browser_release_types,
+  get_downloaded_browser_versions, get_supported_browsers, is_browser_supported_on_platform,
+  kill_browser_profile, launch_browser_profile, list_browser_profiles, rename_profile,
+  update_profile_proxy, update_profile_version,
 };
 
 use settings_manager::{
@@ -400,6 +401,32 @@ pub fn run() {
             Err(e) => {
               eprintln!("Error during Camoufox cleanup: {e}");
             }
+          }
+        }
+      });
+
+      // Warm up nodecar binary in the background
+      tauri::async_runtime::spawn(async move {
+        println!("Starting nodecar warm-up...");
+        let start_time = std::time::Instant::now();
+        
+        // Send a ping request to nodecar to trigger unpacking/warm-up
+        match tokio::process::Command::new("nodecar")
+          .arg("--version")
+          .output()
+          .await
+        {
+          Ok(output) => {
+            let duration = start_time.elapsed();
+            if output.status.success() {
+              println!("Nodecar warm-up completed successfully in {:.2}s", duration.as_secs_f64());
+            } else {
+              println!("Nodecar warm-up completed with non-zero exit code in {:.2}s", duration.as_secs_f64());
+            }
+          }
+          Err(e) => {
+            let duration = start_time.elapsed();
+            println!("Nodecar warm-up failed after {:.2}s: {e}", duration.as_secs_f64());
           }
         }
       });
