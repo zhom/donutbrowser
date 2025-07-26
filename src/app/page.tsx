@@ -4,12 +4,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrent } from "@tauri-apps/plugin-deep-link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FaDownload } from "react-icons/fa";
-import { FiWifi } from "react-icons/fi";
-import { GoGear, GoKebabHorizontal, GoPlus } from "react-icons/go";
 import { CamoufoxConfigDialog } from "@/components/camoufox-config-dialog";
 import { ChangeVersionDialog } from "@/components/change-version-dialog";
 import { CreateProfileDialog } from "@/components/create-profile-dialog";
+import { GroupAssignmentDialog } from "@/components/group-assignment-dialog";
+import { GroupBadges } from "@/components/group-badges";
+import { GroupManagementDialog } from "@/components/group-management-dialog";
+import HomeHeader from "@/components/home-header";
 import { ImportProfileDialog } from "@/components/import-profile-dialog";
 import { PermissionDialog } from "@/components/permission-dialog";
 import { ProfilesDataTable } from "@/components/profile-data-table";
@@ -17,19 +18,7 @@ import { ProfileSelectorDialog } from "@/components/profile-selector-dialog";
 import { ProxyManagementDialog } from "@/components/proxy-management-dialog";
 import { ProxySettingsDialog } from "@/components/proxy-settings-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useAppUpdateNotifications } from "@/hooks/use-app-update-notifications";
 import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -37,7 +26,7 @@ import { useUpdateNotifications } from "@/hooks/use-update-notifications";
 import { useVersionUpdater } from "@/hooks/use-version-updater";
 import { showErrorToast } from "@/lib/toast-utils";
 import { sleep } from "@/lib/utils";
-import type { BrowserProfile, CamoufoxConfig } from "@/types";
+import type { BrowserProfile, CamoufoxConfig, GroupWithCount } from "@/types";
 
 type BrowserTypeString =
   | "mullvad-browser"
@@ -66,6 +55,15 @@ export default function Home() {
     useState(false);
   const [camoufoxConfigDialogOpen, setCamoufoxConfigDialogOpen] =
     useState(false);
+  const [groupManagementDialogOpen, setGroupManagementDialogOpen] =
+    useState(false);
+  const [groupAssignmentDialogOpen, setGroupAssignmentDialogOpen] =
+    useState(false);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [selectedProfilesForGroup, setSelectedProfilesForGroup] = useState<
+    string[]
+  >([]);
+  const [selectedProfiles, setSelectedProfiles] = useState<string[]>([]);
   const [pendingUrls, setPendingUrls] = useState<PendingUrl[]>([]);
   const [currentProfileForProxy, setCurrentProfileForProxy] =
     useState<BrowserProfile | null>(null);
@@ -75,11 +73,17 @@ export default function Home() {
     useState<BrowserProfile | null>(null);
   const [hasCheckedStartupPrompt, setHasCheckedStartupPrompt] = useState(false);
   const [permissionDialogOpen, setPermissionDialogOpen] = useState(false);
+  const [groups, setGroups] = useState<GroupWithCount[]>([]);
+  const [areGroupsLoading, setGroupsLoading] = useState(true);
   const [currentPermissionType, setCurrentPermissionType] =
     useState<PermissionType>("microphone");
-  const [proxyDataReloadTrigger, setProxyDataReloadTrigger] = useState(0);
   const { isMicrophoneAccessGranted, isCameraAccessGranted, isInitialized } =
     usePermissions();
+
+  const handleSelectGroup = useCallback((groupId: string | null) => {
+    setSelectedGroupId(groupId);
+    setSelectedProfiles([]);
+  }, []);
 
   // Check for missing binaries and offer to download them
   const checkMissingBinaries = useCallback(async () => {
@@ -150,11 +154,6 @@ export default function Home() {
       setError(`Failed to load profiles: ${JSON.stringify(err)}`);
     }
   }, [checkMissingBinaries]);
-
-  // Trigger proxy data reload in ProfilesDataTable
-  const triggerProxyDataReload = useCallback(() => {
-    setProxyDataReloadTrigger((prev) => prev + 1);
-  }, []);
 
   const [processingUrls, setProcessingUrls] = useState<Set<string>>(new Set());
 
@@ -379,13 +378,12 @@ export default function Home() {
         }
         await loadProfiles();
         // Trigger proxy data reload in the table
-        triggerProxyDataReload();
       } catch (err: unknown) {
         console.error("Failed to update proxy settings:", err);
         setError(`Failed to update proxy settings: ${JSON.stringify(err)}`);
       }
     },
-    [currentProfileForProxy, loadProfiles, triggerProxyDataReload],
+    [currentProfileForProxy, loadProfiles],
   );
 
   const handleCreateProfile = useCallback(
@@ -414,7 +412,6 @@ export default function Home() {
 
         await loadProfiles();
         // Trigger proxy data reload in the table
-        triggerProxyDataReload();
       } catch (error) {
         setError(
           `Failed to create profile: ${
@@ -424,7 +421,7 @@ export default function Home() {
         throw error;
       }
     },
-    [loadProfiles, triggerProxyDataReload],
+    [loadProfiles],
   );
 
   const [runningProfiles, setRunningProfiles] = useState<Set<string>>(
@@ -563,8 +560,71 @@ export default function Home() {
     [loadProfiles],
   );
 
+  const loadGroups = useCallback(async () => {
+    setGroupsLoading(true);
+    try {
+      const groupsWithCounts = await invoke<GroupWithCount[]>(
+        "get_groups_with_profile_counts",
+      );
+      setGroups(groupsWithCounts);
+    } catch (err) {
+      console.error("Failed to load groups with counts:", err);
+      setGroups([]);
+    } finally {
+      setGroupsLoading(false);
+    }
+  }, []);
+
+  const handleDeleteSelectedProfiles = useCallback(
+    async (profileNames: string[]) => {
+      setError(null);
+      try {
+        await invoke("delete_selected_profiles", { profileNames });
+        await loadProfiles();
+        await loadGroups();
+      } catch (err: unknown) {
+        console.error("Failed to delete selected profiles:", err);
+        setError(`Failed to delete selected profiles: ${JSON.stringify(err)}`);
+      }
+    },
+    [loadProfiles, loadGroups],
+  );
+
+  const handleAssignProfilesToGroup = useCallback((profileNames: string[]) => {
+    setSelectedProfilesForGroup(profileNames);
+    setGroupAssignmentDialogOpen(true);
+  }, []);
+
+  const handleBulkDelete = useCallback(async () => {
+    if (selectedProfiles.length === 0) return;
+
+    try {
+      await invoke("delete_selected_profiles", {
+        profileNames: selectedProfiles,
+      });
+      await loadProfiles();
+      setSelectedProfiles([]);
+    } catch (error) {
+      console.error("Failed to delete selected profiles:", error);
+    }
+  }, [selectedProfiles, loadProfiles]);
+
+  const handleBulkGroupAssignment = useCallback(() => {
+    if (selectedProfiles.length === 0) return;
+    handleAssignProfilesToGroup(selectedProfiles);
+    setSelectedProfiles([]);
+  }, [selectedProfiles, handleAssignProfilesToGroup]);
+
+  const handleGroupAssignmentComplete = useCallback(async () => {
+    await loadProfiles();
+    await loadGroups();
+    setGroupAssignmentDialogOpen(false);
+    setSelectedProfilesForGroup([]);
+  }, [loadProfiles, loadGroups]);
+
   useEffect(() => {
     void loadProfilesWithUpdateCheck();
+    void loadGroups();
 
     // Check for startup default browser prompt
     void checkStartupPrompt();
@@ -592,6 +652,7 @@ export default function Home() {
     checkStartupPrompt,
     listenForUrlEvents,
     checkCurrentUrl,
+    loadGroups,
   ]);
 
   useEffect(() => {
@@ -629,66 +690,26 @@ export default function Home() {
   return (
     <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen gap-8 font-[family-name:var(--font-geist-sans)]  bg-white dark:bg-black">
       <main className="flex flex-col row-start-2 gap-8 items-center w-full max-w-3xl">
-        <Card className="w-full">
+        <Card className="w-full gap-2">
           <CardHeader>
-            <div className="flex justify-between items-center">
-              <CardTitle>Profiles</CardTitle>
-              <div className="flex gap-2 items-center">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="flex gap-2 items-center"
-                    >
-                      <GoKebabHorizontal className="w-4 h-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      onClick={() => {
-                        setSettingsDialogOpen(true);
-                      }}
-                    >
-                      <GoGear className="mr-2 w-4 h-4" />
-                      Settings
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => {
-                        setProxyManagementDialogOpen(true);
-                      }}
-                    >
-                      <FiWifi className="mr-2 w-4 h-4" />
-                      Proxies
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => {
-                        setImportProfileDialogOpen(true);
-                      }}
-                    >
-                      <FaDownload className="mr-2 w-4 h-4" />
-                      Import Profile
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        setCreateProfileDialogOpen(true);
-                      }}
-                      className="flex gap-2 items-center"
-                    >
-                      <GoPlus className="w-4 h-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Create a new profile</TooltipContent>
-                </Tooltip>
-              </div>
-            </div>
+            <HomeHeader
+              selectedProfiles={selectedProfiles}
+              onBulkDelete={handleBulkDelete}
+              onBulkGroupAssignment={handleBulkGroupAssignment}
+              onCreateProfileDialogOpen={setCreateProfileDialogOpen}
+              onGroupManagementDialogOpen={setGroupManagementDialogOpen}
+              onImportProfileDialogOpen={setImportProfileDialogOpen}
+              onProxyManagementDialogOpen={setProxyManagementDialogOpen}
+              onSettingsDialogOpen={setSettingsDialogOpen}
+            />
           </CardHeader>
           <CardContent>
+            <GroupBadges
+              selectedGroupId={selectedGroupId}
+              onGroupSelect={handleSelectGroup}
+              groups={groups}
+              isLoading={areGroupsLoading}
+            />
             <ProfilesDataTable
               data={profiles}
               onLaunchProfile={launchProfile}
@@ -700,9 +721,11 @@ export default function Home() {
               onConfigureCamoufox={handleConfigureCamoufox}
               runningProfiles={runningProfiles}
               isUpdating={isUpdating}
-              onReloadProxyData={
-                proxyDataReloadTrigger > 0 ? triggerProxyDataReload : undefined
-              }
+              onDeleteSelectedProfiles={handleDeleteSelectedProfiles}
+              onAssignProfilesToGroup={handleAssignProfilesToGroup}
+              selectedGroupId={selectedGroupId}
+              selectedProfiles={selectedProfiles}
+              onSelectedProfilesChange={setSelectedProfiles}
             />
           </CardContent>
         </Card>
@@ -787,6 +810,22 @@ export default function Home() {
         }}
         profile={currentProfileForCamoufoxConfig}
         onSave={handleSaveCamoufoxConfig}
+      />
+
+      <GroupManagementDialog
+        isOpen={groupManagementDialogOpen}
+        onClose={() => {
+          setGroupManagementDialogOpen(false);
+        }}
+      />
+
+      <GroupAssignmentDialog
+        isOpen={groupAssignmentDialogOpen}
+        onClose={() => {
+          setGroupAssignmentDialogOpen(false);
+        }}
+        selectedProfiles={selectedProfilesForGroup}
+        onAssignmentComplete={handleGroupAssignmentComplete}
       />
     </div>
   );

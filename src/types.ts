@@ -21,12 +21,24 @@ export interface BrowserProfile {
   last_launch?: number;
   release_type: string; // "stable" or "nightly"
   camoufox_config?: CamoufoxConfig; // Camoufox configuration
+  group_id?: string; // Reference to profile group
 }
 
 export interface StoredProxy {
   id: string;
   name: string;
   proxy_settings: ProxySettings;
+}
+
+export interface ProfileGroup {
+  id: string;
+  name: string;
+}
+
+export interface GroupWithCount {
+  id: string;
+  name: string;
+  count: number;
 }
 
 export interface DetectedProfile {

@@ -19,6 +19,7 @@ mod download;
 mod downloaded_browsers;
 mod extraction;
 mod geoip_downloader;
+mod group_manager;
 
 mod profile_importer;
 mod proxy_manager;
@@ -65,6 +66,11 @@ use profile_importer::{detect_existing_profiles, import_browser_profile};
 use theme_detector::get_system_theme;
 
 use system_utils::{get_system_locale, get_system_timezone};
+
+use group_manager::{
+  assign_profiles_to_group, create_profile_group, delete_profile_group, delete_selected_profiles,
+  get_groups_with_profile_counts, get_profile_groups, update_profile_group,
+};
 
 // Trait to extend WebviewWindow with transparent titlebar functionality
 pub trait WindowExt {
@@ -434,6 +440,13 @@ pub fn run() {
       update_camoufox_config,
       get_system_locale,
       get_system_timezone,
+      get_profile_groups,
+      get_groups_with_profile_counts,
+      create_profile_group,
+      update_profile_group,
+      delete_profile_group,
+      assign_profiles_to_group,
+      delete_selected_profiles,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

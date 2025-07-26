@@ -34,6 +34,8 @@ pub struct BrowserProfile {
   pub release_type: String, // "stable" or "nightly"
   #[serde(default)]
   pub camoufox_config: Option<CamoufoxConfig>, // Camoufox configuration
+  #[serde(default)]
+  pub group_id: Option<String>, // Reference to profile group
 }
 
 fn default_release_type() -> String {
@@ -1352,6 +1354,28 @@ impl BrowserRunner {
     proxy_id: Option<String>,
     camoufox_config: Option<CamoufoxConfig>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+    self.create_profile_with_group(
+      name,
+      browser,
+      version,
+      release_type,
+      proxy_id,
+      camoufox_config,
+      None,
+    )
+  }
+
+  #[allow(clippy::too_many_arguments)]
+  pub fn create_profile_with_group(
+    &self,
+    name: &str,
+    browser: &str,
+    version: &str,
+    release_type: &str,
+    proxy_id: Option<String>,
+    camoufox_config: Option<CamoufoxConfig>,
+    group_id: Option<String>,
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
     println!("Attempting to create profile: {name}");
 
     // Check if a profile with this name already exists (case insensitive)
@@ -1384,6 +1408,7 @@ impl BrowserRunner {
       last_launch: None,
       release_type: release_type.to_string(),
       camoufox_config: camoufox_config.clone(),
+      group_id: group_id.clone(),
     };
 
     // Save profile info
@@ -1612,6 +1637,73 @@ impl BrowserRunner {
     registry.save()?;
 
     Ok(cleaned_up)
+  }
+
+  pub fn assign_profiles_to_group(
+    &self,
+    profile_names: Vec<String>,
+    group_id: Option<String>,
+  ) -> Result<(), Box<dyn std::error::Error>> {
+    let profiles = self.list_profiles()?;
+
+    for profile_name in profile_names {
+      let mut profile = profiles
+        .iter()
+        .find(|p| p.name == profile_name)
+        .ok_or_else(|| format!("Profile '{profile_name}' not found"))?
+        .clone();
+
+      // Check if browser is running
+      if profile.process_id.is_some() {
+        return Err(format!(
+          "Cannot modify group for profile '{profile_name}' while browser is running. Please stop the browser first."
+        ).into());
+      }
+
+      profile.group_id = group_id.clone();
+      self.save_profile(&profile)?;
+    }
+
+    Ok(())
+  }
+
+  pub fn delete_multiple_profiles(
+    &self,
+    profile_names: Vec<String>,
+  ) -> Result<(), Box<dyn std::error::Error>> {
+    let profiles = self.list_profiles()?;
+
+    for profile_name in profile_names {
+      let profile = profiles
+        .iter()
+        .find(|p| p.name == profile_name)
+        .ok_or_else(|| format!("Profile '{profile_name}' not found"))?;
+
+      // Check if browser is running
+      if profile.process_id.is_some() {
+        return Err(
+          format!(
+            "Cannot delete profile '{profile_name}' while browser is running. Please stop the browser first."
+          )
+          .into(),
+        );
+      }
+
+      // Delete the profile
+      let profiles_dir = self.get_profiles_dir();
+      let profile_uuid_dir = profiles_dir.join(profile.id.to_string());
+
+      if profile_uuid_dir.exists() {
+        std::fs::remove_dir_all(&profile_uuid_dir)?;
+      }
+    }
+
+    // Always perform cleanup after profile deletion to remove unused binaries
+    if let Err(e) = self.cleanup_unused_binaries_internal() {
+      println!("Warning: Failed to cleanup unused binaries: {e}");
+    }
+
+    Ok(())
   }
 
   fn get_common_firefox_preferences(&self) -> Vec<String> {

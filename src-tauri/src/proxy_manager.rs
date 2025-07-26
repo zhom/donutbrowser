@@ -412,26 +412,6 @@ impl ProxyManager {
     Ok(())
   }
 
-  // Get proxy settings for a browser process ID
-  #[allow(dead_code)]
-  pub fn get_proxy_settings(&self, browser_pid: u32) -> Option<ProxySettings> {
-    let proxies = self.active_proxies.lock().unwrap();
-    proxies.get(&browser_pid).map(|proxy| ProxySettings {
-      proxy_type: "http".to_string(),
-      host: "127.0.0.1".to_string(), // Use 127.0.0.1 instead of localhost for better compatibility
-      port: proxy.local_port,
-      username: None,
-      password: None,
-    })
-  }
-
-  // Get stored proxy info for a profile
-  #[allow(dead_code)]
-  pub fn get_profile_proxy_info(&self, profile_name: &str) -> Option<ProxySettings> {
-    let profile_proxies = self.profile_proxies.lock().unwrap();
-    profile_proxies.get(profile_name).cloned()
-  }
-
   // Update the PID mapping for an existing proxy
   pub fn update_proxy_pid(&self, old_pid: u32, new_pid: u32) -> Result<(), String> {
     let mut proxies = self.active_proxies.lock().unwrap();
@@ -530,70 +510,6 @@ mod tests {
     Ok(nodecar_binary)
   }
 
-  #[tokio::test]
-  async fn test_proxy_manager_profile_persistence() {
-    let proxy_manager = ProxyManager::new();
-
-    let proxy_settings = ProxySettings {
-      proxy_type: "socks5".to_string(),
-      host: "127.0.0.1".to_string(),
-      port: 1080,
-      username: None,
-      password: None,
-    };
-
-    // Test profile proxy info storage
-    {
-      let mut profile_proxies = proxy_manager.profile_proxies.lock().unwrap();
-      profile_proxies.insert("test_profile".to_string(), proxy_settings.clone());
-    }
-
-    // Test retrieval
-    let retrieved = proxy_manager.get_profile_proxy_info("test_profile");
-    assert!(retrieved.is_some());
-    let retrieved = retrieved.unwrap();
-    assert_eq!(retrieved.proxy_type, "socks5");
-    assert_eq!(retrieved.host, "127.0.0.1");
-    assert_eq!(retrieved.port, 1080);
-
-    // Test non-existent profile
-    let non_existent = proxy_manager.get_profile_proxy_info("non_existent");
-    assert!(non_existent.is_none());
-  }
-
-  #[tokio::test]
-  async fn test_proxy_manager_active_proxy_tracking() {
-    let proxy_manager = ProxyManager::new();
-
-    let proxy_info = ProxyInfo {
-      id: "test_proxy_123".to_string(),
-      local_url: "http://localhost:8080".to_string(),
-      upstream_host: "proxy.example.com".to_string(),
-      upstream_port: 3128,
-      upstream_type: "http".to_string(),
-      local_port: 8080,
-    };
-
-    let browser_pid = 54321u32;
-
-    // Add active proxy
-    {
-      let mut active_proxies = proxy_manager.active_proxies.lock().unwrap();
-      active_proxies.insert(browser_pid, proxy_info.clone());
-    }
-
-    // Test retrieval of proxy settings
-    let proxy_settings = proxy_manager.get_proxy_settings(browser_pid);
-    assert!(proxy_settings.is_some());
-    let settings = proxy_settings.unwrap();
-    assert!(settings.host == "127.0.0.1");
-    assert!(settings.port == 8080);
-
-    // Test non-existent browser PID
-    let non_existent = proxy_manager.get_proxy_settings(99999);
-    assert!(non_existent.is_none());
-  }
-
   #[test]
   fn test_proxy_settings_validation() {
     // Test valid proxy settings
@@ -646,10 +562,6 @@ mod tests {
           let mut active_proxies = pm.active_proxies.lock().unwrap();
           active_proxies.insert(browser_pid, proxy_info);
         }
-
-        // Read proxy
-        let settings = pm.get_proxy_settings(browser_pid);
-        assert!(settings.is_some());
 
         browser_pid
       });

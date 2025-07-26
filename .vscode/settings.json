@@ -1,5 +1,6 @@
 {
   "cSpell.words": [
+    "adwaita",
     "ahooks",
     "akhilmhdh",
     "appimage",
@@ -9,7 +10,9 @@
     "autoconfig",
     "autologin",
     "biomejs",
+    "breezedark",
     "browserforge",
+    "busctl",
     "CAMOU",
     "camoufox",
     "cdylib",
@@ -26,6 +29,7 @@
     "dataclasses",
     "datareporting",
     "datas",
+    "dconf",
     "devedition",
     "doctest",
     "doesn",
@@ -54,8 +58,10 @@
     "idletime",
     "idna",
     "Inno",
+    "kdeglobals",
     "keras",
     "KHTML",
+    "kreadconfig",
     "launchservices",
     "letterboxing",
     "libatk",
@@ -157,6 +163,8 @@
     "winreg",
     "wiremock",
     "xattr",
+    "xfconf",
+    "xsettings",
     "zhom",
     "zoneinfo"
   ]

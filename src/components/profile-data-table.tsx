@@ -10,9 +10,11 @@ import {
 } from "@tanstack/react-table";
 import { invoke } from "@tauri-apps/api/core";
 import * as React from "react";
+import { CiCircleCheck } from "react-icons/ci";
 import { IoEllipsisHorizontal } from "react-icons/io5";
 import { LuChevronDown, LuChevronUp } from "react-icons/lu";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -67,6 +69,11 @@ interface ProfilesDataTableProps {
   runningProfiles: Set<string>;
   isUpdating?: (browser: string) => boolean;
   onReloadProxyData?: () => void | Promise<void>;
+  onDeleteSelectedProfiles?: (profileNames: string[]) => Promise<void>;
+  onAssignProfilesToGroup?: (profileNames: string[]) => void;
+  selectedGroupId?: string | null;
+  selectedProfiles?: string[];
+  onSelectedProfilesChange?: (profiles: string[]) => void;
 }
 
 export function ProfilesDataTable({
@@ -80,7 +87,11 @@ export function ProfilesDataTable({
   onConfigureCamoufox,
   runningProfiles,
   isUpdating = () => false,
-  onReloadProxyData,
+  onDeleteSelectedProfiles: _onDeleteSelectedProfiles,
+  onAssignProfilesToGroup,
+  selectedGroupId,
+  selectedProfiles: externalSelectedProfiles = [],
+  onSelectedProfilesChange,
 }: ProfilesDataTableProps) {
   const { getTableSorting, updateSorting, isLoaded } = useTableSorting();
   const [sorting, setSorting] = React.useState<SortingState>([]);
@@ -95,6 +106,10 @@ export function ProfilesDataTable({
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
 
   const [storedProxies, setStoredProxies] = React.useState<StoredProxy[]>([]);
+  const [selectedProfiles, setSelectedProfiles] = React.useState<Set<string>>(
+    new Set(externalSelectedProfiles),
+  );
+  const [showCheckboxes, setShowCheckboxes] = React.useState(false);
 
   // Helper function to check if a profile has a proxy
   const hasProxy = React.useCallback(
@@ -125,8 +140,21 @@ export function ProfilesDataTable({
     [storedProxies],
   );
 
+  // Filter data by selected group
+  const filteredData = React.useMemo(() => {
+    if (!selectedGroupId) return data;
+    if (selectedGroupId === "default") {
+      return data.filter((profile) => !profile.group_id);
+    }
+    return data.filter((profile) => profile.group_id === selectedGroupId);
+  }, [data, selectedGroupId]);
+
   // Use shared browser state hook
-  const browserState = useBrowserState(data, runningProfiles, isUpdating);
+  const browserState = useBrowserState(
+    filteredData,
+    runningProfiles,
+    isUpdating,
+  );
 
   // Load stored proxies
   const loadStoredProxies = React.useCallback(async () => {
@@ -144,12 +172,12 @@ export function ProfilesDataTable({
     }
   }, [browserState.isClient, loadStoredProxies]);
 
-  // Reload proxy data when requested from parent
+  // Sync external selected profiles with internal state
   React.useEffect(() => {
-    if (onReloadProxyData) {
-      void loadStoredProxies();
-    }
-  }, [onReloadProxyData, loadStoredProxies]);
+    const newSet = new Set(externalSelectedProfiles);
+    setSelectedProfiles(newSet);
+    setShowCheckboxes(newSet.size > 0);
+  }, [externalSelectedProfiles]);
 
   // Update local sorting state when settings are loaded
   React.useEffect(() => {
@@ -203,8 +231,139 @@ export function ProfilesDataTable({
     }
   };
 
+  // Handle icon/checkbox click
+  const handleIconClick = React.useCallback(
+    (profileName: string) => {
+      setShowCheckboxes(true);
+      setSelectedProfiles((prev) => {
+        const newSet = new Set(prev);
+        if (newSet.has(profileName)) {
+          newSet.delete(profileName);
+        } else {
+          newSet.add(profileName);
+        }
+
+        // Hide checkboxes if no profiles are selected
+        if (newSet.size === 0) {
+          setShowCheckboxes(false);
+        }
+
+        // Notify parent component
+        if (onSelectedProfilesChange) {
+          onSelectedProfilesChange(Array.from(newSet));
+        }
+
+        return newSet;
+      });
+    },
+    [onSelectedProfilesChange],
+  );
+
+  // Handle checkbox change
+  const handleCheckboxChange = React.useCallback(
+    (profileName: string, checked: boolean) => {
+      setSelectedProfiles((prev) => {
+        const newSet = new Set(prev);
+        if (checked) {
+          newSet.add(profileName);
+        } else {
+          newSet.delete(profileName);
+        }
+
+        // Hide checkboxes if no profiles are selected
+        if (newSet.size === 0) {
+          setShowCheckboxes(false);
+        }
+
+        // Notify parent component
+        if (onSelectedProfilesChange) {
+          onSelectedProfilesChange(Array.from(newSet));
+        }
+
+        return newSet;
+      });
+    },
+    [onSelectedProfilesChange],
+  );
+
+  // Handle select all checkbox
+  const handleToggleAll = React.useCallback(
+    (checked: boolean) => {
+      const newSet = checked
+        ? new Set(filteredData.map((profile) => profile.name))
+        : new Set<string>();
+
+      setSelectedProfiles(newSet);
+      setShowCheckboxes(checked);
+
+      // Notify parent component
+      if (onSelectedProfilesChange) {
+        onSelectedProfilesChange(Array.from(newSet));
+      }
+    },
+    [filteredData, onSelectedProfilesChange],
+  );
+
   const columns: ColumnDef<BrowserProfile>[] = React.useMemo(
     () => [
+      {
+        id: "select",
+        header: () => (
+          <span>
+            <Checkbox
+              checked={
+                selectedProfiles.size === filteredData.length &&
+                filteredData.length !== 0
+              }
+              onCheckedChange={(value) => handleToggleAll(!!value)}
+              aria-label="Select all"
+              className="cursor-pointer"
+            />
+          </span>
+        ),
+        cell: ({ row }) => {
+          const profile = row.original;
+          const browser = profile.browser;
+          const IconComponent = getBrowserIcon(browser);
+          const isSelected = selectedProfiles.has(profile.name);
+
+          if (showCheckboxes || isSelected) {
+            return (
+              <span className="w-4 h-4 flex items-center justify-center">
+                <Checkbox
+                  checked={isSelected}
+                  onCheckedChange={(value) =>
+                    handleCheckboxChange(profile.name, !!value)
+                  }
+                  aria-label="Select row"
+                  className="w-4 h-4"
+                />
+              </span>
+            );
+          }
+
+          return (
+            <span className="relative flex items-center justify-center w-4 h-4">
+              <button
+                type="button"
+                className="flex items-center justify-center cursor-pointer border-none p-0"
+                onClick={() => handleIconClick(profile.name)}
+                aria-label="Select profile"
+              >
+                <span className="w-4 h-4 group">
+                  {IconComponent && (
+                    <IconComponent className="w-4 h-4 group-hover:hidden" />
+                  )}
+                  <span className="peer border-input dark:bg-input/30 dark:data-[state=checked]:bg-primary size-4 shrink-0 rounded-[4px] border shadow-xs transition-shadow outline-none w-4 h-4 hidden group-hover:block pointer-events-none items-center justify-center duration-200" />
+                </span>
+              </button>
+            </span>
+          );
+        },
+        enableSorting: false,
+        enableHiding: false,
+        size: 40,
+      },
       {
         id: "actions",
         cell: ({ row }) => {
@@ -289,10 +448,8 @@ export function ProfilesDataTable({
         },
         cell: ({ row }) => {
           const browser: string = row.getValue("browser");
-          const IconComponent = getBrowserIcon(browser);
           return (
-            <div className="flex items-center gap-2">
-              {IconComponent && <IconComponent className="w-4 h-4" />}
+            <div className="flex items-center">
               <span>{getBrowserDisplayName(browser)}</span>
             </div>
           );
@@ -358,21 +515,21 @@ export function ProfilesDataTable({
             <div className="flex items-center gap-2">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="inline-flex">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onProxySettings(profile)}
-                      disabled={
-                        !browserState.isClient ||
-                        profile.browser === "tor-browser"
-                      }
-                      className={
-                        profile.browser === "tor-browser" ? "opacity-50" : ""
-                      }
-                    >
-                      {profileHasProxy ? "Configured" : "Configure"}
-                    </Button>
+                  <span className="flex gap-2 items-center">
+                    {profileHasProxy && (
+                      <CiCircleCheck className="w-4 h-4 text-green-500" />
+                    )}
+                    {proxyDisplayName.length > 10 ? (
+                      <span className="text-sm truncate text-muted-foreground">
+                        {proxyDisplayName.slice(0, 10)}...
+                      </span>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">
+                        {profile.browser === "tor-browser"
+                          ? "Not supported"
+                          : proxyDisplayName}
+                      </span>
+                    )}
                   </span>
                 </TooltipTrigger>
                 <TooltipContent>{tooltipText}</TooltipContent>
@@ -413,6 +570,16 @@ export function ProfilesDataTable({
                     disabled={!browserState.isClient || isBrowserUpdating}
                   >
                     Configure Proxy
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      if (onAssignProfilesToGroup) {
+                        onAssignProfilesToGroup([profile.name]);
+                      }
+                    }}
+                    disabled={!browserState.isClient || isBrowserUpdating}
+                  >
+                    Assign to Group
                   </DropdownMenuItem>
                   {profile.browser === "camoufox" && onConfigureCamoufox && (
                     <DropdownMenuItem
@@ -470,6 +637,11 @@ export function ProfilesDataTable({
       },
     ],
     [
+      showCheckboxes,
+      selectedProfiles,
+      handleToggleAll,
+      handleCheckboxChange,
+      handleIconClick,
       runningProfiles,
       browserState,
       hasProxy,
@@ -480,12 +652,14 @@ export function ProfilesDataTable({
       onKillProfile,
       onConfigureCamoufox,
       onChangeVersion,
+      onAssignProfilesToGroup,
       isUpdating,
+      filteredData.length,
     ],
   );
 
   const table = useReactTable({
-    data,
+    data: filteredData,
     columns,
     state: {
       sorting,
@@ -502,7 +676,7 @@ export function ProfilesDataTable({
       <ScrollArea
         className={cn(
           "rounded-md border",
-          platform === "macos" ? "h-[380px]" : "h-[320px]",
+          platform === "macos" ? "h-[340px]" : "h-[280px]",
         )}
       >
         <Table>
@@ -530,6 +704,7 @@ export function ProfilesDataTable({
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
+                  className="hover:bg-accent/50"
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
