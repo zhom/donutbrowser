@@ -55,7 +55,7 @@
     "tauri-plugin-macos-permissions-api": "^2.3.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.1.1",
+    "@biomejs/biome": "2.1.2",
     "@tailwindcss/postcss": "^4.1.11",
     "@tauri-apps/cli": "^2.6.2",
     "@types/node": "^24.0.13",
