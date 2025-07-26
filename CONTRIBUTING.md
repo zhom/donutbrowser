@@ -26,6 +26,7 @@ Ensure you have the following dependencies installed:
 - Node.js (see `.node-version` for exact version)
 - pnpm package manager
 - Latest Rust and Cargo toolchain
+- [Banderole](https://github.com/zhom/banderole)
 - [Tauri prerequisites guide](https://v2.tauri.app/start/prerequisites/).
 
 ## Run Locally
@@ -46,12 +47,13 @@ After having the above dependencies installed, proceed through the following ste
    pnpm install
    ```
 
-4. **Install nodecar dependencies**
+4. **Build nodecar**
+
+   Building nodecar requires you to have `banderole` installed.
 
    ```bash
    cd nodecar
-   pnpm install --frozen-lockfile
-   cd ..
+   pnpm build
    ```
 
 5. **Start the development server**
@@ -105,7 +107,6 @@ Make sure the build completes successfully without errors.
 ## Testing
 
 - Always test your changes on the target platform
-- Test both development and production builds
 - Verify that existing functionality still works
 - Add tests for new features when possible
 
@@ -155,7 +156,7 @@ Donut Browser is built with:
 
 - **Frontend**: Next.js React application
 - **Backend**: Tauri (Rust) for native functionality
-- **Node.js Sidecar**: `nodecar` binary for proxy support
+- **Node.js Sidecar**: `nodecar` binary for access to JavaScript ecosystem
 - **Build System**: GitHub Actions for CI/CD
 
 Understanding this architecture will help you contribute more effectively.
