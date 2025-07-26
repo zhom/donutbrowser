@@ -1638,12 +1638,13 @@ impl BrowserRunner {
     // Get running browser versions (only running profiles)
     let running_versions = registry.get_running_browser_versions(&profiles);
 
-    // Cleanup unused binaries (but keep running ones)
-    let cleaned_up = registry.cleanup_unused_binaries(&active_versions, &running_versions)?;
+    // Get binaries directory
+    let binaries_dir = self.get_binaries_dir();
 
-    // Save updated registry
-    registry.save()?;
+    // Use comprehensive cleanup that syncs registry with disk and removes unused binaries
+    let cleaned_up = registry.comprehensive_cleanup(&binaries_dir, &active_versions, &running_versions)?;
 
+    // Registry is already saved by comprehensive_cleanup
     Ok(cleaned_up)
   }
 

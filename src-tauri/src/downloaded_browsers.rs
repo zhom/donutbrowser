@@ -259,6 +259,129 @@ impl DownloadedBrowsersRegistry {
       .map(|profile| (profile.browser.clone(), profile.version.clone()))
       .collect()
   }
+
+  /// Scan the binaries directory and sync with registry
+  /// This ensures the registry reflects what's actually on disk
+  pub fn sync_with_binaries_directory(
+    &mut self,
+    binaries_dir: &std::path::Path,
+  ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    let mut changes = Vec::new();
+    
+    if !binaries_dir.exists() {
+      return Ok(changes);
+    }
+
+    // Scan for actual browser directories
+    for browser_entry in fs::read_dir(binaries_dir)? {
+      let browser_entry = browser_entry?;
+      let browser_path = browser_entry.path();
+      
+      if !browser_path.is_dir() {
+        continue;
+      }
+      
+      let browser_name = browser_path.file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("");
+      
+      if browser_name.is_empty() || browser_name.starts_with('.') {
+        continue;
+      }
+
+      // Scan for version directories within this browser
+      for version_entry in fs::read_dir(&browser_path)? {
+        let version_entry = version_entry?;
+        let version_path = version_entry.path();
+        
+        if !version_path.is_dir() {
+          continue;
+        }
+        
+        let version_name = version_path.file_name()
+          .and_then(|n| n.to_str())
+          .unwrap_or("");
+        
+        if version_name.is_empty() || version_name.starts_with('.') {
+          continue;
+        }
+
+        // Check if this browser/version is already in registry
+        if !self.is_browser_downloaded(browser_name, version_name) {
+          // Add to registry
+          let info = DownloadedBrowserInfo {
+            browser: browser_name.to_string(),
+            version: version_name.to_string(),
+            file_path: version_path.clone(),
+          };
+          self.add_browser(info);
+          changes.push(format!("Added {browser_name} {version_name} to registry"));
+        }
+      }
+    }
+    
+    if !changes.is_empty() {
+      self.save()?;
+    }
+    
+    Ok(changes)
+  }
+
+  /// Comprehensive cleanup that removes unused binaries and syncs registry
+  pub fn comprehensive_cleanup(
+    &mut self,
+    binaries_dir: &std::path::Path,
+    active_profiles: &[(String, String)],
+    running_profiles: &[(String, String)],
+  ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    let mut cleanup_results = Vec::new();
+    
+    // First, sync registry with actual binaries on disk
+    let sync_results = self.sync_with_binaries_directory(binaries_dir)?;
+    cleanup_results.extend(sync_results);
+    
+    // Then perform the regular cleanup
+    let regular_cleanup = self.cleanup_unused_binaries(active_profiles, running_profiles)?;
+    cleanup_results.extend(regular_cleanup);
+    
+    // Finally, verify and cleanup stale entries
+    let stale_cleanup = self.verify_and_cleanup_stale_entries_simple(binaries_dir)?;
+    cleanup_results.extend(stale_cleanup);
+    
+    if !cleanup_results.is_empty() {
+      self.save()?;
+    }
+    
+    Ok(cleanup_results)
+  }
+
+  /// Simplified version of verify_and_cleanup_stale_entries that doesn't need BrowserRunner
+  pub fn verify_and_cleanup_stale_entries_simple(
+    &mut self,
+    binaries_dir: &std::path::Path,
+  ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    let mut cleaned_up = Vec::new();
+    let mut browsers_to_remove = Vec::new();
+
+    for (browser_str, versions) in &self.browsers {
+      for (version, _info) in versions {
+        // Check if the browser directory actually exists
+        let browser_dir = binaries_dir.join(browser_str).join(version);
+        if !browser_dir.exists() {
+          browsers_to_remove.push((browser_str.clone(), version.clone()));
+        }
+      }
+    }
+
+    // Remove stale entries
+    for (browser_str, version) in browsers_to_remove {
+      if let Some(_removed) = self.remove_browser(&browser_str, &version) {
+        cleaned_up.push(format!("Removed stale registry entry for {browser_str} {version}"));
+      }
+    }
+
+    Ok(cleaned_up)
+  }
 }
 
 #[cfg(test)]
