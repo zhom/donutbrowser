@@ -72,6 +72,8 @@ use group_manager::{
   get_groups_with_profile_counts, get_profile_groups, update_profile_group,
 };
 
+use browser_runner::cleanup_unused_binaries;
+
 // Trait to extend WebviewWindow with transparent titlebar functionality
 pub trait WindowExt {
   #[cfg(target_os = "macos")]
@@ -337,6 +339,22 @@ pub fn run() {
         auto_updater::check_for_updates_with_progress(app_handle_auto_updater).await;
       });
 
+      // Start periodic cleanup task for unused binaries
+      tauri::async_runtime::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(300)); // Every 5 minutes
+
+        loop {
+          interval.tick().await;
+
+          let browser_runner = crate::browser_runner::BrowserRunner::new();
+          if let Err(e) = browser_runner.cleanup_unused_binaries_internal() {
+            eprintln!("Periodic cleanup failed: {e}");
+          } else {
+            println!("Periodic cleanup completed successfully");
+          }
+        }
+      });
+
       let app_handle_update = app.handle().clone();
       tauri::async_runtime::spawn(async move {
         println!("Starting app update check at startup...");
@@ -447,6 +465,7 @@ pub fn run() {
       delete_profile_group,
       assign_profiles_to_group,
       delete_selected_profiles,
+      cleanup_unused_binaries,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

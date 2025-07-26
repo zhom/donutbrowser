@@ -8,13 +8,7 @@ use std::path::PathBuf;
 pub struct DownloadedBrowserInfo {
   pub browser: String,
   pub version: String,
-  pub download_date: u64,
   pub file_path: PathBuf,
-  pub verified: bool,
-  pub actual_version: Option<String>, // For browsers like Chromium where we track the actual version
-  pub file_size: Option<u64>, // For tracking file size changes (useful for rolling releases)
-  #[serde(default)] // Add default value (false) for backwards compatibility
-  pub is_rolling_release: bool, // True for Zen's twilight releases and other rolling releases
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -82,64 +76,37 @@ impl DownloadedBrowsersRegistry {
       .browsers
       .get(browser)
       .and_then(|versions| versions.get(version))
-      .map(|info| info.verified)
-      .unwrap_or(false)
+      .is_some()
   }
 
   pub fn get_downloaded_versions(&self, browser: &str) -> Vec<String> {
     self
       .browsers
       .get(browser)
-      .map(|versions| {
-        versions
-          .iter()
-          .filter(|(_, info)| info.verified)
-          .map(|(version, _)| version.clone())
-          .collect()
-      })
+      .map(|versions| versions.keys().cloned().collect())
       .unwrap_or_default()
   }
 
   pub fn mark_download_started(&mut self, browser: &str, version: &str, file_path: PathBuf) {
-    let is_rolling = Self::is_rolling_release(browser, version);
     let info = DownloadedBrowserInfo {
       browser: browser.to_string(),
       version: version.to_string(),
-      download_date: std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs(),
       file_path,
-      verified: false,
-      actual_version: None,
-      file_size: None,
-      is_rolling_release: is_rolling,
     };
     self.add_browser(info);
   }
 
-  pub fn mark_download_completed_with_actual_version(
-    &mut self,
-    browser: &str,
-    version: &str,
-    actual_version: Option<String>,
-  ) -> Result<(), String> {
-    if let Some(info) = self
+  pub fn mark_download_completed(&mut self, browser: &str, version: &str) -> Result<(), String> {
+    if self
       .browsers
-      .get_mut(browser)
-      .and_then(|versions| versions.get_mut(version))
+      .get(browser)
+      .and_then(|versions| versions.get(version))
+      .is_some()
     {
-      info.verified = true;
-      info.actual_version = actual_version;
       Ok(())
     } else {
       Err(format!("Browser {browser}:{version} not found in registry"))
     }
-  }
-
-  fn is_rolling_release(browser: &str, version: &str) -> bool {
-    // Check if this is a rolling release like twilight
-    browser == "zen" && version.to_lowercase() == "twilight"
   }
 
   pub fn cleanup_failed_download(
@@ -180,32 +147,35 @@ impl DownloadedBrowsersRegistry {
   pub fn cleanup_unused_binaries(
     &mut self,
     active_profiles: &[(String, String)], // (browser, version) pairs
+    running_profiles: &[(String, String)], // (browser, version) pairs for running profiles
   ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
     let active_set: std::collections::HashSet<(String, String)> =
       active_profiles.iter().cloned().collect();
+    let running_set: std::collections::HashSet<(String, String)> =
+      running_profiles.iter().cloned().collect();
     let mut cleaned_up = Vec::new();
 
     // Collect all downloaded browsers that are not in active profiles
     let mut to_remove = Vec::new();
     for (browser, versions) in &self.browsers {
-      for (version, info) in versions {
-        // Only remove verified downloads that are not used by any active profile
-        if info.verified && !active_set.contains(&(browser.clone(), version.clone())) {
-          // Double-check that this browser+version is truly not in use
-          // by looking for exact matches in the active profiles
-          let is_in_use = active_profiles
-            .iter()
-            .any(|(active_browser, active_version)| {
-              active_browser == browser && active_version == version
-            });
+      for version in versions.keys() {
+        let browser_version = (browser.clone(), version.clone());
 
-          if !is_in_use {
-            to_remove.push((browser.clone(), version.clone()));
-            println!("Marking for removal: {browser} {version} (not used by any profile)");
-          } else {
-            println!("Keeping: {browser} {version} (in use by profile)");
-          }
+        // Don't remove if it's used by any active profile
+        if active_set.contains(&browser_version) {
+          println!("Keeping: {browser} {version} (in use by profile)");
+          continue;
         }
+
+        // Don't remove if it's currently running (even if not in active profiles)
+        if running_set.contains(&browser_version) {
+          println!("Keeping: {browser} {version} (currently running)");
+          continue;
+        }
+
+        // Mark for removal
+        to_remove.push(browser_version);
+        println!("Marking for removal: {browser} {version} (not used by any profile)");
       }
     }
 
@@ -277,6 +247,18 @@ impl DownloadedBrowsersRegistry {
 
     Ok(cleaned_up)
   }
+
+  /// Get all browsers and versions that are currently running
+  pub fn get_running_browser_versions(
+    &self,
+    profiles: &[crate::browser_runner::BrowserProfile],
+  ) -> Vec<(String, String)> {
+    profiles
+      .iter()
+      .filter(|profile| profile.process_id.is_some())
+      .map(|profile| (profile.browser.clone(), profile.version.clone()))
+      .collect()
+  }
 }
 
 #[cfg(test)]
@@ -295,12 +277,7 @@ mod tests {
     let info = DownloadedBrowserInfo {
       browser: "firefox".to_string(),
       version: "139.0".to_string(),
-      download_date: 1234567890,
       file_path: PathBuf::from("/test/path"),
-      verified: true,
-      actual_version: None,
-      file_size: None,
-      is_rolling_release: false,
     };
 
     registry.add_browser(info.clone());
@@ -317,34 +294,19 @@ mod tests {
     let info1 = DownloadedBrowserInfo {
       browser: "firefox".to_string(),
       version: "139.0".to_string(),
-      download_date: 1234567890,
       file_path: PathBuf::from("/test/path1"),
-      verified: true,
-      actual_version: None,
-      file_size: None,
-      is_rolling_release: false,
     };
 
     let info2 = DownloadedBrowserInfo {
       browser: "firefox".to_string(),
       version: "140.0".to_string(),
-      download_date: 1234567891,
       file_path: PathBuf::from("/test/path2"),
-      verified: false, // Not verified, should not be included
-      actual_version: None,
-      file_size: None,
-      is_rolling_release: false,
     };
 
     let info3 = DownloadedBrowserInfo {
       browser: "firefox".to_string(),
       version: "141.0".to_string(),
-      download_date: 1234567892,
       file_path: PathBuf::from("/test/path3"),
-      verified: true,
-      actual_version: None,
-      file_size: None,
-      is_rolling_release: false,
     };
 
     registry.add_browser(info1);
@@ -352,10 +314,10 @@ mod tests {
     registry.add_browser(info3);
 
     let versions = registry.get_downloaded_versions("firefox");
-    assert_eq!(versions.len(), 2);
+    assert_eq!(versions.len(), 3);
     assert!(versions.contains(&"139.0".to_string()));
+    assert!(versions.contains(&"140.0".to_string()));
     assert!(versions.contains(&"141.0".to_string()));
-    assert!(!versions.contains(&"140.0".to_string()));
   }
 
   #[test]
@@ -365,15 +327,15 @@ mod tests {
     // Mark download started
     registry.mark_download_started("firefox", "139.0", PathBuf::from("/test/path"));
 
-    // Should not be considered downloaded yet
-    assert!(!registry.is_browser_downloaded("firefox", "139.0"));
+    // Should be considered downloaded immediately
+    assert!(registry.is_browser_downloaded("firefox", "139.0"));
 
     // Mark as completed
     registry
-      .mark_download_completed_with_actual_version("firefox", "139.0", Some("139.0".to_string()))
+      .mark_download_completed("firefox", "139.0")
       .unwrap();
 
-    // Now should be considered downloaded
+    // Should still be considered downloaded
     assert!(registry.is_browser_downloaded("firefox", "139.0"));
   }
 
@@ -383,12 +345,7 @@ mod tests {
     let info = DownloadedBrowserInfo {
       browser: "firefox".to_string(),
       version: "139.0".to_string(),
-      download_date: 1234567890,
       file_path: PathBuf::from("/test/path"),
-      verified: true,
-      actual_version: None,
-      file_size: None,
-      is_rolling_release: false,
     };
 
     registry.add_browser(info);
@@ -400,15 +357,13 @@ mod tests {
   }
 
   #[test]
-  fn test_twilight_rolling_release() {
+  fn test_twilight_download() {
     let mut registry = DownloadedBrowsersRegistry::new();
 
     // Mark twilight download started
     registry.mark_download_started("zen", "twilight", PathBuf::from("/test/zen-twilight"));
 
-    // Check that it's marked as rolling release
-    let zen_versions = &registry.browsers["zen"];
-    let twilight_info = &zen_versions["twilight"];
-    assert!(twilight_info.is_rolling_release);
+    // Check that it's registered
+    assert!(registry.is_browser_downloaded("zen", "twilight"));
   }
 }

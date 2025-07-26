@@ -1434,6 +1434,11 @@ impl BrowserRunner {
       self.disable_proxy_settings_in_profile(&profile_data_dir)?;
     }
 
+    // Perform cleanup after profile creation to remove any unused binaries
+    if let Err(e) = self.cleanup_unused_binaries_internal() {
+      println!("Warning: Failed to cleanup unused binaries after profile creation: {e}");
+    }
+
     Ok(profile)
   }
 
@@ -1616,7 +1621,7 @@ impl BrowserRunner {
   }
 
   /// Internal method to cleanup unused binaries (used by auto-cleanup)
-  fn cleanup_unused_binaries_internal(
+  pub fn cleanup_unused_binaries_internal(
     &self,
   ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
     // Load current profiles
@@ -1627,11 +1632,14 @@ impl BrowserRunner {
     // Load registry
     let mut registry = crate::downloaded_browsers::DownloadedBrowsersRegistry::load()?;
 
-    // Get active browser versions
+    // Get active browser versions (all profiles)
     let active_versions = registry.get_active_browser_versions(&profiles);
 
-    // Cleanup unused binaries
-    let cleaned_up = registry.cleanup_unused_binaries(&active_versions)?;
+    // Get running browser versions (only running profiles)
+    let running_versions = registry.get_running_browser_versions(&profiles);
+
+    // Cleanup unused binaries (but keep running ones)
+    let cleaned_up = registry.cleanup_unused_binaries(&active_versions, &running_versions)?;
 
     // Save updated registry
     registry.save()?;
@@ -3190,14 +3198,14 @@ impl BrowserRunner {
     }
 
     // Mark download as completed in registry
-    let actual_version = if browser_str == "chromium" {
+    let _actual_version = if browser_str == "chromium" {
       Some(version.clone())
     } else {
       None
     };
 
     registry
-      .mark_download_completed_with_actual_version(&browser_str, &version, actual_version)
+      .mark_download_completed(&browser_str, &version)
       .map_err(|e| format!("Failed to mark download as completed: {e}"))?;
     registry
       .save()
@@ -3649,6 +3657,14 @@ pub async fn ensure_all_binaries_exist(
     .ensure_all_binaries_exist(&app_handle)
     .await
     .map_err(|e| format!("Failed to ensure all binaries exist: {e}"))
+}
+
+#[tauri::command]
+pub async fn cleanup_unused_binaries() -> Result<Vec<String>, String> {
+  let browser_runner = BrowserRunner::new();
+  browser_runner
+    .cleanup_unused_binaries_internal()
+    .map_err(|e| format!("Failed to cleanup unused binaries: {e}"))
 }
 
 #[cfg(test)]

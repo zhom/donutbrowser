@@ -370,12 +370,15 @@ impl AutoUpdater {
     let mut registry = crate::downloaded_browsers::DownloadedBrowsersRegistry::load()
       .map_err(|e| format!("Failed to load browser registry: {e}"))?;
 
-    // Get active browser versions
+    // Get active browser versions (all profiles)
     let active_versions = registry.get_active_browser_versions(&profiles);
 
-    // Cleanup unused binaries
+    // Get running browser versions (only running profiles)
+    let running_versions = registry.get_running_browser_versions(&profiles);
+
+    // Cleanup unused binaries (but keep running ones)
     let cleaned_up = registry
-      .cleanup_unused_binaries(&active_versions)
+      .cleanup_unused_binaries(&active_versions, &running_versions)
       .map_err(|e| format!("Failed to cleanup unused binaries: {e}"))?;
 
     // Save updated registry
