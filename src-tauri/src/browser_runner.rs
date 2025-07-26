@@ -1642,7 +1642,8 @@ impl BrowserRunner {
     let binaries_dir = self.get_binaries_dir();
 
     // Use comprehensive cleanup that syncs registry with disk and removes unused binaries
-    let cleaned_up = registry.comprehensive_cleanup(&binaries_dir, &active_versions, &running_versions)?;
+    let cleaned_up =
+      registry.comprehensive_cleanup(&binaries_dir, &active_versions, &running_versions)?;
 
     // Registry is already saved by comprehensive_cleanup
     Ok(cleaned_up)

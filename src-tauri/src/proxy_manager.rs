@@ -780,9 +780,7 @@ mod tests {
       .arg("--type")
       .arg("http");
 
-    let start_time = std::time::Instant::now();
     let output = tokio::time::timeout(Duration::from_secs(60), async { cmd.output() }).await??;
-    let execution_time = start_time.elapsed();
 
     if output.status.success() {
       let stdout = String::from_utf8(output.stdout)?;

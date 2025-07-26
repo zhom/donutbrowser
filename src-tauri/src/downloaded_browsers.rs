@@ -267,7 +267,7 @@ impl DownloadedBrowsersRegistry {
     binaries_dir: &std::path::Path,
   ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
     let mut changes = Vec::new();
-    
+
     if !binaries_dir.exists() {
       return Ok(changes);
     }
@@ -276,15 +276,16 @@ impl DownloadedBrowsersRegistry {
     for browser_entry in fs::read_dir(binaries_dir)? {
       let browser_entry = browser_entry?;
       let browser_path = browser_entry.path();
-      
+
       if !browser_path.is_dir() {
         continue;
       }
-      
-      let browser_name = browser_path.file_name()
+
+      let browser_name = browser_path
+        .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("");
-      
+
       if browser_name.is_empty() || browser_name.starts_with('.') {
         continue;
       }
@@ -293,15 +294,16 @@ impl DownloadedBrowsersRegistry {
       for version_entry in fs::read_dir(&browser_path)? {
         let version_entry = version_entry?;
         let version_path = version_entry.path();
-        
+
         if !version_path.is_dir() {
           continue;
         }
-        
-        let version_name = version_path.file_name()
+
+        let version_name = version_path
+          .file_name()
           .and_then(|n| n.to_str())
           .unwrap_or("");
-        
+
         if version_name.is_empty() || version_name.starts_with('.') {
           continue;
         }
@@ -319,11 +321,11 @@ impl DownloadedBrowsersRegistry {
         }
       }
     }
-    
+
     if !changes.is_empty() {
       self.save()?;
     }
-    
+
     Ok(changes)
   }
 
@@ -335,23 +337,23 @@ impl DownloadedBrowsersRegistry {
     running_profiles: &[(String, String)],
   ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
     let mut cleanup_results = Vec::new();
-    
+
     // First, sync registry with actual binaries on disk
     let sync_results = self.sync_with_binaries_directory(binaries_dir)?;
     cleanup_results.extend(sync_results);
-    
+
     // Then perform the regular cleanup
     let regular_cleanup = self.cleanup_unused_binaries(active_profiles, running_profiles)?;
     cleanup_results.extend(regular_cleanup);
-    
+
     // Finally, verify and cleanup stale entries
     let stale_cleanup = self.verify_and_cleanup_stale_entries_simple(binaries_dir)?;
     cleanup_results.extend(stale_cleanup);
-    
+
     if !cleanup_results.is_empty() {
       self.save()?;
     }
-    
+
     Ok(cleanup_results)
   }
 
@@ -364,7 +366,7 @@ impl DownloadedBrowsersRegistry {
     let mut browsers_to_remove = Vec::new();
 
     for (browser_str, versions) in &self.browsers {
-      for (version, _info) in versions {
+      for version in versions.keys() {
         // Check if the browser directory actually exists
         let browser_dir = binaries_dir.join(browser_str).join(version);
         if !browser_dir.exists() {
@@ -376,7 +378,9 @@ impl DownloadedBrowsersRegistry {
     // Remove stale entries
     for (browser_str, version) in browsers_to_remove {
       if let Some(_removed) = self.remove_browser(&browser_str, &version) {
-        cleaned_up.push(format!("Removed stale registry entry for {browser_str} {version}"));
+        cleaned_up.push(format!(
+          "Removed stale registry entry for {browser_str} {version}"
+        ));
       }
     }
 
