@@ -16,7 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 type Props = {
   selectedProfiles: string[];
   onBulkGroupAssignment: () => void;
-  onBulkDelete: () => Promise<void>;
+  onBulkDelete: () => void;
   onSettingsDialogOpen: (open: boolean) => void;
   onProxyManagementDialogOpen: (open: boolean) => void;
   onGroupManagementDialogOpen: (open: boolean) => void;
@@ -57,7 +57,7 @@ const HomeHeader = ({
               <Button
                 variant="destructive"
                 size="sm"
-                onClick={() => void onBulkDelete()}
+                onClick={onBulkDelete}
                 className="flex gap-2 items-center"
               >
                 <LuTrash2 className="w-4 h-4" />

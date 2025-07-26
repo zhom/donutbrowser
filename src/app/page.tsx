@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CamoufoxConfigDialog } from "@/components/camoufox-config-dialog";
 import { ChangeVersionDialog } from "@/components/change-version-dialog";
 import { CreateProfileDialog } from "@/components/create-profile-dialog";
+import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
 import { GroupAssignmentDialog } from "@/components/group-assignment-dialog";
 import { GroupBadges } from "@/components/group-badges";
 import { GroupManagementDialog } from "@/components/group-management-dialog";
@@ -77,6 +78,9 @@ export default function Home() {
   const [areGroupsLoading, setGroupsLoading] = useState(true);
   const [currentPermissionType, setCurrentPermissionType] =
     useState<PermissionType>("microphone");
+  const [showBulkDeleteConfirmation, setShowBulkDeleteConfirmation] =
+    useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const { isMicrophoneAccessGranted, isCameraAccessGranted, isInitialized } =
     usePermissions();
 
@@ -595,17 +599,27 @@ export default function Home() {
     setGroupAssignmentDialogOpen(true);
   }, []);
 
-  const handleBulkDelete = useCallback(async () => {
+  const handleBulkDelete = useCallback(() => {
+    if (selectedProfiles.length === 0) return;
+    setShowBulkDeleteConfirmation(true);
+  }, [selectedProfiles]);
+
+  const confirmBulkDelete = useCallback(async () => {
     if (selectedProfiles.length === 0) return;
 
+    setIsBulkDeleting(true);
     try {
       await invoke("delete_selected_profiles", {
         profileNames: selectedProfiles,
       });
       await loadProfiles();
       setSelectedProfiles([]);
+      setShowBulkDeleteConfirmation(false);
     } catch (error) {
       console.error("Failed to delete selected profiles:", error);
+      setError(`Failed to delete selected profiles: ${JSON.stringify(error)}`);
+    } finally {
+      setIsBulkDeleting(false);
     }
   }, [selectedProfiles, loadProfiles]);
 
@@ -826,6 +840,16 @@ export default function Home() {
         }}
         selectedProfiles={selectedProfilesForGroup}
         onAssignmentComplete={handleGroupAssignmentComplete}
+      />
+
+      <DeleteConfirmationDialog
+        isOpen={showBulkDeleteConfirmation}
+        onClose={() => setShowBulkDeleteConfirmation(false)}
+        onConfirm={confirmBulkDelete}
+        title="Delete Selected Profiles"
+        description={`This action cannot be undone. This will permanently delete ${selectedProfiles.length} profile${selectedProfiles.length !== 1 ? "s" : ""} and all associated data.`}
+        confirmButtonText={`Delete ${selectedProfiles.length} Profile${selectedProfiles.length !== 1 ? "s" : ""}`}
+        isLoading={isBulkDeleting}
       />
     </div>
   );

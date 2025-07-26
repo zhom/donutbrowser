@@ -13,12 +13,12 @@ import * as React from "react";
 import { CiCircleCheck } from "react-icons/ci";
 import { IoEllipsisHorizontal } from "react-icons/io5";
 import { LuChevronDown, LuChevronUp } from "react-icons/lu";
+import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -101,9 +101,7 @@ export function ProfilesDataTable({
   const [renameError, setRenameError] = React.useState<string | null>(null);
   const [profileToDelete, setProfileToDelete] =
     React.useState<BrowserProfile | null>(null);
-  const [deleteConfirmationName, setDeleteConfirmationName] =
-    React.useState("");
-  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = React.useState(false);
 
   const [storedProxies, setStoredProxies] = React.useState<StoredProxy[]>([]);
   const [selectedProfiles, setSelectedProfiles] = React.useState<Set<string>>(
@@ -214,20 +212,16 @@ export function ProfilesDataTable({
   };
 
   const handleDelete = async () => {
-    if (!profileToDelete || deleteConfirmationName !== profileToDelete.name) {
-      setDeleteError("Profile name confirmation does not match");
-      return;
-    }
+    if (!profileToDelete) return;
 
+    setIsDeleting(true);
     try {
       await onDeleteProfile(profileToDelete);
       setProfileToDelete(null);
-      setDeleteConfirmationName("");
-      setDeleteError(null);
     } catch (error) {
-      setDeleteError(
-        error instanceof Error ? error.message : "Failed to delete profile",
-      );
+      console.error("Failed to delete profile:", error);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -621,7 +615,6 @@ export function ProfilesDataTable({
                   <DropdownMenuItem
                     onClick={() => {
                       setProfileToDelete(profile);
-                      setDeleteConfirmationName("");
                     }}
                     disabled={
                       !browserState.isClient || isRunning || isBrowserUpdating
@@ -776,73 +769,15 @@ export function ProfilesDataTable({
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={profileToDelete !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setProfileToDelete(null);
-            setDeleteConfirmationName("");
-            setDeleteError(null);
-          }
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Profile</DialogTitle>
-            <DialogDescription>
-              This action cannot be undone. This will permanently delete the
-              profile &quot;{profileToDelete?.name}&quot; and all its associated
-              data.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="delete-confirmation">
-                Please type <strong>{profileToDelete?.name}</strong> to confirm:
-              </Label>
-              <Input
-                id="delete-confirmation"
-                value={deleteConfirmationName}
-                onChange={(e) => {
-                  setDeleteConfirmationName(e.target.value);
-                  setDeleteError(null);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    void handleDelete();
-                  }
-                }}
-                placeholder="Type the profile name here"
-              />
-            </div>
-            {deleteError && (
-              <p className="text-sm text-red-600">{deleteError}</p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setProfileToDelete(null);
-                setDeleteConfirmationName("");
-                setDeleteError(null);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => void handleDelete()}
-              disabled={
-                !deleteConfirmationName.trim() ||
-                deleteConfirmationName !== profileToDelete?.name
-              }
-            >
-              Delete Profile
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteConfirmationDialog
+        isOpen={profileToDelete !== null}
+        onClose={() => setProfileToDelete(null)}
+        onConfirm={handleDelete}
+        title="Delete Profile"
+        description={`This action cannot be undone. This will permanently delete the profile "${profileToDelete?.name}" and all its associated data.`}
+        confirmButtonText="Delete Profile"
+        isLoading={isDeleting}
+      />
     </>
   );
 }
