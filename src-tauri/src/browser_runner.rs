@@ -3659,14 +3659,6 @@ pub async fn ensure_all_binaries_exist(
     .map_err(|e| format!("Failed to ensure all binaries exist: {e}"))
 }
 
-#[tauri::command]
-pub async fn cleanup_unused_binaries() -> Result<Vec<String>, String> {
-  let browser_runner = BrowserRunner::new();
-  browser_runner
-    .cleanup_unused_binaries_internal()
-    .map_err(|e| format!("Failed to cleanup unused binaries: {e}"))
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;

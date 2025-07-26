@@ -72,8 +72,6 @@ use group_manager::{
   get_groups_with_profile_counts, get_profile_groups, update_profile_group,
 };
 
-use browser_runner::cleanup_unused_binaries;
-
 // Trait to extend WebviewWindow with transparent titlebar functionality
 pub trait WindowExt {
   #[cfg(target_os = "macos")]
