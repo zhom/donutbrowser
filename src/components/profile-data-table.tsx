@@ -388,7 +388,9 @@ export function ProfilesDataTable({
                     </Button>
                   </span>
                 </TooltipTrigger>
-                <TooltipContent>{tooltipContent}</TooltipContent>
+                {tooltipContent && (
+                  <TooltipContent>{tooltipContent}</TooltipContent>
+                )}
               </Tooltip>
             </div>
           );

@@ -164,7 +164,7 @@ export function useBrowserState(
       const isBrowserUpdating = isUpdating?.(profile.browser) ?? false;
 
       if (isRunning) {
-        return "Click to forcefully stop the browser";
+        return "";
       }
 
       if (isBrowserUpdating) {
@@ -180,7 +180,7 @@ export function useBrowserState(
         return `Only one ${browserDisplayName} browser instance can run at a time. Stop the running ${browserDisplayName} browser first.`;
       }
 
-      return "Click to launch the browser";
+      return "";
     },
     [
       runningProfiles,
