@@ -4,3 +4,4 @@
 - Don't leave comments that don't add value
 - Do not duplicate code unless you have a very good reason to do so. It is important that the same logic is not duplicated multiple times
 - Before finishing the task and showing summary, always run "pnpm format && pnpm lint && pnpm test" at the root of the project to ensure that you don't finish with broken application.
+- Anytime you change nodecar's code and try to test, recompile it with "cd nodecar && pnpm build"
