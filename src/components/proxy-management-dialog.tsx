@@ -18,6 +18,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { trimName } from "@/lib/name-utils";
 import type { StoredProxy } from "@/types";
 
 interface ProxyManagementDialogProps {
@@ -100,10 +101,6 @@ export function ProxyManagementDialog({
   const handleProxyFormClose = useCallback(() => {
     setShowProxyForm(false);
     setEditingProxy(null);
-  }, []);
-
-  const trimName = useCallback((name: string) => {
-    return name.length > 30 ? `${name.substring(0, 30)}...` : name;
   }, []);
 
   return (
