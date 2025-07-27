@@ -18,6 +18,7 @@ interface DeleteConfirmationDialogProps {
   description: string;
   confirmButtonText?: string;
   isLoading?: boolean;
+  profileNames?: string[];
 }
 
 export function DeleteConfirmationDialog({
@@ -28,6 +29,7 @@ export function DeleteConfirmationDialog({
   description,
   confirmButtonText = "Delete",
   isLoading = false,
+  profileNames,
 }: DeleteConfirmationDialogProps) {
   const handleConfirm = async () => {
     await onConfirm();
@@ -39,6 +41,22 @@ export function DeleteConfirmationDialog({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
+          {profileNames && profileNames.length > 0 && (
+            <div className="mt-4">
+              <p className="text-sm font-medium mb-2">
+                Profiles to be deleted:
+              </p>
+              <div className="bg-muted rounded-md p-3 max-h-32 overflow-y-auto">
+                <ul className="space-y-1">
+                  {profileNames.map((name) => (
+                    <li key={name} className="text-sm text-muted-foreground">
+                      • {name}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={isLoading}>
