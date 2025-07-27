@@ -52,6 +52,7 @@ import {
   getBrowserIcon,
   getCurrentOS,
 } from "@/lib/browser-utils";
+import { trimName } from "@/lib/name-utils";
 import { cn } from "@/lib/utils";
 import type { BrowserProfile, StoredProxy } from "@/types";
 import { Input } from "./ui/input";
@@ -416,8 +417,21 @@ export function ProfilesDataTable({
         enableSorting: true,
         sortingFn: "alphanumeric",
         cell: ({ row }) => {
-          const name: string = row.getValue("name");
-          return <div className="font-medium text-left">{name}</div>;
+          const rawName: string = row.getValue("name");
+          const name = getBrowserDisplayName(rawName);
+
+          if (name.length < 20) {
+            return <div className="font-medium text-left">{name}</div>;
+          }
+
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>{trimName(name, 20)}</span>
+              </TooltipTrigger>
+              <TooltipContent>{name}</TooltipContent>
+            </Tooltip>
+          );
         },
       },
       {
@@ -442,10 +456,22 @@ export function ProfilesDataTable({
         },
         cell: ({ row }) => {
           const browser: string = row.getValue("browser");
+          const name = getBrowserDisplayName(browser);
+          if (name.length < 20) {
+            return (
+              <div className="flex items-center">
+                <span>{name}</span>
+              </div>
+            );
+          }
+
           return (
-            <div className="flex items-center">
-              <span>{getBrowserDisplayName(browser)}</span>
-            </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>{trimName(name, 20)}</span>
+              </TooltipTrigger>
+              <TooltipContent>{name}</TooltipContent>
+            </Tooltip>
           );
         },
         enableSorting: true,
@@ -506,29 +532,27 @@ export function ProfilesDataTable({
                 : "No proxy configured";
 
           return (
-            <div className="flex items-center gap-2">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="flex gap-2 items-center">
-                    {profileHasProxy && (
-                      <CiCircleCheck className="w-4 h-4 text-green-500" />
-                    )}
-                    {proxyDisplayName.length > 10 ? (
-                      <span className="text-sm truncate text-muted-foreground">
-                        {proxyDisplayName.slice(0, 10)}...
-                      </span>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">
-                        {profile.browser === "tor-browser"
-                          ? "Not supported"
-                          : proxyDisplayName}
-                      </span>
-                    )}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>{tooltipText}</TooltipContent>
-              </Tooltip>
-            </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="flex gap-2 items-center">
+                  {profileHasProxy && (
+                    <CiCircleCheck className="w-4 h-4 text-green-500" />
+                  )}
+                  {proxyDisplayName.length > 10 ? (
+                    <span className="text-sm truncate text-muted-foreground">
+                      {proxyDisplayName.slice(0, 10)}...
+                    </span>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">
+                      {profile.browser === "tor-browser"
+                        ? "Not supported"
+                        : proxyDisplayName}
+                    </span>
+                  )}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{tooltipText}</TooltipContent>
+            </Tooltip>
           );
         },
       },
