@@ -1,5 +1,10 @@
 import { program } from "commander";
-import { generateCamoufoxConfig } from "./camoufox-launcher.js";
+import {
+  stopAllCamoufoxProcesses,
+  stopCamoufoxProcess,
+} from "./camoufox-launcher.js";
+import { listCamoufoxConfigs } from "./camoufox-storage.js";
+import { runCamoufoxWorker } from "./camoufox-worker.js";
 import {
   startProxyProcess,
   stopAllProxyProcesses,
@@ -150,10 +155,13 @@ program
     }
   });
 
-// Command for generating Camoufox configuration
+// Command for Camoufox management
 program
-  .command("camoufox-config")
-  .argument("<action>", "generate Camoufox configuration")
+  .command("camoufox")
+  .argument("<action>", "start, stop, or list Camoufox instances")
+  .option("--id <id>", "Camoufox ID for stop command")
+  .option("--profile-path <path>", "profile directory path")
+  .option("--url <url>", "URL to open")
 
   // Operating system fingerprinting
   .option(
@@ -231,130 +239,280 @@ program
   // Firefox preferences
   .option("--firefox-prefs <prefs>", "Firefox user preferences (JSON string)")
 
-  .description("generate Camoufox configuration using camoufox-js")
-  .action(async (action: string, options: any) => {
-    try {
-      if (action === "generate") {
-        // Build Camoufox options
-        const camoufoxOptions: any = {
-          enable_cache: !options.disableCache, // Cache enabled by default
-        };
+  // Anti-detect options
+  .option(
+    "--disable-theming",
+    "disable Firefox theming (required for anti-detect)",
+  )
+  .option(
+    "--no-showcursor",
+    "disable cursor display (required for anti-detect)",
+  )
 
-        // OS fingerprinting
-        if (options.os) {
-          camoufoxOptions.os = options.os.includes(",")
-            ? options.os.split(",")
-            : options.os;
-        }
+  .description("manage Camoufox browser instances")
+  .action(
+    async (
+      action: string,
+      options: Record<string, string | number | boolean | undefined>,
+    ) => {
+      if (action === "start") {
+        try {
+          // Build Camoufox options in the format expected by camoufox-js
+          const camoufoxOptions: Record<string, unknown> = {};
 
-        // Blocking options
-        if (options.blockImages) camoufoxOptions.block_images = true;
-        if (options.blockWebrtc) camoufoxOptions.block_webrtc = true;
-        if (options.blockWebgl) camoufoxOptions.block_webgl = true;
-
-        // Security options
-        if (options.disableCoop) camoufoxOptions.disable_coop = true;
-
-        // Geolocation
-        if (options.geoip) {
-          camoufoxOptions.geoip =
-            options.geoip === "auto" ? true : options.geoip;
-        }
-        if (options.latitude && options.longitude) {
-          camoufoxOptions.geolocation = {
-            latitude: options.latitude,
-            longitude: options.longitude,
-            accuracy: 100,
-          };
-        }
-        if (options.country) camoufoxOptions.country = options.country;
-        if (options.timezone) camoufoxOptions.timezone = options.timezone;
-
-        // UI and behavior
-        if (options.humanize) camoufoxOptions.humanize = options.humanize;
-        if (options.headless) camoufoxOptions.headless = true;
-
-        // Localization
-        if (options.locale) {
-          camoufoxOptions.locale = options.locale.includes(",")
-            ? options.locale.split(",")
-            : options.locale;
-        }
-
-        // Extensions and fonts
-        if (options.addons) camoufoxOptions.addons = options.addons.split(",");
-        if (options.fonts) camoufoxOptions.fonts = options.fonts.split(",");
-        if (options.customFontsOnly) camoufoxOptions.custom_fonts_only = true;
-        if (options.excludeAddons)
-          camoufoxOptions.exclude_addons = options.excludeAddons.split(",");
-
-        // Screen and window
-        const screen: any = {};
-        if (options.screenMinWidth) screen.minWidth = options.screenMinWidth;
-        if (options.screenMaxWidth) screen.maxWidth = options.screenMaxWidth;
-        if (options.screenMinHeight) screen.minHeight = options.screenMinHeight;
-        if (options.screenMaxHeight) screen.maxHeight = options.screenMaxHeight;
-        if (Object.keys(screen).length > 0) camoufoxOptions.screen = screen;
-
-        if (options.windowWidth && options.windowHeight) {
-          camoufoxOptions.window = [options.windowWidth, options.windowHeight];
-        }
-
-        // Advanced options
-        if (options.ffVersion) camoufoxOptions.ff_version = options.ffVersion;
-        if (options.mainWorldEval) camoufoxOptions.main_world_eval = true;
-        if (options.webglVendor && options.webglRenderer) {
-          camoufoxOptions.webgl_config = [
-            options.webglVendor,
-            options.webglRenderer,
-          ];
-        }
-
-        // Proxy
-        if (options.proxy) camoufoxOptions.proxy = options.proxy;
-
-        // Environment and debugging
-        if (options.virtualDisplay)
-          camoufoxOptions.virtual_display = options.virtualDisplay;
-        if (options.debug) camoufoxOptions.debug = true;
-        if (options.args) camoufoxOptions.args = options.args.split(",");
-        if (options.env) {
-          try {
-            camoufoxOptions.env = JSON.parse(options.env);
-          } catch (e) {
-            console.error("Invalid JSON for --env option");
-            process.exit(1);
-            return;
+          // OS fingerprinting
+          if (options.os && typeof options.os === "string") {
+            camoufoxOptions.os = options.os.includes(",")
+              ? options.os.split(",")
+              : options.os;
           }
-        }
 
-        // Firefox preferences
-        if (options.firefoxPrefs) {
-          try {
-            camoufoxOptions.firefox_user_prefs = JSON.parse(
-              options.firefoxPrefs,
-            );
-          } catch (e) {
-            console.error("Invalid JSON for --firefox-prefs option");
-            process.exit(1);
-            return;
+          // Blocking options
+          if (options.blockImages) camoufoxOptions.block_images = true;
+          if (options.blockWebrtc) camoufoxOptions.block_webrtc = true;
+          if (options.blockWebgl) camoufoxOptions.block_webgl = true;
+
+          // Security options
+          if (options.disableCoop) camoufoxOptions.disable_coop = true;
+
+          // Geolocation
+          if (options.geoip) {
+            camoufoxOptions.geoip =
+              options.geoip === "auto" ? true : options.geoip;
           }
+          if (options.latitude && options.longitude) {
+            camoufoxOptions.geolocation = {
+              latitude: options.latitude,
+              longitude: options.longitude,
+              accuracy: 100,
+            };
+          }
+          if (options.country) camoufoxOptions.country = options.country;
+          if (options.timezone) camoufoxOptions.timezone = options.timezone;
+
+          // UI and behavior
+          if (options.humanize) camoufoxOptions.humanize = options.humanize;
+          if (options.headless) camoufoxOptions.headless = true;
+
+          // Localization
+          if (options.locale && typeof options.locale === "string") {
+            camoufoxOptions.locale = options.locale.includes(",")
+              ? options.locale.split(",")
+              : options.locale;
+          }
+
+          // Extensions and fonts
+          if (options.addons && typeof options.addons === "string")
+            camoufoxOptions.addons = options.addons.split(",");
+          if (options.fonts && typeof options.fonts === "string")
+            camoufoxOptions.fonts = options.fonts.split(",");
+          if (options.customFontsOnly) camoufoxOptions.custom_fonts_only = true;
+          if (
+            options.excludeAddons &&
+            typeof options.excludeAddons === "string"
+          )
+            camoufoxOptions.exclude_addons = options.excludeAddons.split(",");
+
+          // Screen and window
+          const screen: Record<string, unknown> = {};
+          if (options.screenMinWidth) screen.minWidth = options.screenMinWidth;
+          if (options.screenMaxWidth) screen.maxWidth = options.screenMaxWidth;
+          if (options.screenMinHeight)
+            screen.minHeight = options.screenMinHeight;
+          if (options.screenMaxHeight)
+            screen.maxHeight = options.screenMaxHeight;
+          if (Object.keys(screen).length > 0) camoufoxOptions.screen = screen;
+
+          if (options.windowWidth && options.windowHeight) {
+            camoufoxOptions.window = [
+              options.windowWidth,
+              options.windowHeight,
+            ];
+          }
+
+          // Advanced options
+          if (options.ffVersion) camoufoxOptions.ff_version = options.ffVersion;
+          if (options.mainWorldEval) camoufoxOptions.main_world_eval = true;
+          if (options.webglVendor && options.webglRenderer) {
+            camoufoxOptions.webgl_config = [
+              options.webglVendor,
+              options.webglRenderer,
+            ];
+          }
+
+          // Proxy
+          if (options.proxy) camoufoxOptions.proxy = options.proxy;
+
+          // Cache and performance - default to enabled
+          camoufoxOptions.enable_cache = !options.disableCache;
+
+          // Environment and debugging
+          if (options.virtualDisplay)
+            camoufoxOptions.virtual_display = options.virtualDisplay;
+          if (options.debug) camoufoxOptions.debug = true;
+          if (options.args && typeof options.args === "string")
+            camoufoxOptions.args = options.args.split(",");
+          if (options.env && typeof options.env === "string") {
+            try {
+              camoufoxOptions.env = JSON.parse(options.env);
+            } catch (e) {
+              console.error(
+                JSON.stringify({
+                  error: "Invalid JSON for --env option",
+                  message: String(e),
+                }),
+              );
+              process.exit(1);
+              return;
+            }
+          }
+
+          // Firefox preferences
+          if (
+            options.firefoxPrefs &&
+            typeof options.firefoxPrefs === "string"
+          ) {
+            try {
+              camoufoxOptions.firefox_user_prefs = JSON.parse(
+                options.firefoxPrefs,
+              );
+            } catch (e) {
+              console.error(
+                JSON.stringify({
+                  error: "Invalid JSON for --firefox-prefs option",
+                  message: String(e),
+                }),
+              );
+              process.exit(1);
+              return;
+            }
+          }
+
+          // Generate a unique ID for this instance
+          const id = `camoufox_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+
+          // Add profile path if provided
+          if (typeof options.profilePath === "string") {
+            camoufoxOptions.user_data_dir = options.profilePath;
+          }
+
+          camoufoxOptions.disableTheming = true;
+          camoufoxOptions.showcursor = false;
+
+          // Don't force headless mode - let the user configuration decide
+          if (camoufoxOptions.headless === undefined) {
+            camoufoxOptions.headless = false; // Default to visible
+          }
+
+          // Use the server-based approach via launchServer
+          const { launchServer } = await import("camoufox-js");
+          const { firefox } = await import("playwright-core");
+          const getPort = (await import("get-port")).default;
+
+          // Get an available port
+          const port = await getPort();
+
+          // Launch Camoufox server
+          const server = await launchServer({
+            ...camoufoxOptions,
+            port: port,
+            ws_path: "/camoufox",
+          });
+
+          // Connect to the server
+          const browser = await firefox.connect(server.wsEndpoint());
+
+          // Open URL if provided
+          if (typeof options.url === "string") {
+            try {
+              const page = await browser.newPage();
+              await page.goto(options.url);
+            } catch {
+              // Don't fail if URL opening fails
+            }
+          } else {
+            // Create a blank page to keep the browser alive
+            try {
+              await browser.newPage();
+            } catch {
+              // Ignore if we can't create a page
+            }
+          }
+
+          // Output the configuration as JSON for the Rust side to parse
+          console.log(
+            JSON.stringify({
+              id: id,
+              port: port,
+              wsEndpoint: server.wsEndpoint(),
+              profilePath:
+                typeof options.profilePath === "string"
+                  ? options.profilePath
+                  : undefined,
+              url: typeof options.url === "string" ? options.url : undefined,
+            }),
+          );
+
+          // Keep the process alive by waiting for the browser to disconnect
+          browser.on("disconnected", () => {
+            process.exit(0);
+          });
+
+          // Keep the process alive with a simple interval
+          const keepAlive = setInterval(() => {
+            try {
+              if (!browser.isConnected()) {
+                clearInterval(keepAlive);
+                process.exit(0);
+              }
+            } catch {
+              clearInterval(keepAlive);
+              process.exit(0);
+            }
+          }, 5000);
+
+          // Handle process staying alive
+          process.stdin.resume();
+        } catch (error: unknown) {
+          console.error(
+            JSON.stringify({
+              error: "Failed to start Camoufox",
+              message: error instanceof Error ? error.message : String(error),
+            }),
+          );
+          process.exit(1);
         }
-
-        // Generate configuration
-        const config = await generateCamoufoxConfig(camoufoxOptions);
-
-        // Output the configuration as JSON
-        console.log(JSON.stringify(config, null, 2));
+      } else if (action === "stop") {
+        if (options.id && typeof options.id === "string") {
+          const stopped = await stopCamoufoxProcess(options.id);
+          console.log(JSON.stringify({ success: stopped }));
+        } else {
+          await stopAllCamoufoxProcesses();
+          console.log(JSON.stringify({ success: true }));
+        }
+        process.exit(0);
+      } else if (action === "list") {
+        const configs = listCamoufoxConfigs();
+        console.log(JSON.stringify(configs));
         process.exit(0);
       } else {
-        console.error("Invalid action. Use 'generate'");
+        console.error("Invalid action. Use 'start', 'stop', or 'list'");
         process.exit(1);
       }
-    } catch (error: unknown) {
-      console.error(
-        `Camoufox config generation failed: ${error instanceof Error ? error.message : JSON.stringify(error)}`,
-      );
+    },
+  );
+
+// Command for Camoufox worker (internal use)
+program
+  .command("camoufox-worker")
+  .argument("<action>", "start a Camoufox worker")
+  .requiredOption("--id <id>", "Camoufox configuration ID")
+  .description("run a Camoufox worker process")
+  .action(async (action: string, options: { id: string }) => {
+    if (action === "start") {
+      await runCamoufoxWorker(options.id);
+    } else {
+      console.error("Invalid action for camoufox-worker. Use 'start'");
       process.exit(1);
     }
   });

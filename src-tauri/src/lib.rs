@@ -13,7 +13,7 @@ mod auto_updater;
 mod browser;
 mod browser_runner;
 mod browser_version_service;
-mod camoufox_direct;
+mod camoufox;
 mod default_browser;
 mod download;
 mod downloaded_browsers;
@@ -44,9 +44,7 @@ use settings_manager::{
   save_app_settings, save_table_sorting_settings, should_show_settings_on_startup,
 };
 
-use default_browser::{
-  is_default_browser, open_url_with_profile, set_as_default_browser, smart_open_url,
-};
+use default_browser::{is_default_browser, open_url_with_profile, set_as_default_browser};
 
 use version_updater::{
   get_version_update_status, get_version_updater, trigger_manual_version_update,
@@ -179,7 +177,7 @@ async fn delete_stored_proxy(proxy_id: String) -> Result<(), String> {
 #[tauri::command]
 async fn update_camoufox_config(
   profile_name: String,
-  config: crate::camoufox_direct::CamoufoxConfig,
+  config: crate::camoufox::CamoufoxConfig,
 ) -> Result<(), String> {
   let browser_runner = browser_runner::BrowserRunner::new();
   browser_runner
@@ -337,6 +335,27 @@ pub fn run() {
         auto_updater::check_for_updates_with_progress(app_handle_auto_updater).await;
       });
 
+      // Handle any pending URLs that were received before the window was ready
+      let handle_pending = handle.clone();
+      tauri::async_runtime::spawn(async move {
+        // Wait a bit for the window to be fully ready
+        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+
+        let pending_urls = {
+          let mut pending = PENDING_URLS.lock().unwrap();
+          let urls = pending.clone();
+          pending.clear();
+          urls
+        };
+
+        for url in pending_urls {
+          println!("Processing pending URL: {url}");
+          if let Err(e) = handle_url_open(handle_pending.clone(), url).await {
+            eprintln!("Failed to handle pending URL: {e}");
+          }
+        }
+      });
+
       // Start periodic cleanup task for unused binaries
       tauri::async_runtime::spawn(async move {
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(300)); // Every 5 minutes
@@ -382,7 +401,7 @@ pub fn run() {
       // Start Camoufox cleanup task
       let app_handle_cleanup = app.handle().clone();
       tauri::async_runtime::spawn(async move {
-        let launcher = crate::camoufox_direct::CamoufoxDirectLauncher::new(app_handle_cleanup);
+        let launcher = crate::camoufox::CamoufoxNodecarLauncher::new(app_handle_cleanup);
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
 
         loop {
@@ -469,7 +488,6 @@ pub fn run() {
       is_default_browser,
       open_url_with_profile,
       set_as_default_browser,
-      smart_open_url,
       trigger_manual_version_update,
       get_version_update_status,
       check_for_browser_updates,

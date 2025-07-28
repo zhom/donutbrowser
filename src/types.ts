@@ -106,12 +106,15 @@ export interface CamoufoxConfig {
   additional_args?: string[];
   env_vars?: Record<string, string>;
   firefox_prefs?: Record<string, unknown>;
+  // Required options for anti-detect features
+  disableTheming?: boolean;
+  showcursor?: boolean;
 }
 
 export interface CamoufoxLaunchResult {
   id: string;
-  pid?: number;
-  executable_path: string;
-  profile_path: string;
+  port?: number;
+  wsEndpoint?: string;
+  profilePath?: string;
   url?: string;
 }

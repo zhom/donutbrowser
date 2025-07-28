@@ -1,8 +1,17 @@
-import { launchOptions } from "camoufox-js";
+import { spawn } from "node:child_process";
+import path from "node:path";
+import {
+  type CamoufoxConfig,
+  deleteCamoufoxConfig,
+  generateCamoufoxId,
+  getCamoufoxConfig,
+  listCamoufoxConfigs,
+  saveCamoufoxConfig,
+} from "./camoufox-storage.js";
 
 export interface CamoufoxLaunchOptions {
   // Operating system to use for fingerprint generation
-  os?: "windows" | "macos" | "linux" | string[];
+  os?: "windows" | "macos" | "linux"[];
 
   // Blocking options
   block_images?: boolean;
@@ -25,7 +34,7 @@ export interface CamoufoxLaunchOptions {
   addons?: string[];
   fonts?: string[];
   custom_fonts_only?: boolean;
-  exclude_addons?: string[];
+  exclude_addons?: "UBO"[];
 
   // Screen and window
   screen?: {
@@ -36,8 +45,9 @@ export interface CamoufoxLaunchOptions {
   };
   window?: [number, number];
 
-  // Fingerprint
   fingerprint?: any;
+  disableTheming?: boolean;
+  showcursor?: boolean;
 
   // Version and mode
   ff_version?: number;
@@ -48,7 +58,8 @@ export interface CamoufoxLaunchOptions {
   executable_path?: string;
 
   // Firefox preferences
-  firefox_user_prefs?: Record<string, any>;
+  firefox_user_prefs?: Record<string, unknown>;
+  user_data_dir?: string;
 
   // Proxy settings
   proxy?:
@@ -81,83 +92,202 @@ export interface CamoufoxLaunchOptions {
 }
 
 /**
- * Generate Camoufox configuration using camoufox-js-lsd
+ * Start a Camoufox instance in a separate process
+ * @param options Camoufox launch options
+ * @param profilePath Profile directory path
+ * @param url Optional URL to open
+ * @returns Promise resolving to the Camoufox configuration
  */
-export async function generateCamoufoxConfig(
+export async function startCamoufoxProcess(
   options: CamoufoxLaunchOptions = {},
-): Promise<any> {
-  try {
-    // Convert our options to camoufox-js-lsd format
-    const camoufoxOptions: any = {};
+  profilePath?: string,
+  url?: string,
+): Promise<CamoufoxConfig> {
+  // Generate a unique ID for this instance
+  const id = generateCamoufoxId();
 
-    // Map our options to camoufox-js-lsd format
-    if (options.os) camoufoxOptions.os = options.os;
-    if (options.block_images !== undefined)
-      camoufoxOptions.block_images = options.block_images;
-    if (options.block_webrtc !== undefined)
-      camoufoxOptions.block_webrtc = options.block_webrtc;
-    if (options.block_webgl !== undefined)
-      camoufoxOptions.block_webgl = options.block_webgl;
-    if (options.disable_coop !== undefined)
-      camoufoxOptions.disable_coop = options.disable_coop;
-    if (options.geoip !== undefined) camoufoxOptions.geoip = options.geoip;
-    if (options.humanize !== undefined)
-      camoufoxOptions.humanize = options.humanize;
-    if (options.locale) camoufoxOptions.locale = options.locale;
-    if (options.addons) camoufoxOptions.addons = options.addons;
-    if (options.fonts) camoufoxOptions.fonts = options.fonts;
-    if (options.custom_fonts_only !== undefined)
-      camoufoxOptions.custom_fonts_only = options.custom_fonts_only;
-    if (options.exclude_addons)
-      camoufoxOptions.exclude_addons = options.exclude_addons;
-    if (options.screen) camoufoxOptions.screen = options.screen;
-    if (options.window) camoufoxOptions.window = options.window;
-    if (options.fingerprint) camoufoxOptions.fingerprint = options.fingerprint;
-    if (options.ff_version !== undefined)
-      camoufoxOptions.ff_version = options.ff_version;
-    if (options.headless !== undefined)
-      camoufoxOptions.headless = options.headless;
-    if (options.main_world_eval !== undefined)
-      camoufoxOptions.main_world_eval = options.main_world_eval;
-    if (options.executable_path)
-      camoufoxOptions.executable_path = options.executable_path;
-    if (options.firefox_user_prefs)
-      camoufoxOptions.firefox_user_prefs = options.firefox_user_prefs;
-    if (options.proxy) camoufoxOptions.proxy = options.proxy;
-    if (options.enable_cache !== undefined)
-      camoufoxOptions.enable_cache = options.enable_cache;
-    if (options.args) camoufoxOptions.args = options.args;
-    if (options.env) camoufoxOptions.env = options.env;
-    if (options.debug !== undefined) camoufoxOptions.debug = options.debug;
-    if (options.virtual_display)
-      camoufoxOptions.virtual_display = options.virtual_display;
-    if (options.webgl_config)
-      camoufoxOptions.webgl_config = options.webgl_config;
+  // Create the Camoufox configuration
+  const config: CamoufoxConfig = {
+    id,
+    options,
+    profilePath,
+    url,
+  };
 
-    // Handle custom options that might need mapping
-    if (options.timezone) {
-      // If timezone is provided directly, we can set it in the generated config
-      // This will be handled after generation
+  // Save the configuration before starting the process
+  saveCamoufoxConfig(config);
+
+  // Build the command arguments
+  const args = [
+    path.join(__dirname, "index.js"),
+    "camoufox-worker",
+    "start",
+    "--id",
+    id,
+  ];
+
+  // Spawn the process with proper detachment
+  const child = spawn(process.execPath, args, {
+    detached: true,
+    stdio: ["ignore", "pipe", "pipe"], // Capture stdout and stderr for debugging
+    cwd: process.cwd(),
+    env: { ...process.env, NODE_ENV: "production" }, // Ensure consistent environment
+  });
+
+  saveCamoufoxConfig(config);
+
+  // Wait for the worker to start successfully or fail
+  return new Promise<CamoufoxConfig>((resolve, reject) => {
+    let resolved = false;
+    let stdoutBuffer = "";
+    let stderrBuffer = "";
+
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        reject(
+          new Error(`Camoufox worker ${id} startup timeout after 30 seconds`),
+        );
+      }
+    }, 30000);
+
+    // Handle stdout - look for success JSON
+    if (child.stdout) {
+      child.stdout.on("data", (data) => {
+        const output = data.toString();
+        stdoutBuffer += output;
+
+        // Look for success JSON message
+        const lines = stdoutBuffer.split("\n");
+        for (const line of lines) {
+          if (line.trim()) {
+            try {
+              const parsed = JSON.parse(line.trim());
+              if (
+                parsed.success &&
+                parsed.id === id &&
+                parsed.port &&
+                parsed.wsEndpoint
+              ) {
+                if (!resolved) {
+                  resolved = true;
+                  clearTimeout(timeout);
+                  // Update config with server details
+                  config.port = parsed.port;
+                  config.wsEndpoint = parsed.wsEndpoint;
+                  saveCamoufoxConfig(config);
+                  child.unref(); // Allow parent to exit independently
+                  resolve(config);
+                  return;
+                }
+              }
+            } catch {
+              // Not JSON, continue
+            }
+          }
+        }
+      });
     }
-    if (options.country) {
-      // Similar for country
-    }
-    if (options.geolocation) {
-      // Handle geolocation coordinates
+
+    // Handle stderr - look for error JSON
+    if (child.stderr) {
+      child.stderr.on("data", (data) => {
+        const output = data.toString();
+        stderrBuffer += output;
+
+        // Look for error JSON message
+        const lines = stderrBuffer.split("\n");
+        for (const line of lines) {
+          if (line.trim()) {
+            try {
+              const parsed = JSON.parse(line.trim());
+              if (parsed.error && parsed.id === id) {
+                if (!resolved) {
+                  resolved = true;
+                  clearTimeout(timeout);
+                  reject(
+                    new Error(
+                      `Camoufox worker failed: ${parsed.message || parsed.error}`,
+                    ),
+                  );
+                  return;
+                }
+              }
+            } catch {
+              // Not JSON, continue
+            }
+          }
+        }
+      });
     }
 
-    // Generate the configuration using camoufox-js-lsd
-    const generatedConfig = await launchOptions(camoufoxOptions);
+    child.on("exit", (code, signal) => {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timeout);
+        if (code !== 0) {
+          reject(
+            new Error(
+              `Camoufox worker ${id} exited with code ${code} and signal ${signal}. Stderr: ${stderrBuffer}`,
+            ),
+          );
+        } else {
+          // Process exited successfully but we didn't get success message
+          reject(
+            new Error(
+              `Camoufox worker ${id} exited without success confirmation`,
+            ),
+          );
+        }
+      }
+    });
+  });
+}
 
-    // Apply any custom overrides
-    if (options.timezone) {
-      generatedConfig.env = generatedConfig.env || {};
-      // The timezone will be handled in the CAMOU_CONFIG environment variable
-    }
+/**
+ * Stop a Camoufox process
+ * @param id The Camoufox ID to stop
+ * @returns Promise resolving to true if stopped, false if not found
+ */
+export async function stopCamoufoxProcess(id: string): Promise<boolean> {
+  const config = getCamoufoxConfig(id);
 
-    return generatedConfig;
-  } catch (error) {
-    console.error(`Failed to generate Camoufox config: ${error}`);
-    throw error;
+  if (!config) {
+    return false;
   }
+
+  try {
+    // If we have a port, try to gracefully shutdown the server
+    if (config.port) {
+      try {
+        await fetch(`http://localhost:${config.port}/shutdown`, {
+          method: "POST",
+          signal: AbortSignal.timeout(5000),
+        });
+        // Wait a bit for graceful shutdown
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      } catch {
+        // Graceful shutdown failed, continue with force stop
+      }
+    }
+
+    // Delete the configuration
+    deleteCamoufoxConfig(id);
+    return true;
+  } catch (error) {
+    // Delete the configuration even if stopping failed
+    deleteCamoufoxConfig(id);
+    return false;
+  }
+}
+
+/**
+ * Stop all Camoufox processes
+ * @returns Promise resolving when all instances are stopped
+ */
+export async function stopAllCamoufoxProcesses(): Promise<void> {
+  const configs = listCamoufoxConfigs();
+
+  const stopPromises = configs.map((config) => stopCamoufoxProcess(config.id));
+  await Promise.all(stopPromises);
 }

@@ -172,19 +172,9 @@ export default function Home() {
       setProcessingUrls((prev) => new Set(prev).add(url));
 
       try {
-        // Use smart profile selection
-        const result = await invoke<string>("smart_open_url", {
-          url,
-        });
-        console.log("Smart URL opening succeeded:", result);
-        // URL was handled successfully, no need to show selector
-      } catch (error: unknown) {
-        console.log(
-          "Smart URL opening failed or requires profile selection:",
-          error,
-        );
+        console.log("URL received for opening:", url);
 
-        // Show profile selector for manual selection
+        // Always show profile selector for manual selection - never auto-open
         // Replace any existing pending URL with the new one
         setPendingUrls([{ id: Date.now().toString(), url }]);
       } finally {
@@ -238,11 +228,12 @@ export default function Home() {
 
   useAppUpdateNotifications();
 
-  // For some reason, app.deep_link().get_current() is not working properly
+  // Check for startup URLs but only process them once
   const checkCurrentUrl = useCallback(async () => {
     try {
       const currentUrl = await getCurrent();
       if (currentUrl && currentUrl.length > 0) {
+        console.log("Startup URL detected:", currentUrl[0]);
         void handleUrlOpen(currentUrl[0]);
       }
     } catch (error) {
@@ -315,7 +306,7 @@ export default function Home() {
       // Listen for show profile selector events
       await listen<string>("show-profile-selector", (event) => {
         console.log("Received show profile selector request:", event.payload);
-        setPendingUrls([{ id: Date.now().toString(), url: event.payload }]);
+        void handleUrlOpen(event.payload);
       });
 
       // Listen for show create profile dialog events
@@ -329,6 +320,25 @@ export default function Home() {
         );
         setCreateProfileDialogOpen(true);
       });
+
+      // Listen for custom logo click events
+      const handleLogoUrlEvent = (event: CustomEvent) => {
+        console.log("Received logo URL event:", event.detail);
+        void handleUrlOpen(event.detail);
+      };
+
+      window.addEventListener(
+        "url-open-request",
+        handleLogoUrlEvent as EventListener,
+      );
+
+      // Return cleanup function
+      return () => {
+        window.removeEventListener(
+          "url-open-request",
+          handleLogoUrlEvent as EventListener,
+        );
+      };
     } catch (error) {
       console.error("Failed to setup URL listener:", error);
     }
@@ -643,8 +653,16 @@ export default function Home() {
     // Check for startup default browser prompt
     void checkStartupPrompt();
 
-    // Listen for URL open events
-    void listenForUrlEvents();
+    // Listen for URL open events and get cleanup function
+    const setupListeners = async () => {
+      const cleanup = await listenForUrlEvents();
+      return cleanup;
+    };
+
+    let cleanup: (() => void) | undefined;
+    setupListeners().then((cleanupFn) => {
+      cleanup = cleanupFn;
+    });
 
     // Check for startup URLs (when app was launched as default browser)
     void checkCurrentUrl();
@@ -659,6 +677,9 @@ export default function Home() {
 
     return () => {
       clearInterval(updateInterval);
+      if (cleanup) {
+        cleanup();
+      }
     };
   }, [
     loadProfilesWithUpdateCheck,
@@ -850,6 +871,7 @@ export default function Home() {
         description={`This action cannot be undone. This will permanently delete ${selectedProfiles.length} profile${selectedProfiles.length !== 1 ? "s" : ""} and all associated data.`}
         confirmButtonText={`Delete ${selectedProfiles.length} Profile${selectedProfiles.length !== 1 ? "s" : ""}`}
         isLoading={isBulkDeleting}
+        profileNames={selectedProfiles}
       />
     </div>
   );

@@ -13,7 +13,7 @@ use crate::browser::{create_browser, BrowserType, ProxySettings};
 use crate::browser_version_service::{
   BrowserVersionInfo, BrowserVersionService, BrowserVersionsResult,
 };
-use crate::camoufox_direct::CamoufoxConfig;
+use crate::camoufox::CamoufoxConfig;
 use crate::download::{DownloadProgress, Downloader};
 use crate::downloaded_browsers::DownloadedBrowsersRegistry;
 use crate::extraction::Extractor;
@@ -1884,7 +1884,7 @@ impl BrowserRunner {
     url: Option<String>,
     local_proxy_settings: Option<&ProxySettings>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
-    // Handle camoufox profiles specially using only the direct launcher
+    // Handle camoufox profiles using nodecar launcher
     if profile.browser == "camoufox" {
       if let Some(mut camoufox_config) = profile.camoufox_config.clone() {
         // Handle proxy settings for camoufox
@@ -1951,8 +1951,7 @@ impl BrowserRunner {
         } else {
           // No meaningful config provided, use test config to ensure anti-fingerprinting works
           println!("No Camoufox configuration provided, using test configuration");
-          let mut test_config =
-            crate::camoufox_direct::CamoufoxDirectLauncher::create_test_config();
+          let mut test_config = crate::camoufox::CamoufoxNodecarLauncher::create_test_config();
           // Preserve any proxy settings from the original config
           test_config.proxy = camoufox_config.proxy.clone();
           test_config.headless = camoufox_config.headless;
@@ -1960,8 +1959,8 @@ impl BrowserRunner {
           test_config
         };
 
-        // Use the direct camoufox launcher
-        let camoufox_result = crate::camoufox_direct::launch_camoufox_profile_direct(
+        // Use the nodecar camoufox launcher
+        let camoufox_result = crate::camoufox::launch_camoufox_profile_nodecar(
           app_handle.clone(),
           profile.clone(),
           final_config,
@@ -1969,21 +1968,16 @@ impl BrowserRunner {
         )
         .await
         .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
-          format!("Failed to launch camoufox: {e}").into()
+          format!("Failed to launch camoufox via nodecar: {e}").into()
         })?;
 
-        // Update proxy with actual PID if proxy was started
-        if let Some(pid) = camoufox_result.pid {
-          if profile.proxy_id.is_some() {
-            if let Err(e) = PROXY_MANAGER.update_proxy_pid(0, pid) {
-              println!("Warning: Failed to update proxy PID: {e}");
-            }
-          }
-        }
+        // For server-based Camoufox, we don't have a PID but we have a port
+        // We'll use the port as a unique identifier for the running instance
+        let process_id = camoufox_result.port;
 
         // Update profile with the process info from camoufox result
         let mut updated_profile = profile.clone();
-        updated_profile.process_id = camoufox_result.pid;
+        updated_profile.process_id = process_id;
         updated_profile.last_launch = Some(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs());
 
         // Save the updated profile
@@ -2166,10 +2160,9 @@ impl BrowserRunner {
     url: &str,
     _internal_proxy_settings: Option<&ProxySettings>,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Handle camoufox profiles specially using only the direct launcher
+    // Handle camoufox profiles using nodecar launcher
     if profile.browser == "camoufox" {
-      let camoufox_launcher =
-        crate::camoufox_direct::CamoufoxDirectLauncher::new(app_handle.clone());
+      let camoufox_launcher = crate::camoufox::CamoufoxNodecarLauncher::new(app_handle.clone());
 
       // Get the profile path based on the UUID
       let profiles_dir = self.get_profiles_dir();
@@ -2588,12 +2581,15 @@ impl BrowserRunner {
         let profile_path_match = cmd.iter().any(|s| {
           let arg = s.to_str().unwrap_or("");
           // For Firefox-based browsers (including camoufox), check for exact profile path match
-          if profile.browser == "tor-browser"
+          if profile.browser == "camoufox" {
+            // Camoufox uses user_data_dir like Chromium browsers
+            arg.contains(&format!("--user-data-dir={profile_data_path_str}"))
+              || arg == profile_data_path_str
+          } else if profile.browser == "tor-browser"
             || profile.browser == "firefox"
             || profile.browser == "firefox-developer"
             || profile.browser == "mullvad-browser"
             || profile.browser == "zen"
-            || profile.browser == "camoufox"
           {
             arg == profile_data_path_str
               || arg == format!("-profile={profile_data_path_str}")
@@ -2665,7 +2661,11 @@ impl BrowserRunner {
           let profile_path_match = cmd.iter().any(|s| {
             let arg = s.to_str().unwrap_or("");
             // For Firefox-based browsers, check for exact profile path match
-            if profile.browser == "tor-browser"
+            if profile.browser == "camoufox" {
+              // Camoufox uses user_data_dir like Chromium browsers
+              arg.contains(&format!("--user-data-dir={profile_data_path_str}"))
+                || arg == profile_data_path_str
+            } else if profile.browser == "tor-browser"
               || profile.browser == "firefox"
               || profile.browser == "firefox-developer"
               || profile.browser == "mullvad-browser"
@@ -2726,7 +2726,7 @@ impl BrowserRunner {
   pub fn update_camoufox_config(
     &self,
     profile_name: &str,
-    config: crate::camoufox_direct::CamoufoxConfig,
+    config: crate::camoufox::CamoufoxConfig,
   ) -> Result<(), Box<dyn std::error::Error>> {
     // Find the profile by name
     let profiles = self.list_profiles()?;
@@ -2758,15 +2758,14 @@ impl BrowserRunner {
     app_handle: tauri::AppHandle,
     profile: &BrowserProfile,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Handle camoufox profiles specially using only the direct launcher
+    // Handle camoufox profiles using nodecar launcher
     if profile.browser == "camoufox" {
-      let camoufox_launcher =
-        crate::camoufox_direct::CamoufoxDirectLauncher::new(app_handle.clone());
+      let camoufox_launcher = crate::camoufox::CamoufoxNodecarLauncher::new(app_handle.clone());
 
       // Try to stop by PID first (faster)
       if let Some(stored_pid) = profile.process_id {
         match camoufox_launcher
-          .stop_camoufox(&stored_pid.to_string())
+          .stop_camoufox(&app_handle, &stored_pid.to_string())
           .await
         {
           Ok(stopped) => {
@@ -2791,7 +2790,10 @@ impl BrowserRunner {
           .await
         {
           Ok(Some(camoufox_process)) => {
-            match camoufox_launcher.stop_camoufox(&camoufox_process.id).await {
+            match camoufox_launcher
+              .stop_camoufox(&app_handle, &camoufox_process.id)
+              .await
+            {
               Ok(stopped) => {
                 if stopped {
                   println!(
@@ -2889,7 +2891,11 @@ impl BrowserRunner {
           let profile_path_match = cmd.iter().any(|s| {
             let arg = s.to_str().unwrap_or("");
             // For Firefox-based browsers, check for exact profile path match
-            if profile.browser == "tor-browser"
+            if profile.browser == "camoufox" {
+              // Camoufox uses user_data_dir like Chromium browsers
+              arg.contains(&format!("--user-data-dir={profile_data_path_str}"))
+                || arg == profile_data_path_str
+            } else if profile.browser == "tor-browser"
               || profile.browser == "firefox"
               || profile.browser == "firefox-developer"
               || profile.browser == "mullvad-browser"
