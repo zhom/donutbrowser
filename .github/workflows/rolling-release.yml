@@ -89,18 +89,18 @@ jobs:
             target: "aarch64-unknown-linux-gnu"
             pkg_target: "latest-linux-arm64"
             nodecar_script: "build:linux-arm64"
-          - platform: "windows-latest"
-            args: "--target x86_64-pc-windows-msvc"
-            arch: "x86_64"
-            target: "x86_64-pc-windows-msvc"
-            pkg_target: "latest-win-x64"
-            nodecar_script: "build:win-x64"
-          - platform: "windows-11-arm"
-            args: "--target aarch64-pc-windows-msvc"
-            arch: "aarch64"
-            target: "aarch64-pc-windows-msvc"
-            pkg_target: "latest-win-arm64"
-            nodecar_script: "build:win-arm64"
+          # - platform: "windows-latest"
+          #   args: "--target x86_64-pc-windows-msvc"
+          #   arch: "x86_64"
+          #   target: "x86_64-pc-windows-msvc"
+          #   pkg_target: "latest-win-x64"
+          #   nodecar_script: "build:win-x64"
+          # - platform: "windows-11-arm"
+          #   args: "--target aarch64-pc-windows-msvc"
+          #   arch: "aarch64"
+          #   target: "aarch64-pc-windows-msvc"
+          #   pkg_target: "latest-win-arm64"
+          #   nodecar_script: "build:win-arm64"
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -130,7 +130,7 @@ jobs:
         uses: swatinem/rust-cache@98c8021b550208e191a6a3145459bfc9fb29c4c0 #v2.8.0
         with:
           workdir: ./src-tauri
-        
+
       - name: Install banderole
         run: cargo install banderole
 
