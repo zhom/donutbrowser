@@ -1,4 +1,4 @@
-use crate::browser_runner::BrowserProfile;
+use crate::profile::BrowserProfile;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;

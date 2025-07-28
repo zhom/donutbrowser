@@ -680,7 +680,7 @@ impl ProfileImporter {
     // We need to find a suitable version for this browser type
     let available_versions = self.get_default_version_for_browser(browser_type)?;
 
-    let profile = crate::browser_runner::BrowserProfile {
+    let profile = crate::profile::BrowserProfile {
       id: profile_id,
       name: new_profile_name.to_string(),
       browser: browser_type.to_string(),

@@ -140,7 +140,7 @@ impl GroupManager {
 
   pub fn get_groups_with_profile_counts(
     &self,
-    profiles: &[crate::browser_runner::BrowserProfile],
+    profiles: &[crate::profile::BrowserProfile],
   ) -> Result<Vec<GroupWithCount>, Box<dyn std::error::Error>> {
     let groups = self.get_all_groups()?;
     let mut group_counts = HashMap::new();
@@ -186,9 +186,7 @@ lazy_static::lazy_static! {
 }
 
 // Helper function to get groups with counts
-pub fn get_groups_with_counts(
-  profiles: &[crate::browser_runner::BrowserProfile],
-) -> Vec<GroupWithCount> {
+pub fn get_groups_with_counts(profiles: &[crate::profile::BrowserProfile]) -> Vec<GroupWithCount> {
   let group_manager = GROUP_MANAGER.lock().unwrap();
   group_manager
     .get_groups_with_profile_counts(profiles)
@@ -206,8 +204,8 @@ pub async fn get_profile_groups() -> Result<Vec<ProfileGroup>, String> {
 
 #[tauri::command]
 pub async fn get_groups_with_profile_counts() -> Result<Vec<GroupWithCount>, String> {
-  let browser_runner = crate::browser_runner::BrowserRunner::new();
-  let profiles = browser_runner
+  let profile_manager = crate::profile::ProfileManager::new();
+  let profiles = profile_manager
     .list_profiles()
     .map_err(|e| format!("Failed to list profiles: {e}"))?;
   Ok(get_groups_with_counts(&profiles))
@@ -242,16 +240,16 @@ pub async fn assign_profiles_to_group(
   profile_names: Vec<String>,
   group_id: Option<String>,
 ) -> Result<(), String> {
-  let browser_runner = crate::browser_runner::BrowserRunner::new();
-  browser_runner
+  let profile_manager = crate::profile::ProfileManager::new();
+  profile_manager
     .assign_profiles_to_group(profile_names, group_id)
     .map_err(|e| format!("Failed to assign profiles to group: {e}"))
 }
 
 #[tauri::command]
 pub async fn delete_selected_profiles(profile_names: Vec<String>) -> Result<(), String> {
-  let browser_runner = crate::browser_runner::BrowserRunner::new();
-  browser_runner
+  let profile_manager = crate::profile::ProfileManager::new();
+  profile_manager
     .delete_multiple_profiles(profile_names)
     .map_err(|e| format!("Failed to delete profiles: {e}"))
 }

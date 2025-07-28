@@ -20,7 +20,8 @@ mod downloaded_browsers;
 mod extraction;
 mod geoip_downloader;
 mod group_manager;
-
+mod platform_browser;
+mod profile;
 mod profile_importer;
 mod proxy_manager;
 mod settings_manager;
@@ -36,7 +37,8 @@ use browser_runner::{
   fetch_browser_versions_with_count, fetch_browser_versions_with_count_cached_first,
   get_browser_release_types, get_downloaded_browser_versions, get_supported_browsers,
   is_browser_supported_on_platform, kill_browser_profile, launch_browser_profile,
-  list_browser_profiles, rename_profile, update_profile_proxy, update_profile_version,
+  list_browser_profiles, rename_profile, update_camoufox_config, update_profile_proxy,
+  update_profile_version,
 };
 
 use settings_manager::{
@@ -172,17 +174,6 @@ async fn delete_stored_proxy(proxy_id: String) -> Result<(), String> {
   crate::proxy_manager::PROXY_MANAGER
     .delete_stored_proxy(&proxy_id)
     .map_err(|e| format!("Failed to delete stored proxy: {e}"))
-}
-
-#[tauri::command]
-async fn update_camoufox_config(
-  profile_name: String,
-  config: crate::camoufox::CamoufoxConfig,
-) -> Result<(), String> {
-  let browser_runner = browser_runner::BrowserRunner::new();
-  browser_runner
-    .update_camoufox_config(&profile_name, config)
-    .map_err(|e| format!("Failed to update Camoufox config: {e}"))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

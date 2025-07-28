@@ -1,6 +1,6 @@
 use crate::api_client::is_browser_version_nightly;
-use crate::browser_runner::{BrowserProfile, BrowserRunner};
 use crate::browser_version_service::{BrowserVersionInfo, BrowserVersionService};
+use crate::profile::BrowserProfile;
 use crate::settings_manager::SettingsManager;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -30,7 +30,6 @@ pub struct AutoUpdateState {
 
 pub struct AutoUpdater {
   version_service: BrowserVersionService,
-  browser_runner: BrowserRunner,
   settings_manager: SettingsManager,
 }
 
@@ -38,7 +37,6 @@ impl AutoUpdater {
   pub fn new() -> Self {
     Self {
       version_service: BrowserVersionService::new(),
-      browser_runner: BrowserRunner::new(),
       settings_manager: SettingsManager::new(),
     }
   }
@@ -51,8 +49,8 @@ impl AutoUpdater {
     let mut browser_versions: HashMap<String, Vec<BrowserVersionInfo>> = HashMap::new();
 
     // Group profiles by browser
-    let profiles = self
-      .browser_runner
+    let profile_manager = crate::profile::ProfileManager::new();
+    let profiles = profile_manager
       .list_profiles()
       .map_err(|e| format!("Failed to list profiles: {e}"))?;
     let mut browser_profiles: HashMap<String, Vec<BrowserProfile>> = HashMap::new();
@@ -294,8 +292,8 @@ impl AutoUpdater {
     browser: &str,
     new_version: &str,
   ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
-    let profiles = self
-      .browser_runner
+    let profile_manager = crate::profile::ProfileManager::new();
+    let profiles = profile_manager
       .list_profiles()
       .map_err(|e| format!("Failed to list profiles: {e}"))?;
 
@@ -312,10 +310,7 @@ impl AutoUpdater {
         // Check if this is an update (newer version)
         if self.is_version_newer(new_version, &profile.version) {
           // Update the profile version
-          match self
-            .browser_runner
-            .update_profile_version(&profile.name, new_version)
-          {
+          match profile_manager.update_profile_version(&profile.name, new_version) {
             Ok(_) => {
               updated_profiles.push(profile.name);
             }
@@ -361,8 +356,8 @@ impl AutoUpdater {
     &self,
   ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
     // Load current profiles
-    let profiles = self
-      .browser_runner
+    let profile_manager = crate::profile::ProfileManager::new();
+    let profiles = profile_manager
       .list_profiles()
       .map_err(|e| format!("Failed to load profiles: {e}"))?;
 

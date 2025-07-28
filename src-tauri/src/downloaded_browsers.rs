@@ -201,7 +201,7 @@ impl DownloadedBrowsersRegistry {
   /// Get all browsers and versions referenced by active profiles
   pub fn get_active_browser_versions(
     &self,
-    profiles: &[crate::browser_runner::BrowserProfile],
+    profiles: &[crate::profile::BrowserProfile],
   ) -> Vec<(String, String)> {
     profiles
       .iter()
@@ -251,7 +251,7 @@ impl DownloadedBrowsersRegistry {
   /// Get all browsers and versions that are currently running
   pub fn get_running_browser_versions(
     &self,
-    profiles: &[crate::browser_runner::BrowserProfile],
+    profiles: &[crate::profile::BrowserProfile],
   ) -> Vec<(String, String)> {
     profiles
       .iter()
