@@ -377,7 +377,10 @@ export function ProfilesDataTable({
                       variant={isRunning ? "destructive" : "default"}
                       size="sm"
                       disabled={!canLaunch}
-                      className={!canLaunch ? "opacity-50" : ""}
+                      className={cn(
+                        "cursor-pointer",
+                        !canLaunch && "opacity-50",
+                      )}
                       onClick={() =>
                         void (isRunning
                           ? onKillProfile(profile)
