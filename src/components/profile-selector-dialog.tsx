@@ -84,15 +84,22 @@ export function ProfileSelectorDialog({
         // First, try to find a running profile that can be used for opening links
         const runningAvailableProfile = profileList.find((profile) => {
           const isRunning = runningProfiles.has(profile.name);
-          return isRunning && browserState.canUseProfileForLinks(profile);
+          // Simple check without browserState dependency
+          return (
+            isRunning &&
+            profile.browser !== "tor-browser" &&
+            profile.browser !== "mullvad-browser"
+          );
         });
 
         if (runningAvailableProfile) {
           setSelectedProfile(runningAvailableProfile.name);
         } else {
           // If no running profile is available, find the first available profile
-          const availableProfile = profileList.find((profile) =>
-            browserState.canUseProfileForLinks(profile),
+          const availableProfile = profileList.find(
+            (profile) =>
+              profile.browser !== "tor-browser" &&
+              profile.browser !== "mullvad-browser",
           );
           if (availableProfile) {
             setSelectedProfile(availableProfile.name);
@@ -104,7 +111,7 @@ export function ProfileSelectorDialog({
     } finally {
       setIsLoading(false);
     }
-  }, [runningProfiles, browserState]);
+  }, [runningProfiles]);
 
   // Helper function to get tooltip content for profiles - now uses shared hook
   const getProfileTooltipContent = (profile: BrowserProfile): string | null => {
@@ -227,11 +234,12 @@ export function ProfileSelectorDialog({
                     return (
                       <Tooltip key={profile.name}>
                         <TooltipTrigger asChild>
-                          <span className="inline-flex">
-                            <SelectItem
-                              value={profile.name}
-                              disabled={!canUseForLinks}
-                            >
+                          <SelectItem
+                            value={profile.name}
+                            disabled={!canUseForLinks}
+                            asChild
+                          >
+                            <span>
                               <div
                                 className={`flex items-center gap-2 ${
                                   !canUseForLinks ? "opacity-50" : ""
@@ -276,8 +284,8 @@ export function ProfileSelectorDialog({
                                   </Badge>
                                 )}
                               </div>
-                            </SelectItem>
-                          </span>
+                            </span>
+                          </SelectItem>
                         </TooltipTrigger>
                         {tooltipContent && (
                           <TooltipContent>{tooltipContent}</TooltipContent>

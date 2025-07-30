@@ -103,6 +103,9 @@ export function ProfilesDataTable({
   const [profileToDelete, setProfileToDelete] =
     React.useState<BrowserProfile | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
+  const [launchingProfiles, setLaunchingProfiles] = React.useState<Set<string>>(
+    new Set(),
+  );
 
   const [storedProxies, setStoredProxies] = React.useState<StoredProxy[]>([]);
   const [selectedProfiles, setSelectedProfiles] = React.useState<Set<string>>(
@@ -365,8 +368,40 @@ export function ProfilesDataTable({
           const profile = row.original;
           const isRunning =
             browserState.isClient && runningProfiles.has(profile.name);
+          const isLaunching = launchingProfiles.has(profile.name);
           const canLaunch = browserState.canLaunchProfile(profile);
           const tooltipContent = browserState.getLaunchTooltipContent(profile);
+
+          const handleLaunchClick = async () => {
+            if (isRunning) {
+              console.log(
+                `Stopping ${profile.browser} profile: ${profile.name}`,
+              );
+              await onKillProfile(profile);
+            } else {
+              console.log(
+                `Launching ${profile.browser} profile: ${profile.name}`,
+              );
+              setLaunchingProfiles((prev) => new Set(prev).add(profile.name));
+              try {
+                await onLaunchProfile(profile);
+                console.log(
+                  `Successfully launched ${profile.browser} profile: ${profile.name}`,
+                );
+              } catch (error) {
+                console.error(
+                  `Failed to launch ${profile.browser} profile: ${profile.name}`,
+                  error,
+                );
+              } finally {
+                setLaunchingProfiles((prev) => {
+                  const next = new Set(prev);
+                  next.delete(profile.name);
+                  return next;
+                });
+              }
+            }
+          };
 
           return (
             <div className="flex gap-2 items-center">
@@ -376,18 +411,22 @@ export function ProfilesDataTable({
                     <Button
                       variant={isRunning ? "destructive" : "default"}
                       size="sm"
-                      disabled={!canLaunch}
+                      disabled={!canLaunch || isLaunching}
                       className={cn(
-                        "cursor-pointer",
+                        "cursor-pointer min-w-[70px]",
                         !canLaunch && "opacity-50",
                       )}
-                      onClick={() =>
-                        void (isRunning
-                          ? onKillProfile(profile)
-                          : onLaunchProfile(profile))
-                      }
+                      onClick={() => void handleLaunchClick()}
                     >
-                      {isRunning ? "Stop" : "Launch"}
+                      {isLaunching ? (
+                        <div className="flex items-center gap-1">
+                          <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                        </div>
+                      ) : isRunning ? (
+                        "Stop"
+                      ) : (
+                        "Launch"
+                      )}
                     </Button>
                   </span>
                 </TooltipTrigger>
@@ -408,7 +447,7 @@ export function ProfilesDataTable({
               onClick={() =>
                 column.toggleSorting(column.getIsSorted() === "asc")
               }
-              className="h-auto p-0 font-semibold text-left justify-start"
+              className="h-auto p-0 font-semibold text-left justify-start cursor-pointer"
             >
               Name
               {column.getIsSorted() === "asc" ? (
@@ -448,7 +487,7 @@ export function ProfilesDataTable({
               onClick={() =>
                 column.toggleSorting(column.getIsSorted() === "asc")
               }
-              className="h-auto p-0 font-semibold text-left justify-start"
+              className="h-auto p-0 font-semibold text-left justify-start cursor-pointer"
             >
               Browser
               {column.getIsSorted() === "asc" ? (
@@ -677,6 +716,7 @@ export function ProfilesDataTable({
       onAssignProfilesToGroup,
       isUpdating,
       filteredData.length,
+      launchingProfiles.has,
     ],
   );
 

@@ -1,5 +1,7 @@
 import { program } from "commander";
 import {
+  type CamoufoxLaunchOptions,
+  startCamoufoxProcess,
   stopAllCamoufoxProcesses,
   stopCamoufoxProcess,
 } from "./camoufox-launcher.js";
@@ -258,13 +260,13 @@ program
       if (action === "start") {
         try {
           // Build Camoufox options in the format expected by camoufox-js
-          const camoufoxOptions: Record<string, unknown> = {};
+          const camoufoxOptions: CamoufoxLaunchOptions = {};
 
           // OS fingerprinting
           if (options.os && typeof options.os === "string") {
             camoufoxOptions.os = options.os.includes(",")
-              ? options.os.split(",")
-              : options.os;
+              ? (options.os.split(",") as ("windows" | "macos" | "linux")[])
+              : (options.os as "windows" | "macos" | "linux");
           }
 
           // Blocking options
@@ -278,20 +280,23 @@ program
           // Geolocation
           if (options.geoip) {
             camoufoxOptions.geoip =
-              options.geoip === "auto" ? true : options.geoip;
+              options.geoip === "auto" ? true : (options.geoip as string);
           }
           if (options.latitude && options.longitude) {
             camoufoxOptions.geolocation = {
-              latitude: options.latitude,
-              longitude: options.longitude,
+              latitude: options.latitude as number,
+              longitude: options.longitude as number,
               accuracy: 100,
             };
           }
-          if (options.country) camoufoxOptions.country = options.country;
-          if (options.timezone) camoufoxOptions.timezone = options.timezone;
+          if (options.country)
+            camoufoxOptions.country = options.country as string;
+          if (options.timezone)
+            camoufoxOptions.timezone = options.timezone as string;
 
           // UI and behavior
-          if (options.humanize) camoufoxOptions.humanize = options.humanize;
+          if (options.humanize)
+            camoufoxOptions.humanize = options.humanize as boolean | number;
           if (options.headless) camoufoxOptions.headless = true;
 
           // Localization
@@ -311,44 +316,54 @@ program
             options.excludeAddons &&
             typeof options.excludeAddons === "string"
           )
-            camoufoxOptions.exclude_addons = options.excludeAddons.split(",");
+            camoufoxOptions.exclude_addons = options.excludeAddons.split(
+              ",",
+            ) as "UBO"[];
 
           // Screen and window
-          const screen: Record<string, unknown> = {};
-          if (options.screenMinWidth) screen.minWidth = options.screenMinWidth;
-          if (options.screenMaxWidth) screen.maxWidth = options.screenMaxWidth;
+          const screen: {
+            minWidth?: number;
+            maxWidth?: number;
+            minHeight?: number;
+            maxHeight?: number;
+          } = {};
+          if (options.screenMinWidth)
+            screen.minWidth = options.screenMinWidth as number;
+          if (options.screenMaxWidth)
+            screen.maxWidth = options.screenMaxWidth as number;
           if (options.screenMinHeight)
-            screen.minHeight = options.screenMinHeight;
+            screen.minHeight = options.screenMinHeight as number;
           if (options.screenMaxHeight)
-            screen.maxHeight = options.screenMaxHeight;
+            screen.maxHeight = options.screenMaxHeight as number;
           if (Object.keys(screen).length > 0) camoufoxOptions.screen = screen;
 
           if (options.windowWidth && options.windowHeight) {
             camoufoxOptions.window = [
-              options.windowWidth,
-              options.windowHeight,
+              options.windowWidth as number,
+              options.windowHeight as number,
             ];
           }
 
           // Advanced options
-          if (options.ffVersion) camoufoxOptions.ff_version = options.ffVersion;
+          if (options.ffVersion)
+            camoufoxOptions.ff_version = options.ffVersion as number;
           if (options.mainWorldEval) camoufoxOptions.main_world_eval = true;
           if (options.webglVendor && options.webglRenderer) {
             camoufoxOptions.webgl_config = [
-              options.webglVendor,
-              options.webglRenderer,
+              options.webglVendor as string,
+              options.webglRenderer as string,
             ];
           }
 
           // Proxy
-          if (options.proxy) camoufoxOptions.proxy = options.proxy;
+          if (options.proxy) camoufoxOptions.proxy = options.proxy as string;
 
           // Cache and performance - default to enabled
           camoufoxOptions.enable_cache = !options.disableCache;
 
           // Environment and debugging
           if (options.virtualDisplay)
-            camoufoxOptions.virtual_display = options.virtualDisplay;
+            camoufoxOptions.virtual_display = options.virtualDisplay as string;
           if (options.debug) camoufoxOptions.debug = true;
           if (options.args && typeof options.args === "string")
             camoufoxOptions.args = options.args.split(",");
@@ -388,91 +403,27 @@ program
             }
           }
 
-          // Generate a unique ID for this instance
-          const id = `camoufox_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-
-          // Add profile path if provided
-          if (typeof options.profilePath === "string") {
-            camoufoxOptions.user_data_dir = options.profilePath;
-          }
-
-          camoufoxOptions.disableTheming = true;
-          camoufoxOptions.showcursor = false;
-
-          // Don't force headless mode - let the user configuration decide
-          if (camoufoxOptions.headless === undefined) {
-            camoufoxOptions.headless = false; // Default to visible
-          }
-
-          // Use the server-based approach via launchServer
-          const { launchServer } = await import("camoufox-js");
-          const { firefox } = await import("playwright-core");
-          const getPort = (await import("get-port")).default;
-
-          // Get an available port
-          const port = await getPort();
-
-          // Launch Camoufox server
-          const server = await launchServer({
-            ...camoufoxOptions,
-            port: port,
-            ws_path: "/camoufox",
-          });
-
-          // Connect to the server
-          const browser = await firefox.connect(server.wsEndpoint());
-
-          // Open URL if provided
-          if (typeof options.url === "string") {
-            try {
-              const page = await browser.newPage();
-              await page.goto(options.url);
-            } catch {
-              // Don't fail if URL opening fails
-            }
-          } else {
-            // Create a blank page to keep the browser alive
-            try {
-              await browser.newPage();
-            } catch {
-              // Ignore if we can't create a page
-            }
-          }
+          // Use the launcher to start Camoufox properly
+          const config = await startCamoufoxProcess(
+            camoufoxOptions,
+            typeof options.profilePath === "string"
+              ? options.profilePath
+              : undefined,
+            typeof options.url === "string" ? options.url : undefined,
+          );
 
           // Output the configuration as JSON for the Rust side to parse
           console.log(
             JSON.stringify({
-              id: id,
-              port: port,
-              wsEndpoint: server.wsEndpoint(),
-              profilePath:
-                typeof options.profilePath === "string"
-                  ? options.profilePath
-                  : undefined,
-              url: typeof options.url === "string" ? options.url : undefined,
+              id: config.id,
+              port: config.port,
+              wsEndpoint: config.wsEndpoint,
+              profilePath: config.profilePath,
+              url: config.url,
             }),
           );
 
-          // Keep the process alive by waiting for the browser to disconnect
-          browser.on("disconnected", () => {
-            process.exit(0);
-          });
-
-          // Keep the process alive with a simple interval
-          const keepAlive = setInterval(() => {
-            try {
-              if (!browser.isConnected()) {
-                clearInterval(keepAlive);
-                process.exit(0);
-              }
-            } catch {
-              clearInterval(keepAlive);
-              process.exit(0);
-            }
-          }, 5000);
-
-          // Handle process staying alive
-          process.stdin.resume();
+          process.exit(0);
         } catch (error: unknown) {
           console.error(
             JSON.stringify({

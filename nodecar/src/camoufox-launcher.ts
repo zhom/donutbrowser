@@ -11,7 +11,7 @@ import {
 
 export interface CamoufoxLaunchOptions {
   // Operating system to use for fingerprint generation
-  os?: "windows" | "macos" | "linux"[];
+  os?: "windows" | "macos" | "linux" | ("windows" | "macos" | "linux")[];
 
   // Blocking options
   block_images?: boolean;
@@ -126,30 +126,35 @@ export async function startCamoufoxProcess(
     id,
   ];
 
-  // Spawn the process with proper detachment
+  // Spawn the process with proper detachment - similar to proxy implementation
   const child = spawn(process.execPath, args, {
     detached: true,
-    stdio: ["ignore", "pipe", "pipe"], // Capture stdout and stderr for debugging
+    stdio: ["ignore", "pipe", "pipe"], // Capture stdout and stderr for startup feedback
     cwd: process.cwd(),
-    env: { ...process.env, NODE_ENV: "production" }, // Ensure consistent environment
+    env: {
+      ...process.env,
+      NODE_ENV: "production",
+      // Ensure Camoufox can find its dependencies
+      NODE_PATH: process.env.NODE_PATH || "",
+    },
   });
 
-  saveCamoufoxConfig(config);
-
-  // Wait for the worker to start successfully or fail
+  // Wait for the worker to start successfully or fail - with shorter timeout for quick response
   return new Promise<CamoufoxConfig>((resolve, reject) => {
     let resolved = false;
     let stdoutBuffer = "";
     let stderrBuffer = "";
 
+    // Shorter timeout for quick startup feedback
     const timeout = setTimeout(() => {
       if (!resolved) {
         resolved = true;
+        child.kill("SIGKILL");
         reject(
-          new Error(`Camoufox worker ${id} startup timeout after 30 seconds`),
+          new Error(`Camoufox worker ${id} startup timeout after 5 seconds`),
         );
       }
-    }, 30000);
+    }, 5000);
 
     // Handle stdout - look for success JSON
     if (child.stdout) {
@@ -163,12 +168,7 @@ export async function startCamoufoxProcess(
           if (line.trim()) {
             try {
               const parsed = JSON.parse(line.trim());
-              if (
-                parsed.success &&
-                parsed.id === id &&
-                parsed.port &&
-                parsed.wsEndpoint
-              ) {
+              if (parsed.success && parsed.id === id && parsed.port) {
                 if (!resolved) {
                   resolved = true;
                   clearTimeout(timeout);
@@ -176,7 +176,8 @@ export async function startCamoufoxProcess(
                   config.port = parsed.port;
                   config.wsEndpoint = parsed.wsEndpoint;
                   saveCamoufoxConfig(config);
-                  child.unref(); // Allow parent to exit independently
+                  // Unref immediately after success to detach properly
+                  child.unref();
                   resolve(config);
                   return;
                 }
@@ -257,19 +258,39 @@ export async function stopCamoufoxProcess(id: string): Promise<boolean> {
   }
 
   try {
-    // If we have a port, try to gracefully shutdown the server
+    // Try to find and kill the worker process using multiple methods
+    const { spawn } = await import("node:child_process");
+
+    // Method 1: Kill by process pattern
+    const killByPattern = spawn("pkill", ["-f", `camoufox-worker.*${id}`], {
+      stdio: "ignore",
+    });
+
+    // Method 2: If we have a port (which is actually the process PID), kill by PID
     if (config.port) {
       try {
-        await fetch(`http://localhost:${config.port}/shutdown`, {
-          method: "POST",
-          signal: AbortSignal.timeout(5000),
-        });
-        // Wait a bit for graceful shutdown
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      } catch {
-        // Graceful shutdown failed, continue with force stop
+        process.kill(config.port, "SIGTERM");
+
+        // Give it a moment to terminate gracefully
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        // Force kill if still running
+        try {
+          process.kill(config.port, "SIGKILL");
+        } catch {
+          // Process already terminated
+        }
+      } catch (error) {
+        // Process not found or already terminated
       }
     }
+
+    // Wait for pattern-based kill command to complete
+    await new Promise<void>((resolve) => {
+      killByPattern.on("exit", () => resolve());
+      // Timeout after 3 seconds
+      setTimeout(() => resolve(), 3000);
+    });
 
     // Delete the configuration
     deleteCamoufoxConfig(id);

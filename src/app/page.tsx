@@ -229,17 +229,22 @@ export default function Home() {
   useAppUpdateNotifications();
 
   // Check for startup URLs but only process them once
+  const [hasCheckedStartupUrl, setHasCheckedStartupUrl] = useState(false);
   const checkCurrentUrl = useCallback(async () => {
+    if (hasCheckedStartupUrl) return;
+
     try {
       const currentUrl = await getCurrent();
       if (currentUrl && currentUrl.length > 0) {
         console.log("Startup URL detected:", currentUrl[0]);
         void handleUrlOpen(currentUrl[0]);
       }
+      setHasCheckedStartupUrl(true);
     } catch (error) {
       console.error("Failed to check current URL:", error);
+      setHasCheckedStartupUrl(true);
     }
-  }, [handleUrlOpen]);
+  }, [handleUrlOpen, hasCheckedStartupUrl]);
 
   const checkStartupPrompt = useCallback(async () => {
     // Only check once during app startup to prevent reopening after dismissing notifications
@@ -453,6 +458,9 @@ export default function Home() {
       const currentRunning = runningProfilesRef.current.has(profile.name);
 
       if (isRunning !== currentRunning) {
+        console.log(
+          `Profile ${profile.name} (${profile.browser}) status changed: ${currentRunning} -> ${isRunning}`,
+        );
         setRunningProfiles((prev) => {
           const next = new Set(prev);
           if (isRunning) {

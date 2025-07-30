@@ -27,6 +27,12 @@ impl GeoIPDownloader {
     }
   }
 
+  /// Create a new downloader with custom client (for testing)
+  #[cfg(test)]
+  pub fn new_with_client(client: Client) -> Self {
+    Self { client }
+  }
+
   fn get_cache_dir() -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     let base_dirs = BaseDirs::new().ok_or("Failed to determine base directories")?;
 
@@ -167,5 +173,127 @@ impl GeoIPDownloader {
 
     let releases: Vec<GithubRelease> = response.json().await?;
     Ok(releases)
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::browser::GithubRelease;
+  use wiremock::matchers::{method, path};
+  use wiremock::{Mock, MockServer, ResponseTemplate};
+
+  fn create_mock_release() -> GithubRelease {
+    GithubRelease {
+      tag_name: "v1.0.0".to_string(),
+      name: "Test Release".to_string(),
+      body: Some("Test release body".to_string()),
+      published_at: "2023-01-01T00:00:00Z".to_string(),
+      created_at: Some("2023-01-01T00:00:00Z".to_string()),
+      html_url: Some("https://example.com/release".to_string()),
+      tarball_url: Some("https://example.com/tarball".to_string()),
+      zipball_url: Some("https://example.com/zipball".to_string()),
+      draft: false,
+      prerelease: false,
+      is_nightly: false,
+      id: Some(1),
+      node_id: Some("test_node_id".to_string()),
+      target_commitish: None,
+      assets: vec![crate::browser::GithubAsset {
+        id: Some(1),
+        node_id: Some("test_asset_node_id".to_string()),
+        name: "GeoLite2-City.mmdb".to_string(),
+        label: None,
+        content_type: Some("application/octet-stream".to_string()),
+        state: Some("uploaded".to_string()),
+        size: 1024,
+        download_count: Some(0),
+        created_at: Some("2023-01-01T00:00:00Z".to_string()),
+        updated_at: Some("2023-01-01T00:00:00Z".to_string()),
+        browser_download_url: "https://example.com/GeoLite2-City.mmdb".to_string(),
+      }],
+    }
+  }
+
+  #[tokio::test]
+  async fn test_fetch_geoip_releases_success() {
+    let mock_server = MockServer::start().await;
+    let releases = vec![create_mock_release()];
+
+    Mock::given(method("GET"))
+      .and(path(format!("/repos/{MMDB_REPO}/releases")))
+      .respond_with(ResponseTemplate::new(200).set_body_json(&releases))
+      .mount(&mock_server)
+      .await;
+
+    let client = Client::builder()
+      .build()
+      .expect("Failed to create HTTP client");
+
+    let downloader = GeoIPDownloader::new_with_client(client);
+
+    // Override the URL for testing
+    let url = format!("{}/repos/{}/releases", mock_server.uri(), MMDB_REPO);
+    let response = downloader
+      .client
+      .get(&url)
+      .header("User-Agent", "Mozilla/5.0 (compatible; donutbrowser)")
+      .send()
+      .await
+      .expect("Request should succeed");
+
+    assert!(response.status().is_success());
+
+    let fetched_releases: Vec<GithubRelease> = response.json().await.expect("Should parse JSON");
+    assert_eq!(fetched_releases.len(), 1);
+    assert_eq!(fetched_releases[0].tag_name, "v1.0.0");
+  }
+
+  #[tokio::test]
+  async fn test_find_city_mmdb_asset() {
+    let downloader = GeoIPDownloader::new();
+    let release = create_mock_release();
+
+    let asset_url = downloader.find_city_mmdb_asset(&release);
+    assert!(asset_url.is_some());
+    assert_eq!(asset_url.unwrap(), "https://example.com/GeoLite2-City.mmdb");
+  }
+
+  #[tokio::test]
+  async fn test_find_city_mmdb_asset_not_found() {
+    let downloader = GeoIPDownloader::new();
+    let mut release = create_mock_release();
+    release.assets[0].name = "wrong-file.txt".to_string();
+
+    let asset_url = downloader.find_city_mmdb_asset(&release);
+    assert!(asset_url.is_none());
+  }
+
+  #[test]
+  fn test_get_cache_dir() {
+    let cache_dir = GeoIPDownloader::get_cache_dir();
+    assert!(cache_dir.is_ok());
+
+    let path = cache_dir.unwrap();
+    assert!(path.to_string_lossy().contains("camoufox"));
+  }
+
+  #[test]
+  fn test_get_mmdb_file_path() {
+    let mmdb_path = GeoIPDownloader::get_mmdb_file_path();
+    assert!(mmdb_path.is_ok());
+
+    let path = mmdb_path.unwrap();
+    assert!(path.to_string_lossy().ends_with("GeoLite2-City.mmdb"));
+  }
+
+  #[test]
+  fn test_is_geoip_database_available() {
+    // This test will return false unless the database actually exists
+    // In a real environment, this would check the actual file system
+    let is_available = GeoIPDownloader::is_geoip_database_available();
+    // We can't assert a specific value since it depends on the system state
+    // But we can verify the function doesn't panic
+    println!("GeoIP database available: {is_available}");
   }
 }

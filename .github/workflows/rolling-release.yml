@@ -153,6 +153,10 @@ jobs:
             cp nodecar/nodecar-bin src-tauri/binaries/nodecar-${{ matrix.target }}
           fi
 
+      - name: Download Camoufox for testing
+        run: npx camoufox-js fetch
+        continue-on-error: true
+
       - name: Build frontend
         run: pnpm build
 

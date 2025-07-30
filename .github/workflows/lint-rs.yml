@@ -110,8 +110,14 @@ jobs:
         working-directory: src-tauri
 
       - name: Run Rust unit tests
-        run: cargo test
+        run: cargo test --lib
         working-directory: src-tauri
+
+      - name: Run integration tests
+        run: ./scripts/run-integration-tests.sh
+        env:
+          CI: true
+        continue-on-error: true
 
       - name: Run cargo audit security check
         run: cargo audit

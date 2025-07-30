@@ -20,7 +20,9 @@ export function GroupBadges({
   if (isLoading) {
     return (
       <div className="flex flex-wrap gap-2 mb-4">
-        <div className="text-sm text-muted-foreground">Loading groups...</div>
+        <div className="flex items-center gap-2 px-4.5 py-1.5 text-xs">
+          Loading groups...
+        </div>
       </div>
     );
   }

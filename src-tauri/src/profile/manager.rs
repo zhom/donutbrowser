@@ -335,20 +335,30 @@ impl ProfileManager {
     Ok(())
   }
 
-  pub fn update_camoufox_config(
+  pub async fn update_camoufox_config(
     &self,
+    app_handle: tauri::AppHandle,
     profile_name: &str,
     config: CamoufoxConfig,
-  ) -> Result<(), Box<dyn std::error::Error>> {
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Find the profile by name
-    let profiles = self.list_profiles()?;
+    let profiles =
+      self
+        .list_profiles()
+        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+          format!("Failed to list profiles: {e}").into()
+        })?;
     let mut profile = profiles
       .into_iter()
       .find(|p| p.name == profile_name)
-      .ok_or_else(|| format!("Profile {profile_name} not found"))?;
+      .ok_or_else(|| -> Box<dyn std::error::Error + Send + Sync> {
+        format!("Profile {profile_name} not found").into()
+      })?;
 
-    // Check if the browser is currently running
-    if profile.process_id.is_some() {
+    // Check if the browser is currently running using the comprehensive status check
+    let is_running = self.check_browser_status(app_handle, &profile).await?;
+
+    if is_running {
       return Err(
         "Cannot update Camoufox configuration while browser is running. Please stop the browser first.".into(),
       );
@@ -358,7 +368,11 @@ impl ProfileManager {
     profile.camoufox_config = Some(config);
 
     // Save the updated profile
-    self.save_profile(&profile)?;
+    self
+      .save_profile(&profile)
+      .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+        format!("Failed to save profile: {e}").into()
+      })?;
 
     println!("Camoufox configuration updated for profile '{profile_name}'.");
 
@@ -433,9 +447,6 @@ impl ProfileManager {
                   .map_err(|e| format!("Failed to update profile proxy: {e}"))?;
 
                 println!("Successfully started proxy for profile: {}", profile.name);
-
-                // Give the proxy a moment to fully start up
-                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
               }
               Err(e) => {
                 eprintln!("Failed to start proxy: {e}");
@@ -498,10 +509,14 @@ impl ProfileManager {
     app_handle: tauri::AppHandle,
     profile: &BrowserProfile,
   ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-    // Handle camoufox profiles using the same fast approach as other browsers
-    // No special handling needed - camoufox uses the same process checking logic
+    // Handle Camoufox profiles using nodecar-based status checking
+    if profile.browser == "camoufox" {
+      return self
+        .check_camoufox_status_via_nodecar(&app_handle, profile)
+        .await;
+    }
 
-    // For non-camoufox browsers, use the existing logic
+    // For non-camoufox browsers, use the existing PID-based logic
     let mut inner_profile = profile.clone();
     let system = System::new_all();
     let mut is_running = false;
@@ -517,12 +532,8 @@ impl ProfileManager {
         let profile_data_path_str = profile_data_path.to_string_lossy();
         let profile_path_match = cmd.iter().any(|s| {
           let arg = s.to_str().unwrap_or("");
-          // For Firefox-based browsers (including camoufox), check for exact profile path match
-          if profile.browser == "camoufox" {
-            // Camoufox uses user_data_dir like Chromium browsers
-            arg.contains(&format!("--user-data-dir={profile_data_path_str}"))
-              || arg == profile_data_path_str
-          } else if profile.browser == "tor-browser"
+          // For Firefox-based browsers, check for exact profile path match
+          if profile.browser == "tor-browser"
             || profile.browser == "firefox"
             || profile.browser == "firefox-developer"
             || profile.browser == "mullvad-browser"
@@ -577,13 +588,7 @@ impl ProfileManager {
             "zen" => exe_name.contains("zen"),
             "chromium" => exe_name.contains("chromium"),
             "brave" => exe_name.contains("brave"),
-            "camoufox" => {
-              exe_name.contains("camoufox")
-                || (exe_name.contains("firefox")
-                  && cmd
-                    .iter()
-                    .any(|arg| arg.to_str().unwrap_or("").contains("camoufox")))
-            }
+            // Camoufox is handled via nodecar, not PID-based checking
             _ => false,
           };
 
@@ -658,6 +663,77 @@ impl ProfileManager {
     }
 
     Ok(is_running)
+  }
+
+  // Check Camoufox status using nodecar-based approach
+  async fn check_camoufox_status_via_nodecar(
+    &self,
+    app_handle: &tauri::AppHandle,
+    profile: &BrowserProfile,
+  ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    use crate::camoufox::CamoufoxNodecarLauncher;
+
+    let launcher = CamoufoxNodecarLauncher::new(app_handle.clone());
+    let profiles_dir = self.get_profiles_dir();
+    let profile_data_path = profile.get_profile_data_path(&profiles_dir);
+    let profile_path_str = profile_data_path.to_string_lossy();
+
+    // Check if there's a running Camoufox instance for this profile
+    match launcher.find_camoufox_by_profile(&profile_path_str).await {
+      Ok(Some(camoufox_process)) => {
+        // Found a running instance, update profile with process info
+        let mut updated_profile = profile.clone();
+        updated_profile.process_id = camoufox_process.port;
+        if let Err(e) = self.save_profile(&updated_profile) {
+          println!("Warning: Failed to update Camoufox profile with process info: {e}");
+        }
+
+        // Emit profile update event to frontend
+        if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
+          println!("Warning: Failed to emit profile update event: {e}");
+        }
+
+        println!(
+          "Camoufox profile '{}' is running with PID: {:?}",
+          profile.name, camoufox_process.port
+        );
+        Ok(true)
+      }
+      Ok(None) => {
+        // No running instance found, clear process ID if set
+        if profile.process_id.is_some() {
+          let mut updated_profile = profile.clone();
+          updated_profile.process_id = None;
+          if let Err(e) = self.save_profile(&updated_profile) {
+            println!("Warning: Failed to clear Camoufox profile process info: {e}");
+          }
+
+          // Emit profile update event to frontend
+          if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
+            println!("Warning: Failed to emit profile update event: {e}");
+          }
+        }
+        println!("Camoufox profile '{}' is not running", profile.name);
+        Ok(false)
+      }
+      Err(e) => {
+        // Error checking status, assume not running and clear process ID
+        println!("Warning: Failed to check Camoufox status via nodecar: {e}");
+        if profile.process_id.is_some() {
+          let mut updated_profile = profile.clone();
+          updated_profile.process_id = None;
+          if let Err(e) = self.save_profile(&updated_profile) {
+            println!("Warning: Failed to clear Camoufox profile process info after error: {e}");
+          }
+
+          // Emit profile update event to frontend
+          if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
+            println!("Warning: Failed to emit profile update event: {e}");
+          }
+        }
+        Ok(false)
+      }
+    }
   }
 
   // Helper function to check if a process matches TOR/Mullvad browser

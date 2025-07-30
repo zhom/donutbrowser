@@ -48,7 +48,7 @@ tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 zip = "4"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-core-foundation="0.10"
+core-foundation = "0.10"
 objc2 = "0.6.1"
 objc2-app-kit = { version = "0.3.1", features = ["NSWindow"] }
 
@@ -74,11 +74,17 @@ hyper-util = { version = "0.1", features = ["full"] }
 http-body-util = "0.1"
 tower = "0.5"
 tower-http = { version = "0.6", features = ["fs", "trace"] }
+futures-util = "0.3"
+
+# Integration test configuration
+[[test]]
+name = "nodecar_integration"
+path = "tests/nodecar_integration.rs"
 
 [features]
 # by default Tauri runs in production mode
 # when `tauri dev` runs it is executed with `cargo run --no-default-features` if `devPath` points to the filesystem
-default = [ "custom-protocol" ]
+default = ["custom-protocol"]
 # this feature is used used for production builds where `devPath` points to the filesystem
 # DO NOT remove this
-custom-protocol = [ "tauri/custom-protocol" ]
+custom-protocol = ["tauri/custom-protocol"]

@@ -437,18 +437,22 @@ impl CamoufoxNodecarLauncher {
     }
 
     // Execute nodecar sidecar command
+    println!("Executing nodecar command with args: {args:?}");
     let output = sidecar_command.output().await?;
 
     if !output.status.success() {
       let stderr = String::from_utf8_lossy(&output.stderr);
+      let stdout = String::from_utf8_lossy(&output.stdout);
+      println!("nodecar camoufox failed - stdout: {stdout}, stderr: {stderr}");
       return Err(format!("nodecar camoufox failed: {stderr}").into());
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
+    println!("nodecar camoufox output: {stdout}");
 
     // Parse the JSON output
     let launch_result: CamoufoxLaunchResult = serde_json::from_str(&stdout)
-      .map_err(|e| format!("Failed to parse nodecar output as JSON: {e}"))?;
+      .map_err(|e| format!("Failed to parse nodecar output as JSON: {e}\nOutput was: {stdout}"))?;
 
     // Store the instance
     let instance = CamoufoxInstance {
@@ -529,9 +533,10 @@ impl CamoufoxNodecarLauncher {
           .unwrap_or_else(|_| std::path::Path::new(instance_profile_path).to_path_buf());
 
         if instance_path == target_path {
-          // Verify the server is actually running by checking the port
+          // Verify the server is actually running by checking the process
           if let Some(port) = instance.port {
             if self.is_server_running(port).await {
+              println!("Found running Camoufox instance for profile: {profile_path}");
               return Ok(Some(CamoufoxLaunchResult {
                 id: id.clone(),
                 port: instance.port,
@@ -539,12 +544,15 @@ impl CamoufoxNodecarLauncher {
                 profilePath: instance.profile_path.clone(),
                 url: instance.url.clone(),
               }));
+            } else {
+              println!("Camoufox instance found but process is not running: {id}");
             }
           }
         }
       }
     }
 
+    println!("No running Camoufox instance found for profile: {profile_path}");
     Ok(None)
   }
 
@@ -560,14 +568,16 @@ impl CamoufoxNodecarLauncher {
 
       for (id, instance) in inner.instances.iter() {
         if let Some(port) = instance.port {
-          // Check if the server is still alive
+          // Check if the process is still alive (port is actually PID)
           if !self.is_server_running(port).await {
-            // Server is dead
+            // Process is dead
+            println!("Camoufox instance {id} (PID: {port}) is no longer running");
             dead_instances.push(id.clone());
             instances_to_remove.push(id.clone());
           }
         } else {
-          // No port means it's likely a dead instance
+          // No port/PID means it's likely a dead instance
+          println!("Camoufox instance {id} has no PID, marking as dead");
           dead_instances.push(id.clone());
           instances_to_remove.push(id.clone());
         }
@@ -579,26 +589,35 @@ impl CamoufoxNodecarLauncher {
       let mut inner = self.inner.lock().await;
       for id in &instances_to_remove {
         inner.instances.remove(id);
+        println!("Removed dead Camoufox instance: {id}");
       }
     }
 
     Ok(dead_instances)
   }
 
-  /// Check if a Camoufox server is running on the given port
+  /// Check if a Camoufox server is running on the given port (which is actually a PID)
   async fn is_server_running(&self, port: u32) -> bool {
-    let client = reqwest::Client::new();
-    let url = format!("http://localhost:{port}/json/version");
+    // For Camoufox, the "port" is actually the process PID
+    // Check if the process is still running
+    use sysinfo::{Pid, System};
 
-    match client
-      .get(&url)
-      .timeout(std::time::Duration::from_secs(1))
-      .send()
-      .await
-    {
-      Ok(response) => response.status().is_success(),
-      Err(_) => false,
+    let system = System::new_all();
+    if let Some(process) = system.process(Pid::from(port as usize)) {
+      // Check if this is actually a Camoufox process by looking at the command line
+      let cmd = process.cmd();
+      let is_camoufox = cmd.iter().any(|arg| {
+        let arg_str = arg.to_str().unwrap_or("");
+        arg_str.contains("camoufox-worker") || arg_str.contains("camoufox")
+      });
+
+      if is_camoufox {
+        println!("Found running Camoufox process with PID: {port}");
+        return true;
+      }
     }
+
+    false
   }
 }
 

@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getBrowserDisplayName } from "@/lib/browser-utils";
 import {
   dismissToast,
@@ -46,6 +46,9 @@ export function useVersionUpdater() {
   const [timeUntilNextUpdate, setTimeUntilNextUpdate] = useState<number>(0);
   const [updateProgress, setUpdateProgress] =
     useState<VersionUpdateProgress | null>(null);
+
+  // Track active downloads to prevent duplicates
+  const activeDownloads = useRef(new Set<string>());
 
   const loadUpdateStatus = useCallback(async () => {
     try {
@@ -160,6 +163,18 @@ export function useVersionUpdater() {
               console.log("Browser auto-update event received:", event.payload);
 
               const browserDisplayName = getBrowserDisplayName(browser);
+              const downloadKey = `${browser}-${new_version}`;
+
+              // Check if this download is already in progress
+              if (activeDownloads.current.has(downloadKey)) {
+                console.log(
+                  `Download already in progress for ${browserDisplayName} ${new_version}, skipping`,
+                );
+                return;
+              }
+
+              // Mark download as active
+              activeDownloads.current.add(downloadKey);
 
               try {
                 // Show auto-update start notification
@@ -237,6 +252,9 @@ export function useVersionUpdater() {
                       : "Unknown error occurred",
                   duration: 8000,
                 });
+              } finally {
+                // Remove from active downloads
+                activeDownloads.current.delete(downloadKey);
               }
             };
 

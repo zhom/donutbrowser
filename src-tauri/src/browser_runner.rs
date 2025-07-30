@@ -212,6 +212,10 @@ impl BrowserRunner {
         };
 
         // Use the nodecar camoufox launcher
+        println!(
+          "Launching Camoufox via nodecar for profile: {}",
+          profile.name
+        );
         let camoufox_result = crate::camoufox::launch_camoufox_profile_nodecar(
           app_handle.clone(),
           profile.clone(),
@@ -223,21 +227,27 @@ impl BrowserRunner {
           format!("Failed to launch camoufox via nodecar: {e}").into()
         })?;
 
-        // For server-based Camoufox, we don't have a PID but we have a port
-        // We'll use the port as a unique identifier for the running instance
-        let process_id = camoufox_result.port;
+        // For server-based Camoufox, we use the port as a unique identifier (which is actually the PID)
+        let process_id = camoufox_result.port.unwrap_or(0);
+        println!("Camoufox launched successfully with PID: {process_id}");
 
         // Update profile with the process info from camoufox result
         let mut updated_profile = profile.clone();
-        updated_profile.process_id = process_id;
+        updated_profile.process_id = Some(process_id);
         updated_profile.last_launch = Some(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs());
 
         // Save the updated profile
         self.save_process_info(&updated_profile)?;
+        println!(
+          "Updated profile with process info: {}",
+          updated_profile.name
+        );
 
         // Emit profile update event to frontend
         if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
           println!("Warning: Failed to emit profile update event: {e}");
+        } else {
+          println!("Emitted profile update event for: {}", updated_profile.name);
         }
 
         return Ok(updated_profile);
@@ -769,69 +779,62 @@ impl BrowserRunner {
     if profile.browser == "camoufox" {
       let camoufox_launcher = crate::camoufox::CamoufoxNodecarLauncher::new(app_handle.clone());
 
-      // Try to stop by PID first (faster)
-      if let Some(stored_pid) = profile.process_id {
-        match camoufox_launcher
-          .stop_camoufox(&app_handle, &stored_pid.to_string())
-          .await
-        {
-          Ok(stopped) => {
-            if stopped {
-              println!("Successfully stopped Camoufox process by PID: {stored_pid}");
-            } else {
-              println!("Failed to stop Camoufox process by PID: {stored_pid}");
-            }
-          }
-          Err(e) => {
-            println!("Error stopping Camoufox process by PID: {e}");
-          }
-        }
-      } else {
-        // Fallback: search by profile path
-        let profiles_dir = self.get_profiles_dir();
-        let profile_data_path = profile.get_profile_data_path(&profiles_dir);
-        let profile_path_str = profile_data_path.to_string_lossy();
+      // Search by profile path to find the running Camoufox instance
+      let profiles_dir = self.get_profiles_dir();
+      let profile_data_path = profile.get_profile_data_path(&profiles_dir);
+      let profile_path_str = profile_data_path.to_string_lossy();
 
-        match camoufox_launcher
-          .find_camoufox_by_profile(&profile_path_str)
-          .await
-        {
-          Ok(Some(camoufox_process)) => {
-            match camoufox_launcher
-              .stop_camoufox(&app_handle, &camoufox_process.id)
-              .await
-            {
-              Ok(stopped) => {
-                if stopped {
-                  println!(
-                    "Successfully stopped Camoufox process: {}",
-                    camoufox_process.id
-                  );
-                } else {
-                  println!("Failed to stop Camoufox process: {}", camoufox_process.id);
-                }
-              }
-              Err(e) => {
-                println!("Error stopping Camoufox process: {e}");
+      println!(
+        "Attempting to kill Camoufox process for profile: {}",
+        profile.name
+      );
+
+      match camoufox_launcher
+        .find_camoufox_by_profile(&profile_path_str)
+        .await
+      {
+        Ok(Some(camoufox_process)) => {
+          println!(
+            "Found Camoufox process: {} (PID: {:?})",
+            camoufox_process.id, camoufox_process.port
+          );
+
+          match camoufox_launcher
+            .stop_camoufox(&app_handle, &camoufox_process.id)
+            .await
+          {
+            Ok(stopped) => {
+              if stopped {
+                println!(
+                  "Successfully stopped Camoufox process: {} (PID: {:?})",
+                  camoufox_process.id, camoufox_process.port
+                );
+              } else {
+                println!(
+                  "Failed to stop Camoufox process: {} (PID: {:?})",
+                  camoufox_process.id, camoufox_process.port
+                );
               }
             }
-          }
-          Ok(None) => {
-            println!(
-              "No running Camoufox process found for profile: {}",
-              profile.name
-            );
-          }
-          Err(e) => {
-            println!("Error finding Camoufox process: {e}");
+            Err(e) => {
+              println!(
+                "Error stopping Camoufox process {}: {}",
+                camoufox_process.id, e
+              );
+            }
           }
         }
-      }
-
-      // Stop proxy if one was running for this profile
-      if let Some(pid) = profile.process_id {
-        if let Err(e) = PROXY_MANAGER.stop_proxy(app_handle.clone(), pid).await {
-          println!("Warning: Failed to stop proxy for Camoufox profile: {e}");
+        Ok(None) => {
+          println!(
+            "No running Camoufox process found for profile: {}",
+            profile.name
+          );
+        }
+        Err(e) => {
+          println!(
+            "Error finding Camoufox process for profile {}: {}",
+            profile.name, e
+          );
         }
       }
 
@@ -847,6 +850,10 @@ impl BrowserRunner {
         println!("Warning: Failed to emit profile update event: {e}");
       }
 
+      println!(
+        "Camoufox process cleanup completed for profile: {}",
+        profile.name
+      );
       return Ok(());
     }
 
@@ -877,13 +884,7 @@ impl BrowserRunner {
             "zen" => exe_name.contains("zen"),
             "chromium" => exe_name.contains("chromium"),
             "brave" => exe_name.contains("brave"),
-            "camoufox" => {
-              exe_name.contains("camoufox")
-                || (exe_name.contains("firefox")
-                  && cmd
-                    .iter()
-                    .any(|arg| arg.to_str().unwrap_or("").contains("camoufox")))
-            }
+            // Camoufox is handled via nodecar, not PID-based checking
             _ => false,
           };
 
@@ -1620,12 +1621,14 @@ pub fn create_browser_profile_new(
 
 #[tauri::command]
 pub async fn update_camoufox_config(
+  app_handle: tauri::AppHandle,
   profile_name: String,
   config: CamoufoxConfig,
 ) -> Result<(), String> {
   let profile_manager = ProfileManager::new();
   profile_manager
-    .update_camoufox_config(&profile_name, config)
+    .update_camoufox_config(app_handle, &profile_name, config)
+    .await
     .map_err(|e| format!("Failed to update Camoufox config: {e}"))
 }
 
