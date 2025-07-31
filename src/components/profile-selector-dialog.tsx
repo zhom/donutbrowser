@@ -238,7 +238,6 @@ export function ProfileSelectorDialog({
                             <SelectItem
                               value={profile.name}
                               disabled={!canUseForLinks}
-                              asChild
                             >
                               <div
                                 className={`flex items-center gap-2 ${
