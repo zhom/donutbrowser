@@ -68,7 +68,7 @@ interface ProfilesDataTableProps {
   onChangeVersion: (profile: BrowserProfile) => void;
   onConfigureCamoufox?: (profile: BrowserProfile) => void;
   runningProfiles: Set<string>;
-  isUpdating?: (browser: string) => boolean;
+  isUpdating: (browser: string) => boolean;
   onReloadProxyData?: () => void | Promise<void>;
   onDeleteSelectedProfiles?: (profileNames: string[]) => Promise<void>;
   onAssignProfilesToGroup?: (profileNames: string[]) => void;
@@ -87,7 +87,7 @@ export function ProfilesDataTable({
   onChangeVersion,
   onConfigureCamoufox,
   runningProfiles,
-  isUpdating = () => false,
+  isUpdating,
   onDeleteSelectedProfiles: _onDeleteSelectedProfiles,
   onAssignProfilesToGroup,
   selectedGroupId,

@@ -833,6 +833,7 @@ export default function Home() {
             );
           }}
           url={pendingUrl.url}
+          isUpdating={isUpdating}
           runningProfiles={runningProfiles}
         />
       ))}

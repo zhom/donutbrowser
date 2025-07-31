@@ -34,6 +34,7 @@ import type { BrowserProfile, StoredProxy } from "@/types";
 interface ProfileSelectorDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  isUpdating: (browser: string) => boolean;
   url?: string;
   runningProfiles?: Set<string>;
 }
@@ -43,6 +44,7 @@ export function ProfileSelectorDialog({
   onClose,
   url,
   runningProfiles = new Set(),
+  isUpdating,
 }: ProfileSelectorDialogProps) {
   const [profiles, setProfiles] = useState<BrowserProfile[]>([]);
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
@@ -51,7 +53,7 @@ export function ProfileSelectorDialog({
   const [storedProxies, setStoredProxies] = useState<StoredProxy[]>([]);
 
   // Use shared browser state hook
-  const browserState = useBrowserState(profiles, runningProfiles);
+  const browserState = useBrowserState(profiles, runningProfiles, isUpdating);
 
   // Helper function to check if a profile has a proxy
   const hasProxy = useCallback(

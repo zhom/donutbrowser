@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
+import { getBrowserDisplayName } from "@/lib/browser-utils";
 import type { BrowserProfile } from "@/types";
 
 export function useBrowserSupport() {
@@ -168,7 +169,7 @@ export function useBrowserState(
       }
 
       if (isBrowserUpdating) {
-        return `${profile.browser} is being updated. Please wait for the update to complete.`;
+        return `${getBrowserDisplayName(profile.browser)} is being updated. Please wait for the update to complete.`;
       }
 
       if (
