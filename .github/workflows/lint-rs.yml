@@ -109,15 +109,9 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings -D clippy::all
         working-directory: src-tauri
 
-      - name: Run Rust unit tests
-        run: cargo test --lib
+      - name: Run Rust tests
+        run: cargo test
         working-directory: src-tauri
-
-      - name: Run integration tests
-        run: ./scripts/run-integration-tests.sh
-        env:
-          CI: true
-        continue-on-error: true
 
       - name: Run cargo audit security check
         run: cargo audit
