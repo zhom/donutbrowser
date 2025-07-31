@@ -50,10 +50,14 @@ pub struct SettingsManager {
 }
 
 impl SettingsManager {
-  pub fn new() -> Self {
+  fn new() -> Self {
     Self {
       base_dirs: BaseDirs::new().expect("Failed to get base directories"),
     }
+  }
+
+  pub fn instance() -> &'static SettingsManager {
+    &SETTINGS_MANAGER
   }
 
   pub fn get_settings_dir(&self) -> PathBuf {
@@ -159,7 +163,7 @@ impl SettingsManager {
 
 #[tauri::command]
 pub async fn get_app_settings() -> Result<AppSettings, String> {
-  let manager = SettingsManager::new();
+  let manager = SettingsManager::instance();
   manager
     .load_settings()
     .map_err(|e| format!("Failed to load settings: {e}"))
@@ -167,7 +171,7 @@ pub async fn get_app_settings() -> Result<AppSettings, String> {
 
 #[tauri::command]
 pub async fn save_app_settings(settings: AppSettings) -> Result<(), String> {
-  let manager = SettingsManager::new();
+  let manager = SettingsManager::instance();
   manager
     .save_settings(&settings)
     .map_err(|e| format!("Failed to save settings: {e}"))
@@ -175,7 +179,7 @@ pub async fn save_app_settings(settings: AppSettings) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn should_show_settings_on_startup() -> Result<bool, String> {
-  let manager = SettingsManager::new();
+  let manager = SettingsManager::instance();
   manager
     .should_show_settings_on_startup()
     .map_err(|e| format!("Failed to check prompt setting: {e}"))
@@ -183,7 +187,7 @@ pub async fn should_show_settings_on_startup() -> Result<bool, String> {
 
 #[tauri::command]
 pub async fn get_table_sorting_settings() -> Result<TableSortingSettings, String> {
-  let manager = SettingsManager::new();
+  let manager = SettingsManager::instance();
   manager
     .load_table_sorting()
     .map_err(|e| format!("Failed to load table sorting settings: {e}"))
@@ -191,7 +195,7 @@ pub async fn get_table_sorting_settings() -> Result<TableSortingSettings, String
 
 #[tauri::command]
 pub async fn save_table_sorting_settings(sorting: TableSortingSettings) -> Result<(), String> {
-  let manager = SettingsManager::new();
+  let manager = SettingsManager::instance();
   manager
     .save_table_sorting(&sorting)
     .map_err(|e| format!("Failed to save table sorting settings: {e}"))
@@ -201,7 +205,7 @@ pub async fn save_table_sorting_settings(sorting: TableSortingSettings) -> Resul
 pub async fn clear_all_version_cache_and_refetch(
   app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-  let api_client = ApiClient::new();
+  let api_client = ApiClient::instance();
 
   // Clear all cache first
   api_client
@@ -217,4 +221,9 @@ pub async fn clear_all_version_cache_and_refetch(
     .map_err(|e| format!("Failed to trigger version update: {e}"))?;
 
   Ok(())
+}
+
+// Global singleton instance
+lazy_static::lazy_static! {
+  static ref SETTINGS_MANAGER: SettingsManager = SettingsManager::new();
 }

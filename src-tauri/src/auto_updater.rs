@@ -29,16 +29,20 @@ pub struct AutoUpdateState {
 }
 
 pub struct AutoUpdater {
-  version_service: BrowserVersionService,
-  settings_manager: SettingsManager,
+  version_service: &'static BrowserVersionService,
+  settings_manager: &'static SettingsManager,
 }
 
 impl AutoUpdater {
-  pub fn new() -> Self {
+  fn new() -> Self {
     Self {
-      version_service: BrowserVersionService::new(),
-      settings_manager: SettingsManager::new(),
+      version_service: BrowserVersionService::instance(),
+      settings_manager: SettingsManager::instance(),
     }
+  }
+
+  pub fn instance() -> &'static AutoUpdater {
+    &AUTO_UPDATER
   }
 
   /// Check for updates for all profiles
@@ -458,7 +462,7 @@ impl AutoUpdater {
 
 #[tauri::command]
 pub async fn check_for_browser_updates() -> Result<Vec<UpdateNotification>, String> {
-  let updater = AutoUpdater::new();
+  let updater = AutoUpdater::instance();
   let notifications = updater
     .check_for_updates()
     .await
@@ -469,7 +473,7 @@ pub async fn check_for_browser_updates() -> Result<Vec<UpdateNotification>, Stri
 
 #[tauri::command]
 pub async fn is_browser_disabled_for_update(browser: String) -> Result<bool, String> {
-  let updater = AutoUpdater::new();
+  let updater = AutoUpdater::instance();
   updater
     .is_browser_disabled(&browser)
     .map_err(|e| format!("Failed to check browser status: {e}"))
@@ -477,7 +481,7 @@ pub async fn is_browser_disabled_for_update(browser: String) -> Result<bool, Str
 
 #[tauri::command]
 pub async fn dismiss_update_notification(notification_id: String) -> Result<(), String> {
-  let updater = AutoUpdater::new();
+  let updater = AutoUpdater::instance();
   updater
     .dismiss_update_notification(&notification_id)
     .map_err(|e| format!("Failed to dismiss notification: {e}"))
@@ -488,7 +492,7 @@ pub async fn complete_browser_update_with_auto_update(
   browser: String,
   new_version: String,
 ) -> Result<Vec<String>, String> {
-  let updater = AutoUpdater::new();
+  let updater = AutoUpdater::instance();
   updater
     .complete_browser_update_with_auto_update(&browser, &new_version)
     .await
@@ -497,7 +501,7 @@ pub async fn complete_browser_update_with_auto_update(
 
 #[tauri::command]
 pub async fn check_for_updates_with_progress(app_handle: tauri::AppHandle) {
-  let updater = AutoUpdater::new();
+  let updater = AutoUpdater::instance();
   updater.check_for_updates_with_progress(&app_handle).await;
 }
 
@@ -530,7 +534,7 @@ mod tests {
 
   #[test]
   fn test_compare_versions() {
-    let updater = AutoUpdater::new();
+    let updater = AutoUpdater::instance();
 
     assert_eq!(
       updater.compare_versions("1.0.0", "1.0.0"),
@@ -556,7 +560,7 @@ mod tests {
 
   #[test]
   fn test_is_version_newer() {
-    let updater = AutoUpdater::new();
+    let updater = AutoUpdater::instance();
 
     assert!(updater.is_version_newer("1.0.1", "1.0.0"));
     assert!(updater.is_version_newer("2.0.0", "1.9.9"));
@@ -566,7 +570,7 @@ mod tests {
 
   #[test]
   fn test_camoufox_beta_version_comparison() {
-    let updater = AutoUpdater::new();
+    let updater = AutoUpdater::instance();
 
     // Test the exact user-reported scenario: 135.0.1beta24 vs 135.0beta22
     assert!(
@@ -600,7 +604,7 @@ mod tests {
 
   #[test]
   fn test_beta_version_ordering_comprehensive() {
-    let updater = AutoUpdater::new();
+    let updater = AutoUpdater::instance();
 
     // Test various beta version patterns that could appear in camoufox
     let test_cases = vec![
@@ -628,7 +632,7 @@ mod tests {
 
   #[test]
   fn test_check_profile_update_stable_to_stable() {
-    let updater = AutoUpdater::new();
+    let updater = AutoUpdater::instance();
     let profile = create_test_profile("test", "firefox", "1.0.0");
     let versions = vec![
       create_test_version_info("1.0.1", false), // stable, newer
@@ -646,7 +650,7 @@ mod tests {
 
   #[test]
   fn test_check_profile_update_alpha_to_alpha() {
-    let updater = AutoUpdater::new();
+    let updater = AutoUpdater::instance();
     let profile = create_test_profile("test", "firefox", "1.0.0-alpha");
     let versions = vec![
       create_test_version_info("1.0.1", false), // stable, should be included
@@ -665,7 +669,7 @@ mod tests {
 
   #[test]
   fn test_check_profile_update_no_update_available() {
-    let updater = AutoUpdater::new();
+    let updater = AutoUpdater::instance();
     let profile = create_test_profile("test", "firefox", "1.0.0");
     let versions = vec![
       create_test_version_info("0.9.0", false), // older
@@ -678,7 +682,7 @@ mod tests {
 
   #[test]
   fn test_group_update_notifications() {
-    let updater = AutoUpdater::new();
+    let updater = AutoUpdater::instance();
     let notifications = vec![
       UpdateNotification {
         id: "firefox_1.0.0_to_1.1.0_profile1".to_string(),
@@ -910,4 +914,9 @@ mod tests {
     let loaded_state: AutoUpdateState = serde_json::from_str(&content).unwrap();
     assert_eq!(loaded_state.pending_updates.len(), 0);
   }
+}
+
+// Global singleton instance
+lazy_static::lazy_static! {
+  static ref AUTO_UPDATER: AutoUpdater = AutoUpdater::new();
 }

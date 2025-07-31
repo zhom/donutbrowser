@@ -366,7 +366,7 @@ pub fn run() {
       let app_handle_update = app.handle().clone();
       tauri::async_runtime::spawn(async move {
         println!("Starting app update check at startup...");
-        let updater = app_auto_updater::AppAutoUpdater::new();
+        let updater = app_auto_updater::AppAutoUpdater::instance();
         match updater.check_for_updates().await {
           Ok(Some(update_info)) => {
             println!(

@@ -315,7 +315,7 @@ pub struct ApiClient {
 }
 
 impl ApiClient {
-  pub fn new() -> Self {
+  fn new() -> Self {
     Self {
       client: Client::new(),
       firefox_api_base: "https://product-details.mozilla.org/1.0".to_string(),
@@ -325,6 +325,10 @@ impl ApiClient {
         .to_string(),
       tor_archive_base: "https://archive.torproject.org/tor-package-archive/torbrowser".to_string(),
     }
+  }
+
+  pub fn instance() -> &'static ApiClient {
+    &API_CLIENT
   }
 
   #[cfg(test)]
@@ -1334,6 +1338,11 @@ impl ApiClient {
 
     Ok(())
   }
+}
+
+// Global singleton instance
+lazy_static::lazy_static! {
+  static ref API_CLIENT: ApiClient = ApiClient::new();
 }
 
 #[cfg(test)]

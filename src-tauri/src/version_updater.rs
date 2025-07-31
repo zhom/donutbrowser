@@ -47,16 +47,16 @@ impl Default for BackgroundUpdateState {
 }
 
 pub struct VersionUpdater {
-  version_service: BrowserVersionService,
-  auto_updater: AutoUpdater,
+  version_service: &'static BrowserVersionService,
+  auto_updater: &'static AutoUpdater,
   app_handle: Option<tauri::AppHandle>,
 }
 
 impl VersionUpdater {
   pub fn new() -> Self {
     Self {
-      version_service: BrowserVersionService::new(),
-      auto_updater: AutoUpdater::new(),
+      version_service: BrowserVersionService::instance(),
+      auto_updater: AutoUpdater::instance(),
       app_handle: None,
     }
   }

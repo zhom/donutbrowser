@@ -49,10 +49,14 @@ pub struct AppAutoUpdater {
 }
 
 impl AppAutoUpdater {
-  pub fn new() -> Self {
+  fn new() -> Self {
     Self {
       client: Client::new(),
     }
+  }
+
+  pub fn instance() -> &'static AppAutoUpdater {
+    &APP_AUTO_UPDATER
   }
 
   /// Check if running a nightly build based on environment variable
@@ -971,7 +975,7 @@ rm "{}"
 
 #[tauri::command]
 pub async fn check_for_app_updates() -> Result<Option<AppUpdateInfo>, String> {
-  let updater = AppAutoUpdater::new();
+  let updater = AppAutoUpdater::instance();
   updater
     .check_for_updates()
     .await
@@ -983,7 +987,7 @@ pub async fn download_and_install_app_update(
   app_handle: tauri::AppHandle,
   update_info: AppUpdateInfo,
 ) -> Result<(), String> {
-  let updater = AppAutoUpdater::new();
+  let updater = AppAutoUpdater::instance();
   updater
     .download_and_install_update(&app_handle, &update_info)
     .await
@@ -993,7 +997,7 @@ pub async fn download_and_install_app_update(
 #[tauri::command]
 pub async fn check_for_app_updates_manual() -> Result<Option<AppUpdateInfo>, String> {
   println!("Manual app update check triggered");
-  let updater = AppAutoUpdater::new();
+  let updater = AppAutoUpdater::instance();
   updater
     .check_for_updates()
     .await
@@ -1017,7 +1021,7 @@ mod tests {
 
   #[test]
   fn test_version_comparison() {
-    let updater = AppAutoUpdater::new();
+    let updater = AppAutoUpdater::instance();
 
     // Test semantic version comparison
     assert!(updater.is_version_newer("v1.1.0", "v1.0.0"));
@@ -1029,7 +1033,7 @@ mod tests {
 
   #[test]
   fn test_parse_semver() {
-    let updater = AppAutoUpdater::new();
+    let updater = AppAutoUpdater::instance();
 
     assert_eq!(updater.parse_semver("v1.2.3"), (1, 2, 3));
     assert_eq!(updater.parse_semver("1.2.3"), (1, 2, 3));
@@ -1039,7 +1043,7 @@ mod tests {
 
   #[test]
   fn test_should_update_stable() {
-    let updater = AppAutoUpdater::new();
+    let updater = AppAutoUpdater::instance();
 
     // Stable version updates
     assert!(updater.should_update("v1.0.0", "v1.1.0", false));
@@ -1050,7 +1054,7 @@ mod tests {
 
   #[test]
   fn test_should_update_nightly() {
-    let updater = AppAutoUpdater::new();
+    let updater = AppAutoUpdater::instance();
 
     // Nightly version updates
     assert!(updater.should_update("nightly-abc123", "nightly-def456", true));
@@ -1067,7 +1071,7 @@ mod tests {
 
   #[test]
   fn test_should_update_edge_cases() {
-    let updater = AppAutoUpdater::new();
+    let updater = AppAutoUpdater::instance();
 
     // Test with different nightly formats
     assert!(updater.should_update("nightly-abc123", "nightly-def456", true));
@@ -1085,7 +1089,7 @@ mod tests {
 
   #[test]
   fn test_get_download_url_for_platform() {
-    let updater = AppAutoUpdater::new();
+    let updater = AppAutoUpdater::instance();
 
     let assets = vec![
       AppReleaseAsset {
@@ -1140,7 +1144,7 @@ mod tests {
     // This test verifies that the extract_update method properly uses the Extractor
     // We can't run the actual extraction in unit tests without real DMG files,
     // but we can verify the method signature and basic logic
-    let updater = AppAutoUpdater::new();
+    let updater = AppAutoUpdater::instance();
 
     // Test that unsupported formats would be rejected
     let temp_dir = std::env::temp_dir();
@@ -1158,4 +1162,9 @@ mod tests {
     let error_msg = result.unwrap_err().to_string();
     assert!(error_msg.contains("Unsupported archive format: rar"));
   }
+}
+
+// Global singleton instance
+lazy_static::lazy_static! {
+  static ref APP_AUTO_UPDATER: AppAutoUpdater = AppAutoUpdater::new();
 }
