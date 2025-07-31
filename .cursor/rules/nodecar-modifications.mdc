@@ -3,4 +3,4 @@ description:
 globs: 
 alwaysApply: true
 ---
-Anytime you change nodecar's code and try to test, recompile it with "cd nodecar && pnpm build"
+Anytime you change nodecar's code and try to test, recompile it with "cd nodecar && pnpm build".
