@@ -23,16 +23,16 @@
   "license": "AGPL-3.0",
   "dependencies": {
     "@types/node": "^24.1.0",
-    "camoufox-js": "^0.6.1",
+    "camoufox-js": "^0.6.2",
     "commander": "^14.0.0",
-    "dotenv": "^17.2.0",
+    "dotenv": "^17.2.1",
     "get-port": "^7.1.0",
     "nodemon": "^3.1.10",
     "playwright-core": "^1.54.1",
     "proxy-chain": "^2.5.9",
     "tmp": "^0.2.3",
     "ts-node": "^10.9.2",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.2"
   },
   "devDependencies": {
     "@types/tmp": "^0.2.6"
