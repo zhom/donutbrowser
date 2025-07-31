@@ -95,12 +95,12 @@ jobs:
             target: "x86_64-pc-windows-msvc"
             pkg_target: "latest-win-x64"
             nodecar_script: "build:win-x64"
-          - platform: "windows-11-arm"
-            args: "--target aarch64-pc-windows-msvc"
-            arch: "aarch64"
-            target: "aarch64-pc-windows-msvc"
-            pkg_target: "latest-win-arm64"
-            nodecar_script: "build:win-arm64"
+          # - platform: "windows-11-arm"
+          #   args: "--target aarch64-pc-windows-msvc"
+          #   arch: "aarch64"
+          #   target: "aarch64-pc-windows-msvc"
+          #   pkg_target: "latest-win-arm64"
+          #   nodecar_script: "build:win-arm64"
 
     runs-on: ${{ matrix.platform }}
     steps:
