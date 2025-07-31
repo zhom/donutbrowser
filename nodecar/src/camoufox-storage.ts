@@ -8,8 +8,7 @@ export interface CamoufoxConfig {
   options: LaunchOptions;
   profilePath?: string;
   url?: string;
-  port?: number;
-  wsEndpoint?: string;
+  processId?: number;
 }
 
 const STORAGE_DIR = path.join(tmp.tmpdir, "donutbrowser", "camoufox");
@@ -122,23 +121,6 @@ export function updateCamoufoxConfig(config: CamoufoxConfig): boolean {
     }
 
     console.error(`Error updating Camoufox config ${config.id}:`, error);
-    return false;
-  }
-}
-
-/**
- * Check if a Camoufox server is running
- * @param port The port to check
- * @returns True if running, false otherwise
- */
-export async function isServerRunning(port: number): Promise<boolean> {
-  try {
-    const response = await fetch(`http://localhost:${port}/json/version`, {
-      method: "GET",
-      signal: AbortSignal.timeout(1000),
-    });
-    return response.ok;
-  } catch {
     return false;
   }
 }

@@ -967,8 +967,8 @@ impl BrowserVersionService {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use wiremock::matchers::{method, path};
-  use wiremock::{Mock, MockServer, ResponseTemplate};
+
+  use wiremock::MockServer;
 
   async fn setup_mock_server() -> MockServer {
     MockServer::start().await

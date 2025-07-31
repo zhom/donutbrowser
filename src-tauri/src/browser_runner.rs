@@ -239,8 +239,8 @@ impl BrowserRunner {
           format!("Failed to launch camoufox via nodecar: {e}").into()
         })?;
 
-        // For server-based Camoufox, we use the port as a unique identifier (which is actually the PID)
-        let process_id = camoufox_result.port.unwrap_or(0);
+        // For server-based Camoufox, we use the process_id
+        let process_id = camoufox_result.processId.unwrap_or(0);
         println!("Camoufox launched successfully with PID: {process_id}");
 
         // Update profile with the process info from camoufox result
@@ -808,7 +808,7 @@ impl BrowserRunner {
         Ok(Some(camoufox_process)) => {
           println!(
             "Found Camoufox process: {} (PID: {:?})",
-            camoufox_process.id, camoufox_process.port
+            camoufox_process.id, camoufox_process.processId
           );
 
           match camoufox_launcher
@@ -819,12 +819,12 @@ impl BrowserRunner {
               if stopped {
                 println!(
                   "Successfully stopped Camoufox process: {} (PID: {:?})",
-                  camoufox_process.id, camoufox_process.port
+                  camoufox_process.id, camoufox_process.processId
                 );
               } else {
                 println!(
                   "Failed to stop Camoufox process: {} (PID: {:?})",
-                  camoufox_process.id, camoufox_process.port
+                  camoufox_process.id, camoufox_process.processId
                 );
               }
             }

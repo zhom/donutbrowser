@@ -87,14 +87,13 @@ export async function startCamoufoxProcess(
           if (line.trim()) {
             try {
               const parsed = JSON.parse(line.trim());
-              if (parsed.success && parsed.id === id && parsed.port) {
+              if (parsed.success && parsed.id === id && parsed.processId) {
                 if (!resolved) {
                   resolved = true;
                   clearTimeout(timeout);
-                  // Update config with server details
-                  config.port = parsed.port;
-                  config.wsEndpoint = parsed.wsEndpoint;
+                  config.processId = parsed.processId;
                   saveCamoufoxConfig(config);
+
                   // Unref immediately after success to detach properly
                   child.unref();
                   resolve(config);
@@ -177,25 +176,21 @@ export async function stopCamoufoxProcess(id: string): Promise<boolean> {
   }
 
   try {
-    // Try to find and kill the worker process using multiple methods
-    const { spawn } = await import("node:child_process");
-
-    // Method 1: Kill by process pattern
     const killByPattern = spawn("pkill", ["-f", `camoufox-worker.*${id}`], {
       stdio: "ignore",
     });
 
-    // Method 2: If we have a port (which is actually the process PID), kill by PID
-    if (config.port) {
+    // Method 2: If we have a process ID, kill by PID
+    if (config.processId) {
       try {
-        process.kill(config.port, "SIGTERM");
+        process.kill(config.processId, "SIGTERM");
 
         // Give it a moment to terminate gracefully
         await new Promise((resolve) => setTimeout(resolve, 2000));
 
         // Force kill if still running
         try {
-          process.kill(config.port, "SIGKILL");
+          process.kill(config.processId, "SIGKILL");
         } catch {
           // Process already terminated
         }

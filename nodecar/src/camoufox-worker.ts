@@ -27,16 +27,14 @@ export async function runCamoufoxWorker(id: string): Promise<void> {
     JSON.stringify({
       success: true,
       id: id,
-      port: processId,
-      wsEndpoint: `ws://localhost:0/camoufox-${id}`,
+      processId,
       profilePath: config.profilePath,
       message: "Camoufox worker started successfully",
     }),
   );
 
   // Update config with process details
-  config.port = processId;
-  config.wsEndpoint = `ws://localhost:0/camoufox-${id}`;
+  config.processId = processId;
   saveCamoufoxConfig(config);
 
   // Handle process termination gracefully
@@ -60,11 +58,16 @@ export async function runCamoufoxWorker(id: string): Promise<void> {
         camoufoxOptions.user_data_dir = config.profilePath;
       }
 
-      // Theming
+      // Remove custom properties before passing to Camoufox
       camoufoxOptions.disableTheming = true;
       camoufoxOptions.showcursor = false;
 
-      // Default to headless for tests
+      // Set Firefox preferences for theming
+      if (!camoufoxOptions.firefox_user_prefs) {
+        camoufoxOptions.firefox_user_prefs = {};
+      }
+
+      // Default to non-headless for visibility
       if (camoufoxOptions.headless === undefined) {
         camoufoxOptions.headless = false;
       }
@@ -72,17 +75,6 @@ export async function runCamoufoxWorker(id: string): Promise<void> {
       const browser = await Camoufox(camoufoxOptions);
       const context = await browser.newContext();
 
-      // Update config with actual browser details
-      let wsEndpoint: string | undefined;
-      try {
-        const browserWithWs = browser as any;
-        wsEndpoint =
-          browserWithWs.wsEndpoint?.() || `ws://localhost:0/camoufox-${id}`;
-      } catch {
-        wsEndpoint = `ws://localhost:0/camoufox-${id}`;
-      }
-
-      config.wsEndpoint = wsEndpoint;
       saveCamoufoxConfig(config);
 
       // Handle URL opening if provided

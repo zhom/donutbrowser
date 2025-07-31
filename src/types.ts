@@ -110,8 +110,7 @@ export interface CamoufoxConfig {
 
 export interface CamoufoxLaunchResult {
   id: string;
-  port?: number;
-  wsEndpoint?: string;
+  processId?: number;
   profilePath?: string;
   url?: string;
 }

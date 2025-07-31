@@ -396,9 +396,9 @@ program
             }
           }
 
-          // Theming
+          // Theming and cursor - these are custom properties for camoufox-js
           if (options.disableTheming) camoufoxOptions.disableTheming = true;
-          if (options.noShowcursor) camoufoxOptions.showcursor = false;
+          if (options.showcursor === false) camoufoxOptions.showcursor = false;
 
           // Use the launcher to start Camoufox properly
           const config = await startCamoufoxProcess(
@@ -413,8 +413,7 @@ program
           console.log(
             JSON.stringify({
               id: config.id,
-              port: config.port,
-              wsEndpoint: config.wsEndpoint,
+              processId: config.processId,
               profilePath: config.profilePath,
               url: config.url,
             }),

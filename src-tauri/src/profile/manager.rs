@@ -683,7 +683,7 @@ impl ProfileManager {
       Ok(Some(camoufox_process)) => {
         // Found a running instance, update profile with process info
         let mut updated_profile = profile.clone();
-        updated_profile.process_id = camoufox_process.port;
+        updated_profile.process_id = camoufox_process.processId;
         if let Err(e) = self.save_profile(&updated_profile) {
           println!("Warning: Failed to update Camoufox profile with process info: {e}");
         }
@@ -695,7 +695,7 @@ impl ProfileManager {
 
         println!(
           "Camoufox profile '{}' is running with PID: {:?}",
-          profile.name, camoufox_process.port
+          profile.name, camoufox_process.processId
         );
         Ok(true)
       }
