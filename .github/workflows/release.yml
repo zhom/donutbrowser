@@ -149,7 +149,7 @@ jobs:
         run: |
           mkdir -p src-tauri/binaries
           if [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
-            cp nodecar/nodecar-bin.exe src-tauri/binaries/nodecar-${{ matrix.target }}.exe
+            cp nodecar/nodecar-bin src-tauri/binaries/nodecar-${{ matrix.target }}.exe
           else
             cp nodecar/nodecar-bin src-tauri/binaries/nodecar-${{ matrix.target }}
           fi
