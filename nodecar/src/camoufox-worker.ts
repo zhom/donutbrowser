@@ -1,4 +1,5 @@
-import type { Browser, BrowserContext, Page } from "playwright-core";
+import { Camoufox } from "camoufox-js";
+import type { Page } from "playwright-core";
 import { getCamoufoxConfig, saveCamoufoxConfig } from "./camoufox-storage.js";
 
 /**
@@ -46,15 +47,8 @@ export async function runCamoufoxWorker(id: string): Promise<void> {
   process.on("SIGTERM", () => void gracefulShutdown());
   process.on("SIGINT", () => void gracefulShutdown());
 
-  // Keep the process alive
-  setInterval(() => {
-    // Keep alive
-  }, 1000);
-
   // Launch browser in background - this can take time and may fail
   setImmediate(async () => {
-    let browser: Browser | null = null;
-    let context: BrowserContext | null = null;
     let page: Page | null = null;
 
     try {
@@ -66,7 +60,7 @@ export async function runCamoufoxWorker(id: string): Promise<void> {
         camoufoxOptions.user_data_dir = config.profilePath;
       }
 
-      // Set anti-detect options
+      // Theming
       camoufoxOptions.disableTheming = true;
       camoufoxOptions.showcursor = false;
 
@@ -75,36 +69,8 @@ export async function runCamoufoxWorker(id: string): Promise<void> {
         camoufoxOptions.headless = false;
       }
 
-      // Import Camoufox dynamically
-      let Camoufox: any;
-      try {
-        const camoufoxModule = await import("camoufox-js");
-        Camoufox = camoufoxModule.Camoufox;
-      } catch (importError) {
-        // If Camoufox is not available, just keep the process alive
-        return;
-      }
-
-      // Launch Camoufox with timeout
-      const result = await Promise.race([
-        Camoufox(camoufoxOptions),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Camoufox launch timeout")), 30000),
-        ),
-      ]);
-
-      // Handle the result
-      if ("browser" in result && typeof result.browser === "function") {
-        context = result;
-        browser = context?.browser() ?? null;
-      } else {
-        browser = result as Browser;
-        context = await browser.newContext();
-      }
-
-      if (!browser) {
-        throw new Error("Failed to get browser instance");
-      }
+      const browser = await Camoufox(camoufoxOptions);
+      const context = await browser.newContext();
 
       // Update config with actual browser details
       let wsEndpoint: string | undefined;
@@ -129,7 +95,7 @@ export async function runCamoufoxWorker(id: string): Promise<void> {
             waitUntil: "domcontentloaded",
             timeout: 30000,
           });
-        } catch (error) {
+        } catch {
           // URL opening failure doesn't affect startup success
         }
       }
@@ -146,7 +112,7 @@ export async function runCamoufoxWorker(id: string): Promise<void> {
           process.exit(0);
         }
       }, 2000);
-    } catch (error) {
+    } catch {
       // Browser launch failed, but worker is still "successful"
       // Process will stay alive due to the main setInterval above
     }

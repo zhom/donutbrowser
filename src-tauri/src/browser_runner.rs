@@ -136,6 +136,18 @@ impl BrowserRunner {
     url: Option<String>,
     local_proxy_settings: Option<&ProxySettings>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
+    // Check if browser is disabled due to ongoing update
+    let auto_updater = crate::auto_updater::AutoUpdater::new();
+    if auto_updater.is_browser_disabled(&profile.browser)? {
+      return Err(
+        format!(
+          "{} is currently being updated. Please wait for the update to complete.",
+          profile.browser
+        )
+        .into(),
+      );
+    }
+
     // Handle camoufox profiles using nodecar launcher
     if profile.browser == "camoufox" {
       if let Some(mut camoufox_config) = profile.camoufox_config.clone() {

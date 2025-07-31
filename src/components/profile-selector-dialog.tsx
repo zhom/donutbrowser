@@ -234,12 +234,12 @@ export function ProfileSelectorDialog({
                     return (
                       <Tooltip key={profile.name}>
                         <TooltipTrigger asChild>
-                          <SelectItem
-                            value={profile.name}
-                            disabled={!canUseForLinks}
-                            asChild
-                          >
-                            <span>
+                          <div>
+                            <SelectItem
+                              value={profile.name}
+                              disabled={!canUseForLinks}
+                              asChild
+                            >
                               <div
                                 className={`flex items-center gap-2 ${
                                   !canUseForLinks ? "opacity-50" : ""
@@ -284,8 +284,8 @@ export function ProfileSelectorDialog({
                                   </Badge>
                                 )}
                               </div>
-                            </span>
-                          </SelectItem>
+                            </SelectItem>
+                          </div>
                         </TooltipTrigger>
                         {tooltipContent && (
                           <TooltipContent>{tooltipContent}</TooltipContent>

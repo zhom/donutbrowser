@@ -1,11 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
+import type { LaunchOptions } from "camoufox-js/dist/utils.js";
 import tmp from "tmp";
-import type { CamoufoxLaunchOptions } from "./camoufox-launcher.js";
 
 export interface CamoufoxConfig {
   id: string;
-  options: CamoufoxLaunchOptions;
+  options: LaunchOptions;
   profilePath?: string;
   url?: string;
   port?: number;

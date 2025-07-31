@@ -86,8 +86,8 @@ impl Default for CamoufoxConfig {
       additional_args: None,
       env_vars: None,
       firefox_prefs: None,
-      disable_theming: Some(true), // Required for anti-detect
-      showcursor: Some(false),     // Required for anti-detect
+      disable_theming: Some(true),
+      showcursor: Some(false),
     }
   }
 }
@@ -415,7 +415,6 @@ impl CamoufoxNodecarLauncher {
       args.extend(["--firefox-prefs".to_string(), prefs_json]);
     }
 
-    // Required anti-detect options
     if let Some(disable_theming) = config.disable_theming {
       if disable_theming {
         args.push("--disable-theming".to_string());

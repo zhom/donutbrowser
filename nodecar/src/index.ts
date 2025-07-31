@@ -1,6 +1,6 @@
+import type { LaunchOptions } from "camoufox-js/dist/utils.js";
 import { program } from "commander";
 import {
-  type CamoufoxLaunchOptions,
   startCamoufoxProcess,
   stopAllCamoufoxProcesses,
   stopCamoufoxProcess,
@@ -241,15 +241,8 @@ program
   // Firefox preferences
   .option("--firefox-prefs <prefs>", "Firefox user preferences (JSON string)")
 
-  // Anti-detect options
-  .option(
-    "--disable-theming",
-    "disable Firefox theming (required for anti-detect)",
-  )
-  .option(
-    "--no-showcursor",
-    "disable cursor display (required for anti-detect)",
-  )
+  .option("--disable-theming", "disable Firefox theming")
+  .option("--no-showcursor", "disable cursor display")
 
   .description("manage Camoufox browser instances")
   .action(
@@ -260,7 +253,7 @@ program
       if (action === "start") {
         try {
           // Build Camoufox options in the format expected by camoufox-js
-          const camoufoxOptions: CamoufoxLaunchOptions = {};
+          const camoufoxOptions: LaunchOptions = {};
 
           // OS fingerprinting
           if (options.os && typeof options.os === "string") {
@@ -402,6 +395,10 @@ program
               return;
             }
           }
+
+          // Theming
+          if (options.disableTheming) camoufoxOptions.disableTheming = true;
+          if (options.noShowcursor) camoufoxOptions.showcursor = false;
 
           // Use the launcher to start Camoufox properly
           const config = await startCamoufoxProcess(

@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
+import type { LaunchOptions } from "camoufox-js/dist/utils.js";
 import {
   type CamoufoxConfig,
   deleteCamoufoxConfig,
@@ -9,88 +10,6 @@ import {
   saveCamoufoxConfig,
 } from "./camoufox-storage.js";
 
-export interface CamoufoxLaunchOptions {
-  // Operating system to use for fingerprint generation
-  os?: "windows" | "macos" | "linux" | ("windows" | "macos" | "linux")[];
-
-  // Blocking options
-  block_images?: boolean;
-  block_webrtc?: boolean;
-  block_webgl?: boolean;
-
-  // Security options
-  disable_coop?: boolean;
-
-  // Geolocation options
-  geoip?: string | boolean;
-
-  // UI behavior
-  humanize?: boolean | number;
-
-  // Localization
-  locale?: string | string[];
-
-  // Extensions and fonts
-  addons?: string[];
-  fonts?: string[];
-  custom_fonts_only?: boolean;
-  exclude_addons?: "UBO"[];
-
-  // Screen and window
-  screen?: {
-    minWidth?: number;
-    maxWidth?: number;
-    minHeight?: number;
-    maxHeight?: number;
-  };
-  window?: [number, number];
-
-  fingerprint?: any;
-  disableTheming?: boolean;
-  showcursor?: boolean;
-
-  // Version and mode
-  ff_version?: number;
-  headless?: boolean;
-  main_world_eval?: boolean;
-
-  // Custom executable path
-  executable_path?: string;
-
-  // Firefox preferences
-  firefox_user_prefs?: Record<string, unknown>;
-  user_data_dir?: string;
-
-  // Proxy settings
-  proxy?:
-    | string
-    | {
-        server: string;
-        username?: string;
-        password?: string;
-        bypass?: string;
-      };
-
-  // Cache and performance
-  enable_cache?: boolean;
-
-  // Additional options
-  args?: string[];
-  env?: Record<string, string | number | boolean>;
-  debug?: boolean;
-  virtual_display?: string;
-  webgl_config?: [string, string];
-
-  // Custom options
-  timezone?: string;
-  country?: string;
-  geolocation?: {
-    latitude: number;
-    longitude: number;
-    accuracy?: number;
-  };
-}
-
 /**
  * Start a Camoufox instance in a separate process
  * @param options Camoufox launch options
@@ -99,7 +18,7 @@ export interface CamoufoxLaunchOptions {
  * @returns Promise resolving to the Camoufox configuration
  */
 export async function startCamoufoxProcess(
-  options: CamoufoxLaunchOptions = {},
+  options: LaunchOptions = {},
   profilePath?: string,
   url?: string,
 ): Promise<CamoufoxConfig> {

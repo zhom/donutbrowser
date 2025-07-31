@@ -82,9 +82,6 @@ impl TestUtils {
     let mut cmd = Command::new(binary_path);
     cmd.args(args);
 
-    // Add environment variable to ensure nodecar doesn't hang
-    cmd.env("NODE_ENV", "test");
-
     let output = timeout(Duration::from_secs(timeout_secs), async {
       tokio::process::Command::from(cmd).output().await
     })
