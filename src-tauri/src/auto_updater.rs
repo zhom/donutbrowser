@@ -99,7 +99,7 @@ impl AutoUpdater {
         if let Some(update) = self.check_profile_update(&profile, &versions)? {
           // Apply chromium threshold logic
           if browser == "chromium" {
-            // For chromium, only show notifications if there are 200+ new versions
+            // For chromium, only show notifications if there are 400+ new versions
             let current_version = &profile.version.parse::<u32>().unwrap();
             let new_version = &update.new_version.parse::<u32>().unwrap();
 
@@ -107,11 +107,11 @@ impl AutoUpdater {
             println!(
               "Current version: {current_version}, New version: {new_version}, Result: {result}"
             );
-            if result > 200 {
+            if result > 400 {
               notifications.push(update);
             } else {
               println!(
-                "Skipping chromium update notification: only {result} new versions (need 50+)"
+                "Skipping chromium update notification: only {result} new versions (need 400+)"
               );
             }
           } else {
