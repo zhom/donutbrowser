@@ -1,7 +1,7 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { LoadingButton } from "@/components/loading-button";
 import { SharedCamoufoxConfigForm } from "@/components/shared-camoufox-config-form";
 import { Button } from "@/components/ui/button";
@@ -121,6 +121,7 @@ export function CreateProfileDialog({
   const [supportedBrowsers, setSupportedBrowsers] = useState<string[]>([]);
   const [storedProxies, setStoredProxies] = useState<StoredProxy[]>([]);
   const [isCreating, setIsCreating] = useState(false);
+  const loadingBrowserRef = useRef<string | null>(null);
 
   // Use the browser download hook
   const {
@@ -150,22 +151,33 @@ export function CreateProfileDialog({
 
   const loadReleaseTypes = useCallback(
     async (browser: string) => {
+      // Set loading state
+      loadingBrowserRef.current = browser;
+
       try {
         const releaseTypes = await invoke<BrowserReleaseTypes>(
           "get_browser_release_types",
           { browserStr: browser },
         );
 
-        if (browser === "camoufox") {
-          setCamoufoxReleaseTypes(releaseTypes);
-        } else {
-          setAvailableReleaseTypes(releaseTypes);
-        }
+        // Only update state if this browser is still the one we're loading
+        if (loadingBrowserRef.current === browser) {
+          if (browser === "camoufox") {
+            setCamoufoxReleaseTypes(releaseTypes);
+          } else {
+            setAvailableReleaseTypes(releaseTypes);
+          }
 
-        // Load downloaded versions for this browser
-        await loadDownloadedVersions(browser);
+          // Load downloaded versions for this browser
+          await loadDownloadedVersions(browser);
+        }
       } catch (error) {
         console.error(`Failed to load release types for ${browser}:`, error);
+      } finally {
+        // Clear loading state only if we're still loading this browser
+        if (loadingBrowserRef.current === browser) {
+          loadingBrowserRef.current = null;
+        }
       }
     },
     [loadDownloadedVersions],
@@ -184,13 +196,25 @@ export function CreateProfileDialog({
   // Load release types when browser selection changes
   useEffect(() => {
     if (selectedBrowser) {
+      // Cancel any previous loading
+      loadingBrowserRef.current = null;
+      // Clear previous release types immediately to prevent showing stale data
+      setAvailableReleaseTypes({});
       void loadReleaseTypes(selectedBrowser);
     }
   }, [selectedBrowser, loadReleaseTypes]);
 
   // Helper function to get the best available version and release type
   const getBestAvailableVersion = useCallback(
-    (releaseTypes: BrowserReleaseTypes) => {
+    (releaseTypes: BrowserReleaseTypes, browserType?: string) => {
+      // For Firefox Developer Edition, prefer nightly over stable
+      if (browserType === "firefox-developer" && releaseTypes.nightly) {
+        return {
+          version: releaseTypes.nightly,
+          releaseType: "nightly" as const,
+        };
+      }
+
       if (releaseTypes.stable) {
         return { version: releaseTypes.stable, releaseType: "stable" as const };
       }
@@ -208,7 +232,7 @@ export function CreateProfileDialog({
   const handleDownload = async (browserStr: string) => {
     const releaseTypes =
       browserStr === "camoufox" ? camoufoxReleaseTypes : availableReleaseTypes;
-    const bestVersion = getBestAvailableVersion(releaseTypes);
+    const bestVersion = getBestAvailableVersion(releaseTypes, browserStr);
 
     if (!bestVersion) {
       console.error("No version available for download");
@@ -234,7 +258,10 @@ export function CreateProfileDialog({
         }
 
         // Use the best available version (stable preferred, nightly as fallback)
-        const bestVersion = getBestAvailableVersion(availableReleaseTypes);
+        const bestVersion = getBestAvailableVersion(
+          availableReleaseTypes,
+          selectedBrowser,
+        );
         if (!bestVersion) {
           console.error("No version available");
           return;
@@ -249,8 +276,10 @@ export function CreateProfileDialog({
         });
       } else {
         // Anti-detect tab - always use Camoufox with best available version
-        const bestCamoufoxVersion =
-          getBestAvailableVersion(camoufoxReleaseTypes);
+        const bestCamoufoxVersion = getBestAvailableVersion(
+          camoufoxReleaseTypes,
+          "camoufox",
+        );
         if (!bestCamoufoxVersion) {
           console.error("No Camoufox version available");
           return;
@@ -275,10 +304,15 @@ export function CreateProfileDialog({
   };
 
   const handleClose = () => {
+    // Cancel any ongoing loading
+    loadingBrowserRef.current = null;
+
     // Reset all states
     setProfileName("");
     setSelectedBrowser(undefined);
     setSelectedProxyId(undefined);
+    setAvailableReleaseTypes({});
+    setCamoufoxReleaseTypes({});
     setCamoufoxConfig({
       enable_cache: true,
       os: [getCurrentOS()], // Reset to current OS
@@ -292,11 +326,12 @@ export function CreateProfileDialog({
 
     if (activeTab === "regular") {
       return (
-        !selectedBrowser || !getBestAvailableVersion(availableReleaseTypes)
+        !selectedBrowser ||
+        !getBestAvailableVersion(availableReleaseTypes, selectedBrowser)
       );
     } else {
       // For anti-detect, we need camoufox to be available
-      return !getBestAvailableVersion(camoufoxReleaseTypes);
+      return !getBestAvailableVersion(camoufoxReleaseTypes, "camoufox");
     }
   };
 
@@ -308,7 +343,7 @@ export function CreateProfileDialog({
   const isBrowserVersionAvailable = (browserStr: string) => {
     const releaseTypes =
       browserStr === "camoufox" ? camoufoxReleaseTypes : availableReleaseTypes;
-    const bestVersion = getBestAvailableVersion(releaseTypes);
+    const bestVersion = getBestAvailableVersion(releaseTypes, browserStr);
     return bestVersion && isVersionDownloaded(bestVersion.version);
   };
 
@@ -377,12 +412,16 @@ export function CreateProfileDialog({
                   {selectedBrowser && (
                     <div className="space-y-3">
                       {!isBrowserVersionAvailable(selectedBrowser) &&
-                        getBestAvailableVersion(availableReleaseTypes) && (
+                        getBestAvailableVersion(
+                          availableReleaseTypes,
+                          selectedBrowser,
+                        ) && (
                           <div className="flex gap-3 items-center">
                             <p className="text-sm text-muted-foreground">
                               {(() => {
                                 const bestVersion = getBestAvailableVersion(
                                   availableReleaseTypes,
+                                  selectedBrowser,
                                 );
                                 return `${bestVersion?.releaseType === "stable" ? "Latest stable" : "Latest nightly"} version (${bestVersion?.version}) needs to be downloaded`;
                               })()}
@@ -402,6 +441,7 @@ export function CreateProfileDialog({
                           {(() => {
                             const bestVersion = getBestAvailableVersion(
                               availableReleaseTypes,
+                              selectedBrowser,
                             );
                             return `✓ ${bestVersion?.releaseType === "stable" ? "Latest stable" : "Latest nightly"} version (${bestVersion?.version}) is available`;
                           })()}
@@ -423,12 +463,17 @@ export function CreateProfileDialog({
                 <div className="space-y-6">
                   {/* Camoufox Download Status */}
                   {!isBrowserVersionAvailable("camoufox") &&
-                    getBestAvailableVersion(camoufoxReleaseTypes) && (
+                    getBestAvailableVersion(
+                      camoufoxReleaseTypes,
+                      "camoufox",
+                    ) && (
                       <div className="flex gap-3 items-center p-3 bg-amber-50 rounded-md border border-amber-200">
                         <p className="text-sm text-amber-800">
                           {(() => {
-                            const bestVersion =
-                              getBestAvailableVersion(camoufoxReleaseTypes);
+                            const bestVersion = getBestAvailableVersion(
+                              camoufoxReleaseTypes,
+                              "camoufox",
+                            );
                             return `Camoufox ${bestVersion?.releaseType} version (${bestVersion?.version}) needs to be downloaded`;
                           })()}
                         </p>
@@ -445,8 +490,10 @@ export function CreateProfileDialog({
                   {isBrowserVersionAvailable("camoufox") && (
                     <div className="p-3 text-sm text-green-600 bg-green-50 rounded-md border border-green-200">
                       {(() => {
-                        const bestVersion =
-                          getBestAvailableVersion(camoufoxReleaseTypes);
+                        const bestVersion = getBestAvailableVersion(
+                          camoufoxReleaseTypes,
+                          "camoufox",
+                        );
                         return `✓ Camoufox ${bestVersion?.releaseType} version (${bestVersion?.version}) is available`;
                       })()}
                     </div>
