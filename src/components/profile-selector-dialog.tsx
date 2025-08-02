@@ -240,13 +240,14 @@ export function ProfileSelectorDialog({
                             <SelectItem
                               value={profile.name}
                               disabled={!canUseForLinks}
+                              className="cursor-pointer"
                             >
                               <div
                                 className={`flex items-center gap-2 ${
                                   !canUseForLinks ? "opacity-50" : ""
                                 }`}
                               >
-                                <div className="flex gap-3 items-center px-2 py-1 rounded-lg cursor-pointer hover:bg-accent">
+                                <div className="flex gap-3 items-center px-2 py-1 rounded-lg">
                                   <div className="flex gap-2 items-center">
                                     {(() => {
                                       const IconComponent = getBrowserIcon(
