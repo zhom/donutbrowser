@@ -174,6 +174,41 @@ export function ProfilesDataTable({
     }
   }, [browserState.isClient, loadStoredProxies]);
 
+  // Automatically deselect profiles that become running or updating
+  React.useEffect(() => {
+    setSelectedProfiles((prev) => {
+      const newSet = new Set(prev);
+      let hasChanges = false;
+
+      for (const profileName of prev) {
+        const profile = filteredData.find((p) => p.name === profileName);
+        if (profile) {
+          const isRunning =
+            browserState.isClient && runningProfiles.has(profile.name);
+          const isBrowserUpdating = isUpdating(profile.browser);
+
+          if (isRunning || isBrowserUpdating) {
+            newSet.delete(profileName);
+            hasChanges = true;
+          }
+        }
+      }
+
+      if (hasChanges) {
+        onSelectedProfilesChange?.(Array.from(newSet));
+        return newSet;
+      }
+
+      return prev;
+    });
+  }, [
+    filteredData,
+    runningProfiles,
+    isUpdating,
+    browserState.isClient,
+    onSelectedProfilesChange,
+  ]);
+
   // Sync external selected profiles with internal state
   React.useEffect(() => {
     const newSet = new Set(externalSelectedProfiles);
@@ -288,7 +323,16 @@ export function ProfilesDataTable({
   const handleToggleAll = React.useCallback(
     (checked: boolean) => {
       const newSet = checked
-        ? new Set(filteredData.map((profile) => profile.name))
+        ? new Set(
+            filteredData
+              .filter((profile) => {
+                const isRunning =
+                  browserState.isClient && runningProfiles.has(profile.name);
+                const isBrowserUpdating = isUpdating(profile.browser);
+                return !isRunning && !isBrowserUpdating;
+              })
+              .map((profile) => profile.name),
+          )
         : new Set<string>();
 
       setSelectedProfiles(newSet);
@@ -299,35 +343,76 @@ export function ProfilesDataTable({
         onSelectedProfilesChange(Array.from(newSet));
       }
     },
-    [filteredData, onSelectedProfilesChange],
+    [
+      filteredData,
+      onSelectedProfilesChange,
+      browserState.isClient,
+      runningProfiles,
+      isUpdating,
+    ],
   );
 
   const columns: ColumnDef<BrowserProfile>[] = React.useMemo(
     () => [
       {
         id: "select",
-        header: () => (
-          <span>
-            <Checkbox
-              checked={
-                selectedProfiles.size === filteredData.length &&
-                filteredData.length !== 0
-              }
-              onCheckedChange={(value) => handleToggleAll(!!value)}
-              aria-label="Select all"
-              className="cursor-pointer"
-            />
-          </span>
-        ),
+        header: () => {
+          const selectableProfiles = filteredData.filter((profile) => {
+            const isRunning =
+              browserState.isClient && runningProfiles.has(profile.name);
+            const isBrowserUpdating = isUpdating(profile.browser);
+            return !isRunning && !isBrowserUpdating;
+          });
+
+          return (
+            <span>
+              <Checkbox
+                checked={
+                  selectedProfiles.size === selectableProfiles.length &&
+                  selectableProfiles.length !== 0
+                }
+                onCheckedChange={(value) => handleToggleAll(!!value)}
+                aria-label="Select all"
+                className="cursor-pointer"
+              />
+            </span>
+          );
+        },
         cell: ({ row }) => {
           const profile = row.original;
           const browser = profile.browser;
           const IconComponent = getBrowserIcon(browser);
           const isSelected = selectedProfiles.has(profile.name);
+          const isRunning =
+            browserState.isClient && runningProfiles.has(profile.name);
+          const isBrowserUpdating = isUpdating(browser);
+          const isDisabled = isRunning || isBrowserUpdating;
+
+          // Show tooltip for disabled profiles
+          if (isDisabled) {
+            const tooltipMessage = isRunning
+              ? "Can't modify running profile"
+              : "Can't modify profile while browser is updating";
+
+            return (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="flex justify-center items-center w-4 h-4 cursor-not-allowed">
+                    {IconComponent && (
+                      <IconComponent className="w-4 h-4 opacity-50" />
+                    )}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{tooltipMessage}</p>
+                </TooltipContent>
+              </Tooltip>
+            );
+          }
 
           if (showCheckboxes || isSelected) {
             return (
-              <span className="w-4 h-4 flex items-center justify-center">
+              <span className="flex justify-center items-center w-4 h-4">
                 <Checkbox
                   checked={isSelected}
                   onCheckedChange={(value) =>
@@ -341,10 +426,10 @@ export function ProfilesDataTable({
           }
 
           return (
-            <span className="relative flex items-center justify-center w-4 h-4">
+            <span className="flex relative justify-center items-center w-4 h-4">
               <button
                 type="button"
-                className="flex items-center justify-center cursor-pointer border-none p-0"
+                className="flex justify-center items-center p-0 border-none cursor-pointer"
                 onClick={() => handleIconClick(profile.name)}
                 aria-label="Select profile"
               >
@@ -419,8 +504,8 @@ export function ProfilesDataTable({
                       onClick={() => void handleLaunchClick()}
                     >
                       {isLaunching ? (
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                        <div className="flex gap-1 items-center">
+                          <div className="w-3 h-3 rounded-full border border-current animate-spin border-t-transparent" />
                         </div>
                       ) : isRunning ? (
                         "Stop"
@@ -447,13 +532,13 @@ export function ProfilesDataTable({
               onClick={() =>
                 column.toggleSorting(column.getIsSorted() === "asc")
               }
-              className="h-auto p-0 font-semibold text-left justify-start cursor-pointer"
+              className="justify-start p-0 h-auto font-semibold text-left cursor-pointer"
             >
               Name
               {column.getIsSorted() === "asc" ? (
-                <LuChevronUp className="ml-2 h-4 w-4" />
+                <LuChevronUp className="ml-2 w-4 h-4" />
               ) : column.getIsSorted() === "desc" ? (
-                <LuChevronDown className="ml-2 h-4 w-4" />
+                <LuChevronDown className="ml-2 w-4 h-4" />
               ) : null}
             </Button>
           );
@@ -487,13 +572,13 @@ export function ProfilesDataTable({
               onClick={() =>
                 column.toggleSorting(column.getIsSorted() === "asc")
               }
-              className="h-auto p-0 font-semibold text-left justify-start cursor-pointer"
+              className="justify-start p-0 h-auto font-semibold text-left cursor-pointer"
             >
               Browser
               {column.getIsSorted() === "asc" ? (
-                <LuChevronUp className="ml-2 h-4 w-4" />
+                <LuChevronUp className="ml-2 w-4 h-4" />
               ) : column.getIsSorted() === "desc" ? (
-                <LuChevronDown className="ml-2 h-4 w-4" />
+                <LuChevronDown className="ml-2 w-4 h-4" />
               ) : null}
             </Button>
           );
@@ -715,8 +800,9 @@ export function ProfilesDataTable({
       onChangeVersion,
       onAssignProfilesToGroup,
       isUpdating,
-      filteredData.length,
       launchingProfiles.has,
+      filteredData,
+      browserState.isClient,
     ],
   );
 
