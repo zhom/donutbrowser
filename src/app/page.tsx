@@ -239,9 +239,9 @@ export default function Home() {
         console.log("Startup URL detected:", currentUrl[0]);
         void handleUrlOpen(currentUrl[0]);
       }
-      setHasCheckedStartupUrl(true);
     } catch (error) {
       console.error("Failed to check current URL:", error);
+    } finally {
       setHasCheckedStartupUrl(true);
     }
   }, [handleUrlOpen, hasCheckedStartupUrl]);
@@ -257,9 +257,9 @@ export default function Home() {
       if (shouldShow) {
         setSettingsDialogOpen(true);
       }
-      setHasCheckedStartupPrompt(true);
     } catch (error) {
       console.error("Failed to check startup prompt:", error);
+    } finally {
       setHasCheckedStartupPrompt(true);
     }
   }, [hasCheckedStartupPrompt]);
