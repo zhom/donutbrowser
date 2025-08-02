@@ -700,6 +700,77 @@ async fn test_nodecar_proxy_types() -> Result<(), Box<dyn std::error::Error + Se
   Ok(())
 }
 
+/// Test direct proxy (no upstream) functionality
+#[tokio::test]
+async fn test_nodecar_direct_proxy() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+  let nodecar_path = setup_test().await?;
+  let mut tracker = TestResourceTracker::new(nodecar_path.clone());
+
+  // Test starting a direct proxy (no upstream)
+  let args = ["proxy", "start"];
+
+  println!("Starting direct proxy with nodecar...");
+  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 30).await?;
+
+  if !output.status.success() {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    tracker.cleanup_all().await;
+    return Err(format!("Direct proxy start failed - stdout: {stdout}, stderr: {stderr}").into());
+  }
+
+  let stdout = String::from_utf8(output.stdout)?;
+  let config: Value = serde_json::from_str(&stdout)?;
+
+  // Verify proxy configuration structure
+  assert!(config["id"].is_string(), "Proxy ID should be a string");
+  assert!(
+    config["localPort"].is_number(),
+    "Local port should be a number"
+  );
+  assert!(
+    config["localUrl"].is_string(),
+    "Local URL should be a string"
+  );
+  assert_eq!(
+    config["upstreamUrl"].as_str().unwrap(),
+    "DIRECT",
+    "Upstream URL should be DIRECT"
+  );
+
+  let proxy_id = config["id"].as_str().unwrap().to_string();
+  let local_port = config["localPort"].as_u64().unwrap() as u16;
+  tracker.track_proxy(proxy_id.clone());
+
+  println!("Direct proxy started with ID: {proxy_id} on port: {local_port}");
+
+  // Wait for the proxy to start listening
+  let is_listening = TestUtils::wait_for_port_state(local_port, true, 10).await;
+  assert!(
+    is_listening,
+    "Direct proxy should be listening on the assigned port"
+  );
+
+  // Test stopping the proxy
+  let stop_args = ["proxy", "stop", "--id", &proxy_id];
+  let stop_output = TestUtils::execute_nodecar_command(&nodecar_path, &stop_args, 10).await?;
+
+  assert!(
+    stop_output.status.success(),
+    "Direct proxy stop should succeed"
+  );
+
+  let port_available = TestUtils::wait_for_port_state(local_port, false, 5).await;
+  assert!(
+    port_available,
+    "Port should be available after stopping direct proxy"
+  );
+
+  println!("Direct proxy test completed successfully");
+  tracker.cleanup_all().await;
+  Ok(())
+}
+
 /// Test SOCKS5 proxy chaining - create two proxies where the second uses the first as upstream
 #[tokio::test]
 async fn test_nodecar_socks5_proxy_chaining() -> Result<(), Box<dyn std::error::Error + Send + Sync>>

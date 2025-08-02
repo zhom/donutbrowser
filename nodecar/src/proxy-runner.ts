@@ -2,23 +2,23 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import getPort from "get-port";
 import {
-  type ProxyConfig,
   deleteProxyConfig,
   generateProxyId,
   getProxyConfig,
   isProcessRunning,
   listProxyConfigs,
+  type ProxyConfig,
   saveProxyConfig,
 } from "./proxy-storage";
 
 /**
  * Start a proxy in a separate process
- * @param upstreamUrl The upstream proxy URL
+ * @param upstreamUrl The upstream proxy URL (optional for direct proxy)
  * @param options Optional configuration
  * @returns Promise resolving to the proxy configuration
  */
 export async function startProxyProcess(
-  upstreamUrl: string,
+  upstreamUrl?: string,
   options: { port?: number; ignoreProxyCertificate?: boolean } = {},
 ): Promise<ProxyConfig> {
   // Generate a unique ID for this proxy
@@ -30,7 +30,7 @@ export async function startProxyProcess(
   // Create the proxy configuration
   const config: ProxyConfig = {
     id,
-    upstreamUrl,
+    upstreamUrl: upstreamUrl || "DIRECT",
     localPort: port,
     ignoreProxyCertificate: options.ignoreProxyCertificate ?? false,
   };

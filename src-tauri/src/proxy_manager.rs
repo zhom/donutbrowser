@@ -249,10 +249,11 @@ impl ProxyManager {
   }
 
   // Start a proxy for given proxy settings and associate it with a browser process ID
+  // If proxy_settings is None, starts a direct proxy for traffic monitoring
   pub async fn start_proxy(
     &self,
     app_handle: tauri::AppHandle,
-    proxy_settings: &ProxySettings,
+    proxy_settings: Option<&ProxySettings>,
     browser_pid: u32,
     profile_name: Option<&str>,
   ) -> Result<ProxySettings, String> {
@@ -273,15 +274,19 @@ impl ProxyManager {
     // Check if we have a preferred port for this profile
     let preferred_port = if let Some(name) = profile_name {
       let profile_proxies = self.profile_proxies.lock().unwrap();
-      profile_proxies.get(name).and_then(|settings| {
+      profile_proxies.get(name).and_then(|_settings| {
         // Find existing proxy with same settings to reuse port
         let active_proxies = self.active_proxies.lock().unwrap();
         active_proxies
           .values()
           .find(|p| {
-            p.upstream_host == settings.host
-              && p.upstream_port == settings.port
-              && p.upstream_type == settings.proxy_type
+            if let Some(proxy_settings) = proxy_settings {
+              p.upstream_host == proxy_settings.host
+                && p.upstream_port == proxy_settings.port
+                && p.upstream_type == proxy_settings.proxy_type
+            } else {
+              p.upstream_type == "DIRECT"
+            }
           })
           .map(|p| p.local_port)
       })
@@ -295,20 +300,25 @@ impl ProxyManager {
       .sidecar("nodecar")
       .map_err(|e| format!("Failed to create sidecar: {e}"))?
       .arg("proxy")
-      .arg("start")
-      .arg("--host")
-      .arg(&proxy_settings.host)
-      .arg("--proxy-port")
-      .arg(proxy_settings.port.to_string())
-      .arg("--type")
-      .arg(&proxy_settings.proxy_type);
+      .arg("start");
 
-    // Add credentials if provided
-    if let Some(username) = &proxy_settings.username {
-      nodecar = nodecar.arg("--username").arg(username);
-    }
-    if let Some(password) = &proxy_settings.password {
-      nodecar = nodecar.arg("--password").arg(password);
+    // Add upstream proxy settings if provided, otherwise create direct proxy
+    if let Some(proxy_settings) = proxy_settings {
+      nodecar = nodecar
+        .arg("--host")
+        .arg(&proxy_settings.host)
+        .arg("--proxy-port")
+        .arg(proxy_settings.port.to_string())
+        .arg("--type")
+        .arg(&proxy_settings.proxy_type);
+
+      // Add credentials if provided
+      if let Some(username) = &proxy_settings.username {
+        nodecar = nodecar.arg("--username").arg(username);
+      }
+      if let Some(password) = &proxy_settings.password {
+        nodecar = nodecar.arg("--password").arg(password);
+      }
     }
 
     // If we have a preferred port, use it
@@ -349,9 +359,13 @@ impl ProxyManager {
     let proxy_info = ProxyInfo {
       id: id.to_string(),
       local_url,
-      upstream_host: proxy_settings.host.clone(),
-      upstream_port: proxy_settings.port,
-      upstream_type: proxy_settings.proxy_type.clone(),
+      upstream_host: proxy_settings
+        .map(|p| p.host.clone())
+        .unwrap_or_else(|| "DIRECT".to_string()),
+      upstream_port: proxy_settings.map(|p| p.port).unwrap_or(0),
+      upstream_type: proxy_settings
+        .map(|p| p.proxy_type.clone())
+        .unwrap_or_else(|| "DIRECT".to_string()),
       local_port,
     };
 
@@ -363,8 +377,10 @@ impl ProxyManager {
 
     // Store the profile proxy info for persistence
     if let Some(name) = profile_name {
-      let mut profile_proxies = self.profile_proxies.lock().unwrap();
-      profile_proxies.insert(name.to_string(), proxy_settings.clone());
+      if let Some(proxy_settings) = proxy_settings {
+        let mut profile_proxies = self.profile_proxies.lock().unwrap();
+        profile_proxies.insert(name.to_string(), proxy_settings.clone());
+      }
     }
 
     // Return proxy settings for the browser

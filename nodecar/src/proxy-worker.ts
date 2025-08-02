@@ -19,6 +19,10 @@ export async function runProxyWorker(id: string): Promise<void> {
     port: config.localPort,
     host: "127.0.0.1",
     prepareRequestFunction: () => {
+      // If upstreamUrl is "DIRECT", don't use upstream proxy
+      if (config.upstreamUrl === "DIRECT") {
+        return {};
+      }
       return {
         upstreamProxyUrl: config.upstreamUrl,
         ignoreUpstreamProxyCertificate: config.ignoreProxyCertificate ?? false,

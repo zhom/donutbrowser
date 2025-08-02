@@ -434,7 +434,12 @@ impl ProfileManager {
           // Browser is running and proxy is enabled, start new proxy
           if let Some(pid) = profile.process_id {
             match PROXY_MANAGER
-              .start_proxy(app_handle.clone(), &proxy_settings, pid, Some(profile_name))
+              .start_proxy(
+                app_handle.clone(),
+                Some(&proxy_settings),
+                pid,
+                Some(profile_name),
+              )
               .await
             {
               Ok(internal_proxy_settings) => {

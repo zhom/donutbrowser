@@ -137,7 +137,7 @@ impl BrowserRunner {
     app_handle: tauri::AppHandle,
     profile: &BrowserProfile,
     url: Option<String>,
-    local_proxy_settings: Option<&ProxySettings>,
+    _local_proxy_settings: Option<&ProxySettings>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
     // Check if browser is disabled due to ongoing update
     let auto_updater = crate::auto_updater::AutoUpdater::instance();
@@ -154,60 +154,42 @@ impl BrowserRunner {
     // Handle camoufox profiles using nodecar launcher
     if profile.browser == "camoufox" {
       if let Some(mut camoufox_config) = profile.camoufox_config.clone() {
-        // Handle proxy settings for camoufox
-        if let Some(proxy_id) = &profile.proxy_id {
-          if let Some(stored_proxy) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id) {
-            println!("Starting proxy for Camoufox profile: {}", profile.name);
+        // Always start a local proxy for Camoufox (for traffic monitoring and geoip support)
+        let upstream_proxy = profile
+          .proxy_id
+          .as_ref()
+          .and_then(|id| PROXY_MANAGER.get_proxy_settings_by_id(id));
 
-            // Start the proxy and get local proxy settings
-            let local_proxy = PROXY_MANAGER
-              .start_proxy(
-                app_handle.clone(),
-                &stored_proxy,
-                0, // Use 0 as temporary PID, will be updated later
-                Some(&profile.name),
-              )
-              .await
-              .map_err(|e| format!("Failed to start proxy for Camoufox: {e}"))?;
+        println!(
+          "Starting local proxy for Camoufox profile: {} (upstream: {})",
+          profile.name,
+          upstream_proxy
+            .as_ref()
+            .map(|p| format!("{}:{}", p.host, p.port))
+            .unwrap_or_else(|| "DIRECT".to_string())
+        );
 
-            // Format proxy URL for camoufox
-            let proxy_url = format!(
-              "{}://{}:{}",
-              if stored_proxy.proxy_type == "socks5" || stored_proxy.proxy_type == "socks4" {
-                &stored_proxy.proxy_type
-              } else {
-                "http"
-              },
-              local_proxy.host,
-              local_proxy.port
-            );
+        // Start the proxy and get local proxy settings
+        let local_proxy = PROXY_MANAGER
+          .start_proxy(
+            app_handle.clone(),
+            upstream_proxy.as_ref(),
+            0, // Use 0 as temporary PID, will be updated later
+            Some(&profile.name),
+          )
+          .await
+          .map_err(|e| format!("Failed to start local proxy for Camoufox: {e}"))?;
 
-            // Add username and password if available
-            let proxy_url = if let (Some(username), Some(password)) =
-              (&stored_proxy.username, &stored_proxy.password)
-            {
-              format!(
-                "{}://{}:{}@{}:{}",
-                if stored_proxy.proxy_type == "socks5" || stored_proxy.proxy_type == "socks4" {
-                  &stored_proxy.proxy_type
-                } else {
-                  "http"
-                },
-                username,
-                password,
-                local_proxy.host,
-                local_proxy.port
-              )
-            } else {
-              proxy_url
-            };
+        // Format proxy URL for camoufox - always use HTTP for the local proxy
+        let proxy_url = format!("http://{}:{}", local_proxy.host, local_proxy.port);
 
-            // Set proxy in camoufox config
-            camoufox_config.proxy = Some(proxy_url);
+        // Set proxy in camoufox config
+        camoufox_config.proxy = Some(proxy_url);
 
-            println!("Configured proxy for Camoufox: {:?}", camoufox_config.proxy);
-          }
-        }
+        println!(
+          "Configured local proxy for Camoufox: {:?}",
+          camoufox_config.proxy
+        );
 
         // Use the existing config or create a test config if none exists
         let final_config = if camoufox_config.timezone.is_some()
@@ -289,18 +271,14 @@ impl BrowserRunner {
       // Continue anyway, the error might not be critical
     }
 
-    // For Chromium browsers, use local proxy settings if available
-    // For Firefox browsers, proxy settings are handled via PAC files
-    let stored_proxy_settings = profile
+    // Get stored proxy settings for later use (removed as we handle this in proxy startup)
+    let _stored_proxy_settings = profile
       .proxy_id
       .as_ref()
       .and_then(|id| PROXY_MANAGER.get_proxy_settings_by_id(id));
-    let proxy_for_launch_args = match browser_type {
-      BrowserType::Chromium | BrowserType::Brave => {
-        local_proxy_settings.or(stored_proxy_settings.as_ref())
-      }
-      _ => None, // Firefox browsers use PAC files, not launch args
-    };
+
+    // For now, don't use proxy in launch args - we'll set it up after launch
+    let proxy_for_launch_args: Option<&ProxySettings> = None;
 
     // Get profile data path and launch arguments
     let profiles_dir = self.get_profiles_dir();
@@ -399,24 +377,56 @@ impl BrowserRunner {
       // which is already handled in the profile creation process
     }
 
-    // Start proxy if configured and needed (for Chromium-based browsers)
-    if let Some(proxy_id) = &profile.proxy_id {
-      if let Some(stored_proxy) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id) {
-        println!("Starting proxy for profile: {}", profile.name);
+    // Always start a local proxy for traffic monitoring and potential upstream routing
+    let upstream_proxy = profile
+      .proxy_id
+      .as_ref()
+      .and_then(|id| PROXY_MANAGER.get_proxy_settings_by_id(id));
 
-        match PROXY_MANAGER
-          .start_proxy(
-            app_handle.clone(),
-            &stored_proxy,
-            actual_pid,
-            Some(&profile.name),
-          )
-          .await
-        {
-          Ok(_) => println!("Proxy started successfully for profile: {}", profile.name),
-          Err(e) => println!("Warning: Failed to start proxy: {e}"),
+    println!(
+      "Starting local proxy for profile: {} (upstream: {})",
+      profile.name,
+      upstream_proxy
+        .as_ref()
+        .map(|p| format!("{}:{}", p.host, p.port))
+        .unwrap_or_else(|| "DIRECT".to_string())
+    );
+
+    match PROXY_MANAGER
+      .start_proxy(
+        app_handle.clone(),
+        upstream_proxy.as_ref(),
+        actual_pid,
+        Some(&profile.name),
+      )
+      .await
+    {
+      Ok(local_proxy) => {
+        println!(
+          "Local proxy started successfully for profile: {} on port: {}",
+          profile.name, local_proxy.port
+        );
+
+        // For Firefox-based browsers, update the PAC file with the local proxy
+        if matches!(
+          browser_type,
+          BrowserType::Firefox
+            | BrowserType::FirefoxDeveloper
+            | BrowserType::Zen
+            | BrowserType::TorBrowser
+            | BrowserType::MullvadBrowser
+        ) {
+          let profiles_dir = self.get_profiles_dir();
+          let profile_path = profiles_dir
+            .join(updated_profile.id.to_string())
+            .join("profile");
+
+          if let Err(e) = self.apply_proxy_settings_to_profile(&profile_path, &local_proxy, None) {
+            println!("Warning: Failed to update Firefox proxy settings: {e}");
+          }
         }
       }
+      Err(e) => println!("Warning: Failed to start local proxy: {e}"),
     }
 
     // Emit profile update event to frontend
@@ -1351,7 +1361,12 @@ pub async fn launch_browser_profile(
 
       // Start the proxy first
       match PROXY_MANAGER
-        .start_proxy(app_handle.clone(), &proxy, temp_pid, Some(&profile.name))
+        .start_proxy(
+          app_handle.clone(),
+          Some(&proxy),
+          temp_pid,
+          Some(&profile.name),
+        )
         .await
       {
         Ok(internal_proxy) => {

@@ -52,7 +52,7 @@ program
       },
     ) => {
       if (action === "start") {
-        let upstreamUrl: string;
+        let upstreamUrl: string | undefined;
 
         // Build upstream URL from individual components if provided
         if (options.host && options.proxyPort && options.type) {
@@ -69,16 +69,8 @@ program
           upstreamUrl = `${protocol}://${auth}${options.host}:${options.proxyPort}`;
         } else if (options.upstream) {
           upstreamUrl = options.upstream;
-        } else {
-          console.error(
-            "Error: Either --upstream URL or --host, --proxy-port, and --type are required",
-          );
-          console.log(
-            "Example: proxy start --host proxy.example.com --proxy-port 9000 --type http --username user --password pass",
-          );
-          process.exit(1);
-          return;
         }
+        // If no upstream is provided, create a direct proxy
 
         try {
           const config = await startProxyProcess(upstreamUrl, {

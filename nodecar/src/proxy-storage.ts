@@ -4,7 +4,7 @@ import tmp from "tmp";
 
 export interface ProxyConfig {
   id: string;
-  upstreamUrl: string;
+  upstreamUrl: string; // Can be "DIRECT" for direct proxy
   localPort?: number;
   ignoreProxyCertificate?: boolean;
   localUrl?: string;
