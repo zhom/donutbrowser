@@ -56,7 +56,7 @@
     "tauri-plugin-macos-permissions-api": "^2.3.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.1.1",
+    "@biomejs/biome": "2.1.3",
     "@tailwindcss/postcss": "^4.1.11",
     "@tauri-apps/cli": "^2.7.1",
     "@types/node": "^24.1.0",
@@ -68,7 +68,7 @@
     "tailwindcss": "^4.1.11",
     "ts-unused-exports": "^11.0.1",
     "tw-animate-css": "^1.3.6",
-    "typescript": "~5.8.3"
+    "typescript": "~5.9.2"
   },
   "packageManager": "pnpm@10.13.1",
   "lint-staged": {
