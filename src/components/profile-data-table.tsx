@@ -573,7 +573,7 @@ export function ProfilesDataTable({
                 ? `${proxyDisplayName}, ${proxyInfo.proxy_settings.proxy_type.toUpperCase()} (${
                     proxyInfo.proxy_settings.host
                   }:${proxyInfo.proxy_settings.port})`
-                : "No proxy configured";
+                : "";
 
           return (
             <Tooltip>
@@ -595,7 +595,7 @@ export function ProfilesDataTable({
                   )}
                 </span>
               </TooltipTrigger>
-              <TooltipContent>{tooltipText}</TooltipContent>
+              {tooltipText && <TooltipContent>{tooltipText}</TooltipContent>}
             </Tooltip>
           );
         },
