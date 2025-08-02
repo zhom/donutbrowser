@@ -53,7 +53,7 @@ impl AutoUpdater {
     let mut browser_versions: HashMap<String, Vec<BrowserVersionInfo>> = HashMap::new();
 
     // Group profiles by browser
-    let profile_manager = crate::profile::ProfileManager::new();
+    let profile_manager = crate::profile::ProfileManager::instance();
     let profiles = profile_manager
       .list_profiles()
       .map_err(|e| format!("Failed to list profiles: {e}"))?;
@@ -296,7 +296,7 @@ impl AutoUpdater {
     browser: &str,
     new_version: &str,
   ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
-    let profile_manager = crate::profile::ProfileManager::new();
+    let profile_manager = crate::profile::ProfileManager::instance();
     let profiles = profile_manager
       .list_profiles()
       .map_err(|e| format!("Failed to list profiles: {e}"))?;
@@ -360,14 +360,13 @@ impl AutoUpdater {
     &self,
   ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
     // Load current profiles
-    let profile_manager = crate::profile::ProfileManager::new();
+    let profile_manager = crate::profile::ProfileManager::instance();
     let profiles = profile_manager
       .list_profiles()
       .map_err(|e| format!("Failed to load profiles: {e}"))?;
 
-    // Load registry
-    let mut registry = crate::downloaded_browsers::DownloadedBrowsersRegistry::load()
-      .map_err(|e| format!("Failed to load browser registry: {e}"))?;
+    // Get registry instance
+    let registry = crate::downloaded_browsers::DownloadedBrowsersRegistry::instance();
 
     // Get active browser versions (all profiles)
     let active_versions = registry.get_active_browser_versions(&profiles);

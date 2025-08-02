@@ -204,7 +204,7 @@ pub async fn get_profile_groups() -> Result<Vec<ProfileGroup>, String> {
 
 #[tauri::command]
 pub async fn get_groups_with_profile_counts() -> Result<Vec<GroupWithCount>, String> {
-  let profile_manager = crate::profile::ProfileManager::new();
+  let profile_manager = crate::profile::ProfileManager::instance();
   let profiles = profile_manager
     .list_profiles()
     .map_err(|e| format!("Failed to list profiles: {e}"))?;
@@ -240,7 +240,7 @@ pub async fn assign_profiles_to_group(
   profile_names: Vec<String>,
   group_id: Option<String>,
 ) -> Result<(), String> {
-  let profile_manager = crate::profile::ProfileManager::new();
+  let profile_manager = crate::profile::ProfileManager::instance();
   profile_manager
     .assign_profiles_to_group(profile_names, group_id)
     .map_err(|e| format!("Failed to assign profiles to group: {e}"))
@@ -248,7 +248,7 @@ pub async fn assign_profiles_to_group(
 
 #[tauri::command]
 pub async fn delete_selected_profiles(profile_names: Vec<String>) -> Result<(), String> {
-  let profile_manager = crate::profile::ProfileManager::new();
+  let profile_manager = crate::profile::ProfileManager::instance();
   profile_manager
     .delete_multiple_profiles(profile_names)
     .map_err(|e| format!("Failed to delete profiles: {e}"))

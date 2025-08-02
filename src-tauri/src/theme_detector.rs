@@ -9,8 +9,12 @@ pub struct SystemTheme {
 pub struct ThemeDetector;
 
 impl ThemeDetector {
-  pub fn new() -> Self {
+  fn new() -> Self {
     Self
+  }
+
+  pub fn instance() -> &'static ThemeDetector {
+    &THEME_DETECTOR
   }
 
   /// Detect the system theme preference
@@ -514,7 +518,7 @@ mod windows {
 // Command to expose this functionality to the frontend
 #[tauri::command]
 pub fn get_system_theme() -> SystemTheme {
-  let detector = ThemeDetector::new();
+  let detector = ThemeDetector::instance();
   detector.detect_system_theme()
 }
 
@@ -524,7 +528,7 @@ mod tests {
 
   #[test]
   fn test_theme_detector_creation() {
-    let detector = ThemeDetector::new();
+    let detector = ThemeDetector::instance();
     let theme = detector.detect_system_theme();
 
     // Should return a valid theme string
@@ -536,4 +540,9 @@ mod tests {
     let theme = get_system_theme();
     assert!(matches!(theme.theme.as_str(), "light" | "dark" | "unknown"));
   }
+}
+
+// Global singleton instance
+lazy_static::lazy_static! {
+  static ref THEME_DETECTOR: ThemeDetector = ThemeDetector::new();
 }

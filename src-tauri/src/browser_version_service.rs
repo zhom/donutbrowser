@@ -30,19 +30,19 @@ pub struct DownloadInfo {
   pub is_archive: bool, // true for .dmg, .zip, etc.
 }
 
-pub struct BrowserVersionService;
+pub struct BrowserVersionService {
+  api_client: &'static ApiClient,
+}
 
 impl BrowserVersionService {
   fn new() -> Self {
-    Self
+    Self {
+      api_client: ApiClient::instance(),
+    }
   }
 
   pub fn instance() -> &'static BrowserVersionService {
     &BROWSER_VERSION_SERVICE
-  }
-
-  fn api_client(&self) -> &'static ApiClient {
-    ApiClient::instance()
   }
 
   /// Check if a browser is supported on the current platform and architecture
@@ -116,7 +116,7 @@ impl BrowserVersionService {
 
   /// Get cached browser versions immediately (returns None if no cache exists)
   pub fn get_cached_browser_versions(&self, browser: &str) -> Option<Vec<String>> {
-    self.api_client().load_cached_versions(browser)
+    self.api_client.load_cached_versions(browser)
   }
 
   /// Get cached detailed browser version information immediately
@@ -124,7 +124,7 @@ impl BrowserVersionService {
     &self,
     browser: &str,
   ) -> Option<Vec<BrowserVersionInfo>> {
-    let cached_versions = self.api_client().load_cached_versions(browser)?;
+    let cached_versions = self.api_client.load_cached_versions(browser)?;
 
     // Convert cached versions to detailed info (without dates since cache doesn't store them)
     let detailed_info: Vec<BrowserVersionInfo> = cached_versions
@@ -143,7 +143,7 @@ impl BrowserVersionService {
 
   /// Check if cache should be updated (expired or doesn't exist)
   pub fn should_update_cache(&self, browser: &str) -> bool {
-    self.api_client().is_cache_expired(browser)
+    self.api_client.is_cache_expired(browser)
   }
 
   /// Get latest stable and nightly versions for a browser (cached first)
@@ -227,7 +227,7 @@ impl BrowserVersionService {
   ) -> Result<BrowserVersionsResult, Box<dyn std::error::Error + Send + Sync>> {
     // Get existing cached versions to compare and merge
     let existing_versions = self
-      .api_client()
+      .api_client
       .load_cached_versions(browser)
       .unwrap_or_default();
     let existing_set: HashSet<String> = existing_versions.into_iter().collect();
@@ -264,7 +264,7 @@ impl BrowserVersionService {
     // Save the merged cache (unless explicitly bypassing cache)
     if !no_caching {
       if let Err(e) = self
-        .api_client()
+        .api_client
         .save_cached_versions(browser, &merged_versions)
       {
         eprintln!("Failed to save merged cache for {browser}: {e}");
@@ -495,7 +495,7 @@ impl BrowserVersionService {
   ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
     // Get existing cached versions
     let existing_versions = self
-      .api_client()
+      .api_client
       .load_cached_versions(browser)
       .unwrap_or_default();
     let existing_set: HashSet<String> = existing_versions.into_iter().collect();
@@ -515,10 +515,7 @@ impl BrowserVersionService {
     sort_versions(&mut all_versions);
 
     // Save the updated cache
-    if let Err(e) = self
-      .api_client()
-      .save_cached_versions(browser, &all_versions)
-    {
+    if let Err(e) = self.api_client.save_cached_versions(browser, &all_versions) {
       eprintln!("Failed to save updated cache for {browser}: {e}");
     }
 
@@ -824,7 +821,7 @@ impl BrowserVersionService {
     no_caching: bool,
   ) -> Result<Vec<BrowserRelease>, Box<dyn std::error::Error + Send + Sync>> {
     self
-      .api_client()
+      .api_client
       .fetch_firefox_releases_with_caching(no_caching)
       .await
   }
@@ -844,7 +841,7 @@ impl BrowserVersionService {
     no_caching: bool,
   ) -> Result<Vec<BrowserRelease>, Box<dyn std::error::Error + Send + Sync>> {
     self
-      .api_client()
+      .api_client
       .fetch_firefox_developer_releases_with_caching(no_caching)
       .await
   }
@@ -862,7 +859,7 @@ impl BrowserVersionService {
     no_caching: bool,
   ) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
     self
-      .api_client()
+      .api_client
       .fetch_mullvad_releases_with_caching(no_caching)
       .await
   }
@@ -886,7 +883,7 @@ impl BrowserVersionService {
     no_caching: bool,
   ) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
     self
-      .api_client()
+      .api_client
       .fetch_zen_releases_with_caching(no_caching)
       .await
   }
@@ -904,7 +901,7 @@ impl BrowserVersionService {
     no_caching: bool,
   ) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
     self
-      .api_client()
+      .api_client
       .fetch_brave_releases_with_caching(no_caching)
       .await
   }
@@ -922,7 +919,7 @@ impl BrowserVersionService {
     no_caching: bool,
   ) -> Result<Vec<BrowserRelease>, Box<dyn std::error::Error + Send + Sync>> {
     self
-      .api_client()
+      .api_client
       .fetch_chromium_releases_with_caching(no_caching)
       .await
   }
@@ -940,7 +937,7 @@ impl BrowserVersionService {
     no_caching: bool,
   ) -> Result<Vec<BrowserRelease>, Box<dyn std::error::Error + Send + Sync>> {
     self
-      .api_client()
+      .api_client
       .fetch_tor_releases_with_caching(no_caching)
       .await
   }
@@ -958,7 +955,7 @@ impl BrowserVersionService {
     no_caching: bool,
   ) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
     self
-      .api_client()
+      .api_client
       .fetch_camoufox_releases_with_caching(no_caching)
       .await
   }

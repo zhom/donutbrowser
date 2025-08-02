@@ -9,8 +9,12 @@ use crate::download::DownloadProgress;
 pub struct Extractor;
 
 impl Extractor {
-  pub fn new() -> Self {
+  fn new() -> Self {
     Self
+  }
+
+  pub fn instance() -> &'static Extractor {
+    &EXTRACTOR
   }
 
   pub async fn extract_browser(
@@ -1330,14 +1334,8 @@ mod tests {
   use tempfile::TempDir;
 
   #[test]
-  fn test_extractor_creation() {
-    let _ = Extractor::new();
-    // Just verify we can create an extractor instance
-  }
-
-  #[test]
   fn test_unsupported_archive_format() {
-    let extractor = Extractor::new();
+    let extractor = Extractor::instance();
     let temp_dir = TempDir::new().unwrap();
     let fake_archive = temp_dir.path().join("test.rar");
 
@@ -1353,7 +1351,7 @@ mod tests {
 
   #[test]
   fn test_format_detection_zip() {
-    let extractor = Extractor::new();
+    let extractor = Extractor::instance();
     let temp_dir = TempDir::new().unwrap();
     let zip_path = temp_dir.path().join("test.zip");
 
@@ -1369,7 +1367,7 @@ mod tests {
 
   #[test]
   fn test_format_detection_dmg_by_extension() {
-    let extractor = Extractor::new();
+    let extractor = Extractor::instance();
     let temp_dir = TempDir::new().unwrap();
     let dmg_path = temp_dir.path().join("test.dmg");
 
@@ -1384,7 +1382,7 @@ mod tests {
 
   #[test]
   fn test_format_detection_exe() {
-    let extractor = Extractor::new();
+    let extractor = Extractor::instance();
     let temp_dir = TempDir::new().unwrap();
     let exe_path = temp_dir.path().join("test.exe");
 
@@ -1400,7 +1398,7 @@ mod tests {
 
   #[test]
   fn test_format_detection_tar_gz() {
-    let extractor = Extractor::new();
+    let extractor = Extractor::instance();
     let temp_dir = TempDir::new().unwrap();
     let tar_gz_path = temp_dir.path().join("test.tar.gz");
 
@@ -1443,7 +1441,7 @@ mod tests {
   #[tokio::test]
   #[cfg(target_os = "macos")]
   async fn test_find_app_at_root_level() {
-    let extractor = Extractor::new();
+    let extractor = Extractor::instance();
     let temp_dir = TempDir::new().unwrap();
 
     // Create a Firefox.app directory
@@ -1471,7 +1469,7 @@ mod tests {
   #[tokio::test]
   #[cfg(target_os = "macos")]
   async fn test_find_app_in_subdirectory() {
-    let extractor = Extractor::new();
+    let extractor = Extractor::instance();
     let temp_dir = TempDir::new().unwrap();
 
     // Create a nested structure like some browsers have
@@ -1503,7 +1501,7 @@ mod tests {
   #[tokio::test]
   #[cfg(target_os = "macos")]
   async fn test_find_app_multiple_levels_deep() {
-    let extractor = Extractor::new();
+    let extractor = Extractor::instance();
     let temp_dir = TempDir::new().unwrap();
 
     // Create a deeply nested structure
@@ -1536,7 +1534,7 @@ mod tests {
   #[tokio::test]
   #[cfg(target_os = "macos")]
   async fn test_find_app_no_app_found() {
-    let extractor = Extractor::new();
+    let extractor = Extractor::instance();
     let temp_dir = TempDir::new().unwrap();
 
     // Create some files and directories that are NOT .app bundles
@@ -1559,7 +1557,7 @@ mod tests {
   #[tokio::test]
   #[cfg(target_os = "macos")]
   async fn test_find_app_recursive_depth_limit() {
-    let extractor = Extractor::new();
+    let extractor = Extractor::instance();
     let temp_dir = TempDir::new().unwrap();
 
     // Create a very deep nested structure (deeper than our limit of 4)
@@ -1581,7 +1579,7 @@ mod tests {
   #[tokio::test]
   #[cfg(target_os = "macos")]
   async fn test_find_macos_app_and_move_from_subdir() {
-    let extractor = Extractor::new();
+    let extractor = Extractor::instance();
     let temp_dir = TempDir::new().unwrap();
 
     // Create a nested structure where the app is in a subdirectory
@@ -1619,7 +1617,7 @@ mod tests {
   #[tokio::test]
   #[cfg(target_os = "macos")]
   async fn test_multiple_apps_found_returns_first() {
-    let extractor = Extractor::new();
+    let extractor = Extractor::instance();
     let temp_dir = TempDir::new().unwrap();
 
     // Create multiple .app directories
@@ -1683,4 +1681,9 @@ mod tests {
       assert_eq!(app_path.file_name().unwrap().to_str().unwrap(), *app_name);
     }
   }
+}
+
+// Global singleton instance
+lazy_static::lazy_static! {
+  static ref EXTRACTOR: Extractor = Extractor::new();
 }

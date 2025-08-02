@@ -222,7 +222,7 @@ pub fn run() {
 
       // Migrate profiles to UUID format if needed (async)
       println!("Checking for profile migration...");
-      let browser_runner = browser_runner::BrowserRunner::new();
+      let browser_runner = browser_runner::BrowserRunner::instance();
       tauri::async_runtime::spawn(async move {
         match browser_runner.migrate_profiles_to_uuid().await {
           Ok(migrated) => {
@@ -354,7 +354,7 @@ pub fn run() {
         loop {
           interval.tick().await;
 
-          let browser_runner = crate::browser_runner::BrowserRunner::new();
+          let browser_runner = crate::browser_runner::BrowserRunner::instance();
           if let Err(e) = browser_runner.cleanup_unused_binaries_internal() {
             eprintln!("Periodic cleanup failed: {e}");
           } else {
@@ -390,9 +390,9 @@ pub fn run() {
       });
 
       // Start Camoufox cleanup task
-      let app_handle_cleanup = app.handle().clone();
+      let _app_handle_cleanup = app.handle().clone();
       tauri::async_runtime::spawn(async move {
-        let launcher = crate::camoufox::CamoufoxNodecarLauncher::new(app_handle_cleanup);
+        let launcher = crate::camoufox::CamoufoxNodecarLauncher::instance();
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
 
         loop {

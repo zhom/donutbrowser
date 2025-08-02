@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DownloadedBrowserInfo {
@@ -12,25 +13,38 @@ pub struct DownloadedBrowserInfo {
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
-pub struct DownloadedBrowsersRegistry {
+struct RegistryData {
   pub browsers: HashMap<String, HashMap<String, DownloadedBrowserInfo>>, // browser -> version -> info
 }
 
+pub struct DownloadedBrowsersRegistry {
+  data: Mutex<RegistryData>,
+}
+
 impl DownloadedBrowsersRegistry {
-  pub fn new() -> Self {
-    Self::default()
+  fn new() -> Self {
+    Self {
+      data: Mutex::new(RegistryData::default()),
+    }
   }
 
-  pub fn load() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+  pub fn instance() -> &'static DownloadedBrowsersRegistry {
+    &DOWNLOADED_BROWSERS_REGISTRY
+  }
+
+  pub fn load(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let registry_path = Self::get_registry_path()?;
 
     if !registry_path.exists() {
-      return Ok(Self::new());
+      return Ok(());
     }
 
     let content = fs::read_to_string(&registry_path)?;
-    let registry: DownloadedBrowsersRegistry = serde_json::from_str(&content)?;
-    Ok(registry)
+    let registry_data: RegistryData = serde_json::from_str(&content)?;
+
+    let mut data = self.data.lock().unwrap();
+    *data = registry_data;
+    Ok(())
   }
 
   pub fn save(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -41,7 +55,8 @@ impl DownloadedBrowsersRegistry {
       fs::create_dir_all(parent)?;
     }
 
-    let content = serde_json::to_string_pretty(self)?;
+    let data = self.data.lock().unwrap();
+    let content = serde_json::to_string_pretty(&*data)?;
     fs::write(&registry_path, content)?;
     Ok(())
   }
@@ -59,20 +74,23 @@ impl DownloadedBrowsersRegistry {
     Ok(path)
   }
 
-  pub fn add_browser(&mut self, info: DownloadedBrowserInfo) {
-    self
+  pub fn add_browser(&self, info: DownloadedBrowserInfo) {
+    let mut data = self.data.lock().unwrap();
+    data
       .browsers
       .entry(info.browser.clone())
       .or_default()
       .insert(info.version.clone(), info);
   }
 
-  pub fn remove_browser(&mut self, browser: &str, version: &str) -> Option<DownloadedBrowserInfo> {
-    self.browsers.get_mut(browser)?.remove(version)
+  pub fn remove_browser(&self, browser: &str, version: &str) -> Option<DownloadedBrowserInfo> {
+    let mut data = self.data.lock().unwrap();
+    data.browsers.get_mut(browser)?.remove(version)
   }
 
   pub fn is_browser_downloaded(&self, browser: &str, version: &str) -> bool {
-    self
+    let data = self.data.lock().unwrap();
+    data
       .browsers
       .get(browser)
       .and_then(|versions| versions.get(version))
@@ -80,14 +98,15 @@ impl DownloadedBrowsersRegistry {
   }
 
   pub fn get_downloaded_versions(&self, browser: &str) -> Vec<String> {
-    self
+    let data = self.data.lock().unwrap();
+    data
       .browsers
       .get(browser)
       .map(|versions| versions.keys().cloned().collect())
       .unwrap_or_default()
   }
 
-  pub fn mark_download_started(&mut self, browser: &str, version: &str, file_path: PathBuf) {
+  pub fn mark_download_started(&self, browser: &str, version: &str, file_path: PathBuf) {
     let info = DownloadedBrowserInfo {
       browser: browser.to_string(),
       version: version.to_string(),
@@ -96,8 +115,9 @@ impl DownloadedBrowsersRegistry {
     self.add_browser(info);
   }
 
-  pub fn mark_download_completed(&mut self, browser: &str, version: &str) -> Result<(), String> {
-    if self
+  pub fn mark_download_completed(&self, browser: &str, version: &str) -> Result<(), String> {
+    let data = self.data.lock().unwrap();
+    if data
       .browsers
       .get(browser)
       .and_then(|versions| versions.get(version))
@@ -110,7 +130,7 @@ impl DownloadedBrowsersRegistry {
   }
 
   pub fn cleanup_failed_download(
-    &mut self,
+    &self,
     browser: &str,
     version: &str,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -145,7 +165,7 @@ impl DownloadedBrowsersRegistry {
 
   /// Find and remove unused browser binaries that are not referenced by any active profiles
   pub fn cleanup_unused_binaries(
-    &mut self,
+    &self,
     active_profiles: &[(String, String)], // (browser, version) pairs
     running_profiles: &[(String, String)], // (browser, version) pairs for running profiles
   ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
@@ -157,25 +177,28 @@ impl DownloadedBrowsersRegistry {
 
     // Collect all downloaded browsers that are not in active profiles
     let mut to_remove = Vec::new();
-    for (browser, versions) in &self.browsers {
-      for version in versions.keys() {
-        let browser_version = (browser.clone(), version.clone());
+    {
+      let data = self.data.lock().unwrap();
+      for (browser, versions) in &data.browsers {
+        for version in versions.keys() {
+          let browser_version = (browser.clone(), version.clone());
 
-        // Don't remove if it's used by any active profile
-        if active_set.contains(&browser_version) {
-          println!("Keeping: {browser} {version} (in use by profile)");
-          continue;
+          // Don't remove if it's used by any active profile
+          if active_set.contains(&browser_version) {
+            println!("Keeping: {browser} {version} (in use by profile)");
+            continue;
+          }
+
+          // Don't remove if it's currently running (even if not in active profiles)
+          if running_set.contains(&browser_version) {
+            println!("Keeping: {browser} {version} (currently running)");
+            continue;
+          }
+
+          // Mark for removal
+          to_remove.push(browser_version);
+          println!("Marking for removal: {browser} {version} (not used by any profile)");
         }
-
-        // Don't remove if it's currently running (even if not in active profiles)
-        if running_set.contains(&browser_version) {
-          println!("Keeping: {browser} {version} (currently running)");
-          continue;
-        }
-
-        // Mark for removal
-        to_remove.push(browser_version);
-        println!("Marking for removal: {browser} {version} (not used by any profile)");
       }
     }
 
@@ -211,22 +234,25 @@ impl DownloadedBrowsersRegistry {
 
   /// Verify that all registered browsers actually exist on disk and clean up stale entries
   pub fn verify_and_cleanup_stale_entries(
-    &mut self,
+    &self,
     browser_runner: &crate::browser_runner::BrowserRunner,
   ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
     use crate::browser::{create_browser, BrowserType};
     let mut cleaned_up = Vec::new();
     let binaries_dir = browser_runner.get_binaries_dir();
 
-    let browsers_to_check: Vec<(String, String)> = self
-      .browsers
-      .iter()
-      .flat_map(|(browser, versions)| {
-        versions
-          .keys()
-          .map(|version| (browser.clone(), version.clone()))
-      })
-      .collect();
+    let browsers_to_check: Vec<(String, String)> = {
+      let data = self.data.lock().unwrap();
+      data
+        .browsers
+        .iter()
+        .flat_map(|(browser, versions)| {
+          versions
+            .keys()
+            .map(|version| (browser.clone(), version.clone()))
+        })
+        .collect()
+    };
 
     for (browser_str, version) in browsers_to_check {
       if let Ok(browser_type) = BrowserType::from_str(&browser_str) {
@@ -263,7 +289,7 @@ impl DownloadedBrowsersRegistry {
   /// Scan the binaries directory and sync with registry
   /// This ensures the registry reflects what's actually on disk
   pub fn sync_with_binaries_directory(
-    &mut self,
+    &self,
     binaries_dir: &std::path::Path,
   ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
     let mut changes = Vec::new();
@@ -331,7 +357,7 @@ impl DownloadedBrowsersRegistry {
 
   /// Comprehensive cleanup that removes unused binaries and syncs registry
   pub fn comprehensive_cleanup(
-    &mut self,
+    &self,
     binaries_dir: &std::path::Path,
     active_profiles: &[(String, String)],
     running_profiles: &[(String, String)],
@@ -359,18 +385,21 @@ impl DownloadedBrowsersRegistry {
 
   /// Simplified version of verify_and_cleanup_stale_entries that doesn't need BrowserRunner
   pub fn verify_and_cleanup_stale_entries_simple(
-    &mut self,
+    &self,
     binaries_dir: &std::path::Path,
   ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
     let mut cleaned_up = Vec::new();
     let mut browsers_to_remove = Vec::new();
 
-    for (browser_str, versions) in &self.browsers {
-      for version in versions.keys() {
-        // Check if the browser directory actually exists
-        let browser_dir = binaries_dir.join(browser_str).join(version);
-        if !browser_dir.exists() {
-          browsers_to_remove.push((browser_str.clone(), version.clone()));
+    {
+      let data = self.data.lock().unwrap();
+      for (browser_str, versions) in &data.browsers {
+        for version in versions.keys() {
+          // Check if the browser directory actually exists
+          let browser_dir = binaries_dir.join(browser_str).join(version);
+          if !browser_dir.exists() {
+            browsers_to_remove.push((browser_str.clone(), version.clone()));
+          }
         }
       }
     }
@@ -388,6 +417,17 @@ impl DownloadedBrowsersRegistry {
   }
 }
 
+// Global singleton instance
+lazy_static::lazy_static! {
+  static ref DOWNLOADED_BROWSERS_REGISTRY: DownloadedBrowsersRegistry = {
+    let registry = DownloadedBrowsersRegistry::new();
+    if let Err(e) = registry.load() {
+      eprintln!("Warning: Failed to load downloaded browsers registry: {e}");
+    }
+    registry
+  };
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -395,12 +435,13 @@ mod tests {
   #[test]
   fn test_registry_creation() {
     let registry = DownloadedBrowsersRegistry::new();
-    assert!(registry.browsers.is_empty());
+    let data = registry.data.lock().unwrap();
+    assert!(data.browsers.is_empty());
   }
 
   #[test]
   fn test_add_and_get_browser() {
-    let mut registry = DownloadedBrowsersRegistry::new();
+    let registry = DownloadedBrowsersRegistry::new();
     let info = DownloadedBrowserInfo {
       browser: "firefox".to_string(),
       version: "139.0".to_string(),
@@ -416,7 +457,7 @@ mod tests {
 
   #[test]
   fn test_get_downloaded_versions() {
-    let mut registry = DownloadedBrowsersRegistry::new();
+    let registry = DownloadedBrowsersRegistry::new();
 
     let info1 = DownloadedBrowserInfo {
       browser: "firefox".to_string(),
@@ -449,7 +490,7 @@ mod tests {
 
   #[test]
   fn test_mark_download_lifecycle() {
-    let mut registry = DownloadedBrowsersRegistry::new();
+    let registry = DownloadedBrowsersRegistry::new();
 
     // Mark download started
     registry.mark_download_started("firefox", "139.0", PathBuf::from("/test/path"));
@@ -468,7 +509,7 @@ mod tests {
 
   #[test]
   fn test_remove_browser() {
-    let mut registry = DownloadedBrowsersRegistry::new();
+    let registry = DownloadedBrowsersRegistry::new();
     let info = DownloadedBrowserInfo {
       browser: "firefox".to_string(),
       version: "139.0".to_string(),
@@ -485,7 +526,7 @@ mod tests {
 
   #[test]
   fn test_twilight_download() {
-    let mut registry = DownloadedBrowsersRegistry::new();
+    let registry = DownloadedBrowsersRegistry::new();
 
     // Mark twilight download started
     registry.mark_download_started("zen", "twilight", PathBuf::from("/test/zen-twilight"));

@@ -6,8 +6,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tauri::Emitter;
 
-use crate::extraction::Extractor;
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AppReleaseAsset {
   pub name: String,
@@ -488,7 +486,7 @@ impl AppAutoUpdater {
     archive_path: &Path,
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    let extractor = Extractor::new();
+    let extractor = crate::extraction::Extractor::instance();
 
     let extension = archive_path
       .extension()
@@ -699,7 +697,7 @@ impl AppAutoUpdater {
           fs::create_dir_all(&temp_extract_dir)?;
 
           // Extract ZIP file
-          let extractor = crate::extraction::Extractor::new();
+          let extractor = crate::extraction::Extractor::instance();
           let extracted_path = extractor
             .extract_zip(installer_path, &temp_extract_dir)
             .await?;

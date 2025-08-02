@@ -120,18 +120,8 @@ pub struct CamoufoxNodecarLauncher {
   inner: Arc<AsyncMutex<CamoufoxNodecarLauncherInner>>,
 }
 
-// Global singleton instance
-lazy_static::lazy_static! {
-  static ref GLOBAL_NODECAR_LAUNCHER: CamoufoxNodecarLauncher = CamoufoxNodecarLauncher::new_singleton();
-}
-
 impl CamoufoxNodecarLauncher {
-  pub fn new(_app_handle: AppHandle) -> Self {
-    // Return a reference to the global singleton
-    GLOBAL_NODECAR_LAUNCHER.clone()
-  }
-
-  pub fn new_singleton() -> Self {
+  fn new() -> Self {
     Self {
       inner: Arc::new(AsyncMutex::new(CamoufoxNodecarLauncherInner {
         instances: HashMap::new(),
@@ -139,10 +129,8 @@ impl CamoufoxNodecarLauncher {
     }
   }
 
-  fn clone(&self) -> Self {
-    Self {
-      inner: Arc::clone(&self.inner),
-    }
+  pub fn instance() -> &'static CamoufoxNodecarLauncher {
+    &CAMOUFOX_NODECAR_LAUNCHER
   }
 
   /// Create a test configuration to verify anti-fingerprinting is working
@@ -619,33 +607,34 @@ impl CamoufoxNodecarLauncher {
   }
 }
 
-pub async fn launch_camoufox_profile_nodecar(
-  app_handle: AppHandle,
-  profile: BrowserProfile,
-  config: CamoufoxConfig,
-  url: Option<String>,
-) -> Result<CamoufoxLaunchResult, String> {
-  let launcher = CamoufoxNodecarLauncher::new(app_handle.clone());
+impl CamoufoxNodecarLauncher {
+  pub async fn launch_camoufox_profile_nodecar(
+    &self,
+    app_handle: AppHandle,
+    profile: BrowserProfile,
+    config: CamoufoxConfig,
+    url: Option<String>,
+  ) -> Result<CamoufoxLaunchResult, String> {
+    // Get profile path
+    let browser_runner = crate::browser_runner::BrowserRunner::instance();
+    let profiles_dir = browser_runner.get_profiles_dir();
+    let profile_path = profile.get_profile_data_path(&profiles_dir);
+    let profile_path_str = profile_path.to_string_lossy();
 
-  // Get profile path
-  let browser_runner = crate::browser_runner::BrowserRunner::new();
-  let profiles_dir = browser_runner.get_profiles_dir();
-  let profile_path = profile.get_profile_data_path(&profiles_dir);
-  let profile_path_str = profile_path.to_string_lossy();
+    // Check if there's already a running instance for this profile
+    if let Ok(Some(existing)) = self.find_camoufox_by_profile(&profile_path_str).await {
+      // If there's an existing instance, stop it first to avoid conflicts
+      let _ = self.stop_camoufox(&app_handle, &existing.id).await;
+    }
 
-  // Check if there's already a running instance for this profile
-  if let Ok(Some(existing)) = launcher.find_camoufox_by_profile(&profile_path_str).await {
-    // If there's an existing instance, stop it first to avoid conflicts
-    let _ = launcher.stop_camoufox(&app_handle, &existing.id).await;
+    // Clean up any dead instances before launching
+    let _ = self.cleanup_dead_instances().await;
+
+    self
+      .launch_camoufox(&app_handle, &profile_path_str, &config, url.as_deref())
+      .await
+      .map_err(|e| format!("Failed to launch Camoufox via nodecar: {e}"))
   }
-
-  // Clean up any dead instances before launching
-  let _ = launcher.cleanup_dead_instances().await;
-
-  launcher
-    .launch_camoufox(&app_handle, &profile_path_str, &config, url.as_deref())
-    .await
-    .map_err(|e| format!("Failed to launch Camoufox via nodecar: {e}"))
 }
 
 #[cfg(test)]
@@ -685,4 +674,9 @@ mod tests {
     assert_eq!(default_config.debug, None);
     assert_eq!(default_config.headless, None);
   }
+}
+
+// Global singleton instance
+lazy_static::lazy_static! {
+  static ref CAMOUFOX_NODECAR_LAUNCHER: CamoufoxNodecarLauncher = CamoufoxNodecarLauncher::new();
 }

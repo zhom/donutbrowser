@@ -789,17 +789,33 @@ impl Browser for CamoufoxBrowser {
   }
 }
 
-// Factory function to create browser instances
-pub fn create_browser(browser_type: BrowserType) -> Box<dyn Browser> {
-  match browser_type {
-    BrowserType::MullvadBrowser
-    | BrowserType::Firefox
-    | BrowserType::FirefoxDeveloper
-    | BrowserType::Zen
-    | BrowserType::TorBrowser => Box::new(FirefoxBrowser::new(browser_type)),
-    BrowserType::Chromium | BrowserType::Brave => Box::new(ChromiumBrowser::new(browser_type)),
-    BrowserType::Camoufox => Box::new(CamoufoxBrowser::new()),
+pub struct BrowserFactory;
+
+impl BrowserFactory {
+  fn new() -> Self {
+    Self
   }
+
+  pub fn instance() -> &'static BrowserFactory {
+    &BROWSER_FACTORY
+  }
+
+  pub fn create_browser(&self, browser_type: BrowserType) -> Box<dyn Browser> {
+    match browser_type {
+      BrowserType::MullvadBrowser
+      | BrowserType::Firefox
+      | BrowserType::FirefoxDeveloper
+      | BrowserType::Zen
+      | BrowserType::TorBrowser => Box::new(FirefoxBrowser::new(browser_type)),
+      BrowserType::Chromium | BrowserType::Brave => Box::new(ChromiumBrowser::new(browser_type)),
+      BrowserType::Camoufox => Box::new(CamoufoxBrowser::new()),
+    }
+  }
+}
+
+// Factory function to create browser instances (kept for backward compatibility)
+pub fn create_browser(browser_type: BrowserType) -> Box<dyn Browser> {
+  BrowserFactory::instance().create_browser(browser_type)
 }
 
 // Add GithubRelease and GithubAsset structs to browser.rs if they don't already exist
@@ -1096,4 +1112,9 @@ mod tests {
     assert_eq!(deserialized.host, proxy.host);
     assert_eq!(deserialized.port, proxy.port);
   }
+}
+
+// Global singleton instance
+lazy_static::lazy_static! {
+  static ref BROWSER_FACTORY: BrowserFactory = BrowserFactory::new();
 }

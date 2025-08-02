@@ -21,10 +21,14 @@ pub struct GeoIPDownloader {
 }
 
 impl GeoIPDownloader {
-  pub fn new() -> Self {
+  fn new() -> Self {
     Self {
       client: Client::new(),
     }
+  }
+
+  pub fn instance() -> &'static GeoIPDownloader {
+    &GEOIP_DOWNLOADER
   }
 
   /// Create a new downloader with custom client (for testing)
@@ -296,4 +300,9 @@ mod tests {
     // But we can verify the function doesn't panic
     println!("GeoIP database available: {is_available}");
   }
+}
+
+// Global singleton instance
+lazy_static::lazy_static! {
+  static ref GEOIP_DOWNLOADER: GeoIPDownloader = GeoIPDownloader::new();
 }

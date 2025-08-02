@@ -27,11 +27,15 @@ pub struct Downloader {
 }
 
 impl Downloader {
-  pub fn new() -> Self {
+  fn new() -> Self {
     Self {
       client: Client::new(),
       api_client: ApiClient::instance(),
     }
+  }
+
+  pub fn instance() -> &'static Downloader {
+    &DOWNLOADER
   }
 
   #[cfg(test)]
@@ -715,4 +719,9 @@ mod tests {
     let downloaded_content = std::fs::read(&downloaded_file).unwrap();
     assert_eq!(downloaded_content.len(), test_content.len());
   }
+}
+
+// Global singleton instance
+lazy_static::lazy_static! {
+  static ref DOWNLOADER: Downloader = Downloader::new();
 }

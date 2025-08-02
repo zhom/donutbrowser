@@ -17,15 +17,17 @@ pub struct DetectedProfile {
 
 pub struct ProfileImporter {
   base_dirs: BaseDirs,
-  browser_runner: BrowserRunner,
 }
 
 impl ProfileImporter {
-  pub fn new() -> Self {
+  fn new() -> Self {
     Self {
       base_dirs: BaseDirs::new().expect("Failed to get base directories"),
-      browser_runner: BrowserRunner::new(),
     }
+  }
+
+  pub fn instance() -> &'static ProfileImporter {
+    &PROFILE_IMPORTER
   }
 
   /// Detect existing browser profiles on the system
@@ -656,7 +658,7 @@ impl ProfileImporter {
       .map_err(|_| format!("Invalid browser type: {browser_type}"))?;
 
     // Check if a profile with this name already exists
-    let existing_profiles = self.browser_runner.list_profiles()?;
+    let existing_profiles = BrowserRunner::instance().list_profiles()?;
     if existing_profiles
       .iter()
       .any(|p| p.name.to_lowercase() == new_profile_name.to_lowercase())
@@ -666,7 +668,7 @@ impl ProfileImporter {
 
     // Generate UUID for new profile and create the directory structure
     let profile_id = uuid::Uuid::new_v4();
-    let profiles_dir = self.browser_runner.get_profiles_dir();
+    let profiles_dir = BrowserRunner::instance().get_profiles_dir();
     let new_profile_uuid_dir = profiles_dir.join(profile_id.to_string());
     let new_profile_data_dir = new_profile_uuid_dir.join("profile");
 
@@ -694,7 +696,7 @@ impl ProfileImporter {
     };
 
     // Save the profile metadata
-    self.browser_runner.save_profile(&profile)?;
+    BrowserRunner::instance().save_profile(&profile)?;
 
     println!(
       "Successfully imported profile '{}' from '{}'",
@@ -711,8 +713,7 @@ impl ProfileImporter {
     browser_type: &str,
   ) -> Result<String, Box<dyn std::error::Error>> {
     // Check if any version of the browser is downloaded
-    let registry =
-      crate::downloaded_browsers::DownloadedBrowsersRegistry::load().unwrap_or_default();
+    let registry = crate::downloaded_browsers::DownloadedBrowsersRegistry::instance();
     let downloaded_versions = registry.get_downloaded_versions(browser_type);
 
     if let Some(version) = downloaded_versions.first() {
@@ -755,7 +756,7 @@ impl ProfileImporter {
 // Tauri commands
 #[tauri::command]
 pub async fn detect_existing_profiles() -> Result<Vec<DetectedProfile>, String> {
-  let importer = ProfileImporter::new();
+  let importer = ProfileImporter::instance();
   importer
     .detect_existing_profiles()
     .map_err(|e| format!("Failed to detect existing profiles: {e}"))
@@ -767,8 +768,13 @@ pub async fn import_browser_profile(
   browser_type: String,
   new_profile_name: String,
 ) -> Result<(), String> {
-  let importer = ProfileImporter::new();
+  let importer = ProfileImporter::instance();
   importer
     .import_profile(&source_path, &browser_type, &new_profile_name)
     .map_err(|e| format!("Failed to import profile: {e}"))
+}
+
+// Global singleton instance
+lazy_static::lazy_static! {
+  static ref PROFILE_IMPORTER: ProfileImporter = ProfileImporter::new();
 }

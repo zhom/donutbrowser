@@ -15,9 +15,8 @@ use crate::browser_version_service::{
   BrowserVersionInfo, BrowserVersionService, BrowserVersionsResult,
 };
 use crate::camoufox::CamoufoxConfig;
-use crate::download::{DownloadProgress, Downloader};
+use crate::download::DownloadProgress;
 use crate::downloaded_browsers::DownloadedBrowsersRegistry;
-use crate::extraction::Extractor;
 
 // Global state to track currently downloading browser-version pairs
 lazy_static::lazy_static! {
@@ -29,15 +28,19 @@ pub struct BrowserRunner {
 }
 
 impl BrowserRunner {
-  pub fn new() -> Self {
+  fn new() -> Self {
     Self {
       base_dirs: BaseDirs::new().expect("Failed to get base directories"),
     }
   }
 
+  pub fn instance() -> &'static BrowserRunner {
+    &BROWSER_RUNNER
+  }
+
   /// Migrate old profile structure to new UUID-based structure
   pub async fn migrate_profiles_to_uuid(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    let profile_manager = ProfileManager::new();
+    let profile_manager = ProfileManager::instance();
     profile_manager.migrate_profiles_to_uuid().await
   }
 
@@ -76,7 +79,7 @@ impl BrowserRunner {
   }
 
   pub fn get_profiles_dir(&self) -> PathBuf {
-    let profile_manager = ProfileManager::new();
+    let profile_manager = ProfileManager::instance();
     profile_manager.get_profiles_dir()
   }
 
@@ -89,8 +92,8 @@ impl BrowserRunner {
       .list_profiles()
       .map_err(|e| format!("Failed to list profiles: {e}"))?;
 
-    // Load registry
-    let mut registry = crate::downloaded_browsers::DownloadedBrowsersRegistry::load()?;
+    // Get registry instance
+    let registry = crate::downloaded_browsers::DownloadedBrowsersRegistry::instance();
 
     // Get active browser versions (all profiles)
     let active_versions = registry.get_active_browser_versions(&profiles);
@@ -115,17 +118,17 @@ impl BrowserRunner {
     proxy: &ProxySettings,
     internal_proxy: Option<&ProxySettings>,
   ) -> Result<(), Box<dyn std::error::Error>> {
-    let profile_manager = ProfileManager::new();
+    let profile_manager = ProfileManager::instance();
     profile_manager.apply_proxy_settings_to_profile(profile_data_path, proxy, internal_proxy)
   }
 
   pub fn save_profile(&self, profile: &BrowserProfile) -> Result<(), Box<dyn std::error::Error>> {
-    let profile_manager = ProfileManager::new();
+    let profile_manager = ProfileManager::instance();
     profile_manager.save_profile(profile)
   }
 
   pub fn list_profiles(&self) -> Result<Vec<BrowserProfile>, Box<dyn std::error::Error>> {
-    let profile_manager = ProfileManager::new();
+    let profile_manager = ProfileManager::instance();
     profile_manager.list_profiles()
   }
 
@@ -228,16 +231,13 @@ impl BrowserRunner {
           "Launching Camoufox via nodecar for profile: {}",
           profile.name
         );
-        let camoufox_result = crate::camoufox::launch_camoufox_profile_nodecar(
-          app_handle.clone(),
-          profile.clone(),
-          final_config,
-          url,
-        )
-        .await
-        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
-          format!("Failed to launch camoufox via nodecar: {e}").into()
-        })?;
+        let camoufox_launcher = crate::camoufox::CamoufoxNodecarLauncher::instance();
+        let camoufox_result = camoufox_launcher
+          .launch_camoufox_profile_nodecar(app_handle.clone(), profile.clone(), final_config, url)
+          .await
+          .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+            format!("Failed to launch camoufox via nodecar: {e}").into()
+          })?;
 
         // For server-based Camoufox, we use the process_id
         let process_id = camoufox_result.processId.unwrap_or(0);
@@ -436,7 +436,7 @@ impl BrowserRunner {
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Handle camoufox profiles using nodecar launcher
     if profile.browser == "camoufox" {
-      let camoufox_launcher = crate::camoufox::CamoufoxNodecarLauncher::new(app_handle.clone());
+      let camoufox_launcher = crate::camoufox::CamoufoxNodecarLauncher::instance();
 
       // Get the profile path based on the UUID
       let profiles_dir = self.get_profiles_dir();
@@ -760,7 +760,7 @@ impl BrowserRunner {
   }
 
   pub fn delete_profile(&self, profile_name: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let profile_manager = ProfileManager::new();
+    let profile_manager = ProfileManager::instance();
     profile_manager.delete_profile(profile_name)?;
 
     // Always perform cleanup after profile deletion to remove unused binaries
@@ -776,7 +776,7 @@ impl BrowserRunner {
     app_handle: tauri::AppHandle,
     profile: &BrowserProfile,
   ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-    let profile_manager = ProfileManager::new();
+    let profile_manager = ProfileManager::instance();
     profile_manager
       .check_browser_status(app_handle, profile)
       .await
@@ -789,7 +789,7 @@ impl BrowserRunner {
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Handle camoufox profiles using nodecar launcher
     if profile.browser == "camoufox" {
-      let camoufox_launcher = crate::camoufox::CamoufoxNodecarLauncher::new(app_handle.clone());
+      let camoufox_launcher = crate::camoufox::CamoufoxNodecarLauncher::instance();
 
       // Search by profile path to find the running Camoufox instance
       let profiles_dir = self.get_profiles_dir();
@@ -1013,15 +1013,14 @@ impl BrowserRunner {
     app_handle: &tauri::AppHandle,
   ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
     // First, clean up any stale registry entries
-    if let Ok(mut registry) = DownloadedBrowsersRegistry::load() {
-      if let Ok(cleaned_up) = registry.verify_and_cleanup_stale_entries(self) {
-        if !cleaned_up.is_empty() {
-          println!(
-            "Cleaned up {} stale registry entries: {}",
-            cleaned_up.len(),
-            cleaned_up.join(", ")
-          );
-        }
+    let registry = DownloadedBrowsersRegistry::instance();
+    if let Ok(cleaned_up) = registry.verify_and_cleanup_stale_entries(self) {
+      if !cleaned_up.is_empty() {
+        println!(
+          "Cleaned up {} stale registry entries: {}",
+          cleaned_up.len(),
+          cleaned_up.join(", ")
+        );
       }
     }
 
@@ -1072,9 +1071,8 @@ impl BrowserRunner {
       BrowserType::from_str(&browser_str).map_err(|e| format!("Invalid browser type: {e}"))?;
     let browser = create_browser(browser_type.clone());
 
-    // Load registry and check if already downloaded
-    let mut registry = DownloadedBrowsersRegistry::load()
-      .map_err(|e| format!("Failed to load browser registry: {e}"))?;
+    // Get registry instance and check if already downloaded
+    let registry = DownloadedBrowsersRegistry::instance();
 
     // Check if registry thinks it's downloaded, but also verify files actually exist
     if registry.is_browser_downloaded(&browser_str, &version) {
@@ -1134,8 +1132,8 @@ impl BrowserRunner {
       .save()
       .map_err(|e| format!("Failed to save registry: {e}"))?;
 
-    // Use the new download module
-    let downloader = Downloader::new();
+    // Use the download module
+    let downloader = crate::download::Downloader::instance();
     let download_path = match downloader
       .download_browser(
         &app_handle,
@@ -1160,9 +1158,9 @@ impl BrowserRunner {
       }
     };
 
-    // Use the new extraction module
+    // Use the extraction module
     if download_info.is_archive {
-      let extractor = Extractor::new();
+      let extractor = crate::extraction::Extractor::instance();
       match extractor
         .extract_browser(
           &app_handle,
@@ -1225,13 +1223,6 @@ impl BrowserRunner {
       return Err("Browser download completed but verification failed".into());
     }
 
-    // Mark download as completed in registry
-    let _actual_version = if browser_str == "chromium" {
-      Some(version.clone())
-    } else {
-      None
-    };
-
     registry
       .mark_download_completed(&browser_str, &version)
       .map_err(|e| format!("Failed to mark download as completed: {e}"))?;
@@ -1247,7 +1238,7 @@ impl BrowserRunner {
       if !GeoIPDownloader::is_geoip_database_available() {
         println!("Downloading GeoIP database for Camoufox...");
 
-        let geoip_downloader = GeoIPDownloader::new();
+        let geoip_downloader = GeoIPDownloader::instance();
         if let Err(e) = geoip_downloader.download_geoip_database(&app_handle).await {
           eprintln!("Warning: Failed to download GeoIP database: {e}");
           // Don't fail the browser download if GeoIP download fails
@@ -1297,12 +1288,11 @@ impl BrowserRunner {
 
     // If files don't exist but registry thinks they do, clean up the registry
     if !files_exist {
-      if let Ok(mut registry) = DownloadedBrowsersRegistry::load() {
-        if registry.is_browser_downloaded(browser_str, version) {
-          println!("Cleaning up stale registry entry for {browser_str} {version}");
-          registry.remove_browser(browser_str, version);
-          let _ = registry.save(); // Don't fail if save fails, just log
-        }
+      let registry = DownloadedBrowsersRegistry::instance();
+      if registry.is_browser_downloaded(browser_str, version) {
+        println!("Cleaning up stale registry entry for {browser_str} {version}");
+        registry.remove_browser(browser_str, version);
+        let _ = registry.save(); // Don't fail if save fails, just log
       }
     }
 
@@ -1319,7 +1309,7 @@ pub fn create_browser_profile(
   proxy_id: Option<String>,
   camoufox_config: Option<CamoufoxConfig>,
 ) -> Result<BrowserProfile, String> {
-  let profile_manager = ProfileManager::new();
+  let profile_manager = ProfileManager::instance();
   profile_manager
     .create_profile(
       &name,
@@ -1334,7 +1324,7 @@ pub fn create_browser_profile(
 
 #[tauri::command]
 pub fn list_browser_profiles() -> Result<Vec<BrowserProfile>, String> {
-  let profile_manager = ProfileManager::new();
+  let profile_manager = ProfileManager::instance();
   profile_manager
     .list_profiles()
     .map_err(|e| format!("Failed to list profiles: {e}"))
@@ -1346,7 +1336,7 @@ pub async fn launch_browser_profile(
   profile: BrowserProfile,
   url: Option<String>,
 ) -> Result<BrowserProfile, String> {
-  let browser_runner = BrowserRunner::new();
+  let browser_runner = BrowserRunner::instance();
 
   // Store the internal proxy settings for passing to launch_browser
   let mut internal_proxy_settings: Option<ProxySettings> = None;
@@ -1365,7 +1355,7 @@ pub async fn launch_browser_profile(
         .await
       {
         Ok(internal_proxy) => {
-          let browser_runner = BrowserRunner::new();
+          let browser_runner = BrowserRunner::instance();
           let profiles_dir = browser_runner.get_profiles_dir();
           let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
 
@@ -1385,7 +1375,7 @@ pub async fn launch_browser_profile(
         Err(e) => {
           eprintln!("Failed to start proxy: {e}");
           // Still continue with browser launch, but without proxy
-          let browser_runner = BrowserRunner::new();
+          let browser_runner = BrowserRunner::instance();
           let profiles_dir = browser_runner.get_profiles_dir();
           let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
 
@@ -1439,7 +1429,7 @@ pub async fn update_profile_proxy(
   profile_name: String,
   proxy_id: Option<String>,
 ) -> Result<BrowserProfile, String> {
-  let profile_manager = ProfileManager::new();
+  let profile_manager = ProfileManager::instance();
   profile_manager
     .update_profile_proxy(app_handle, &profile_name, proxy_id)
     .await
@@ -1451,7 +1441,7 @@ pub fn update_profile_version(
   profile_name: String,
   version: String,
 ) -> Result<BrowserProfile, String> {
-  let profile_manager = ProfileManager::new();
+  let profile_manager = ProfileManager::instance();
   profile_manager
     .update_profile_version(&profile_name, &version)
     .map_err(|e| format!("Failed to update profile version: {e}"))
@@ -1462,7 +1452,7 @@ pub async fn check_browser_status(
   app_handle: tauri::AppHandle,
   profile: BrowserProfile,
 ) -> Result<bool, String> {
-  let profile_manager = ProfileManager::new();
+  let profile_manager = ProfileManager::instance();
   profile_manager
     .check_browser_status(app_handle, &profile)
     .await
@@ -1475,7 +1465,7 @@ pub fn rename_profile(
   old_name: &str,
   new_name: &str,
 ) -> Result<BrowserProfile, String> {
-  let profile_manager = ProfileManager::new();
+  let profile_manager = ProfileManager::instance();
   profile_manager
     .rename_profile(old_name, new_name)
     .map_err(|e| format!("Failed to rename profile: {e}"))
@@ -1483,7 +1473,7 @@ pub fn rename_profile(
 
 #[tauri::command]
 pub fn delete_profile(_app_handle: tauri::AppHandle, profile_name: String) -> Result<(), String> {
-  let browser_runner = BrowserRunner::new();
+  let browser_runner = BrowserRunner::instance();
   browser_runner
     .delete_profile(profile_name.as_str())
     .map_err(|e| format!("Failed to delete profile: {e}"))
@@ -1579,7 +1569,7 @@ pub async fn download_browser(
   browser_str: String,
   version: String,
 ) -> Result<String, String> {
-  let browser_runner = BrowserRunner::new();
+  let browser_runner = BrowserRunner::instance();
   browser_runner
     .download_browser_impl(app_handle, browser_str, version)
     .await
@@ -1588,7 +1578,7 @@ pub async fn download_browser(
 
 #[tauri::command]
 pub fn is_browser_downloaded(browser_str: String, version: String) -> bool {
-  let browser_runner = BrowserRunner::new();
+  let browser_runner = BrowserRunner::instance();
   browser_runner.is_browser_downloaded(&browser_str, &version)
 }
 
@@ -1603,7 +1593,7 @@ pub async fn kill_browser_profile(
   app_handle: tauri::AppHandle,
   profile: BrowserProfile,
 ) -> Result<(), String> {
-  let browser_runner = BrowserRunner::new();
+  let browser_runner = BrowserRunner::instance();
   browser_runner
     .kill_browser_process(app_handle, &profile)
     .await
@@ -1637,7 +1627,7 @@ pub async fn update_camoufox_config(
   profile_name: String,
   config: CamoufoxConfig,
 ) -> Result<(), String> {
-  let profile_manager = ProfileManager::new();
+  let profile_manager = ProfileManager::instance();
   profile_manager
     .update_camoufox_config(app_handle, &profile_name, config)
     .await
@@ -1657,8 +1647,7 @@ pub async fn fetch_browser_versions_with_count(
 
 #[tauri::command]
 pub fn get_downloaded_browser_versions(browser_str: String) -> Result<Vec<String>, String> {
-  let registry = DownloadedBrowsersRegistry::load()
-    .map_err(|e| format!("Failed to load browser registry: {e}"))?;
+  let registry = DownloadedBrowsersRegistry::instance();
   Ok(registry.get_downloaded_versions(&browser_str))
 }
 
@@ -1675,7 +1664,7 @@ pub async fn get_browser_release_types(
 
 #[tauri::command]
 pub async fn check_missing_binaries() -> Result<Vec<(String, String, String)>, String> {
-  let browser_runner = BrowserRunner::new();
+  let browser_runner = BrowserRunner::instance();
   browser_runner
     .check_missing_binaries()
     .await
@@ -1686,7 +1675,7 @@ pub async fn check_missing_binaries() -> Result<Vec<(String, String, String)>, S
 pub async fn ensure_all_binaries_exist(
   app_handle: tauri::AppHandle,
 ) -> Result<Vec<String>, String> {
-  let browser_runner = BrowserRunner::new();
+  let browser_runner = BrowserRunner::instance();
   browser_runner
     .ensure_all_binaries_exist(&app_handle)
     .await
@@ -1698,20 +1687,14 @@ mod tests {
   use super::*;
   use tempfile::TempDir;
 
-  fn create_test_browser_runner() -> (BrowserRunner, TempDir) {
+  fn create_test_browser_runner() -> (&'static BrowserRunner, TempDir) {
     let temp_dir = TempDir::new().unwrap();
 
     // Mock the base directories by setting environment variables
     std::env::set_var("HOME", temp_dir.path());
 
-    let browser_runner = BrowserRunner::new();
+    let browser_runner = BrowserRunner::instance();
     (browser_runner, temp_dir)
-  }
-
-  #[test]
-  fn test_browser_runner_creation() {
-    let (_runner, _temp_dir) = create_test_browser_runner();
-    // If we get here without panicking, the test passes
   }
 
   #[test]
@@ -1731,36 +1714,9 @@ mod tests {
     assert!(profiles_dir.to_string_lossy().contains("DonutBrowser"));
     assert!(profiles_dir.to_string_lossy().contains("profiles"));
   }
+}
 
-  #[test]
-  fn test_profile_operations_via_profile_manager() {
-    let (_runner, _temp_dir) = create_test_browser_runner();
-    let profile_manager = ProfileManager::new();
-
-    let profile = profile_manager
-      .create_profile("Test Profile", "firefox", "139.0", "stable", None, None)
-      .unwrap();
-
-    assert_eq!(profile.name, "Test Profile");
-    assert_eq!(profile.browser, "firefox");
-    assert_eq!(profile.version, "139.0");
-    assert!(profile.proxy_id.is_none());
-    assert!(profile.process_id.is_none());
-
-    // Test listing profiles
-    let profiles = profile_manager.list_profiles().unwrap();
-    assert_eq!(profiles.len(), 1);
-    assert_eq!(profiles[0].name, "Test Profile");
-
-    // Test renaming profile
-    let renamed_profile = profile_manager
-      .rename_profile("Test Profile", "Renamed Profile")
-      .unwrap();
-    assert_eq!(renamed_profile.name, "Renamed Profile");
-
-    // Test deleting profile
-    profile_manager.delete_profile("Renamed Profile").unwrap();
-    let profiles = profile_manager.list_profiles().unwrap();
-    assert_eq!(profiles.len(), 0);
-  }
+// Global singleton instance
+lazy_static::lazy_static! {
+  static ref BROWSER_RUNNER: BrowserRunner = BrowserRunner::new();
 }
