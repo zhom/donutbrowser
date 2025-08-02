@@ -97,15 +97,7 @@ export function ProfileSelectorDialog({
         if (runningAvailableProfile) {
           setSelectedProfile(runningAvailableProfile.name);
         } else {
-          // If no running profile is available, find the first available profile
-          const availableProfile = profileList.find(
-            (profile) =>
-              profile.browser !== "tor-browser" &&
-              profile.browser !== "mullvad-browser",
-          );
-          if (availableProfile) {
-            setSelectedProfile(availableProfile.name);
-          }
+          setSelectedProfile(profileList[0].name);
         }
       }
     } catch (err) {
