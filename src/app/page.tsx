@@ -191,20 +191,9 @@ export default function Home() {
     [processingUrls],
   );
 
-  // Version updater for handling version fetching progress events and auto-updates
-  const { isUpdating: isVersionUpdating } = useVersionUpdater();
-
   // Auto-update functionality - use the existing hook for compatibility
   const updateNotifications = useUpdateNotifications(loadProfiles);
   const { checkForUpdates, isUpdating } = updateNotifications;
-
-  // Combined update checking function for per-browser blocking
-  const isBrowserUpdating = useCallback(
-    (browser: string) => {
-      return isVersionUpdating || isUpdating(browser);
-    },
-    [isVersionUpdating, isUpdating],
-  );
 
   // Profiles loader with update check (for initial load and manual refresh)
   const loadProfilesWithUpdateCheck = useCallback(async () => {
@@ -771,7 +760,7 @@ export default function Home() {
               onChangeVersion={openChangeVersionDialog}
               onConfigureCamoufox={handleConfigureCamoufox}
               runningProfiles={runningProfiles}
-              isUpdating={isBrowserUpdating}
+              isUpdating={isUpdating}
               onDeleteSelectedProfiles={handleDeleteSelectedProfiles}
               onAssignProfilesToGroup={handleAssignProfilesToGroup}
               selectedGroupId={selectedGroupId}
@@ -841,7 +830,7 @@ export default function Home() {
             );
           }}
           url={pendingUrl.url}
-          isUpdating={isBrowserUpdating}
+          isUpdating={isUpdating}
           runningProfiles={runningProfiles}
         />
       ))}
