@@ -192,11 +192,19 @@ export default function Home() {
   );
 
   // Version updater for handling version fetching progress events and auto-updates
-  useVersionUpdater();
+  const { isUpdating: isVersionUpdating } = useVersionUpdater();
 
   // Auto-update functionality - use the existing hook for compatibility
   const updateNotifications = useUpdateNotifications(loadProfiles);
   const { checkForUpdates, isUpdating } = updateNotifications;
+
+  // Combined update checking function for per-browser blocking
+  const isBrowserUpdating = useCallback(
+    (browser: string) => {
+      return isVersionUpdating || isUpdating(browser);
+    },
+    [isVersionUpdating, isUpdating],
+  );
 
   // Profiles loader with update check (for initial load and manual refresh)
   const loadProfilesWithUpdateCheck = useCallback(async () => {
@@ -733,7 +741,7 @@ export default function Home() {
   return (
     <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen gap-8 font-[family-name:var(--font-geist-sans)]  bg-white dark:bg-black">
       <main className="flex flex-col row-start-2 gap-8 items-center w-full max-w-3xl">
-        <Card className="w-full gap-2">
+        <Card className="gap-2 w-full">
           <CardHeader>
             <HomeHeader
               selectedProfiles={selectedProfiles}
@@ -763,7 +771,7 @@ export default function Home() {
               onChangeVersion={openChangeVersionDialog}
               onConfigureCamoufox={handleConfigureCamoufox}
               runningProfiles={runningProfiles}
-              isUpdating={isUpdating}
+              isUpdating={isBrowserUpdating}
               onDeleteSelectedProfiles={handleDeleteSelectedProfiles}
               onAssignProfilesToGroup={handleAssignProfilesToGroup}
               selectedGroupId={selectedGroupId}
@@ -833,7 +841,7 @@ export default function Home() {
             );
           }}
           url={pendingUrl.url}
-          isUpdating={isUpdating}
+          isUpdating={isBrowserUpdating}
           runningProfiles={runningProfiles}
         />
       ))}

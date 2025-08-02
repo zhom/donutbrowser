@@ -267,6 +267,14 @@ export function ProfilesDataTable({
   // Handle icon/checkbox click
   const handleIconClick = React.useCallback(
     (profileName: string) => {
+      const profile = filteredData.find((p) => p.name === profileName);
+      if (!profile) return;
+
+      // Prevent selection of profiles whose browsers are updating
+      if (!browserState.canSelectProfile(profile)) {
+        return;
+      }
+
       setShowCheckboxes(true);
       setSelectedProfiles((prev) => {
         const newSet = new Set(prev);
@@ -289,7 +297,7 @@ export function ProfilesDataTable({
         return newSet;
       });
     },
-    [onSelectedProfilesChange],
+    [filteredData, browserState.canSelectProfile, onSelectedProfilesChange],
   );
 
   // Handle checkbox change

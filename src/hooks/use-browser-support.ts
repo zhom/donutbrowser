@@ -104,8 +104,10 @@ export function useBrowserState(
       // If the profile is already running, it can always be stopped
       if (isRunning) return true;
 
-      // If browser is updating, it cannot be launched
-      if (isBrowserUpdating) return false;
+      // If THIS specific browser is updating or downloading, block this profile
+      if (isBrowserUpdating) {
+        return false;
+      }
 
       // For single-instance browsers, check if any instance is running
       if (isSingleInstanceBrowser(profile.browser)) {
@@ -132,6 +134,12 @@ export function useBrowserState(
       if (!isClient) return false;
 
       const isRunning = runningProfiles.has(profile.name);
+      const isBrowserUpdating = isUpdating?.(profile.browser) ?? false;
+
+      // If this specific browser is updating or downloading, block it
+      if (isBrowserUpdating) {
+        return false;
+      }
 
       // For single-instance browsers (Tor and Mullvad)
       if (isSingleInstanceBrowser(profile.browser)) {
@@ -151,7 +159,26 @@ export function useBrowserState(
       // For other browsers, any profile can be used
       return true;
     },
-    [profiles, runningProfiles, isClient, isSingleInstanceBrowser],
+    [profiles, runningProfiles, isClient, isSingleInstanceBrowser, isUpdating],
+  );
+
+  /**
+   * Check if a profile can be selected for actions (delete, move group, etc.)
+   */
+  const canSelectProfile = useCallback(
+    (profile: BrowserProfile): boolean => {
+      if (!isClient) return false;
+
+      const isBrowserUpdating = isUpdating?.(profile.browser) ?? false;
+
+      // If this specific browser is updating or downloading, block selection
+      if (isBrowserUpdating) {
+        return false;
+      }
+
+      return true;
+    },
+    [isClient, isUpdating],
   );
 
   /**
@@ -203,6 +230,12 @@ export function useBrowserState(
 
       if (canUseForLinks) return null;
 
+      const isBrowserUpdating = isUpdating?.(profile.browser) ?? false;
+
+      if (isBrowserUpdating) {
+        return `${getBrowserDisplayName(profile.browser)} is being updated. Please wait for the update to complete.`;
+      }
+
       if (isSingleInstanceBrowser(profile.browser)) {
         const browserDisplayName =
           profile.browser === "tor-browser" ? "TOR" : "Mullvad";
@@ -226,6 +259,7 @@ export function useBrowserState(
       isClient,
       canUseProfileForLinks,
       isSingleInstanceBrowser,
+      isUpdating,
     ],
   );
 
@@ -235,6 +269,7 @@ export function useBrowserState(
     isAnyInstanceRunning,
     canLaunchProfile,
     canUseProfileForLinks,
+    canSelectProfile,
     getLaunchTooltipContent,
     getProfileTooltipContent,
   };
