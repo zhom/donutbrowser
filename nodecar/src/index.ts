@@ -233,8 +233,7 @@ program
   // Firefox preferences
   .option("--firefox-prefs <prefs>", "Firefox user preferences (JSON string)")
 
-  .option("--disable-theming", "disable Firefox theming")
-  .option("--no-showcursor", "disable cursor display")
+  // Note: theming and cursor options are hardcoded and not user-configurable
 
   .description("manage Camoufox browser instances")
   .action(
@@ -262,11 +261,12 @@ program
           // Security options
           if (options.disableCoop) camoufoxOptions.disable_coop = true;
 
-          // Geolocation
+          // Geolocation - always enable geoip for proper spoofing
           if (options.geoip) {
             camoufoxOptions.geoip =
               options.geoip === "auto" ? true : (options.geoip as string);
           }
+
           if (options.latitude && options.longitude) {
             camoufoxOptions.geolocation = {
               latitude: options.latitude as number,
@@ -279,9 +279,8 @@ program
           if (options.timezone)
             camoufoxOptions.timezone = options.timezone as string;
 
-          // UI and behavior
           if (options.humanize)
-            camoufoxOptions.humanize = options.humanize as boolean | number;
+            camoufoxOptions.humanize = options.humanize as boolean;
           if (options.headless) camoufoxOptions.headless = true;
 
           // Localization
@@ -388,11 +387,6 @@ program
             }
           }
 
-          // Theming and cursor - these are custom properties for camoufox-js
-          if (options.disableTheming) camoufoxOptions.disableTheming = true;
-          if (options.showcursor === false) camoufoxOptions.showcursor = false;
-
-          // Use the launcher to start Camoufox properly
           const config = await startCamoufoxProcess(
             camoufoxOptions,
             typeof options.profilePath === "string"
@@ -401,7 +395,6 @@ program
             typeof options.url === "string" ? options.url : undefined,
           );
 
-          // Output the configuration as JSON for the Rust side to parse
           console.log(
             JSON.stringify({
               id: config.id,

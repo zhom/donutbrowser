@@ -30,6 +30,7 @@ export function CamoufoxConfigDialog({
   const [config, setConfig] = useState<CamoufoxConfig>({
     enable_cache: true,
     os: [getCurrentOS()],
+    geoip: true,
   });
   const [isSaving, setIsSaving] = useState(false);
 
@@ -40,6 +41,7 @@ export function CamoufoxConfigDialog({
         profile.camoufox_config || {
           enable_cache: true,
           os: [getCurrentOS()],
+          geoip: true,
         },
       );
     }
@@ -70,6 +72,7 @@ export function CamoufoxConfigDialog({
         profile.camoufox_config || {
           enable_cache: true,
           os: [getCurrentOS()],
+          geoip: true,
         },
       );
     }

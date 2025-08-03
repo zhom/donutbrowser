@@ -56,7 +56,7 @@ impl Default for CamoufoxConfig {
       block_webrtc: None,
       block_webgl: None,
       disable_coop: None,
-      geoip: None,
+      geoip: Some(serde_json::Value::Bool(true)),
       country: None,
       timezone: None,
       latitude: None,
@@ -80,7 +80,7 @@ impl Default for CamoufoxConfig {
       webgl_vendor: None,
       webgl_renderer: None,
       proxy: None,
-      enable_cache: Some(true), // Cache enabled by default
+      enable_cache: Some(true),
       virtual_display: None,
       debug: None,
       additional_args: None,
@@ -133,44 +133,20 @@ impl CamoufoxNodecarLauncher {
     &CAMOUFOX_NODECAR_LAUNCHER
   }
 
-  /// Create a test configuration to verify anti-fingerprinting is working
+  /// Create a test configuration
+  #[allow(dead_code)]
   pub fn create_test_config() -> CamoufoxConfig {
     CamoufoxConfig {
       // Core anti-fingerprinting settings
-      timezone: Some("Europe/London".to_string()),
       screen_min_width: Some(1440),
       screen_min_height: Some(900),
-      window_width: Some(1200),
-      window_height: Some(800),
-
-      // Locale settings
-      locale: Some(vec!["en-GB".to_string(), "en-US".to_string()]),
 
       // WebGL spoofing
       webgl_vendor: Some("Intel Inc.".to_string()),
       webgl_renderer: Some("Intel Iris Pro OpenGL Engine".to_string()),
 
-      // Geolocation spoofing (London coordinates)
-      latitude: Some(51.5074),
-      longitude: Some(-0.1278),
-
-      // Font settings
-      fonts: Some(vec![
-        "Arial".to_string(),
-        "Times New Roman".to_string(),
-        "Helvetica".to_string(),
-        "Georgia".to_string(),
-      ]),
-      custom_fonts_only: Some(true),
-
       // Humanization
       humanize: Some(true),
-      humanize_duration: Some(2.0),
-
-      // Blocking features
-      block_images: Some(false), // Don't block images for testing
-      block_webrtc: Some(true),
-      block_webgl: Some(false), // Don't block WebGL so we can test spoofing
 
       // Other settings
       debug: Some(true),
@@ -646,22 +622,19 @@ mod tests {
     let test_config = CamoufoxNodecarLauncher::create_test_config();
 
     // Verify test config has expected values
-    assert_eq!(test_config.timezone, Some("Europe/London".to_string()));
     assert_eq!(test_config.screen_min_width, Some(1440));
     assert_eq!(test_config.screen_min_height, Some(900));
-    assert_eq!(test_config.window_width, Some(1200));
-    assert_eq!(test_config.window_height, Some(800));
     assert_eq!(test_config.webgl_vendor, Some("Intel Inc.".to_string()));
     assert_eq!(
       test_config.webgl_renderer,
       Some("Intel Iris Pro OpenGL Engine".to_string())
     );
-    assert_eq!(test_config.latitude, Some(51.5074));
-    assert_eq!(test_config.longitude, Some(-0.1278));
     assert_eq!(test_config.humanize, Some(true));
     assert_eq!(test_config.debug, Some(true));
     assert_eq!(test_config.enable_cache, Some(true));
     assert_eq!(test_config.headless, Some(false));
+    // Verify that geoip is enabled by default (from Default implementation)
+    assert_eq!(test_config.geoip, Some(serde_json::Value::Bool(true)));
   }
 
   #[test]
@@ -670,6 +643,7 @@ mod tests {
 
     // Verify defaults
     assert_eq!(default_config.enable_cache, Some(true));
+    assert_eq!(default_config.geoip, Some(serde_json::Value::Bool(true)));
     assert_eq!(default_config.timezone, None);
     assert_eq!(default_config.debug, None);
     assert_eq!(default_config.headless, None);

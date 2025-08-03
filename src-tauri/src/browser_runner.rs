@@ -185,28 +185,16 @@ impl BrowserRunner {
 
         // Set proxy in camoufox config
         camoufox_config.proxy = Some(proxy_url);
+        
+        // Ensure geoip is always enabled for proper geolocation spoofing
+        if camoufox_config.geoip.is_none() {
+          camoufox_config.geoip = Some(serde_json::Value::Bool(true));
+        }
 
         println!(
-          "Configured local proxy for Camoufox: {:?}",
-          camoufox_config.proxy
+          "Configured local proxy for Camoufox: {:?}, geoip: {:?}",
+          camoufox_config.proxy, camoufox_config.geoip
         );
-
-        // Use the existing config or create a test config if none exists
-        let final_config = if camoufox_config.timezone.is_some()
-          || camoufox_config.screen_min_width.is_some()
-          || camoufox_config.window_width.is_some()
-        {
-          camoufox_config.clone()
-        } else {
-          // No meaningful config provided, use test config to ensure anti-fingerprinting works
-          println!("No Camoufox configuration provided, using test configuration");
-          let mut test_config = crate::camoufox::CamoufoxNodecarLauncher::create_test_config();
-          // Preserve any proxy settings from the original config
-          test_config.proxy = camoufox_config.proxy.clone();
-          test_config.headless = camoufox_config.headless;
-          test_config.debug = Some(true); // Enable debug for troubleshooting
-          test_config
-        };
 
         // Use the nodecar camoufox launcher
         println!(
@@ -215,7 +203,12 @@ impl BrowserRunner {
         );
         let camoufox_launcher = crate::camoufox::CamoufoxNodecarLauncher::instance();
         let camoufox_result = camoufox_launcher
-          .launch_camoufox_profile_nodecar(app_handle.clone(), profile.clone(), final_config, url)
+          .launch_camoufox_profile_nodecar(
+            app_handle.clone(),
+            profile.clone(),
+            camoufox_config,
+            url,
+          )
           .await
           .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
             format!("Failed to launch camoufox via nodecar: {e}").into()

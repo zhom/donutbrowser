@@ -14,11 +14,11 @@ import {
 } from "@/components/ui/select";
 import type { CamoufoxConfig } from "@/types";
 
-const osOptions = [
-  { value: "windows", label: "Windows" },
-  { value: "macos", label: "macOS" },
-  { value: "linux", label: "Linux" },
-];
+// const osOptions = [
+//   { value: "windows", label: "Windows" },
+//   { value: "macos", label: "macOS" },
+//   { value: "linux", label: "Linux" },
+// ];
 
 const timezoneOptions = [
   { value: "America/New_York", label: "America/New_York" },
@@ -143,15 +143,15 @@ const localeOptions = [
   { value: "mt-MT", label: "Maltese (Malta)" },
 ];
 
-const getCurrentOS = () => {
-  if (typeof window !== "undefined") {
-    const userAgent = window.navigator.userAgent;
-    if (userAgent.includes("Win")) return "windows";
-    if (userAgent.includes("Mac")) return "macos";
-    if (userAgent.includes("Linux")) return "linux";
-  }
-  return "unknown";
-};
+// const getCurrentOS = () => {
+//   if (typeof window !== "undefined") {
+//     const userAgent = window.navigator.userAgent;
+//     if (userAgent.includes("Win")) return "windows";
+//     if (userAgent.includes("Mac")) return "macos";
+//     if (userAgent.includes("Linux")) return "linux";
+//   }
+//   return "unknown";
+// };
 
 interface SystemLocale {
   locale: string;
@@ -211,16 +211,36 @@ export function SharedCamoufoxConfigForm({
     loadSystemDefaults();
   }, []);
 
+  // Determine if automatic location configuration is enabled
+  // Default to true if geoip is not explicitly set to false
+  const isAutoLocationEnabled = config.geoip !== false;
+
+  // Handle automatic location configuration toggle
+  const handleAutoLocationToggle = (enabled: boolean) => {
+    if (enabled) {
+      // Enable automatic configuration - set geoip to true and clear manual fields
+      onConfigChange("geoip", true);
+      onConfigChange("country", undefined);
+      onConfigChange("timezone", undefined);
+      onConfigChange("latitude", undefined);
+      onConfigChange("longitude", undefined);
+      onConfigChange("locale", undefined);
+    } else {
+      // Disable automatic configuration - set geoip to false
+      onConfigChange("geoip", false);
+    }
+  };
+
   // Get the selected OS for warning
-  const selectedOS = config.os?.[0];
-  const currentOS = getCurrentOS();
-  const showOSWarning =
-    selectedOS && selectedOS !== currentOS && currentOS !== "unknown";
+  // const selectedOS = config.os?.[0];
+  // const currentOS = getCurrentOS();
+  // const showOSWarning =
+  //   selectedOS && selectedOS !== currentOS && currentOS !== "unknown";
 
   return (
     <div className={`space-y-6 ${className}`}>
       {/* OS Selection */}
-      <div className="space-y-3">
+      {/*<div className="space-y-3">
         <Label>Operating System</Label>
         <Select
           value={config.os?.[0] || getCurrentOS()}
@@ -243,162 +263,154 @@ export function SharedCamoufoxConfigForm({
             {currentOS}). This may affect fingerprinting effectiveness.
           </p>
         )}
-      </div>
+      </div>*/}
 
-      {/* Privacy & Blocking */}
+      {/* Automatic Location Configuration */}
       <div className="space-y-3">
-        <Label>Privacy & Blocking</Label>
-        <div className="space-y-2">
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="block-images"
-              checked={config.block_images || false}
-              onCheckedChange={(checked) =>
-                onConfigChange("block_images", checked)
-              }
-            />
-            <Label htmlFor="block-images">Block Images</Label>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="block-webrtc"
-              checked={config.block_webrtc || false}
-              onCheckedChange={(checked) =>
-                onConfigChange("block_webrtc", checked)
-              }
-            />
-            <Label htmlFor="block-webrtc">Block WebRTC</Label>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="block-webgl"
-              checked={config.block_webgl || false}
-              onCheckedChange={(checked) =>
-                onConfigChange("block_webgl", checked)
-              }
-            />
-            <Label htmlFor="block-webgl">Block WebGL</Label>
-          </div>
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id="auto-location"
+            checked={isAutoLocationEnabled}
+            onCheckedChange={handleAutoLocationToggle}
+          />
+          <Label htmlFor="auto-location">
+            Automatically configure location information based on proxy
+            configuration or your connection if no proxy provided
+          </Label>
         </div>
       </div>
 
       {/* Geolocation */}
-      <div className="space-y-3">
-        <Label>Geolocation</Label>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="country">Country</Label>
-            <Input
-              id="country"
-              value={config.country || ""}
-              onChange={(e) =>
-                onConfigChange("country", e.target.value || undefined)
-              }
-              placeholder={
-                systemLocale
-                  ? `e.g., ${systemLocale.country}`
-                  : "e.g., US, GB, DE"
-              }
-            />
+      {!isAutoLocationEnabled && (
+        <div className="space-y-3">
+          <Label>Geolocation</Label>
+          <div className="mb-4 p-3 bg-amber-50 rounded-md border border-amber-200">
+            <p className="text-sm text-amber-800">
+              ⚠️ Warning: Configuring variables yourself may not always work due
+              to underlying technology. It's recommended to use automatic
+              location configuration.
+            </p>
           </div>
-          <div className="space-y-2">
-            <Label>Timezone</Label>
-            <Select
-              value={config.timezone || "auto"}
-              onValueChange={(value) =>
-                onConfigChange("timezone", value === "auto" ? undefined : value)
-              }
-            >
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={
-                    isLoadingSystemDefaults ? "Loading..." : "Select timezone"
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="auto">
-                  {isLoadingSystemDefaults
-                    ? "Auto (loading...)"
-                    : `Auto (${systemTimezone?.timezone || "UTC"})`}
-                </SelectItem>
-                {timezoneOptions.map((tz) => (
-                  <SelectItem key={tz.value} value={tz.value}>
-                    {tz.label}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="country">Country</Label>
+              <Input
+                id="country"
+                value={config.country || ""}
+                onChange={(e) =>
+                  onConfigChange("country", e.target.value || undefined)
+                }
+                placeholder={
+                  systemLocale
+                    ? `e.g., ${systemLocale.country}`
+                    : "e.g., US, GB, DE"
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Timezone</Label>
+              <Select
+                value={config.timezone || "auto"}
+                onValueChange={(value) =>
+                  onConfigChange(
+                    "timezone",
+                    value === "auto" ? undefined : value,
+                  )
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue
+                    placeholder={
+                      isLoadingSystemDefaults ? "Loading..." : "Select timezone"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">
+                    {isLoadingSystemDefaults
+                      ? "Auto (loading...)"
+                      : `Auto (${systemTimezone?.timezone || "UTC"})`}
                   </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                  {timezoneOptions.map((tz) => (
+                    <SelectItem key={tz.value} value={tz.value}>
+                      {tz.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="latitude">Latitude</Label>
+              <Input
+                id="latitude"
+                type="number"
+                step="any"
+                value={config.latitude || ""}
+                onChange={(e) =>
+                  onConfigChange(
+                    "latitude",
+                    e.target.value ? parseFloat(e.target.value) : undefined,
+                  )
+                }
+                placeholder="e.g., 40.7128"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="longitude">Longitude</Label>
+              <Input
+                id="longitude"
+                type="number"
+                step="any"
+                value={config.longitude || ""}
+                onChange={(e) =>
+                  onConfigChange(
+                    "longitude",
+                    e.target.value ? parseFloat(e.target.value) : undefined,
+                  )
+                }
+                placeholder="e.g., -74.0060"
+              />
+            </div>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="latitude">Latitude</Label>
-            <Input
-              id="latitude"
-              type="number"
-              step="any"
-              value={config.latitude || ""}
-              onChange={(e) =>
-                onConfigChange(
-                  "latitude",
-                  e.target.value ? parseFloat(e.target.value) : undefined,
-                )
-              }
-              placeholder="e.g., 40.7128"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="longitude">Longitude</Label>
-            <Input
-              id="longitude"
-              type="number"
-              step="any"
-              value={config.longitude || ""}
-              onChange={(e) =>
-                onConfigChange(
-                  "longitude",
-                  e.target.value ? parseFloat(e.target.value) : undefined,
-                )
-              }
-              placeholder="e.g., -74.0060"
-            />
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* Localization */}
-      <div className="space-y-3">
-        <Label>Locale</Label>
-        <Select
-          value={config.locale?.[0] || ""}
-          onValueChange={(value) =>
-            onConfigChange("locale", value ? [value] : undefined)
-          }
-        >
-          <SelectTrigger>
-            <SelectValue
-              placeholder={
-                isLoadingSystemDefaults
-                  ? "Loading..."
-                  : `Select locale (system: ${systemLocale?.locale || "unknown"})`
-              }
-            />
-          </SelectTrigger>
-          <SelectContent>
-            {!isLoadingSystemDefaults && systemLocale && (
-              <SelectItem value={systemLocale.locale}>
-                {systemLocale.locale} (System Default)
-              </SelectItem>
-            )}
-            {localeOptions.map((locale) => (
-              <SelectItem key={locale.value} value={locale.value}>
-                {locale.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {!isAutoLocationEnabled && (
+        <div className="space-y-3">
+          <Label>Locale</Label>
+          <Select
+            value={config.locale?.[0] || ""}
+            onValueChange={(value) =>
+              onConfigChange("locale", value ? [value] : undefined)
+            }
+          >
+            <SelectTrigger>
+              <SelectValue
+                placeholder={
+                  isLoadingSystemDefaults
+                    ? "Loading..."
+                    : `Select locale (system: ${systemLocale?.locale || "unknown"})`
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {!isLoadingSystemDefaults && systemLocale && (
+                <SelectItem value={systemLocale.locale}>
+                  {systemLocale.locale} (System Default)
+                </SelectItem>
+              )}
+              {localeOptions.map((locale) => (
+                <SelectItem key={locale.value} value={locale.value}>
+                  {locale.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {/* Screen Resolution */}
       <div className="space-y-3">
@@ -465,72 +477,6 @@ export function SharedCamoufoxConfigForm({
               }
               placeholder="e.g., 1080"
             />
-          </div>
-        </div>
-      </div>
-
-      {/* Window Size */}
-      <div className="space-y-3">
-        <Label>Window Size</Label>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="window-width">Width</Label>
-            <Input
-              id="window-width"
-              type="number"
-              value={config.window_width || ""}
-              onChange={(e) =>
-                onConfigChange(
-                  "window_width",
-                  e.target.value ? parseInt(e.target.value) : undefined,
-                )
-              }
-              placeholder="e.g., 1366"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="window-height">Height</Label>
-            <Input
-              id="window-height"
-              type="number"
-              value={config.window_height || ""}
-              onChange={(e) =>
-                onConfigChange(
-                  "window_height",
-                  e.target.value ? parseInt(e.target.value) : undefined,
-                )
-              }
-              placeholder="e.g., 768"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Advanced Options */}
-      <div className="space-y-3">
-        <Label>Advanced Options</Label>
-        <div className="space-y-2">
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="enable-cache"
-              checked={config.enable_cache || false}
-              onCheckedChange={(checked) =>
-                onConfigChange("enable_cache", checked)
-              }
-            />
-            <Label htmlFor="enable-cache">Enable Browser Cache</Label>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="main-world-eval"
-              checked={config.main_world_eval || false}
-              onCheckedChange={(checked) =>
-                onConfigChange("main_world_eval", checked)
-              }
-            />
-            <Label htmlFor="main-world-eval">
-              Enable Main World Evaluation
-            </Label>
           </div>
         </div>
       </div>

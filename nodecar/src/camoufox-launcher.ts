@@ -176,28 +176,47 @@ export async function stopCamoufoxProcess(id: string): Promise<boolean> {
   }
 
   try {
-    const killByPattern = spawn("pkill", ["-f", `camoufox-worker.*${id}`], {
-      stdio: "ignore",
-    });
+    console.log(`Stopping Camoufox process ${id} (PID: ${config.processId})`);
 
-    // Method 2: If we have a process ID, kill by PID
+    // Method 1: If we have a process ID, kill by PID with proper signal sequence
     if (config.processId) {
       try {
+        // First try SIGTERM for graceful shutdown
         process.kill(config.processId, "SIGTERM");
+        console.log(`Sent SIGTERM to Camoufox process ${config.processId}`);
 
-        // Give it a moment to terminate gracefully
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        // Give it more time to terminate gracefully (increased from 2s to 5s)
+        await new Promise((resolve) => setTimeout(resolve, 5000));
 
-        // Force kill if still running
+        // Check if process is still running
         try {
+          process.kill(config.processId, 0); // Signal 0 checks if process exists
+          // Process still exists, force kill
+          console.log(
+            `Camoufox process ${config.processId} still running, sending SIGKILL`,
+          );
           process.kill(config.processId, "SIGKILL");
         } catch {
           // Process already terminated
+          console.log(
+            `Camoufox process ${config.processId} terminated gracefully`,
+          );
         }
-      } catch (error) {
-        // Process not found or already terminated
+      } catch {
+        console.log(
+          `Camoufox process ${config.processId} not found or already terminated`,
+        );
       }
     }
+
+    // Method 2: Pattern-based kill as fallback
+    const killByPattern = spawn(
+      "pkill",
+      ["-TERM", "-f", `camoufox-worker.*${id}`],
+      {
+        stdio: "ignore",
+      },
+    );
 
     // Wait for pattern-based kill command to complete
     await new Promise<void>((resolve) => {
@@ -206,10 +225,17 @@ export async function stopCamoufoxProcess(id: string): Promise<boolean> {
       setTimeout(() => resolve(), 3000);
     });
 
+    // Final cleanup with SIGKILL if needed
+    setTimeout(() => {
+      spawn("pkill", ["-KILL", "-f", `camoufox-worker.*${id}`], {
+        stdio: "ignore",
+      });
+    }, 1000);
+
     // Delete the configuration
     deleteCamoufoxConfig(id);
     return true;
-  } catch (error) {
+  } catch {
     // Delete the configuration even if stopping failed
     deleteCamoufoxConfig(id);
     return false;

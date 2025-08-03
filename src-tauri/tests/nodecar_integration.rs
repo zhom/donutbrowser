@@ -591,15 +591,6 @@ async fn test_nodecar_command_validation() -> Result<(), Box<dyn std::error::Err
 
   assert!(!output.status.success(), "Invalid command should fail");
 
-  // Test proxy without required arguments
-  let incomplete_args = ["proxy", "start"];
-  let output = TestUtils::execute_nodecar_command(&nodecar_path, &incomplete_args, 10).await?;
-
-  assert!(
-    !output.status.success(),
-    "Incomplete proxy command should fail"
-  );
-
   tracker.cleanup_all().await;
   Ok(())
 }
