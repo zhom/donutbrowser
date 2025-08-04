@@ -416,7 +416,8 @@ export function CreateProfileDialog({
 
                   {selectedBrowser && (
                     <div className="space-y-3">
-                      {!isBrowserVersionAvailable(selectedBrowser) &&
+                      {!isBrowserCurrentlyDownloading(selectedBrowser) &&
+                        !isBrowserVersionAvailable(selectedBrowser) &&
                         getBestAvailableVersion(
                           availableReleaseTypes,
                           selectedBrowser,
@@ -476,7 +477,8 @@ export function CreateProfileDialog({
               <TabsContent value="anti-detect" className="mt-0 space-y-6">
                 <div className="space-y-6">
                   {/* Camoufox Download Status */}
-                  {!isBrowserVersionAvailable("camoufox") &&
+                  {!isBrowserCurrentlyDownloading("camoufox") &&
+                    !isBrowserVersionAvailable("camoufox") &&
                     getBestAvailableVersion(
                       camoufoxReleaseTypes,
                       "camoufox",
