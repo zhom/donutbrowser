@@ -8,7 +8,9 @@ import type { BrowserProfile } from "@/types";
 export function useBrowserState(
   profiles: BrowserProfile[],
   runningProfiles: Set<string>,
-  isUpdating?: (browser: string) => boolean,
+  isUpdating: (browser: string) => boolean,
+  launchingProfiles: Set<string>,
+  stoppingProfiles: Set<string>,
 ) {
   const [isClient, setIsClient] = useState(false);
 
@@ -47,7 +49,14 @@ export function useBrowserState(
       if (!isClient) return false;
 
       const isRunning = runningProfiles.has(profile.name);
+      const isLaunching = launchingProfiles?.has(profile.name) ?? false;
+      const isStopping = stoppingProfiles?.has(profile.name) ?? false;
       const isBrowserUpdating = isUpdating?.(profile.browser) ?? false;
+
+      // If the profile is launching or stopping, disable the button
+      if (isLaunching || isStopping) {
+        return false;
+      }
 
       // If the profile is already running, it can always be stopped
       if (isRunning) return true;
@@ -70,6 +79,8 @@ export function useBrowserState(
       isUpdating,
       isSingleInstanceBrowser,
       isAnyInstanceRunning,
+      launchingProfiles,
+      stoppingProfiles,
     ],
   );
 
@@ -82,10 +93,12 @@ export function useBrowserState(
       if (!isClient) return false;
 
       const isRunning = runningProfiles.has(profile.name);
+      const isLaunching = launchingProfiles?.has(profile.name) ?? false;
+      const isStopping = stoppingProfiles?.has(profile.name) ?? false;
       const isBrowserUpdating = isUpdating?.(profile.browser) ?? false;
 
-      // If this specific browser is updating or downloading, block it
-      if (isBrowserUpdating) {
+      // If this specific browser is updating, downloading, launching, or stopping, block it
+      if (isBrowserUpdating || isLaunching || isStopping) {
         return false;
       }
 
@@ -107,7 +120,15 @@ export function useBrowserState(
       // For other browsers, any profile can be used
       return true;
     },
-    [profiles, runningProfiles, isClient, isSingleInstanceBrowser, isUpdating],
+    [
+      profiles,
+      runningProfiles,
+      isClient,
+      isSingleInstanceBrowser,
+      isUpdating,
+      launchingProfiles,
+      stoppingProfiles,
+    ],
   );
 
   /**
@@ -117,16 +138,25 @@ export function useBrowserState(
     (profile: BrowserProfile): boolean => {
       if (!isClient) return false;
 
+      const isRunning = runningProfiles.has(profile.name);
+      const isLaunching = launchingProfiles?.has(profile.name) ?? false;
+      const isStopping = stoppingProfiles?.has(profile.name) ?? false;
       const isBrowserUpdating = isUpdating?.(profile.browser) ?? false;
 
-      // If this specific browser is updating or downloading, block selection
-      if (isBrowserUpdating) {
+      // If profile is running, launching, stopping, or browser is updating, block selection
+      if (isRunning || isLaunching || isStopping || isBrowserUpdating) {
         return false;
       }
 
       return true;
     },
-    [isClient, isUpdating],
+    [
+      isClient,
+      runningProfiles,
+      launchingProfiles,
+      stoppingProfiles,
+      isUpdating,
+    ],
   );
 
   /**
@@ -137,7 +167,17 @@ export function useBrowserState(
       if (!isClient) return "Loading...";
 
       const isRunning = runningProfiles.has(profile.name);
+      const isLaunching = launchingProfiles?.has(profile.name) ?? false;
+      const isStopping = stoppingProfiles?.has(profile.name) ?? false;
       const isBrowserUpdating = isUpdating?.(profile.browser) ?? false;
+
+      if (isLaunching) {
+        return "Launching browser...";
+      }
+
+      if (isStopping) {
+        return "Stopping browser...";
+      }
 
       if (isRunning) {
         return "";
@@ -164,6 +204,8 @@ export function useBrowserState(
       isUpdating,
       isSingleInstanceBrowser,
       canLaunchProfile,
+      launchingProfiles,
+      stoppingProfiles,
     ],
   );
 
@@ -178,7 +220,17 @@ export function useBrowserState(
 
       if (canUseForLinks) return null;
 
+      const isLaunching = launchingProfiles?.has(profile.name) ?? false;
+      const isStopping = stoppingProfiles?.has(profile.name) ?? false;
       const isBrowserUpdating = isUpdating?.(profile.browser) ?? false;
+
+      if (isLaunching) {
+        return "Profile is currently launching. Please wait.";
+      }
+
+      if (isStopping) {
+        return "Profile is currently stopping. Please wait.";
+      }
 
       if (isBrowserUpdating) {
         return `${getBrowserDisplayName(profile.browser)} is being updated. Please wait for the update to complete.`;
@@ -208,6 +260,8 @@ export function useBrowserState(
       canUseProfileForLinks,
       isSingleInstanceBrowser,
       isUpdating,
+      launchingProfiles,
+      stoppingProfiles,
     ],
   );
 

@@ -106,6 +106,9 @@ export function ProfilesDataTable({
   const [launchingProfiles, setLaunchingProfiles] = React.useState<Set<string>>(
     new Set(),
   );
+  const [stoppingProfiles, setStoppingProfiles] = React.useState<Set<string>>(
+    new Set(),
+  );
 
   const [storedProxies, setStoredProxies] = React.useState<StoredProxy[]>([]);
   const [selectedProfiles, setSelectedProfiles] = React.useState<Set<string>>(
@@ -156,6 +159,8 @@ export function ProfilesDataTable({
     filteredData,
     runningProfiles,
     isUpdating,
+    launchingProfiles,
+    stoppingProfiles,
   );
 
   // Load stored proxies
@@ -174,7 +179,7 @@ export function ProfilesDataTable({
     }
   }, [browserState.isClient, loadStoredProxies]);
 
-  // Automatically deselect profiles that become running or updating
+  // Automatically deselect profiles that become running, updating, launching, or stopping
   React.useEffect(() => {
     setSelectedProfiles((prev) => {
       const newSet = new Set(prev);
@@ -185,9 +190,11 @@ export function ProfilesDataTable({
         if (profile) {
           const isRunning =
             browserState.isClient && runningProfiles.has(profile.name);
+          const isLaunching = launchingProfiles.has(profile.name);
+          const isStopping = stoppingProfiles.has(profile.name);
           const isBrowserUpdating = isUpdating(profile.browser);
 
-          if (isRunning || isBrowserUpdating) {
+          if (isRunning || isLaunching || isStopping || isBrowserUpdating) {
             newSet.delete(profileName);
             hasChanges = true;
           }
@@ -204,6 +211,8 @@ export function ProfilesDataTable({
   }, [
     filteredData,
     runningProfiles,
+    launchingProfiles,
+    stoppingProfiles,
     isUpdating,
     browserState.isClient,
     onSelectedProfilesChange,
@@ -336,8 +345,15 @@ export function ProfilesDataTable({
               .filter((profile) => {
                 const isRunning =
                   browserState.isClient && runningProfiles.has(profile.name);
+                const isLaunching = launchingProfiles.has(profile.name);
+                const isStopping = stoppingProfiles.has(profile.name);
                 const isBrowserUpdating = isUpdating(profile.browser);
-                return !isRunning && !isBrowserUpdating;
+                return (
+                  !isRunning &&
+                  !isLaunching &&
+                  !isStopping &&
+                  !isBrowserUpdating
+                );
               })
               .map((profile) => profile.name),
           )
@@ -356,6 +372,8 @@ export function ProfilesDataTable({
       onSelectedProfilesChange,
       browserState.isClient,
       runningProfiles,
+      launchingProfiles,
+      stoppingProfiles,
       isUpdating,
     ],
   );
@@ -368,8 +386,12 @@ export function ProfilesDataTable({
           const selectableProfiles = filteredData.filter((profile) => {
             const isRunning =
               browserState.isClient && runningProfiles.has(profile.name);
+            const isLaunching = launchingProfiles.has(profile.name);
+            const isStopping = stoppingProfiles.has(profile.name);
             const isBrowserUpdating = isUpdating(profile.browser);
-            return !isRunning && !isBrowserUpdating;
+            return (
+              !isRunning && !isLaunching && !isStopping && !isBrowserUpdating
+            );
           });
 
           return (
@@ -393,14 +415,21 @@ export function ProfilesDataTable({
           const isSelected = selectedProfiles.has(profile.name);
           const isRunning =
             browserState.isClient && runningProfiles.has(profile.name);
+          const isLaunching = launchingProfiles.has(profile.name);
+          const isStopping = stoppingProfiles.has(profile.name);
           const isBrowserUpdating = isUpdating(browser);
-          const isDisabled = isRunning || isBrowserUpdating;
+          const isDisabled =
+            isRunning || isLaunching || isStopping || isBrowserUpdating;
 
           // Show tooltip for disabled profiles
           if (isDisabled) {
             const tooltipMessage = isRunning
               ? "Can't modify running profile"
-              : "Can't modify profile while browser is updating";
+              : isLaunching
+                ? "Can't modify profile while launching"
+                : isStopping
+                  ? "Can't modify profile while stopping"
+                  : "Can't modify profile while browser is updating";
 
             return (
               <Tooltip>
@@ -462,6 +491,7 @@ export function ProfilesDataTable({
           const isRunning =
             browserState.isClient && runningProfiles.has(profile.name);
           const isLaunching = launchingProfiles.has(profile.name);
+          const isStopping = stoppingProfiles.has(profile.name);
           const canLaunch = browserState.canLaunchProfile(profile);
           const tooltipContent = browserState.getLaunchTooltipContent(profile);
 
@@ -470,7 +500,24 @@ export function ProfilesDataTable({
               console.log(
                 `Stopping ${profile.browser} profile: ${profile.name}`,
               );
-              await onKillProfile(profile);
+              setStoppingProfiles((prev) => new Set(prev).add(profile.name));
+              try {
+                await onKillProfile(profile);
+                console.log(
+                  `Successfully stopped ${profile.browser} profile: ${profile.name}`,
+                );
+              } catch (error) {
+                console.error(
+                  `Failed to stop ${profile.browser} profile: ${profile.name}`,
+                  error,
+                );
+              } finally {
+                setStoppingProfiles((prev) => {
+                  const next = new Set(prev);
+                  next.delete(profile.name);
+                  return next;
+                });
+              }
             } else {
               console.log(
                 `Launching ${profile.browser} profile: ${profile.name}`,
@@ -504,14 +551,14 @@ export function ProfilesDataTable({
                     <Button
                       variant={isRunning ? "destructive" : "default"}
                       size="sm"
-                      disabled={!canLaunch || isLaunching}
+                      disabled={!canLaunch || isLaunching || isStopping}
                       className={cn(
                         "cursor-pointer min-w-[70px]",
                         !canLaunch && "opacity-50",
                       )}
                       onClick={() => void handleLaunchClick()}
                     >
-                      {isLaunching ? (
+                      {isLaunching || isStopping ? (
                         <div className="flex gap-1 items-center">
                           <div className="w-3 h-3 rounded-full border border-current animate-spin border-t-transparent" />
                         </div>
@@ -808,7 +855,8 @@ export function ProfilesDataTable({
       onChangeVersion,
       onAssignProfilesToGroup,
       isUpdating,
-      launchingProfiles.has,
+      launchingProfiles,
+      stoppingProfiles,
       filteredData,
       browserState.isClient,
     ],

@@ -51,9 +51,21 @@ export function ProfileSelectorDialog({
   const [isLoading, setIsLoading] = useState(false);
   const [isLaunching, setIsLaunching] = useState(false);
   const [storedProxies, setStoredProxies] = useState<StoredProxy[]>([]);
+  const [launchingProfiles, setLaunchingProfiles] = useState<Set<string>>(
+    new Set(),
+  );
+  const [stoppingProfiles, _setStoppingProfiles] = useState<Set<string>>(
+    new Set(),
+  );
 
   // Use shared browser state hook
-  const browserState = useBrowserState(profiles, runningProfiles, isUpdating);
+  const browserState = useBrowserState(
+    profiles,
+    runningProfiles,
+    isUpdating,
+    launchingProfiles,
+    stoppingProfiles,
+  );
 
   // Helper function to check if a profile has a proxy
   const hasProxy = useCallback(
@@ -116,6 +128,7 @@ export function ProfileSelectorDialog({
     if (!selectedProfile || !url) return;
 
     setIsLaunching(true);
+    setLaunchingProfiles((prev) => new Set(prev).add(selectedProfile));
     try {
       await invoke("open_url_with_profile", {
         profileName: selectedProfile,
@@ -126,6 +139,11 @@ export function ProfileSelectorDialog({
       console.error("Failed to open URL with profile:", error);
     } finally {
       setIsLaunching(false);
+      setLaunchingProfiles((prev) => {
+        const next = new Set(prev);
+        next.delete(selectedProfile);
+        return next;
+      });
     }
   }, [selectedProfile, url, onClose]);
 
@@ -221,6 +239,8 @@ export function ProfileSelectorDialog({
                 <SelectContent>
                   {profiles.map((profile) => {
                     const isRunning = runningProfiles.has(profile.name);
+                    const isLaunching = launchingProfiles.has(profile.name);
+                    const isStopping = stoppingProfiles.has(profile.name);
                     const canUseForLinks =
                       browserState.canUseProfileForLinks(profile);
                     const tooltipContent = getProfileTooltipContent(profile);
@@ -267,6 +287,16 @@ export function ProfileSelectorDialog({
                                 {isRunning && (
                                   <Badge variant="default" className="text-xs">
                                     Running
+                                  </Badge>
+                                )}
+                                {isLaunching && (
+                                  <Badge variant="outline" className="text-xs">
+                                    Launching
+                                  </Badge>
+                                )}
+                                {isStopping && (
+                                  <Badge variant="outline" className="text-xs">
+                                    Stopping
                                   </Badge>
                                 )}
                                 {!canUseForLinks && (
