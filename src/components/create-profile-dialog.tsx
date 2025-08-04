@@ -532,6 +532,7 @@ export function CreateProfileDialog({
                   <SharedCamoufoxConfigForm
                     config={camoufoxConfig}
                     onConfigChange={updateCamoufoxConfig}
+                    isCreating
                   />
                 </div>
               </TabsContent>

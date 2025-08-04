@@ -168,12 +168,14 @@ interface SharedCamoufoxConfigFormProps {
   config: CamoufoxConfig;
   onConfigChange: (key: keyof CamoufoxConfig, value: unknown) => void;
   className?: string;
+  isCreating?: boolean; // Flag to indicate if this is for creating a new profile
 }
 
 export function SharedCamoufoxConfigForm({
   config,
   onConfigChange,
   className = "",
+  isCreating = false,
 }: SharedCamoufoxConfigFormProps) {
   const [systemLocale, setSystemLocale] = useState<SystemLocale | null>(null);
   const [systemTimezone, setSystemTimezone] = useState<SystemTimezone | null>(
@@ -208,8 +210,30 @@ export function SharedCamoufoxConfigForm({
       }
     };
 
+    // Set screen resolution to user's screen size when creating a new profile
+    const setScreenDefaults = () => {
+      if (isCreating && typeof window !== "undefined") {
+        const screenWidth = window.screen.width;
+        const screenHeight = window.screen.height;
+
+        // Only set if not already configured
+        if (!config.screen_max_width) {
+          onConfigChange("screen_max_width", screenWidth);
+        }
+        if (!config.screen_max_height) {
+          onConfigChange("screen_max_height", screenHeight);
+        }
+      }
+    };
+
     loadSystemDefaults();
-  }, []);
+    setScreenDefaults();
+  }, [
+    isCreating,
+    config.screen_max_width,
+    config.screen_max_height,
+    onConfigChange,
+  ]);
 
   // Determine if automatic location configuration is enabled
   // Default to true if geoip is not explicitly set to false
@@ -414,7 +438,9 @@ export function SharedCamoufoxConfigForm({
 
       {/* Screen Resolution */}
       <div className="space-y-3">
-        <Label>Screen Resolution</Label>
+        <div className="flex items-center justify-between">
+          <Label>Screen Resolution</Label>
+        </div>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="screen-min-width">Min Width</Label>
