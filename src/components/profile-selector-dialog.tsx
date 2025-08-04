@@ -27,7 +27,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useBrowserState } from "@/hooks/use-browser-support";
+import { useBrowserState } from "@/hooks/use-browser-state";
 import { getBrowserDisplayName, getBrowserIcon } from "@/lib/browser-utils";
 import type { BrowserProfile, StoredProxy } from "@/types";
 

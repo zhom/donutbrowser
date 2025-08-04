@@ -45,7 +45,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useBrowserState } from "@/hooks/use-browser-support";
+import { useBrowserState } from "@/hooks/use-browser-state";
 import { useTableSorting } from "@/hooks/use-table-sorting";
 import {
   getBrowserDisplayName,
