@@ -347,6 +347,11 @@ export function CreateProfileDialog({
     return bestVersion && isVersionDownloaded(bestVersion.version);
   };
 
+  // Check if browser is currently downloading
+  const isBrowserCurrentlyDownloading = (browserStr: string) => {
+    return isBrowserDownloading(browserStr);
+  };
+
   // Get the selected OS for warning
   const selectedOS = camoufoxConfig.os?.[0];
   const currentOS = getCurrentOS();
@@ -428,22 +433,38 @@ export function CreateProfileDialog({
                             </p>
                             <LoadingButton
                               onClick={() => handleDownload(selectedBrowser)}
-                              isLoading={isBrowserDownloading(selectedBrowser)}
+                              isLoading={isBrowserCurrentlyDownloading(
+                                selectedBrowser,
+                              )}
                               size="sm"
-                              disabled={isBrowserDownloading(selectedBrowser)}
+                              disabled={isBrowserCurrentlyDownloading(
+                                selectedBrowser,
+                              )}
                             >
                               Download
                             </LoadingButton>
                           </div>
                         )}
-                      {isBrowserVersionAvailable(selectedBrowser) && (
-                        <div className="text-sm text-green-600">
+                      {!isBrowserCurrentlyDownloading(selectedBrowser) &&
+                        isBrowserVersionAvailable(selectedBrowser) && (
+                          <div className="text-sm text-green-600">
+                            {(() => {
+                              const bestVersion = getBestAvailableVersion(
+                                availableReleaseTypes,
+                                selectedBrowser,
+                              );
+                              return `✓ ${bestVersion?.releaseType === "stable" ? "Latest stable" : "Latest nightly"} version (${bestVersion?.version}) is available`;
+                            })()}
+                          </div>
+                        )}
+                      {isBrowserCurrentlyDownloading(selectedBrowser) && (
+                        <div className="text-sm text-blue-600">
                           {(() => {
                             const bestVersion = getBestAvailableVersion(
                               availableReleaseTypes,
                               selectedBrowser,
                             );
-                            return `✓ ${bestVersion?.releaseType === "stable" ? "Latest stable" : "Latest nightly"} version (${bestVersion?.version}) is available`;
+                            return `Downloading ${bestVersion?.releaseType === "stable" ? "stable" : "nightly"} version (${bestVersion?.version})...`;
                           })()}
                         </div>
                       )}
@@ -472,22 +493,36 @@ export function CreateProfileDialog({
                         </p>
                         <LoadingButton
                           onClick={() => handleDownload("camoufox")}
-                          isLoading={isBrowserDownloading("camoufox")}
+                          isLoading={isBrowserCurrentlyDownloading("camoufox")}
                           size="sm"
-                          disabled={isBrowserDownloading("camoufox")}
+                          disabled={isBrowserCurrentlyDownloading("camoufox")}
                         >
-                          Download
+                          {isBrowserCurrentlyDownloading("camoufox")
+                            ? "Downloading..."
+                            : "Download"}
                         </LoadingButton>
                       </div>
                     )}
-                  {isBrowserVersionAvailable("camoufox") && (
-                    <div className="p-3 text-sm text-green-600 bg-green-50 rounded-md border border-green-200">
+                  {!isBrowserCurrentlyDownloading("camoufox") &&
+                    isBrowserVersionAvailable("camoufox") && (
+                      <div className="p-3 text-sm text-green-600 bg-green-50 rounded-md border border-green-200">
+                        {(() => {
+                          const bestVersion = getBestAvailableVersion(
+                            camoufoxReleaseTypes,
+                            "camoufox",
+                          );
+                          return `✓ Camoufox ${bestVersion?.releaseType} version (${bestVersion?.version}) is available`;
+                        })()}
+                      </div>
+                    )}
+                  {isBrowserCurrentlyDownloading("camoufox") && (
+                    <div className="p-3 text-sm text-blue-600 bg-blue-50 rounded-md border border-blue-200">
                       {(() => {
                         const bestVersion = getBestAvailableVersion(
                           camoufoxReleaseTypes,
                           "camoufox",
                         );
-                        return `✓ Camoufox ${bestVersion?.releaseType} version (${bestVersion?.version}) is available`;
+                        return `Downloading Camoufox ${bestVersion?.releaseType} version (${bestVersion?.version})...`;
                       })()}
                     </div>
                   )}

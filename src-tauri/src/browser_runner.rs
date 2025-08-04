@@ -185,7 +185,7 @@ impl BrowserRunner {
 
         // Set proxy in camoufox config
         camoufox_config.proxy = Some(proxy_url);
-        
+
         // Ensure geoip is always enabled for proper geolocation spoofing
         if camoufox_config.geoip.is_none() {
           camoufox_config.geoip = Some(serde_json::Value::Bool(true));

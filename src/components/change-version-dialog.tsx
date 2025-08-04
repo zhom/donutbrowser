@@ -44,7 +44,7 @@ export function ChangeVersionDialog({
 
   const {
     downloadedVersions,
-    isDownloading,
+    isBrowserDownloading,
     loadDownloadedVersions,
     downloadBrowser,
     isVersionDownloaded,
@@ -207,7 +207,7 @@ export function ChangeVersionDialog({
                       onReleaseTypeSelect={setSelectedReleaseType}
                       availableReleaseTypes={releaseTypes}
                       browser={profile.browser}
-                      isDownloading={isDownloading}
+                      isDownloading={isBrowserDownloading(profile.browser)}
                       onDownload={() => {
                         void handleDownload();
                       }}
@@ -247,7 +247,7 @@ export function ChangeVersionDialog({
                     onReleaseTypeSelect={setSelectedReleaseType}
                     availableReleaseTypes={releaseTypes}
                     browser={profile.browser}
-                    isDownloading={isDownloading}
+                    isDownloading={isBrowserDownloading(profile.browser)}
                     onDownload={() => {
                       void handleDownload();
                     }}
