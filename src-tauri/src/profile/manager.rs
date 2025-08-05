@@ -785,22 +785,26 @@ impl ProfileManager {
 
   fn get_common_firefox_preferences(&self) -> Vec<String> {
     vec![
-      // Disable default browser check
+      // Disable default browser updates
       "user_pref(\"browser.shell.checkDefaultBrowser\", false);".to_string(),
+      "user_pref(\"browser.shell.skipDefaultBrowserCheckOnFirstRun\", true);".to_string(),
+      "user_pref(\"browser.preferences.moreFromMozilla\", false);".to_string(),
+      "user_pref(\"services.sync.prefs.sync.browser.startup.upgradeDialog.enabled\", false);"
+        .to_string(),
       "user_pref(\"app.update.enabled\", false);".to_string(),
+      "user_pref(\"app.update.staging.enabled\", false);".to_string(),
+      "user_pref(\"app.update.timerFirstInterval\", -1);".to_string(),
+      "user_pref(\"app.update.download.maxAttempts\", 0);".to_string(),
+      "user_pref(\"app.update.elevate.maxAttempts\", 0);".to_string(),
+      "user_pref(\"app.update.disabledForTesting\", true);".to_string(),
       "user_pref(\"app.update.auto\", false);".to_string(),
-      "user_pref(\"app.update.mode\", 2);".to_string(),
-      "user_pref(\"app.update.promptWaitTime\", 0);".to_string(),
+      "user_pref(\"app.update.mode\", 0);".to_string(),
+      "user_pref(\"app.update.promptWaitTime\", -1);".to_string(),
       "user_pref(\"app.update.service.enabled\", false);".to_string(),
       "user_pref(\"app.update.silent\", true);".to_string(),
       "user_pref(\"app.update.checkInstallTime\", false);".to_string(),
-      "user_pref(\"app.update.url\", \"\");".to_string(),
-      "user_pref(\"app.update.url.manual\", \"\");".to_string(),
-      "user_pref(\"app.update.url.details\", \"\");".to_string(),
-      "user_pref(\"app.update.url.override\", \"\");".to_string(),
-      "user_pref(\"app.update.interval\", 9999999999);".to_string(),
-      "user_pref(\"app.update.background.interval\", 9999999999);".to_string(),
-      "user_pref(\"app.update.download.attemptOnce\", false);".to_string(),
+      "user_pref(\"app.update.interval\", -1);".to_string(),
+      "user_pref(\"app.update.background.interval\", -1);".to_string(),
       "user_pref(\"app.update.idletime\", -1);".to_string(),
     ]
   }
