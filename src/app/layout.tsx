@@ -28,7 +28,7 @@ export default function RootLayout({
       >
         <CustomThemeProvider>
           <TooltipProvider>{children}</TooltipProvider>
-          <Toaster />
+          <Toaster className="pointer-events-none" />
           <WindowDragArea />
         </CustomThemeProvider>
       </body>
