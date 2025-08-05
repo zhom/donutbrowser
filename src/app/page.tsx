@@ -202,17 +202,6 @@ export default function Home() {
       );
       setProfiles(profileList);
 
-      // TODO: remove after a few version bumps, needed to properly display migrated profiles
-      setTimeout(async () => {
-        for (let i = 0; i < 10; i++) {
-          const profiles = await invoke<BrowserProfile[]>(
-            "list_browser_profiles",
-          );
-          setProfiles(profiles);
-        }
-        await sleep(500);
-      }, 0);
-
       // Check for updates after loading profiles
       await checkForUpdates();
       await checkMissingBinaries();

@@ -220,26 +220,6 @@ pub fn run() {
         }
       }
 
-      // Migrate profiles to UUID format if needed (async)
-      println!("Checking for profile migration...");
-      let browser_runner = browser_runner::BrowserRunner::instance();
-      tauri::async_runtime::spawn(async move {
-        match browser_runner.migrate_profiles_to_uuid().await {
-          Ok(migrated) => {
-            if !migrated.is_empty() {
-              println!(
-                "Successfully migrated {} profiles: {:?}",
-                migrated.len(),
-                migrated
-              );
-            }
-          }
-          Err(e) => {
-            eprintln!("Warning: Failed to migrate profiles: {e}");
-          }
-        }
-      });
-
       // Set up deep link handler
       let handle = app.handle().clone();
 

@@ -38,12 +38,6 @@ impl BrowserRunner {
     &BROWSER_RUNNER
   }
 
-  /// Migrate old profile structure to new UUID-based structure
-  pub async fn migrate_profiles_to_uuid(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    let profile_manager = ProfileManager::instance();
-    profile_manager.migrate_profiles_to_uuid().await
-  }
-
   // Helper function to check if a process matches TOR/Mullvad browser
   fn is_tor_or_mullvad_browser(
     &self,
