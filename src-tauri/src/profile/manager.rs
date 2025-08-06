@@ -100,6 +100,37 @@ impl ProfileManager {
         crate::camoufox::CamoufoxConfig::default()
       });
 
+      // Pass upstream proxy information to config for fingerprint generation
+      if let Some(proxy_id_ref) = &proxy_id {
+        if let Some(proxy_settings) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id_ref) {
+          // For fingerprint generation, pass upstream proxy directly with credentials if present
+          let proxy_url = if let (Some(username), Some(password)) = (&proxy_settings.username, &proxy_settings.password) {
+            format!(
+              "{}://{}:{}@{}:{}",
+              proxy_settings.proxy_type.to_lowercase(),
+              username,
+              password,
+              proxy_settings.host,
+              proxy_settings.port
+            )
+          } else {
+            format!(
+              "{}://{}:{}",
+              proxy_settings.proxy_type.to_lowercase(),
+              proxy_settings.host,
+              proxy_settings.port
+            )
+          };
+          config.proxy = Some(proxy_url);
+          println!(
+            "Using upstream proxy for Camoufox fingerprint generation: {}://{}:{}",
+            proxy_settings.proxy_type.to_lowercase(),
+            proxy_settings.host,
+            proxy_settings.port
+          );
+        }
+      }
+
       // Generate fingerprint if not already provided
       if config.fingerprint.is_none() {
         println!("Generating fingerprint for Camoufox profile: {name}");
@@ -115,13 +146,16 @@ impl ProfileManager {
             println!("Successfully generated fingerprint for profile: {name}");
           }
           Err(e) => {
-            println!("Warning: Failed to generate fingerprint for profile {name}: {e}");
-            // Continue with the profile creation even if fingerprint generation fails
+            return Err(format!("Failed to generate fingerprint for Camoufox profile '{name}': {e}").into());
           }
         }
       } else {
         println!("Using provided fingerprint for Camoufox profile: {name}");
       }
+
+      // Clear the proxy from config after fingerprint generation
+      // Browser launch should always use local proxy, never direct to upstream
+      config.proxy = None;
 
       Some(config)
     } else {
