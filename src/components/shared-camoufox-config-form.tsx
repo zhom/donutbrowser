@@ -174,8 +174,10 @@ export function SharedCamoufoxConfigForm({
       <Alert>
         <AlertDescription>
           ⚠️ Warning: Only edit these parameters if you know what you're doing.
-          Incorrect parameters may break websites, make them detect you, and
-          lead to hard-to-debug bugs.
+          Incorrect values may break websites, make them detect you, and lead to
+          hard-to-debug bugs.{" "}
+          {isCreating &&
+            "The app will attempt to generate sensible defaults for all parameters you don't set."}
         </AlertDescription>
       </Alert>
 
