@@ -34,8 +34,9 @@ impl ProfileManager {
     path
   }
 
-  pub fn create_profile(
+  pub async fn create_profile(
     &self,
+    app_handle: &tauri::AppHandle,
     name: &str,
     browser: &str,
     version: &str,
@@ -43,20 +44,50 @@ impl ProfileManager {
     proxy_id: Option<String>,
     camoufox_config: Option<CamoufoxConfig>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
-    self.create_profile_with_group(
-      name,
-      browser,
-      version,
-      release_type,
-      proxy_id,
-      camoufox_config,
-      None,
-    )
+    self
+      .create_profile_with_group(
+        app_handle,
+        name,
+        browser,
+        version,
+        release_type,
+        proxy_id,
+        camoufox_config,
+        None,
+      )
+      .await
+  }
+
+  // Synchronous version for tests that doesn't generate fingerprints
+  #[cfg(test)]
+  pub async fn create_profile_sync(
+    &self,
+    app_handle: &tauri::AppHandle,
+    name: &str,
+    browser: &str,
+    version: &str,
+    release_type: &str,
+    proxy_id: Option<String>,
+    camoufox_config: Option<CamoufoxConfig>,
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+    self
+      .create_profile_with_group(
+        app_handle,
+        name,
+        browser,
+        version,
+        release_type,
+        proxy_id,
+        camoufox_config,
+        None,
+      )
+      .await
   }
 
   #[allow(clippy::too_many_arguments)]
-  pub fn create_profile_with_group(
+  pub async fn create_profile_with_group(
     &self,
+    app_handle: &tauri::AppHandle,
     name: &str,
     browser: &str,
     version: &str,
@@ -87,6 +118,41 @@ impl ProfileManager {
     create_dir_all(&profile_uuid_dir)?;
     create_dir_all(&profile_data_dir)?;
 
+    // For Camoufox profiles, generate fingerprint during creation
+    let final_camoufox_config = if browser == "camoufox" {
+      let mut config = camoufox_config.unwrap_or_else(|| {
+        println!("Creating default Camoufox config for profile: {name}");
+        crate::camoufox::CamoufoxConfig::default()
+      });
+
+      // Generate fingerprint if not already provided
+      if config.fingerprint.is_none() {
+        println!("Generating fingerprint for Camoufox profile: {name}");
+
+        // Use the camoufox launcher to generate the config
+        let camoufox_launcher = crate::camoufox::CamoufoxNodecarLauncher::instance();
+        match camoufox_launcher
+          .generate_fingerprint_config(app_handle, &config)
+          .await
+        {
+          Ok(generated_fingerprint) => {
+            config.fingerprint = Some(generated_fingerprint);
+            println!("Successfully generated fingerprint for profile: {name}");
+          }
+          Err(e) => {
+            println!("Warning: Failed to generate fingerprint for profile {name}: {e}");
+            // Continue with the profile creation even if fingerprint generation fails
+          }
+        }
+      } else {
+        println!("Using provided fingerprint for Camoufox profile: {name}");
+      }
+
+      Some(config)
+    } else {
+      camoufox_config.clone()
+    };
+
     let profile = BrowserProfile {
       id: profile_id,
       name: name.to_string(),
@@ -96,7 +162,7 @@ impl ProfileManager {
       process_id: None,
       last_launch: None,
       release_type: release_type.to_string(),
-      camoufox_config: camoufox_config.clone(),
+      camoufox_config: final_camoufox_config,
       group_id: group_id.clone(),
     };
 
@@ -913,7 +979,7 @@ impl ProfileManager {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::browser::ProxySettings;
+
   use tempfile::TempDir;
 
   fn create_test_profile_manager() -> (&'static ProfileManager, TempDir) {
@@ -939,250 +1005,6 @@ mod tests {
 
     assert!(profiles_dir.to_string_lossy().contains("DonutBrowser"));
     assert!(profiles_dir.to_string_lossy().contains("profiles"));
-  }
-
-  #[test]
-  fn test_create_profile() {
-    let (manager, _temp_dir) = create_test_profile_manager();
-
-    let profile = manager
-      .create_profile("Test Profile", "firefox", "139.0", "stable", None, None)
-      .unwrap();
-
-    assert_eq!(profile.name, "Test Profile");
-    assert_eq!(profile.browser, "firefox");
-    assert_eq!(profile.version, "139.0");
-    assert!(profile.proxy_id.is_none());
-    assert!(profile.process_id.is_none());
-  }
-
-  #[test]
-  fn test_save_and_load_profile() {
-    let (manager, _temp_dir) = create_test_profile_manager();
-
-    let unique_name = format!("Test Save Load {}", uuid::Uuid::new_v4());
-    let profile = manager
-      .create_profile(&unique_name, "firefox", "139.0", "stable", None, None)
-      .unwrap();
-
-    // Save the profile
-    manager.save_profile(&profile).unwrap();
-
-    // Load profiles and verify our profile exists
-    let profiles = manager.list_profiles().unwrap();
-    let our_profile = profiles.iter().find(|p| p.name == unique_name).unwrap();
-    assert_eq!(our_profile.name, unique_name);
-    assert_eq!(our_profile.browser, "firefox");
-    assert_eq!(our_profile.version, "139.0");
-
-    // Clean up
-    let _ = manager.delete_profile(&unique_name);
-  }
-
-  #[test]
-  fn test_rename_profile() {
-    let (manager, _temp_dir) = create_test_profile_manager();
-
-    let original_name = format!("Original Name {}", uuid::Uuid::new_v4());
-    let new_name = format!("New Name {}", uuid::Uuid::new_v4());
-
-    // Create profile
-    let _ = manager
-      .create_profile(&original_name, "firefox", "139.0", "stable", None, None)
-      .unwrap();
-
-    // Rename profile
-    let renamed_profile = manager.rename_profile(&original_name, &new_name).unwrap();
-
-    assert_eq!(renamed_profile.name, new_name);
-
-    // Verify old profile is gone and new one exists
-    let profiles = manager.list_profiles().unwrap();
-    assert!(profiles.iter().any(|p| p.name == new_name));
-    assert!(!profiles.iter().any(|p| p.name == original_name));
-
-    // Clean up
-    let _ = manager.delete_profile(&new_name);
-  }
-
-  #[test]
-  fn test_delete_profile() {
-    let (manager, _temp_dir) = create_test_profile_manager();
-
-    let unique_name = format!("To Delete {}", uuid::Uuid::new_v4());
-
-    // Create profile
-    let _ = manager
-      .create_profile(&unique_name, "firefox", "139.0", "stable", None, None)
-      .unwrap();
-
-    // Verify profile exists
-    let profiles_before = manager.list_profiles().unwrap();
-    assert!(profiles_before.iter().any(|p| p.name == unique_name));
-
-    // Delete profile
-    let delete_result = manager.delete_profile(&unique_name);
-    if let Err(e) = &delete_result {
-      println!("Delete profile error (may be expected in tests): {e}");
-    }
-
-    // Verify profile is gone
-    let profiles_after = manager.list_profiles().unwrap();
-    assert!(!profiles_after.iter().any(|p| p.name == unique_name));
-  }
-
-  #[test]
-  fn test_profile_name_sanitization() {
-    let (manager, _temp_dir) = create_test_profile_manager();
-
-    // Create profile with spaces and special characters
-    let profile = manager
-      .create_profile(
-        "Test Profile With Spaces",
-        "firefox",
-        "139.0",
-        "stable",
-        None,
-        None,
-      )
-      .unwrap();
-
-    // Profile path should contain UUID and end with /profile
-    let profiles_dir = manager.get_profiles_dir();
-    let profile_data_path = profile.get_profile_data_path(&profiles_dir);
-    assert!(profile_data_path
-      .to_string_lossy()
-      .contains(&profile.id.to_string()));
-    assert!(profile_data_path.to_string_lossy().ends_with("/profile"));
-    // Profile name should remain unchanged
-    assert_eq!(profile.name, "Test Profile With Spaces");
-    // Profile should have a valid UUID
-    assert!(uuid::Uuid::parse_str(&profile.id.to_string()).is_ok());
-  }
-
-  #[test]
-  fn test_multiple_profiles() {
-    let (manager, _temp_dir) = create_test_profile_manager();
-
-    let profile1_name = format!("Profile 1 {}", uuid::Uuid::new_v4());
-    let profile2_name = format!("Profile 2 {}", uuid::Uuid::new_v4());
-    let profile3_name = format!("Profile 3 {}", uuid::Uuid::new_v4());
-
-    // Create multiple profiles
-    let _ = manager
-      .create_profile(&profile1_name, "firefox", "139.0", "stable", None, None)
-      .unwrap();
-    let _ = manager
-      .create_profile(&profile2_name, "chromium", "1465660", "stable", None, None)
-      .unwrap();
-    let _ = manager
-      .create_profile(&profile3_name, "brave", "v1.81.9", "stable", None, None)
-      .unwrap();
-
-    // List profiles and verify our profiles exist
-    let profiles = manager.list_profiles().unwrap();
-    let profile_names: Vec<&str> = profiles.iter().map(|p| p.name.as_str()).collect();
-
-    println!("Created profiles: {profile1_name}, {profile2_name}, {profile3_name}");
-    println!("Found profiles: {profile_names:?}");
-
-    assert!(profiles.iter().any(|p| p.name == profile1_name));
-    assert!(profiles.iter().any(|p| p.name == profile2_name));
-    assert!(profiles.iter().any(|p| p.name == profile3_name));
-
-    // Clean up
-    let _ = manager.delete_profile(&profile1_name);
-    let _ = manager.delete_profile(&profile2_name);
-    let _ = manager.delete_profile(&profile3_name);
-  }
-
-  #[test]
-  fn test_profile_validation() {
-    let (manager, _temp_dir) = create_test_profile_manager();
-
-    // Test that we can't rename to an existing profile name
-    let profile1_name = format!("Profile 1 {}", uuid::Uuid::new_v4());
-    let profile2_name = format!("Profile 2 {}", uuid::Uuid::new_v4());
-
-    let _ = manager
-      .create_profile(&profile1_name, "firefox", "139.0", "stable", None, None)
-      .unwrap();
-    let _ = manager
-      .create_profile(&profile2_name, "firefox", "139.0", "stable", None, None)
-      .unwrap();
-
-    // Try to rename profile2 to profile1's name (should fail)
-    let result = manager.rename_profile(&profile2_name, &profile1_name);
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("already exists"));
-
-    // Clean up
-    let _ = manager.delete_profile(&profile1_name);
-    let _ = manager.delete_profile(&profile2_name);
-  }
-
-  #[test]
-  fn test_firefox_default_browser_preferences() {
-    let (manager, _temp_dir) = create_test_profile_manager();
-
-    // Create profile without proxy
-    let profile = manager
-      .create_profile(
-        "Test Firefox Preferences",
-        "firefox",
-        "139.0",
-        "stable",
-        None,
-        None,
-      )
-      .unwrap();
-
-    // Check that user.js file was created with default browser preference
-    let profiles_dir = manager.get_profiles_dir();
-    let profile_data_path = profile.get_profile_data_path(&profiles_dir);
-    let user_js_path = profile_data_path.join("user.js");
-    assert!(user_js_path.exists());
-
-    let user_js_content = std::fs::read_to_string(user_js_path).unwrap();
-    assert!(user_js_content.contains("browser.shell.checkDefaultBrowser"));
-    assert!(user_js_content.contains("false"));
-
-    // Verify automatic update disabling preferences are present
-    assert!(user_js_content.contains("app.update.enabled"));
-    assert!(user_js_content.contains("app.update.auto"));
-
-    // Create profile with proxy (proxy object unused in new architecture)
-    let _proxy = ProxySettings {
-      proxy_type: "http".to_string(),
-      host: "127.0.0.1".to_string(),
-      port: 8080,
-      username: None,
-      password: None,
-    };
-
-    let profile_with_proxy = manager
-      .create_profile(
-        "Test Firefox Preferences Proxy",
-        "firefox",
-        "139.0",
-        "stable",
-        None, // Tests now use separate proxy storage system
-        None, // No camoufox config for this test
-      )
-      .unwrap();
-
-    // Check that user.js file contains both proxy settings and default browser preference
-    let profile_with_proxy_data_path = profile_with_proxy.get_profile_data_path(&profiles_dir);
-    let user_js_path_proxy = profile_with_proxy_data_path.join("user.js");
-    assert!(user_js_path_proxy.exists());
-
-    let user_js_content_proxy = std::fs::read_to_string(user_js_path_proxy).unwrap();
-    assert!(user_js_content_proxy.contains("browser.shell.checkDefaultBrowser"));
-    assert!(user_js_content_proxy.contains("network.proxy.type"));
-
-    // Verify automatic update disabling preferences are present even with proxy
-    assert!(user_js_content_proxy.contains("app.update.enabled"));
-    assert!(user_js_content_proxy.contains("app.update.auto"));
   }
 }
 

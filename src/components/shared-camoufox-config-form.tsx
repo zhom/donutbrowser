@@ -1,7 +1,8 @@
 "use client";
 
-import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
+import MultipleSelector, { type Option } from "@/components/multiple-selector";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,13 +13,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { CamoufoxConfig } from "@/types";
-
-// const osOptions = [
-//   { value: "windows", label: "Windows" },
-//   { value: "macos", label: "macOS" },
-//   { value: "linux", label: "Linux" },
-// ];
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import type { CamoufoxConfig, CamoufoxFingerprintConfig } from "@/types";
 
 const timezoneOptions = [
   { value: "America/New_York", label: "America/New_York" },
@@ -85,90 +82,58 @@ const timezoneOptions = [
   { value: "America/Mexico_City", label: "America/Mexico_City" },
 ];
 
-const localeOptions = [
-  { value: "en-US", label: "English (US)" },
-  { value: "en-GB", label: "English (UK)" },
-  { value: "en-CA", label: "English (Canada)" },
-  { value: "en-AU", label: "English (Australia)" },
-  { value: "fr-FR", label: "French (France)" },
-  { value: "fr-CA", label: "French (Canada)" },
-  { value: "de-DE", label: "German (Germany)" },
-  { value: "de-AT", label: "German (Austria)" },
-  { value: "de-CH", label: "German (Switzerland)" },
-  { value: "es-ES", label: "Spanish (Spain)" },
-  { value: "es-MX", label: "Spanish (Mexico)" },
-  { value: "es-AR", label: "Spanish (Argentina)" },
-  { value: "it-IT", label: "Italian (Italy)" },
-  { value: "it-CH", label: "Italian (Switzerland)" },
-  { value: "pt-BR", label: "Portuguese (Brazil)" },
-  { value: "pt-PT", label: "Portuguese (Portugal)" },
-  { value: "ru-RU", label: "Russian (Russia)" },
-  { value: "zh-CN", label: "Chinese (Simplified)" },
-  { value: "zh-TW", label: "Chinese (Traditional)" },
-  { value: "ja-JP", label: "Japanese (Japan)" },
-  { value: "ko-KR", label: "Korean (Korea)" },
-  { value: "ar-SA", label: "Arabic (Saudi Arabia)" },
-  { value: "ar-EG", label: "Arabic (Egypt)" },
-  { value: "hi-IN", label: "Hindi (India)" },
-  { value: "tr-TR", label: "Turkish (Turkey)" },
-  { value: "pl-PL", label: "Polish (Poland)" },
-  { value: "nl-NL", label: "Dutch (Netherlands)" },
-  { value: "nl-BE", label: "Dutch (Belgium)" },
-  { value: "sv-SE", label: "Swedish (Sweden)" },
-  { value: "da-DK", label: "Danish (Denmark)" },
-  { value: "no-NO", label: "Norwegian (Norway)" },
-  { value: "fi-FI", label: "Finnish (Finland)" },
-  { value: "he-IL", label: "Hebrew (Israel)" },
-  { value: "th-TH", label: "Thai (Thailand)" },
-  { value: "vi-VN", label: "Vietnamese (Vietnam)" },
-  { value: "id-ID", label: "Indonesian (Indonesia)" },
-  { value: "ms-MY", label: "Malay (Malaysia)" },
-  { value: "uk-UA", label: "Ukrainian (Ukraine)" },
-  { value: "cs-CZ", label: "Czech (Czech Republic)" },
-  { value: "sk-SK", label: "Slovak (Slovakia)" },
-  { value: "hu-HU", label: "Hungarian (Hungary)" },
-  { value: "ro-RO", label: "Romanian (Romania)" },
-  { value: "bg-BG", label: "Bulgarian (Bulgaria)" },
-  { value: "hr-HR", label: "Croatian (Croatia)" },
-  { value: "sr-RS", label: "Serbian (Serbia)" },
-  { value: "sl-SI", label: "Slovenian (Slovenia)" },
-  { value: "lt-LT", label: "Lithuanian (Lithuania)" },
-  { value: "lv-LV", label: "Latvian (Latvia)" },
-  { value: "et-EE", label: "Estonian (Estonia)" },
-  { value: "el-GR", label: "Greek (Greece)" },
-  { value: "ca-ES", label: "Catalan (Spain)" },
-  { value: "eu-ES", label: "Basque (Spain)" },
-  { value: "gl-ES", label: "Galician (Spain)" },
-  { value: "is-IS", label: "Icelandic (Iceland)" },
-  { value: "mt-MT", label: "Maltese (Malta)" },
-];
-
-// const getCurrentOS = () => {
-//   if (typeof window !== "undefined") {
-//     const userAgent = window.navigator.userAgent;
-//     if (userAgent.includes("Win")) return "windows";
-//     if (userAgent.includes("Mac")) return "macos";
-//     if (userAgent.includes("Linux")) return "linux";
-//   }
-//   return "unknown";
-// };
-
-interface SystemLocale {
-  locale: string;
-  language: string;
-  country: string;
-}
-
-interface SystemTimezone {
-  timezone: string;
-  offset: string;
-}
-
 interface SharedCamoufoxConfigFormProps {
   config: CamoufoxConfig;
   onConfigChange: (key: keyof CamoufoxConfig, value: unknown) => void;
   className?: string;
   isCreating?: boolean; // Flag to indicate if this is for creating a new profile
+  forceAdvanced?: boolean; // Force advanced mode (for editing)
+}
+
+// Component for editing nested objects like webGl:parameters
+interface ObjectEditorProps {
+  value: Record<string, unknown>;
+  onChange: (value: Record<string, unknown>) => void;
+  title: string;
+}
+
+function ObjectEditor({ value, onChange, title }: ObjectEditorProps) {
+  const [jsonString, setJsonString] = useState(
+    JSON.stringify(value || {}, null, 2),
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  // Update jsonString when value changes
+  useEffect(() => {
+    setJsonString(JSON.stringify(value || {}, null, 2));
+  }, [value]);
+
+  const handleChange = (newValue: string) => {
+    setJsonString(newValue);
+    try {
+      const parsed = JSON.parse(newValue);
+      setError(null);
+      onChange(parsed);
+    } catch (e) {
+      setError(
+        `Invalid JSON format: ${e instanceof Error ? e.message : "Unknown error"}`,
+      );
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label>{title}</Label>
+      <Textarea
+        value={jsonString}
+        onChange={(e) => handleChange(e.target.value)}
+        placeholder={`Enter ${title} as JSON`}
+        className="font-mono text-sm"
+        rows={6}
+      />
+      {error && <p className="text-sm text-red-600">{error}</p>}
+    </div>
+  );
 }
 
 export function SharedCamoufoxConfigForm({
@@ -176,58 +141,28 @@ export function SharedCamoufoxConfigForm({
   onConfigChange,
   className = "",
   isCreating = false,
+  forceAdvanced = false,
 }: SharedCamoufoxConfigFormProps) {
-  const [systemLocale, setSystemLocale] = useState<SystemLocale | null>(null);
-  const [systemTimezone, setSystemTimezone] = useState<SystemTimezone | null>(
-    null,
+  const [activeTab, setActiveTab] = useState(
+    forceAdvanced ? "advanced" : "normal",
   );
-  const [isLoadingSystemDefaults, setIsLoadingSystemDefaults] = useState(true);
+  const [fingerprintConfig, setFingerprintConfig] =
+    useState<CamoufoxFingerprintConfig>({});
 
-  // Load system defaults on component mount
+  // Set screen resolution to user's screen size when creating a new profile
   useEffect(() => {
-    const loadSystemDefaults = async () => {
-      try {
-        const [locale, timezone] = await Promise.all([
-          invoke<SystemLocale>("get_system_locale"),
-          invoke<SystemTimezone>("get_system_timezone"),
-        ]);
-        setSystemLocale(locale);
-        setSystemTimezone(timezone);
-      } catch (error) {
-        console.error("Failed to load system defaults:", error);
-        // Set fallback defaults
-        setSystemLocale({
-          locale: "en-US",
-          language: "en",
-          country: "US",
-        });
-        setSystemTimezone({
-          timezone: "America/New_York",
-          offset: "-05:00",
-        });
-      } finally {
-        setIsLoadingSystemDefaults(false);
+    if (isCreating && typeof window !== "undefined") {
+      const screenWidth = window.screen.width;
+      const screenHeight = window.screen.height;
+
+      // Only set if not already configured
+      if (!config.screen_max_width) {
+        onConfigChange("screen_max_width", screenWidth);
       }
-    };
-
-    // Set screen resolution to user's screen size when creating a new profile
-    const setScreenDefaults = () => {
-      if (isCreating && typeof window !== "undefined") {
-        const screenWidth = window.screen.width;
-        const screenHeight = window.screen.height;
-
-        // Only set if not already configured
-        if (!config.screen_max_width) {
-          onConfigChange("screen_max_width", screenWidth);
-        }
-        if (!config.screen_max_height) {
-          onConfigChange("screen_max_height", screenHeight);
-        }
+      if (!config.screen_max_height) {
+        onConfigChange("screen_max_height", screenHeight);
       }
-    };
-
-    loadSystemDefaults();
-    setScreenDefaults();
+    }
   }, [
     isCreating,
     config.screen_max_width,
@@ -235,306 +170,788 @@ export function SharedCamoufoxConfigForm({
     onConfigChange,
   ]);
 
+  // Parse fingerprint config when component mounts or config changes
+  useEffect(() => {
+    if (config.fingerprint) {
+      try {
+        const parsed = JSON.parse(
+          config.fingerprint,
+        ) as CamoufoxFingerprintConfig;
+        setFingerprintConfig(parsed);
+      } catch (error) {
+        console.error("Failed to parse fingerprint config:", error);
+        setFingerprintConfig({});
+      }
+    } else {
+      // Initialize with empty config if no fingerprint is set
+      setFingerprintConfig({});
+    }
+  }, [config.fingerprint]);
+
+  // Update fingerprint config and serialize it
+  const updateFingerprintConfig = (
+    key: keyof CamoufoxFingerprintConfig,
+    value: unknown,
+  ) => {
+    const newConfig = { ...fingerprintConfig };
+
+    // Remove undefined values to keep the config clean
+    if (
+      value === undefined ||
+      value === "" ||
+      (Array.isArray(value) && value.length === 0)
+    ) {
+      delete newConfig[key];
+    } else {
+      (newConfig as Record<string, unknown>)[key] = value;
+    }
+
+    setFingerprintConfig(newConfig);
+
+    // Validate that the config can be serialized to JSON
+    try {
+      const jsonString = JSON.stringify(newConfig);
+      onConfigChange("fingerprint", jsonString);
+    } catch (error) {
+      console.error("Failed to serialize fingerprint config:", error);
+      // Don't update if serialization fails
+    }
+  };
+
   // Determine if automatic location configuration is enabled
-  // Default to true if geoip is not explicitly set to false
   const isAutoLocationEnabled = config.geoip !== false;
 
   // Handle automatic location configuration toggle
   const handleAutoLocationToggle = (enabled: boolean) => {
     if (enabled) {
-      // Enable automatic configuration - set geoip to true and clear manual fields
       onConfigChange("geoip", true);
-      onConfigChange("country", undefined);
-      onConfigChange("timezone", undefined);
-      onConfigChange("latitude", undefined);
-      onConfigChange("longitude", undefined);
-      onConfigChange("locale", undefined);
     } else {
-      // Disable automatic configuration - set geoip to false
       onConfigChange("geoip", false);
     }
   };
 
-  // Get the selected OS for warning
-  // const selectedOS = config.os?.[0];
-  // const currentOS = getCurrentOS();
-  // const showOSWarning =
-  //   selectedOS && selectedOS !== currentOS && currentOS !== "unknown";
+  const renderAdvancedForm = () => (
+    <div className="space-y-6">
+      <Alert>
+        <AlertDescription>
+          ⚠️ Warning: Only edit these parameters if you know what you're doing.
+          Incorrect parameters may break websites, make them detect you, and
+          lead to hard-to-debug bugs.
+        </AlertDescription>
+      </Alert>
 
-  return (
-    <div className={`space-y-6 ${className}`}>
-      {/* OS Selection */}
-      {/*<div className="space-y-3">
-        <Label>Operating System</Label>
-        <Select
-          value={config.os?.[0] || getCurrentOS()}
-          onValueChange={(value) => onConfigChange("os", [value])}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Select OS" />
-          </SelectTrigger>
-          <SelectContent>
-            {osOptions.map((os) => (
-              <SelectItem key={os.value} value={os.value}>
-                {os.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {showOSWarning && (
-          <p className="text-sm text-yellow-600 dark:text-yellow-400">
-            ⚠️ Selected OS ({selectedOS}) differs from your current OS (
-            {currentOS}). This may affect fingerprinting effectiveness.
-          </p>
-        )}
-      </div>*/}
-
-      {/* Automatic Location Configuration */}
+      {/* Blocking Options */}
       <div className="space-y-3">
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="auto-location"
-            checked={isAutoLocationEnabled}
-            onCheckedChange={handleAutoLocationToggle}
-          />
-          <Label htmlFor="auto-location">
-            Automatically configure location information based on proxy
-            configuration or your connection if no proxy provided
-          </Label>
+        <Label>Blocking Options</Label>
+        <div className="space-y-2">
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="block-images"
+              checked={config.block_images || false}
+              onCheckedChange={(checked) =>
+                onConfigChange("block_images", checked)
+              }
+            />
+            <Label htmlFor="block-images">Block Images</Label>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="block-webrtc"
+              checked={config.block_webrtc || false}
+              onCheckedChange={(checked) =>
+                onConfigChange("block_webrtc", checked)
+              }
+            />
+            <Label htmlFor="block-webrtc">Block WebRTC</Label>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="block-webgl"
+              checked={config.block_webgl || false}
+              onCheckedChange={(checked) =>
+                onConfigChange("block_webgl", checked)
+              }
+            />
+            <Label htmlFor="block-webgl">Block WebGL</Label>
+          </div>
         </div>
       </div>
 
-      {/* Geolocation */}
-      {!isAutoLocationEnabled && (
-        <div className="space-y-3">
-          <Label>Geolocation</Label>
-          <div className="mb-4 p-3 bg-amber-50 rounded-md border border-amber-200">
-            <p className="text-sm text-amber-800">
-              ⚠️ Warning: Configuring variables yourself may not always work due
-              to underlying technology. It's recommended to use automatic
-              location configuration.
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="country">Country</Label>
-              <Input
-                id="country"
-                value={config.country || ""}
-                onChange={(e) =>
-                  onConfigChange("country", e.target.value || undefined)
-                }
-                placeholder={
-                  systemLocale
-                    ? `e.g., ${systemLocale.country}`
-                    : "e.g., US, GB, DE"
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Timezone</Label>
-              <Select
-                value={config.timezone || "auto"}
-                onValueChange={(value) =>
-                  onConfigChange(
-                    "timezone",
-                    value === "auto" ? undefined : value,
-                  )
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={
-                      isLoadingSystemDefaults ? "Loading..." : "Select timezone"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="auto">
-                    {isLoadingSystemDefaults
-                      ? "Auto (loading...)"
-                      : `Auto (${systemTimezone?.timezone || "UTC"})`}
-                  </SelectItem>
-                  {timezoneOptions.map((tz) => (
-                    <SelectItem key={tz.value} value={tz.value}>
-                      {tz.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="latitude">Latitude</Label>
-              <Input
-                id="latitude"
-                type="number"
-                step="any"
-                value={config.latitude || ""}
-                onChange={(e) =>
-                  onConfigChange(
-                    "latitude",
-                    e.target.value ? parseFloat(e.target.value) : undefined,
-                  )
-                }
-                placeholder="e.g., 40.7128"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="longitude">Longitude</Label>
-              <Input
-                id="longitude"
-                type="number"
-                step="any"
-                value={config.longitude || ""}
-                onChange={(e) =>
-                  onConfigChange(
-                    "longitude",
-                    e.target.value ? parseFloat(e.target.value) : undefined,
-                  )
-                }
-                placeholder="e.g., -74.0060"
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Localization */}
-      {!isAutoLocationEnabled && (
-        <div className="space-y-3">
-          <Label>Locale</Label>
-          <Select
-            value={config.locale?.[0] || ""}
-            onValueChange={(value) =>
-              onConfigChange("locale", value ? [value] : undefined)
-            }
-          >
-            <SelectTrigger>
-              <SelectValue
-                placeholder={
-                  isLoadingSystemDefaults
-                    ? "Loading..."
-                    : `Select locale (system: ${systemLocale?.locale || "unknown"})`
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {!isLoadingSystemDefaults && systemLocale && (
-                <SelectItem value={systemLocale.locale}>
-                  {systemLocale.locale} (System Default)
-                </SelectItem>
-              )}
-              {localeOptions.map((locale) => (
-                <SelectItem key={locale.value} value={locale.value}>
-                  {locale.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      {/* Screen Resolution */}
+      {/* Navigator Properties */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <Label>Screen Resolution</Label>
-        </div>
+        <Label>Navigator Properties</Label>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="screen-min-width">Min Width</Label>
+            <Label htmlFor="user-agent">User Agent</Label>
             <Input
-              id="screen-min-width"
-              type="number"
-              value={config.screen_min_width || ""}
+              id="user-agent"
+              value={fingerprintConfig["navigator.userAgent"] || ""}
               onChange={(e) =>
-                onConfigChange(
-                  "screen_min_width",
-                  e.target.value ? parseInt(e.target.value) : undefined,
+                updateFingerprintConfig(
+                  "navigator.userAgent",
+                  e.target.value || undefined,
                 )
               }
-              placeholder="e.g., 1024"
+              placeholder="Mozilla/5.0..."
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="screen-max-width">Max Width</Label>
+            <Label htmlFor="platform">Platform</Label>
             <Input
-              id="screen-max-width"
-              type="number"
-              value={config.screen_max_width || ""}
+              id="platform"
+              value={fingerprintConfig["navigator.platform"] || ""}
               onChange={(e) =>
-                onConfigChange(
-                  "screen_max_width",
+                updateFingerprintConfig(
+                  "navigator.platform",
+                  e.target.value || undefined,
+                )
+              }
+              placeholder="e.g., MacIntel, Win32"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="app-version">App Version</Label>
+            <Input
+              id="app-version"
+              value={fingerprintConfig["navigator.appVersion"] || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "navigator.appVersion",
+                  e.target.value || undefined,
+                )
+              }
+              placeholder="e.g., 5.0 (Macintosh)"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="oscpu">OS CPU</Label>
+            <Input
+              id="oscpu"
+              value={fingerprintConfig["navigator.oscpu"] || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "navigator.oscpu",
+                  e.target.value || undefined,
+                )
+              }
+              placeholder="e.g., Intel Mac OS X 10.15"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="hardware-concurrency">Hardware Concurrency</Label>
+            <Input
+              id="hardware-concurrency"
+              type="number"
+              value={fingerprintConfig["navigator.hardwareConcurrency"] || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "navigator.hardwareConcurrency",
+                  e.target.value ? parseInt(e.target.value) : undefined,
+                )
+              }
+              placeholder="e.g., 8"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="max-touch-points">Max Touch Points</Label>
+            <Input
+              id="max-touch-points"
+              type="number"
+              value={fingerprintConfig["navigator.maxTouchPoints"] || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "navigator.maxTouchPoints",
+                  e.target.value ? parseInt(e.target.value) : undefined,
+                )
+              }
+              placeholder="e.g., 0"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="do-not-track">Do Not Track</Label>
+            <Select
+              value={fingerprintConfig["navigator.doNotTrack"] || ""}
+              onValueChange={(value) =>
+                updateFingerprintConfig(
+                  "navigator.doNotTrack",
+                  value || undefined,
+                )
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select DNT value" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="0">0 (tracking allowed)</SelectItem>
+                <SelectItem value="1">1 (tracking not allowed)</SelectItem>
+                <SelectItem value="unspecified">unspecified</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="language">Language</Label>
+            <Input
+              id="language"
+              value={fingerprintConfig["navigator.language"] || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "navigator.language",
+                  e.target.value || undefined,
+                )
+              }
+              placeholder="e.g., en-US"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Screen Properties */}
+      <div className="space-y-3">
+        <Label>Screen Properties</Label>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="screen-width">Screen Width</Label>
+            <Input
+              id="screen-width"
+              type="number"
+              value={fingerprintConfig["screen.width"] || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "screen.width",
                   e.target.value ? parseInt(e.target.value) : undefined,
                 )
               }
               placeholder="e.g., 1920"
             />
           </div>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="screen-min-height">Min Height</Label>
+            <Label htmlFor="screen-height">Screen Height</Label>
             <Input
-              id="screen-min-height"
+              id="screen-height"
               type="number"
-              value={config.screen_min_height || ""}
+              value={fingerprintConfig["screen.height"] || ""}
               onChange={(e) =>
-                onConfigChange(
-                  "screen_min_height",
-                  e.target.value ? parseInt(e.target.value) : undefined,
-                )
-              }
-              placeholder="e.g., 768"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="screen-max-height">Max Height</Label>
-            <Input
-              id="screen-max-height"
-              type="number"
-              value={config.screen_max_height || ""}
-              onChange={(e) =>
-                onConfigChange(
-                  "screen_max_height",
+                updateFingerprintConfig(
+                  "screen.height",
                   e.target.value ? parseInt(e.target.value) : undefined,
                 )
               }
               placeholder="e.g., 1080"
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="avail-width">Available Width</Label>
+            <Input
+              id="avail-width"
+              type="number"
+              value={fingerprintConfig["screen.availWidth"] || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "screen.availWidth",
+                  e.target.value ? parseInt(e.target.value) : undefined,
+                )
+              }
+              placeholder="e.g., 1920"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="avail-height">Available Height</Label>
+            <Input
+              id="avail-height"
+              type="number"
+              value={fingerprintConfig["screen.availHeight"] || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "screen.availHeight",
+                  e.target.value ? parseInt(e.target.value) : undefined,
+                )
+              }
+              placeholder="e.g., 1055"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="color-depth">Color Depth</Label>
+            <Input
+              id="color-depth"
+              type="number"
+              value={fingerprintConfig["screen.colorDepth"] || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "screen.colorDepth",
+                  e.target.value ? parseInt(e.target.value) : undefined,
+                )
+              }
+              placeholder="e.g., 30"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="pixel-depth">Pixel Depth</Label>
+            <Input
+              id="pixel-depth"
+              type="number"
+              value={fingerprintConfig["screen.pixelDepth"] || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "screen.pixelDepth",
+                  e.target.value ? parseInt(e.target.value) : undefined,
+                )
+              }
+              placeholder="e.g., 30"
+            />
+          </div>
         </div>
       </div>
 
-      {/* WebGL Settings */}
+      {/* Window Properties */}
       <div className="space-y-3">
-        <Label>WebGL Settings</Label>
+        <Label>Window Properties</Label>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="outer-width">Outer Width</Label>
+            <Input
+              id="outer-width"
+              type="number"
+              value={fingerprintConfig["window.outerWidth"] || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "window.outerWidth",
+                  e.target.value ? parseInt(e.target.value) : undefined,
+                )
+              }
+              placeholder="e.g., 1512"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="outer-height">Outer Height</Label>
+            <Input
+              id="outer-height"
+              type="number"
+              value={fingerprintConfig["window.outerHeight"] || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "window.outerHeight",
+                  e.target.value ? parseInt(e.target.value) : undefined,
+                )
+              }
+              placeholder="e.g., 886"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="inner-width">Inner Width</Label>
+            <Input
+              id="inner-width"
+              type="number"
+              value={fingerprintConfig["window.innerWidth"] || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "window.innerWidth",
+                  e.target.value ? parseInt(e.target.value) : undefined,
+                )
+              }
+              placeholder="e.g., 1512"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="inner-height">Inner Height</Label>
+            <Input
+              id="inner-height"
+              type="number"
+              value={fingerprintConfig["window.innerHeight"] || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "window.innerHeight",
+                  e.target.value ? parseInt(e.target.value) : undefined,
+                )
+              }
+              placeholder="e.g., 886"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="screen-x">Screen X</Label>
+            <Input
+              id="screen-x"
+              type="number"
+              value={fingerprintConfig["window.screenX"] || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "window.screenX",
+                  e.target.value ? parseInt(e.target.value) : undefined,
+                )
+              }
+              placeholder="e.g., 0"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="screen-y">Screen Y</Label>
+            <Input
+              id="screen-y"
+              type="number"
+              value={fingerprintConfig["window.screenY"] || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "window.screenY",
+                  e.target.value ? parseInt(e.target.value) : undefined,
+                )
+              }
+              placeholder="e.g., 0"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* WebGL Properties */}
+      <div className="space-y-3">
+        <Label>WebGL Properties</Label>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="webgl-vendor">WebGL Vendor</Label>
             <Input
               id="webgl-vendor"
-              value={config.webgl_vendor || ""}
+              value={fingerprintConfig["webGl:vendor"] || ""}
               onChange={(e) =>
-                onConfigChange("webgl_vendor", e.target.value || undefined)
+                updateFingerprintConfig(
+                  "webGl:vendor",
+                  e.target.value || undefined,
+                )
               }
-              placeholder="e.g., Intel Inc."
+              placeholder="e.g., Mesa"
             />
           </div>
           <div className="space-y-2">
             <Label htmlFor="webgl-renderer">WebGL Renderer</Label>
             <Input
               id="webgl-renderer"
-              value={config.webgl_renderer || ""}
+              value={fingerprintConfig["webGl:renderer"] || ""}
               onChange={(e) =>
-                onConfigChange("webgl_renderer", e.target.value || undefined)
+                updateFingerprintConfig(
+                  "webGl:renderer",
+                  e.target.value || undefined,
+                )
               }
-              placeholder="e.g., Intel HD Graphics"
+              placeholder="e.g., llvmpipe, or similar"
             />
           </div>
         </div>
       </div>
+
+      {/* WebGL Parameters */}
+      <div className="space-y-3">
+        <ObjectEditor
+          value={
+            (fingerprintConfig["webGl:parameters"] as Record<
+              string,
+              unknown
+            >) || {}
+          }
+          onChange={(value) =>
+            updateFingerprintConfig("webGl:parameters", value)
+          }
+          title="WebGL Parameters"
+        />
+      </div>
+
+      {/* WebGL2 Parameters */}
+      <div className="space-y-3">
+        <ObjectEditor
+          value={
+            (fingerprintConfig["webGl2:parameters"] as Record<
+              string,
+              unknown
+            >) || {}
+          }
+          onChange={(value) =>
+            updateFingerprintConfig("webGl2:parameters", value)
+          }
+          title="WebGL2 Parameters"
+        />
+      </div>
+
+      {/* WebGL Shader Precision Formats */}
+      <div className="space-y-3">
+        <ObjectEditor
+          value={
+            (fingerprintConfig["webGl:shaderPrecisionFormats"] as Record<
+              string,
+              unknown
+            >) || {}
+          }
+          onChange={(value) =>
+            updateFingerprintConfig("webGl:shaderPrecisionFormats", value)
+          }
+          title="WebGL Shader Precision Formats"
+        />
+      </div>
+
+      {/* WebGL2 Shader Precision Formats */}
+      <div className="space-y-3">
+        <ObjectEditor
+          value={
+            (fingerprintConfig["webGl2:shaderPrecisionFormats"] as Record<
+              string,
+              unknown
+            >) || {}
+          }
+          onChange={(value) =>
+            updateFingerprintConfig("webGl2:shaderPrecisionFormats", value)
+          }
+          title="WebGL2 Shader Precision Formats"
+        />
+      </div>
+
+      {/* Geolocation */}
+      <div className="space-y-3">
+        <Label>Geolocation</Label>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="latitude">Latitude</Label>
+            <Input
+              id="latitude"
+              type="number"
+              step="any"
+              value={fingerprintConfig["geolocation:latitude"] || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "geolocation:latitude",
+                  e.target.value ? parseFloat(e.target.value) : undefined,
+                )
+              }
+              placeholder="e.g., 41.0019"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="longitude">Longitude</Label>
+            <Input
+              id="longitude"
+              type="number"
+              step="any"
+              value={fingerprintConfig["geolocation:longitude"] || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "geolocation:longitude",
+                  e.target.value ? parseFloat(e.target.value) : undefined,
+                )
+              }
+              placeholder="e.g., 28.9645"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="timezone">Timezone</Label>
+            <Select
+              value={fingerprintConfig.timezone || ""}
+              onValueChange={(value) =>
+                updateFingerprintConfig("timezone", value || undefined)
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select timezone" />
+              </SelectTrigger>
+              <SelectContent>
+                {timezoneOptions.map((tz) => (
+                  <SelectItem key={tz.value} value={tz.value}>
+                    {tz.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+
+      {/* Locale */}
+      <div className="space-y-3">
+        <Label>Locale</Label>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="locale-language">Language</Label>
+            <Input
+              id="locale-language"
+              value={fingerprintConfig["locale:language"] || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "locale:language",
+                  e.target.value || undefined,
+                )
+              }
+              placeholder="e.g., tr"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="locale-region">Region</Label>
+            <Input
+              id="locale-region"
+              value={fingerprintConfig["locale:region"] || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "locale:region",
+                  e.target.value || undefined,
+                )
+              }
+              placeholder="e.g., TR"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="locale-script">Script</Label>
+            <Input
+              id="locale-script"
+              value={fingerprintConfig["locale:script"] || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "locale:script",
+                  e.target.value || undefined,
+                )
+              }
+              placeholder="e.g., Latn"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Fonts */}
+      <div className="space-y-3">
+        <Label>Fonts</Label>
+        <MultipleSelector
+          value={
+            fingerprintConfig.fonts?.map((font) => ({
+              label: font,
+              value: font,
+            })) || []
+          }
+          onChange={(selected: Option[]) =>
+            updateFingerprintConfig(
+              "fonts",
+              selected.map((s: Option) => s.value),
+            )
+          }
+          placeholder="Add fonts..."
+          creatable
+        />
+      </div>
+
+      {/* Battery */}
+      <div className="space-y-3">
+        <Label>Battery</Label>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="battery-charging"
+                checked={fingerprintConfig["battery:charging"] || false}
+                onCheckedChange={(checked) =>
+                  updateFingerprintConfig("battery:charging", checked)
+                }
+              />
+              <Label htmlFor="battery-charging">Charging</Label>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="charging-time">Charging Time</Label>
+            <Input
+              id="charging-time"
+              type="number"
+              step="any"
+              value={fingerprintConfig["battery:chargingTime"] || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "battery:chargingTime",
+                  e.target.value ? parseFloat(e.target.value) : undefined,
+                )
+              }
+              placeholder="e.g., 0"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="discharging-time">Discharging Time</Label>
+            <Input
+              id="discharging-time"
+              type="number"
+              step="any"
+              value={fingerprintConfig["battery:dischargingTime"] || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "battery:dischargingTime",
+                  e.target.value ? parseFloat(e.target.value) : undefined,
+                )
+              }
+              placeholder="e.g., 0"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className={`space-y-6 ${className}`}>
+      {forceAdvanced ? (
+        // Advanced mode only (for editing)
+        renderAdvancedForm()
+      ) : (
+        // Normal/Advanced tabs for creation
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid grid-cols-2 w-full">
+            <TabsTrigger value="normal">Normal</TabsTrigger>
+            <TabsTrigger value="advanced">Advanced</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="normal" className="space-y-6">
+            {/* Automatic Location Configuration */}
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="auto-location"
+                  checked={isAutoLocationEnabled}
+                  onCheckedChange={handleAutoLocationToggle}
+                />
+                <Label htmlFor="auto-location">
+                  Automatically configure location information based on proxy
+                  configuration or your connection if no proxy provided
+                </Label>
+              </div>
+            </div>
+
+            {/* Screen Resolution */}
+            <div className="space-y-3">
+              <Label>Screen Resolution</Label>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="screen-max-width">Max Width</Label>
+                  <Input
+                    id="screen-max-width"
+                    type="number"
+                    value={config.screen_max_width || ""}
+                    onChange={(e) =>
+                      onConfigChange(
+                        "screen_max_width",
+                        e.target.value ? parseInt(e.target.value) : undefined,
+                      )
+                    }
+                    placeholder="e.g., 1920"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="screen-max-height">Max Height</Label>
+                  <Input
+                    id="screen-max-height"
+                    type="number"
+                    value={config.screen_max_height || ""}
+                    onChange={(e) =>
+                      onConfigChange(
+                        "screen_max_height",
+                        e.target.value ? parseInt(e.target.value) : undefined,
+                      )
+                    }
+                    placeholder="e.g., 1080"
+                  />
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="advanced" className="space-y-6">
+            {renderAdvancedForm()}
+          </TabsContent>
+        </Tabs>
+      )}
     </div>
   );
 }

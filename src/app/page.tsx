@@ -25,7 +25,6 @@ import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useUpdateNotifications } from "@/hooks/use-update-notifications";
 import { showErrorToast } from "@/lib/toast-utils";
-import { sleep } from "@/lib/utils";
 import type { BrowserProfile, CamoufoxConfig, GroupWithCount } from "@/types";
 
 type BrowserTypeString =

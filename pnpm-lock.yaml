@@ -153,6 +153,9 @@ importers:
       dotenv:
         specifier: ^17.2.1
         version: 17.2.1
+      fingerprint-generator:
+        specifier: ^2.1.69
+        version: 2.1.69
       get-port:
         specifier: ^7.1.0
         version: 7.1.0

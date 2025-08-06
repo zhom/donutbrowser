@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
+import { launchOptions } from "camoufox-js";
 import type { LaunchOptions } from "camoufox-js/dist/utils.js";
 import {
   type CamoufoxConfig,
@@ -9,6 +10,194 @@ import {
   listCamoufoxConfigs,
   saveCamoufoxConfig,
 } from "./camoufox-storage.js";
+
+/**
+ * Convert fingerprint-generator format to camoufox fingerprint format (reverse of convertCamoufoxToFingerprintGenerator)
+ * @param fingerprintObj The fingerprint-generator object
+ * @returns camoufox fingerprint object
+ */
+export function convertFingerprintGeneratorToCamoufox(
+  fingerprintObj: Record<string, any>,
+): Record<string, any> {
+  const camoufoxData: Record<string, any> = {};
+
+  // Reverse mappings from fingerprint-generator structure to camoufox keys
+  const reverseMappings: Record<string, string> = {
+    // Navigator properties
+    "navigator.userAgent": "navigator.userAgent",
+    "navigator.platform": "navigator.platform",
+    "navigator.hardwareConcurrency": "navigator.hardwareConcurrency",
+    "navigator.maxTouchPoints": "navigator.maxTouchPoints",
+    "navigator.doNotTrack": "navigator.doNotTrack",
+    "navigator.appCodeName": "navigator.appCodeName",
+    "navigator.appName": "navigator.appName",
+    "navigator.appVersion": "navigator.appVersion",
+    "navigator.oscpu": "navigator.oscpu",
+    "navigator.product": "navigator.product",
+    "navigator.language": "navigator.language",
+    "navigator.languages": "navigator.languages",
+    "navigator.globalPrivacyControl": "navigator.globalPrivacyControl",
+
+    // Screen properties
+    "screen.width": "screen.width",
+    "screen.height": "screen.height",
+    "screen.availWidth": "screen.availWidth",
+    "screen.availHeight": "screen.availHeight",
+    "screen.availTop": "screen.availTop",
+    "screen.availLeft": "screen.availLeft",
+    "screen.colorDepth": "screen.colorDepth",
+    "screen.pixelDepth": "screen.pixelDepth",
+    "screen.outerWidth": "window.outerWidth",
+    "screen.outerHeight": "window.outerHeight",
+    "screen.innerWidth": "window.innerWidth",
+    "screen.innerHeight": "window.innerHeight",
+    "screen.screenX": "window.screenX",
+    "screen.screenY": "window.screenY",
+    "screen.pageXOffset": "screen.pageXOffset",
+    "screen.pageYOffset": "screen.pageYOffset",
+    "screen.devicePixelRatio": "window.devicePixelRatio",
+    "screen.clientWidth": "document.body.clientWidth",
+    "screen.clientHeight": "document.body.clientHeight",
+
+    // WebGL properties
+    "videoCard.vendor": "webGl:vendor",
+    "videoCard.renderer": "webGl:renderer",
+
+    // Headers
+    "headers.Accept-Encoding": "headers.Accept-Encoding",
+
+    // Battery
+    "battery.charging": "battery:charging",
+    "battery.chargingTime": "battery:chargingTime",
+    "battery.dischargingTime": "battery:dischargingTime",
+  };
+
+  // Apply reverse mappings
+  for (const [fingerprintPath, camoufoxKey] of Object.entries(
+    reverseMappings,
+  )) {
+    const pathParts = fingerprintPath.split(".");
+    let current = fingerprintObj;
+
+    // Navigate to the nested property
+    for (let i = 0; i < pathParts.length - 1; i++) {
+      const part = pathParts[i];
+      if (!current[part]) {
+        break;
+      }
+      current = current[part];
+    }
+
+    // Get the final value
+    const finalKey = pathParts[pathParts.length - 1];
+    if (current && current[finalKey] !== undefined) {
+      camoufoxData[camoufoxKey] = current[finalKey];
+    }
+  }
+
+  // Handle fonts separately
+  if (fingerprintObj.fonts && Array.isArray(fingerprintObj.fonts)) {
+    camoufoxData.fonts = fingerprintObj.fonts;
+  }
+
+  return camoufoxData;
+}
+
+/**
+ * Convert camoufox fingerprint format to fingerprint-generator format
+ * @param camoufoxFingerprint The camoufox fingerprint object
+ * @returns fingerprint-generator object
+ */
+function convertCamoufoxToFingerprintGenerator(
+  camoufoxFingerprint: Record<string, any>,
+): any {
+  const fingerprintObj: Record<string, any> = {
+    navigator: {},
+    screen: {},
+    videoCard: {},
+    headers: {},
+    battery: {},
+  };
+
+  // Mapping from camoufox keys to fingerprint-generator structure based on the YAML
+  const mappings: Record<string, string> = {
+    // Navigator properties
+    "navigator.userAgent": "navigator.userAgent",
+    "navigator.platform": "navigator.platform",
+    "navigator.hardwareConcurrency": "navigator.hardwareConcurrency",
+    "navigator.maxTouchPoints": "navigator.maxTouchPoints",
+    "navigator.doNotTrack": "navigator.doNotTrack",
+    "navigator.appCodeName": "navigator.appCodeName",
+    "navigator.appName": "navigator.appName",
+    "navigator.appVersion": "navigator.appVersion",
+    "navigator.oscpu": "navigator.oscpu",
+    "navigator.product": "navigator.product",
+    "navigator.language": "navigator.language",
+    "navigator.languages": "navigator.languages",
+    "navigator.globalPrivacyControl": "navigator.globalPrivacyControl",
+
+    // Screen properties
+    "screen.width": "screen.width",
+    "screen.height": "screen.height",
+    "screen.availWidth": "screen.availWidth",
+    "screen.availHeight": "screen.availHeight",
+    "screen.availTop": "screen.availTop",
+    "screen.availLeft": "screen.availLeft",
+    "screen.colorDepth": "screen.colorDepth",
+    "screen.pixelDepth": "screen.pixelDepth",
+    "window.outerWidth": "screen.outerWidth",
+    "window.outerHeight": "screen.outerHeight",
+    "window.innerWidth": "screen.innerWidth",
+    "window.innerHeight": "screen.innerHeight",
+    "window.screenX": "screen.screenX",
+    "window.screenY": "screen.screenY",
+    "screen.pageXOffset": "screen.pageXOffset",
+    "screen.pageYOffset": "screen.pageYOffset",
+    "window.devicePixelRatio": "screen.devicePixelRatio",
+    "document.body.clientWidth": "screen.clientWidth",
+    "document.body.clientHeight": "screen.clientHeight",
+
+    // WebGL properties
+    "webGl:vendor": "videoCard.vendor",
+    "webGl:renderer": "videoCard.renderer",
+
+    // Headers
+    "headers.Accept-Encoding": "headers.Accept-Encoding",
+
+    // Battery
+    "battery:charging": "battery.charging",
+    "battery:chargingTime": "battery.chargingTime",
+    "battery:dischargingTime": "battery.dischargingTime",
+  };
+
+  // Apply mappings
+  for (const [camoufoxKey, fingerprintPath] of Object.entries(mappings)) {
+    if (camoufoxFingerprint[camoufoxKey] !== undefined) {
+      const pathParts = fingerprintPath.split(".");
+      let current = fingerprintObj;
+
+      // Navigate to the nested property, creating objects as needed
+      for (let i = 0; i < pathParts.length - 1; i++) {
+        const part = pathParts[i];
+        if (!current[part]) {
+          current[part] = {};
+        }
+        current = current[part];
+      }
+
+      // Set the final value
+      const finalKey = pathParts[pathParts.length - 1];
+      current[finalKey] = camoufoxFingerprint[camoufoxKey];
+    }
+  }
+
+  // Handle fonts separately
+  if (camoufoxFingerprint.fonts && Array.isArray(camoufoxFingerprint.fonts)) {
+    fingerprintObj.fonts = camoufoxFingerprint.fonts;
+  }
+
+  return fingerprintObj;
+}
 
 /**
  * Start a Camoufox instance in a separate process
@@ -21,6 +210,7 @@ export async function startCamoufoxProcess(
   options: LaunchOptions = {},
   profilePath?: string,
   url?: string,
+  customConfig?: string,
 ): Promise<CamoufoxConfig> {
   // Generate a unique ID for this instance
   const id = generateCamoufoxId();
@@ -31,6 +221,7 @@ export async function startCamoufoxProcess(
     options,
     profilePath,
     url,
+    customConfig,
   };
 
   // Save the configuration before starting the process
@@ -251,4 +442,106 @@ export async function stopAllCamoufoxProcesses(): Promise<void> {
 
   const stopPromises = configs.map((config) => stopCamoufoxProcess(config.id));
   await Promise.all(stopPromises);
+}
+
+interface GenerateConfigOptions {
+  proxy?: string;
+  maxWidth?: number;
+  maxHeight?: number;
+  geoip?: string | boolean;
+  blockImages?: boolean;
+  blockWebrtc?: boolean;
+  blockWebgl?: boolean;
+  executablePath?: string;
+  fingerprint?: string;
+}
+
+/**
+ * Generate Camoufox configuration using launchOptions
+ * @param options Configuration options
+ * @returns Promise resolving to the generated config JSON string
+ */
+export async function generateCamoufoxConfig(
+  options: GenerateConfigOptions,
+): Promise<string> {
+  try {
+    // Build launch options
+    const launchOpts: LaunchOptions = {
+      // Always set these defaults
+      headless: false,
+      i_know_what_im_doing: true,
+      config: {
+        disableTheming: true,
+        showcursor: false,
+      },
+    };
+
+    // Always set geoip and blocking options
+    launchOpts.geoip = options.geoip !== undefined ? options.geoip : true;
+
+    if (options.blockImages) {
+      launchOpts.block_images = true;
+    }
+    if (options.blockWebrtc) {
+      launchOpts.block_webrtc = true;
+    }
+    if (options.blockWebgl) {
+      launchOpts.block_webgl = true;
+    }
+
+    if (options.executablePath) {
+      launchOpts.executable_path = options.executablePath;
+    }
+
+    // If fingerprint is provided, use it and ignore other options except executable_path and block_*
+    if (options.fingerprint) {
+      try {
+        const camoufoxFingerprint = JSON.parse(options.fingerprint);
+
+        // Convert camoufox fingerprint format to fingerprint-generator format
+        const fingerprintObj =
+          convertCamoufoxToFingerprintGenerator(camoufoxFingerprint);
+        launchOpts.fingerprint = fingerprintObj;
+      } catch (error) {
+        throw new Error(`Invalid fingerprint JSON: ${error}`);
+      }
+    } else {
+      // Use individual options to build configuration
+      if (options.proxy) {
+        launchOpts.proxy = options.proxy;
+      }
+
+      if (options.maxWidth && options.maxHeight) {
+        launchOpts.screen = {
+          maxWidth: options.maxWidth,
+          maxHeight: options.maxHeight,
+        };
+      }
+    }
+
+    // Generate the configuration using launchOptions
+    const generatedOptions = await launchOptions(launchOpts);
+
+    // Extract the environment variables that contain the config
+    const envVars = generatedOptions.env || {};
+
+    // Reconstruct the config from environment variables using getEnvVars utility
+    let configStr = "";
+    let chunkIndex = 1;
+
+    while (envVars[`CAMOU_CONFIG_${chunkIndex}`]) {
+      configStr += envVars[`CAMOU_CONFIG_${chunkIndex}`];
+      chunkIndex++;
+    }
+
+    if (!configStr) {
+      throw new Error("No configuration generated");
+    }
+
+    // Parse and return the config as JSON string
+    const config = JSON.parse(configStr);
+    return JSON.stringify(config);
+  } catch (error) {
+    throw new Error(`Failed to generate Camoufox config: ${error}`);
+  }
 }

@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useBrowserDownload } from "@/hooks/use-browser-download";
-import { getBrowserIcon, getCurrentOS } from "@/lib/browser-utils";
+import { getBrowserIcon } from "@/lib/browser-utils";
 import type { BrowserReleaseTypes, CamoufoxConfig, StoredProxy } from "@/types";
 
 type BrowserTypeString =
@@ -109,8 +109,7 @@ export function CreateProfileDialog({
 
   // Camoufox anti-detect states
   const [camoufoxConfig, setCamoufoxConfig] = useState<CamoufoxConfig>({
-    enable_cache: true, // Cache enabled by default
-    os: [getCurrentOS()], // Default to current OS
+    geoip: true, // Default to automatic geoip
   });
 
   // Common states
@@ -285,13 +284,17 @@ export function CreateProfileDialog({
           return;
         }
 
+        // The fingerprint will be generated at launch time by the Rust backend
+        // We don't need to generate it here during profile creation
+        const finalCamoufoxConfig = { ...camoufoxConfig };
+
         await onCreateProfile({
           name: profileName.trim(),
           browserStr: "camoufox" as BrowserTypeString,
           version: bestCamoufoxVersion.version,
           releaseType: bestCamoufoxVersion.releaseType,
           proxyId: selectedProxyId,
-          camoufoxConfig,
+          camoufoxConfig: finalCamoufoxConfig,
         });
       }
 
@@ -314,8 +317,7 @@ export function CreateProfileDialog({
     setAvailableReleaseTypes({});
     setCamoufoxReleaseTypes({});
     setCamoufoxConfig({
-      enable_cache: true,
-      os: [getCurrentOS()], // Reset to current OS
+      geoip: true, // Reset to automatic geoip
     });
     setActiveTab("regular");
     onClose();
@@ -352,11 +354,7 @@ export function CreateProfileDialog({
     return isBrowserDownloading(browserStr);
   };
 
-  // Get the selected OS for warning
-  const selectedOS = camoufoxConfig.os?.[0];
-  const currentOS = getCurrentOS();
-  const _showOSWarning =
-    selectedOS && selectedOS !== currentOS && currentOS !== "unknown";
+  // No OS warning needed anymore
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>

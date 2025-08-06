@@ -147,94 +147,94 @@ impl BrowserRunner {
 
     // Handle camoufox profiles using nodecar launcher
     if profile.browser == "camoufox" {
-      if let Some(mut camoufox_config) = profile.camoufox_config.clone() {
-        // Always start a local proxy for Camoufox (for traffic monitoring and geoip support)
-        let upstream_proxy = profile
-          .proxy_id
-          .as_ref()
-          .and_then(|id| PROXY_MANAGER.get_proxy_settings_by_id(id));
-
+      // Get or create camoufox config
+      let mut camoufox_config = profile.camoufox_config.clone().unwrap_or_else(|| {
         println!(
-          "Starting local proxy for Camoufox profile: {} (upstream: {})",
-          profile.name,
-          upstream_proxy
-            .as_ref()
-            .map(|p| format!("{}:{}", p.host, p.port))
-            .unwrap_or_else(|| "DIRECT".to_string())
-        );
-
-        // Start the proxy and get local proxy settings
-        let local_proxy = PROXY_MANAGER
-          .start_proxy(
-            app_handle.clone(),
-            upstream_proxy.as_ref(),
-            0, // Use 0 as temporary PID, will be updated later
-            Some(&profile.name),
-          )
-          .await
-          .map_err(|e| format!("Failed to start local proxy for Camoufox: {e}"))?;
-
-        // Format proxy URL for camoufox - always use HTTP for the local proxy
-        let proxy_url = format!("http://{}:{}", local_proxy.host, local_proxy.port);
-
-        // Set proxy in camoufox config
-        camoufox_config.proxy = Some(proxy_url);
-
-        // Ensure geoip is always enabled for proper geolocation spoofing
-        if camoufox_config.geoip.is_none() {
-          camoufox_config.geoip = Some(serde_json::Value::Bool(true));
-        }
-
-        println!(
-          "Configured local proxy for Camoufox: {:?}, geoip: {:?}",
-          camoufox_config.proxy, camoufox_config.geoip
-        );
-
-        // Use the nodecar camoufox launcher
-        println!(
-          "Launching Camoufox via nodecar for profile: {}",
+          "No camoufox config found for profile {}, using default",
           profile.name
         );
-        let camoufox_launcher = crate::camoufox::CamoufoxNodecarLauncher::instance();
-        let camoufox_result = camoufox_launcher
-          .launch_camoufox_profile_nodecar(
-            app_handle.clone(),
-            profile.clone(),
-            camoufox_config,
-            url,
-          )
-          .await
-          .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
-            format!("Failed to launch camoufox via nodecar: {e}").into()
-          })?;
+        crate::camoufox::CamoufoxConfig::default()
+      });
 
-        // For server-based Camoufox, we use the process_id
-        let process_id = camoufox_result.processId.unwrap_or(0);
-        println!("Camoufox launched successfully with PID: {process_id}");
+      // Always start a local proxy for Camoufox (for traffic monitoring and geoip support)
+      let upstream_proxy = profile
+        .proxy_id
+        .as_ref()
+        .and_then(|id| PROXY_MANAGER.get_proxy_settings_by_id(id));
 
-        // Update profile with the process info from camoufox result
-        let mut updated_profile = profile.clone();
-        updated_profile.process_id = Some(process_id);
-        updated_profile.last_launch = Some(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs());
+      println!(
+        "Starting local proxy for Camoufox profile: {} (upstream: {})",
+        profile.name,
+        upstream_proxy
+          .as_ref()
+          .map(|p| format!("{}:{}", p.host, p.port))
+          .unwrap_or_else(|| "DIRECT".to_string())
+      );
 
-        // Save the updated profile
-        self.save_process_info(&updated_profile)?;
-        println!(
-          "Updated profile with process info: {}",
-          updated_profile.name
-        );
+      // Start the proxy and get local proxy settings
+      let local_proxy = PROXY_MANAGER
+        .start_proxy(
+          app_handle.clone(),
+          upstream_proxy.as_ref(),
+          0, // Use 0 as temporary PID, will be updated later
+          Some(&profile.name),
+        )
+        .await
+        .map_err(|e| format!("Failed to start local proxy for Camoufox: {e}"))?;
 
-        // Emit profile update event to frontend
-        if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
-          println!("Warning: Failed to emit profile update event: {e}");
-        } else {
-          println!("Emitted profile update event for: {}", updated_profile.name);
-        }
+      // Format proxy URL for camoufox - always use HTTP for the local proxy
+      let proxy_url = format!("http://{}:{}", local_proxy.host, local_proxy.port);
 
-        return Ok(updated_profile);
-      } else {
-        return Err("Camoufox profile missing configuration".into());
+      // Set proxy in camoufox config
+      camoufox_config.proxy = Some(proxy_url);
+
+      // Ensure geoip is always enabled for proper geolocation spoofing
+      if camoufox_config.geoip.is_none() {
+        camoufox_config.geoip = Some(serde_json::Value::Bool(true));
       }
+
+      println!(
+        "Configured local proxy for Camoufox: {:?}, geoip: {:?}",
+        camoufox_config.proxy, camoufox_config.geoip
+      );
+
+      // Use the nodecar camoufox launcher
+      println!(
+        "Launching Camoufox via nodecar for profile: {}",
+        profile.name
+      );
+      let camoufox_launcher = crate::camoufox::CamoufoxNodecarLauncher::instance();
+      let camoufox_result = camoufox_launcher
+        .launch_camoufox_profile_nodecar(app_handle.clone(), profile.clone(), camoufox_config, url)
+        .await
+        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+          format!("Failed to launch camoufox via nodecar: {e}").into()
+        })?;
+
+      // For server-based Camoufox, we use the process_id
+      let process_id = camoufox_result.processId.unwrap_or(0);
+      println!("Camoufox launched successfully with PID: {process_id}");
+
+      // Update profile with the process info from camoufox result
+      let mut updated_profile = profile.clone();
+      updated_profile.process_id = Some(process_id);
+      updated_profile.last_launch = Some(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs());
+
+      // Save the updated profile
+      self.save_process_info(&updated_profile)?;
+      println!(
+        "Updated profile with process info: {}",
+        updated_profile.name
+      );
+
+      // Emit profile update event to frontend
+      if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
+        println!("Warning: Failed to emit profile update event: {e}");
+      } else {
+        println!("Emitted profile update event for: {}", updated_profile.name);
+      }
+
+      return Ok(updated_profile);
     }
 
     // Create browser instance
@@ -1298,7 +1298,8 @@ impl BrowserRunner {
 }
 
 #[tauri::command]
-pub fn create_browser_profile(
+pub async fn create_browser_profile(
+  app_handle: tauri::AppHandle,
   name: String,
   browser: String,
   version: String,
@@ -1309,6 +1310,7 @@ pub fn create_browser_profile(
   let profile_manager = ProfileManager::instance();
   profile_manager
     .create_profile(
+      &app_handle,
       &name,
       &browser,
       &version,
@@ -1316,6 +1318,7 @@ pub fn create_browser_profile(
       proxy_id,
       camoufox_config,
     )
+    .await
     .map_err(|e| format!("Failed to create profile: {e}"))
 }
 
@@ -1603,7 +1606,8 @@ pub async fn kill_browser_profile(
 }
 
 #[tauri::command]
-pub fn create_browser_profile_new(
+pub async fn create_browser_profile_new(
+  app_handle: tauri::AppHandle,
   name: String,
   browser_str: String,
   version: String,
@@ -1614,6 +1618,7 @@ pub fn create_browser_profile_new(
   let browser_type =
     BrowserType::from_str(&browser_str).map_err(|e| format!("Invalid browser type: {e}"))?;
   create_browser_profile(
+    app_handle,
     name,
     browser_type.as_str().to_string(),
     version,
@@ -1621,6 +1626,7 @@ pub fn create_browser_profile_new(
     proxy_id,
     camoufox_config,
   )
+  .await
 }
 
 #[tauri::command]

@@ -1,6 +1,7 @@
 import type { LaunchOptions } from "camoufox-js/dist/utils.js";
 import { program } from "commander";
 import {
+  generateCamoufoxConfig,
   startCamoufoxProcess,
   stopAllCamoufoxProcesses,
   stopCamoufoxProcess,
@@ -152,88 +153,26 @@ program
 // Command for Camoufox management
 program
   .command("camoufox")
-  .argument("<action>", "start, stop, or list Camoufox instances")
+  .argument(
+    "<action>",
+    "start, stop, list, or generate-config Camoufox instances",
+  )
   .option("--id <id>", "Camoufox ID for stop command")
   .option("--profile-path <path>", "profile directory path")
   .option("--url <url>", "URL to open")
 
-  // Operating system fingerprinting
-  .option(
-    "--os <os>",
-    "OS to emulate (windows, macos, linux, or comma-separated list)",
-  )
-
-  // Blocking options
-  .option("--block-images", "block all images")
-  .option("--block-webrtc", "block WebRTC entirely")
+  // Config generation options
+  .option("--proxy <proxy>", "proxy URL for config generation")
+  .option("--max-width <width>", "maximum screen width", parseInt)
+  .option("--max-height <height>", "maximum screen height", parseInt)
+  .option("--geoip [ip]", "enable geoip or specify IP")
+  .option("--block-images", "block images")
+  .option("--block-webrtc", "block WebRTC")
   .option("--block-webgl", "block WebGL")
-
-  // Security options
-  .option("--disable-coop", "disable Cross-Origin-Opener-Policy")
-
-  // Geolocation and IP
-  .option(
-    "--geoip <ip>",
-    "IP address for geolocation spoofing (or 'auto' for automatic)",
-  )
-  .option("--country <country>", "country code for geolocation")
-  .option("--timezone <timezone>", "timezone to spoof")
-  .option("--latitude <lat>", "latitude for geolocation", parseFloat)
-  .option("--longitude <lng>", "longitude for geolocation", parseFloat)
-
-  // UI and behavior
-  .option(
-    "--humanize [duration]",
-    "humanize cursor movement (optional max duration in seconds)",
-    (val) => (val ? parseFloat(val) : true),
-  )
+  .option("--executable-path <path>", "executable path")
+  .option("--fingerprint <json>", "fingerprint JSON string")
   .option("--headless", "run in headless mode")
-
-  // Localization
-  .option("--locale <locale>", "locale(s) to use (comma-separated)")
-
-  // Extensions and fonts
-  .option("--addons <addons>", "Firefox addons to load (comma-separated paths)")
-  .option("--fonts <fonts>", "additional fonts to load (comma-separated)")
-  .option("--custom-fonts-only", "use only custom fonts, exclude OS fonts")
-  .option(
-    "--exclude-addons <addons>",
-    "default addons to exclude (comma-separated)",
-  )
-
-  // Screen and window
-  .option("--screen-min-width <width>", "minimum screen width", parseInt)
-  .option("--screen-max-width <width>", "maximum screen width", parseInt)
-  .option("--screen-min-height <height>", "minimum screen height", parseInt)
-  .option("--screen-max-height <height>", "maximum screen height", parseInt)
-  .option("--window-width <width>", "fixed window width", parseInt)
-  .option("--window-height <height>", "fixed window height", parseInt)
-
-  // Advanced options
-  .option("--ff-version <version>", "Firefox version to emulate", parseInt)
-  .option("--main-world-eval", "enable main world script evaluation")
-  .option("--webgl-vendor <vendor>", "WebGL vendor string")
-  .option("--webgl-renderer <renderer>", "WebGL renderer string")
-
-  // Proxy
-  .option(
-    "--proxy <proxy>",
-    "proxy URL (protocol://[username:password@]host:port)",
-  )
-
-  // Cache and performance
-  .option("--disable-cache", "disable browser cache (cache enabled by default)")
-
-  // Environment and debugging
-  .option("--virtual-display <display>", "virtual display number (e.g., :99)")
-  .option("--debug", "enable debug output")
-  .option("--args <args>", "additional browser arguments (comma-separated)")
-  .option("--env <env>", "environment variables (JSON string)")
-
-  // Firefox preferences
-  .option("--firefox-prefs <prefs>", "Firefox user preferences (JSON string)")
-
-  // Note: theming and cursor options are hardcoded and not user-configurable
+  .option("--custom-config <json>", "custom config JSON string")
 
   .description("manage Camoufox browser instances")
   .action(
@@ -349,6 +288,11 @@ program
           if (options.virtualDisplay)
             camoufoxOptions.virtual_display = options.virtualDisplay as string;
           if (options.debug) camoufoxOptions.debug = true;
+
+          // Handle headless mode via flag instead of environment variable
+          if (options.headless) {
+            camoufoxOptions.headless = true;
+          }
           if (options.args && typeof options.args === "string")
             camoufoxOptions.args = options.args.split(",");
           if (options.env && typeof options.env === "string") {
@@ -393,6 +337,9 @@ program
               ? options.profilePath
               : undefined,
             typeof options.url === "string" ? options.url : undefined,
+            typeof options.customConfig === "string"
+              ? options.customConfig
+              : undefined,
           );
 
           console.log(
@@ -427,8 +374,71 @@ program
         const configs = listCamoufoxConfigs();
         console.log(JSON.stringify(configs));
         process.exit(0);
+      } else if (action === "generate-config") {
+        try {
+          // Handle geoip option properly
+          let geoipValue: string | boolean = true; // Default to true
+          if (options.geoip !== undefined) {
+            if (typeof options.geoip === "boolean") {
+              geoipValue = options.geoip;
+            } else if (typeof options.geoip === "string") {
+              if (options.geoip === "true") {
+                geoipValue = true;
+              } else if (options.geoip === "false") {
+                geoipValue = false;
+              } else {
+                geoipValue = options.geoip; // IP address
+              }
+            }
+          }
+
+          const config = await generateCamoufoxConfig({
+            proxy:
+              typeof options.proxy === "string" ? options.proxy : undefined,
+            maxWidth:
+              typeof options.maxWidth === "number"
+                ? options.maxWidth
+                : undefined,
+            maxHeight:
+              typeof options.maxHeight === "number"
+                ? options.maxHeight
+                : undefined,
+            geoip: geoipValue,
+            blockImages:
+              typeof options.blockImages === "boolean"
+                ? options.blockImages
+                : undefined,
+            blockWebrtc:
+              typeof options.blockWebrtc === "boolean"
+                ? options.blockWebrtc
+                : undefined,
+            blockWebgl:
+              typeof options.blockWebgl === "boolean"
+                ? options.blockWebgl
+                : undefined,
+            executablePath:
+              typeof options.executablePath === "string"
+                ? options.executablePath
+                : undefined,
+            fingerprint:
+              typeof options.fingerprint === "string"
+                ? options.fingerprint
+                : undefined,
+          });
+          console.log(config);
+          process.exit(0);
+        } catch (error: unknown) {
+          console.error(
+            `Failed to generate config: ${
+              error instanceof Error ? error.message : JSON.stringify(error)
+            }`,
+          );
+          process.exit(1);
+        }
       } else {
-        console.error("Invalid action. Use 'start', 'stop', or 'list'");
+        console.error(
+          "Invalid action. Use 'start', 'stop', 'list', or 'generate-config'",
+        );
         process.exit(1);
       }
     },

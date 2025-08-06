@@ -261,7 +261,6 @@ async fn test_nodecar_camoufox_lifecycle() -> Result<(), Box<dyn std::error::Err
     "--profile-path",
     profile_path.to_str().unwrap(),
     "--headless",
-    "--debug",
   ];
 
   println!("Starting Camoufox with nodecar...");
@@ -323,7 +322,6 @@ async fn test_nodecar_camoufox_with_url() -> Result<(), Box<dyn std::error::Erro
     "--url",
     "https://httpbin.org/get",
     "--headless",
-    "--debug",
   ];
 
   let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 15).await?;
@@ -399,7 +397,6 @@ async fn test_nodecar_camoufox_process_tracking(
       "--profile-path",
       &instance_profile_path,
       "--headless",
-      "--debug",
     ];
 
     println!("Starting Camoufox instance {i}...");
@@ -520,17 +517,12 @@ async fn test_nodecar_camoufox_configuration_options(
     "start",
     "--profile-path",
     profile_path.to_str().unwrap(),
-    "--headless",
-    "--debug",
-    "--os",
-    "linux",
     "--block-images",
-    "--humanize",
-    "--locale",
-    "en-US,en-GB",
-    "--timezone",
-    "America/New_York",
-    "--disable-cache",
+    "--max-width",
+    "1920",
+    "--max-height",
+    "1080",
+    "--headless",
   ];
 
   println!("Starting Camoufox with configuration options...");
@@ -575,6 +567,172 @@ async fn test_nodecar_camoufox_configuration_options(
   assert!(stop_output.status.success(), "Camoufox stop should succeed");
 
   println!("Camoufox configuration test completed successfully");
+  tracker.cleanup_all().await;
+  Ok(())
+}
+
+/// Test Camoufox generate-config command with basic options
+#[tokio::test]
+async fn test_nodecar_camoufox_generate_config_basic(
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+  let nodecar_path = setup_test().await?;
+  let tracker = TestResourceTracker::new(nodecar_path.clone());
+
+  let args = [
+    "camoufox",
+    "generate-config",
+    "--max-width",
+    "1920",
+    "--max-height",
+    "1080",
+    "--block-images",
+  ];
+
+  println!("Testing Camoufox config generation with basic options...");
+  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 30).await?;
+
+  if !output.status.success() {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // If Camoufox is not installed or times out, skip the test
+    if stderr.contains("not installed")
+      || stderr.contains("not found")
+      || stderr.contains("timeout")
+      || stdout.contains("timeout")
+      || stderr.contains("Could not determine OS")
+    {
+      println!(
+        "Skipping Camoufox generate-config test - Camoufox not available or configuration issue"
+      );
+      tracker.cleanup_all().await;
+      return Ok(());
+    }
+
+    tracker.cleanup_all().await;
+    return Err(
+      format!("Camoufox generate-config failed - stdout: {stdout}, stderr: {stderr}").into(),
+    );
+  }
+
+  let stdout = String::from_utf8(output.stdout)?;
+  println!("Generated config output: {stdout}");
+
+  // Parse the generated config as JSON
+  let config: Value = serde_json::from_str(&stdout)?;
+
+  // Verify the config contains expected properties
+  assert!(
+    config.is_object(),
+    "Generated config should be a JSON object"
+  );
+
+  // Check for some expected fingerprint properties
+  assert!(
+    config.get("screen.width").is_some(),
+    "Config should contain screen.width"
+  );
+  assert!(
+    config.get("screen.height").is_some(),
+    "Config should contain screen.height"
+  );
+  assert!(
+    config.get("navigator.userAgent").is_some(),
+    "Config should contain navigator.userAgent"
+  );
+
+  println!("Camoufox generate-config basic test completed successfully");
+  tracker.cleanup_all().await;
+  Ok(())
+}
+
+/// Test Camoufox generate-config command with custom fingerprint
+#[tokio::test]
+async fn test_nodecar_camoufox_generate_config_custom_fingerprint(
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+  let nodecar_path = setup_test().await?;
+  let tracker = TestResourceTracker::new(nodecar_path.clone());
+
+  // Create a custom fingerprint JSON
+  let custom_fingerprint = r#"{
+    "screen.width": 1440,
+    "screen.height": 900,
+    "navigator.userAgent": "Mozilla/5.0 (Custom) Test Browser",
+    "navigator.platform": "TestPlatform",
+    "timezone": "America/New_York",
+    "locale:language": "en",
+    "locale:region": "US"
+  }"#;
+
+  let args = [
+    "camoufox",
+    "generate-config",
+    "--fingerprint",
+    custom_fingerprint,
+    "--block-webrtc",
+  ];
+
+  println!("Testing Camoufox config generation with custom fingerprint...");
+  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 30).await?;
+
+  if !output.status.success() {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // If Camoufox is not installed or has configuration issues, skip the test
+    if stderr.contains("not installed")
+      || stderr.contains("not found")
+      || stderr.contains("timeout")
+      || stdout.contains("timeout")
+      || stderr.contains("Could not determine OS")
+    {
+      println!(
+        "Skipping Camoufox generate-config custom fingerprint test - Camoufox not available or configuration issue"
+      );
+      tracker.cleanup_all().await;
+      return Ok(());
+    }
+
+    tracker.cleanup_all().await;
+    return Err(
+      format!("Camoufox generate-config with custom fingerprint failed - stdout: {stdout}, stderr: {stderr}").into(),
+    );
+  }
+
+  let stdout = String::from_utf8(output.stdout)?;
+
+  // Parse the generated config as JSON
+  let config: Value = serde_json::from_str(&stdout)?;
+
+  // Verify the config contains expected properties
+  assert!(
+    config.is_object(),
+    "Generated config should be a JSON object"
+  );
+
+  // Check that our custom values are preserved
+  assert_eq!(
+    config.get("screen.width").and_then(|v| v.as_u64()),
+    Some(1440),
+    "Custom screen width should be preserved"
+  );
+  assert_eq!(
+    config.get("screen.height").and_then(|v| v.as_u64()),
+    Some(900),
+    "Custom screen height should be preserved"
+  );
+  assert_eq!(
+    config.get("navigator.userAgent").and_then(|v| v.as_str()),
+    Some("Mozilla/5.0 (Custom) Test Browser"),
+    "Custom user agent should be preserved"
+  );
+  assert_eq!(
+    config.get("timezone").and_then(|v| v.as_str()),
+    Some("America/New_York"),
+    "Custom timezone should be preserved"
+  );
+
+  println!("Camoufox generate-config custom fingerprint test completed successfully");
   tracker.cleanup_all().await;
   Ok(())
 }

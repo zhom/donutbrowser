@@ -11,7 +11,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { getCurrentOS } from "@/lib/browser-utils";
 import type { BrowserProfile, CamoufoxConfig } from "@/types";
 
 interface CamoufoxConfigDialogProps {
@@ -28,8 +27,6 @@ export function CamoufoxConfigDialog({
   onSave,
 }: CamoufoxConfigDialogProps) {
   const [config, setConfig] = useState<CamoufoxConfig>({
-    enable_cache: true,
-    os: [getCurrentOS()],
     geoip: true,
   });
   const [isSaving, setIsSaving] = useState(false);
@@ -39,8 +36,6 @@ export function CamoufoxConfigDialog({
     if (profile && profile.browser === "camoufox") {
       setConfig(
         profile.camoufox_config || {
-          enable_cache: true,
-          os: [getCurrentOS()],
           geoip: true,
         },
       );
@@ -54,12 +49,31 @@ export function CamoufoxConfigDialog({
   const handleSave = async () => {
     if (!profile) return;
 
+    // Validate fingerprint JSON if it exists
+    if (config.fingerprint) {
+      try {
+        JSON.parse(config.fingerprint);
+      } catch (_error) {
+        const { toast } = await import("sonner");
+        toast.error("Invalid fingerprint configuration", {
+          description:
+            "The fingerprint configuration contains invalid JSON. Please check your advanced settings.",
+        });
+        return;
+      }
+    }
+
     setIsSaving(true);
     try {
       await onSave(profile, config);
       onClose();
     } catch (error) {
       console.error("Failed to save camoufox config:", error);
+      const { toast } = await import("sonner");
+      toast.error("Failed to save configuration", {
+        description:
+          error instanceof Error ? error.message : "Unknown error occurred",
+      });
     } finally {
       setIsSaving(false);
     }
@@ -70,8 +84,6 @@ export function CamoufoxConfigDialog({
     if (profile && profile.browser === "camoufox") {
       setConfig(
         profile.camoufox_config || {
-          enable_cache: true,
-          os: [getCurrentOS()],
           geoip: true,
         },
       );
@@ -83,11 +95,7 @@ export function CamoufoxConfigDialog({
     return null;
   }
 
-  // Get the selected OS for warning
-  const selectedOS = config.os?.[0];
-  const currentOS = getCurrentOS();
-  const showOSWarning =
-    selectedOS && selectedOS !== currentOS && currentOS !== "unknown";
+  // No OS warning needed anymore since we removed OS selection
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -98,22 +106,12 @@ export function CamoufoxConfigDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 pr-6 h-[320px]">
+        <ScrollArea className="flex-1 pr-6 h-[400px]">
           <div className="py-4">
-            {/* OS Warning */}
-            {showOSWarning && (
-              <div className="mb-6 p-3 bg-amber-50 rounded-md border border-amber-200">
-                <p className="text-sm text-amber-800">
-                  ⚠️ Warning: Spoofing OS features is detectable by advanced
-                  anti-bot systems. Some platform-specific APIs and behaviors
-                  cannot be fully replicated.
-                </p>
-              </div>
-            )}
-
             <SharedCamoufoxConfigForm
               config={config}
               onConfigChange={updateConfig}
+              forceAdvanced={true}
             />
           </div>
         </ScrollArea>

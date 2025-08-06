@@ -9,6 +9,7 @@ export interface CamoufoxConfig {
   profilePath?: string;
   url?: string;
   processId?: number;
+  customConfig?: string; // JSON string of the fingerprint config
 }
 
 const STORAGE_DIR = path.join(tmp.tmpdir, "donutbrowser", "camoufox");

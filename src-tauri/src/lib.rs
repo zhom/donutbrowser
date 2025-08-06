@@ -25,7 +25,6 @@ mod profile;
 mod profile_importer;
 mod proxy_manager;
 mod settings_manager;
-mod system_utils;
 mod theme_detector;
 mod version_updater;
 
@@ -64,8 +63,6 @@ use app_auto_updater::{
 use profile_importer::{detect_existing_profiles, import_browser_profile};
 
 use theme_detector::get_system_theme;
-
-use system_utils::{get_system_locale, get_system_timezone};
 
 use group_manager::{
   assign_profiles_to_group, create_profile_group, delete_profile_group, delete_selected_profiles,
@@ -478,8 +475,6 @@ pub fn run() {
       update_stored_proxy,
       delete_stored_proxy,
       update_camoufox_config,
-      get_system_locale,
-      get_system_timezone,
       get_profile_groups,
       get_groups_with_profile_counts,
       create_profile_group,

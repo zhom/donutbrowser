@@ -1,6 +1,8 @@
-import { launchServer } from "camoufox-js";
+import { launchOptions } from "camoufox-js";
+import type { LaunchOptions } from "camoufox-js/dist/utils.js";
 import { type Browser, type BrowserServer, firefox } from "playwright-core";
 import { getCamoufoxConfig, saveCamoufoxConfig } from "./camoufox-storage.js";
+import { getEnvVars } from "./utils.js";
 
 /**
  * Run a Camoufox browser server as a worker process
@@ -73,62 +75,67 @@ export async function runCamoufoxWorker(id: string): Promise<void> {
 
     try {
       // Prepare options for Camoufox
-      const camoufoxOptions = { ...config.options };
+      const camoufoxOptions: LaunchOptions = { ...config.options };
 
       // Add profile path if provided
       if (config.profilePath) {
         camoufoxOptions.user_data_dir = config.profilePath;
       }
 
-      // Theming
-      camoufoxOptions.disableTheming = true;
-      camoufoxOptions.showcursor = false;
-
-      // Set Firefox preferences for theming
-      if (!camoufoxOptions.firefox_user_prefs) {
-        camoufoxOptions.firefox_user_prefs = {};
+      if (camoufoxOptions.block_images) {
+        camoufoxOptions.block_images = true;
       }
 
-      // Default to non-headless for visibility
-      if (camoufoxOptions.headless === undefined) {
-        camoufoxOptions.headless = false;
+      if (camoufoxOptions.block_webgl) {
+        camoufoxOptions.block_webgl = true;
       }
 
-      // Launch the server with proper options
-      server = await launchServer({
-        ws_path: `/ws_${config.id}`,
-        os: camoufoxOptions.os,
-        block_images: camoufoxOptions.block_images,
-        block_webrtc: camoufoxOptions.block_webrtc,
-        block_webgl: camoufoxOptions.block_webgl,
-        disable_coop: camoufoxOptions.disable_coop,
-        geoip: camoufoxOptions.geoip,
-        humanize: camoufoxOptions.humanize,
-        locale: camoufoxOptions.locale,
-        addons: camoufoxOptions.addons,
-        fonts: camoufoxOptions.fonts,
-        custom_fonts_only: camoufoxOptions.custom_fonts_only,
-        exclude_addons: camoufoxOptions.exclude_addons,
-        screen: camoufoxOptions.screen,
-        window: camoufoxOptions.window,
-        fingerprint: camoufoxOptions.fingerprint,
-        ff_version: camoufoxOptions.ff_version,
-        headless: camoufoxOptions.headless,
-        main_world_eval: camoufoxOptions.main_world_eval,
-        executable_path: camoufoxOptions.executable_path,
-        firefox_user_prefs: camoufoxOptions.firefox_user_prefs,
-        proxy: camoufoxOptions.proxy,
-        enable_cache: camoufoxOptions.enable_cache,
-        args: camoufoxOptions.args,
-        env: camoufoxOptions.env,
-        debug: camoufoxOptions.debug,
-        virtual_display: camoufoxOptions.virtual_display,
-        webgl_config: camoufoxOptions.webgl_config,
-        config: {
-          disableTheming: true,
-          showcursor: false,
-          timezone: camoufoxOptions.timezone,
-        },
+      if (camoufoxOptions.block_webrtc) {
+        camoufoxOptions.block_webrtc = true;
+      }
+
+      // Check for headless mode from config (no environment variable check)
+      if (camoufoxOptions.headless) {
+        camoufoxOptions.headless = true;
+      }
+
+      // Always set these defaults
+      camoufoxOptions.i_know_what_im_doing = true;
+      camoufoxOptions.config = {
+        disableTheming: true,
+        showcursor: false,
+        ...(camoufoxOptions.config || {}),
+      };
+
+      // Generate the configuration using launchOptions
+      const generatedOptions = await launchOptions(camoufoxOptions);
+
+      // If we have a custom config from Rust, use it directly as environment variables
+      let finalEnv = generatedOptions.env || {};
+
+      if (config.customConfig) {
+        try {
+          // Parse the custom config JSON string
+          const customConfigObj = JSON.parse(config.customConfig);
+
+          // Convert custom config to environment variables using getEnvVars
+          const customEnvVars = getEnvVars(customConfigObj);
+
+          // Merge custom config with generated config (custom takes precedence)
+          finalEnv = { ...finalEnv, ...customEnvVars };
+        } catch (error) {
+          console.error(
+            "Failed to parse custom config, using generated config:",
+            error,
+          );
+        }
+      }
+
+      // Launch the server with the final configuration
+      server = await firefox.launchServer({
+        ...generatedOptions,
+        wsPath: `/ws_${config.id}`,
+        env: finalEnv,
       });
 
       // Connect to the server
@@ -140,8 +147,7 @@ export async function runCamoufoxWorker(id: string): Promise<void> {
 
       saveCamoufoxConfig(config);
 
-      // Monitor for window closure to handle Command+Q properly
-
+      // Monitor for window closure
       const startWindowMonitoring = () => {
         windowCheckInterval = setInterval(async () => {
           try {

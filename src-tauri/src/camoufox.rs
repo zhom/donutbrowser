@@ -9,85 +9,29 @@ use tokio::sync::Mutex as AsyncMutex;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CamoufoxConfig {
-  pub os: Option<Vec<String>>,
+  pub proxy: Option<String>,
+  pub screen_max_width: Option<u32>,
+  pub screen_max_height: Option<u32>,
+  pub geoip: Option<serde_json::Value>, // Can be String or bool
   pub block_images: Option<bool>,
   pub block_webrtc: Option<bool>,
   pub block_webgl: Option<bool>,
-  pub disable_coop: Option<bool>,
-  pub geoip: Option<serde_json::Value>, // Can be String or bool
-  pub country: Option<String>,
-  pub timezone: Option<String>,
-  pub latitude: Option<f64>,
-  pub longitude: Option<f64>,
-  pub humanize: Option<bool>,
-  pub humanize_duration: Option<f64>,
-  pub headless: Option<bool>,
-  pub locale: Option<Vec<String>>,
-  pub addons: Option<Vec<String>>,
-  pub fonts: Option<Vec<String>>,
-  pub custom_fonts_only: Option<bool>,
-  pub exclude_addons: Option<Vec<String>>,
-  pub screen_min_width: Option<u32>,
-  pub screen_max_width: Option<u32>,
-  pub screen_min_height: Option<u32>,
-  pub screen_max_height: Option<u32>,
-  pub window_width: Option<u32>,
-  pub window_height: Option<u32>,
-  pub ff_version: Option<u32>,
-  pub main_world_eval: Option<bool>,
-  pub webgl_vendor: Option<String>,
-  pub webgl_renderer: Option<String>,
-  pub proxy: Option<String>,
-  pub enable_cache: Option<bool>,
-  pub virtual_display: Option<String>,
-  pub debug: Option<bool>,
-  pub additional_args: Option<Vec<String>>,
-  pub env_vars: Option<HashMap<String, String>>,
-  pub firefox_prefs: Option<HashMap<String, serde_json::Value>>,
-  pub disable_theming: Option<bool>,
-  pub showcursor: Option<bool>,
+  pub executable_path: Option<String>,
+  pub fingerprint: Option<String>, // JSON string of the complete fingerprint config
 }
 
 impl Default for CamoufoxConfig {
   fn default() -> Self {
     Self {
-      os: None,
+      proxy: None,
+      screen_max_width: None,
+      screen_max_height: None,
+      geoip: Some(serde_json::Value::Bool(true)),
       block_images: None,
       block_webrtc: None,
       block_webgl: None,
-      disable_coop: None,
-      geoip: Some(serde_json::Value::Bool(true)),
-      country: None,
-      timezone: None,
-      latitude: None,
-      longitude: None,
-      humanize: None,
-      humanize_duration: None,
-      headless: None,
-      locale: None,
-      addons: None,
-      fonts: None,
-      custom_fonts_only: None,
-      exclude_addons: None,
-      screen_min_width: None,
-      screen_max_width: None,
-      screen_min_height: None,
-      screen_max_height: None,
-      window_width: None,
-      window_height: None,
-      ff_version: None,
-      main_world_eval: None,
-      webgl_vendor: None,
-      webgl_renderer: None,
-      proxy: None,
-      enable_cache: Some(true),
-      virtual_display: None,
-      debug: None,
-      additional_args: None,
-      env_vars: None,
-      firefox_prefs: None,
-      disable_theming: Some(true),
-      showcursor: Some(false),
+      executable_path: None,
+      fingerprint: None,
     }
   }
 }
@@ -137,26 +81,93 @@ impl CamoufoxNodecarLauncher {
   #[allow(dead_code)]
   pub fn create_test_config() -> CamoufoxConfig {
     CamoufoxConfig {
-      // Core anti-fingerprinting settings
-      screen_min_width: Some(1440),
-      screen_min_height: Some(900),
-
-      // WebGL spoofing
-      webgl_vendor: Some("Intel Inc.".to_string()),
-      webgl_renderer: Some("Intel Iris Pro OpenGL Engine".to_string()),
-
-      // Humanization
-      humanize: Some(true),
-
-      // Other settings
-      debug: Some(true),
-      enable_cache: Some(true),
-      headless: Some(false), // Not headless for testing
-      disable_theming: Some(true),
-      showcursor: Some(false),
-
+      screen_max_width: Some(1440),
+      screen_max_height: Some(900),
+      geoip: Some(serde_json::Value::Bool(true)),
       ..Default::default()
     }
+  }
+
+  /// Generate Camoufox fingerprint configuration during profile creation
+  pub async fn generate_fingerprint_config(
+    &self,
+    app_handle: &AppHandle,
+    config: &CamoufoxConfig,
+  ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let mut config_args = vec!["camoufox".to_string(), "generate-config".to_string()];
+
+    // For fingerprint generation during profile creation, we can pass proxy directly
+    // but we set geoip to false during tests to avoid network requests
+    if std::env::var("CAMOUFOX_TEST").is_ok() {
+      config_args.extend(["--geoip".to_string(), "false".to_string()]);
+    } else if let Some(geoip) = &config.geoip {
+      match geoip {
+        serde_json::Value::Bool(true) => {
+          config_args.extend(["--geoip".to_string(), "true".to_string()]);
+        }
+        serde_json::Value::Bool(false) => {
+          config_args.extend(["--geoip".to_string(), "false".to_string()]);
+        }
+        serde_json::Value::String(ip) => {
+          config_args.extend(["--geoip".to_string(), ip.clone()]);
+        }
+        _ => {}
+      }
+    } else {
+      // Default to true for fingerprint generation
+      config_args.extend(["--geoip".to_string(), "true".to_string()]);
+    }
+
+    // Add proxy if provided (can be passed directly during fingerprint generation)
+    if let Some(proxy) = &config.proxy {
+      config_args.extend(["--proxy".to_string(), proxy.clone()]);
+    }
+
+    // Add screen dimensions if provided
+    if let Some(max_width) = config.screen_max_width {
+      config_args.extend(["--max-width".to_string(), max_width.to_string()]);
+    }
+
+    if let Some(max_height) = config.screen_max_height {
+      config_args.extend(["--max-height".to_string(), max_height.to_string()]);
+    }
+
+    // Add block_* and executable_path options
+    if let Some(block_images) = config.block_images {
+      if block_images {
+        config_args.push("--block-images".to_string());
+      }
+    }
+
+    if let Some(block_webrtc) = config.block_webrtc {
+      if block_webrtc {
+        config_args.push("--block-webrtc".to_string());
+      }
+    }
+
+    if let Some(block_webgl) = config.block_webgl {
+      if block_webgl {
+        config_args.push("--block-webgl".to_string());
+      }
+    }
+
+    if let Some(executable_path) = &config.executable_path {
+      config_args.extend(["--executable-path".to_string(), executable_path.clone()]);
+    }
+
+    // Execute config generation command
+    let mut config_sidecar = self.get_nodecar_sidecar(app_handle)?;
+    for arg in &config_args {
+      config_sidecar = config_sidecar.arg(arg);
+    }
+
+    let config_output = config_sidecar.output().await?;
+    if !config_output.status.success() {
+      let stderr = String::from_utf8_lossy(&config_output.stderr);
+      return Err(format!("Failed to generate camoufox fingerprint config: {stderr}").into());
+    }
+
+    Ok(String::from_utf8_lossy(&config_output.stdout).to_string())
   }
 
   /// Get the nodecar sidecar command
@@ -179,6 +190,82 @@ impl CamoufoxNodecarLauncher {
     config: &CamoufoxConfig,
     url: Option<&str>,
   ) -> Result<CamoufoxLaunchResult, Box<dyn std::error::Error + Send + Sync>> {
+    // Generate or use existing configuration
+    let custom_config = if let Some(existing_fingerprint) = &config.fingerprint {
+      // Use existing fingerprint from profile metadata
+      println!("Using existing fingerprint from profile metadata");
+      existing_fingerprint.clone()
+    } else {
+      // Generate new configuration using nodecar generate-config command
+      println!("Generating new fingerprint configuration");
+      let mut config_args = vec!["camoufox".to_string(), "generate-config".to_string()];
+
+      // Use individual options to build configuration
+      if let Some(proxy) = &config.proxy {
+        config_args.extend(["--proxy".to_string(), proxy.clone()]);
+      }
+
+      if let Some(max_width) = config.screen_max_width {
+        config_args.extend(["--max-width".to_string(), max_width.to_string()]);
+      }
+
+      if let Some(max_height) = config.screen_max_height {
+        config_args.extend(["--max-height".to_string(), max_height.to_string()]);
+      }
+
+      if let Some(geoip) = &config.geoip {
+        match geoip {
+          serde_json::Value::Bool(true) => {
+            config_args.extend(["--geoip".to_string(), "true".to_string()]);
+          }
+          serde_json::Value::Bool(false) => {
+            config_args.extend(["--geoip".to_string(), "false".to_string()]);
+          }
+          serde_json::Value::String(ip) => {
+            config_args.extend(["--geoip".to_string(), ip.clone()]);
+          }
+          _ => {}
+        }
+      }
+
+      // Always add block_* and executable_path options
+      if let Some(block_images) = config.block_images {
+        if block_images {
+          config_args.push("--block-images".to_string());
+        }
+      }
+
+      if let Some(block_webrtc) = config.block_webrtc {
+        if block_webrtc {
+          config_args.push("--block-webrtc".to_string());
+        }
+      }
+
+      if let Some(block_webgl) = config.block_webgl {
+        if block_webgl {
+          config_args.push("--block-webgl".to_string());
+        }
+      }
+
+      if let Some(executable_path) = &config.executable_path {
+        config_args.extend(["--executable-path".to_string(), executable_path.clone()]);
+      }
+
+      // Execute config generation command
+      let mut config_sidecar = self.get_nodecar_sidecar(app_handle)?;
+      for arg in &config_args {
+        config_sidecar = config_sidecar.arg(arg);
+      }
+
+      let config_output = config_sidecar.output().await?;
+      if !config_output.status.success() {
+        let stderr = String::from_utf8_lossy(&config_output.stderr);
+        return Err(format!("Failed to generate camoufox config: {stderr}").into());
+      }
+
+      String::from_utf8_lossy(&config_output.stdout).to_string()
+    };
+
     // Build nodecar command arguments
     let mut args = vec!["camoufox".to_string(), "start".to_string()];
 
@@ -190,207 +277,12 @@ impl CamoufoxNodecarLauncher {
       args.extend(["--url".to_string(), url.to_string()]);
     }
 
-    // Add configuration options
-    if let Some(os_list) = &config.os {
-      let os_str = os_list.join(",");
-      args.extend(["--os".to_string(), os_str]);
-    }
+    // Always add the generated custom config
+    args.extend(["--custom-config".to_string(), custom_config]);
 
-    if let Some(block_images) = config.block_images {
-      if block_images {
-        args.push("--block-images".to_string());
-      }
-    }
-
-    if let Some(block_webrtc) = config.block_webrtc {
-      if block_webrtc {
-        args.push("--block-webrtc".to_string());
-      }
-    }
-
-    if let Some(block_webgl) = config.block_webgl {
-      if block_webgl {
-        args.push("--block-webgl".to_string());
-      }
-    }
-
-    if let Some(disable_coop) = config.disable_coop {
-      if disable_coop {
-        args.push("--disable-coop".to_string());
-      }
-    }
-
-    if let Some(geoip) = &config.geoip {
-      match geoip {
-        serde_json::Value::Bool(true) => {
-          args.extend(["--geoip".to_string(), "auto".to_string()]);
-        }
-        serde_json::Value::String(ip) => {
-          args.extend(["--geoip".to_string(), ip.clone()]);
-        }
-        _ => {}
-      }
-    }
-
-    if let Some(country) = &config.country {
-      args.extend(["--country".to_string(), country.clone()]);
-    }
-
-    if let Some(timezone) = &config.timezone {
-      args.extend(["--timezone".to_string(), timezone.clone()]);
-    }
-
-    if let Some(latitude) = config.latitude {
-      args.extend(["--latitude".to_string(), latitude.to_string()]);
-    }
-
-    if let Some(longitude) = config.longitude {
-      args.extend(["--longitude".to_string(), longitude.to_string()]);
-    }
-
-    if let Some(humanize) = config.humanize {
-      if humanize {
-        if let Some(duration) = config.humanize_duration {
-          args.extend(["--humanize".to_string(), duration.to_string()]);
-        } else {
-          args.push("--humanize".to_string());
-        }
-      }
-    }
-
-    if let Some(headless) = config.headless {
-      if headless {
-        args.push("--headless".to_string());
-      }
-    }
-
-    if let Some(locale_list) = &config.locale {
-      let locale_str = locale_list.join(",");
-      args.extend(["--locale".to_string(), locale_str]);
-    }
-
-    if let Some(addons) = &config.addons {
-      let addons_str = addons.join(",");
-      args.extend(["--addons".to_string(), addons_str]);
-    }
-
-    if let Some(fonts) = &config.fonts {
-      let fonts_str = fonts.join(",");
-      args.extend(["--fonts".to_string(), fonts_str]);
-    }
-
-    if let Some(custom_fonts_only) = config.custom_fonts_only {
-      if custom_fonts_only {
-        args.push("--custom-fonts-only".to_string());
-      }
-    }
-
-    if let Some(exclude_addons) = &config.exclude_addons {
-      let exclude_str = exclude_addons.join(",");
-      args.extend(["--exclude-addons".to_string(), exclude_str]);
-    }
-
-    if let Some(screen_min_width) = config.screen_min_width {
-      args.extend([
-        "--screen-min-width".to_string(),
-        screen_min_width.to_string(),
-      ]);
-    }
-
-    if let Some(screen_max_width) = config.screen_max_width {
-      args.extend([
-        "--screen-max-width".to_string(),
-        screen_max_width.to_string(),
-      ]);
-    }
-
-    if let Some(screen_min_height) = config.screen_min_height {
-      args.extend([
-        "--screen-min-height".to_string(),
-        screen_min_height.to_string(),
-      ]);
-    }
-
-    if let Some(screen_max_height) = config.screen_max_height {
-      args.extend([
-        "--screen-max-height".to_string(),
-        screen_max_height.to_string(),
-      ]);
-    }
-
-    if let Some(window_width) = config.window_width {
-      args.extend(["--window-width".to_string(), window_width.to_string()]);
-    }
-
-    if let Some(window_height) = config.window_height {
-      args.extend(["--window-height".to_string(), window_height.to_string()]);
-    }
-
-    if let Some(ff_version) = config.ff_version {
-      args.extend(["--ff-version".to_string(), ff_version.to_string()]);
-    }
-
-    if let Some(main_world_eval) = config.main_world_eval {
-      if main_world_eval {
-        args.push("--main-world-eval".to_string());
-      }
-    }
-
-    if let Some(webgl_vendor) = &config.webgl_vendor {
-      args.extend(["--webgl-vendor".to_string(), webgl_vendor.clone()]);
-    }
-
-    if let Some(webgl_renderer) = &config.webgl_renderer {
-      args.extend(["--webgl-renderer".to_string(), webgl_renderer.clone()]);
-    }
-
-    if let Some(proxy) = &config.proxy {
-      args.extend(["--proxy".to_string(), proxy.clone()]);
-    }
-
-    if let Some(enable_cache) = config.enable_cache {
-      if !enable_cache {
-        args.push("--disable-cache".to_string());
-      }
-    }
-
-    if let Some(virtual_display) = &config.virtual_display {
-      args.extend(["--virtual-display".to_string(), virtual_display.clone()]);
-    }
-
-    if let Some(debug) = config.debug {
-      if debug {
-        args.push("--debug".to_string());
-      }
-    }
-
-    if let Some(additional_args) = &config.additional_args {
-      let args_str = additional_args.join(",");
-      args.extend(["--args".to_string(), args_str]);
-    }
-
-    if let Some(env_vars) = &config.env_vars {
-      let env_json = serde_json::to_string(env_vars)?;
-      args.extend(["--env".to_string(), env_json]);
-    }
-
-    if let Some(firefox_prefs) = &config.firefox_prefs {
-      let prefs_json = serde_json::to_string(firefox_prefs)?;
-      args.extend(["--firefox-prefs".to_string(), prefs_json]);
-    }
-
-    if let Some(disable_theming) = config.disable_theming {
-      if disable_theming {
-        args.push("--disable-theming".to_string());
-      }
-    }
-
-    if let Some(showcursor) = config.showcursor {
-      if showcursor {
-        args.push("--showcursor".to_string());
-      } else {
-        args.push("--no-showcursor".to_string());
-      }
+    // Add headless flag for tests
+    if std::env::var("CAMOUFOX_HEADLESS").is_ok() {
+      args.push("--headless".to_string());
     }
 
     // Get the nodecar sidecar command
@@ -622,18 +514,8 @@ mod tests {
     let test_config = CamoufoxNodecarLauncher::create_test_config();
 
     // Verify test config has expected values
-    assert_eq!(test_config.screen_min_width, Some(1440));
-    assert_eq!(test_config.screen_min_height, Some(900));
-    assert_eq!(test_config.webgl_vendor, Some("Intel Inc.".to_string()));
-    assert_eq!(
-      test_config.webgl_renderer,
-      Some("Intel Iris Pro OpenGL Engine".to_string())
-    );
-    assert_eq!(test_config.humanize, Some(true));
-    assert_eq!(test_config.debug, Some(true));
-    assert_eq!(test_config.enable_cache, Some(true));
-    assert_eq!(test_config.headless, Some(false));
-    // Verify that geoip is enabled by default (from Default implementation)
+    assert_eq!(test_config.screen_max_width, Some(1440));
+    assert_eq!(test_config.screen_max_height, Some(900));
     assert_eq!(test_config.geoip, Some(serde_json::Value::Bool(true)));
   }
 
@@ -642,11 +524,9 @@ mod tests {
     let default_config = CamoufoxConfig::default();
 
     // Verify defaults
-    assert_eq!(default_config.enable_cache, Some(true));
     assert_eq!(default_config.geoip, Some(serde_json::Value::Bool(true)));
-    assert_eq!(default_config.timezone, None);
-    assert_eq!(default_config.debug, None);
-    assert_eq!(default_config.headless, None);
+    assert_eq!(default_config.proxy, None);
+    assert_eq!(default_config.fingerprint, None);
   }
 }
 
