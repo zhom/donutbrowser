@@ -683,11 +683,7 @@ impl ProfileManager {
           is_running = true;
           found_pid = Some(pid);
           // Found existing browser process
-        } else {
-          println!("PID {pid} exists but doesn't match our profile path exactly, searching for correct process...");
         }
-      } else {
-        println!("Stored PID {pid} no longer exists, searching for browser process...");
       }
     }
 
@@ -840,6 +836,7 @@ impl ProfileManager {
             println!("Warning: Failed to emit profile update event: {e}");
           }
 
+          // Only log once when the process actually stops (when we had a PID but now don't)
           println!(
             "Camoufox process has stopped for profile '{}'",
             profile.name
