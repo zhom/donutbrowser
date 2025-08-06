@@ -2,7 +2,6 @@ use std::env;
 use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
-use tokio::time::timeout;
 
 /// Utility functions for integration tests
 pub struct TestUtils;
