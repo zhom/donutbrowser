@@ -31,28 +31,22 @@ export async function runProxyWorker(id: string): Promise<void> {
   });
 
   // Handle process termination gracefully
-  const gracefulShutdown = async (signal: string) => {
-    console.log(`Proxy worker ${id} received ${signal}, shutting down...`);
+  const gracefulShutdown = async () => {
     try {
       await server.close(true);
-      console.log(`Proxy worker ${id} shut down successfully`);
-    } catch (error) {
-      console.error(`Error during shutdown for proxy ${id}:`, error);
-    }
+    } catch {}
     process.exit(0);
   };
 
-  process.on("SIGTERM", () => void gracefulShutdown("SIGTERM"));
-  process.on("SIGINT", () => void gracefulShutdown("SIGINT"));
+  process.on("SIGTERM", () => void gracefulShutdown());
+  process.on("SIGINT", () => void gracefulShutdown());
 
   // Handle uncaught exceptions
-  process.on("uncaughtException", (error) => {
-    console.error(`Uncaught exception in proxy worker ${id}:`, error);
+  process.on("uncaughtException", () => {
     process.exit(1);
   });
 
-  process.on("unhandledRejection", (reason) => {
-    console.error(`Unhandled rejection in proxy worker ${id}:`, reason);
+  process.on("unhandledRejection", () => {
     process.exit(1);
   });
 
@@ -64,9 +58,6 @@ export async function runProxyWorker(id: string): Promise<void> {
     config.localPort = server.port;
     config.localUrl = `http://127.0.0.1:${server.port}`;
     updateProxyConfig(config);
-
-    console.log(`Proxy worker ${id} started on port ${server.port}`);
-    console.log(`Forwarding to upstream proxy: ${config.upstreamUrl}`);
 
     // Keep the process alive
     setInterval(() => {

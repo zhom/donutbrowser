@@ -43,7 +43,10 @@ export function getCamoufoxConfig(id: string): CamoufoxConfig | null {
     const content = fs.readFileSync(filePath, "utf-8");
     return JSON.parse(content) as CamoufoxConfig;
   } catch (error) {
-    console.error(`Error reading Camoufox config ${id}:`, error);
+    console.error({
+      message: `Error reading Camoufox config ${id}`,
+      error: (error as Error).message,
+    });
     return null;
   }
 }
@@ -64,7 +67,10 @@ export function deleteCamoufoxConfig(id: string): boolean {
     fs.unlinkSync(filePath);
     return true;
   } catch (error) {
-    console.error(`Error deleting Camoufox config ${id}:`, error);
+    console.error({
+      message: `Error deleting Camoufox config ${id}`,
+      error: (error as Error).message,
+    });
     return false;
   }
 }
@@ -90,13 +96,16 @@ export function listCamoufoxConfigs(): CamoufoxConfig[] {
           );
           return JSON.parse(content) as CamoufoxConfig;
         } catch (error) {
-          console.error(`Error reading Camoufox config ${file}:`, error);
+          console.error({
+            message: `Error reading Camoufox config ${file}`,
+            error,
+          });
           return null;
         }
       })
       .filter((config): config is CamoufoxConfig => config !== null);
   } catch (error) {
-    console.error("Error listing Camoufox configs:", error);
+    console.error({ message: "Error listing Camoufox configs:", error });
     return [];
   }
 }
@@ -115,13 +124,16 @@ export function updateCamoufoxConfig(config: CamoufoxConfig): boolean {
     return true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      console.error(
-        `Config ${config.id} was deleted while the app was running`,
-      );
+      console.error({
+        message: `Config ${config.id} was deleted while the app was running`,
+      });
       return false;
     }
 
-    console.error(`Error updating Camoufox config ${config.id}:`, error);
+    console.error({
+      message: `Error updating Camoufox config ${config.id}`,
+      error,
+    });
     return false;
   }
 }

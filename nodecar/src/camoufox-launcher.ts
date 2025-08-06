@@ -12,98 +12,6 @@ import {
 } from "./camoufox-storage.js";
 
 /**
- * Convert fingerprint-generator format to camoufox fingerprint format (reverse of convertCamoufoxToFingerprintGenerator)
- * @param fingerprintObj The fingerprint-generator object
- * @returns camoufox fingerprint object
- */
-export function convertFingerprintGeneratorToCamoufox(
-  fingerprintObj: Record<string, any>,
-): Record<string, any> {
-  const camoufoxData: Record<string, any> = {};
-
-  // Reverse mappings from fingerprint-generator structure to camoufox keys
-  const reverseMappings: Record<string, string> = {
-    // Navigator properties
-    "navigator.userAgent": "navigator.userAgent",
-    "navigator.platform": "navigator.platform",
-    "navigator.hardwareConcurrency": "navigator.hardwareConcurrency",
-    "navigator.maxTouchPoints": "navigator.maxTouchPoints",
-    "navigator.doNotTrack": "navigator.doNotTrack",
-    "navigator.appCodeName": "navigator.appCodeName",
-    "navigator.appName": "navigator.appName",
-    "navigator.appVersion": "navigator.appVersion",
-    "navigator.oscpu": "navigator.oscpu",
-    "navigator.product": "navigator.product",
-    "navigator.language": "navigator.language",
-    "navigator.languages": "navigator.languages",
-    "navigator.globalPrivacyControl": "navigator.globalPrivacyControl",
-
-    // Screen properties
-    "screen.width": "screen.width",
-    "screen.height": "screen.height",
-    "screen.availWidth": "screen.availWidth",
-    "screen.availHeight": "screen.availHeight",
-    "screen.availTop": "screen.availTop",
-    "screen.availLeft": "screen.availLeft",
-    "screen.colorDepth": "screen.colorDepth",
-    "screen.pixelDepth": "screen.pixelDepth",
-    "screen.outerWidth": "window.outerWidth",
-    "screen.outerHeight": "window.outerHeight",
-    "screen.innerWidth": "window.innerWidth",
-    "screen.innerHeight": "window.innerHeight",
-    "screen.screenX": "window.screenX",
-    "screen.screenY": "window.screenY",
-    "screen.pageXOffset": "screen.pageXOffset",
-    "screen.pageYOffset": "screen.pageYOffset",
-    "screen.devicePixelRatio": "window.devicePixelRatio",
-    "screen.clientWidth": "document.body.clientWidth",
-    "screen.clientHeight": "document.body.clientHeight",
-
-    // WebGL properties
-    "videoCard.vendor": "webGl:vendor",
-    "videoCard.renderer": "webGl:renderer",
-
-    // Headers
-    "headers.Accept-Encoding": "headers.Accept-Encoding",
-
-    // Battery
-    "battery.charging": "battery:charging",
-    "battery.chargingTime": "battery:chargingTime",
-    "battery.dischargingTime": "battery:dischargingTime",
-  };
-
-  // Apply reverse mappings
-  for (const [fingerprintPath, camoufoxKey] of Object.entries(
-    reverseMappings,
-  )) {
-    const pathParts = fingerprintPath.split(".");
-    let current = fingerprintObj;
-
-    // Navigate to the nested property
-    for (let i = 0; i < pathParts.length - 1; i++) {
-      const part = pathParts[i];
-      if (!current[part]) {
-        break;
-      }
-      current = current[part];
-    }
-
-    // Get the final value
-    const finalKey = pathParts[pathParts.length - 1];
-    if (current && current[finalKey] !== undefined) {
-      camoufoxData[camoufoxKey] = current[finalKey];
-    }
-  }
-
-  // Handle fonts separately
-  if (fingerprintObj.fonts && Array.isArray(fingerprintObj.fonts)) {
-    camoufoxData.fonts = fingerprintObj.fonts;
-  }
-
-  return camoufoxData;
-}
-
-/**
  * Convert camoufox fingerprint format to fingerprint-generator format
  * @param camoufoxFingerprint The camoufox fingerprint object
  * @returns fingerprint-generator object
@@ -367,37 +275,20 @@ export async function stopCamoufoxProcess(id: string): Promise<boolean> {
   }
 
   try {
-    console.log(`Stopping Camoufox process ${id} (PID: ${config.processId})`);
-
     // Method 1: If we have a process ID, kill by PID with proper signal sequence
     if (config.processId) {
       try {
         // First try SIGTERM for graceful shutdown
         process.kill(config.processId, "SIGTERM");
-        console.log(`Sent SIGTERM to Camoufox process ${config.processId}`);
-
         // Give it more time to terminate gracefully (increased from 2s to 5s)
         await new Promise((resolve) => setTimeout(resolve, 5000));
 
         // Check if process is still running
         try {
           process.kill(config.processId, 0); // Signal 0 checks if process exists
-          // Process still exists, force kill
-          console.log(
-            `Camoufox process ${config.processId} still running, sending SIGKILL`,
-          );
           process.kill(config.processId, "SIGKILL");
-        } catch {
-          // Process already terminated
-          console.log(
-            `Camoufox process ${config.processId} terminated gracefully`,
-          );
-        }
-      } catch {
-        console.log(
-          `Camoufox process ${config.processId} not found or already terminated`,
-        );
-      }
+        } catch {}
+      } catch {}
     }
 
     // Method 2: Pattern-based kill as fallback

@@ -8,7 +8,6 @@
     "watch": "nodemon --exec ts-node --esm ./src/index.ts --watch src",
     "dev": "node --loader ts-node/esm ./src/index.ts",
     "start": "tsc && node ./dist/index.js",
-    "test": "tsc && node ./dist/test-proxy.js",
     "rename-binary": "sh ./copy-binary.sh",
     "build": "tsc && banderole bundle . --output nodecar-bin && pnpm rename-binary",
     "build:mac-aarch64": "tsc && banderole bundle . --output nodecar-bin && pnpm rename-binary",
