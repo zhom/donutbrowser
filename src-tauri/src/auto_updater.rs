@@ -428,7 +428,7 @@ impl AutoUpdater {
       .join("auto_update_state.json")
   }
 
-  fn load_auto_update_state(
+  pub fn load_auto_update_state(
     &self,
   ) -> Result<AutoUpdateState, Box<dyn std::error::Error + Send + Sync>> {
     let state_file = self.get_auto_update_state_file();
@@ -442,7 +442,7 @@ impl AutoUpdater {
     Ok(state)
   }
 
-  fn save_auto_update_state(
+  pub fn save_auto_update_state(
     &self,
     state: &AutoUpdateState,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
