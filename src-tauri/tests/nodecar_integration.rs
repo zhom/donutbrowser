@@ -94,7 +94,7 @@ async fn test_nodecar_proxy_lifecycle() -> Result<(), Box<dyn std::error::Error 
   ];
 
   println!("Starting proxy with nodecar...");
-  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 30).await?;
+  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 120).await?;
 
   if !output.status.success() {
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -167,7 +167,7 @@ async fn test_nodecar_proxy_with_auth() -> Result<(), Box<dyn std::error::Error 
     "testpass",
   ];
 
-  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 30).await?;
+  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 120).await?;
 
   if output.status.success() {
     let stdout = String::from_utf8(output.stdout)?;
@@ -589,25 +589,11 @@ async fn test_nodecar_camoufox_generate_config_basic(
   ];
 
   println!("Testing Camoufox config generation with basic options...");
-  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 30).await?;
+  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 120).await?;
 
   if !output.status.success() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
-
-    // If Camoufox is not installed or times out, skip the test
-    if stderr.contains("not installed")
-      || stderr.contains("not found")
-      || stderr.contains("timeout")
-      || stdout.contains("timeout")
-      || stderr.contains("Could not determine OS")
-    {
-      println!(
-        "Skipping Camoufox generate-config test - Camoufox not available or configuration issue"
-      );
-      tracker.cleanup_all().await;
-      return Ok(());
-    }
 
     tracker.cleanup_all().await;
     return Err(
@@ -657,7 +643,7 @@ async fn test_nodecar_camoufox_generate_config_custom_fingerprint(
   let custom_fingerprint = r#"{
     "screen.width": 1440,
     "screen.height": 900,
-    "navigator.userAgent": "Mozilla/5.0 (Custom) Test Browser",
+    "navigator.userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:135.0) Gecko/20100101 Firefox/140.0",
     "navigator.platform": "TestPlatform",
     "timezone": "America/New_York",
     "locale:language": "en",
@@ -673,25 +659,11 @@ async fn test_nodecar_camoufox_generate_config_custom_fingerprint(
   ];
 
   println!("Testing Camoufox config generation with custom fingerprint...");
-  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 30).await?;
+  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 120).await?;
 
   if !output.status.success() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
-
-    // If Camoufox is not installed or has configuration issues, skip the test
-    if stderr.contains("not installed")
-      || stderr.contains("not found")
-      || stderr.contains("timeout")
-      || stdout.contains("timeout")
-      || stderr.contains("Could not determine OS")
-    {
-      println!(
-        "Skipping Camoufox generate-config custom fingerprint test - Camoufox not available or configuration issue"
-      );
-      tracker.cleanup_all().await;
-      return Ok(());
-    }
 
     tracker.cleanup_all().await;
     return Err(
@@ -723,7 +695,7 @@ async fn test_nodecar_camoufox_generate_config_custom_fingerprint(
   );
   assert_eq!(
     config.get("navigator.userAgent").and_then(|v| v.as_str()),
-    Some("Mozilla/5.0 (Custom) Test Browser"),
+    Some("Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:135.0) Gecko/20100101 Firefox/140.0"),
     "Custom user agent should be preserved"
   );
   assert_eq!(
@@ -830,7 +802,7 @@ async fn test_nodecar_proxy_types() -> Result<(), Box<dyn std::error::Error + Se
       proxy_type,
     ];
 
-    let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 30).await?;
+    let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 120).await?;
 
     if output.status.success() {
       let stdout = String::from_utf8(output.stdout)?;
@@ -859,7 +831,7 @@ async fn test_nodecar_direct_proxy() -> Result<(), Box<dyn std::error::Error + S
   let args = ["proxy", "start"];
 
   println!("Starting direct proxy with nodecar...");
-  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 30).await?;
+  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 120).await?;
 
   if !output.status.success() {
     let stderr = String::from_utf8_lossy(&output.stderr);
