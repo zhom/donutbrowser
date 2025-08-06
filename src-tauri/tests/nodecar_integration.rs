@@ -6,8 +6,9 @@ use serde_json::Value;
 async fn setup_test() -> Result<std::path::PathBuf, Box<dyn std::error::Error + Send + Sync>> {
   let nodecar_path = TestUtils::ensure_nodecar_binary().await?;
 
-  // Clean up any existing processes from previous test runs
-  let _ = TestUtils::cleanup_all_nodecar_processes(&nodecar_path).await;
+  // Only clean up test-specific processes, not all processes
+  // This prevents interfering with actual app usage during testing
+  println!("Setting up test environment...");
 
   Ok(nodecar_path)
 }
@@ -37,20 +38,13 @@ impl TestResourceTracker {
   }
 
   async fn cleanup_all(&self) {
-    // Clean up tracked proxies
-    for proxy_id in &self.proxy_ids {
-      let stop_args = ["proxy", "stop", "--id", proxy_id];
-      let _ = TestUtils::execute_nodecar_command(&self.nodecar_path, &stop_args, 10).await;
-    }
-
-    // Clean up tracked camoufox instances
-    for camoufox_id in &self.camoufox_ids {
-      let stop_args = ["camoufox", "stop", "--id", camoufox_id];
-      let _ = TestUtils::execute_nodecar_command(&self.nodecar_path, &stop_args, 30).await;
-    }
-
-    // Give processes time to clean up
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    // Use targeted cleanup to only stop test-specific processes
+    let _ = TestUtils::cleanup_specific_processes(
+      &self.nodecar_path,
+      &self.proxy_ids,
+      &self.camoufox_ids,
+    )
+    .await;
   }
 }
 
@@ -62,15 +56,7 @@ impl Drop for TestResourceTracker {
     let nodecar_path = self.nodecar_path.clone();
 
     tokio::spawn(async move {
-      for proxy_id in &proxy_ids {
-        let stop_args = ["proxy", "stop", "--id", proxy_id];
-        let _ = TestUtils::execute_nodecar_command(&nodecar_path, &stop_args, 10).await;
-      }
-
-      for camoufox_id in &camoufox_ids {
-        let stop_args = ["camoufox", "stop", "--id", camoufox_id];
-        let _ = TestUtils::execute_nodecar_command(&nodecar_path, &stop_args, 30).await;
-      }
+      let _ = TestUtils::cleanup_specific_processes(&nodecar_path, &proxy_ids, &camoufox_ids).await;
     });
   }
 }

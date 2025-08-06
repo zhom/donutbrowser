@@ -121,11 +121,48 @@ impl TestUtils {
     Ok(tempfile::tempdir()?)
   }
 
+  /// Clean up specific nodecar processes by IDs (for targeted test cleanup)
+  pub async fn cleanup_specific_processes(
+    nodecar_path: &PathBuf,
+    proxy_ids: &[String],
+    camoufox_ids: &[String],
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("Cleaning up specific test processes...");
+
+    // Stop specific proxies
+    for proxy_id in proxy_ids {
+      let stop_args = ["proxy", "stop", "--id", proxy_id];
+      if let Ok(output) = Self::execute_nodecar_command(nodecar_path, &stop_args, 10).await {
+        if output.status.success() {
+          println!("Stopped test proxy: {proxy_id}");
+        }
+      }
+    }
+
+    // Stop specific camoufox instances
+    for camoufox_id in camoufox_ids {
+      let stop_args = ["camoufox", "stop", "--id", camoufox_id];
+      if let Ok(output) = Self::execute_nodecar_command(nodecar_path, &stop_args, 30).await {
+        if output.status.success() {
+          println!("Stopped test camoufox instance: {camoufox_id}");
+        }
+      }
+    }
+
+    // Give processes time to clean up
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    println!("Test process cleanup completed");
+    Ok(())
+  }
+
   /// Clean up all running nodecar processes (proxies and camoufox instances)
+  /// WARNING: This will stop ALL processes, including those from actual app usage
+  #[allow(dead_code)]
   pub async fn cleanup_all_nodecar_processes(
     nodecar_path: &PathBuf,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    println!("Cleaning up all nodecar processes...");
+    println!("WARNING: Cleaning up ALL nodecar processes...");
 
     // Get list of all proxies and stop them individually
     let proxy_list_args = ["proxy", "list"];
