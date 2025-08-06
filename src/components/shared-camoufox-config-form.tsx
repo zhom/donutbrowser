@@ -828,7 +828,7 @@ export function SharedCamoufoxConfigForm({
 
           <TabsContent value="normal" className="space-y-6">
             {/* Automatic Location Configuration */}
-            <div className="space-y-3">
+            <div className="mt-4 space-y-3">
               <div className="flex items-center space-x-2">
                 <Checkbox
                   id="auto-location"
