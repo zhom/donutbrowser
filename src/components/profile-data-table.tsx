@@ -779,7 +779,9 @@ export function ProfilesDataTable({
                         onAssignProfilesToGroup([profile.name]);
                       }
                     }}
-                    disabled={!browserState.isClient || isBrowserUpdating}
+                    disabled={
+                      !browserState.isClient || isBrowserUpdating || isRunning
+                    }
                   >
                     Assign to Group
                   </DropdownMenuItem>
