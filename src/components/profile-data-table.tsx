@@ -147,10 +147,10 @@ export function ProfilesDataTable({
 
   // Filter data by selected group
   const filteredData = React.useMemo(() => {
-    if (!selectedGroupId) return data;
-    if (selectedGroupId === "default") {
+    if (!selectedGroupId || selectedGroupId === "default") {
       return data.filter((profile) => !profile.group_id);
     }
+
     return data.filter((profile) => profile.group_id === selectedGroupId);
   }, [data, selectedGroupId]);
 

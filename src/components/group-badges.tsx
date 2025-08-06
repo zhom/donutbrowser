@@ -5,7 +5,7 @@ import type { GroupWithCount } from "@/types";
 
 interface GroupBadgesProps {
   selectedGroupId: string | null;
-  onGroupSelect: (groupId: string | null) => void;
+  onGroupSelect: (groupId: string) => void;
   refreshTrigger?: number;
   groups: GroupWithCount[];
   isLoading: boolean;
@@ -39,7 +39,7 @@ export function GroupBadges({
           variant={selectedGroupId === group.id ? "default" : "secondary"}
           className="cursor-pointer hover:bg-primary/80 transition-colors flex items-center gap-2 px-3 py-1"
           onClick={() => {
-            onGroupSelect(selectedGroupId === group.id ? null : group.id);
+            onGroupSelect(selectedGroupId === group.id ? "default" : group.id);
           }}
         >
           <span>{group.name}</span>

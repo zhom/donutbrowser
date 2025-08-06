@@ -58,7 +58,7 @@ export default function Home() {
     useState(false);
   const [groupAssignmentDialogOpen, setGroupAssignmentDialogOpen] =
     useState(false);
-  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<string>("default");
   const [selectedProfilesForGroup, setSelectedProfilesForGroup] = useState<
     string[]
   >([]);
@@ -82,7 +82,7 @@ export default function Home() {
   const { isMicrophoneAccessGranted, isCameraAccessGranted, isInitialized } =
     usePermissions();
 
-  const handleSelectGroup = useCallback((groupId: string | null) => {
+  const handleSelectGroup = useCallback((groupId: string) => {
     setSelectedGroupId(groupId);
     setSelectedProfiles([]);
   }, []);
