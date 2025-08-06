@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { launchOptions } from "camoufox-js";
-import type { LaunchOptions } from "camoufox-js/dist/utils.js";
+import { launchOptions } from "donutbrowser-camoufox-js";
+import type { LaunchOptions } from "donutbrowser-camoufox-js/dist/utils.js";
 import {
   type CamoufoxConfig,
   deleteCamoufoxConfig,
@@ -196,7 +196,7 @@ function convertCamoufoxToFingerprintGenerator(
     fingerprintObj.fonts = camoufoxFingerprint.fonts;
   }
 
-  return fingerprintObj;
+  return { ...camoufoxFingerprint, ...fingerprintObj };
 }
 
 /**
@@ -465,7 +465,7 @@ export async function generateCamoufoxConfig(
   options: GenerateConfigOptions,
 ): Promise<string> {
   try {
-    const launchOpts: LaunchOptions = {
+    const launchOpts: any = {
       headless: false,
       i_know_what_im_doing: true,
       config: {
@@ -474,8 +474,8 @@ export async function generateCamoufoxConfig(
       },
     };
 
-    if (options.geoip !== undefined) {
-      launchOpts.geoip = options.geoip;
+    if (options.geoip) {
+      launchOpts.geoip = true;
     }
 
     if (options.blockImages) {
@@ -492,10 +492,18 @@ export async function generateCamoufoxConfig(
       launchOpts.executable_path = options.executablePath;
     }
 
+    if (options.proxy) {
+      launchOpts.proxy = options.proxy;
+    }
+
     // If fingerprint is provided, use it and ignore other options except executable_path and block_*
     if (options.fingerprint) {
       try {
         const camoufoxFingerprint = JSON.parse(options.fingerprint);
+
+        if (camoufoxFingerprint.timezone) {
+          launchOpts.config.timezone = camoufoxFingerprint.timezone;
+        }
 
         // Convert camoufox fingerprint format to fingerprint-generator format
         const fingerprintObj =
@@ -506,9 +514,6 @@ export async function generateCamoufoxConfig(
       }
     } else {
       // Use individual options to build configuration
-      if (options.proxy) {
-        launchOpts.proxy = options.proxy;
-      }
 
       if (options.maxWidth && options.maxHeight) {
         launchOpts.screen = {

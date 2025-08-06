@@ -67,9 +67,12 @@ export function ProxySettingsDialog({
       loadStoredProxies();
       if (isProxyDisabled) {
         setSelectedProxyId(null);
+      } else {
+        // Reset to initial proxy ID when dialog opens
+        setSelectedProxyId(initialProxyId || null);
       }
     }
-  }, [isOpen, isProxyDisabled, loadStoredProxies]);
+  }, [isOpen, isProxyDisabled, loadStoredProxies, initialProxyId]);
 
   const handleCreateProxy = useCallback(() => {
     setShowProxyForm(true);

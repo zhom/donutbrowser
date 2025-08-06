@@ -376,13 +376,8 @@ pub fn run() {
           interval.tick().await;
 
           match launcher.cleanup_dead_instances().await {
-            Ok(dead_instances) => {
-              if !dead_instances.is_empty() {
-                println!(
-                  "Cleaned up {} dead Camoufox instances",
-                  dead_instances.len()
-                );
-              }
+            Ok(_dead_instances) => {
+              // Cleanup completed silently
             }
             Err(e) => {
               eprintln!("Error during Camoufox cleanup: {e}");

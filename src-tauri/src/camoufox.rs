@@ -92,30 +92,32 @@ impl CamoufoxNodecarLauncher {
   pub async fn generate_fingerprint_config(
     &self,
     app_handle: &AppHandle,
+    profile: &crate::profile::BrowserProfile,
     config: &CamoufoxConfig,
   ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let mut config_args = vec!["camoufox".to_string(), "generate-config".to_string()];
 
-    // For fingerprint generation during profile creation, we can pass proxy directly
-    // but we set geoip to false during tests to avoid network requests
-    if std::env::var("CAMOUFOX_TEST").is_ok() {
-      config_args.extend(["--geoip".to_string(), "false".to_string()]);
-    } else if let Some(geoip) = &config.geoip {
-      match geoip {
-        serde_json::Value::Bool(true) => {
-          config_args.extend(["--geoip".to_string(), "true".to_string()]);
-        }
-        serde_json::Value::Bool(false) => {
-          config_args.extend(["--geoip".to_string(), "false".to_string()]);
-        }
-        serde_json::Value::String(ip) => {
-          config_args.extend(["--geoip".to_string(), ip.clone()]);
-        }
-        _ => {}
-      }
+    // Always ensure executable_path is set to the user's binary location
+    let executable_path = if let Some(path) = &config.executable_path {
+      path.clone()
     } else {
-      // Default to true for fingerprint generation
-      config_args.extend(["--geoip".to_string(), "true".to_string()]);
+      // Use the browser runner helper with the real profile
+      let browser_runner = crate::browser_runner::BrowserRunner::instance();
+      browser_runner
+        .get_browser_executable_path(profile)
+        .map_err(|e| format!("Failed to get Camoufox executable path: {e}"))?
+        .to_string_lossy()
+        .to_string()
+    };
+    config_args.extend(["--executable-path".to_string(), executable_path]);
+
+    // Pass existing fingerprint if provided (for advanced form partial fingerprints)
+    if let Some(fingerprint) = &config.fingerprint {
+      config_args.extend(["--fingerprint".to_string(), fingerprint.clone()]);
+    }
+
+    if let Some(serde_json::Value::Bool(true)) = &config.geoip {
+      config_args.push("--geoip".to_string());
     }
 
     // Add proxy if provided (can be passed directly during fingerprint generation)
@@ -132,7 +134,7 @@ impl CamoufoxNodecarLauncher {
       config_args.extend(["--max-height".to_string(), max_height.to_string()]);
     }
 
-    // Add block_* and executable_path options
+    // Add block_* options
     if let Some(block_images) = config.block_images {
       if block_images {
         config_args.push("--block-images".to_string());
@@ -149,10 +151,6 @@ impl CamoufoxNodecarLauncher {
       if block_webgl {
         config_args.push("--block-webgl".to_string());
       }
-    }
-
-    if let Some(executable_path) = &config.executable_path {
-      config_args.extend(["--executable-path".to_string(), executable_path.clone()]);
     }
 
     // Execute config generation command
@@ -186,84 +184,29 @@ impl CamoufoxNodecarLauncher {
   pub async fn launch_camoufox(
     &self,
     app_handle: &AppHandle,
+    profile: &crate::profile::BrowserProfile,
     profile_path: &str,
     config: &CamoufoxConfig,
     url: Option<&str>,
   ) -> Result<CamoufoxLaunchResult, Box<dyn std::error::Error + Send + Sync>> {
-    // Generate or use existing configuration
     let custom_config = if let Some(existing_fingerprint) = &config.fingerprint {
-      // Use existing fingerprint from profile metadata
       println!("Using existing fingerprint from profile metadata");
       existing_fingerprint.clone()
     } else {
-      // Generate new configuration using nodecar generate-config command
-      println!("Generating new fingerprint configuration");
-      let mut config_args = vec!["camoufox".to_string(), "generate-config".to_string()];
+      return Err("No fingerprint provided".into());
+    };
 
-      // Use individual options to build configuration
-      if let Some(proxy) = &config.proxy {
-        config_args.extend(["--proxy".to_string(), proxy.clone()]);
-      }
-
-      if let Some(max_width) = config.screen_max_width {
-        config_args.extend(["--max-width".to_string(), max_width.to_string()]);
-      }
-
-      if let Some(max_height) = config.screen_max_height {
-        config_args.extend(["--max-height".to_string(), max_height.to_string()]);
-      }
-
-      if let Some(geoip) = &config.geoip {
-        match geoip {
-          serde_json::Value::Bool(true) => {
-            config_args.extend(["--geoip".to_string(), "true".to_string()]);
-          }
-          serde_json::Value::Bool(false) => {
-            config_args.extend(["--geoip".to_string(), "false".to_string()]);
-          }
-          serde_json::Value::String(ip) => {
-            config_args.extend(["--geoip".to_string(), ip.clone()]);
-          }
-          _ => {}
-        }
-      }
-
-      // Always add block_* and executable_path options
-      if let Some(block_images) = config.block_images {
-        if block_images {
-          config_args.push("--block-images".to_string());
-        }
-      }
-
-      if let Some(block_webrtc) = config.block_webrtc {
-        if block_webrtc {
-          config_args.push("--block-webrtc".to_string());
-        }
-      }
-
-      if let Some(block_webgl) = config.block_webgl {
-        if block_webgl {
-          config_args.push("--block-webgl".to_string());
-        }
-      }
-
-      if let Some(executable_path) = &config.executable_path {
-        config_args.extend(["--executable-path".to_string(), executable_path.clone()]);
-      }
-
-      // Execute config generation command
-      let mut config_sidecar = self.get_nodecar_sidecar(app_handle)?;
-      for arg in &config_args {
-        config_sidecar = config_sidecar.arg(arg);
-      }
-
-      let config_output = config_sidecar.output().await?;
-      if !config_output.status.success() {
-        let stderr = String::from_utf8_lossy(&config_output.stderr);
-        return Err(format!("Failed to generate camoufox config: {stderr}").into());
-      }
-
-      String::from_utf8_lossy(&config_output.stdout).to_string()
+    // Always ensure executable_path is set to the user's binary location
+    let executable_path = if let Some(path) = &config.executable_path {
+      path.clone()
+    } else {
+      // Use the browser runner helper with the real profile
+      let browser_runner = crate::browser_runner::BrowserRunner::instance();
+      browser_runner
+        .get_browser_executable_path(profile)
+        .map_err(|e| format!("Failed to get Camoufox executable path: {e}"))?
+        .to_string_lossy()
+        .to_string()
     };
 
     // Build nodecar command arguments
@@ -276,6 +219,9 @@ impl CamoufoxNodecarLauncher {
     if let Some(url) = url {
       args.extend(["--url".to_string(), url.to_string()]);
     }
+
+    // Always add the executable path
+    args.extend(["--executable-path".to_string(), executable_path]);
 
     // Always add the generated custom config
     args.extend(["--custom-config".to_string(), custom_config]);
@@ -392,7 +338,7 @@ impl CamoufoxNodecarLauncher {
           // Verify the server is actually running by checking the process
           if let Some(process_id) = instance.process_id {
             if self.is_server_running(process_id).await {
-              println!("Found running Camoufox instance for profile: {profile_path}");
+              // Found running Camoufox instance
               return Ok(Some(CamoufoxLaunchResult {
                 id: id.clone(),
                 processId: instance.process_id,
@@ -400,14 +346,13 @@ impl CamoufoxNodecarLauncher {
                 url: instance.url.clone(),
               }));
             } else {
-              println!("Camoufox instance found but process is not running: {id}");
+              // Camoufox instance found but process is not running
             }
           }
         }
       }
     }
 
-    println!("No running Camoufox instance found for profile: {profile_path}");
     Ok(None)
   }
 
@@ -426,13 +371,13 @@ impl CamoufoxNodecarLauncher {
           // Check if the process is still alive
           if !self.is_server_running(process_id).await {
             // Process is dead
-            println!("Camoufox instance {id} (PID: {process_id}) is no longer running");
+            // Camoufox instance is no longer running
             dead_instances.push(id.clone());
             instances_to_remove.push(id.clone());
           }
         } else {
           // No process_id means it's likely a dead instance
-          println!("Camoufox instance {id} has no PID, marking as dead");
+          // Camoufox instance has no PID, marking as dead
           dead_instances.push(id.clone());
           instances_to_remove.push(id.clone());
         }
@@ -444,7 +389,7 @@ impl CamoufoxNodecarLauncher {
       let mut inner = self.inner.lock().await;
       for id in &instances_to_remove {
         inner.instances.remove(id);
-        println!("Removed dead Camoufox instance: {id}");
+        // Removed dead Camoufox instance
       }
     }
 
@@ -466,7 +411,7 @@ impl CamoufoxNodecarLauncher {
       });
 
       if is_camoufox {
-        println!("Found running Camoufox process with PID: {process_id}");
+        // Found running Camoufox process
         return true;
       }
     }
@@ -499,7 +444,13 @@ impl CamoufoxNodecarLauncher {
     let _ = self.cleanup_dead_instances().await;
 
     self
-      .launch_camoufox(&app_handle, &profile_path_str, &config, url.as_deref())
+      .launch_camoufox(
+        &app_handle,
+        &profile,
+        &profile_path_str,
+        &config,
+        url.as_deref(),
+      )
       .await
       .map_err(|e| format!("Failed to launch Camoufox via nodecar: {e}"))
   }

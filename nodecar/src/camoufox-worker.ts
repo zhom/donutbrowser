@@ -1,8 +1,8 @@
-import { launchOptions } from "camoufox-js";
-import type { LaunchOptions } from "camoufox-js/dist/utils.js";
+import { launchOptions } from "donutbrowser-camoufox-js";
+import type { LaunchOptions } from "donutbrowser-camoufox-js/dist/utils.js";
 import { type Browser, type BrowserServer, firefox } from "playwright-core";
 import { getCamoufoxConfig, saveCamoufoxConfig } from "./camoufox-storage.js";
-import { getEnvVars } from "./utils.js";
+import { getEnvVars, parseProxyString } from "./utils.js";
 
 /**
  * Run a Camoufox browser server as a worker process
@@ -128,15 +128,31 @@ export async function runCamoufoxWorker(id: string): Promise<void> {
             "Failed to parse custom config, using generated config:",
             error,
           );
+          return;
         }
       }
 
       // Launch the server with the final configuration
-      server = await firefox.launchServer({
+      const finalOptions: any = {
         ...generatedOptions,
         wsPath: `/ws_${config.id}`,
         env: finalEnv,
-      });
+      };
+
+      // Only add proxy if it exists and is valid
+      if (camoufoxOptions.proxy) {
+        try {
+          finalOptions.proxy = parseProxyString(camoufoxOptions.proxy);
+        } catch (error) {
+          console.error({
+            message: "Failed to parse proxy, launching without proxy",
+            error,
+          });
+          return;
+        }
+      }
+
+      server = await firefox.launchServer(finalOptions);
 
       // Connect to the server
       browser = await firefox.connect(server.wsEndpoint());

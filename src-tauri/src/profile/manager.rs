@@ -100,11 +100,37 @@ impl ProfileManager {
         crate::camoufox::CamoufoxConfig::default()
       });
 
+      // Always ensure executable_path is set to the user's binary location
+      if config.executable_path.is_none() {
+        let browser_runner = crate::browser_runner::BrowserRunner::instance();
+        let mut browser_dir = browser_runner.get_binaries_dir();
+        browser_dir.push(browser);
+        browser_dir.push(version);
+
+        #[cfg(target_os = "macos")]
+        let binary_path = browser_dir
+          .join("Camoufox.app")
+          .join("Contents")
+          .join("MacOS")
+          .join("camoufox");
+
+        #[cfg(target_os = "windows")]
+        let binary_path = browser_dir.join("camoufox.exe");
+
+        #[cfg(target_os = "linux")]
+        let binary_path = browser_dir.join("camoufox");
+
+        config.executable_path = Some(binary_path.to_string_lossy().to_string());
+        println!("Set Camoufox executable path: {:?}", config.executable_path);
+      }
+
       // Pass upstream proxy information to config for fingerprint generation
       if let Some(proxy_id_ref) = &proxy_id {
         if let Some(proxy_settings) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id_ref) {
           // For fingerprint generation, pass upstream proxy directly with credentials if present
-          let proxy_url = if let (Some(username), Some(password)) = (&proxy_settings.username, &proxy_settings.password) {
+          let proxy_url = if let (Some(username), Some(password)) =
+            (&proxy_settings.username, &proxy_settings.password)
+          {
             format!(
               "{}://{}:{}@{}:{}",
               proxy_settings.proxy_type.to_lowercase(),
@@ -137,8 +163,23 @@ impl ProfileManager {
 
         // Use the camoufox launcher to generate the config
         let camoufox_launcher = crate::camoufox::CamoufoxNodecarLauncher::instance();
+
+        // Create a temporary profile for fingerprint generation
+        let temp_profile = BrowserProfile {
+          id: uuid::Uuid::new_v4(),
+          name: name.to_string(),
+          browser: browser.to_string(),
+          version: version.to_string(),
+          proxy_id: proxy_id.clone(),
+          process_id: None,
+          last_launch: None,
+          release_type: release_type.to_string(),
+          camoufox_config: None,
+          group_id: group_id.clone(),
+        };
+
         match camoufox_launcher
-          .generate_fingerprint_config(app_handle, &config)
+          .generate_fingerprint_config(app_handle, &temp_profile, &config)
           .await
         {
           Ok(generated_fingerprint) => {
@@ -146,7 +187,9 @@ impl ProfileManager {
             println!("Successfully generated fingerprint for profile: {name}");
           }
           Err(e) => {
-            return Err(format!("Failed to generate fingerprint for Camoufox profile '{name}': {e}").into());
+            return Err(
+              format!("Failed to generate fingerprint for Camoufox profile '{name}': {e}").into(),
+            );
           }
         }
       } else {
@@ -639,10 +682,7 @@ impl ProfileManager {
         if profile_path_match {
           is_running = true;
           found_pid = Some(pid);
-          println!(
-            "Found existing browser process with PID: {} for profile: {}",
-            pid, profile.name
-          );
+          // Found existing browser process
         } else {
           println!("PID {pid} exists but doesn't match our profile path exactly, searching for correct process...");
         }

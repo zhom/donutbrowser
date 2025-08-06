@@ -77,6 +77,28 @@ impl BrowserRunner {
     profile_manager.get_profiles_dir()
   }
 
+  /// Get the executable path for a browser profile
+  /// This is a common helper to eliminate code duplication across the codebase
+  pub fn get_browser_executable_path(
+    &self,
+    profile: &BrowserProfile,
+  ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
+    // Create browser instance to get executable path
+    let browser_type = crate::browser::BrowserType::from_str(&profile.browser)
+      .map_err(|e| format!("Invalid browser type: {e}"))?;
+    let browser = crate::browser::create_browser(browser_type);
+
+    // Construct browser directory path: binaries/<browser>/<version>/
+    let mut browser_dir = self.get_binaries_dir();
+    browser_dir.push(&profile.browser);
+    browser_dir.push(&profile.version);
+
+    // Get platform-specific executable path
+    browser
+      .get_executable_path(&browser_dir)
+      .map_err(|e| format!("Failed to get executable path for {}: {e}", profile.browser).into())
+  }
+
   /// Internal method to cleanup unused binaries (used by auto-cleanup)
   pub fn cleanup_unused_binaries_internal(
     &self,
@@ -242,15 +264,12 @@ impl BrowserRunner {
       .map_err(|_| format!("Invalid browser type: {}", profile.browser))?;
     let browser = create_browser(browser_type.clone());
 
-    // Get executable path - path structure: binaries/<browser>/<version>/
-    let mut browser_dir = self.get_binaries_dir();
-    browser_dir.push(&profile.browser);
-    browser_dir.push(&profile.version);
-
-    println!("Browser directory: {browser_dir:?}");
-    let executable_path = browser
-      .get_executable_path(&browser_dir)
+    // Get executable path using common helper
+    let executable_path = self
+      .get_browser_executable_path(profile)
       .expect("Failed to get executable path");
+
+    println!("Executable path: {executable_path:?}");
 
     // Prepare the executable (set permissions, etc.)
     if let Err(e) = browser.prepare_executable(&executable_path) {

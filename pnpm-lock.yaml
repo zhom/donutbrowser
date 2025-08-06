@@ -144,12 +144,12 @@ importers:
       '@types/node':
         specifier: ^24.1.0
         version: 24.1.0
-      camoufox-js:
-        specifier: ^0.6.2
-        version: 0.6.2(encoding@0.1.13)(playwright-core@1.54.2)
       commander:
         specifier: ^14.0.0
         version: 14.0.0
+      donutbrowser-camoufox-js:
+        specifier: ^0.6.2
+        version: 0.6.2(encoding@0.1.13)(playwright-core@1.54.2)
       dotenv:
         specifier: ^17.2.1
         version: 17.2.1
@@ -1614,12 +1614,6 @@ packages:
     resolution: {integrity: sha512-P8BjAsXvZS+VIDUI11hHCQEv74YT67YUi5JJFNWIqL235sBmjX4+qx9Muvls5ivyNENctx46xQLQ3aTuE7ssaQ==}
     engines: {node: '>=6'}
 
-  camoufox-js@0.6.2:
-    resolution: {integrity: sha512-oeQigZ8+TsV34kJguKnwqALiL+go9IXA/3Opyw2P+VQSDWoFDTfc/pKEmkhrpX7xBPtcbarcnU7PnPmQyebNIg==}
-    hasBin: true
-    peerDependencies:
-      playwright-core: '*'
-
   caniuse-lite@1.0.30001731:
     resolution: {integrity: sha512-lDdp2/wrOmTRWuoB5DpfNkC0rJDU8DqRa6nYL6HK6sytw70QMopt/NIc/9SM7ylItlBWfACXk0tEn37UWM/+mg==}
 
@@ -1762,6 +1756,12 @@ packages:
   diff@4.0.2:
     resolution: {integrity: sha512-58lmxKSA4BNyLz+HHMUzlOEpg09FV+ev6ZMe3vJihgdxzgcwZ8VoEEPmALCZG9LmqfVoNMMKpttIYTVG6uDY7A==}
     engines: {node: '>=0.3.1'}
+
+  donutbrowser-camoufox-js@0.6.2:
+    resolution: {integrity: sha512-nIgofMkGnPJgLSqmclOS6wYtcpkfsjnkCALeF4gNjuB9KWZBBHoEyxr9Lb5flG1Fwrx8X3C0gmyvDaQ/s/Vgjw==}
+    hasBin: true
+    peerDependencies:
+      playwright-core: '*'
 
   dot-prop@6.0.1:
     resolution: {integrity: sha512-tE7ztYzXHIeyvc7N+hR3oi7FIbf/NIjVP9hmAt3yMXzrQ072/fpjGLx2GxNxGxUl5V73MEqYzioOMoVhGMJ5cA==}
@@ -2256,8 +2256,8 @@ packages:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
     engines: {node: '>= 0.4'}
 
-  maxmind@4.3.28:
-    resolution: {integrity: sha512-K3PcTVjhrSU6xzY7niQf/CHPmx/qzkMIpMumd3x0JXMkIDJMerL4LY9RsEhArHb4T3IK0NBxQcUlwjsxRm9rIw==}
+  maxmind@4.3.29:
+    resolution: {integrity: sha512-Vxx0rh7omBekjZnsDxpw35SrGGM3Uy7NoIKWzZlvh3UcjihGaySR8n+YSQ8YBseCvhEn+yehA98rZkTDW+uhPw==}
     engines: {node: '>=12', npm: '>=6'}
 
   micromatch@4.0.8:
@@ -2774,8 +2774,8 @@ packages:
   tauri-plugin-macos-permissions-api@2.3.0:
     resolution: {integrity: sha512-pZp0jmDySysBqrGueknd1a7Rr4XEO9aXpMv9TNrT2PDHP0MSH20njieOagsFYJ5MCVb8A+wcaK0cIkjUC2dOww==}
 
-  tiny-lru@11.3.3:
-    resolution: {integrity: sha512-/ShxBZOgHXDdZi7FxajcsH0MfcBqwP+t7i4T3PGjI//NUA5aCpC7cB9bbdAYrAeQLBUTJfg2rk191fzZGeo7DA==}
+  tiny-lru@11.3.4:
+    resolution: {integrity: sha512-UxWEfRKpFCabAf6fkTNdlfSw/RDUJ/4C6i1aLZaDnGF82PERHyYhz5CMCVYXtLt34LbqgfpJ2bjmgGKgxuF/6A==}
     engines: {node: '>=12'}
 
   tinyglobby@0.2.14:
@@ -4258,25 +4258,6 @@ snapshots:
 
   callsites@3.1.0: {}
 
-  camoufox-js@0.6.2(encoding@0.1.13)(playwright-core@1.54.2):
-    dependencies:
-      adm-zip: 0.5.16
-      commander: 13.1.0
-      fingerprint-generator: 2.1.69
-      impit: 0.5.3
-      js-yaml: 4.1.0
-      language-tags: 2.1.0
-      maxmind: 4.3.28
-      playwright-core: 1.54.2
-      progress: 2.0.3
-      sqlite3: 5.1.7
-      ua-parser-js: 2.0.4(encoding@0.1.13)
-      xml2js: 0.6.2
-    transitivePeerDependencies:
-      - bluebird
-      - encoding
-      - supports-color
-
   caniuse-lite@1.0.30001731: {}
 
   chalk@4.1.2:
@@ -4404,6 +4385,25 @@ snapshots:
   detect-node-es@1.1.0: {}
 
   diff@4.0.2: {}
+
+  donutbrowser-camoufox-js@0.6.2(encoding@0.1.13)(playwright-core@1.54.2):
+    dependencies:
+      adm-zip: 0.5.16
+      commander: 13.1.0
+      fingerprint-generator: 2.1.69
+      impit: 0.5.3
+      js-yaml: 4.1.0
+      language-tags: 2.1.0
+      maxmind: 4.3.29
+      playwright-core: 1.54.2
+      progress: 2.0.3
+      sqlite3: 5.1.7
+      ua-parser-js: 2.0.4(encoding@0.1.13)
+      xml2js: 0.6.2
+    transitivePeerDependencies:
+      - bluebird
+      - encoding
+      - supports-color
 
   dot-prop@6.0.1:
     dependencies:
@@ -4901,10 +4901,10 @@ snapshots:
 
   math-intrinsics@1.1.0: {}
 
-  maxmind@4.3.28:
+  maxmind@4.3.29:
     dependencies:
       mmdb-lib: 2.2.1
-      tiny-lru: 11.3.3
+      tiny-lru: 11.3.4
 
   micromatch@4.0.8:
     dependencies:
@@ -5488,7 +5488,7 @@ snapshots:
     dependencies:
       '@tauri-apps/api': 2.7.0
 
-  tiny-lru@11.3.3: {}
+  tiny-lru@11.3.4: {}
 
   tinyglobby@0.2.14:
     dependencies:

@@ -1,5 +1,5 @@
-import type { LaunchOptions } from "camoufox-js/dist/utils.js";
 import { program } from "commander";
+import type { LaunchOptions } from "donutbrowser-camoufox-js/dist/utils.js";
 import {
   generateCamoufoxConfig,
   startCamoufoxProcess,
@@ -165,7 +165,7 @@ program
   .option("--proxy <proxy>", "proxy URL for config generation")
   .option("--max-width <width>", "maximum screen width", parseInt)
   .option("--max-height <height>", "maximum screen height", parseInt)
-  .option("--geoip [ip]", "enable geoip or specify IP")
+  .option("--geoip", "enable geoip")
   .option("--block-images", "block images")
   .option("--block-webrtc", "block WebRTC")
   .option("--block-webgl", "block WebGL")
@@ -325,7 +325,6 @@ program
                 }),
               );
               process.exit(1);
-              return;
             }
           }
 
@@ -374,22 +373,6 @@ program
         process.exit(0);
       } else if (action === "generate-config") {
         try {
-          // Handle geoip option properly
-          let geoipValue: string | boolean = true; // Default to true
-          if (options.geoip !== undefined) {
-            if (typeof options.geoip === "boolean") {
-              geoipValue = options.geoip;
-            } else if (typeof options.geoip === "string") {
-              if (options.geoip === "true") {
-                geoipValue = true;
-              } else if (options.geoip === "false") {
-                geoipValue = false;
-              } else {
-                geoipValue = options.geoip; // IP address
-              }
-            }
-          }
-
           const config = await generateCamoufoxConfig({
             proxy:
               typeof options.proxy === "string" ? options.proxy : undefined,
@@ -401,7 +384,7 @@ program
               typeof options.maxHeight === "number"
                 ? options.maxHeight
                 : undefined,
-            geoip: geoipValue,
+            geoip: Boolean(options.geoip),
             blockImages:
               typeof options.blockImages === "boolean"
                 ? options.blockImages
@@ -426,17 +409,18 @@ program
           console.log(config);
           process.exit(0);
         } catch (error: unknown) {
-          console.error(
-            `Failed to generate config: ${
-              error instanceof Error ? error.message : JSON.stringify(error)
-            }`,
-          );
+          console.error({
+            error: "Failed to generate config",
+            message:
+              error instanceof Error ? error.message : JSON.stringify(error),
+          });
           process.exit(1);
         }
       } else {
-        console.error(
-          "Invalid action. Use 'start', 'stop', 'list', or 'generate-config'",
-        );
+        console.error({
+          error: "Invalid action",
+          message: "Use 'start', 'stop', 'list', or 'generate-config'",
+        });
         process.exit(1);
       }
     },
@@ -452,7 +436,10 @@ program
     if (action === "start") {
       await runCamoufoxWorker(options.id);
     } else {
-      console.error("Invalid action for camoufox-worker. Use 'start'");
+      console.error({
+        error: "Invalid action for camoufox-worker",
+        message: "Use 'start'",
+      });
       process.exit(1);
     }
   });

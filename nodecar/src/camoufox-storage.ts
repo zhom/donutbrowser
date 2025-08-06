@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { LaunchOptions } from "camoufox-js/dist/utils.js";
+import type { LaunchOptions } from "donutbrowser-camoufox-js/dist/utils.js";
 import tmp from "tmp";
 
 export interface CamoufoxConfig {
