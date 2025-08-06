@@ -552,9 +552,7 @@ export function CreateProfileDialog({
                       <SelectItem value="none">No proxy</SelectItem>
                       {storedProxies.map((proxy) => (
                         <SelectItem key={proxy.id} value={proxy.id}>
-                          {proxy.name} ({proxy.proxy_settings.proxy_type}://
-                          {proxy.proxy_settings.host}:
-                          {proxy.proxy_settings.port})
+                          {proxy.name}{" "}
                         </SelectItem>
                       ))}
                     </SelectContent>
