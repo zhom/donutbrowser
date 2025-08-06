@@ -30,11 +30,13 @@ import type { ProfileGroup } from "@/types";
 interface GroupManagementDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  onGroupManagementComplete: () => void;
 }
 
 export function GroupManagementDialog({
   isOpen,
   onClose,
+  onGroupManagementComplete,
 }: GroupManagementDialogProps) {
   const [groups, setGroups] = useState<ProfileGroup[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -60,21 +62,30 @@ export function GroupManagementDialog({
     }
   }, []);
 
-  const handleGroupCreated = useCallback((newGroup: ProfileGroup) => {
-    setGroups((prev) => [...prev, newGroup]);
-  }, []);
+  const handleGroupCreated = useCallback(
+    (newGroup: ProfileGroup) => {
+      setGroups((prev) => [...prev, newGroup]);
+      onGroupManagementComplete();
+    },
+    [onGroupManagementComplete],
+  );
 
-  const handleGroupUpdated = useCallback((updatedGroup: ProfileGroup) => {
-    setGroups((prev) =>
-      prev.map((group) =>
-        group.id === updatedGroup.id ? updatedGroup : group,
-      ),
-    );
-  }, []);
+  const handleGroupUpdated = useCallback(
+    (updatedGroup: ProfileGroup) => {
+      setGroups((prev) =>
+        prev.map((group) =>
+          group.id === updatedGroup.id ? updatedGroup : group,
+        ),
+      );
+      onGroupManagementComplete();
+    },
+    [onGroupManagementComplete],
+  );
 
   const handleGroupDeleted = useCallback(() => {
     void loadGroups();
-  }, [loadGroups]);
+    onGroupManagementComplete();
+  }, [loadGroups, onGroupManagementComplete]);
 
   const handleEditGroup = useCallback((group: ProfileGroup) => {
     setSelectedGroup(group);

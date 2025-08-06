@@ -638,6 +638,10 @@ export default function Home() {
     setSelectedProfilesForGroup([]);
   }, [loadProfiles, loadGroups]);
 
+  const handleGroupManagementComplete = useCallback(async () => {
+    await loadGroups();
+  }, [loadGroups]);
+
   useEffect(() => {
     void loadProfilesWithUpdateCheck();
     void loadGroups();
@@ -845,6 +849,7 @@ export default function Home() {
         onClose={() => {
           setGroupManagementDialogOpen(false);
         }}
+        onGroupManagementComplete={handleGroupManagementComplete}
       />
 
       <GroupAssignmentDialog
