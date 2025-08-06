@@ -226,6 +226,11 @@ impl CamoufoxNodecarLauncher {
     // Always add the generated custom config
     args.extend(["--custom-config".to_string(), custom_config]);
 
+    // Add proxy if provided
+    if let Some(proxy) = &config.proxy {
+      args.extend(["--proxy".to_string(), proxy.clone()]);
+    }
+
     // Add headless flag for tests
     if std::env::var("CAMOUFOX_HEADLESS").is_ok() {
       args.push("--headless".to_string());

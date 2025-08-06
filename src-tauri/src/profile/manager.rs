@@ -805,22 +805,25 @@ impl ProfileManager {
     // Check if there's a running Camoufox instance for this profile
     match launcher.find_camoufox_by_profile(&profile_path_str).await {
       Ok(Some(camoufox_process)) => {
-        // Found a running instance, update profile with process info
-        let mut updated_profile = profile.clone();
-        updated_profile.process_id = camoufox_process.processId;
-        if let Err(e) = self.save_profile(&updated_profile) {
-          println!("Warning: Failed to update Camoufox profile with process info: {e}");
-        }
+        // Found a running instance, update profile with process info if changed
+        let process_id_changed = profile.process_id != camoufox_process.processId;
+        if process_id_changed {
+          let mut updated_profile = profile.clone();
+          updated_profile.process_id = camoufox_process.processId;
+          if let Err(e) = self.save_profile(&updated_profile) {
+            println!("Warning: Failed to update Camoufox profile with process info: {e}");
+          }
 
-        // Emit profile update event to frontend
-        if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
-          println!("Warning: Failed to emit profile update event: {e}");
-        }
+          // Emit profile update event to frontend
+          if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
+            println!("Warning: Failed to emit profile update event: {e}");
+          }
 
-        println!(
-          "Camoufox profile '{}' is running with PID: {:?}",
-          profile.name, camoufox_process.processId
-        );
+          println!(
+            "Camoufox process has started for profile '{}' with PID: {:?}",
+            profile.name, camoufox_process.processId
+          );
+        }
         Ok(true)
       }
       Ok(None) => {
@@ -836,8 +839,12 @@ impl ProfileManager {
           if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
             println!("Warning: Failed to emit profile update event: {e}");
           }
+
+          println!(
+            "Camoufox process has stopped for profile '{}'",
+            profile.name
+          );
         }
-        println!("Camoufox profile '{}' is not running", profile.name);
         Ok(false)
       }
       Err(e) => {

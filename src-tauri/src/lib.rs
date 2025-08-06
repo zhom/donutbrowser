@@ -386,6 +386,33 @@ pub fn run() {
         }
       });
 
+      // Start proxy cleanup task for dead browser processes
+      let app_handle_proxy_cleanup = app.handle().clone();
+      tauri::async_runtime::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
+
+        loop {
+          interval.tick().await;
+
+          match crate::proxy_manager::PROXY_MANAGER
+            .cleanup_dead_proxies(app_handle_proxy_cleanup.clone())
+            .await
+          {
+            Ok(dead_pids) => {
+              if !dead_pids.is_empty() {
+                println!(
+                  "Cleaned up proxies for {} dead browser processes",
+                  dead_pids.len()
+                );
+              }
+            }
+            Err(e) => {
+              eprintln!("Error during proxy cleanup: {e}");
+            }
+          }
+        }
+      });
+
       // Warm up nodecar binary in the background
       tauri::async_runtime::spawn(async move {
         println!("Starting nodecar warm-up...");

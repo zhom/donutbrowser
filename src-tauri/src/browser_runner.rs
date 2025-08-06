@@ -38,6 +38,20 @@ impl BrowserRunner {
     &BROWSER_RUNNER
   }
 
+  // Start periodic cleanup of dead proxies
+  #[allow(dead_code)]
+  pub fn start_proxy_cleanup_task(&self, app_handle: tauri::AppHandle) {
+    tokio::spawn(async move {
+      let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
+      loop {
+        interval.tick().await;
+        if let Err(e) = PROXY_MANAGER.cleanup_dead_proxies(app_handle.clone()).await {
+          println!("Warning: Failed to cleanup dead proxies: {e}");
+        }
+      }
+    });
+  }
+
   // Helper function to check if a process matches TOR/Mullvad browser
   fn is_tor_or_mullvad_browser(
     &self,
@@ -241,6 +255,13 @@ impl BrowserRunner {
       let mut updated_profile = profile.clone();
       updated_profile.process_id = Some(process_id);
       updated_profile.last_launch = Some(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs());
+
+      // Update the proxy manager with the correct PID
+      if let Err(e) = PROXY_MANAGER.update_proxy_pid(0, process_id) {
+        println!("Warning: Failed to update proxy PID mapping: {e}");
+      } else {
+        println!("Updated proxy PID mapping from temp (0) to actual PID: {process_id}");
+      }
 
       // Save the updated profile
       self.save_process_info(&updated_profile)?;

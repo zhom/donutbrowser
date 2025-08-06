@@ -438,6 +438,42 @@ impl ProxyManager {
       Err(format!("No proxy found for PID {old_pid}"))
     }
   }
+
+  // Check if a process is still running
+  fn is_process_running(&self, pid: u32) -> bool {
+    use sysinfo::{Pid, System};
+    let system = System::new_all();
+    system.process(Pid::from(pid as usize)).is_some()
+  }
+
+  // Clean up proxies for dead browser processes
+  pub async fn cleanup_dead_proxies(
+    &self,
+    app_handle: tauri::AppHandle,
+  ) -> Result<Vec<u32>, String> {
+    let dead_pids = {
+      let proxies = self.active_proxies.lock().unwrap();
+      proxies
+        .keys()
+        .filter(|&&pid| pid != 0 && !self.is_process_running(pid)) // Skip temporary PID 0
+        .copied()
+        .collect::<Vec<u32>>()
+    };
+
+    for dead_pid in &dead_pids {
+      println!("Cleaning up proxy for dead browser process PID: {dead_pid}");
+      let _ = self.stop_proxy(app_handle.clone(), *dead_pid).await;
+    }
+
+    Ok(dead_pids)
+  }
+
+  // Get all active proxy PIDs for monitoring
+  #[allow(dead_code)]
+  pub fn get_active_proxy_pids(&self) -> Vec<u32> {
+    let proxies = self.active_proxies.lock().unwrap();
+    proxies.keys().copied().collect()
+  }
 }
 
 // Create a singleton instance of the proxy manager
