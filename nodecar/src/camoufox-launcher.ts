@@ -465,9 +465,7 @@ export async function generateCamoufoxConfig(
   options: GenerateConfigOptions,
 ): Promise<string> {
   try {
-    // Build launch options
     const launchOpts: LaunchOptions = {
-      // Always set these defaults
       headless: false,
       i_know_what_im_doing: true,
       config: {
@@ -476,8 +474,9 @@ export async function generateCamoufoxConfig(
       },
     };
 
-    // Always set geoip and blocking options
-    launchOpts.geoip = options.geoip !== undefined ? options.geoip : true;
+    if (options.geoip !== undefined) {
+      launchOpts.geoip = options.geoip;
+    }
 
     if (options.blockImages) {
       launchOpts.block_images = true;

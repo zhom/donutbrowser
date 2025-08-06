@@ -200,10 +200,8 @@ program
           // Security options
           if (options.disableCoop) camoufoxOptions.disable_coop = true;
 
-          // Geolocation - always enable geoip for proper spoofing
           if (options.geoip) {
-            camoufoxOptions.geoip =
-              options.geoip === "auto" ? true : (options.geoip as string);
+            camoufoxOptions.geoip = true;
           }
 
           if (options.latitude && options.longitude) {
