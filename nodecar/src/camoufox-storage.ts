@@ -103,7 +103,11 @@ export function listCamoufoxConfigs(): CamoufoxConfig[] {
           return null;
         }
       })
-      .filter((config): config is CamoufoxConfig => config !== null);
+      .filter((config): config is CamoufoxConfig => config !== null)
+      .map((config) => {
+        config.options = "Removed for logging" as any;
+        return config;
+      });
   } catch (error) {
     console.error({ message: "Error listing Camoufox configs:", error });
     return [];
