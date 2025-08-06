@@ -77,15 +77,11 @@ impl TestUtils {
   pub async fn execute_nodecar_command(
     binary_path: &PathBuf,
     args: &[&str],
-    timeout_secs: u64,
   ) -> Result<std::process::Output, Box<dyn std::error::Error + Send + Sync>> {
     let mut cmd = Command::new(binary_path);
     cmd.args(args);
 
-    let output = timeout(Duration::from_secs(timeout_secs), async {
-      tokio::process::Command::from(cmd).output().await
-    })
-    .await??;
+    let output = tokio::process::Command::from(cmd).output().await?;
 
     Ok(output)
   }
@@ -132,7 +128,7 @@ impl TestUtils {
     // Stop specific proxies
     for proxy_id in proxy_ids {
       let stop_args = ["proxy", "stop", "--id", proxy_id];
-      if let Ok(output) = Self::execute_nodecar_command(nodecar_path, &stop_args, 10).await {
+      if let Ok(output) = Self::execute_nodecar_command(nodecar_path, &stop_args).await {
         if output.status.success() {
           println!("Stopped test proxy: {proxy_id}");
         }
@@ -142,7 +138,7 @@ impl TestUtils {
     // Stop specific camoufox instances
     for camoufox_id in camoufox_ids {
       let stop_args = ["camoufox", "stop", "--id", camoufox_id];
-      if let Ok(output) = Self::execute_nodecar_command(nodecar_path, &stop_args, 30).await {
+      if let Ok(output) = Self::execute_nodecar_command(nodecar_path, &stop_args).await {
         if output.status.success() {
           println!("Stopped test camoufox instance: {camoufox_id}");
         }
@@ -166,8 +162,7 @@ impl TestUtils {
 
     // Get list of all proxies and stop them individually
     let proxy_list_args = ["proxy", "list"];
-    if let Ok(list_output) = Self::execute_nodecar_command(nodecar_path, &proxy_list_args, 10).await
-    {
+    if let Ok(list_output) = Self::execute_nodecar_command(nodecar_path, &proxy_list_args).await {
       if list_output.status.success() {
         let list_stdout = String::from_utf8(list_output.stdout)?;
         if let Ok(proxies) = serde_json::from_str::<serde_json::Value>(&list_stdout) {
@@ -175,7 +170,7 @@ impl TestUtils {
             for proxy in proxy_array {
               if let Some(proxy_id) = proxy["id"].as_str() {
                 let stop_args = ["proxy", "stop", "--id", proxy_id];
-                let _ = Self::execute_nodecar_command(nodecar_path, &stop_args, 10).await;
+                let _ = Self::execute_nodecar_command(nodecar_path, &stop_args).await;
                 println!("Stopped proxy: {proxy_id}");
               }
             }
@@ -186,8 +181,7 @@ impl TestUtils {
 
     // Get list of all camoufox instances and stop them individually
     let camoufox_list_args = ["camoufox", "list"];
-    if let Ok(list_output) =
-      Self::execute_nodecar_command(nodecar_path, &camoufox_list_args, 10).await
+    if let Ok(list_output) = Self::execute_nodecar_command(nodecar_path, &camoufox_list_args).await
     {
       if list_output.status.success() {
         let list_stdout = String::from_utf8(list_output.stdout)?;
@@ -196,7 +190,7 @@ impl TestUtils {
             for instance in instance_array {
               if let Some(instance_id) = instance["id"].as_str() {
                 let stop_args = ["camoufox", "stop", "--id", instance_id];
-                let _ = Self::execute_nodecar_command(nodecar_path, &stop_args, 30).await;
+                let _ = Self::execute_nodecar_command(nodecar_path, &stop_args).await;
                 println!("Stopped camoufox instance: {instance_id}");
               }
             }

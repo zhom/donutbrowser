@@ -80,7 +80,7 @@ async fn test_nodecar_proxy_lifecycle() -> Result<(), Box<dyn std::error::Error 
   ];
 
   println!("Starting proxy with nodecar...");
-  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 120).await?;
+  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args).await?;
 
   if !output.status.success() {
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -118,7 +118,7 @@ async fn test_nodecar_proxy_lifecycle() -> Result<(), Box<dyn std::error::Error 
 
   // Test stopping the proxy
   let stop_args = ["proxy", "stop", "--id", &proxy_id];
-  let stop_output = TestUtils::execute_nodecar_command(&nodecar_path, &stop_args, 10).await?;
+  let stop_output = TestUtils::execute_nodecar_command(&nodecar_path, &stop_args).await?;
 
   assert!(stop_output.status.success(), "Proxy stop should succeed");
 
@@ -153,7 +153,7 @@ async fn test_nodecar_proxy_with_auth() -> Result<(), Box<dyn std::error::Error 
     "testpass",
   ];
 
-  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 120).await?;
+  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args).await?;
 
   if output.status.success() {
     let stdout = String::from_utf8(output.stdout)?;
@@ -198,7 +198,7 @@ async fn test_nodecar_proxy_list() -> Result<(), Box<dyn std::error::Error + Sen
     "http",
   ];
 
-  let start_output = TestUtils::execute_nodecar_command(&nodecar_path, &start_args, 30).await?;
+  let start_output = TestUtils::execute_nodecar_command(&nodecar_path, &start_args).await?;
 
   if start_output.status.success() {
     let stdout = String::from_utf8(start_output.stdout)?;
@@ -208,7 +208,7 @@ async fn test_nodecar_proxy_list() -> Result<(), Box<dyn std::error::Error + Sen
 
     // Test list command
     let list_args = ["proxy", "list"];
-    let list_output = TestUtils::execute_nodecar_command(&nodecar_path, &list_args, 10).await?;
+    let list_output = TestUtils::execute_nodecar_command(&nodecar_path, &list_args).await?;
 
     assert!(list_output.status.success(), "Proxy list should succeed");
 
@@ -250,7 +250,7 @@ async fn test_nodecar_camoufox_lifecycle() -> Result<(), Box<dyn std::error::Err
   ];
 
   println!("Starting Camoufox with nodecar...");
-  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 35).await?;
+  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args).await?;
 
   if !output.status.success() {
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -283,7 +283,7 @@ async fn test_nodecar_camoufox_lifecycle() -> Result<(), Box<dyn std::error::Err
 
   // Test stopping Camoufox
   let stop_args = ["camoufox", "stop", "--id", &camoufox_id];
-  let stop_output = TestUtils::execute_nodecar_command(&nodecar_path, &stop_args, 30).await?;
+  let stop_output = TestUtils::execute_nodecar_command(&nodecar_path, &stop_args).await?;
 
   assert!(stop_output.status.success(), "Camoufox stop should succeed");
 
@@ -310,7 +310,7 @@ async fn test_nodecar_camoufox_with_url() -> Result<(), Box<dyn std::error::Erro
     "--headless",
   ];
 
-  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 15).await?;
+  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args).await?;
 
   if output.status.success() {
     let stdout = String::from_utf8(output.stdout)?;
@@ -329,7 +329,7 @@ async fn test_nodecar_camoufox_with_url() -> Result<(), Box<dyn std::error::Erro
 
     // Test stopping Camoufox explicitly
     let stop_args = ["camoufox", "stop", "--id", &camoufox_id];
-    let stop_output = TestUtils::execute_nodecar_command(&nodecar_path, &stop_args, 30).await?;
+    let stop_output = TestUtils::execute_nodecar_command(&nodecar_path, &stop_args).await?;
     assert!(stop_output.status.success(), "Camoufox stop should succeed");
   } else {
     println!("Skipping Camoufox URL test - likely not installed");
@@ -349,7 +349,7 @@ async fn test_nodecar_camoufox_list() -> Result<(), Box<dyn std::error::Error + 
 
   // Test list command (should work even without Camoufox installed)
   let list_args = ["camoufox", "list"];
-  let list_output = TestUtils::execute_nodecar_command(&nodecar_path, &list_args, 10).await?;
+  let list_output = TestUtils::execute_nodecar_command(&nodecar_path, &list_args).await?;
 
   assert!(list_output.status.success(), "Camoufox list should succeed");
 
@@ -386,7 +386,7 @@ async fn test_nodecar_camoufox_process_tracking(
     ];
 
     println!("Starting Camoufox instance {i}...");
-    let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 10).await?;
+    let output = TestUtils::execute_nodecar_command(&nodecar_path, &args).await?;
 
     if !output.status.success() {
       let stderr = String::from_utf8_lossy(&output.stderr);
@@ -416,7 +416,7 @@ async fn test_nodecar_camoufox_process_tracking(
 
   // Verify all instances are tracked
   let list_args = ["camoufox", "list"];
-  let list_output = TestUtils::execute_nodecar_command(&nodecar_path, &list_args, 10).await?;
+  let list_output = TestUtils::execute_nodecar_command(&nodecar_path, &list_args).await?;
 
   assert!(list_output.status.success(), "Camoufox list should succeed");
 
@@ -450,7 +450,7 @@ async fn test_nodecar_camoufox_process_tracking(
   for instance_id in &instance_ids {
     println!("Stopping Camoufox instance: {instance_id}");
     let stop_args = ["camoufox", "stop", "--id", instance_id];
-    let stop_output = TestUtils::execute_nodecar_command(&nodecar_path, &stop_args, 30).await?;
+    let stop_output = TestUtils::execute_nodecar_command(&nodecar_path, &stop_args).await?;
 
     if stop_output.status.success() {
       let stop_stdout = String::from_utf8(stop_output.stdout)?;
@@ -468,7 +468,7 @@ async fn test_nodecar_camoufox_process_tracking(
   }
 
   // Verify all instances are removed
-  let list_output_after = TestUtils::execute_nodecar_command(&nodecar_path, &list_args, 10).await?;
+  let list_output_after = TestUtils::execute_nodecar_command(&nodecar_path, &list_args).await?;
 
   let instances_after: Value = serde_json::from_str(&String::from_utf8(list_output_after.stdout)?)?;
   let instances_after_array = instances_after.as_array().unwrap();
@@ -512,7 +512,7 @@ async fn test_nodecar_camoufox_configuration_options(
   ];
 
   println!("Starting Camoufox with configuration options...");
-  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 45).await?;
+  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args).await?;
 
   if !output.status.success() {
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -548,7 +548,7 @@ async fn test_nodecar_camoufox_configuration_options(
 
   // Test stopping Camoufox explicitly
   let stop_args = ["camoufox", "stop", "--id", &camoufox_id];
-  let stop_output = TestUtils::execute_nodecar_command(&nodecar_path, &stop_args, 30).await?;
+  let stop_output = TestUtils::execute_nodecar_command(&nodecar_path, &stop_args).await?;
 
   assert!(stop_output.status.success(), "Camoufox stop should succeed");
 
@@ -575,7 +575,7 @@ async fn test_nodecar_camoufox_generate_config_basic(
   ];
 
   println!("Testing Camoufox config generation with basic options...");
-  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 120).await?;
+  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args).await?;
 
   if !output.status.success() {
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -645,7 +645,7 @@ async fn test_nodecar_camoufox_generate_config_custom_fingerprint(
   ];
 
   println!("Testing Camoufox config generation with custom fingerprint...");
-  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 120).await?;
+  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args).await?;
 
   if !output.status.success() {
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -703,7 +703,7 @@ async fn test_nodecar_command_validation() -> Result<(), Box<dyn std::error::Err
 
   // Test invalid command
   let invalid_args = ["invalid", "command"];
-  let output = TestUtils::execute_nodecar_command(&nodecar_path, &invalid_args, 10).await?;
+  let output = TestUtils::execute_nodecar_command(&nodecar_path, &invalid_args).await?;
 
   assert!(!output.status.success(), "Invalid command should fail");
 
@@ -734,7 +734,7 @@ async fn test_nodecar_concurrent_proxies() -> Result<(), Box<dyn std::error::Err
         "http",
       ];
 
-      TestUtils::execute_nodecar_command(&nodecar_path_clone, &args, 30).await
+      TestUtils::execute_nodecar_command(&nodecar_path_clone, &args).await
     });
     handles.push((i, handle));
   }
@@ -788,7 +788,7 @@ async fn test_nodecar_proxy_types() -> Result<(), Box<dyn std::error::Error + Se
       proxy_type,
     ];
 
-    let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 120).await?;
+    let output = TestUtils::execute_nodecar_command(&nodecar_path, &args).await?;
 
     if output.status.success() {
       let stdout = String::from_utf8(output.stdout)?;
@@ -817,7 +817,7 @@ async fn test_nodecar_direct_proxy() -> Result<(), Box<dyn std::error::Error + S
   let args = ["proxy", "start"];
 
   println!("Starting direct proxy with nodecar...");
-  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args, 120).await?;
+  let output = TestUtils::execute_nodecar_command(&nodecar_path, &args).await?;
 
   if !output.status.success() {
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -860,7 +860,7 @@ async fn test_nodecar_direct_proxy() -> Result<(), Box<dyn std::error::Error + S
 
   // Test stopping the proxy
   let stop_args = ["proxy", "stop", "--id", &proxy_id];
-  let stop_output = TestUtils::execute_nodecar_command(&nodecar_path, &stop_args, 10).await?;
+  let stop_output = TestUtils::execute_nodecar_command(&nodecar_path, &stop_args).await?;
 
   assert!(
     stop_output.status.success(),
@@ -898,7 +898,7 @@ async fn test_nodecar_socks5_proxy_chaining() -> Result<(), Box<dyn std::error::
   ];
 
   println!("Starting first proxy with HTTP upstream...");
-  let socks5_output = TestUtils::execute_nodecar_command(&nodecar_path, &socks5_args, 30).await?;
+  let socks5_output = TestUtils::execute_nodecar_command(&nodecar_path, &socks5_args).await?;
 
   if !socks5_output.status.success() {
     let stderr = String::from_utf8_lossy(&socks5_output.stderr);
@@ -925,7 +925,7 @@ async fn test_nodecar_socks5_proxy_chaining() -> Result<(), Box<dyn std::error::
   ];
 
   println!("Starting second proxy with first proxy as upstream...");
-  let http_output = TestUtils::execute_nodecar_command(&nodecar_path, &http_proxy_args, 30).await?;
+  let http_output = TestUtils::execute_nodecar_command(&nodecar_path, &http_proxy_args).await?;
 
   if !http_output.status.success() {
     let stderr = String::from_utf8_lossy(&http_output.stderr);
@@ -965,10 +965,9 @@ async fn test_nodecar_socks5_proxy_chaining() -> Result<(), Box<dyn std::error::
   let stop_http_args = ["proxy", "stop", "--id", &http_proxy_id];
   let stop_socks5_args = ["proxy", "stop", "--id", &socks5_proxy_id];
 
-  let http_stop_result =
-    TestUtils::execute_nodecar_command(&nodecar_path, &stop_http_args, 10).await;
+  let http_stop_result = TestUtils::execute_nodecar_command(&nodecar_path, &stop_http_args).await;
   let socks5_stop_result =
-    TestUtils::execute_nodecar_command(&nodecar_path, &stop_socks5_args, 10).await;
+    TestUtils::execute_nodecar_command(&nodecar_path, &stop_socks5_args).await;
 
   // Verify cleanup
   assert!(
