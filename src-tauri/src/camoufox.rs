@@ -212,8 +212,13 @@ impl CamoufoxNodecarLauncher {
     // Build nodecar command arguments
     let mut args = vec!["camoufox".to_string(), "start".to_string()];
 
-    // Add profile path
-    args.extend(["--profile-path".to_string(), profile_path.to_string()]);
+    // Add profile path - ensure it's an absolute path
+    let absolute_profile_path = std::path::Path::new(profile_path)
+      .canonicalize()
+      .unwrap_or_else(|_| std::path::Path::new(profile_path).to_path_buf())
+      .to_string_lossy()
+      .to_string();
+    args.extend(["--profile-path".to_string(), absolute_profile_path]);
 
     // Add URL if provided
     if let Some(url) = url {

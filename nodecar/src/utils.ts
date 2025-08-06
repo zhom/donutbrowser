@@ -10,12 +10,14 @@ const OS_NAME: "mac" | "win" | "lin" = OS_MAP[process.platform];
 
 export function getEnvVars(configMap: Record<string, string>) {
   const envVars: {
-    [key: string]: string | number | boolean;
+    [key: string]: string | undefined;
   } = {};
   let updatedConfigData: Uint8Array;
 
   try {
-    updatedConfigData = new TextEncoder().encode(JSON.stringify(configMap));
+    // Ensure we're working with a fresh copy of the config
+    const configCopy = JSON.parse(JSON.stringify(configMap));
+    updatedConfigData = new TextEncoder().encode(JSON.stringify(configCopy));
   } catch (e) {
     console.error(`Error updating config: ${e}`);
     process.exit(1);

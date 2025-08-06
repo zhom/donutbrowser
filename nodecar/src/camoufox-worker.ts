@@ -74,14 +74,17 @@ export async function runCamoufoxWorker(id: string): Promise<void> {
     process.on("unhandledRejection", () => void gracefulShutdown());
 
     try {
-      // Prepare options for Camoufox
-      const camoufoxOptions: LaunchOptions = { ...config.options };
+      // Deep clone to avoid reference sharing and ensure fresh configuration for each instance
+      const camoufoxOptions: LaunchOptions = JSON.parse(
+        JSON.stringify(config.options || {}),
+      );
 
       // Add profile path if provided
       if (config.profilePath) {
         camoufoxOptions.user_data_dir = config.profilePath;
       }
 
+      // Ensure block options are properly set
       if (camoufoxOptions.block_images) {
         camoufoxOptions.block_images = true;
       }
@@ -99,7 +102,7 @@ export async function runCamoufoxWorker(id: string): Promise<void> {
         camoufoxOptions.headless = true;
       }
 
-      // Always set these defaults
+      // Always set these defaults - ensure they are applied for each instance
       camoufoxOptions.i_know_what_im_doing = true;
       camoufoxOptions.config = {
         disableTheming: true,
@@ -107,12 +110,18 @@ export async function runCamoufoxWorker(id: string): Promise<void> {
         ...(camoufoxOptions.config || {}),
       };
 
-      // Generate the configuration using launchOptions
+      // Generate fresh options for this specific instance
       const generatedOptions = await launchOptions(camoufoxOptions);
 
-      // If we have a custom config from Rust, use it directly as environment variables
-      let finalEnv = generatedOptions.env || {};
+      // Start with process environment to ensure proper inheritance
+      let finalEnv = { ...process.env };
 
+      // Add generated options environment variables
+      if (generatedOptions.env) {
+        finalEnv = { ...finalEnv, ...generatedOptions.env };
+      }
+
+      // If we have a custom config from Rust, use it directly as environment variables
       if (config.customConfig) {
         try {
           // Parse the custom config JSON string
@@ -125,16 +134,16 @@ export async function runCamoufoxWorker(id: string): Promise<void> {
           finalEnv = { ...finalEnv, ...customEnvVars };
         } catch (error) {
           console.error(
-            "Failed to parse custom config, using generated config:",
+            `Camoufox worker ${id}: Failed to parse custom config, using generated config:`,
             error,
           );
           return;
         }
       }
-
-      // Launch the server with the final configuration
+      // Launch the server with the final configuration - ensure unique wsPath for each instance
       const finalOptions: any = {
         ...generatedOptions,
+        user_data_dir: config.profilePath,
         wsPath: `/ws_${config.id}`,
         env: finalEnv,
       };

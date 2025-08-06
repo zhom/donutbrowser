@@ -106,6 +106,7 @@ export function listCamoufoxConfigs(): CamoufoxConfig[] {
       .filter((config): config is CamoufoxConfig => config !== null)
       .map((config) => {
         config.options = "Removed for logging" as any;
+        config.customConfig = "Removed for logging" as any;
         return config;
       });
   } catch (error) {
@@ -147,5 +148,6 @@ export function updateCamoufoxConfig(config: CamoufoxConfig): boolean {
  * @returns A unique ID string
  */
 export function generateCamoufoxId(): string {
-  return `camoufox_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+  // Include process ID to ensure uniqueness across multiple processes
+  return `camoufox_${Date.now()}_${process.pid}_${Math.floor(Math.random() * 10000)}`;
 }

@@ -123,11 +123,16 @@ export async function startCamoufoxProcess(
   // Generate a unique ID for this instance
   const id = generateCamoufoxId();
 
+  // Ensure profile path is absolute if provided
+  const absoluteProfilePath = profilePath
+    ? path.resolve(profilePath)
+    : undefined;
+
   // Create the Camoufox configuration
   const config: CamoufoxConfig = {
     id,
-    options,
-    profilePath,
+    options: JSON.parse(JSON.stringify(options)), // Deep clone to avoid reference sharing
+    profilePath: absoluteProfilePath,
     url,
     customConfig,
   };
