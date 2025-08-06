@@ -17,71 +17,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import type { CamoufoxConfig, CamoufoxFingerprintConfig } from "@/types";
 
-const timezoneOptions = [
-  { value: "America/New_York", label: "America/New_York" },
-  { value: "America/Los_Angeles", label: "America/Los_Angeles" },
-  { value: "America/Chicago", label: "America/Chicago" },
-  { value: "America/Denver", label: "America/Denver" },
-  { value: "America/Phoenix", label: "America/Phoenix" },
-  { value: "America/Toronto", label: "America/Toronto" },
-  { value: "America/Vancouver", label: "America/Vancouver" },
-  { value: "Europe/London", label: "Europe/London" },
-  { value: "Europe/Paris", label: "Europe/Paris" },
-  { value: "Europe/Berlin", label: "Europe/Berlin" },
-  { value: "Europe/Rome", label: "Europe/Rome" },
-  { value: "Europe/Madrid", label: "Europe/Madrid" },
-  { value: "Europe/Amsterdam", label: "Europe/Amsterdam" },
-  { value: "Europe/Zurich", label: "Europe/Zurich" },
-  { value: "Europe/Vienna", label: "Europe/Vienna" },
-  { value: "Europe/Warsaw", label: "Europe/Warsaw" },
-  { value: "Europe/Prague", label: "Europe/Prague" },
-  { value: "Europe/Stockholm", label: "Europe/Stockholm" },
-  { value: "Europe/Copenhagen", label: "Europe/Copenhagen" },
-  { value: "Europe/Helsinki", label: "Europe/Helsinki" },
-  { value: "Europe/Oslo", label: "Europe/Oslo" },
-  { value: "Europe/Brussels", label: "Europe/Brussels" },
-  { value: "Europe/Dublin", label: "Europe/Dublin" },
-  { value: "Europe/Lisbon", label: "Europe/Lisbon" },
-  { value: "Europe/Athens", label: "Europe/Athens" },
-  { value: "Europe/Budapest", label: "Europe/Budapest" },
-  { value: "Europe/Bucharest", label: "Europe/Bucharest" },
-  { value: "Europe/Sofia", label: "Europe/Sofia" },
-  { value: "Europe/Kiev", label: "Europe/Kiev" },
-  { value: "Europe/Moscow", label: "Europe/Moscow" },
-  { value: "Asia/Tokyo", label: "Asia/Tokyo" },
-  { value: "Asia/Seoul", label: "Asia/Seoul" },
-  { value: "Asia/Shanghai", label: "Asia/Shanghai" },
-  { value: "Asia/Hong_Kong", label: "Asia/Hong_Kong" },
-  { value: "Asia/Singapore", label: "Asia/Singapore" },
-  { value: "Asia/Bangkok", label: "Asia/Bangkok" },
-  { value: "Asia/Jakarta", label: "Asia/Jakarta" },
-  { value: "Asia/Manila", label: "Asia/Manila" },
-  { value: "Asia/Kolkata", label: "Asia/Kolkata" },
-  { value: "Asia/Dubai", label: "Asia/Dubai" },
-  { value: "Asia/Riyadh", label: "Asia/Riyadh" },
-  { value: "Asia/Tehran", label: "Asia/Tehran" },
-  { value: "Asia/Jerusalem", label: "Asia/Jerusalem" },
-  { value: "Asia/Istanbul", label: "Asia/Istanbul" },
-  { value: "Australia/Sydney", label: "Australia/Sydney" },
-  { value: "Australia/Melbourne", label: "Australia/Melbourne" },
-  { value: "Australia/Brisbane", label: "Australia/Brisbane" },
-  { value: "Australia/Perth", label: "Australia/Perth" },
-  { value: "Australia/Adelaide", label: "Australia/Adelaide" },
-  { value: "Pacific/Auckland", label: "Pacific/Auckland" },
-  { value: "Pacific/Honolulu", label: "Pacific/Honolulu" },
-  { value: "Africa/Cairo", label: "Africa/Cairo" },
-  { value: "Africa/Johannesburg", label: "Africa/Johannesburg" },
-  { value: "Africa/Lagos", label: "Africa/Lagos" },
-  { value: "Africa/Nairobi", label: "Africa/Nairobi" },
-  { value: "America/Sao_Paulo", label: "America/Sao_Paulo" },
-  { value: "America/Buenos_Aires", label: "America/Buenos_Aires" },
-  { value: "America/Lima", label: "America/Lima" },
-  { value: "America/Bogota", label: "America/Bogota" },
-  { value: "America/Santiago", label: "America/Santiago" },
-  { value: "America/Caracas", label: "America/Caracas" },
-  { value: "America/Mexico_City", label: "America/Mexico_City" },
-];
-
 interface SharedCamoufoxConfigFormProps {
   config: CamoufoxConfig;
   onConfigChange: (key: keyof CamoufoxConfig, value: unknown) => void;
@@ -92,18 +27,14 @@ interface SharedCamoufoxConfigFormProps {
 
 // Component for editing nested objects like webGl:parameters
 interface ObjectEditorProps {
-  value: Record<string, unknown>;
-  onChange: (value: Record<string, unknown>) => void;
+  value: Record<string, unknown> | undefined;
+  onChange: (value: Record<string, unknown> | undefined) => void;
   title: string;
 }
 
 function ObjectEditor({ value, onChange, title }: ObjectEditorProps) {
-  const [jsonString, setJsonString] = useState(
-    JSON.stringify(value || {}, null, 2),
-  );
-  const [error, setError] = useState<string | null>(null);
+  const [jsonString, setJsonString] = useState("");
 
-  // Update jsonString when value changes
   useEffect(() => {
     setJsonString(JSON.stringify(value || {}, null, 2));
   }, [value]);
@@ -111,13 +42,22 @@ function ObjectEditor({ value, onChange, title }: ObjectEditorProps) {
   const handleChange = (newValue: string) => {
     setJsonString(newValue);
     try {
+      if (newValue.trim() === "" || newValue.trim() === "{}") {
+        onChange(undefined); // Treat empty objects as undefined
+        return;
+      }
       const parsed = JSON.parse(newValue);
-      setError(null);
-      onChange(parsed);
-    } catch (e) {
-      setError(
-        `Invalid JSON format: ${e instanceof Error ? e.message : "Unknown error"}`,
-      );
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        Object.keys(parsed).length === 0
+      ) {
+        onChange(undefined);
+        return;
+      }
+      onChange(parsed as Record<string, unknown>);
+    } catch (err) {
+      console.warn("Invalid JSON:", err);
     }
   };
 
@@ -131,7 +71,6 @@ function ObjectEditor({ value, onChange, title }: ObjectEditorProps) {
         className="font-mono text-sm"
         rows={6}
       />
-      {error && <p className="text-sm text-red-600">{error}</p>}
     </div>
   );
 }
@@ -736,23 +675,15 @@ export function SharedCamoufoxConfigForm({
           </div>
           <div className="space-y-2">
             <Label htmlFor="timezone">Timezone</Label>
-            <Select
+            <Input
+              id="timezone"
+              type="text"
               value={fingerprintConfig.timezone || ""}
-              onValueChange={(value) =>
-                updateFingerprintConfig("timezone", value || undefined)
+              onChange={(e) =>
+                updateFingerprintConfig("timezone", e.target.value || undefined)
               }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select timezone" />
-              </SelectTrigger>
-              <SelectContent>
-                {timezoneOptions.map((tz) => (
-                  <SelectItem key={tz.value} value={tz.value}>
-                    {tz.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              placeholder="e.g., America/New_York"
+            />
           </div>
         </div>
       </div>
