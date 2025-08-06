@@ -7,7 +7,7 @@ import { BsCamera, BsMic } from "react-icons/bs";
 import { LoadingButton } from "@/components/loading-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+
 import {
   Dialog,
   DialogContent,
@@ -29,7 +29,6 @@ import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 
 interface AppSettings {
   set_as_default_browser: boolean;
-  show_settings_on_startup: boolean;
   theme: string;
 }
 
@@ -47,12 +46,10 @@ interface SettingsDialogProps {
 export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   const [settings, setSettings] = useState<AppSettings>({
     set_as_default_browser: false,
-    show_settings_on_startup: true,
     theme: "system",
   });
   const [originalSettings, setOriginalSettings] = useState<AppSettings>({
     set_as_default_browser: false,
-    show_settings_on_startup: true,
     theme: "system",
   });
   const [isDefaultBrowser, setIsDefaultBrowser] = useState(false);
@@ -290,10 +287,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   ]);
 
   // Check if settings have changed (excluding default browser setting)
-  const hasChanges =
-    settings.show_settings_on_startup !==
-      originalSettings.show_settings_on_startup ||
-    settings.theme !== originalSettings.theme;
+  const hasChanges = settings.theme !== originalSettings.theme;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -359,29 +353,6 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
             <p className="text-xs text-muted-foreground">
               When set as default, Donut Browser will handle web links and allow
               you to choose which profile to use.
-            </p>
-          </div>
-
-          {/* Startup Behavior Section */}
-          <div className="space-y-4">
-            <Label className="text-base font-medium">Startup Behavior</Label>
-
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="show-settings"
-                checked={settings.show_settings_on_startup}
-                onCheckedChange={(checked) => {
-                  updateSetting("show_settings_on_startup", checked as boolean);
-                }}
-              />
-              <Label htmlFor="show-settings" className="text-sm">
-                Show settings on app startup
-              </Label>
-            </div>
-
-            <p className="text-xs text-muted-foreground">
-              When enabled, the settings dialog will be shown when the app
-              starts.
             </p>
           </div>
 

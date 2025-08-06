@@ -25,8 +25,6 @@ impl Default for TableSortingSettings {
 pub struct AppSettings {
   #[serde(default)]
   pub set_as_default_browser: bool,
-  #[serde(default)]
-  pub show_settings_on_startup: bool,
   #[serde(default = "default_theme")]
   pub theme: String, // "light", "dark", or "system"
 }
@@ -39,7 +37,6 @@ impl Default for AppSettings {
   fn default() -> Self {
     Self {
       set_as_default_browser: false,
-      show_settings_on_startup: true,
       theme: "system".to_string(),
     }
   }
@@ -151,13 +148,8 @@ impl SettingsManager {
   }
 
   pub fn should_show_settings_on_startup(&self) -> Result<bool, Box<dyn std::error::Error>> {
-    let settings = self.load_settings()?;
-
-    // Show prompt if:
-    // 1. User wants to see the prompt
-    // 2. Donut Browser is not set as default
-    // 3. User hasn't explicitly disabled the default browser setting
-    Ok(settings.show_settings_on_startup && !settings.set_as_default_browser)
+    // Always return false - we don't show settings on startup anymore
+    Ok(false)
   }
 }
 
