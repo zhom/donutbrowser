@@ -835,12 +835,6 @@ impl ProfileManager {
           if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
             println!("Warning: Failed to emit profile update event: {e}");
           }
-
-          // Only log once when the process actually stops (when we had a PID but now don't)
-          println!(
-            "Camoufox process has stopped for profile '{}'",
-            profile.name
-          );
         }
         Ok(false)
       }
