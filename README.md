@@ -1,7 +1,7 @@
 <div align="center">
   <img src="assets/logo.png" alt="Donut Browser Logo" width="150">
   <h1>Donut Browser</h1>
-  <strong>A powerful browser orchestrator that puts you in control of your browsing experience. 🍩</strong>
+  <strong>A powerful anti-detect browser that puts you in control of your browsing experience. 🍩</strong>
 </div>
 <br>
 
@@ -84,8 +84,8 @@ Have questions or want to contribute? We'd love to hear from you!
 
 <!-- readme: collaborators,contributors -start -->
 <table>
-	<tbody>
-		<tr>
+ <tbody>
+  <tr>
             <td align="center">
                 <a href="https://github.com/zhom">
                     <img src="https://avatars.githubusercontent.com/u/2717306?v=4" width="100;" alt="zhom"/>
@@ -93,8 +93,8 @@ Have questions or want to contribute? We'd love to hear from you!
                     <sub><b>zhom</b></sub>
                 </a>
             </td>
-		</tr>
-	<tbody>
+  </tr>
+ <tbody>
 </table>
 <!-- readme: collaborators,contributors -end -->
 

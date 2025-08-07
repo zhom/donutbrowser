@@ -230,7 +230,7 @@ mod windows {
     app_key
       .set_value(
         "ApplicationDescription",
-        &"Donut Browser - Simple Yet Powerful Browser Orchestrator",
+        &"Donut Browser - Simple Yet Powerful Anti-Detect Browser",
       )
       .map_err(|e| format!("Failed to set ApplicationDescription: {}", e))?;
 
@@ -246,7 +246,7 @@ mod windows {
     capabilities
       .set_value(
         "ApplicationDescription",
-        &"Donut Browser - Simple Yet Powerful Browser Orchestrator",
+        &"Donut Browser - Simple Yet Powerful Anti-Detect Browser",
       )
       .map_err(|e| format!("Failed to set Capabilities description: {}", e))?;
 

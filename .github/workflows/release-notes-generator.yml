@@ -62,7 +62,7 @@ jobs:
         with:
           prompt-file: commits.txt
           system-prompt: |
-            You are an expert technical writer tasked with generating comprehensive release notes for Donut Browser, a powerful browser orchestrator.
+            You are an expert technical writer tasked with generating comprehensive release notes for Donut Browser, a powerful anti-detect browser.
 
             Analyze the provided commit messages and generate well-structured release notes following this format:
 
