@@ -17,7 +17,7 @@ export function GroupBadges({
   groups,
   isLoading,
 }: GroupBadgesProps) {
-  if (isLoading) {
+  if (isLoading && !groups.length) {
     return (
       <div className="flex flex-wrap gap-2 mb-4">
         <div className="flex items-center gap-2 px-4.5 py-1.5 text-xs">
