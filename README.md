@@ -25,10 +25,6 @@
   </a>
 </p>
 
-## Donut Browser
-
-> A free and open source browser orchestrator built with [Tauri](https://v2.tauri.app/).
-
 <picture>
  <source media="(prefers-color-scheme: dark)" srcset="assets/preview-dark.png" />
  <source media="(prefers-color-scheme: light)" srcset="assets/preview.png" />
@@ -38,6 +34,7 @@
 ## Features
 
 - Create unlimited number of local browser profiles completely isolated from each other
+- Safely use multiple accounts on one device by using anti-detect browser profiles, powered by [Camoufox](https://camoufox.com)
 - Proxy support with basic auth for all browsers except for TOR Browser
 - Import profiles from your existing browsers
 - Automatic updates both for browsers and for the app itself
@@ -87,8 +84,8 @@ Have questions or want to contribute? We'd love to hear from you!
 
 <!-- readme: collaborators,contributors -start -->
 <table>
-	<tbody>
-		<tr>
+ <tbody>
+  <tr>
             <td align="center">
                 <a href="https://github.com/zhom">
                     <img src="https://avatars.githubusercontent.com/u/2717306?v=4" width="100;" alt="zhom"/>
@@ -96,8 +93,8 @@ Have questions or want to contribute? We'd love to hear from you!
                     <sub><b>zhom</b></sub>
                 </a>
             </td>
-		</tr>
-	<tbody>
+  </tr>
+ <tbody>
 </table>
 <!-- readme: collaborators,contributors -end -->
 
