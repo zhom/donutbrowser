@@ -110,6 +110,16 @@ export function CreateProfileDialog({
   const [selectedBrowser, setSelectedBrowser] = useState<BrowserTypeString>();
   const [selectedProxyId, setSelectedProxyId] = useState<string>();
 
+  const handleTabChange = (value: string) => {
+    if (value === "regular") {
+      setSelectedBrowser(undefined);
+    } else if (value === "anti-detect") {
+      setSelectedBrowser("camoufox");
+    }
+
+    setActiveTab(value);
+  };
+
   // Camoufox anti-detect states
   const [camoufoxConfig, setCamoufoxConfig] = useState<CamoufoxConfig>({
     geoip: true, // Default to automatic geoip
@@ -331,15 +341,17 @@ export function CreateProfileDialog({
   const isCreateDisabled = () => {
     if (!profileName.trim()) return true;
 
-    if (activeTab === "regular") {
-      return (
-        !selectedBrowser ||
-        !getBestAvailableVersion(availableReleaseTypes, selectedBrowser)
-      );
-    } else {
-      // For anti-detect, we need camoufox to be available
-      return !getBestAvailableVersion(camoufoxReleaseTypes, "camoufox");
+    if (!selectedBrowser) return true;
+
+    if (isBrowserCurrentlyDownloading(selectedBrowser)) return true;
+
+    if (!isBrowserVersionAvailable(selectedBrowser)) return true;
+
+    if (selectedBrowser === "camoufox") {
+      return !getBestAvailableVersion(camoufoxReleaseTypes, selectedBrowser);
     }
+
+    return !getBestAvailableVersion(availableReleaseTypes, selectedBrowser);
   };
 
   const updateCamoufoxConfig = (key: keyof CamoufoxConfig, value: unknown) => {
@@ -359,7 +371,7 @@ export function CreateProfileDialog({
     return isBrowserDownloading(browserStr);
   };
 
-  // No OS warning needed anymore
+  console.log(selectedBrowser);
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -370,7 +382,7 @@ export function CreateProfileDialog({
 
         <Tabs
           value={activeTab}
-          onValueChange={setActiveTab}
+          onValueChange={handleTabChange}
           className="flex flex-col flex-1 w-full min-h-0"
         >
           <TabsList className="grid flex-shrink-0 grid-cols-2 w-full">
