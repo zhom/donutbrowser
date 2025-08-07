@@ -239,8 +239,6 @@ export function ProfileSelectorDialog({
                 <SelectContent>
                   {profiles.map((profile) => {
                     const isRunning = runningProfiles.has(profile.name);
-                    const isLaunching = launchingProfiles.has(profile.name);
-                    const isStopping = stoppingProfiles.has(profile.name);
                     const canUseForLinks =
                       browserState.canUseProfileForLinks(profile);
                     const tooltipContent = getProfileTooltipContent(profile);
@@ -287,16 +285,6 @@ export function ProfileSelectorDialog({
                                 {isRunning && (
                                   <Badge variant="default" className="text-xs">
                                     Running
-                                  </Badge>
-                                )}
-                                {isLaunching && (
-                                  <Badge variant="outline" className="text-xs">
-                                    Launching
-                                  </Badge>
-                                )}
-                                {isStopping && (
-                                  <Badge variant="outline" className="text-xs">
-                                    Stopping
                                   </Badge>
                                 )}
                                 {!canUseForLinks && (

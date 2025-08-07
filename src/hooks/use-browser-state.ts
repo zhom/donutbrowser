@@ -117,6 +117,10 @@ export function useBrowserState(
         return isRunning;
       }
 
+      if (profile.browser === "camoufox" && isRunning) {
+        return false;
+      }
+
       // For other browsers, any profile can be used
       return true;
     },
@@ -220,6 +224,7 @@ export function useBrowserState(
 
       if (canUseForLinks) return null;
 
+      const isRunning = runningProfiles.has(profile.name);
       const isLaunching = launchingProfiles?.has(profile.name) ?? false;
       const isStopping = stoppingProfiles?.has(profile.name) ?? false;
       const isBrowserUpdating = isUpdating?.(profile.browser) ?? false;
@@ -249,6 +254,10 @@ export function useBrowserState(
             .join(", ");
           return `${browserDisplayName} browser is already running (${runningProfileNames}). Only one instance can run at a time.`;
         }
+      }
+
+      if (profile.browser === "camoufox" && isRunning) {
+        return "Anti-detect profiles can only open links on first launch";
       }
 
       return "This profile cannot be used for opening links right now.";
