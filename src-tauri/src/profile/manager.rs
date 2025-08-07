@@ -35,31 +35,6 @@ impl ProfileManager {
   }
 
   #[allow(clippy::too_many_arguments)]
-  pub async fn create_profile(
-    &self,
-    app_handle: &tauri::AppHandle,
-    name: &str,
-    browser: &str,
-    version: &str,
-    release_type: &str,
-    proxy_id: Option<String>,
-    camoufox_config: Option<CamoufoxConfig>,
-  ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
-    self
-      .create_profile_with_group(
-        app_handle,
-        name,
-        browser,
-        version,
-        release_type,
-        proxy_id,
-        camoufox_config,
-        None,
-      )
-      .await
-  }
-
-  #[allow(clippy::too_many_arguments)]
   pub async fn create_profile_with_group(
     &self,
     app_handle: &tauri::AppHandle,

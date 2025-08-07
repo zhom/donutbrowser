@@ -389,6 +389,21 @@ export default function Home() {
     [currentProfileForProxy, loadProfiles],
   );
 
+  const loadGroups = useCallback(async () => {
+    setGroupsLoading(true);
+    try {
+      const groupsWithCounts = await invoke<GroupWithCount[]>(
+        "get_groups_with_profile_counts",
+      );
+      setGroups(groupsWithCounts);
+    } catch (err) {
+      console.error("Failed to load groups with counts:", err);
+      setGroups([]);
+    } finally {
+      setGroupsLoading(false);
+    }
+  }, []);
+
   const handleCreateProfile = useCallback(
     async (profileData: {
       name: string;
@@ -397,6 +412,7 @@ export default function Home() {
       releaseType: string;
       proxyId?: string;
       camoufoxConfig?: CamoufoxConfig;
+      groupId?: string;
     }) => {
       setError(null);
 
@@ -410,10 +426,14 @@ export default function Home() {
             releaseType: profileData.releaseType,
             proxyId: profileData.proxyId,
             camoufoxConfig: profileData.camoufoxConfig,
+            groupId:
+              profileData.groupId ||
+              (selectedGroupId !== "default" ? selectedGroupId : undefined),
           },
         );
 
         await loadProfiles();
+        await loadGroups();
         // Trigger proxy data reload in the table
       } catch (error) {
         setError(
@@ -424,7 +444,7 @@ export default function Home() {
         throw error;
       }
     },
-    [loadProfiles],
+    [loadProfiles, loadGroups, selectedGroupId],
   );
 
   const [runningProfiles, setRunningProfiles] = useState<Set<string>>(
@@ -524,8 +544,9 @@ export default function Home() {
         // Give a small delay to ensure file system operations complete
         await new Promise((resolve) => setTimeout(resolve, 500));
 
-        // Reload profiles to ensure UI is updated
+        // Reload profiles and groups to ensure UI is updated
         await loadProfiles();
+        await loadGroups();
 
         console.log("Profile deleted and profiles reloaded successfully");
       } catch (err: unknown) {
@@ -534,7 +555,7 @@ export default function Home() {
         setError(`Failed to delete profile: ${errorMessage}`);
       }
     },
-    [loadProfiles],
+    [loadProfiles, loadGroups],
   );
 
   const handleRenameProfile = useCallback(
@@ -565,21 +586,6 @@ export default function Home() {
     },
     [loadProfiles],
   );
-
-  const loadGroups = useCallback(async () => {
-    setGroupsLoading(true);
-    try {
-      const groupsWithCounts = await invoke<GroupWithCount[]>(
-        "get_groups_with_profile_counts",
-      );
-      setGroups(groupsWithCounts);
-    } catch (err) {
-      console.error("Failed to load groups with counts:", err);
-      setGroups([]);
-    } finally {
-      setGroupsLoading(false);
-    }
-  }, []);
 
   const handleDeleteSelectedProfiles = useCallback(
     async (profileNames: string[]) => {
@@ -615,6 +621,7 @@ export default function Home() {
         profileNames: selectedProfiles,
       });
       await loadProfiles();
+      await loadGroups();
       setSelectedProfiles([]);
       setShowBulkDeleteConfirmation(false);
     } catch (error) {
@@ -623,7 +630,7 @@ export default function Home() {
     } finally {
       setIsBulkDeleting(false);
     }
-  }, [selectedProfiles, loadProfiles]);
+  }, [selectedProfiles, loadProfiles, loadGroups]);
 
   const handleBulkGroupAssignment = useCallback(() => {
     if (selectedProfiles.length === 0) return;
@@ -778,6 +785,7 @@ export default function Home() {
           setCreateProfileDialogOpen(false);
         }}
         onCreateProfile={handleCreateProfile}
+        selectedGroupId={selectedGroupId}
       />
 
       <SettingsDialog

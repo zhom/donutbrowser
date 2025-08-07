@@ -48,7 +48,9 @@ interface CreateProfileDialogProps {
     releaseType: string;
     proxyId?: string;
     camoufoxConfig?: CamoufoxConfig;
+    groupId?: string;
   }) => Promise<void>;
+  selectedGroupId?: string;
 }
 
 interface BrowserOption {
@@ -99,6 +101,7 @@ export function CreateProfileDialog({
   isOpen,
   onClose,
   onCreateProfile,
+  selectedGroupId,
 }: CreateProfileDialogProps) {
   const [profileName, setProfileName] = useState("");
   const [activeTab, setActiveTab] = useState("regular");
@@ -272,6 +275,7 @@ export function CreateProfileDialog({
           version: bestVersion.version,
           releaseType: bestVersion.releaseType,
           proxyId: selectedProxyId,
+          groupId: selectedGroupId !== "default" ? selectedGroupId : undefined,
         });
       } else {
         // Anti-detect tab - always use Camoufox with best available version
@@ -295,6 +299,7 @@ export function CreateProfileDialog({
           releaseType: bestCamoufoxVersion.releaseType,
           proxyId: selectedProxyId,
           camoufoxConfig: finalCamoufoxConfig,
+          groupId: selectedGroupId !== "default" ? selectedGroupId : undefined,
         });
       }
 

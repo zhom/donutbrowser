@@ -1337,8 +1337,9 @@ impl BrowserRunner {
   }
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
-pub async fn create_browser_profile(
+pub async fn create_browser_profile_with_group(
   app_handle: tauri::AppHandle,
   name: String,
   browser: String,
@@ -1346,10 +1347,11 @@ pub async fn create_browser_profile(
   release_type: String,
   proxy_id: Option<String>,
   camoufox_config: Option<CamoufoxConfig>,
+  group_id: Option<String>,
 ) -> Result<BrowserProfile, String> {
   let profile_manager = ProfileManager::instance();
   profile_manager
-    .create_profile(
+    .create_profile_with_group(
       &app_handle,
       &name,
       &browser,
@@ -1357,6 +1359,7 @@ pub async fn create_browser_profile(
       &release_type,
       proxy_id,
       camoufox_config,
+      group_id,
     )
     .await
     .map_err(|e| format!("Failed to create profile: {e}"))
@@ -1645,6 +1648,7 @@ pub async fn kill_browser_profile(
     .map_err(|e| format!("Failed to kill browser: {e}"))
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn create_browser_profile_new(
   app_handle: tauri::AppHandle,
@@ -1654,10 +1658,11 @@ pub async fn create_browser_profile_new(
   release_type: String,
   proxy_id: Option<String>,
   camoufox_config: Option<CamoufoxConfig>,
+  group_id: Option<String>,
 ) -> Result<BrowserProfile, String> {
   let browser_type =
     BrowserType::from_str(&browser_str).map_err(|e| format!("Invalid browser type: {e}"))?;
-  create_browser_profile(
+  create_browser_profile_with_group(
     app_handle,
     name,
     browser_type.as_str().to_string(),
@@ -1665,6 +1670,7 @@ pub async fn create_browser_profile_new(
     release_type,
     proxy_id,
     camoufox_config,
+    group_id,
   )
   .await
 }
