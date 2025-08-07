@@ -769,7 +769,9 @@ export function ProfilesDataTable({
                     onClick={() => {
                       onProxySettings(profile);
                     }}
-                    disabled={!browserState.isClient || isBrowserUpdating}
+                    disabled={
+                      !browserState.isClient || isBrowserUpdating || isRunning
+                    }
                   >
                     Configure Proxy
                   </DropdownMenuItem>
