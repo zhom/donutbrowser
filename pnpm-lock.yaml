@@ -148,8 +148,8 @@ importers:
         specifier: ^14.0.0
         version: 14.0.0
       donutbrowser-camoufox-js:
-        specifier: ^0.6.3
-        version: 0.6.3(encoding@0.1.13)(playwright-core@1.54.2)
+        specifier: ^0.6.4
+        version: 0.6.4(encoding@0.1.13)(playwright-core@1.54.2)
       dotenv:
         specifier: ^17.2.1
         version: 17.2.1
@@ -1757,8 +1757,8 @@ packages:
     resolution: {integrity: sha512-58lmxKSA4BNyLz+HHMUzlOEpg09FV+ev6ZMe3vJihgdxzgcwZ8VoEEPmALCZG9LmqfVoNMMKpttIYTVG6uDY7A==}
     engines: {node: '>=0.3.1'}
 
-  donutbrowser-camoufox-js@0.6.3:
-    resolution: {integrity: sha512-FWGryyq1hg4JetHxpycjNbsZiKGsoq5bfcRsEhMFxkDSzzCKDgk0FcFId/ea6bffBOROC6gLD3sSj/qxhXlMXg==}
+  donutbrowser-camoufox-js@0.6.4:
+    resolution: {integrity: sha512-PAH6iCZHuMtEfwOrJmucF54APeTuMUhZgJySz+OrGaRQqg992+Xdk6xRChjtoRJv9H5E/mjoL4mYPCK7jB88oQ==}
     hasBin: true
     peerDependencies:
       playwright-core: '*'
@@ -4386,7 +4386,7 @@ snapshots:
 
   diff@4.0.2: {}
 
-  donutbrowser-camoufox-js@0.6.3(encoding@0.1.13)(playwright-core@1.54.2):
+  donutbrowser-camoufox-js@0.6.4(encoding@0.1.13)(playwright-core@1.54.2):
     dependencies:
       adm-zip: 0.5.16
       commander: 13.1.0
