@@ -86,6 +86,11 @@ jobs:
             pnpm run build:win-x64
           fi
 
+      # TODO: replace with an integration test that fetches everything from rust
+      - name: Download Camoufox for testing
+        run: npx camoufox-js fetch
+        continue-on-error: true
+
       - name: Copy nodecar binary to Tauri binaries
         shell: bash
         run: |
