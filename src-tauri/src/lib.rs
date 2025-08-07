@@ -326,7 +326,7 @@ pub fn run() {
 
       // Start periodic cleanup task for unused binaries
       tauri::async_runtime::spawn(async move {
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(300)); // Every 5 minutes
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(43200)); // Every 12 hours
 
         loop {
           interval.tick().await;
