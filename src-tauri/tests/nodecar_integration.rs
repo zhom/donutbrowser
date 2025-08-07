@@ -558,6 +558,7 @@ async fn test_nodecar_camoufox_configuration_options(
 }
 
 /// Test Camoufox generate-config command with basic options
+#[ignore = "CI is rate limited for camoufox download"]
 #[tokio::test]
 async fn test_nodecar_camoufox_generate_config_basic(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -619,6 +620,7 @@ async fn test_nodecar_camoufox_generate_config_basic(
 }
 
 /// Test Camoufox generate-config command with custom fingerprint
+#[ignore = "CI is rate limited for camoufox download"]
 #[tokio::test]
 async fn test_nodecar_camoufox_generate_config_custom_fingerprint(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
