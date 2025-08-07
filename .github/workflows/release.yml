@@ -179,4 +179,3 @@ jobs:
         with:
           branch: main
           commit_message: "docs: update CHANGELOG.md for ${{ github.ref_name }} [skip ci]"
-          file_pattern: CHANGELOG.md
