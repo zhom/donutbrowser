@@ -451,7 +451,7 @@ export function CreateProfileDialog({
                         )}
                       {!isBrowserCurrentlyDownloading(selectedBrowser) &&
                         isBrowserVersionAvailable(selectedBrowser) && (
-                          <div className="text-sm text-green-600">
+                          <div className="text-sm text-muted-foreground">
                             {(() => {
                               const bestVersion = getBestAvailableVersion(
                                 availableReleaseTypes,
@@ -462,7 +462,7 @@ export function CreateProfileDialog({
                           </div>
                         )}
                       {isBrowserCurrentlyDownloading(selectedBrowser) && (
-                        <div className="text-sm text-blue-600">
+                        <div className="text-sm text-muted-foreground">
                           {(() => {
                             const bestVersion = getBestAvailableVersion(
                               availableReleaseTypes,
@@ -486,8 +486,8 @@ export function CreateProfileDialog({
                       camoufoxReleaseTypes,
                       "camoufox",
                     ) && (
-                      <div className="flex gap-3 items-center p-3 bg-amber-50 rounded-md border border-amber-200">
-                        <p className="text-sm text-amber-800">
+                      <div className="flex gap-3 items-center p-3 rounded-md border">
+                        <p className="text-sm text-muted-foreground">
                           {(() => {
                             const bestVersion = getBestAvailableVersion(
                               camoufoxReleaseTypes,
@@ -510,7 +510,7 @@ export function CreateProfileDialog({
                     )}
                   {!isBrowserCurrentlyDownloading("camoufox") &&
                     isBrowserVersionAvailable("camoufox") && (
-                      <div className="p-3 text-sm text-green-600 bg-green-50 rounded-md border border-green-200">
+                      <div className="p-3 text-sm rounded-md border text-muted-foreground">
                         {(() => {
                           const bestVersion = getBestAvailableVersion(
                             camoufoxReleaseTypes,
@@ -521,7 +521,7 @@ export function CreateProfileDialog({
                       </div>
                     )}
                   {isBrowserCurrentlyDownloading("camoufox") && (
-                    <div className="p-3 text-sm text-blue-600 bg-blue-50 rounded-md border border-blue-200">
+                    <div className="p-3 text-sm text-muted-foreground rounded-md border">
                       {(() => {
                         const bestVersion = getBestAvailableVersion(
                           camoufoxReleaseTypes,
