@@ -111,16 +111,6 @@ interface TwilightUpdateToastProps extends BaseToastProps {
   hasUpdate?: boolean;
 }
 
-interface AppUpdateToastProps extends BaseToastProps {
-  type: "app-update";
-  stage?: "downloading" | "extracting" | "installing" | "completed";
-  progress?: {
-    percentage: number;
-    speed?: string;
-    eta?: string;
-  };
-}
-
 type ToastProps =
   | LoadingToastProps
   | SuccessToastProps
@@ -128,8 +118,7 @@ type ToastProps =
   | DownloadToastProps
   | VersionUpdateToastProps
   | FetchingToastProps
-  | TwilightUpdateToastProps
-  | AppUpdateToastProps;
+  | TwilightUpdateToastProps;
 
 function getToastIcon(type: ToastProps["type"], stage?: string) {
   switch (type) {
@@ -144,21 +133,7 @@ function getToastIcon(type: ToastProps["type"], stage?: string) {
         );
       }
       return <LuDownload className="flex-shrink-0 w-4 h-4 text-blue-500" />;
-    case "app-update":
-      if (stage === "completed") {
-        return (
-          <LuCheckCheck className="flex-shrink-0 w-4 h-4 text-green-500" />
-        );
-      } else if (stage === "downloading") {
-        return <LuDownload className="flex-shrink-0 w-4 h-4 text-blue-500" />;
-      } else if (stage === "installing") {
-        return (
-          <LuRefreshCw className="flex-shrink-0 w-4 h-4 text-blue-500 animate-spin" />
-        );
-      }
-      return (
-        <LuRefreshCw className="flex-shrink-0 w-4 h-4 text-blue-500 animate-spin" />
-      );
+
     case "version-update":
       return (
         <LuRefreshCw className="flex-shrink-0 w-4 h-4 text-blue-500 animate-spin" />
@@ -239,47 +214,6 @@ export function UnifiedToast(props: ToastProps) {
             </div>
           )}
 
-        {/* App update progress */}
-        {type === "app-update" && (
-          <div className="mt-2 space-y-1">
-            {/* Download progress with percentage */}
-            {progress &&
-              "percentage" in progress &&
-              stage === "downloading" && (
-                <>
-                  <div className="flex justify-between items-center">
-                    <p className="flex-1 min-w-0 text-xs text-gray-600 dark:text-gray-300">
-                      {progress.percentage.toFixed(1)}%
-                      {progress.speed && ` • ${progress.speed} MB/s`}
-                      {progress.eta && ` • ${progress.eta} remaining`}
-                    </p>
-                  </div>
-                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
-                    <div
-                      className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
-                      style={{ width: `${progress.percentage}%` }}
-                    />
-                  </div>
-                </>
-              )}
-
-            {/* Progress indicator for other stages */}
-            {(stage === "extracting" ||
-              stage === "installing" ||
-              stage === "completed") && (
-              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
-                <div
-                  className={`h-1.5 rounded-full transition-all duration-500 ${
-                    stage === "completed"
-                      ? "bg-green-500 w-full"
-                      : "bg-blue-500 w-full animate-pulse"
-                  }`}
-                />
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Version update progress */}
         {type === "version-update" &&
           progress &&
@@ -351,27 +285,6 @@ export function UnifiedToast(props: ToastProps) {
             {stage === "downloading (twilight rolling release)" && (
               <p className="mt-1 text-xs text-purple-600 dark:text-purple-400">
                 Downloading rolling release build...
-              </p>
-            )}
-          </>
-        )}
-
-        {/* Stage-specific descriptions for app updates */}
-        {type === "app-update" && !description && (
-          <>
-            {stage === "extracting" && (
-              <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
-                Preparing update files...
-              </p>
-            )}
-            {stage === "installing" && (
-              <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
-                Installing new version...
-              </p>
-            )}
-            {stage === "completed" && (
-              <p className="mt-1 text-xs text-green-600 dark:text-green-400">
-                Update completed! Restarting application...
               </p>
             )}
           </>

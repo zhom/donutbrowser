@@ -144,11 +144,7 @@ export function AppUpdateToast({
 
         {/* Other stage progress (with visual indicators) */}
         {showOtherStageProgress && (
-          <div className="mt-2 space-y-2">
-            <p className="text-xs text-muted-foreground">
-              {updateProgress.message}
-            </p>
-
+          <div className="mt-2 space-y-1">
             {/* Progress indicator for non-downloading stages */}
             <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
               <div
@@ -159,22 +155,6 @@ export function AppUpdateToast({
                 }`}
               />
             </div>
-
-            {updateProgress.stage === "extracting" && (
-              <p className="text-xs text-muted-foreground">
-                Preparing update files...
-              </p>
-            )}
-            {updateProgress.stage === "installing" && (
-              <p className="text-xs text-muted-foreground">
-                Installing new version...
-              </p>
-            )}
-            {updateProgress.stage === "completed" && (
-              <p className="text-xs text-green-600 dark:text-green-400">
-                Update completed! Restarting application...
-              </p>
-            )}
           </div>
         )}
 
