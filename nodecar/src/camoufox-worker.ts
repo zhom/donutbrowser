@@ -1,6 +1,6 @@
 import { launchOptions } from "donutbrowser-camoufox-js";
 import type { LaunchOptions } from "donutbrowser-camoufox-js/dist/utils.js";
-import { type Browser, type BrowserServer, firefox } from "playwright-core";
+import { type Browser, type BrowserContext, firefox } from "playwright-core";
 import { getCamoufoxConfig, saveCamoufoxConfig } from "./camoufox-storage.js";
 import { getEnvVars, parseProxyString } from "./utils.js";
 
@@ -38,7 +38,7 @@ export async function runCamoufoxWorker(id: string): Promise<void> {
   // Launch browser in background - this can take time and may fail
   setImmediate(async () => {
     let browser: Browser | null = null;
-    let server: BrowserServer | null = null;
+    let context: BrowserContext | null = null;
     let windowCheckInterval: NodeJS.Timeout | null = null;
 
     // Graceful shutdown handler with access to browser and server
@@ -50,12 +50,14 @@ export async function runCamoufoxWorker(id: string): Promise<void> {
         }
 
         // Close browser context and server if they exist
+        if (context && !context.pages) {
+          // Context is already closed
+        } else if (context) {
+          await context.close();
+        }
+
         if (browser?.isConnected()) {
           await browser.close();
-        }
-        if (server) {
-          server.process().kill();
-          await server.close();
         }
       } catch {
         // Ignore cleanup errors during shutdown
@@ -127,8 +129,15 @@ export async function runCamoufoxWorker(id: string): Promise<void> {
           // Parse the custom config JSON string
           const customConfigObj = JSON.parse(config.customConfig);
 
-          // Convert custom config to environment variables using getEnvVars
-          const customEnvVars = getEnvVars(customConfigObj);
+          // Ensure default config values are preserved even with custom config
+          const mergedConfig = {
+            ...customConfigObj,
+            disableTheming: true,
+            showcursor: false,
+          };
+
+          // Convert merged config to environment variables using getEnvVars
+          const customEnvVars = getEnvVars(mergedConfig);
 
           // Merge custom config with generated config (custom takes precedence)
           finalEnv = { ...finalEnv, ...customEnvVars };
@@ -140,11 +149,12 @@ export async function runCamoufoxWorker(id: string): Promise<void> {
           return;
         }
       }
-      // Launch the server with the final configuration - ensure unique wsPath for each instance
+      // Prepare profile path for persistent context
+      const profilePath = config.profilePath || "";
+
+      // Launch persistent context with the final configuration
       const finalOptions: any = {
         ...generatedOptions,
-        user_data_dir: config.profilePath,
-        wsPath: `/ws_${config.id}`,
         env: finalEnv,
       };
 
@@ -161,14 +171,22 @@ export async function runCamoufoxWorker(id: string): Promise<void> {
         }
       }
 
-      server = await firefox.launchServer(finalOptions);
+      // Use launchPersistentContext instead of launchServer
+      context = await firefox.launchPersistentContext(
+        profilePath,
+        finalOptions,
+      );
 
-      // Connect to the server
-      browser = await firefox.connect(server.wsEndpoint());
-      const context = await browser.newContext();
+      // Get the browser instance from context
+      browser = context.browser();
 
       // Handle browser disconnection for proper cleanup
-      browser.on("disconnected", () => void gracefulShutdown());
+      if (browser) {
+        browser.on("disconnected", () => void gracefulShutdown());
+      }
+
+      // Handle context close for proper cleanup
+      context.on("close", () => void gracefulShutdown());
 
       saveCamoufoxConfig(config);
 
@@ -176,22 +194,31 @@ export async function runCamoufoxWorker(id: string): Promise<void> {
       const startWindowMonitoring = () => {
         windowCheckInterval = setInterval(async () => {
           try {
-            if (browser?.isConnected()) {
-              const contexts = browser.contexts();
-              let totalPages = 0;
-
-              for (const ctx of contexts) {
-                const pages = ctx.pages();
-                totalPages += pages.length;
+            // Check if context is still active
+            if (!context?.pages || context.pages().length === 0) {
+              if (windowCheckInterval) {
+                clearInterval(windowCheckInterval);
               }
+              await gracefulShutdown();
+              return;
+            }
 
-              // If no pages are open, terminate the server
-              if (totalPages === 0) {
-                if (windowCheckInterval) {
-                  clearInterval(windowCheckInterval);
-                }
-                await gracefulShutdown();
+            // Check if browser is still connected (if available)
+            if (browser && !browser.isConnected()) {
+              if (windowCheckInterval) {
+                clearInterval(windowCheckInterval);
               }
+              await gracefulShutdown();
+              return;
+            }
+
+            // Check pages in the persistent context
+            const pages = context.pages();
+            if (pages.length === 0) {
+              if (windowCheckInterval) {
+                clearInterval(windowCheckInterval);
+              }
+              await gracefulShutdown();
             }
           } catch {
             // If we can't check windows, assume browser is closing
@@ -206,14 +233,17 @@ export async function runCamoufoxWorker(id: string): Promise<void> {
       // Handle URL opening if provided
       if (config.url) {
         try {
-          const page = await context.newPage();
-          await page.goto(config.url, {
-            waitUntil: "domcontentloaded",
-            timeout: 30000,
-          });
+          const pages = await context.pages();
+          if (pages.length) {
+            const page = pages[0];
+            await page.goto(config.url, {
+              waitUntil: "domcontentloaded",
+              timeout: 30000,
+            });
 
-          // Start monitoring after page is created
-          startWindowMonitoring();
+            // Start monitoring after page is created
+            startWindowMonitoring();
+          }
         } catch (urlError) {
           console.error({
             message: "Failed to open URL",
@@ -224,17 +254,25 @@ export async function runCamoufoxWorker(id: string): Promise<void> {
           startWindowMonitoring();
         }
       } else {
-        await context.newPage();
         // Start monitoring after page is created
         startWindowMonitoring();
       }
 
-      // Monitor browser connection
+      // Monitor browser/context connection
       const keepAlive = setInterval(async () => {
         try {
-          if (!browser || !browser.isConnected()) {
+          // Check if context is still active
+          if (!context?.pages) {
             clearInterval(keepAlive);
             await gracefulShutdown();
+            return;
+          }
+
+          // Check browser connection if available
+          if (browser && !browser.isConnected()) {
+            clearInterval(keepAlive);
+            await gracefulShutdown();
+            return;
           }
         } catch (error) {
           console.error({
