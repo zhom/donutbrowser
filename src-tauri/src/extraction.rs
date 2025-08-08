@@ -23,31 +23,8 @@ impl Extractor {
     &EXTRACTOR
   }
 
-  /// Sanitize ZIP file paths to handle Unicode issues and problematic characters
-  fn sanitize_zip_path(&self, path: &str) -> String {
-    // Replace problematic Unicode sequences that cause extraction issues
-    let sanitized = path
-      .replace("#U30d2", "ヒ")
-      .replace("#U30e9", "ラ")
-      .replace("#U30ad", "キ")
-      .replace("#U3099", "゙")
-      .replace("#U30ce", "ノ")
-      .replace("#U4e38", "丸")
-      .replace("#U30b3", "コ")
-      .replace("#U30b4", "ゴ")
-      .replace("#U660e", "明")
-      .replace("#U671d", "朝")
-      .replace("#U89d2", "角")
-      .replace("#U30b7", "シ")
-      .replace("#U30c3", "ッ")
-      .replace("#U30af", "ク");
-
-    // Remove any remaining problematic characters
-    sanitized
-      .chars()
-      .filter(|c| c.is_ascii() || c.is_alphanumeric() || matches!(*c, '/' | '.' | '-' | '_' | ' '))
-      .collect()
-  }
+  // NOTE: We intentionally do not rename or sanitize ZIP entry paths.
+  // We only ensure paths are enclosed within the destination using zip's enclosed_name.
 
   /// Ensure the extracted files are in the correct directory structure expected by verification
   #[cfg(target_os = "linux")]
@@ -564,91 +541,45 @@ impl Extractor {
     println!("ZIP archive contains {} files", archive.len());
 
     for i in 0..archive.len() {
-      let mut file = match archive.by_index(i) {
-        Ok(f) => f,
-        Err(e) => {
-          println!("Warning: Failed to read file at index {i}: {e}");
-          continue;
-        }
-      };
+      let mut entry = archive
+        .by_index(i)
+        .map_err(|e| format!("Failed to read ZIP entry at index {i}: {e}"))?;
 
-      // Handle Unicode filename issues by using the raw filename and sanitizing it
-      let file_name = file.name();
-      let sanitized_path = self.sanitize_zip_path(file_name);
+      // Use enclosed_name to prevent path traversal; do not modify names otherwise
+      let enclosed = entry
+        .enclosed_name()
+        .ok_or_else(|| format!("ZIP contains an invalid entry path: {}", entry.name()))?;
 
-      // Skip problematic files (like the Japanese font files that cause issues)
-      if sanitized_path.is_empty() || sanitized_path.contains("fonts/macos/") {
-        println!("Skipping problematic file: {file_name}");
-        continue;
-      }
+      let outpath = dest_dir.join(enclosed);
 
-      let outpath = dest_dir.join(&sanitized_path);
-
-      // Ensure the path is within the destination directory (security check)
-      if !outpath.starts_with(dest_dir) {
-        println!("Warning: Skipping file with path outside destination: {file_name}");
-        continue;
-      }
-
-      // Handle directory creation
-      if file_name.ends_with('/') {
-        if let Err(e) = std::fs::create_dir_all(&outpath) {
-          println!(
-            "Warning: Failed to create directory {}: {}",
-            outpath.display(),
-            e
-          );
-        }
+      // Handle directories and files
+      if entry.is_dir() {
+        std::fs::create_dir_all(&outpath)
+          .map_err(|e| format!("Failed to create directory {}: {}", outpath.display(), e))?;
       } else {
-        // Create parent directories
-        if let Some(p) = outpath.parent() {
-          if !p.exists() {
-            if let Err(e) = std::fs::create_dir_all(p) {
-              println!(
-                "Warning: Failed to create parent directory {}: {}",
-                p.display(),
-                e
-              );
-              continue;
-            }
-          }
-        }
-
-        // Extract file
-        match File::create(&outpath) {
-          Ok(mut outfile) => {
-            if let Err(e) = io::copy(&mut file, &mut outfile) {
-              println!(
-                "Warning: Failed to extract file {}: {}",
-                outpath.display(),
-                e
-              );
-              continue;
-            }
-          }
-          Err(e) => {
-            println!(
-              "Warning: Failed to create file {}: {}",
-              outpath.display(),
+        if let Some(parent) = outpath.parent() {
+          std::fs::create_dir_all(parent).map_err(|e| {
+            format!(
+              "Failed to create parent directory {}: {}",
+              parent.display(),
               e
-            );
-            continue;
-          }
+            )
+          })?;
         }
 
-        // Set executable permissions on Unix-like systems
+        let mut outfile = File::create(&outpath)
+          .map_err(|e| format!("Failed to create file {}: {}", outpath.display(), e))?;
+        io::copy(&mut entry, &mut outfile)
+          .map_err(|e| format!("Failed to extract file {}: {}", outpath.display(), e))?;
+
+        // Set executable permissions on Unix-like systems based on stored mode
         #[cfg(unix)]
         {
           use std::os::unix::fs::PermissionsExt;
-          if let Some(mode) = file.unix_mode() {
+          if let Some(mode) = entry.unix_mode() {
             let permissions = std::fs::Permissions::from_mode(mode);
-            if let Err(e) = std::fs::set_permissions(&outpath, permissions) {
-              println!(
-                "Warning: Failed to set permissions for {}: {}",
-                outpath.display(),
-                e
-              );
-            }
+            std::fs::set_permissions(&outpath, permissions)
+              .map_err(|e| format!("Failed to set permissions for {}: {}", outpath.display(), e))?;
           }
         }
       }
