@@ -319,12 +319,12 @@ impl AppAutoUpdater {
 
     #[cfg(target_os = "windows")]
     {
-      return self.get_windows_download_url(assets, arch);
+      self.get_windows_download_url(assets, arch);
     }
 
     #[cfg(target_os = "linux")]
     {
-      return self.get_linux_download_url(assets, arch);
+      self.get_linux_download_url(assets, arch);
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
@@ -1264,54 +1264,6 @@ Categories=Network;WebBrowser;
 
     println!("Tarball installation completed successfully");
     Ok(())
-  }
-
-  /// Detect Linux installation method
-  #[cfg(target_os = "linux")]
-  fn detect_linux_installation_method(&self) -> String {
-    // Check if running from AppImage
-    if std::env::var("APPIMAGE").is_ok() {
-      return "appimage".to_string();
-    }
-
-    // Check if installed via package manager by looking at the executable path
-    let exe_path = match std::env::current_exe() {
-      Ok(path) => path,
-      Err(_) => return "unknown".to_string(),
-    };
-
-    let exe_str = exe_path.to_string_lossy();
-
-    // Common system paths indicate package manager installation
-    if exe_str.starts_with("/usr/bin/") || exe_str.starts_with("/usr/local/bin/") {
-      // Try to determine which package manager was used
-      if Command::new("dpkg")
-        .arg("-l")
-        .arg("donutbrowser")
-        .output()
-        .is_ok()
-      {
-        return "deb".to_string();
-      }
-      if Command::new("rpm")
-        .arg("-q")
-        .arg("donutbrowser")
-        .output()
-        .is_ok()
-      {
-        return "rpm".to_string();
-      }
-      return "system".to_string();
-    }
-
-    // If in home directory, likely manual installation
-    if let Some(user_dirs) = directories::UserDirs::new() {
-      if exe_str.starts_with(&user_dirs.home_dir().to_string_lossy().as_ref()) {
-        return "manual".to_string();
-      }
-    }
-
-    "unknown".to_string()
   }
 
   /// Get the current application bundle path
