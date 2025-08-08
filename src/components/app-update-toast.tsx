@@ -79,7 +79,7 @@ export function AppUpdateToast({
       updateProgress.stage === "completed");
 
   return (
-    <div className="flex items-start p-4 w-full max-w-md bg-white rounded-lg border border-gray-200 shadow-lg dark:bg-gray-800 dark:border-gray-700">
+    <div className="flex items-start p-4 w-full max-w-md bg-card rounded-lg border border-border shadow-lg text-card-foreground">
       <div className="mr-3 mt-0.5">
         {getStageIcon(updateProgress?.stage, isUpdating)}
       </div>
@@ -134,9 +134,9 @@ export function AppUpdateToast({
                 {updateProgress.eta && ` • ${updateProgress.eta} remaining`}
               </p>
             </div>
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+            <div className="w-full bg-muted rounded-full h-1.5">
               <div
-                className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
+                className="bg-primary h-1.5 rounded-full transition-all duration-300"
                 style={{ width: `${updateProgress.percentage}%` }}
               />
             </div>
@@ -147,12 +147,12 @@ export function AppUpdateToast({
         {showOtherStageProgress && (
           <div className="mt-2 space-y-1">
             {/* Progress indicator for non-downloading stages */}
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+            <div className="w-full bg-muted rounded-full h-1.5">
               <div
                 className={`h-1.5 rounded-full transition-all duration-500 ${
                   updateProgress.stage === "completed"
                     ? "bg-green-500 w-full"
-                    : "bg-blue-500 w-full animate-pulse"
+                    : "bg-primary w-full animate-pulse"
                 }`}
               />
             </div>

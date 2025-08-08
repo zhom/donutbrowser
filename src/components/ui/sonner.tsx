@@ -12,8 +12,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
       className="toaster group"
       style={
         {
-          "--normal-bg": "var(--popover)",
-          "--normal-text": "var(--popover-foreground)",
+          "--normal-bg": "var(--card)",
+          "--normal-text": "var(--card-foreground)",
           "--normal-border": "var(--border)",
           zIndex: 99999,
         } as React.CSSProperties
@@ -22,6 +22,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
         style: {
           zIndex: 99999,
           pointerEvents: "auto",
+          backdropFilter: "saturate(1.2)",
         },
       }}
       {...props}

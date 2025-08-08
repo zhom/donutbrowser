@@ -156,6 +156,7 @@ export function useAppUpdateNotifications() {
         style: {
           zIndex: 99999, // Ensure app updates appear above dialogs
           pointerEvents: "auto", // Ensure app updates remain interactive
+          marginTop: "16px", // slightly lower on macOS-like top controls
         },
       },
     );
