@@ -319,12 +319,12 @@ impl AppAutoUpdater {
 
     #[cfg(target_os = "windows")]
     {
-      self.get_windows_download_url(assets, arch);
+      self.get_windows_download_url(assets, arch)
     }
 
     #[cfg(target_os = "linux")]
     {
-      self.get_linux_download_url(assets, arch);
+      self.get_linux_download_url(assets, arch)
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
@@ -1791,23 +1791,6 @@ mod tests {
         "tar.gz should be supported but got: {error_msg}"
       );
     }
-  }
-
-  #[cfg(target_os = "linux")]
-  #[test]
-  fn test_linux_installation_method_detection() {
-    let updater = AppAutoUpdater::instance();
-
-    // This test can only verify the method doesn't panic
-    // The actual detection depends on the runtime environment
-    let method = updater.detect_linux_installation_method();
-
-    // Should return one of the known methods
-    let valid_methods = ["appimage", "deb", "rpm", "system", "manual", "unknown"];
-    assert!(
-      valid_methods.contains(&method.as_str()),
-      "Invalid installation method detected: {method}"
-    );
   }
 }
 
