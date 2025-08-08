@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { StoredProxy } from "@/types";
+import { RippleButton } from "./ui/ripple";
 
 interface ProxySettingsDialogProps {
   isOpen: boolean;
@@ -142,15 +143,15 @@ export function ProxySettingsDialog({
                     </Label>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Button
+                        <RippleButton
                           variant="outline"
                           size="sm"
                           onClick={handleCreateProxy}
                           className="flex gap-2 items-center"
                         >
                           <FiPlus className="w-4 h-4" />
-                          Create New
-                        </Button>
+                          Create
+                        </RippleButton>
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>Create a new proxy configuration</p>
@@ -263,12 +264,12 @@ export function ProxySettingsDialog({
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={onClose}>
+            <RippleButton variant="outline" onClick={onClose}>
               Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={!hasChanged()}>
+            </RippleButton>
+            <RippleButton onClick={handleSave} disabled={!hasChanged()}>
               Save
-            </Button>
+            </RippleButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>

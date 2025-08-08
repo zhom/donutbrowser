@@ -15,6 +15,7 @@ import {
 import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
+import { RippleButton } from "./ui/ripple";
 
 interface PermissionDialogProps {
   isOpen: boolean;
@@ -148,9 +149,9 @@ export function PermissionDialog({
         </div>
 
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose}>
+          <RippleButton variant="outline" onClick={onClose}>
             {isCurrentPermissionGranted ? "Done" : "Cancel"}
-          </Button>
+          </RippleButton>
 
           {!isCurrentPermissionGranted && (
             <LoadingButton

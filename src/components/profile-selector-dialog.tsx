@@ -30,6 +30,7 @@ import {
 import { useBrowserState } from "@/hooks/use-browser-state";
 import { getBrowserDisplayName, getBrowserIcon } from "@/lib/browser-utils";
 import type { BrowserProfile, StoredProxy } from "@/types";
+import { RippleButton } from "./ui/ripple";
 
 interface ProfileSelectorDialogProps {
   isOpen: boolean;
@@ -196,7 +197,7 @@ export function ProfileSelectorDialog({
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <Label className="text-sm font-medium">Opening URL:</Label>
-                <Button
+                <RippleButton
                   variant="outline"
                   size="sm"
                   onClick={() => void handleCopyUrl()}
@@ -204,7 +205,7 @@ export function ProfileSelectorDialog({
                 >
                   <LuCopy className="w-3 h-3" />
                   Copy
-                </Button>
+                </RippleButton>
               </div>
               <div className="p-2 text-sm break-all rounded bg-muted">
                 {url}
@@ -312,9 +313,9 @@ export function ProfileSelectorDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleCancel}>
+          <RippleButton variant="outline" onClick={handleCancel}>
             Cancel
-          </Button>
+          </RippleButton>
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="inline-flex">

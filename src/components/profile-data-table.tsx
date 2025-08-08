@@ -55,6 +55,7 @@ import { cn } from "@/lib/utils";
 import type { BrowserProfile, StoredProxy } from "@/types";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { RippleButton } from "./ui/ripple";
 
 interface ProfilesDataTableProps {
   data: BrowserProfile[];
@@ -546,7 +547,7 @@ export function ProfilesDataTable({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="inline-flex">
-                    <Button
+                    <RippleButton
                       variant={isRunning ? "destructive" : "default"}
                       size="sm"
                       disabled={!canLaunch || isLaunching || isStopping}
@@ -565,7 +566,7 @@ export function ProfilesDataTable({
                       ) : (
                         "Launch"
                       )}
-                    </Button>
+                    </RippleButton>
                   </span>
                 </TooltipTrigger>
                 {tooltipContent && (
@@ -959,15 +960,17 @@ export function ProfilesDataTable({
             )}
           </div>
           <DialogFooter>
-            <Button
+            <RippleButton
               variant="outline"
               onClick={() => {
                 setProfileToRename(null);
               }}
             >
               Cancel
-            </Button>
-            <Button onClick={() => void handleRename()}>Save</Button>
+            </RippleButton>
+            <RippleButton onClick={() => void handleRename()}>
+              Save
+            </RippleButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>

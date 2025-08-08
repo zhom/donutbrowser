@@ -5,6 +5,7 @@ import { LuCheckCheck, LuCog, LuRefreshCw } from "react-icons/lu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { AppUpdateInfo, AppUpdateProgress } from "@/types";
+import { RippleButton } from "./ui/ripple";
 
 interface AppUpdateToastProps {
   updateInfo: AppUpdateInfo;
@@ -160,22 +161,22 @@ export function AppUpdateToast({
 
         {!isUpdating && (
           <div className="flex gap-2 items-center mt-3">
-            <Button
+            <RippleButton
               onClick={() => void handleUpdateClick()}
               size="sm"
               className="flex gap-2 items-center text-xs"
             >
               <FaDownload className="w-3 h-3" />
               Update Now
-            </Button>
-            <Button
+            </RippleButton>
+            <RippleButton
               variant="outline"
               onClick={onDismiss}
               size="sm"
               className="text-xs"
             >
               Later
-            </Button>
+            </RippleButton>
           </div>
         )}
       </div>

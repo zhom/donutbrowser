@@ -9,6 +9,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { LoadingButton } from "./loading-button";
+import { RippleButton } from "./ui/ripple";
 
 interface DeleteConfirmationDialogProps {
   isOpen: boolean;
@@ -59,16 +61,20 @@ export function DeleteConfirmationDialog({
           )}
         </DialogHeader>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={isLoading}>
-            Cancel
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={() => void handleConfirm()}
+          <RippleButton
+            variant="outline"
+            onClick={onClose}
             disabled={isLoading}
           >
-            {isLoading ? "Deleting..." : confirmButtonText}
-          </Button>
+            Cancel
+          </RippleButton>
+          <LoadingButton
+            variant="destructive"
+            onClick={() => void handleConfirm()}
+            isLoading={isLoading}
+          >
+            {confirmButtonText}
+          </LoadingButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>

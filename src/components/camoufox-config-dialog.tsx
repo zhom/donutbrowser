@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { BrowserProfile, CamoufoxConfig } from "@/types";
+import { LoadingButton } from "./loading-button";
+import { RippleButton } from "./ui/ripple";
 
 interface CamoufoxConfigDialogProps {
   isOpen: boolean;
@@ -117,12 +119,16 @@ export function CamoufoxConfigDialog({
         </ScrollArea>
 
         <DialogFooter className="flex-shrink-0 pt-4 border-t">
-          <Button variant="outline" onClick={handleClose}>
+          <RippleButton variant="outline" onClick={handleClose}>
             Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={isSaving}>
-            {isSaving ? "Saving..." : "Save Configuration"}
-          </Button>
+          </RippleButton>
+          <LoadingButton
+            isLoading={isSaving}
+            onClick={handleSave}
+            disabled={isSaving}
+          >
+            Save
+          </LoadingButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>

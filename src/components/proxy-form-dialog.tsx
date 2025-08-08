@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { StoredProxy } from "@/types";
+import { RippleButton } from "./ui/ripple";
 
 interface ProxyFormData {
   name: string;
@@ -264,13 +265,13 @@ export function ProxyFormDialog({
         </div>
 
         <DialogFooter>
-          <Button
+          <RippleButton
             variant="outline"
             onClick={handleClose}
             disabled={isSubmitting}
           >
             Cancel
-          </Button>
+          </RippleButton>
           <LoadingButton
             isLoading={isSubmitting}
             onClick={handleSubmit}

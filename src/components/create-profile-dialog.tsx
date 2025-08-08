@@ -27,6 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useBrowserDownload } from "@/hooks/use-browser-download";
 import { getBrowserIcon } from "@/lib/browser-utils";
 import type { BrowserReleaseTypes, CamoufoxConfig, StoredProxy } from "@/types";
+import { RippleButton } from "./ui/ripple";
 
 type BrowserTypeString =
   | "mullvad-browser"
@@ -580,9 +581,9 @@ export function CreateProfileDialog({
           </ScrollArea>
 
           <DialogFooter className="flex-shrink-0 pt-4 border-t">
-            <Button variant="outline" onClick={handleClose}>
+            <RippleButton variant="outline" onClick={handleClose}>
               Cancel
-            </Button>
+            </RippleButton>
             <LoadingButton
               onClick={handleCreate}
               isLoading={isCreating}

@@ -1,5 +1,8 @@
 import { LuLoaderCircle } from "react-icons/lu";
-import { type ButtonProps, Button as UIButton } from "./ui/button";
+import {
+  type RippleButtonProps as ButtonProps,
+  RippleButton as UIButton,
+} from "./ui/ripple";
 
 type Props = ButtonProps & {
   isLoading: boolean;
@@ -7,7 +10,11 @@ type Props = ButtonProps & {
 };
 export const LoadingButton = ({ isLoading, ...props }: Props) => {
   return (
-    <UIButton className="grid place-items-center" {...props}>
+    <UIButton
+      className="grid place-items-center"
+      {...props}
+      disabled={props.disabled || isLoading}
+    >
       {isLoading ? (
         <LuLoaderCircle className="h-4 w-4 animate-spin" />
       ) : (

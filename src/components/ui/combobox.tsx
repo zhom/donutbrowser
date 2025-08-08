@@ -18,6 +18,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { RippleButton } from "./ripple";
 
 interface ComboboxOption {
   value: string;
@@ -47,7 +48,7 @@ export function Combobox({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
+        <RippleButton
           variant="outline"
           role="combobox"
           aria-expanded={open}
@@ -57,7 +58,7 @@ export function Combobox({
             ? options.find((option) => option.value === value)?.label
             : placeholder}
           <LuChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
+        </RippleButton>
       </PopoverTrigger>
       <PopoverContent className="w-full p-0">
         <Command>

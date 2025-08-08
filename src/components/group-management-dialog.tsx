@@ -26,6 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { ProfileGroup } from "@/types";
+import { RippleButton } from "./ui/ripple";
 
 interface GroupManagementDialogProps {
   isOpen: boolean;
@@ -119,14 +120,14 @@ export function GroupManagementDialog({
             {/* Create new group button */}
             <div className="flex justify-between items-center">
               <Label>Groups</Label>
-              <Button
+              <RippleButton
                 size="sm"
                 onClick={() => setCreateDialogOpen(true)}
                 className="flex gap-2 items-center"
               >
                 <GoPlus className="w-4 h-4" />
-                Create Group
-              </Button>
+                Create
+              </RippleButton>
             </div>
 
             {error && (
@@ -187,9 +188,9 @@ export function GroupManagementDialog({
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={onClose}>
+            <RippleButton variant="outline" onClick={onClose}>
               Close
-            </Button>
+            </RippleButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>

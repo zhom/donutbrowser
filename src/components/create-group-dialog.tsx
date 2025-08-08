@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ProfileGroup } from "@/types";
+import { RippleButton } from "./ui/ripple";
 
 interface CreateGroupDialogProps {
   isOpen: boolean;
@@ -98,15 +99,19 @@ export function CreateGroupDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose} disabled={isCreating}>
+          <RippleButton
+            variant="outline"
+            onClick={handleClose}
+            disabled={isCreating}
+          >
             Cancel
-          </Button>
+          </RippleButton>
           <LoadingButton
             isLoading={isCreating}
             onClick={() => void handleCreate()}
             disabled={!groupName.trim()}
           >
-            Create Group
+            Create
           </LoadingButton>
         </DialogFooter>
       </DialogContent>

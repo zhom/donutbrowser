@@ -11,6 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
+import { RippleButton } from "./ui/ripple";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 type Props = {
@@ -46,7 +47,6 @@ const HomeHeader = ({
       <div className="flex items-center gap-3">
         <button
           type="button"
-          onClick={handleLogoClick}
           className="p-1 cursor-pointer"
           title="Open donutbrowser.com"
         >
@@ -59,7 +59,7 @@ const HomeHeader = ({
               {selectedProfiles.length !== 1 ? "s" : ""} selected
             </span>
             <div className="flex gap-2">
-              <Button
+              <RippleButton
                 variant="outline"
                 size="sm"
                 onClick={onBulkGroupAssignment}
@@ -67,8 +67,8 @@ const HomeHeader = ({
               >
                 <LuUsers className="w-4 h-4" />
                 Assign to Group
-              </Button>
-              <Button
+              </RippleButton>
+              <RippleButton
                 variant="destructive"
                 size="sm"
                 onClick={onBulkDelete}
@@ -76,7 +76,7 @@ const HomeHeader = ({
               >
                 <LuTrash2 className="w-4 h-4" />
                 Delete Selected
-              </Button>
+              </RippleButton>
             </div>
           </div>
         ) : (

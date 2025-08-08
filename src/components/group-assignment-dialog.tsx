@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ProfileGroup } from "@/types";
+import { RippleButton } from "./ui/ripple";
 
 interface GroupAssignmentDialogProps {
   isOpen: boolean;
@@ -161,9 +162,13 @@ export function GroupAssignmentDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={isAssigning}>
+          <RippleButton
+            variant="outline"
+            onClick={onClose}
+            disabled={isAssigning}
+          >
             Cancel
-          </Button>
+          </RippleButton>
           <LoadingButton
             isLoading={isAssigning}
             onClick={() => void handleAssign()}

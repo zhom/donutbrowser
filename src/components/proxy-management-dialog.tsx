@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/tooltip";
 import { trimName } from "@/lib/name-utils";
 import type { StoredProxy } from "@/types";
+import { RippleButton } from "./ui/ripple";
 
 interface ProxyManagementDialogProps {
   isOpen: boolean;
@@ -124,13 +125,13 @@ export function ProxyManagementDialog({
                   profiles
                 </p>
               </div>
-              <Button
+              <RippleButton
                 onClick={handleCreateProxy}
                 className="flex gap-2 items-center"
               >
                 <FiPlus className="w-4 h-4" />
                 Create Proxy
-              </Button>
+              </RippleButton>
             </div>
 
             {/* Proxy List - Scrollable */}
@@ -150,10 +151,10 @@ export function ProxyManagementDialog({
                   <p className="mb-4 text-sm text-muted-foreground">
                     Create your first proxy configuration to get started
                   </p>
-                  <Button variant="outline" onClick={handleCreateProxy}>
+                  <RippleButton variant="outline" onClick={handleCreateProxy}>
                     <FiPlus className="mr-2 w-4 h-4" />
                     Create First Proxy
-                  </Button>
+                  </RippleButton>
                 </div>
               ) : (
                 <div className="overflow-y-auto pr-2 space-y-2 h-full">
@@ -221,7 +222,7 @@ export function ProxyManagementDialog({
           </div>
 
           <DialogFooter className="flex-shrink-0">
-            <Button onClick={onClose}>Close</Button>
+            <RippleButton onClick={onClose}>Close</RippleButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>

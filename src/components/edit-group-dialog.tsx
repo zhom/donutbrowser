@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ProfileGroup } from "@/types";
+import { RippleButton } from "./ui/ripple";
 
 interface EditGroupDialogProps {
   isOpen: boolean;
@@ -108,9 +109,13 @@ export function EditGroupDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose} disabled={isUpdating}>
+          <RippleButton
+            variant="outline"
+            onClick={handleClose}
+            disabled={isUpdating}
+          >
             Cancel
-          </Button>
+          </RippleButton>
           <LoadingButton
             isLoading={isUpdating}
             onClick={() => void handleUpdate()}

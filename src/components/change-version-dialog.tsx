@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { useBrowserDownload } from "@/hooks/use-browser-download";
 import { getBrowserDisplayName } from "@/lib/browser-utils";
 import type { BrowserProfile, BrowserReleaseTypes } from "@/types";
+import { RippleButton } from "./ui/ripple";
 
 interface ChangeVersionDialogProps {
   isOpen: boolean;
@@ -288,9 +289,9 @@ export function ChangeVersionDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <RippleButton variant="outline" onClick={onClose}>
             Cancel
-          </Button>
+          </RippleButton>
           <LoadingButton
             isLoading={isUpdating}
             onClick={() => {

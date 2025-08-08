@@ -33,6 +33,7 @@ import {
   showSuccessToast,
   showUnifiedVersionUpdateToast,
 } from "@/lib/toast-utils";
+import { RippleButton } from "./ui/ripple";
 
 interface AppSettings {
   set_as_default_browser: boolean;
@@ -529,9 +530,9 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
         </div>
 
         <DialogFooter className="flex-shrink-0">
-          <Button variant="outline" onClick={onClose}>
+          <RippleButton variant="outline" onClick={onClose}>
             Cancel
-          </Button>
+          </RippleButton>
           <LoadingButton
             isLoading={isSaving}
             onClick={() => {

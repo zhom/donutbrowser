@@ -26,6 +26,7 @@ import {
 import { useBrowserSupport } from "@/hooks/use-browser-support";
 import { getBrowserDisplayName, getBrowserIcon } from "@/lib/browser-utils";
 import type { DetectedProfile } from "@/types";
+import { RippleButton } from "./ui/ripple";
 
 interface ImportProfileDialogProps {
   isOpen: boolean;
@@ -242,7 +243,7 @@ export function ImportProfileDialog({
       );
       if (profile) {
         const browserName = getBrowserDisplayName(profile.browser);
-        const defaultName = `Imported ${browserName} Profile`;
+        const defaultName = `Old ${browserName}`;
         setAutoDetectProfileName(defaultName);
       }
     }
@@ -268,7 +269,7 @@ export function ImportProfileDialog({
         <div className="overflow-y-auto flex-1 space-y-6 min-h-0">
           {/* Mode Selection */}
           <div className="flex gap-2">
-            <Button
+            <RippleButton
               variant={importMode === "auto-detect" ? "default" : "outline"}
               onClick={() => {
                 setImportMode("auto-detect");
@@ -277,8 +278,8 @@ export function ImportProfileDialog({
               disabled={isLoading}
             >
               Auto-Detect
-            </Button>
-            <Button
+            </RippleButton>
+            <RippleButton
               variant={importMode === "manual" ? "default" : "outline"}
               onClick={() => {
                 setImportMode("manual");
@@ -287,7 +288,7 @@ export function ImportProfileDialog({
               disabled={isLoading}
             >
               Manual Import
-            </Button>
+            </RippleButton>
           </div>
 
           {/* Auto-Detect Mode */}
@@ -479,9 +480,9 @@ export function ImportProfileDialog({
         </div>
 
         <DialogFooter className="flex-shrink-0">
-          <Button variant="outline" onClick={handleClose}>
+          <RippleButton variant="outline" onClick={handleClose}>
             Cancel
-          </Button>
+          </RippleButton>
           {importMode === "auto-detect" ? (
             <LoadingButton
               isLoading={isImporting}
@@ -494,7 +495,7 @@ export function ImportProfileDialog({
                 isLoading
               }
             >
-              Import Profile
+              Import
             </LoadingButton>
           ) : (
             <LoadingButton
@@ -508,7 +509,7 @@ export function ImportProfileDialog({
                 !manualProfileName.trim()
               }
             >
-              Import Profile
+              Import
             </LoadingButton>
           )}
         </DialogFooter>

@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import type { BrowserReleaseTypes } from "@/types";
+import { RippleButton } from "./ui/ripple";
 
 interface ReleaseTypeSelectorProps {
   selectedReleaseType: "stable" | "nightly" | null;
@@ -85,7 +86,7 @@ export function ReleaseTypeSelector({
       {showDropdown ? (
         <Popover open={popoverOpen} onOpenChange={setPopoverOpen} modal={true}>
           <PopoverTrigger asChild>
-            <Button
+            <RippleButton
               variant="outline"
               role="combobox"
               aria-expanded={popoverOpen}
@@ -93,7 +94,7 @@ export function ReleaseTypeSelector({
             >
               {selectedDisplayText}
               <LuChevronsUpDown className="ml-2 w-4 h-4 opacity-50 shrink-0" />
-            </Button>
+            </RippleButton>
           </PopoverTrigger>
           <PopoverContent className="p-0">
             <Command>

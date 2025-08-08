@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { BrowserProfile, ProfileGroup } from "@/types";
+import { RippleButton } from "./ui/ripple";
 
 interface DeleteGroupDialogProps {
   isOpen: boolean;
@@ -188,9 +189,13 @@ export function DeleteGroupDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose} disabled={isDeleting}>
+          <RippleButton
+            variant="outline"
+            onClick={handleClose}
+            disabled={isDeleting}
+          >
             Cancel
-          </Button>
+          </RippleButton>
           <LoadingButton
             variant="destructive"
             isLoading={isDeleting}
