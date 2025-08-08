@@ -37,7 +37,7 @@ export function GroupBadges({
         <Badge
           key={group.id}
           variant={selectedGroupId === group.id ? "default" : "secondary"}
-          className="cursor-pointer hover:bg-primary/80 transition-colors flex items-center gap-2 px-3 py-1"
+          className="flex gap-2 items-center px-3 py-1 transition-colors cursor-pointer dark:hover:bg-primary/60 hover:bg-primary/80"
           onClick={() => {
             onGroupSelect(selectedGroupId === group.id ? "default" : group.id);
           }}
