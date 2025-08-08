@@ -104,7 +104,7 @@ export function CreateProfileDialog({
   selectedGroupId,
 }: CreateProfileDialogProps) {
   const [profileName, setProfileName] = useState("");
-  const [activeTab, setActiveTab] = useState("regular");
+  const [activeTab, setActiveTab] = useState("anti-detect");
 
   // Regular browser states
   const [selectedBrowser, setSelectedBrowser] = useState<BrowserTypeString>();
