@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { BsCamera, BsMic } from "react-icons/bs";
 import { LoadingButton } from "@/components/loading-button";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,

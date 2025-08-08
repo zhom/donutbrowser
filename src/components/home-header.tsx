@@ -35,7 +35,7 @@ const HomeHeader = ({
   onImportProfileDialogOpen,
   onCreateProfileDialogOpen,
 }: Props) => {
-  const handleLogoClick = () => {
+  const _handleLogoClick = () => {
     // Trigger the same URL handling logic as if the URL came from the system
     const event = new CustomEvent("url-open-request", {
       detail: "https://donutbrowser.com",

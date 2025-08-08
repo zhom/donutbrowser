@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { SharedCamoufoxConfigForm } from "@/components/shared-camoufox-config-form";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,

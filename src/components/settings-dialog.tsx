@@ -7,7 +7,6 @@ import { useCallback, useEffect, useState } from "react";
 import { BsCamera, BsMic } from "react-icons/bs";
 import { LoadingButton } from "@/components/loading-button";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 
 import {
   Dialog,

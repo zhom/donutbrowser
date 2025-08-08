@@ -4,7 +4,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { LoadingButton } from "@/components/loading-button";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
