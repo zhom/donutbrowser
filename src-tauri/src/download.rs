@@ -1,6 +1,5 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::fs::File;
 use std::io;
 use std::path::{Path, PathBuf};
 use tauri::Emitter;
@@ -415,25 +414,74 @@ impl Downloader {
 
     let _ = app_handle.emit("download-progress", &progress);
 
-    // Start download
-    let response = self
+    // Determine if we have a partial file to resume
+    let mut existing_size: u64 = 0;
+    if let Ok(meta) = std::fs::metadata(&file_path) {
+      existing_size = meta.len();
+    }
+
+    // Build request, add Range only if we have bytes
+    let mut request = self
       .client
       .get(&download_url)
-      .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
-      .send()
-      .await?;
+      .header(
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+      );
+
+    if existing_size > 0 {
+      request = request.header("Range", format!("bytes={existing_size}-"));
+    }
+
+    // Start download (or resume)
+    let response = request.send().await?;
 
     // Check if the response is successful
-    if !response.status().is_success() {
+    if !(response.status().is_success() || response.status().as_u16() == 206) {
       return Err(format!("Download failed with status: {}", response.status()).into());
     }
 
-    let total_size = response.content_length();
-    let mut downloaded = 0u64;
+    // Determine total size
+    let mut total_size = response.content_length();
+
+    // If resuming (206) and Content-Range is present, parse total
+    if response.status().as_u16() == 206 {
+      if let Some(content_range) = response.headers().get(reqwest::header::CONTENT_RANGE) {
+        if let Ok(cr) = content_range.to_str() {
+          // Format: bytes start-end/total
+          if let Some((_, total_str)) = cr.split('/').collect::<Vec<_>>().split_first() {
+            if let Some(total_str) = total_str.first() {
+              if let Ok(total) = total_str.parse::<u64>() {
+                total_size = Some(total);
+              }
+            }
+          }
+        }
+      } else if let Some(len) = response.headers().get(reqwest::header::CONTENT_LENGTH) {
+        // Fallback: total = existing + incoming length
+        if let Ok(len_str) = len.to_str() {
+          if let Ok(incoming) = len_str.parse::<u64>() {
+            total_size = Some(existing_size + incoming);
+          }
+        }
+      }
+    } else if existing_size > 0 && response.status().is_success() {
+      // Server ignored range or we asked from 0; if 200 and existing file has content, start fresh
+      // Truncate existing file so we don't append duplicate bytes
+      let _ = std::fs::remove_file(&file_path);
+      existing_size = 0;
+    }
+
+    let mut downloaded = existing_size;
     let start_time = std::time::Instant::now();
     let mut last_update = start_time;
 
-    let mut file = File::create(&file_path)?;
+    // Open file in append mode (resuming) or create new
+    use std::fs::OpenOptions;
+    let mut file = OpenOptions::new()
+      .create(true)
+      .append(true)
+      .open(&file_path)?;
     let mut stream = response.bytes_stream();
 
     use futures_util::StreamExt;
@@ -452,7 +500,11 @@ impl Downloader {
           0.0
         };
         let percentage = if let Some(total) = total_size {
-          (downloaded as f64 / total as f64) * 100.0
+          if total > 0 {
+            (downloaded as f64 / total as f64) * 100.0
+          } else {
+            0.0
+          }
         } else {
           0.0
         };
