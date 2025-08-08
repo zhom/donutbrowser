@@ -536,6 +536,7 @@ impl AppAutoUpdater {
   /// Install the update by replacing the current app
   async fn install_update(
     &self,
+    #[allow(unused_variables)]
     installer_path: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     #[cfg(target_os = "macos")]
