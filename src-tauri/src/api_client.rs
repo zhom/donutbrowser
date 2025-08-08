@@ -1684,6 +1684,16 @@ mod tests {
             "name": "brave-v1.81.9-universal.dmg",
             "browser_download_url": "https://example.com/brave-1.81.9-universal.dmg",
             "size": 200000000
+          },
+          {
+            "name": "brave-browser-1.81.9-linux-amd64.zip",
+            "browser_download_url": "https://example.com/brave-1.81.9-linux-amd64.zip",
+            "size": 180000000
+          },
+          {
+            "name": "BraveBrowserStandaloneSetup.exe",
+            "browser_download_url": "https://example.com/brave-1.81.9-setup.exe",
+            "size": 150000000
           }
         ]
       }
