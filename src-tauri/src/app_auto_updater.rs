@@ -1306,7 +1306,7 @@ Categories=Network;WebBrowser;
 
     // If in home directory, likely manual installation
     if let Some(user_dirs) = directories::UserDirs::new() {
-      if exe_str.starts_with(&user_dirs.home_dir().to_string_lossy()) {
+      if exe_str.starts_with(&user_dirs.home_dir().to_string_lossy().as_ref()) {
         return "manual".to_string();
       }
     }
