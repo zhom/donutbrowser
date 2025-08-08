@@ -210,9 +210,18 @@ export function useBrowserDownload() {
         if (!suppressNotifications) {
           // Dismiss any existing download toast and show error
           dismissToast(`download-${browserStr}-${version}`);
+
+          let errorMessage = "Unknown error occurred";
+          if (error instanceof Error) {
+            errorMessage = error.message;
+          } else if (typeof error === "string") {
+            errorMessage = error;
+          } else if (error && typeof error === "object" && "message" in error) {
+            errorMessage = String(error.message);
+          }
+
           showErrorToast(`Failed to download ${browserName} ${version}`, {
-            description:
-              error instanceof Error ? error.message : "Unknown error occurred",
+            description: errorMessage,
           });
         }
         throw error;

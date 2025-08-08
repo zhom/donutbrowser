@@ -1250,6 +1250,59 @@ impl BrowserRunner {
     // Use the browser's own verification method
     let binaries_dir = self.get_binaries_dir();
     if !browser.is_version_downloaded(&version, &binaries_dir) {
+      // Provide detailed error information for debugging
+      let browser_dir = binaries_dir.join(&browser_str).join(&version);
+      let mut error_details = format!(
+        "Browser download completed but verification failed for {} {}. Expected directory: {}",
+        browser_str,
+        version,
+        browser_dir.display()
+      );
+
+      // List what files actually exist
+      if browser_dir.exists() {
+        error_details.push_str("\nFiles found in directory:");
+        if let Ok(entries) = std::fs::read_dir(&browser_dir) {
+          for entry in entries.flatten() {
+            let path = entry.path();
+            let file_type = if path.is_dir() { "DIR" } else { "FILE" };
+            error_details.push_str(&format!("\n  {} {}", file_type, path.display()));
+          }
+        } else {
+          error_details.push_str("\n  (Could not read directory contents)");
+        }
+      } else {
+        error_details.push_str("\nDirectory does not exist!");
+      }
+
+      // For Camoufox on Linux, provide specific expected files
+      if browser_str == "camoufox" && cfg!(target_os = "linux") {
+        let camoufox_subdir = browser_dir.join("camoufox");
+        error_details.push_str(&format!("\nExpected Camoufox executable locations:"));
+        error_details.push_str(&format!("\n  {}/camoufox-bin", camoufox_subdir.display()));
+        error_details.push_str(&format!("\n  {}/camoufox", camoufox_subdir.display()));
+
+        if camoufox_subdir.exists() {
+          error_details.push_str(&format!(
+            "\nCamoufox subdirectory exists: {}",
+            camoufox_subdir.display()
+          ));
+          if let Ok(entries) = std::fs::read_dir(&camoufox_subdir) {
+            error_details.push_str("\nFiles in camoufox subdirectory:");
+            for entry in entries.flatten() {
+              let path = entry.path();
+              let file_type = if path.is_dir() { "DIR" } else { "FILE" };
+              error_details.push_str(&format!("\n  {} {}", file_type, path.display()));
+            }
+          }
+        } else {
+          error_details.push_str(&format!(
+            "\nCamoufox subdirectory does not exist: {}",
+            camoufox_subdir.display()
+          ));
+        }
+      }
+
       let _ = registry.cleanup_failed_download(&browser_str, &version);
       let _ = registry.save();
       // Remove browser-version pair from downloading set on verification failure
@@ -1257,7 +1310,7 @@ impl BrowserRunner {
         let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
         downloading.remove(&download_key);
       }
-      return Err("Browser download completed but verification failed".into());
+      return Err(error_details.into());
     }
 
     registry

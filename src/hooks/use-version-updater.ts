@@ -245,11 +245,22 @@ export function useVersionUpdater() {
                 }
               } catch (error) {
                 console.error("Failed to handle browser auto-update:", error);
+
+                let errorMessage = "Unknown error occurred";
+                if (error instanceof Error) {
+                  errorMessage = error.message;
+                } else if (typeof error === "string") {
+                  errorMessage = error;
+                } else if (
+                  error &&
+                  typeof error === "object" &&
+                  "message" in error
+                ) {
+                  errorMessage = String(error.message);
+                }
+
                 showErrorToast(`Failed to auto-update ${browserDisplayName}`, {
-                  description:
-                    error instanceof Error
-                      ? error.message
-                      : "Unknown error occurred",
+                  description: errorMessage,
                   duration: 8000,
                 });
               } finally {
@@ -336,9 +347,17 @@ export function useVersionUpdater() {
       return results;
     } catch (error) {
       console.error("Failed to trigger manual update:", error);
+      let errorMessage = "Unknown error occurred";
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === "string") {
+        errorMessage = error;
+      } else if (error && typeof error === "object" && "message" in error) {
+        errorMessage = String(error.message);
+      }
+
       showErrorToast("Failed to update browser versions", {
-        description:
-          error instanceof Error ? error.message : "Unknown error occurred",
+        description: errorMessage,
         duration: 4000,
       });
       throw error;
