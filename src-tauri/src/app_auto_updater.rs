@@ -1,3 +1,69 @@
+/*!
+# App Auto Updater
+
+This module provides comprehensive self-update functionality for the Donut Browser application
+across multiple operating systems and installation methods.
+
+## Supported Platforms
+
+### macOS
+- **Format**: DMG files
+- **Installation**: Replaces the .app bundle in place
+- **Architecture**: Supports both x64 and aarch64 (Apple Silicon)
+
+### Windows
+- **Formats**: MSI (preferred), EXE, ZIP
+- **Installation**:
+  - MSI: Silent installation using msiexec
+  - EXE: Silent installation with multiple fallback flags (NSIS, Inno Setup)
+  - ZIP: Binary replacement
+- **Architecture**: Supports both x64 and x86_64
+
+### Linux
+- **Formats**: DEB, RPM, AppImage, TAR.GZ
+- **Installation Methods**:
+  - **DEB**: Uses dpkg or apt with pkexec for privilege escalation
+  - **RPM**: Uses rpm, dnf, yum, or zypper with pkexec
+  - **AppImage**: Direct replacement or installation to ~/.local/bin
+  - **TAR.GZ**: Binary extraction and replacement
+- **Architecture**: Supports x64, x86_64, amd64, aarch64, arm64
+
+## Linux Installation Detection
+
+The updater automatically detects how the application was installed:
+- **AppImage**: Detected via APPIMAGE environment variable
+- **Package Manager**: Detected by executable location and package queries
+- **Manual**: Detected by location in user directories
+- **System**: Detected by location in system directories
+
+## Update Process
+
+1. **Check**: Fetches releases from GitHub API
+2. **Filter**: Filters releases based on build type (stable vs nightly)
+3. **Compare**: Compares versions using semantic versioning or commit hashes
+4. **Download**: Downloads appropriate asset with progress tracking
+5. **Extract**: Extracts or prepares installer based on format
+6. **Install**: Installs using platform-appropriate method
+7. **Restart**: Restarts application after successful installation
+
+## Error Handling
+
+- Comprehensive error messages for each platform
+- Fallback mechanisms for different package managers
+- Backup creation before installation
+- Cleanup of temporary files
+- Graceful handling of permission issues
+
+## Testing
+
+Includes comprehensive unit tests for:
+- Version comparison logic
+- Platform detection
+- Asset selection
+- Installation method detection (Linux)
+- File format support
+*/
+
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -236,7 +302,6 @@ impl AppAutoUpdater {
 
   /// Get the appropriate download URL for the current platform
   fn get_download_url_for_platform(&self, assets: &[AppReleaseAsset]) -> Option<String> {
-    // Priority 1: Get architecture-specific binary for backward compatibility
     let arch = if cfg!(target_arch = "aarch64") {
       "aarch64"
     } else if cfg!(target_arch = "x86_64") {
@@ -245,8 +310,32 @@ impl AppAutoUpdater {
       "unknown"
     };
 
-    println!("Falling back to architecture-specific search for: {arch}");
+    println!("Looking for platform-specific asset for arch: {arch}");
 
+    #[cfg(target_os = "macos")]
+    {
+      return self.get_macos_download_url(assets, arch);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+      return self.get_windows_download_url(assets, arch);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+      return self.get_linux_download_url(assets, arch);
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+      println!("Unsupported platform for auto-update");
+      None
+    }
+  }
+
+  #[cfg(target_os = "macos")]
+  fn get_macos_download_url(&self, assets: &[AppReleaseAsset], arch: &str) -> Option<String> {
     // Look for exact architecture match in DMG
     for asset in assets {
       if asset.name.contains(".dmg")
@@ -284,20 +373,130 @@ impl AppAutoUpdater {
       }
     }
 
-    // Priority 2: Fallback to any macOS DMG
+    // Fallback to any macOS DMG
     for asset in assets {
       if asset.name.contains(".dmg")
         && (asset.name.to_lowercase().contains("macos")
           || asset.name.to_lowercase().contains("darwin")
           || !asset.name.contains(".app.tar.gz"))
       {
-        // Exclude app.tar.gz files
         println!("Found fallback DMG: {}", asset.name);
         return Some(asset.browser_download_url.clone());
       }
     }
 
-    println!("No suitable asset found for platform");
+    None
+  }
+
+  #[cfg(target_os = "windows")]
+  fn get_windows_download_url(&self, assets: &[AppReleaseAsset], arch: &str) -> Option<String> {
+    // Priority order: MSI > EXE > ZIP
+    let extensions = ["msi", "exe", "zip"];
+
+    for ext in &extensions {
+      // Look for exact architecture match
+      for asset in assets {
+        if asset.name.to_lowercase().ends_with(&format!(".{ext}"))
+          && (asset.name.contains(&format!("_{arch}.{ext}"))
+            || asset.name.contains(&format!("-{arch}.{ext}"))
+            || asset.name.contains(&format!("_{arch}_"))
+            || asset.name.contains(&format!("-{arch}-")))
+        {
+          println!("Found Windows {ext} with exact arch match: {}", asset.name);
+          return Some(asset.browser_download_url.clone());
+        }
+      }
+
+      // Look for x86_64 variations if we're looking for x64
+      if arch == "x64" {
+        for asset in assets {
+          if asset.name.to_lowercase().ends_with(&format!(".{ext}"))
+            && (asset.name.contains("x86_64") || asset.name.contains("x86-64"))
+          {
+            println!("Found Windows {ext} with x86_64 variant: {}", asset.name);
+            return Some(asset.browser_download_url.clone());
+          }
+        }
+      }
+
+      // Fallback to any Windows file of this type
+      for asset in assets {
+        if asset.name.to_lowercase().ends_with(&format!(".{ext}"))
+          && (asset.name.to_lowercase().contains("windows")
+            || asset.name.to_lowercase().contains("win32")
+            || asset.name.to_lowercase().contains("win64"))
+        {
+          println!("Found Windows {ext} fallback: {}", asset.name);
+          return Some(asset.browser_download_url.clone());
+        }
+      }
+    }
+
+    None
+  }
+
+  #[cfg(target_os = "linux")]
+  fn get_linux_download_url(&self, assets: &[AppReleaseAsset], arch: &str) -> Option<String> {
+    // Priority order: DEB > RPM > AppImage > TAR.GZ
+    let extensions = ["deb", "rpm", "appimage", "tar.gz"];
+
+    for ext in &extensions {
+      // Look for exact architecture match
+      for asset in assets {
+        let asset_name_lower = asset.name.to_lowercase();
+        if asset_name_lower.ends_with(&format!(".{ext}"))
+          && (asset.name.contains(&format!("_{arch}.{ext}"))
+            || asset.name.contains(&format!("-{arch}.{ext}"))
+            || asset.name.contains(&format!("_{arch}_"))
+            || asset.name.contains(&format!("-{arch}-")))
+        {
+          println!("Found Linux {ext} with exact arch match: {}", asset.name);
+          return Some(asset.browser_download_url.clone());
+        }
+      }
+
+      // Look for x86_64 variations if we're looking for x64
+      if arch == "x64" {
+        for asset in assets {
+          let asset_name_lower = asset.name.to_lowercase();
+          if asset_name_lower.ends_with(&format!(".{ext}"))
+            && (asset.name.contains("x86_64")
+              || asset.name.contains("x86-64")
+              || asset.name.contains("amd64"))
+          {
+            println!("Found Linux {ext} with x86_64 variant: {}", asset.name);
+            return Some(asset.browser_download_url.clone());
+          }
+        }
+      }
+
+      // Look for arm64 variations if we're looking for aarch64
+      if arch == "aarch64" {
+        for asset in assets {
+          let asset_name_lower = asset.name.to_lowercase();
+          if asset_name_lower.ends_with(&format!(".{ext}"))
+            && (asset.name.contains("arm64") || asset.name.contains("aarch64"))
+          {
+            println!("Found Linux {ext} with arm64 variant: {}", asset.name);
+            return Some(asset.browser_download_url.clone());
+          }
+        }
+      }
+
+      // Fallback to any Linux file of this type
+      for asset in assets {
+        let asset_name_lower = asset.name.to_lowercase();
+        if asset_name_lower.ends_with(&format!(".{ext}"))
+          && (asset_name_lower.contains("linux")
+            || asset_name_lower.contains("ubuntu")
+            || asset_name_lower.contains("debian"))
+        {
+          println!("Found Linux {ext} fallback: {}", asset.name);
+          return Some(asset.browser_download_url.clone());
+        }
+      }
+    }
+
     None
   }
 
@@ -488,6 +687,16 @@ impl AppAutoUpdater {
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     let extractor = crate::extraction::Extractor::instance();
 
+    let file_name = archive_path
+      .file_name()
+      .and_then(|name| name.to_str())
+      .unwrap_or("");
+
+    // Handle compound extensions like .tar.gz
+    if file_name.ends_with(".tar.gz") {
+      return extractor.extract_tar_gz(archive_path, dest_dir).await;
+    }
+
     let extension = archive_path
       .extension()
       .and_then(|ext| ext.to_str())
@@ -526,6 +735,39 @@ impl AppAutoUpdater {
         #[cfg(not(target_os = "windows"))]
         {
           Err("EXE installation is only supported on Windows".into())
+        }
+      }
+      "deb" => {
+        #[cfg(target_os = "linux")]
+        {
+          // For DEB files on Linux, return the path for installation
+          Ok(archive_path.to_path_buf())
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+          Err("DEB installation is only supported on Linux".into())
+        }
+      }
+      "rpm" => {
+        #[cfg(target_os = "linux")]
+        {
+          // For RPM files on Linux, return the path for installation
+          Ok(archive_path.to_path_buf())
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+          Err("RPM installation is only supported on Linux".into())
+        }
+      }
+      "appimage" => {
+        #[cfg(target_os = "linux")]
+        {
+          // For AppImage files, return the path for installation
+          Ok(archive_path.to_path_buf())
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+          Err("AppImage installation is only supported on Linux".into())
         }
       }
       "zip" => extractor.extract_zip(archive_path, dest_dir).await,
@@ -750,15 +992,326 @@ impl AppAutoUpdater {
 
     #[cfg(target_os = "linux")]
     {
-      // For Linux, we would handle different package formats here
-      // This implementation would depend on the specific package type
-      Err("Linux auto-update installation not yet implemented".into())
+      let file_name = installer_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("");
+
+      println!("Installing Linux update: {}", installer_path.display());
+
+      // Handle compound extensions like .tar.gz
+      if file_name.ends_with(".tar.gz") {
+        return self.install_linux_tarball(installer_path).await;
+      }
+
+      let extension = installer_path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("");
+
+      match extension {
+        "deb" => self.install_linux_deb(installer_path).await,
+        "rpm" => self.install_linux_rpm(installer_path).await,
+        "appimage" => self.install_linux_appimage(installer_path).await,
+        _ => Err(format!("Unsupported Linux installer format: {extension}").into()),
+      }
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
       Err("Auto-update installation not supported on this platform".into())
     }
+  }
+
+  /// Install Linux DEB package
+  #[cfg(target_os = "linux")]
+  async fn install_linux_deb(
+    &self,
+    deb_path: &Path,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("Installing DEB package: {}", deb_path.display());
+
+    // Try different package managers in order of preference
+    let package_managers = [
+      ("dpkg", vec!["-i", deb_path.to_str().unwrap()]),
+      ("apt", vec!["install", "-y", deb_path.to_str().unwrap()]),
+    ];
+
+    let mut last_error = String::new();
+
+    for (manager, args) in &package_managers {
+      // Check if package manager exists
+      if Command::new("which").arg(manager).output().is_ok() {
+        println!("Trying to install with {manager}");
+
+        let output = Command::new("pkexec").arg(manager).args(args).output();
+
+        match output {
+          Ok(output) if output.status.success() => {
+            println!("DEB installation completed successfully with {manager}");
+            return Ok(());
+          }
+          Ok(output) => {
+            let error_msg = String::from_utf8_lossy(&output.stderr);
+            last_error = format!("{manager} failed: {error_msg}");
+            println!("Installation failed with {manager}: {error_msg}");
+          }
+          Err(e) => {
+            last_error = format!("Failed to execute {manager}: {e}");
+            println!("Failed to execute {manager}: {e}");
+          }
+        }
+      }
+    }
+
+    Err(format!("DEB installation failed. Last error: {last_error}").into())
+  }
+
+  /// Install Linux RPM package
+  #[cfg(target_os = "linux")]
+  async fn install_linux_rpm(
+    &self,
+    rpm_path: &Path,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("Installing RPM package: {}", rpm_path.display());
+
+    // Try different package managers in order of preference
+    let package_managers = [
+      ("rpm", vec!["-Uvh", rpm_path.to_str().unwrap()]),
+      ("dnf", vec!["install", "-y", rpm_path.to_str().unwrap()]),
+      ("yum", vec!["install", "-y", rpm_path.to_str().unwrap()]),
+      ("zypper", vec!["install", "-y", rpm_path.to_str().unwrap()]),
+    ];
+
+    let mut last_error = String::new();
+
+    for (manager, args) in &package_managers {
+      // Check if package manager exists
+      if Command::new("which").arg(manager).output().is_ok() {
+        println!("Trying to install with {manager}");
+
+        let output = Command::new("pkexec").arg(manager).args(args).output();
+
+        match output {
+          Ok(output) if output.status.success() => {
+            println!("RPM installation completed successfully with {manager}");
+            return Ok(());
+          }
+          Ok(output) => {
+            let error_msg = String::from_utf8_lossy(&output.stderr);
+            last_error = format!("{manager} failed: {error_msg}");
+            println!("Installation failed with {manager}: {error_msg}");
+          }
+          Err(e) => {
+            last_error = format!("Failed to execute {manager}: {e}");
+            println!("Failed to execute {manager}: {e}");
+          }
+        }
+      }
+    }
+
+    Err(format!("RPM installation failed. Last error: {last_error}").into())
+  }
+
+  /// Install Linux AppImage
+  #[cfg(target_os = "linux")]
+  async fn install_linux_appimage(
+    &self,
+    appimage_path: &Path,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("Installing AppImage: {}", appimage_path.display());
+
+    let current_exe = self.get_current_app_path()?;
+
+    // Detect if we're running from an AppImage
+    if let Ok(appimage_env) = std::env::var("APPIMAGE") {
+      // We're running from an AppImage, replace it
+      let current_appimage = PathBuf::from(appimage_env);
+
+      // Create backup
+      let backup_path = current_appimage.with_extension("appimage.backup");
+      if backup_path.exists() {
+        fs::remove_file(&backup_path)?;
+      }
+      fs::copy(&current_appimage, &backup_path)?;
+
+      // Make new AppImage executable
+      let _ = Command::new("chmod")
+        .args(["+x", appimage_path.to_str().unwrap()])
+        .output();
+
+      // Replace the AppImage
+      fs::copy(appimage_path, &current_appimage)?;
+
+      println!("AppImage replacement completed successfully");
+      Ok(())
+    } else {
+      // We're not running from AppImage, try to install to standard location
+      let install_dir = directories::UserDirs::new()
+        .ok_or("Could not determine user directories")?
+        .home_dir()
+        .join(".local/bin");
+
+      fs::create_dir_all(&install_dir)?;
+
+      let app_name = current_exe
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .unwrap_or("donutbrowser");
+
+      let install_path = install_dir.join(format!("{app_name}.AppImage"));
+
+      // Make AppImage executable
+      let _ = Command::new("chmod")
+        .args(["+x", appimage_path.to_str().unwrap()])
+        .output();
+
+      // Copy to install location
+      fs::copy(appimage_path, &install_path)?;
+
+      // Try to create desktop entry
+      if let Some(user_dirs) = directories::UserDirs::new() {
+        let desktop_dir = user_dirs.home_dir().join(".local/share/applications");
+        let _ = fs::create_dir_all(&desktop_dir);
+
+        let desktop_file = desktop_dir.join(format!("{app_name}.desktop"));
+        let desktop_content = format!(
+          r#"[Desktop Entry]
+Name=Donut Browser
+Exec={}
+Icon=donutbrowser
+Type=Application
+Categories=Network;WebBrowser;
+"#,
+          install_path.to_str().unwrap()
+        );
+
+        let _ = fs::write(desktop_file, desktop_content);
+      }
+
+      println!("AppImage installation completed successfully");
+      Ok(())
+    }
+  }
+
+  /// Install Linux tarball
+  #[cfg(target_os = "linux")]
+  async fn install_linux_tarball(
+    &self,
+    tarball_path: &Path,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("Installing tarball: {}", tarball_path.display());
+
+    let current_exe = self.get_current_app_path()?;
+    let temp_extract_dir = tarball_path.parent().unwrap().join("extracted");
+    fs::create_dir_all(&temp_extract_dir)?;
+
+    // Extract tarball
+    let extractor = crate::extraction::Extractor::instance();
+    let extracted_path = extractor
+      .extract_tar_gz(tarball_path, &temp_extract_dir)
+      .await?;
+
+    // Find the executable in the extracted files
+    let current_exe_name = current_exe.file_name().unwrap();
+    let new_exe_path =
+      if extracted_path.is_file() && extracted_path.file_name() == Some(current_exe_name) {
+        extracted_path
+      } else {
+        // Search in extracted directory
+        let mut found_exe = None;
+        if let Ok(entries) = fs::read_dir(&extracted_path) {
+          for entry in entries.flatten() {
+            let path = entry.path();
+            if path.file_name() == Some(current_exe_name) {
+              found_exe = Some(path);
+              break;
+            }
+            // Also check subdirectories
+            if path.is_dir() {
+              if let Ok(sub_entries) = fs::read_dir(&path) {
+                for sub_entry in sub_entries.flatten() {
+                  let sub_path = sub_entry.path();
+                  if sub_path.file_name() == Some(current_exe_name) {
+                    found_exe = Some(sub_path);
+                    break;
+                  }
+                }
+              }
+            }
+          }
+        }
+        found_exe.ok_or("Could not find executable in tarball")?
+      };
+
+    // Create backup of current executable
+    let backup_path = current_exe.with_extension("backup");
+    if backup_path.exists() {
+      fs::remove_file(&backup_path)?;
+    }
+    fs::copy(&current_exe, &backup_path)?;
+
+    // Replace current executable
+    fs::copy(&new_exe_path, &current_exe)?;
+
+    // Make sure it's executable
+    let _ = Command::new("chmod")
+      .args(["+x", current_exe.to_str().unwrap()])
+      .output();
+
+    // Clean up
+    let _ = fs::remove_dir_all(&temp_extract_dir);
+
+    println!("Tarball installation completed successfully");
+    Ok(())
+  }
+
+  /// Detect Linux installation method
+  #[cfg(target_os = "linux")]
+  fn detect_linux_installation_method(&self) -> String {
+    // Check if running from AppImage
+    if std::env::var("APPIMAGE").is_ok() {
+      return "appimage".to_string();
+    }
+
+    // Check if installed via package manager by looking at the executable path
+    let exe_path = match std::env::current_exe() {
+      Ok(path) => path,
+      Err(_) => return "unknown".to_string(),
+    };
+
+    let exe_str = exe_path.to_string_lossy();
+
+    // Common system paths indicate package manager installation
+    if exe_str.starts_with("/usr/bin/") || exe_str.starts_with("/usr/local/bin/") {
+      // Try to determine which package manager was used
+      if Command::new("dpkg")
+        .arg("-l")
+        .arg("donutbrowser")
+        .output()
+        .is_ok()
+      {
+        return "deb".to_string();
+      }
+      if Command::new("rpm")
+        .arg("-q")
+        .arg("donutbrowser")
+        .output()
+        .is_ok()
+      {
+        return "rpm".to_string();
+      }
+      return "system".to_string();
+    }
+
+    // If in home directory, likely manual installation
+    if let Some(user_dirs) = directories::UserDirs::new() {
+      if exe_str.starts_with(&user_dirs.home_dir().to_string_lossy()) {
+        return "manual".to_string();
+      }
+    }
+
+    "unknown".to_string()
   }
 
   /// Get the current application bundle path
@@ -1002,6 +1555,76 @@ pub async fn check_for_app_updates_manual() -> Result<Option<AppUpdateInfo>, Str
     .map_err(|e| format!("Failed to check for app updates: {e}"))
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PlatformInfo {
+  pub os: String,
+  pub arch: String,
+  pub installation_method: String,
+  pub supported_formats: Vec<String>,
+}
+
+#[tauri::command]
+pub async fn get_platform_info() -> Result<PlatformInfo, String> {
+  let os = if cfg!(target_os = "macos") {
+    "macos".to_string()
+  } else if cfg!(target_os = "windows") {
+    "windows".to_string()
+  } else if cfg!(target_os = "linux") {
+    "linux".to_string()
+  } else {
+    "unknown".to_string()
+  };
+
+  let arch = if cfg!(target_arch = "aarch64") {
+    "aarch64".to_string()
+  } else if cfg!(target_arch = "x86_64") {
+    "x64".to_string()
+  } else {
+    "unknown".to_string()
+  };
+
+  let installation_method = {
+    #[cfg(target_os = "linux")]
+    {
+      AppAutoUpdater::instance().detect_linux_installation_method()
+    }
+    #[cfg(target_os = "macos")]
+    {
+      "app_bundle".to_string()
+    }
+    #[cfg(target_os = "windows")]
+    {
+      "installer".to_string()
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+      "unknown".to_string()
+    }
+  };
+
+  let supported_formats = if cfg!(target_os = "macos") {
+    vec!["dmg".to_string()]
+  } else if cfg!(target_os = "windows") {
+    vec!["msi".to_string(), "exe".to_string(), "zip".to_string()]
+  } else if cfg!(target_os = "linux") {
+    vec![
+      "deb".to_string(),
+      "rpm".to_string(),
+      "appimage".to_string(),
+      "tar.gz".to_string(),
+    ]
+  } else {
+    vec![]
+  };
+
+  Ok(PlatformInfo {
+    os,
+    arch,
+    installation_method,
+    supported_formats,
+  })
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -1159,6 +1782,142 @@ mod tests {
     assert!(result.is_err());
     let error_msg = result.unwrap_err().to_string();
     assert!(error_msg.contains("Unsupported archive format: rar"));
+  }
+
+  #[test]
+  fn test_platform_specific_download_urls() {
+    let updater = AppAutoUpdater::instance();
+
+    // Create comprehensive assets for all platforms
+    let all_assets = vec![
+      // macOS assets
+      AppReleaseAsset {
+        name: "Donut.Browser_0.1.0_aarch64.dmg".to_string(),
+        browser_download_url: "https://example.com/aarch64.dmg".to_string(),
+        size: 12345,
+      },
+      AppReleaseAsset {
+        name: "Donut.Browser_0.1.0_x64.dmg".to_string(),
+        browser_download_url: "https://example.com/x64.dmg".to_string(),
+        size: 12345,
+      },
+      // Windows assets
+      AppReleaseAsset {
+        name: "Donut.Browser_0.1.0_x64.msi".to_string(),
+        browser_download_url: "https://example.com/x64.msi".to_string(),
+        size: 12345,
+      },
+      AppReleaseAsset {
+        name: "Donut.Browser_0.1.0_x64.exe".to_string(),
+        browser_download_url: "https://example.com/x64.exe".to_string(),
+        size: 12345,
+      },
+      // Linux assets
+      AppReleaseAsset {
+        name: "donutbrowser_0.1.0_amd64.deb".to_string(),
+        browser_download_url: "https://example.com/amd64.deb".to_string(),
+        size: 12345,
+      },
+      AppReleaseAsset {
+        name: "donutbrowser-0.1.0-1.x86_64.rpm".to_string(),
+        browser_download_url: "https://example.com/x86_64.rpm".to_string(),
+        size: 12345,
+      },
+      AppReleaseAsset {
+        name: "Donut.Browser-0.1.0-x86_64.AppImage".to_string(),
+        browser_download_url: "https://example.com/x86_64.AppImage".to_string(),
+        size: 12345,
+      },
+    ];
+
+    // Test that the method returns a URL for the current platform
+    let url = updater.get_download_url_for_platform(&all_assets);
+    assert!(
+      url.is_some(),
+      "Should find a suitable download URL for current platform"
+    );
+
+    // Test platform-specific behavior
+    #[cfg(target_os = "macos")]
+    {
+      let url = url.unwrap();
+      assert!(url.contains(".dmg"), "macOS should prefer DMG files");
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+      let url = url.unwrap();
+      assert!(
+        url.contains(".msi") || url.contains(".exe") || url.contains(".zip"),
+        "Windows should prefer MSI, EXE, or ZIP files"
+      );
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+      let url = url.unwrap();
+      assert!(
+        url.contains(".deb")
+          || url.contains(".rpm")
+          || url.contains(".appimage")
+          || url.contains(".tar.gz"),
+        "Linux should prefer DEB, RPM, AppImage, or TAR.GZ files"
+      );
+    }
+  }
+
+  #[test]
+  fn test_supported_file_extensions() {
+    let updater = AppAutoUpdater::instance();
+    let temp_dir = std::env::temp_dir();
+    let rt = tokio::runtime::Runtime::new().unwrap();
+
+    // Test that all supported extensions are handled
+    let supported_extensions = ["dmg", "msi", "exe", "deb", "rpm", "appimage", "zip"];
+
+    for ext in &supported_extensions {
+      let test_file = temp_dir.join(format!("test.{ext}"));
+      let result = rt.block_on(async { updater.extract_update(&test_file, &temp_dir).await });
+
+      // The result should either succeed or fail with a platform-specific error,
+      // but not with "Unsupported archive format"
+      if let Err(e) = result {
+        let error_msg = e.to_string();
+        assert!(
+          !error_msg.contains("Unsupported archive format"),
+          "Extension {ext} should be supported but got: {error_msg}"
+        );
+      }
+    }
+
+    // Test tar.gz compound extension
+    let tar_gz_file = temp_dir.join("test.tar.gz");
+    let result = rt.block_on(async { updater.extract_update(&tar_gz_file, &temp_dir).await });
+
+    if let Err(e) = result {
+      let error_msg = e.to_string();
+      assert!(
+        !error_msg.contains("Unsupported archive format"),
+        "tar.gz should be supported but got: {error_msg}"
+      );
+    }
+  }
+
+  #[cfg(target_os = "linux")]
+  #[test]
+  fn test_linux_installation_method_detection() {
+    let updater = AppAutoUpdater::instance();
+
+    // This test can only verify the method doesn't panic
+    // The actual detection depends on the runtime environment
+    let method = updater.detect_linux_installation_method();
+
+    // Should return one of the known methods
+    let valid_methods = ["appimage", "deb", "rpm", "system", "manual", "unknown"];
+    assert!(
+      valid_methods.contains(&method.as_str()),
+      "Invalid installation method detected: {method}"
+    );
   }
 }
 
