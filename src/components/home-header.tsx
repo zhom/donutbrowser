@@ -49,8 +49,9 @@ const HomeHeader = ({
           type="button"
           className="p-1 cursor-pointer"
           title="Open donutbrowser.com"
+          onClick={_handleLogoClick}
         >
-          <Logo className="w-10 h-10" />
+          <Logo className="w-10 h-10 transition-transform duration-300 ease-out will-change-transform hover:scale-110" />
         </button>
         {selectedProfiles.length > 0 ? (
           <div className="flex items-center gap-3">
