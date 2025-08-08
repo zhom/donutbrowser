@@ -748,6 +748,10 @@ export function ProfilesDataTable({
             browserState.isClient && runningProfiles.has(profile.name);
           const isBrowserUpdating =
             browserState.isClient && isUpdating(profile.browser);
+          const isLaunching = launchingProfiles.has(profile.name);
+          const isStopping = stoppingProfiles.has(profile.name);
+          const isDisabled =
+            isRunning || isLaunching || isStopping || isBrowserUpdating;
 
           return (
             <div className="flex justify-end items-center">
@@ -767,9 +771,7 @@ export function ProfilesDataTable({
                     onClick={() => {
                       onProxySettings(profile);
                     }}
-                    disabled={
-                      !browserState.isClient || isBrowserUpdating || isRunning
-                    }
+                    disabled={isDisabled}
                   >
                     Configure Proxy
                   </DropdownMenuItem>
@@ -779,9 +781,7 @@ export function ProfilesDataTable({
                         onAssignProfilesToGroup([profile.name]);
                       }
                     }}
-                    disabled={
-                      !browserState.isClient || isBrowserUpdating || isRunning
-                    }
+                    disabled={isDisabled}
                   >
                     Assign to Group
                   </DropdownMenuItem>
@@ -790,9 +790,7 @@ export function ProfilesDataTable({
                       onClick={() => {
                         onConfigureCamoufox(profile);
                       }}
-                      disabled={
-                        !browserState.isClient || isRunning || isBrowserUpdating
-                      }
+                      disabled={isDisabled}
                     >
                       Configure Camoufox
                     </DropdownMenuItem>
@@ -804,9 +802,7 @@ export function ProfilesDataTable({
                       onClick={() => {
                         onChangeVersion(profile);
                       }}
-                      disabled={
-                        !browserState.isClient || isRunning || isBrowserUpdating
-                      }
+                      disabled={isDisabled}
                     >
                       Switch Release
                     </DropdownMenuItem>
@@ -816,9 +812,7 @@ export function ProfilesDataTable({
                       setProfileToRename(profile);
                       setNewProfileName(profile.name);
                     }}
-                    disabled={
-                      !browserState.isClient || isRunning || isBrowserUpdating
-                    }
+                    disabled={isDisabled}
                   >
                     Rename
                   </DropdownMenuItem>
@@ -826,9 +820,7 @@ export function ProfilesDataTable({
                     onClick={() => {
                       setProfileToDelete(profile);
                     }}
-                    disabled={
-                      !browserState.isClient || isRunning || isBrowserUpdating
-                    }
+                    disabled={isDisabled}
                   >
                     Delete
                   </DropdownMenuItem>
