@@ -23,6 +23,96 @@ impl Extractor {
     &EXTRACTOR
   }
 
+  /// Sanitize ZIP file paths to handle Unicode issues and problematic characters
+  fn sanitize_zip_path(&self, path: &str) -> String {
+    // Replace problematic Unicode sequences that cause extraction issues
+    let sanitized = path
+      .replace("#U30d2", "ヒ")
+      .replace("#U30e9", "ラ")
+      .replace("#U30ad", "キ")
+      .replace("#U3099", "゙")
+      .replace("#U30ce", "ノ")
+      .replace("#U4e38", "丸")
+      .replace("#U30b3", "コ")
+      .replace("#U30b4", "ゴ")
+      .replace("#U660e", "明")
+      .replace("#U671d", "朝")
+      .replace("#U89d2", "角")
+      .replace("#U30b7", "シ")
+      .replace("#U30c3", "ッ")
+      .replace("#U30af", "ク");
+
+    // Remove any remaining problematic characters
+    sanitized
+      .chars()
+      .filter(|c| c.is_ascii() || c.is_alphanumeric() || matches!(*c, '/' | '.' | '-' | '_' | ' '))
+      .collect()
+  }
+
+  /// Ensure the extracted files are in the correct directory structure expected by verification
+  #[cfg(target_os = "linux")]
+  async fn ensure_correct_directory_structure(
+    &self,
+    dest_dir: &Path,
+    exe_path: &Path,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // Determine browser type from the destination directory path
+    let browser_type = if dest_dir.to_string_lossy().contains("camoufox") {
+      "camoufox"
+    } else if dest_dir.to_string_lossy().contains("firefox") {
+      "firefox"
+    } else if dest_dir.to_string_lossy().contains("zen") {
+      "zen"
+    } else {
+      // For other browsers, assume the structure is already correct
+      return Ok(());
+    };
+
+    let expected_subdir = dest_dir.join(browser_type);
+
+    // If the executable is not in the expected subdirectory, create the structure
+    if !exe_path.starts_with(&expected_subdir) {
+      println!("Reorganizing directory structure for {}", browser_type);
+
+      // Create the expected subdirectory
+      std::fs::create_dir_all(&expected_subdir)?;
+
+      // Move all files from the root to the subdirectory
+      if let Ok(entries) = std::fs::read_dir(dest_dir) {
+        for entry in entries.flatten() {
+          let path = entry.path();
+          let file_name = match path.file_name() {
+            Some(name) => name,
+            None => continue,
+          };
+
+          // Skip the subdirectory we just created
+          if path == expected_subdir {
+            continue;
+          }
+
+          let target_path = expected_subdir.join(file_name);
+
+          // Move the file/directory
+          if let Err(e) = std::fs::rename(&path, &target_path) {
+            println!(
+              "Warning: Failed to move {} to {}: {}",
+              path.display(),
+              target_path.display(),
+              e
+            );
+          } else {
+            println!("Moved {} to {}", path.display(), target_path.display());
+          }
+        }
+      }
+
+      println!("Directory structure reorganized for {}", browser_type);
+    }
+
+    Ok(())
+  }
+
   pub async fn extract_browser(
     &self,
     app_handle: &tauri::AppHandle,
@@ -45,48 +135,114 @@ impl Extractor {
     let _ = app_handle.emit("download-progress", &progress);
 
     println!(
-      "Starting extraction of {} for browser {}",
+      "Starting extraction of {} for browser {} version {}",
       archive_path.display(),
-      browser_type.as_str()
+      browser_type.as_str(),
+      version
     );
 
     // Detect the actual file type by reading the file header
-    let actual_format = self.detect_file_format(archive_path)?;
+    let actual_format = self.detect_file_format(archive_path).map_err(|e| {
+      format!(
+        "Failed to detect file format for {}: {}",
+        archive_path.display(),
+        e
+      )
+    })?;
     println!("Detected format: {actual_format}");
 
-    match actual_format.as_str() {
+    let extraction_result = match actual_format.as_str() {
       "dmg" => {
         #[cfg(target_os = "macos")]
-        return self.extract_dmg(archive_path, dest_dir).await;
+        {
+          self.extract_dmg(archive_path, dest_dir).await.map_err(|e| {
+            format!("DMG extraction failed for {} {}: {}", browser_type.as_str(), version, e).into()
+          })
+        }
 
         #[cfg(not(target_os = "macos"))]
-        return Err("DMG extraction is only supported on macOS".into());
+        {
+          Err(format!("DMG extraction is only supported on macOS, but {} {} requires DMG extraction", browser_type.as_str(), version).into())
+        }
       }
-      "zip" => self.extract_zip(archive_path, dest_dir).await,
-      "tar.xz" => self.extract_tar_xz(archive_path, dest_dir).await,
-      "tar.bz2" => self.extract_tar_bz2(archive_path, dest_dir).await,
-      "tar.gz" => self.extract_tar_gz(archive_path, dest_dir).await,
-      "msi" => self.extract_msi(archive_path, dest_dir).await,
+      "zip" => {
+        self.extract_zip(archive_path, dest_dir).await.map_err(|e| {
+          format!("ZIP extraction failed for {} {}: {}", browser_type.as_str(), version, e).into()
+        })
+      }
+      "tar.xz" => {
+        self.extract_tar_xz(archive_path, dest_dir).await.map_err(|e| {
+          format!("TAR.XZ extraction failed for {} {}: {}", browser_type.as_str(), version, e).into()
+        })
+      }
+      "tar.bz2" => {
+        self.extract_tar_bz2(archive_path, dest_dir).await.map_err(|e| {
+          format!("TAR.BZ2 extraction failed for {} {}: {}", browser_type.as_str(), version, e).into()
+        })
+      }
+      "tar.gz" => {
+        self.extract_tar_gz(archive_path, dest_dir).await.map_err(|e| {
+          format!("TAR.GZ extraction failed for {} {}: {}", browser_type.as_str(), version, e).into()
+        })
+      }
+      "msi" => {
+        self.extract_msi(archive_path, dest_dir).await.map_err(|e| {
+          format!("MSI extraction failed for {} {}: {}", browser_type.as_str(), version, e).into()
+        })
+      }
       "exe" => {
         // For Windows EXE files, some may be self-extracting archives, others are installers
         // For browsers like Firefox, TOR, they're typically installers that don't need extraction
         self
-          .handle_exe_file(archive_path, dest_dir, browser_type)
+          .handle_exe_file(archive_path, dest_dir, browser_type.clone())
           .await
+          .map_err(|e| {
+            format!("EXE handling failed for {} {}: {}", browser_type.as_str(), version, e).into()
+          })
       }
       "appimage" => {
         #[cfg(target_os = "linux")]
-        return self.handle_appimage(archive_path, dest_dir).await;
+        {
+          self.handle_appimage(archive_path, dest_dir).await.map_err(|e| {
+            format!("AppImage handling failed for {} {}: {}", browser_type.as_str(), version, e).into()
+          })
+        }
 
         #[cfg(not(target_os = "linux"))]
-        return Err("AppImage is only supported on Linux".into());
+        {
+          Err(format!("AppImage is only supported on Linux, but {} {} requires AppImage handling", browser_type.as_str(), version).into())
+        }
       }
       _ => {
         Err(format!(
-          "Unsupported archive format: {} (detected: {}). The downloaded file might be corrupted or in an unexpected format.",
+          "Unsupported archive format for {} {}: {} (detected: {}). The downloaded file might be corrupted or in an unexpected format. File: {}",
+          browser_type.as_str(),
+          version,
           archive_path.extension().and_then(|ext| ext.to_str()).unwrap_or("unknown"),
-          actual_format
+          actual_format,
+          archive_path.display()
         ).into())
+      }
+    };
+
+    match extraction_result {
+      Ok(path) => {
+        println!(
+          "Successfully extracted {} {} to: {}",
+          browser_type.as_str(),
+          version,
+          path.display()
+        );
+        Ok(path)
+      }
+      Err(e) => {
+        eprintln!(
+          "Extraction failed for {} {}: {}",
+          browser_type.as_str(),
+          version,
+          e
+        );
+        Err(e)
       }
     }
   }
@@ -399,30 +555,86 @@ impl Extractor {
     println!("Extracting ZIP archive: {}", zip_path.display());
     std::fs::create_dir_all(dest_dir)?;
 
-    let file = File::open(zip_path)?;
-    let mut archive = zip::ZipArchive::new(BufReader::new(file))?;
+    let file = File::open(zip_path)
+      .map_err(|e| format!("Failed to open ZIP file {}: {}", zip_path.display(), e))?;
+
+    let mut archive = zip::ZipArchive::new(BufReader::new(file))
+      .map_err(|e| format!("Failed to read ZIP archive {}: {}", zip_path.display(), e))?;
+
+    println!("ZIP archive contains {} files", archive.len());
 
     for i in 0..archive.len() {
-      let mut file = archive.by_index(i)?;
-      let outpath = match file.enclosed_name() {
-        Some(path) => dest_dir.join(path),
-        None => continue,
+      let mut file = match archive.by_index(i) {
+        Ok(f) => f,
+        Err(e) => {
+          println!("Warning: Failed to read file at index {i}: {e}");
+          continue;
+        }
       };
 
+      // Handle Unicode filename issues by using the raw filename and sanitizing it
+      let file_name = file.name();
+      let sanitized_path = self.sanitize_zip_path(file_name);
+
+      // Skip problematic files (like the Japanese font files that cause issues)
+      if sanitized_path.is_empty() || sanitized_path.contains("fonts/macos/") {
+        println!("Skipping problematic file: {file_name}");
+        continue;
+      }
+
+      let outpath = dest_dir.join(&sanitized_path);
+
+      // Ensure the path is within the destination directory (security check)
+      if !outpath.starts_with(dest_dir) {
+        println!("Warning: Skipping file with path outside destination: {file_name}");
+        continue;
+      }
+
       // Handle directory creation
-      if file.name().ends_with('/') {
-        std::fs::create_dir_all(&outpath)?;
+      if file_name.ends_with('/') {
+        if let Err(e) = std::fs::create_dir_all(&outpath) {
+          println!(
+            "Warning: Failed to create directory {}: {}",
+            outpath.display(),
+            e
+          );
+        }
       } else {
         // Create parent directories
         if let Some(p) = outpath.parent() {
           if !p.exists() {
-            std::fs::create_dir_all(p)?;
+            if let Err(e) = std::fs::create_dir_all(p) {
+              println!(
+                "Warning: Failed to create parent directory {}: {}",
+                p.display(),
+                e
+              );
+              continue;
+            }
           }
         }
 
         // Extract file
-        let mut outfile = File::create(&outpath)?;
-        io::copy(&mut file, &mut outfile)?;
+        match File::create(&outpath) {
+          Ok(mut outfile) => {
+            if let Err(e) = io::copy(&mut file, &mut outfile) {
+              println!(
+                "Warning: Failed to extract file {}: {}",
+                outpath.display(),
+                e
+              );
+              continue;
+            }
+          }
+          Err(e) => {
+            println!(
+              "Warning: Failed to create file {}: {}",
+              outpath.display(),
+              e
+            );
+            continue;
+          }
+        }
 
         // Set executable permissions on Unix-like systems
         #[cfg(unix)]
@@ -430,14 +642,23 @@ impl Extractor {
           use std::os::unix::fs::PermissionsExt;
           if let Some(mode) = file.unix_mode() {
             let permissions = std::fs::Permissions::from_mode(mode);
-            std::fs::set_permissions(&outpath, permissions)?;
+            if let Err(e) = std::fs::set_permissions(&outpath, permissions) {
+              println!(
+                "Warning: Failed to set permissions for {}: {}",
+                outpath.display(),
+                e
+              );
+            }
           }
         }
       }
     }
 
     println!("ZIP extraction completed. Searching for executable...");
-    self.find_extracted_executable(dest_dir).await
+    self
+      .find_extracted_executable(dest_dir)
+      .await
+      .map_err(|e| format!("Failed to find executable after ZIP extraction: {e}").into())
   }
 
   pub async fn extract_tar_gz(
@@ -633,7 +854,17 @@ impl Extractor {
 
     #[cfg(target_os = "linux")]
     {
-      self.find_linux_executable(dest_dir).await
+      let result = self.find_linux_executable(dest_dir).await;
+
+      // If we found an executable, ensure it's in the correct directory structure
+      // that the verification expects
+      if let Ok(exe_path) = &result {
+        self
+          .ensure_correct_directory_structure(dest_dir, exe_path)
+          .await?;
+      }
+
+      result
     }
   }
 
@@ -813,6 +1044,8 @@ impl Extractor {
     &self,
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
+    println!("Searching for Linux executable in: {}", dest_dir.display());
+
     // Enhanced list of common browser executable names
     let exe_names = [
       // Firefox variants
@@ -849,12 +1082,17 @@ impl Extractor {
       // Mullvad Browser
       "mullvad-browser",
       "mullvad-browser-bin",
+      // Camoufox variants
+      "camoufox",
+      "camoufox-bin",
+      "camoufox-browser",
     ];
 
     // First, try direct lookup in the main directory
     for exe_name in &exe_names {
       let exe_path = dest_dir.join(exe_name);
       if exe_path.exists() && self.is_executable(&exe_path) {
+        println!("Found executable at root level: {}", exe_path.display());
         return Ok(exe_path);
       }
     }
@@ -874,6 +1112,7 @@ impl Extractor {
       "zen",
       "tor-browser",
       "mullvad-browser",
+      "camoufox",
       ".",
       "./",
       "firefox",
@@ -884,8 +1123,10 @@ impl Extractor {
       "opt/google/chrome",
       "opt/brave.com/brave",
       "opt/mullvad-browser",
+      "opt/camoufox",
       "usr/lib/firefox",
       "usr/lib/chromium",
+      "usr/lib/camoufox",
       "usr/share/applications",
       "usr/bin",
       "AppRun",
@@ -898,6 +1139,7 @@ impl Extractor {
         for exe_name in &exe_names {
           let exe_path = subdir_path.join(exe_name);
           if exe_path.exists() && self.is_executable(&exe_path) {
+            println!("Found executable in subdirectory: {}", exe_path.display());
             return Ok(exe_path);
           }
         }
@@ -910,6 +1152,7 @@ impl Extractor {
         let path = entry.path();
         if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
           if file_name.ends_with(".AppImage") && self.is_executable(&path) {
+            println!("Found AppImage: {}", path.display());
             return Ok(path);
           }
         }
@@ -917,7 +1160,36 @@ impl Extractor {
     }
 
     // Last resort: recursive search for any executable file
-    self.find_any_executable_recursive(dest_dir, 0).await
+    println!("Performing recursive search for executables...");
+    match self.find_any_executable_recursive(dest_dir, 0).await {
+      Ok(path) => {
+        println!("Found executable via recursive search: {}", path.display());
+        Ok(path)
+      }
+      Err(e) => {
+        // List all files in the directory for debugging
+        println!("Failed to find executable. Directory contents:");
+        if let Ok(entries) = fs::read_dir(dest_dir) {
+          for entry in entries.flatten() {
+            let path = entry.path();
+            let is_exec = if path.is_file() {
+              self.is_executable(&path)
+            } else {
+              false
+            };
+            println!("  {} (executable: {})", path.display(), is_exec);
+          }
+        }
+        Err(
+          format!(
+            "No executable found in {} after extraction. Original error: {}",
+            dest_dir.display(),
+            e
+          )
+          .into(),
+        )
+      }
+    }
   }
 
   #[cfg(target_os = "linux")]
@@ -1019,6 +1291,7 @@ impl Extractor {
 
     if let Ok(entries) = fs::read_dir(dir) {
       let mut directories = Vec::new();
+      let mut potential_executables = Vec::new();
 
       // First pass: look for executable files
       for entry in entries.flatten() {
@@ -1033,10 +1306,18 @@ impl Extractor {
               || name_lower.contains("zen")
               || name_lower.contains("tor")
               || name_lower.contains("mullvad")
+              || name_lower.contains("camoufox")
               || file_name.ends_with(".AppImage")
             {
+              println!(
+                "Found priority executable at depth {}: {}",
+                depth,
+                path.display()
+              );
               return Ok(path);
             }
+            // Collect other executables as potential candidates
+            potential_executables.push(path);
           }
         } else if path.is_dir() {
           directories.push(path);
@@ -1050,9 +1331,36 @@ impl Extractor {
           return Ok(result);
         }
       }
+
+      // Third pass: if no browser-specific executable found, try any executable
+      if !potential_executables.is_empty() {
+        // Sort by filename to prefer more likely candidates
+        potential_executables.sort_by(|a, b| {
+          let a_name = a
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_lowercase();
+          let b_name = b
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_lowercase();
+
+          // Prefer shorter names (likely main executables)
+          a_name.len().cmp(&b_name.len())
+        });
+
+        println!(
+          "Found potential executable at depth {}: {}",
+          depth,
+          potential_executables[0].display()
+        );
+        return Ok(potential_executables[0].clone());
+      }
     }
 
-    Err("No executable found".into())
+    Err(format!("No executable found in directory: {}", dir.display()).into())
   }
 }
 

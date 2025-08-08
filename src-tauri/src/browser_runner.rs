@@ -1278,7 +1278,7 @@ impl BrowserRunner {
       // For Camoufox on Linux, provide specific expected files
       if browser_str == "camoufox" && cfg!(target_os = "linux") {
         let camoufox_subdir = browser_dir.join("camoufox");
-        error_details.push_str(&format!("\nExpected Camoufox executable locations:"));
+        error_details.push_str("\nExpected Camoufox executable locations:");
         error_details.push_str(&format!("\n  {}/camoufox-bin", camoufox_subdir.display()));
         error_details.push_str(&format!("\n  {}/camoufox", camoufox_subdir.display()));
 
