@@ -314,7 +314,7 @@ impl AppAutoUpdater {
 
     #[cfg(target_os = "macos")]
     {
-      return self.get_macos_download_url(assets, arch);
+      self.get_macos_download_url(assets, arch)
     }
 
     #[cfg(target_os = "windows")]
