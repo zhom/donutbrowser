@@ -588,7 +588,7 @@ export function CreateProfileDialog({
               isLoading={isCreating}
               disabled={isCreateDisabled()}
             >
-              Create Profile
+              Create
             </LoadingButton>
           </DialogFooter>
         </Tabs>
