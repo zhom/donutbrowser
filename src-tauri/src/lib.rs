@@ -58,7 +58,6 @@ use auto_updater::{
 
 use app_auto_updater::{
   check_for_app_updates, check_for_app_updates_manual, download_and_install_app_update,
-  get_platform_info,
 };
 
 use profile_importer::{detect_existing_profiles, import_browser_profile};
@@ -488,7 +487,6 @@ pub fn run() {
       check_for_app_updates,
       check_for_app_updates_manual,
       download_and_install_app_update,
-      get_platform_info,
       get_system_theme,
       detect_existing_profiles,
       import_browser_profile,
