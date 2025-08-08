@@ -1678,6 +1678,7 @@ mod tests {
         "name": "Release v1.81.9 (Chromium 137.0.7151.104)",
         "prerelease": false,
         "published_at": "2024-01-15T10:00:00Z",
+        "draft": false,
         "assets": [
           {
             "name": "brave-v1.81.9-universal.dmg",

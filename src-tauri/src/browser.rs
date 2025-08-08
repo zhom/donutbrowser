@@ -1037,9 +1037,34 @@ mod tests {
     let browser_dir = binaries_dir.join("firefox").join("139.0");
     fs::create_dir_all(&browser_dir).unwrap();
 
-    // Create a mock .app directory
-    let app_dir = browser_dir.join("Firefox.app");
-    fs::create_dir_all(&app_dir).unwrap();
+    #[cfg(target_os = "macos")]
+    {
+      // Create a mock .app directory for macOS
+      let app_dir = browser_dir.join("Firefox.app");
+      fs::create_dir_all(&app_dir).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+      // Create a mock firefox subdirectory and executable for Linux
+      let firefox_subdir = browser_dir.join("firefox");
+      fs::create_dir_all(&firefox_subdir).unwrap();
+      let executable_path = firefox_subdir.join("firefox");
+      fs::write(&executable_path, "mock executable").unwrap();
+
+      // Set executable permissions on Linux
+      use std::os::unix::fs::PermissionsExt;
+      let mut permissions = executable_path.metadata().unwrap().permissions();
+      permissions.set_mode(0o755);
+      fs::set_permissions(&executable_path, permissions).unwrap();
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+      // Create a mock firefox.exe for Windows
+      let executable_path = browser_dir.join("firefox.exe");
+      fs::write(&executable_path, "mock executable").unwrap();
+    }
 
     let browser = FirefoxBrowser::new(BrowserType::Firefox);
     assert!(browser.is_version_downloaded("139.0", binaries_dir));
@@ -1048,15 +1073,39 @@ mod tests {
     // Test with Chromium browser with new path structure
     let chromium_dir = binaries_dir.join("chromium").join("1465660");
     fs::create_dir_all(&chromium_dir).unwrap();
-    let chromium_app_dir = chromium_dir.join("Chromium.app");
-    fs::create_dir_all(chromium_app_dir.join("Contents").join("MacOS")).unwrap();
 
-    // Create a mock executable
-    let executable_path = chromium_app_dir
-      .join("Contents")
-      .join("MacOS")
-      .join("Chromium");
-    fs::write(&executable_path, "mock executable").unwrap();
+    #[cfg(target_os = "macos")]
+    {
+      let chromium_app_dir = chromium_dir.join("Chromium.app");
+      fs::create_dir_all(chromium_app_dir.join("Contents").join("MacOS")).unwrap();
+
+      // Create a mock executable
+      let executable_path = chromium_app_dir
+        .join("Contents")
+        .join("MacOS")
+        .join("Chromium");
+      fs::write(&executable_path, "mock executable").unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+      // Create a mock chromium executable for Linux
+      let executable_path = chromium_dir.join("chromium");
+      fs::write(&executable_path, "mock executable").unwrap();
+
+      // Set executable permissions on Linux
+      use std::os::unix::fs::PermissionsExt;
+      let mut permissions = executable_path.metadata().unwrap().permissions();
+      permissions.set_mode(0o755);
+      fs::set_permissions(&executable_path, permissions).unwrap();
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+      // Create a mock chromium.exe for Windows
+      let executable_path = chromium_dir.join("chromium.exe");
+      fs::write(&executable_path, "mock executable").unwrap();
+    }
 
     let chromium_browser = ChromiumBrowser::new(BrowserType::Chromium);
     assert!(chromium_browser.is_version_downloaded("1465660", binaries_dir));
@@ -1068,11 +1117,11 @@ mod tests {
     let temp_dir = TempDir::new().unwrap();
     let binaries_dir = temp_dir.path();
 
-    // Create browser directory but no .app directory with new path structure
+    // Create browser directory but no proper executable structure
     let browser_dir = binaries_dir.join("firefox").join("139.0");
     fs::create_dir_all(&browser_dir).unwrap();
 
-    // Create some other files but no .app
+    // Create some other files but no proper executable structure
     fs::write(browser_dir.join("readme.txt"), "Some content").unwrap();
 
     let browser = FirefoxBrowser::new(BrowserType::Firefox);

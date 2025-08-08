@@ -1016,59 +1016,198 @@ mod tests {
   fn test_get_download_info() {
     let service = BrowserVersionService::instance();
 
-    // Test Firefox
+    // Test Firefox - platform-specific expectations
     let firefox_info = service.get_download_info("firefox", "139.0").unwrap();
-    assert_eq!(firefox_info.filename, "Firefox 139.0.dmg");
+
+    #[cfg(target_os = "macos")]
+    {
+      assert_eq!(firefox_info.filename, "Firefox 139.0.dmg");
+      assert!(firefox_info.is_archive);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+      assert_eq!(firefox_info.filename, "firefox-139.0.tar.xz");
+      assert!(firefox_info.is_archive);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+      assert_eq!(firefox_info.filename, "Firefox Setup 139.0.exe");
+      assert!(!firefox_info.is_archive);
+    }
+
     assert!(firefox_info
       .url
       .contains("download-installer.cdn.mozilla.net"));
     assert!(firefox_info.url.contains("/pub/firefox/releases/139.0/"));
-    assert!(firefox_info.is_archive);
 
     // Test Firefox Developer
     let firefox_dev_info = service
       .get_download_info("firefox-developer", "139.0b1")
       .unwrap();
-    assert_eq!(firefox_dev_info.filename, "Firefox 139.0b1.dmg");
+
+    #[cfg(target_os = "macos")]
+    {
+      assert_eq!(firefox_dev_info.filename, "Firefox 139.0b1.dmg");
+      assert!(firefox_dev_info.is_archive);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+      assert_eq!(firefox_dev_info.filename, "firefox-139.0b1.tar.xz");
+      assert!(firefox_dev_info.is_archive);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+      assert_eq!(firefox_dev_info.filename, "Firefox Setup 139.0b1.exe");
+      assert!(!firefox_dev_info.is_archive);
+    }
+
     assert!(firefox_dev_info
       .url
       .contains("download-installer.cdn.mozilla.net"));
     assert!(firefox_dev_info
       .url
       .contains("/pub/devedition/releases/139.0b1/"));
-    assert!(firefox_dev_info.is_archive);
 
     // Test Mullvad Browser
     let mullvad_info = service
       .get_download_info("mullvad-browser", "14.5a6")
       .unwrap();
-    assert_eq!(mullvad_info.filename, "mullvad-browser-macos-14.5a6.dmg");
-    assert!(mullvad_info.url.contains("mullvad-browser-macos-14.5a6"));
-    assert!(mullvad_info.is_archive);
+
+    #[cfg(target_os = "macos")]
+    {
+      assert_eq!(mullvad_info.filename, "mullvad-browser-macos-14.5a6.dmg");
+      assert!(mullvad_info.url.contains("mullvad-browser-macos-14.5a6"));
+      assert!(mullvad_info.is_archive);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+      assert_eq!(
+        mullvad_info.filename,
+        "mullvad-browser-x86_64-14.5a6.tar.xz"
+      );
+      assert!(mullvad_info.url.contains("mullvad-browser-x86_64-14.5a6"));
+      assert!(mullvad_info.is_archive);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+      assert_eq!(
+        mullvad_info.filename,
+        "mullvad-browser-windows-x86_64-14.5a6.exe"
+      );
+      assert!(mullvad_info
+        .url
+        .contains("mullvad-browser-windows-x86_64-14.5a6"));
+      assert!(!mullvad_info.is_archive);
+    }
 
     // Test Zen Browser
     let zen_info = service.get_download_info("zen", "1.11b").unwrap();
-    assert_eq!(zen_info.filename, "zen-1.11b.dmg");
-    assert!(zen_info.url.contains("zen.macos-universal.dmg"));
-    assert!(zen_info.is_archive);
+
+    #[cfg(target_os = "macos")]
+    {
+      assert_eq!(zen_info.filename, "zen-1.11b.dmg");
+      assert!(zen_info.url.contains("zen.macos-universal.dmg"));
+      assert!(zen_info.is_archive);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+      assert_eq!(zen_info.filename, "zen-1.11b-x86_64.tar.xz");
+      assert!(zen_info.url.contains("zen.linux-x86_64.tar.xz"));
+      assert!(zen_info.is_archive);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+      assert_eq!(zen_info.filename, "zen-1.11b.exe");
+      assert!(zen_info.url.contains("zen.installer.exe"));
+      assert!(!zen_info.is_archive);
+    }
 
     // Test Tor Browser
     let tor_info = service.get_download_info("tor-browser", "14.0.4").unwrap();
-    assert_eq!(tor_info.filename, "tor-browser-macos-14.0.4.dmg");
-    assert!(tor_info.url.contains("tor-browser-macos-14.0.4"));
-    assert!(tor_info.is_archive);
+
+    #[cfg(target_os = "macos")]
+    {
+      assert_eq!(tor_info.filename, "tor-browser-macos-14.0.4.dmg");
+      assert!(tor_info.url.contains("tor-browser-macos-14.0.4"));
+      assert!(tor_info.is_archive);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+      assert_eq!(tor_info.filename, "tor-browser-linux-x86_64-14.0.4.tar.xz");
+      assert!(tor_info.url.contains("tor-browser-linux-x86_64-14.0.4"));
+      assert!(tor_info.is_archive);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+      assert_eq!(
+        tor_info.filename,
+        "tor-browser-windows-x86_64-portable-14.0.4.exe"
+      );
+      assert!(tor_info
+        .url
+        .contains("tor-browser-windows-x86_64-portable-14.0.4"));
+      assert!(!tor_info.is_archive);
+    }
 
     // Test Chromium
     let chromium_info = service.get_download_info("chromium", "1465660").unwrap();
-    assert_eq!(chromium_info.filename, "chromium-1465660-mac.zip");
-    assert!(chromium_info.url.contains("chrome-mac.zip"));
+
+    #[cfg(target_os = "macos")]
+    {
+      assert_eq!(chromium_info.filename, "chromium-1465660-mac.zip");
+      assert!(chromium_info.url.contains("chrome-mac.zip"));
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+      assert_eq!(chromium_info.filename, "chromium-1465660-linux.zip");
+      assert!(chromium_info.url.contains("chrome-linux.zip"));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+      assert_eq!(chromium_info.filename, "chromium-1465660-win.zip");
+      assert!(chromium_info.url.contains("chrome-win.zip"));
+    }
+
     assert!(chromium_info.is_archive);
 
     // Test Brave - Note: Brave uses dynamic URL resolution, so get_download_info provides a template URL
     let brave_info = service.get_download_info("brave", "v1.81.9").unwrap();
-    assert_eq!(brave_info.filename, "Brave-Browser-universal.dmg");
-    assert_eq!(brave_info.url, "https://github.com/brave/brave-browser/releases/download/v1.81.9/Brave-Browser-universal.dmg");
-    assert!(brave_info.is_archive);
+
+    #[cfg(target_os = "macos")]
+    {
+      assert_eq!(brave_info.filename, "Brave-Browser-universal.dmg");
+      assert_eq!(brave_info.url, "https://github.com/brave/brave-browser/releases/download/v1.81.9/Brave-Browser-universal.dmg");
+      assert!(brave_info.is_archive);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+      assert_eq!(brave_info.filename, "brave-browser-v1.81.9-linux-amd64.zip");
+      assert_eq!(brave_info.url, "https://github.com/brave/brave-browser/releases/download/v1.81.9/brave-browser-v1.81.9-linux-amd64.zip");
+      assert!(brave_info.is_archive);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+      assert_eq!(brave_info.filename, "brave-v1.81.9.exe");
+      assert_eq!(
+        brave_info.url,
+        "https://github.com/brave/brave-browser/releases/download/v1.81.9/brave-v1.81.9.exe"
+      );
+      assert!(!brave_info.is_archive);
+    }
 
     // Test unsupported browser
     let unsupported_result = service.get_download_info("unsupported", "1.0.0");
