@@ -1563,68 +1563,6 @@ pub struct PlatformInfo {
   pub supported_formats: Vec<String>,
 }
 
-#[tauri::command]
-pub async fn get_platform_info() -> Result<PlatformInfo, String> {
-  let os = if cfg!(target_os = "macos") {
-    "macos".to_string()
-  } else if cfg!(target_os = "windows") {
-    "windows".to_string()
-  } else if cfg!(target_os = "linux") {
-    "linux".to_string()
-  } else {
-    "unknown".to_string()
-  };
-
-  let arch = if cfg!(target_arch = "aarch64") {
-    "aarch64".to_string()
-  } else if cfg!(target_arch = "x86_64") {
-    "x64".to_string()
-  } else {
-    "unknown".to_string()
-  };
-
-  let installation_method = {
-    #[cfg(target_os = "linux")]
-    {
-      AppAutoUpdater::instance().detect_linux_installation_method()
-    }
-    #[cfg(target_os = "macos")]
-    {
-      "app_bundle".to_string()
-    }
-    #[cfg(target_os = "windows")]
-    {
-      "installer".to_string()
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-    {
-      "unknown".to_string()
-    }
-  };
-
-  let supported_formats = if cfg!(target_os = "macos") {
-    vec!["dmg".to_string()]
-  } else if cfg!(target_os = "windows") {
-    vec!["msi".to_string(), "exe".to_string(), "zip".to_string()]
-  } else if cfg!(target_os = "linux") {
-    vec![
-      "deb".to_string(),
-      "rpm".to_string(),
-      "appimage".to_string(),
-      "tar.gz".to_string(),
-    ]
-  } else {
-    vec![]
-  };
-
-  Ok(PlatformInfo {
-    os,
-    arch,
-    installation_method,
-    supported_formats,
-  })
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;
