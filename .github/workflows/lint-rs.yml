@@ -30,7 +30,6 @@ permissions:
 jobs:
   build:
     strategy:
-      fail-fast: true
       matrix:
         os: [macos-latest, ubuntu-latest]
 
