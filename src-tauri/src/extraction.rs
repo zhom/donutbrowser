@@ -1,11 +1,16 @@
-use std::fs::{self, create_dir_all, File};
+use std::fs::{self, File};
 use std::io::{self, BufReader, Read};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use tauri::Emitter;
 
 use crate::browser::BrowserType;
 use crate::download::DownloadProgress;
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use std::process::Command;
+
+#[cfg(target_os = "macos")]
+use std::fs::create_dir_all;
 
 pub struct Extractor;
 
@@ -392,7 +397,7 @@ impl Extractor {
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     println!("Extracting ZIP archive: {}", zip_path.display());
-    create_dir_all(dest_dir)?;
+    std::fs::create_dir_all(dest_dir)?;
 
     let file = File::open(zip_path)?;
     let mut archive = zip::ZipArchive::new(BufReader::new(file))?;
@@ -406,12 +411,12 @@ impl Extractor {
 
       // Handle directory creation
       if file.name().ends_with('/') {
-        create_dir_all(&outpath)?;
+        std::fs::create_dir_all(&outpath)?;
       } else {
         // Create parent directories
         if let Some(p) = outpath.parent() {
           if !p.exists() {
-            create_dir_all(p)?;
+            std::fs::create_dir_all(p)?;
           }
         }
 
@@ -441,7 +446,7 @@ impl Extractor {
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     println!("Extracting tar.gz archive: {}", tar_path.display());
-    create_dir_all(dest_dir)?;
+    std::fs::create_dir_all(dest_dir)?;
 
     let file = File::open(tar_path)?;
     let gz_decoder = flate2::read::GzDecoder::new(BufReader::new(file));
@@ -462,7 +467,7 @@ impl Extractor {
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     println!("Extracting tar.bz2 archive: {}", tar_path.display());
-    create_dir_all(dest_dir)?;
+    std::fs::create_dir_all(dest_dir)?;
 
     let file = File::open(tar_path)?;
     let bz2_decoder = bzip2::read::BzDecoder::new(BufReader::new(file));
@@ -483,7 +488,7 @@ impl Extractor {
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     println!("Extracting tar.xz archive: {}", tar_path.display());
-    create_dir_all(dest_dir)?;
+    std::fs::create_dir_all(dest_dir)?;
 
     let file = File::open(tar_path)?;
     let mut buf_reader = BufReader::new(file);
@@ -518,7 +523,7 @@ impl Extractor {
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     println!("Extracting MSI archive: {}", msi_path.display());
-    create_dir_all(dest_dir)?;
+    std::fs::create_dir_all(dest_dir)?;
 
     // Extract MSI in a separate scope to avoid Send issues
     {
@@ -536,7 +541,7 @@ impl Extractor {
     appimage_path: &Path,
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    create_dir_all(dest_dir)?;
+    std::fs::create_dir_all(dest_dir)?;
 
     // For AppImages, we typically just copy them and make sure they're executable
     let dest_file = dest_dir.join(
@@ -1054,9 +1059,12 @@ impl Extractor {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use std::fs::{create_dir_all, File};
+  use std::fs::File;
   use std::io::Write;
   use tempfile::TempDir;
+
+  #[cfg(target_os = "macos")]
+  use std::fs::create_dir_all;
 
   #[test]
   fn test_format_detection_zip() {
