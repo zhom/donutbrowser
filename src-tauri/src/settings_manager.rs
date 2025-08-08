@@ -207,7 +207,7 @@ pub async fn clear_all_version_cache_and_refetch(
   // Disable all browsers during the update process
   let auto_updater = crate::auto_updater::AutoUpdater::instance();
   let supported_browsers =
-    crate::browser_version_service::BrowserVersionService::instance().get_supported_browsers();
+    crate::browser_version_manager::BrowserVersionManager::instance().get_supported_browsers();
 
   // Load current state and disable all browsers
   let mut state = auto_updater

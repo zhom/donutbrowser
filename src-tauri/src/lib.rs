@@ -12,7 +12,7 @@ mod app_auto_updater;
 mod auto_updater;
 mod browser;
 mod browser_runner;
-mod browser_version_service;
+mod browser_version_manager;
 mod camoufox;
 mod default_browser;
 mod download;

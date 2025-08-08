@@ -10,7 +10,7 @@ use tokio::sync::Mutex;
 use tokio::time::interval;
 
 use crate::auto_updater::AutoUpdater;
-use crate::browser_version_service::BrowserVersionService;
+use crate::browser_version_manager::BrowserVersionManager;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct VersionUpdateProgress {
@@ -47,7 +47,7 @@ impl Default for BackgroundUpdateState {
 }
 
 pub struct VersionUpdater {
-  version_service: &'static BrowserVersionService,
+  version_service: &'static BrowserVersionManager,
   auto_updater: &'static AutoUpdater,
   app_handle: Option<tauri::AppHandle>,
 }
@@ -55,7 +55,7 @@ pub struct VersionUpdater {
 impl VersionUpdater {
   pub fn new() -> Self {
     Self {
-      version_service: BrowserVersionService::instance(),
+      version_service: BrowserVersionManager::instance(),
       auto_updater: AutoUpdater::instance(),
       app_handle: None,
     }

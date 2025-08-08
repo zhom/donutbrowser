@@ -11,8 +11,8 @@ use sysinfo::System;
 use tauri::Emitter;
 
 use crate::browser::{create_browser, BrowserType, ProxySettings};
-use crate::browser_version_service::{
-  BrowserVersionInfo, BrowserVersionService, BrowserVersionsResult,
+use crate::browser_version_manager::{
+  BrowserVersionInfo, BrowserVersionManager, BrowserVersionsResult,
 };
 use crate::camoufox::CamoufoxConfig;
 use crate::download::DownloadProgress;
@@ -1129,7 +1129,7 @@ impl BrowserRunner {
     }
 
     // Check if browser is supported on current platform before attempting download
-    let version_service = BrowserVersionService::instance();
+    let version_service = BrowserVersionManager::instance();
 
     if !version_service
       .is_browser_supported(&browser_str)
@@ -1582,13 +1582,13 @@ pub fn delete_profile(_app_handle: tauri::AppHandle, profile_name: String) -> Re
 
 #[tauri::command]
 pub fn get_supported_browsers() -> Result<Vec<String>, String> {
-  let service = BrowserVersionService::instance();
+  let service = BrowserVersionManager::instance();
   Ok(service.get_supported_browsers())
 }
 
 #[tauri::command]
 pub fn is_browser_supported_on_platform(browser_str: String) -> Result<bool, String> {
-  let service = BrowserVersionService::instance();
+  let service = BrowserVersionManager::instance();
   service
     .is_browser_supported(&browser_str)
     .map_err(|e| format!("Failed to check browser support: {e}"))
@@ -1598,14 +1598,14 @@ pub fn is_browser_supported_on_platform(browser_str: String) -> Result<bool, Str
 pub async fn fetch_browser_versions_cached_first(
   browser_str: String,
 ) -> Result<Vec<BrowserVersionInfo>, String> {
-  let service = BrowserVersionService::instance();
+  let service = BrowserVersionManager::instance();
 
   // Get cached versions immediately if available
   if let Some(cached_versions) = service.get_cached_browser_versions_detailed(&browser_str) {
     // Check if we should update cache in background
     if service.should_update_cache(&browser_str) {
       // Start background update but return cached data immediately
-      let service_clone = BrowserVersionService::instance();
+      let service_clone = BrowserVersionManager::instance();
       let browser_str_clone = browser_str.clone();
       tokio::spawn(async move {
         if let Err(e) = service_clone
@@ -1630,14 +1630,14 @@ pub async fn fetch_browser_versions_cached_first(
 pub async fn fetch_browser_versions_with_count_cached_first(
   browser_str: String,
 ) -> Result<BrowserVersionsResult, String> {
-  let service = BrowserVersionService::instance();
+  let service = BrowserVersionManager::instance();
 
   // Get cached versions immediately if available
   if let Some(cached_versions) = service.get_cached_browser_versions(&browser_str) {
     // Check if we should update cache in background
     if service.should_update_cache(&browser_str) {
       // Start background update but return cached data immediately
-      let service_clone = BrowserVersionService::instance();
+      let service_clone = BrowserVersionManager::instance();
       let browser_str_clone = browser_str.clone();
       tokio::spawn(async move {
         if let Err(e) = service_clone
@@ -1745,7 +1745,7 @@ pub async fn update_camoufox_config(
 pub async fn fetch_browser_versions_with_count(
   browser_str: String,
 ) -> Result<BrowserVersionsResult, String> {
-  let service = BrowserVersionService::instance();
+  let service = BrowserVersionManager::instance();
   service
     .fetch_browser_versions_with_count(&browser_str, false)
     .await
@@ -1761,8 +1761,8 @@ pub fn get_downloaded_browser_versions(browser_str: String) -> Result<Vec<String
 #[tauri::command]
 pub async fn get_browser_release_types(
   browser_str: String,
-) -> Result<crate::browser_version_service::BrowserReleaseTypes, String> {
-  let service = BrowserVersionService::instance();
+) -> Result<crate::browser_version_manager::BrowserReleaseTypes, String> {
+  let service = BrowserVersionManager::instance();
   service
     .get_browser_release_types(&browser_str)
     .await

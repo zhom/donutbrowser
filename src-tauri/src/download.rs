@@ -7,7 +7,7 @@ use tauri::Emitter;
 
 use crate::api_client::ApiClient;
 use crate::browser::BrowserType;
-use crate::browser_version_service::DownloadInfo;
+use crate::browser_version_manager::DownloadInfo;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DownloadProgress {
@@ -493,7 +493,7 @@ mod tests {
   use super::*;
   use crate::api_client::ApiClient;
   use crate::browser::BrowserType;
-  use crate::browser_version_service::DownloadInfo;
+  use crate::browser_version_manager::DownloadInfo;
 
   use tempfile::TempDir;
   use wiremock::matchers::{method, path};

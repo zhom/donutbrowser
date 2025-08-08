@@ -30,18 +30,18 @@ pub struct DownloadInfo {
   pub is_archive: bool, // true for .dmg, .zip, etc.
 }
 
-pub struct BrowserVersionService {
+pub struct BrowserVersionManager {
   api_client: &'static ApiClient,
 }
 
-impl BrowserVersionService {
+impl BrowserVersionManager {
   fn new() -> Self {
     Self {
       api_client: ApiClient::instance(),
     }
   }
 
-  pub fn instance() -> &'static BrowserVersionService {
+  pub fn instance() -> &'static BrowserVersionManager {
     &BROWSER_VERSION_SERVICE
   }
 
@@ -982,13 +982,13 @@ mod tests {
     )
   }
 
-  fn create_test_service(_api_client: ApiClient) -> &'static BrowserVersionService {
-    BrowserVersionService::instance()
+  fn create_test_service(_api_client: ApiClient) -> &'static BrowserVersionManager {
+    BrowserVersionManager::instance()
   }
 
   #[tokio::test]
-  async fn test_browser_version_service_creation() {
-    let _ = BrowserVersionService::instance();
+  async fn test_browser_version_manager_creation() {
+    let _ = BrowserVersionManager::instance();
     // Test passes if we can create the service without panicking
   }
 
@@ -1014,7 +1014,7 @@ mod tests {
 
   #[test]
   fn test_get_download_info() {
-    let service = BrowserVersionService::instance();
+    let service = BrowserVersionManager::instance();
 
     // Test Firefox - platform-specific expectations
     let firefox_info = service.get_download_info("firefox", "139.0").unwrap();
@@ -1219,5 +1219,5 @@ mod tests {
 
 // Global singleton instance
 lazy_static::lazy_static! {
-  static ref BROWSER_VERSION_SERVICE: BrowserVersionService = BrowserVersionService::new();
+  static ref BROWSER_VERSION_SERVICE: BrowserVersionManager = BrowserVersionManager::new();
 }

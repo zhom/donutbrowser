@@ -1,5 +1,5 @@
 use crate::api_client::is_browser_version_nightly;
-use crate::browser_version_service::{BrowserVersionInfo, BrowserVersionService};
+use crate::browser_version_manager::{BrowserVersionInfo, BrowserVersionManager};
 use crate::profile::BrowserProfile;
 use crate::settings_manager::SettingsManager;
 use serde::{Deserialize, Serialize};
@@ -29,14 +29,14 @@ pub struct AutoUpdateState {
 }
 
 pub struct AutoUpdater {
-  version_service: &'static BrowserVersionService,
+  version_service: &'static BrowserVersionManager,
   settings_manager: &'static SettingsManager,
 }
 
 impl AutoUpdater {
   fn new() -> Self {
     Self {
-      version_service: BrowserVersionService::instance(),
+      version_service: BrowserVersionManager::instance(),
       settings_manager: SettingsManager::instance(),
     }
   }
