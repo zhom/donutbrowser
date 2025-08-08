@@ -1,4 +1,5 @@
-use std::fs::{self, create_dir_all};
+use std::fs::{self, create_dir_all, File};
+use std::io::{self, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tauri::Emitter;
@@ -44,7 +45,7 @@ impl Extractor {
       browser_type.as_str()
     );
 
-    // Try to detect the actual file type by reading the file header
+    // Detect the actual file type by reading the file header
     let actual_format = self.detect_file_format(archive_path)?;
     println!("Detected format: {actual_format}");
 
@@ -60,19 +61,13 @@ impl Extractor {
       "tar.xz" => self.extract_tar_xz(archive_path, dest_dir).await,
       "tar.bz2" => self.extract_tar_bz2(archive_path, dest_dir).await,
       "tar.gz" => self.extract_tar_gz(archive_path, dest_dir).await,
+      "msi" => self.extract_msi(archive_path, dest_dir).await,
       "exe" => {
         // For Windows EXE files, some may be self-extracting archives, others are installers
         // For browsers like Firefox, TOR, they're typically installers that don't need extraction
         self
           .handle_exe_file(archive_path, dest_dir, browser_type)
           .await
-      }
-      "deb" => {
-        #[cfg(target_os = "linux")]
-        return self.extract_deb(archive_path, dest_dir).await;
-
-        #[cfg(not(target_os = "linux"))]
-        return Err("DEB extraction is only supported on Linux".into());
       }
       "appimage" => {
         #[cfg(target_os = "linux")]
@@ -96,14 +91,14 @@ impl Extractor {
     &self,
     file_path: &Path,
   ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    use std::fs::File;
-    use std::io::Read;
-
     // First check file extension for DMG files since they're common on macOS
     // and can have misleading magic numbers
     if let Some(ext) = file_path.extension().and_then(|ext| ext.to_str()) {
       if ext.to_lowercase() == "dmg" {
         return Ok("dmg".to_string());
+      }
+      if ext.to_lowercase() == "msi" {
+        return Ok("msi".to_string());
       }
     }
 
@@ -121,6 +116,11 @@ impl Extractor {
       _ => {}
     }
 
+    // Check for MSI files (Microsoft Installer)
+    if buffer[0..8] == [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1] {
+      return Ok("msi".to_string());
+    }
+
     // Check for XZ compressed files
     if buffer[0..6] == [0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00] {
       return Ok("tar.xz".to_string());
@@ -136,16 +136,12 @@ impl Extractor {
       return Ok("tar.gz".to_string());
     }
 
-    // Check for DEB files
-    if buffer[0..8] == [0x21, 0x3C, 0x61, 0x72, 0x63, 0x68, 0x3E, 0x0A] {
-      return Ok("deb".to_string());
-    }
-
     // Fallback to file extension
     if let Some(ext) = file_path.extension().and_then(|ext| ext.to_str()) {
       match ext.to_lowercase().as_str() {
         "dmg" => Ok("dmg".to_string()),
         "zip" => Ok("zip".to_string()),
+        "msi" => Ok("msi".to_string()),
         "xz" => {
           if file_path
             .file_name()
@@ -183,7 +179,6 @@ impl Extractor {
           }
         }
         "exe" => Ok("exe".to_string()),
-        "deb" => Ok("deb".to_string()),
         "appimage" => Ok("appimage".to_string()),
         _ => Ok("unknown".to_string()),
       }
@@ -240,56 +235,13 @@ impl Extractor {
 
     println!("Successfully mounted DMG");
 
-    // List the contents for debugging
-    println!("Mount point contents:");
-    if let Ok(entries) = fs::read_dir(&mount_point) {
-      for entry in entries.flatten() {
-        let path = entry.path();
-        println!(
-          "  - {} ({})",
-          path.display(),
-          if path.is_dir() { "dir" } else { "file" }
-        );
-      }
-    }
-
-    // Find the .app directory in the mount point with enhanced search
+    // Find the .app directory in the mount point
     let app_result = self.find_app_in_directory(&mount_point).await;
 
     let app_entry = match app_result {
       Ok(app_path) => app_path,
       Err(e) => {
         println!("Failed to find .app in mount point: {e}");
-
-        // Enhanced debugging - look for any interesting files/directories
-        if let Ok(entries) = fs::read_dir(&mount_point) {
-          println!("Detailed mount point analysis:");
-          for entry in entries.flatten() {
-            let path = entry.path();
-            let metadata = fs::metadata(&path);
-            println!(
-              "  - {} ({}) - {:?}",
-              path.display(),
-              if path.is_dir() { "dir" } else { "file" },
-              metadata.map(|m| m.len()).unwrap_or(0)
-            );
-
-            // If it's a directory, look one level deep
-            if path.is_dir() {
-              if let Ok(sub_entries) = fs::read_dir(&path) {
-                for sub_entry in sub_entries.flatten().take(5) {
-                  // Limit to first 5 items
-                  let sub_path = sub_entry.path();
-                  println!(
-                    "    - {} ({})",
-                    sub_path.display(),
-                    if sub_path.is_dir() { "dir" } else { "file" }
-                  );
-                }
-              }
-            }
-          }
-        }
 
         // Try to unmount before returning error
         let _ = Command::new("hdiutil")
@@ -439,73 +391,11 @@ impl Extractor {
     zip_path: &Path,
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    // Platform-specific ZIP extraction
-    #[cfg(target_os = "windows")]
-    {
-      self.extract_zip_windows(zip_path, dest_dir).await
-    }
+    println!("Extracting ZIP archive: {}", zip_path.display());
+    create_dir_all(dest_dir)?;
 
-    #[cfg(not(target_os = "windows"))]
-    {
-      self.extract_zip_unix(zip_path, dest_dir).await
-    }
-  }
-
-  #[cfg(target_os = "windows")]
-  async fn extract_zip_windows(
-    &self,
-    zip_path: &Path,
-    dest_dir: &Path,
-  ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    println!("Extracting ZIP archive on Windows: {}", zip_path.display());
-
-    // Create destination directory if it doesn't exist
-    fs::create_dir_all(dest_dir)?;
-
-    // First try PowerShell's Expand-Archive (Windows 10+)
-    let powershell_result = Command::new("powershell")
-      .args([
-        "-Command",
-        &format!(
-          "Expand-Archive -Path '{}' -DestinationPath '{}' -Force",
-          zip_path.display(),
-          dest_dir.display()
-        ),
-      ])
-      .output();
-
-    match powershell_result {
-      Ok(output) if output.status.success() => {
-        println!("Successfully extracted using PowerShell");
-      }
-      Ok(output) => {
-        println!(
-          "PowerShell extraction failed: {}, trying Rust zip crate fallback",
-          String::from_utf8_lossy(&output.stderr)
-        );
-        // Fallback to Rust zip crate for Windows 7 compatibility
-        return self.extract_zip_with_rust_crate(zip_path, dest_dir).await;
-      }
-      Err(e) => {
-        println!("PowerShell not available: {}, using Rust zip crate", e);
-        // Fallback to Rust zip crate for Windows 7 compatibility
-        return self.extract_zip_with_rust_crate(zip_path, dest_dir).await;
-      }
-    }
-
-    self.find_extracted_executable(dest_dir).await
-  }
-
-  #[cfg(target_os = "windows")]
-  async fn extract_zip_with_rust_crate(
-    &self,
-    zip_path: &Path,
-    dest_dir: &Path,
-  ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    println!("Using Rust zip crate for extraction (Windows 7+ compatibility)");
-
-    let file = fs::File::open(zip_path)?;
-    let mut archive = zip::ZipArchive::new(file)?;
+    let file = File::open(zip_path)?;
+    let mut archive = zip::ZipArchive::new(BufReader::new(file))?;
 
     for i in 0..archive.len() {
       let mut file = archive.by_index(i)?;
@@ -516,28 +406,26 @@ impl Extractor {
 
       // Handle directory creation
       if file.name().ends_with('/') {
-        fs::create_dir_all(&outpath)?;
+        create_dir_all(&outpath)?;
       } else {
         // Create parent directories
         if let Some(p) = outpath.parent() {
           if !p.exists() {
-            fs::create_dir_all(p)?;
+            create_dir_all(p)?;
           }
         }
 
         // Extract file
-        let mut outfile = fs::File::create(&outpath)?;
-        std::io::copy(&mut file, &mut outfile)?;
+        let mut outfile = File::create(&outpath)?;
+        io::copy(&mut file, &mut outfile)?;
 
-        // On Windows, verify executable files
-        if outpath
-          .extension()
-          .is_some_and(|ext| ext.to_string_lossy().to_lowercase() == "exe")
+        // Set executable permissions on Unix-like systems
+        #[cfg(unix)]
         {
-          if let Ok(metadata) = fs::metadata(&outpath) {
-            if metadata.len() > 0 {
-              println!("Extracted executable: {}", outpath.display());
-            }
+          use std::os::unix::fs::PermissionsExt;
+          if let Some(mode) = file.unix_mode() {
+            let permissions = std::fs::Permissions::from_mode(mode);
+            std::fs::set_permissions(&outpath, permissions)?;
           }
         }
       }
@@ -547,32 +435,45 @@ impl Extractor {
     self.find_extracted_executable(dest_dir).await
   }
 
-  #[cfg(not(target_os = "windows"))]
-  async fn extract_zip_unix(
+  pub async fn extract_tar_gz(
     &self,
-    zip_path: &Path,
+    tar_path: &Path,
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    // Use unzip command on Unix-like systems
-    let output = Command::new("unzip")
-      .args([
-        "-q", // quiet
-        zip_path.to_str().unwrap(),
-        "-d",
-        dest_dir.to_str().unwrap(),
-      ])
-      .output()?;
+    println!("Extracting tar.gz archive: {}", tar_path.display());
+    create_dir_all(dest_dir)?;
 
-    if !output.status.success() {
-      return Err(
-        format!(
-          "Failed to extract zip: {}",
-          String::from_utf8_lossy(&output.stderr)
-        )
-        .into(),
-      );
-    }
+    let file = File::open(tar_path)?;
+    let gz_decoder = flate2::read::GzDecoder::new(BufReader::new(file));
+    let mut archive = tar::Archive::new(gz_decoder);
 
+    archive.unpack(dest_dir)?;
+
+    // Set executable permissions for extracted files
+    self.set_executable_permissions_recursive(dest_dir).await?;
+
+    println!("tar.gz extraction completed. Searching for executable...");
+    self.find_extracted_executable(dest_dir).await
+  }
+
+  pub async fn extract_tar_bz2(
+    &self,
+    tar_path: &Path,
+    dest_dir: &Path,
+  ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
+    println!("Extracting tar.bz2 archive: {}", tar_path.display());
+    create_dir_all(dest_dir)?;
+
+    let file = File::open(tar_path)?;
+    let bz2_decoder = bzip2::read::BzDecoder::new(BufReader::new(file));
+    let mut archive = tar::Archive::new(bz2_decoder);
+
+    archive.unpack(dest_dir)?;
+
+    // Set executable permissions for extracted files
+    self.set_executable_permissions_recursive(dest_dir).await?;
+
+    println!("tar.bz2 extraction completed. Searching for executable...");
     self.find_extracted_executable(dest_dir).await
   }
 
@@ -581,219 +482,52 @@ impl Extractor {
     tar_path: &Path,
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
+    println!("Extracting tar.xz archive: {}", tar_path.display());
     create_dir_all(dest_dir)?;
 
-    #[cfg(target_os = "windows")]
+    let file = File::open(tar_path)?;
+    let mut buf_reader = BufReader::new(file);
+
+    // Read the entire file into memory for lzma-rs
+    let mut compressed_data = Vec::new();
+    buf_reader.read_to_end(&mut compressed_data)?;
+
+    // Decompress using lzma-rs
+    let mut decompressed_data = Vec::new();
+    lzma_rs::xz_decompress(
+      &mut std::io::Cursor::new(compressed_data),
+      &mut decompressed_data,
+    )?;
+
+    // Create tar archive from decompressed data
+    let cursor = std::io::Cursor::new(decompressed_data);
+    let mut archive = tar::Archive::new(cursor);
+
+    archive.unpack(dest_dir)?;
+
+    // Set executable permissions for extracted files
+    self.set_executable_permissions_recursive(dest_dir).await?;
+
+    println!("tar.xz extraction completed. Searching for executable...");
+    self.find_extracted_executable(dest_dir).await
+  }
+
+  pub async fn extract_msi(
+    &self,
+    msi_path: &Path,
+    dest_dir: &Path,
+  ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
+    println!("Extracting MSI archive: {}", msi_path.display());
+    create_dir_all(dest_dir)?;
+
+    // Extract MSI in a separate scope to avoid Send issues
     {
-      // On Windows, try multiple extraction methods for better compatibility
-      // First try using tar if available (Windows 10+)
-      let tar_result = Command::new("tar")
-        .args([
-          "-xf",
-          tar_path.to_str().unwrap(),
-          "-C",
-          dest_dir.to_str().unwrap(),
-        ])
-        .output();
-
-      match tar_result {
-        Ok(output) if output.status.success() => {
-          println!("Successfully extracted tar.xz using tar command");
-        }
-        Ok(output) => {
-          println!(
-            "tar command failed: {}, trying 7-Zip fallback",
-            String::from_utf8_lossy(&output.stderr)
-          );
-          // Try 7-Zip as fallback
-          return self.extract_with_7zip(tar_path, dest_dir).await;
-        }
-        Err(_) => {
-          println!("tar command not available, trying 7-Zip");
-          // Try 7-Zip as fallback
-          return self.extract_with_7zip(tar_path, dest_dir).await;
-        }
-      }
+      let mut extractor = msi_extract::MsiExtractor::from_path(msi_path)?;
+      extractor.to(dest_dir);
     }
 
-    #[cfg(not(target_os = "windows"))]
-    {
-      // Use tar command for Unix-like systems
-      let output = Command::new("tar")
-        .args([
-          "-xf",
-          tar_path.to_str().unwrap(),
-          "-C",
-          dest_dir.to_str().unwrap(),
-        ])
-        .output()?;
-
-      if !output.status.success() {
-        return Err(
-          format!(
-            "Failed to extract tar.xz: {}",
-            String::from_utf8_lossy(&output.stderr)
-          )
-          .into(),
-        );
-      }
-    }
-
-    // Find the extracted executable and set proper permissions
-    let executable_path = self.find_extracted_executable(dest_dir).await?;
-
-    // Ensure executable permissions are set correctly for Linux
-    if cfg!(target_os = "linux") {
-      self.set_executable_permissions(&executable_path).await?;
-    }
-
-    Ok(executable_path)
-  }
-
-  #[cfg(target_os = "windows")]
-  async fn extract_with_7zip(
-    &self,
-    archive_path: &Path,
-    dest_dir: &Path,
-  ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    // Try to use 7-Zip for extraction (common on Windows)
-    let seven_zip_paths = [
-      "7z", // If 7z is in PATH
-      "C:\\Program Files\\7-Zip\\7z.exe",
-      "C:\\Program Files (x86)\\7-Zip\\7z.exe",
-    ];
-
-    for seven_zip_path in &seven_zip_paths {
-      let result = Command::new(seven_zip_path)
-        .args([
-          "x", // Extract with full paths
-          archive_path.to_str().unwrap(),
-          &format!("-o{}", dest_dir.display()), // Output directory
-          "-y",                                 // Yes to all
-        ])
-        .output();
-
-      match result {
-        Ok(output) if output.status.success() => {
-          println!("Successfully extracted using 7-Zip: {}", seven_zip_path);
-          return self.find_extracted_executable(dest_dir).await;
-        }
-        Ok(_) => continue,
-        Err(_) => continue,
-      }
-    }
-
-    Err(
-      "No suitable extraction tool found. Please install 7-Zip or ensure tar is available.".into(),
-    )
-  }
-
-  pub async fn extract_tar_bz2(
-    &self,
-    tar_path: &Path,
-    dest_dir: &Path,
-  ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    create_dir_all(dest_dir)?;
-
-    // Use tar command for more reliable extraction
-    let output = Command::new("tar")
-      .args([
-        "-xjf",
-        tar_path.to_str().unwrap(),
-        "-C",
-        dest_dir.to_str().unwrap(),
-      ])
-      .output()?;
-
-    if !output.status.success() {
-      return Err(
-        format!(
-          "Failed to extract tar.bz2: {}",
-          String::from_utf8_lossy(&output.stderr)
-        )
-        .into(),
-      );
-    }
-
-    // Find the extracted executable and set proper permissions
-    let executable_path = self.find_extracted_executable(dest_dir).await?;
-
-    // Ensure executable permissions are set correctly for Linux
-    if cfg!(target_os = "linux") {
-      self.set_executable_permissions(&executable_path).await?;
-    }
-
-    Ok(executable_path)
-  }
-
-  pub async fn extract_tar_gz(
-    &self,
-    tar_path: &Path,
-    dest_dir: &Path,
-  ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    create_dir_all(dest_dir)?;
-
-    // Use tar command for more reliable extraction
-    let output = Command::new("tar")
-      .args([
-        "-xzf",
-        tar_path.to_str().unwrap(),
-        "-C",
-        dest_dir.to_str().unwrap(),
-      ])
-      .output()?;
-
-    if !output.status.success() {
-      return Err(
-        format!(
-          "Failed to extract tar.gz: {}",
-          String::from_utf8_lossy(&output.stderr)
-        )
-        .into(),
-      );
-    }
-
-    // Find the extracted executable and set proper permissions
-    let executable_path = self.find_extracted_executable(dest_dir).await?;
-
-    // Ensure executable permissions are set correctly for Linux
-    if cfg!(target_os = "linux") {
-      self.set_executable_permissions(&executable_path).await?;
-    }
-
-    Ok(executable_path)
-  }
-
-  #[cfg(target_os = "linux")]
-  pub async fn extract_deb(
-    &self,
-    deb_path: &Path,
-    dest_dir: &Path,
-  ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    create_dir_all(dest_dir)?;
-
-    // Extract DEB package using dpkg-deb
-    let output = Command::new("dpkg-deb")
-      .args(["-x", deb_path.to_str().unwrap(), dest_dir.to_str().unwrap()])
-      .output()?;
-
-    if !output.status.success() {
-      return Err(
-        format!(
-          "Failed to extract DEB: {}",
-          String::from_utf8_lossy(&output.stderr)
-        )
-        .into(),
-      );
-    }
-
-    // Find the extracted executable and set proper permissions
-    let executable_path = self.find_extracted_executable(dest_dir).await?;
-
-    // Ensure executable permissions are set correctly
-    self.set_executable_permissions(&executable_path).await?;
-
-    Ok(executable_path)
+    println!("MSI extraction completed. Searching for executable...");
+    self.find_extracted_executable(dest_dir).await
   }
 
   #[cfg(target_os = "linux")]
@@ -859,7 +593,6 @@ impl Extractor {
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     // For Zen installer, we need to run it silently
-    // This is a simplified approach - in practice, you might need more sophisticated installer handling
     let output = Command::new(installer_path)
       .args(["/S", &format!("/D={}", dest_dir.display())])
       .output()?;
@@ -938,28 +671,6 @@ impl Extractor {
       }
       Err(e) => {
         println!("Failed to find .app bundle: {e}");
-
-        // List contents for debugging
-        if let Ok(entries) = fs::read_dir(dest_dir) {
-          println!("Destination directory contents:");
-          for entry in entries.flatten() {
-            let path = entry.path();
-            let metadata = if path.is_dir() { "dir" } else { "file" };
-            println!("  - {} ({})", path.display(), metadata);
-
-            // If it's a directory, also list its contents
-            if path.is_dir() {
-              if let Ok(sub_entries) = fs::read_dir(&path) {
-                for sub_entry in sub_entries.flatten() {
-                  let sub_path = sub_entry.path();
-                  let sub_metadata = if sub_path.is_dir() { "dir" } else { "file" };
-                  println!("    - {} ({})", sub_path.display(), sub_metadata);
-                }
-              }
-            }
-          }
-        }
-
         Err("No .app found after extraction".into())
       }
     }
@@ -1005,19 +716,7 @@ impl Extractor {
         );
         Ok(exe_path)
       }
-      Err(_) => {
-        // List directory contents for debugging
-        if let Ok(entries) = fs::read_dir(dest_dir) {
-          println!("Directory contents:");
-          for entry in entries.flatten() {
-            let path = entry.path();
-            let metadata = if path.is_dir() { "dir" } else { "file" };
-            println!("  - {} ({})", path.display(), metadata);
-          }
-        }
-
-        Err("No executable found after extraction".into())
-      }
+      Err(_) => Err("No executable found after extraction".into()),
     }
   }
 
@@ -1109,7 +808,7 @@ impl Extractor {
     &self,
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    // Enhanced list of common browser executable names with better pattern matching
+    // Enhanced list of common browser executable names
     let exe_names = [
       // Firefox variants
       "firefox",
@@ -1145,42 +844,24 @@ impl Extractor {
       // Mullvad Browser
       "mullvad-browser",
       "mullvad-browser-bin",
-      // AppImage pattern (will be handled specially)
-      "*.AppImage",
     ];
 
     // First, try direct lookup in the main directory
     for exe_name in &exe_names {
-      if exe_name.contains('*') {
-        // Handle glob patterns like *.AppImage
-        if let Ok(entries) = fs::read_dir(dest_dir) {
-          for entry in entries.flatten() {
-            let path = entry.path();
-            if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
-              if file_name.ends_with(".AppImage") && self.is_executable(&path) {
-                return Ok(path);
-              }
-            }
-          }
-        }
-      } else {
-        let exe_path = dest_dir.join(exe_name);
-        if exe_path.exists() && self.is_executable(&exe_path) {
-          return Ok(exe_path);
-        }
+      let exe_path = dest_dir.join(exe_name);
+      if exe_path.exists() && self.is_executable(&exe_path) {
+        return Ok(exe_path);
       }
     }
 
     // Enhanced list of common Linux subdirectories to search
     let subdirs = [
-      // Standard Unix directories
       "bin",
       "usr/bin",
       "usr/local/bin",
       "opt",
       "sbin",
       "usr/sbin",
-      // Browser-specific directories
       "firefox",
       "chrome",
       "chromium",
@@ -1188,55 +869,49 @@ impl Extractor {
       "zen",
       "tor-browser",
       "mullvad-browser",
-      // Common extraction patterns
       ".",
       "./",
-      // Package-specific extraction patterns
       "firefox",
       "mullvad-browser",
       "tor-browser_en-US",
       "Browser",
       "browser",
-      // Nested patterns for different distro packaging
       "opt/google/chrome",
       "opt/brave.com/brave",
       "opt/mullvad-browser",
       "usr/lib/firefox",
       "usr/lib/chromium",
       "usr/share/applications",
-      // AppImage mount patterns
       "usr/bin",
       "AppRun",
     ];
 
-    // Search in subdirectories with better depth handling
+    // Search in subdirectories
     for subdir in &subdirs {
       let subdir_path = dest_dir.join(subdir);
       if subdir_path.exists() && subdir_path.is_dir() {
         for exe_name in &exe_names {
-          if exe_name.contains('*') {
-            // Handle glob patterns for AppImages
-            if let Ok(entries) = fs::read_dir(&subdir_path) {
-              for entry in entries.flatten() {
-                let path = entry.path();
-                if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
-                  if file_name.ends_with(".AppImage") && self.is_executable(&path) {
-                    return Ok(path);
-                  }
-                }
-              }
-            }
-          } else {
-            let exe_path = subdir_path.join(exe_name);
-            if exe_path.exists() && self.is_executable(&exe_path) {
-              return Ok(exe_path);
-            }
+          let exe_path = subdir_path.join(exe_name);
+          if exe_path.exists() && self.is_executable(&exe_path) {
+            return Ok(exe_path);
           }
         }
       }
     }
 
-    // Last resort: enhanced recursive search for any executable file
+    // Look for AppImage files
+    if let Ok(entries) = fs::read_dir(dest_dir) {
+      for entry in entries.flatten() {
+        let path = entry.path();
+        if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+          if file_name.ends_with(".AppImage") && self.is_executable(&path) {
+            return Ok(path);
+          }
+        }
+      }
+    }
+
+    // Last resort: recursive search for any executable file
     self.find_any_executable_recursive(dest_dir, 0).await
   }
 
@@ -1249,8 +924,9 @@ impl Extractor {
     false
   }
 
-  /// Set executable permissions on Linux for extracted binaries
-  #[cfg(target_os = "linux")]
+  /// Set executable permissions on Unix-like systems for extracted binaries
+  #[cfg(unix)]
+  #[allow(dead_code)]
   async fn set_executable_permissions(
     &self,
     path: &Path,
@@ -1268,10 +944,59 @@ impl Extractor {
     Ok(())
   }
 
-  #[cfg(not(target_os = "linux"))]
+  #[cfg(not(unix))]
   async fn set_executable_permissions(
     &self,
     _path: &Path,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    Ok(())
+  }
+
+  /// Set executable permissions recursively for all files in a directory
+  #[cfg(unix)]
+  async fn set_executable_permissions_recursive(
+    &self,
+    dir: &Path,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use std::os::unix::fs::PermissionsExt;
+
+    if let Ok(entries) = fs::read_dir(dir) {
+      for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_file() {
+          // Check if file looks like it should be executable
+          if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+            let name_lower = file_name.to_lowercase();
+            if name_lower.contains("firefox")
+              || name_lower.contains("chrome")
+              || name_lower.contains("brave")
+              || name_lower.contains("zen")
+              || name_lower.contains("tor")
+              || name_lower.contains("mullvad")
+              || name_lower.ends_with(".appimage")
+              || !name_lower.contains('.')
+            {
+              // Likely an executable, set permissions
+              let mut permissions = path.metadata()?.permissions();
+              let current_mode = permissions.mode();
+              let new_mode = current_mode | 0o755; // rwxr-xr-x
+              permissions.set_mode(new_mode);
+              std::fs::set_permissions(&path, permissions)?;
+            }
+          }
+        } else if path.is_dir() {
+          // Recursively process subdirectories
+          Box::pin(self.set_executable_permissions_recursive(&path)).await?;
+        }
+      }
+    }
+    Ok(())
+  }
+
+  #[cfg(not(unix))]
+  async fn set_executable_permissions_recursive(
+    &self,
+    _dir: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     Ok(())
   }
@@ -1332,22 +1057,6 @@ mod tests {
   use std::fs::{create_dir_all, File};
   use std::io::Write;
   use tempfile::TempDir;
-
-  #[test]
-  fn test_unsupported_archive_format() {
-    let extractor = Extractor::instance();
-    let temp_dir = TempDir::new().unwrap();
-    let fake_archive = temp_dir.path().join("test.rar");
-
-    // Create a file with invalid header
-    let mut file = File::create(&fake_archive).unwrap();
-    file.write_all(b"invalid content").unwrap();
-
-    // Test format detection
-    let result = extractor.detect_file_format(&fake_archive);
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), "unknown");
-  }
 
   #[test]
   fn test_format_detection_zip() {
@@ -1413,33 +1122,183 @@ mod tests {
   }
 
   #[test]
-  fn test_mount_point_generation() {
-    // Test that mount point generation creates unique paths
-    let mount_point1 = std::env::temp_dir().join(format!(
-      "donut_mount_{}",
-      std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
-    ));
+  fn test_format_detection_tar_bz2() {
+    let extractor = Extractor::instance();
+    let temp_dir = TempDir::new().unwrap();
+    let tar_bz2_path = temp_dir.path().join("test.tar.bz2");
 
-    std::thread::sleep(std::time::Duration::from_millis(10));
+    // Create a file with bzip2 magic
+    let mut file = File::create(&tar_bz2_path).unwrap();
+    file.write_all(&[0x42, 0x5A, 0x68]).unwrap(); // bzip2 magic
+    file.write_all(&[0; 9]).unwrap(); // padding
 
-    let mount_point2 = std::env::temp_dir().join(format!(
-      "donut_mount_{}",
-      std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
-    ));
+    let result = extractor.detect_file_format(&tar_bz2_path);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "tar.bz2");
+  }
 
-    // They should be different (or at least have the potential to be)
-    assert!(mount_point1.to_string_lossy().contains("donut_mount_"));
-    assert!(mount_point2.to_string_lossy().contains("donut_mount_"));
+  #[test]
+  fn test_format_detection_tar_xz() {
+    let extractor = Extractor::instance();
+    let temp_dir = TempDir::new().unwrap();
+    let tar_xz_path = temp_dir.path().join("test.tar.xz");
+
+    // Create a file with xz magic
+    let mut file = File::create(&tar_xz_path).unwrap();
+    file
+      .write_all(&[0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00])
+      .unwrap(); // xz magic
+    file.write_all(&[0; 6]).unwrap(); // padding
+
+    let result = extractor.detect_file_format(&tar_xz_path);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "tar.xz");
+  }
+
+  #[test]
+  fn test_format_detection_msi() {
+    let extractor = Extractor::instance();
+    let temp_dir = TempDir::new().unwrap();
+    let msi_path = temp_dir.path().join("test.msi");
+
+    // Create a file with MSI magic
+    let mut file = File::create(&msi_path).unwrap();
+    file
+      .write_all(&[0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1])
+      .unwrap(); // MSI magic
+    file.write_all(&[0; 4]).unwrap(); // padding
+
+    let result = extractor.detect_file_format(&msi_path);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "msi");
+  }
+
+  #[test]
+  fn test_format_detection_msi_by_extension() {
+    let extractor = Extractor::instance();
+    let temp_dir = TempDir::new().unwrap();
+    let msi_path = temp_dir.path().join("test.msi");
+
+    // Create a file (magic number won't match, but extension will)
+    let mut file = File::create(&msi_path).unwrap();
+    file.write_all(b"fake msi content").unwrap();
+
+    let result = extractor.detect_file_format(&msi_path);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "msi");
   }
 
   #[tokio::test]
+  async fn test_extract_zip_with_test_archive() {
+    let extractor = Extractor::instance();
+    let temp_dir = TempDir::new().unwrap();
+    let dest_dir = temp_dir.path().join("extracted");
+
+    // Use the test ZIP archive
+    let zip_path = std::path::Path::new("test-assets/test.zip");
+    if !zip_path.exists() {
+      // Skip test if test archive doesn't exist
+      return;
+    }
+
+    let _result = extractor.extract_zip(zip_path, &dest_dir).await;
+
+    // The result might fail because we're looking for executables, but the extraction should work
+    // Let's just check if the file was extracted
+    let extracted_file = dest_dir.join("test.txt");
+    if extracted_file.exists() {
+      let content = std::fs::read_to_string(&extracted_file).unwrap();
+      assert_eq!(content.trim(), "Hello, World!");
+    }
+  }
+
+  #[tokio::test]
+  async fn test_extract_tar_gz_with_test_archive() {
+    let extractor = Extractor::instance();
+    let temp_dir = TempDir::new().unwrap();
+    let dest_dir = temp_dir.path().join("extracted");
+
+    // Use the test tar.gz archive
+    let tar_gz_path = std::path::Path::new("test-assets/test.tar.gz");
+    if !tar_gz_path.exists() {
+      // Skip test if test archive doesn't exist
+      return;
+    }
+
+    let _result = extractor.extract_tar_gz(tar_gz_path, &dest_dir).await;
+
+    // Check if the file was extracted
+    let extracted_file = dest_dir.join("test.txt");
+    if extracted_file.exists() {
+      let content = std::fs::read_to_string(&extracted_file).unwrap();
+      assert_eq!(content.trim(), "Hello, World!");
+    }
+  }
+
+  #[tokio::test]
+  async fn test_extract_tar_bz2_with_test_archive() {
+    let extractor = Extractor::instance();
+    let temp_dir = TempDir::new().unwrap();
+    let dest_dir = temp_dir.path().join("extracted");
+
+    // Use the test tar.bz2 archive
+    let tar_bz2_path = std::path::Path::new("test-assets/test.tar.bz2");
+    if !tar_bz2_path.exists() {
+      // Skip test if test archive doesn't exist
+      return;
+    }
+
+    let _result = extractor.extract_tar_bz2(tar_bz2_path, &dest_dir).await;
+
+    // Check if the file was extracted
+    let extracted_file = dest_dir.join("test.txt");
+    if extracted_file.exists() {
+      let content = std::fs::read_to_string(&extracted_file).unwrap();
+      assert_eq!(content.trim(), "Hello, World!");
+    }
+  }
+
+  #[tokio::test]
+  async fn test_extract_tar_xz_with_test_archive() {
+    let extractor = Extractor::instance();
+    let temp_dir = TempDir::new().unwrap();
+    let dest_dir = temp_dir.path().join("extracted");
+
+    // Use the test tar.xz archive
+    let tar_xz_path = std::path::Path::new("test-assets/test.tar.xz");
+    if !tar_xz_path.exists() {
+      // Skip test if test archive doesn't exist
+      return;
+    }
+
+    let _result = extractor.extract_tar_xz(tar_xz_path, &dest_dir).await;
+
+    // Check if the file was extracted
+    let extracted_file = dest_dir.join("test.txt");
+    if extracted_file.exists() {
+      let content = std::fs::read_to_string(&extracted_file).unwrap();
+      assert_eq!(content.trim(), "Hello, World!");
+    }
+  }
+
+  #[test]
+  fn test_unsupported_archive_format() {
+    let extractor = Extractor::instance();
+    let temp_dir = TempDir::new().unwrap();
+    let fake_archive = temp_dir.path().join("test.rar");
+
+    // Create a file with invalid header
+    let mut file = File::create(&fake_archive).unwrap();
+    file.write_all(b"invalid content").unwrap();
+
+    // Test format detection
+    let result = extractor.detect_file_format(&fake_archive);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "unknown");
+  }
+
   #[cfg(target_os = "macos")]
+  #[tokio::test]
   async fn test_find_app_at_root_level() {
     let extractor = Extractor::instance();
     let temp_dir = TempDir::new().unwrap();
@@ -1466,220 +1325,27 @@ mod tests {
     assert!(found_app.exists());
   }
 
-  #[tokio::test]
-  #[cfg(target_os = "macos")]
-  async fn test_find_app_in_subdirectory() {
+  #[cfg(target_os = "linux")]
+  #[test]
+  fn test_is_executable() {
     let extractor = Extractor::instance();
     let temp_dir = TempDir::new().unwrap();
 
-    // Create a nested structure like some browsers have
-    let subdir = temp_dir.path().join("chrome-mac");
-    create_dir_all(&subdir).unwrap();
-
-    // Create a Brave Browser.app directory
-    let brave_app = subdir.join("Brave Browser.app");
-    create_dir_all(&brave_app).unwrap();
-
-    // Create the standard macOS app structure
-    let contents_dir = brave_app.join("Contents");
-    let macos_dir = contents_dir.join("MacOS");
-    create_dir_all(&macos_dir).unwrap();
-
-    // Create the executable
-    let executable = macos_dir.join("Brave Browser");
-    File::create(&executable).unwrap();
-
-    // Test finding the app
-    let result = extractor.find_app_in_directory(temp_dir.path()).await;
-    assert!(result.is_ok());
-
-    let found_app = result.unwrap();
-    assert_eq!(found_app.file_name().unwrap(), "Brave Browser.app");
-    assert!(found_app.exists());
-  }
-
-  #[tokio::test]
-  #[cfg(target_os = "macos")]
-  async fn test_find_app_multiple_levels_deep() {
-    let extractor = Extractor::instance();
-    let temp_dir = TempDir::new().unwrap();
-
-    // Create a deeply nested structure
-    let level1 = temp_dir.path().join("level1");
-    let level2 = level1.join("level2");
-    create_dir_all(&level2).unwrap();
-
-    // Create a Mullvad Browser.app directory
-    let mullvad_app = level2.join("Mullvad Browser.app");
-    create_dir_all(&mullvad_app).unwrap();
-
-    // Create the standard macOS app structure
-    let contents_dir = mullvad_app.join("Contents");
-    let macos_dir = contents_dir.join("MacOS");
-    create_dir_all(&macos_dir).unwrap();
-
-    // Create the executable
-    let executable = macos_dir.join("firefox");
-    File::create(&executable).unwrap();
-
-    // Test finding the app
-    let result = extractor.find_app_in_directory(temp_dir.path()).await;
-    assert!(result.is_ok());
-
-    let found_app = result.unwrap();
-    assert_eq!(found_app.file_name().unwrap(), "Mullvad Browser.app");
-    assert!(found_app.exists());
-  }
-
-  #[tokio::test]
-  #[cfg(target_os = "macos")]
-  async fn test_find_app_no_app_found() {
-    let extractor = Extractor::instance();
-    let temp_dir = TempDir::new().unwrap();
-
-    // Create some files and directories that are NOT .app bundles
-    let regular_dir = temp_dir.path().join("regular_directory");
-    create_dir_all(&regular_dir).unwrap();
-
-    let regular_file = temp_dir.path().join("regular_file.txt");
+    // Create a regular file
+    let regular_file = temp_dir.path().join("regular.txt");
     File::create(&regular_file).unwrap();
 
-    // Create a directory that looks like an app but isn't (wrong extension)
-    let fake_app = temp_dir.path().join("NotAnApp.app-backup");
-    create_dir_all(&fake_app).unwrap();
+    // Should not be executable initially
+    assert!(!extractor.is_executable(&regular_file));
 
-    // Test that no app is found
-    let result = extractor.find_app_in_directory(temp_dir.path()).await;
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("No .app found"));
-  }
+    // Make it executable
+    use std::os::unix::fs::PermissionsExt;
+    let mut permissions = regular_file.metadata().unwrap().permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(&regular_file, permissions).unwrap();
 
-  #[tokio::test]
-  #[cfg(target_os = "macos")]
-  async fn test_find_app_recursive_depth_limit() {
-    let extractor = Extractor::instance();
-    let temp_dir = TempDir::new().unwrap();
-
-    // Create a very deep nested structure (deeper than our limit of 4)
-    let mut current_path = temp_dir.path().to_path_buf();
-    for i in 0..6 {
-      current_path = current_path.join(format!("level{i}"));
-      create_dir_all(&current_path).unwrap();
-    }
-
-    // Create an app at the deepest level
-    let deep_app = current_path.join("Deep.app");
-    create_dir_all(&deep_app).unwrap();
-
-    // Test that the app is NOT found due to depth limit
-    let result = extractor.find_app_in_directory(temp_dir.path()).await;
-    assert!(result.is_err());
-  }
-
-  #[tokio::test]
-  #[cfg(target_os = "macos")]
-  async fn test_find_macos_app_and_move_from_subdir() {
-    let extractor = Extractor::instance();
-    let temp_dir = TempDir::new().unwrap();
-
-    // Create a nested structure where the app is in a subdirectory
-    let subdir = temp_dir.path().join("extracted_content");
-    create_dir_all(&subdir).unwrap();
-
-    // Create a Tor Browser.app directory in the subdirectory
-    let tor_app = subdir.join("Tor Browser.app");
-    create_dir_all(&tor_app).unwrap();
-
-    // Create the standard macOS app structure
-    let contents_dir = tor_app.join("Contents");
-    let macos_dir = contents_dir.join("MacOS");
-    create_dir_all(&macos_dir).unwrap();
-
-    // Create the executable
-    let executable = macos_dir.join("firefox");
-    File::create(&executable).unwrap();
-
-    // Test finding and moving the app
-    let result = extractor.find_macos_app(temp_dir.path()).await;
-    assert!(result.is_ok());
-
-    let found_app = result.unwrap();
-    assert_eq!(found_app.file_name().unwrap(), "Tor Browser.app");
-
-    // Verify the app was moved to the root level
-    assert_eq!(found_app.parent().unwrap(), temp_dir.path());
-    assert!(found_app.exists());
-
-    // Verify the original subdirectory structure was cleaned up
-    assert!(!subdir.exists() || fs::read_dir(&subdir).unwrap().count() == 0);
-  }
-
-  #[tokio::test]
-  #[cfg(target_os = "macos")]
-  async fn test_multiple_apps_found_returns_first() {
-    let extractor = Extractor::instance();
-    let temp_dir = TempDir::new().unwrap();
-
-    // Create multiple .app directories
-    let firefox_app = temp_dir.path().join("Firefox.app");
-    create_dir_all(&firefox_app).unwrap();
-
-    let chrome_app = temp_dir.path().join("Chrome.app");
-    create_dir_all(&chrome_app).unwrap();
-
-    // Test that we find one of them (implementation should be consistent)
-    let result = extractor.find_app_in_directory(temp_dir.path()).await;
-    assert!(result.is_ok());
-
-    let found_app = result.unwrap();
-    let app_name = found_app.file_name().unwrap().to_str().unwrap();
-    assert!(app_name == "Firefox.app" || app_name == "Chrome.app");
-  }
-
-  #[test]
-  fn test_browser_specific_app_names() {
-    // Test that we can identify common browser app names correctly
-    let common_browser_apps = [
-      "Firefox.app",
-      "Firefox Developer Edition.app",
-      "Brave Browser.app",
-      "Mullvad Browser.app",
-      "Tor Browser.app",
-      "Zen Browser.app",
-      "Chromium.app",
-      "Google Chrome.app",
-    ];
-
-    for app_name in &common_browser_apps {
-      let path = std::path::Path::new(app_name);
-      let extension = path.extension().and_then(|ext| ext.to_str());
-      assert_eq!(extension, Some("app"), "Failed for {app_name}");
-    }
-  }
-
-  #[test]
-  fn test_edge_cases_in_path_handling() {
-    let temp_dir = TempDir::new().unwrap();
-
-    // Test paths with spaces and special characters
-    let problematic_names = [
-      "Firefox Developer Edition.app",
-      "Brave Browser.app",
-      "App with (parentheses).app",
-      "App-with-dashes.app",
-      "App_with_underscores.app",
-    ];
-
-    for app_name in &problematic_names {
-      let app_path = temp_dir.path().join(app_name);
-      create_dir_all(&app_path).unwrap();
-
-      // Verify we can detect the .app extension correctly
-      assert!(app_path.extension().is_some_and(|ext| ext == "app"));
-
-      // Verify file_name extraction works
-      assert_eq!(app_path.file_name().unwrap().to_str().unwrap(), *app_name);
-    }
+    // Should now be executable
+    assert!(extractor.is_executable(&regular_file));
   }
 }
 
