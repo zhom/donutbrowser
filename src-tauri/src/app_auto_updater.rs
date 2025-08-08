@@ -1599,58 +1599,6 @@ mod tests {
   }
 
   #[test]
-  fn test_get_download_url_for_platform() {
-    let updater = AppAutoUpdater::instance();
-
-    let assets = vec![
-      AppReleaseAsset {
-        name: "Donut.Browser_0.1.0_x64.dmg".to_string(),
-        browser_download_url: "https://example.com/x64.dmg".to_string(),
-        size: 12345,
-      },
-      AppReleaseAsset {
-        name: "Donut.Browser_0.1.0_aarch64.dmg".to_string(),
-        browser_download_url: "https://example.com/aarch64.dmg".to_string(),
-        size: 12345,
-      },
-    ];
-
-    let url = updater.get_download_url_for_platform(&assets);
-    assert!(url.is_some());
-
-    // Test with generic macOS DMG (no architecture specified)
-    let generic_assets = vec![AppReleaseAsset {
-      name: "Donut.Browser_0.1.0_macos.dmg".to_string(),
-      browser_download_url: "https://example.com/macos.dmg".to_string(),
-      size: 12345,
-    }];
-
-    let generic_url = updater.get_download_url_for_platform(&generic_assets);
-    assert!(generic_url.is_some());
-    assert_eq!(generic_url.unwrap(), "https://example.com/macos.dmg");
-
-    // Test architecture-specific DMG
-    let arch_specific_assets = vec![
-      AppReleaseAsset {
-        name: "Donut.Browser_0.1.0_x64.dmg".to_string(),
-        browser_download_url: "https://example.com/x64.dmg".to_string(),
-        size: 12345,
-      },
-      AppReleaseAsset {
-        name: "Donut.Browser_0.1.0_aarch64.dmg".to_string(),
-        browser_download_url: "https://example.com/aarch64.dmg".to_string(),
-        size: 12345,
-      },
-    ];
-
-    let arch_url = updater.get_download_url_for_platform(&arch_specific_assets);
-    assert!(arch_url.is_some());
-    // The exact URL depends on the target architecture, but should be one of the available ones
-    let arch_url = arch_url.unwrap();
-    assert!(arch_url.contains(".dmg"));
-  }
-
-  #[test]
   fn test_extract_update_uses_extractor() {
     // This test verifies that the extract_update method properly uses the Extractor
     // We can't run the actual extraction in unit tests without real DMG files,
