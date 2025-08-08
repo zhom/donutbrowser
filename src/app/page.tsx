@@ -19,7 +19,6 @@ import { ProfileSelectorDialog } from "@/components/profile-selector-dialog";
 import { ProxyManagementDialog } from "@/components/proxy-management-dialog";
 import { ProxySettingsDialog } from "@/components/proxy-settings-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useAppUpdateNotifications } from "@/hooks/use-app-update-notifications";
 import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -727,46 +726,44 @@ export default function Home() {
 
   return (
     <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen gap-8 font-[family-name:var(--font-geist-sans)]  bg-white dark:bg-black">
-      <main className="flex flex-col row-start-2 gap-8 items-center w-full max-w-3xl">
-        <Card className="gap-2 w-full">
-          <CardHeader>
-            <HomeHeader
-              selectedProfiles={selectedProfiles}
-              onBulkDelete={handleBulkDelete}
-              onBulkGroupAssignment={handleBulkGroupAssignment}
-              onCreateProfileDialogOpen={setCreateProfileDialogOpen}
-              onGroupManagementDialogOpen={setGroupManagementDialogOpen}
-              onImportProfileDialogOpen={setImportProfileDialogOpen}
-              onProxyManagementDialogOpen={setProxyManagementDialogOpen}
-              onSettingsDialogOpen={setSettingsDialogOpen}
-            />
-          </CardHeader>
-          <CardContent>
-            <GroupBadges
-              selectedGroupId={selectedGroupId}
-              onGroupSelect={handleSelectGroup}
-              groups={groups}
-              isLoading={areGroupsLoading}
-            />
-            <ProfilesDataTable
-              data={profiles}
-              onLaunchProfile={launchProfile}
-              onKillProfile={handleKillProfile}
-              onProxySettings={openProxyDialog}
-              onDeleteProfile={handleDeleteProfile}
-              onRenameProfile={handleRenameProfile}
-              onChangeVersion={openChangeVersionDialog}
-              onConfigureCamoufox={handleConfigureCamoufox}
-              runningProfiles={runningProfiles}
-              isUpdating={isUpdating}
-              onDeleteSelectedProfiles={handleDeleteSelectedProfiles}
-              onAssignProfilesToGroup={handleAssignProfilesToGroup}
-              selectedGroupId={selectedGroupId}
-              selectedProfiles={selectedProfiles}
-              onSelectedProfilesChange={setSelectedProfiles}
-            />
-          </CardContent>
-        </Card>
+      <main className="flex flex-col row-start-2 gap-6 items-center w-full max-w-3xl">
+        <div className="w-full">
+          <HomeHeader
+            selectedProfiles={selectedProfiles}
+            onBulkDelete={handleBulkDelete}
+            onBulkGroupAssignment={handleBulkGroupAssignment}
+            onCreateProfileDialogOpen={setCreateProfileDialogOpen}
+            onGroupManagementDialogOpen={setGroupManagementDialogOpen}
+            onImportProfileDialogOpen={setImportProfileDialogOpen}
+            onProxyManagementDialogOpen={setProxyManagementDialogOpen}
+            onSettingsDialogOpen={setSettingsDialogOpen}
+          />
+        </div>
+        <div className="space-y-4 w-full">
+          <GroupBadges
+            selectedGroupId={selectedGroupId}
+            onGroupSelect={handleSelectGroup}
+            groups={groups}
+            isLoading={areGroupsLoading}
+          />
+          <ProfilesDataTable
+            data={profiles}
+            onLaunchProfile={launchProfile}
+            onKillProfile={handleKillProfile}
+            onProxySettings={openProxyDialog}
+            onDeleteProfile={handleDeleteProfile}
+            onRenameProfile={handleRenameProfile}
+            onChangeVersion={openChangeVersionDialog}
+            onConfigureCamoufox={handleConfigureCamoufox}
+            runningProfiles={runningProfiles}
+            isUpdating={isUpdating}
+            onDeleteSelectedProfiles={handleDeleteSelectedProfiles}
+            onAssignProfilesToGroup={handleAssignProfilesToGroup}
+            selectedGroupId={selectedGroupId}
+            selectedProfiles={selectedProfiles}
+            onSelectedProfilesChange={setSelectedProfiles}
+          />
+        </div>
       </main>
 
       <ProxySettingsDialog
