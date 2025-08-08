@@ -763,8 +763,6 @@ export function ProfilesDataTable({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={() => {
                       onProxySettings(profile);
