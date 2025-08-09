@@ -419,10 +419,7 @@ pub fn run() {
         let start_time = std::time::Instant::now();
 
         // Send a ping request to nodecar to trigger unpacking/warm-up
-        match tokio::process::Command::new("nodecar")
-          .output()
-          .await
-        {
+        match tokio::process::Command::new("nodecar").output().await {
           Ok(output) => {
             let duration = start_time.elapsed();
             if output.status.success() {
