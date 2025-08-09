@@ -1904,6 +1904,73 @@ mod tests {
       }
     }
   }
+
+  #[test]
+  fn test_appimage_detection_logic() {
+    let updater = AppAutoUpdater::instance();
+
+    // Test that the get_download_url_for_platform method properly handles AppImage detection
+    // This test can run on all platforms
+
+    // Create comprehensive assets for all platforms including AppImage
+    let all_assets = vec![
+      // macOS assets
+      AppReleaseAsset {
+        name: "Donut.Browser_0.1.0_aarch64.dmg".to_string(),
+        browser_download_url: "https://example.com/aarch64.dmg".to_string(),
+        size: 12345,
+      },
+      // Windows assets
+      AppReleaseAsset {
+        name: "Donut.Browser_0.1.0_x64.msi".to_string(),
+        browser_download_url: "https://example.com/x64.msi".to_string(),
+        size: 12345,
+      },
+      // Linux assets
+      AppReleaseAsset {
+        name: "donutbrowser_0.1.0_amd64.deb".to_string(),
+        browser_download_url: "https://example.com/amd64.deb".to_string(),
+        size: 12345,
+      },
+      AppReleaseAsset {
+        name: "Donut.Browser-0.1.0-x86_64.AppImage".to_string(),
+        browser_download_url: "https://example.com/x86_64.AppImage".to_string(),
+        size: 12345,
+      },
+    ];
+
+    // Test that the method returns a URL for the current platform
+    let url = updater.get_download_url_for_platform(&all_assets);
+
+    // On non-Linux platforms, should always return a URL
+    #[cfg(not(target_os = "linux"))]
+    {
+      assert!(
+        url.is_some(),
+        "Should find a suitable download URL for non-Linux platforms"
+      );
+      let url_str = url.unwrap();
+      assert!(
+        !url_str.contains("AppImage"),
+        "Non-Linux platforms should not get AppImage downloads"
+      );
+    }
+
+    // On Linux platforms, behavior depends on AppImage detection
+    #[cfg(target_os = "linux")]
+    {
+      // The URL might be None if AppImage is detected, or Some if not
+      // This is expected behavior based on our implementation
+      if let Some(url_str) = url {
+        // If we get a URL, it should not be an AppImage
+        assert!(
+          !url_str.contains("AppImage"),
+          "Should not select AppImage format"
+        );
+      }
+      // If url is None, it means AppImage was detected and auto-updates are disabled
+    }
+  }
 }
 
 // Global singleton instance
