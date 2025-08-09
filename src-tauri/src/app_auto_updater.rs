@@ -72,6 +72,16 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tauri::Emitter;
 
+#[cfg(target_os = "linux")]
+#[derive(Debug, Clone)]
+enum LinuxInstallationMethod {
+  Deb,      // Installed via DEB package
+  Rpm,      // Installed via RPM package
+  AppImage, // Running from AppImage
+  Manual,   // Manually installed (e.g., extracted tarball)
+  Unknown,  // Cannot determine
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AppReleaseAsset {
   pub name: String,
@@ -300,6 +310,116 @@ impl AppAutoUpdater {
     (major, minor, patch)
   }
 
+  /// Detect if we're running from an AppImage
+  #[cfg(target_os = "linux")]
+  fn is_running_from_appimage(&self) -> bool {
+    // Check APPIMAGE environment variable first
+    if std::env::var("APPIMAGE").is_ok() {
+      return true;
+    }
+
+    // Check if current executable path looks like an AppImage
+    if let Ok(exe_path) = std::env::current_exe() {
+      if let Some(file_name) = exe_path.file_name().and_then(|n| n.to_str()) {
+        if file_name.to_lowercase().contains("appimage") {
+          return true;
+        }
+      }
+
+      // Check if the executable is in a temporary mount point (typical for AppImages)
+      if let Some(path_str) = exe_path.to_str() {
+        if path_str.contains("/tmp/.mount_") || path_str.contains("/tmp/appimage") {
+          return true;
+        }
+      }
+    }
+
+    false
+  }
+
+  /// Detect how the application was installed on Linux
+  #[cfg(target_os = "linux")]
+  fn detect_linux_installation_method(&self) -> LinuxInstallationMethod {
+    // First check if we're running from an AppImage
+    if self.is_running_from_appimage() {
+      return LinuxInstallationMethod::AppImage;
+    }
+
+    // Get current executable path
+    let exe_path = match std::env::current_exe() {
+      Ok(path) => path,
+      Err(_) => return LinuxInstallationMethod::Unknown,
+    };
+
+    let exe_path_str = exe_path.to_string_lossy();
+    println!("Detecting installation method for: {exe_path_str}");
+
+    // Check if installed via package manager by querying package databases
+    if let Some(exe_name) = exe_path.file_name().and_then(|n| n.to_str()) {
+      // Try to find the package that owns this file
+
+      // Check DEB systems (dpkg)
+      if let Ok(output) = Command::new("dpkg").args(["-S", &exe_path_str]).output() {
+        if output.status.success() {
+          let stdout = String::from_utf8_lossy(&output.stdout);
+          if !stdout.trim().is_empty() && !stdout.contains("no path found") {
+            println!("Found DEB package owning the executable");
+            return LinuxInstallationMethod::Deb;
+          }
+        }
+      }
+
+      // Check RPM systems (rpm)
+      if let Ok(output) = Command::new("rpm").args(["-qf", &exe_path_str]).output() {
+        if output.status.success() {
+          let stdout = String::from_utf8_lossy(&output.stdout);
+          if !stdout.trim().is_empty() && !stdout.contains("not owned") {
+            println!("Found RPM package owning the executable");
+            return LinuxInstallationMethod::Rpm;
+          }
+        }
+      }
+
+      // Alternative RPM check with different systems
+      for rpm_cmd in &["dnf", "yum", "zypper"] {
+        if let Ok(output) = Command::new(rpm_cmd)
+          .args(["provides", &exe_path_str])
+          .output()
+        {
+          if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if !stdout.trim().is_empty() && stdout.contains(exe_name) {
+              println!("Found RPM package via {rpm_cmd}");
+              return LinuxInstallationMethod::Rpm;
+            }
+          }
+        }
+      }
+    }
+
+    // Check installation location to infer method
+    if exe_path_str.starts_with("/usr/bin/") || exe_path_str.starts_with("/usr/local/bin/") {
+      // Likely installed via package manager or system-wide installation
+      println!("Executable in system directory, assuming package installation");
+
+      // Try to determine which package system is available
+      if Command::new("dpkg").arg("--version").output().is_ok() {
+        return LinuxInstallationMethod::Deb;
+      } else if Command::new("rpm").arg("--version").output().is_ok() {
+        return LinuxInstallationMethod::Rpm;
+      }
+
+      return LinuxInstallationMethod::Manual;
+    } else if exe_path_str.contains("/.local/") || exe_path_str.starts_with("/home/") {
+      // User-local installation
+      println!("Executable in user directory, assuming manual installation");
+      return LinuxInstallationMethod::Manual;
+    }
+
+    println!("Could not determine installation method");
+    LinuxInstallationMethod::Unknown
+  }
+
   /// Get the appropriate download URL for the current platform
   fn get_download_url_for_platform(&self, assets: &[AppReleaseAsset]) -> Option<String> {
     let arch = if cfg!(target_arch = "aarch64") {
@@ -311,6 +431,15 @@ impl AppAutoUpdater {
     };
 
     println!("Looking for platform-specific asset for arch: {arch}");
+
+    #[cfg(target_os = "linux")]
+    {
+      // If we're running from an AppImage, disable auto-updates for safety
+      if self.is_running_from_appimage() {
+        println!("Running from AppImage - auto-updates disabled for safety");
+        return None;
+      }
+    }
 
     #[cfg(target_os = "macos")]
     {
@@ -437,8 +566,23 @@ impl AppAutoUpdater {
 
   #[cfg(target_os = "linux")]
   fn get_linux_download_url(&self, assets: &[AppReleaseAsset], arch: &str) -> Option<String> {
-    // Priority order: DEB > RPM > AppImage > TAR.GZ
-    let extensions = ["deb", "rpm", "appimage", "tar.gz"];
+    // Detect installation method to prioritize appropriate formats
+    let installation_method = self.detect_linux_installation_method();
+    println!("Detected Linux installation method: {installation_method:?}");
+
+    // Priority order based on installation method
+    let extensions = match installation_method {
+      LinuxInstallationMethod::Deb => vec!["deb", "tar.gz"],
+      LinuxInstallationMethod::Rpm => vec!["rpm", "tar.gz"],
+      LinuxInstallationMethod::AppImage => {
+        // AppImages should not auto-update for safety
+        println!("AppImage installation detected - auto-updates disabled");
+        return None;
+      }
+      LinuxInstallationMethod::Manual | LinuxInstallationMethod::Unknown => {
+        vec!["deb", "rpm", "tar.gz"]
+      }
+    };
 
     for ext in &extensions {
       // Look for exact architecture match
@@ -1121,77 +1265,40 @@ impl AppAutoUpdater {
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("Installing AppImage: {}", appimage_path.display());
 
+    // This function should not be called for AppImages since we disable auto-updates for them
+    // But if it somehow gets called, we'll handle it safely
+
+    if !self.is_running_from_appimage() {
+      return Err("AppImage installation attempted but not running from AppImage".into());
+    }
+
     let current_exe = self.get_current_app_path()?;
 
-    // Detect if we're running from an AppImage
-    if let Ok(appimage_env) = std::env::var("APPIMAGE") {
-      // We're running from an AppImage, replace it
-      let current_appimage = PathBuf::from(appimage_env);
-
-      // Create backup
-      let backup_path = current_appimage.with_extension("appimage.backup");
-      if backup_path.exists() {
-        fs::remove_file(&backup_path)?;
-      }
-      fs::copy(&current_appimage, &backup_path)?;
-
-      // Make new AppImage executable
-      let _ = Command::new("chmod")
-        .args(["+x", appimage_path.to_str().unwrap()])
-        .output();
-
-      // Replace the AppImage
-      fs::copy(appimage_path, &current_appimage)?;
-
-      println!("AppImage replacement completed successfully");
-      Ok(())
+    // Detect if we're running from an AppImage using multiple methods
+    let current_appimage = if let Ok(appimage_env) = std::env::var("APPIMAGE") {
+      PathBuf::from(appimage_env)
     } else {
-      // We're not running from AppImage, try to install to standard location
-      let install_dir = directories::UserDirs::new()
-        .ok_or("Could not determine user directories")?
-        .home_dir()
-        .join(".local/bin");
+      // Fallback: use current executable path
+      current_exe.clone()
+    };
 
-      fs::create_dir_all(&install_dir)?;
-
-      let app_name = current_exe
-        .file_stem()
-        .and_then(|name| name.to_str())
-        .unwrap_or("donutbrowser");
-
-      let install_path = install_dir.join(format!("{app_name}.AppImage"));
-
-      // Make AppImage executable
-      let _ = Command::new("chmod")
-        .args(["+x", appimage_path.to_str().unwrap()])
-        .output();
-
-      // Copy to install location
-      fs::copy(appimage_path, &install_path)?;
-
-      // Try to create desktop entry
-      if let Some(user_dirs) = directories::UserDirs::new() {
-        let desktop_dir = user_dirs.home_dir().join(".local/share/applications");
-        let _ = fs::create_dir_all(&desktop_dir);
-
-        let desktop_file = desktop_dir.join(format!("{app_name}.desktop"));
-        let desktop_content = format!(
-          r#"[Desktop Entry]
-Name=Donut Browser
-Exec={}
-Icon=donutbrowser
-Type=Application
-Categories=Network;WebBrowser;
-"#,
-          install_path.to_str().unwrap()
-        );
-
-        let _ = fs::write(desktop_file, desktop_content);
-      }
-
-      println!("AppImage installation completed successfully");
-      Ok(())
+    // Create backup
+    let backup_path = current_appimage.with_extension("appimage.backup");
+    if backup_path.exists() {
+      fs::remove_file(&backup_path)?;
     }
+    fs::copy(&current_appimage, &backup_path)?;
+
+    // Make new AppImage executable
+    let _ = Command::new("chmod")
+      .args(["+x", appimage_path.to_str().unwrap()])
+      .output();
+
+    // Replace the AppImage
+    fs::copy(appimage_path, &current_appimage)?;
+
+    println!("AppImage replacement completed successfully");
+    Ok(())
   }
 
   /// Install Linux tarball
@@ -1738,6 +1845,63 @@ mod tests {
         !error_msg.contains("Unsupported archive format"),
         "tar.gz should be supported but got: {error_msg}"
       );
+    }
+  }
+
+  #[cfg(target_os = "linux")]
+  #[test]
+  fn test_appimage_detection() {
+    let updater = AppAutoUpdater::instance();
+
+    // Test that AppImage detection works with various scenarios
+    // Note: These tests can't fully simulate AppImage environment without actual AppImage
+
+    // Test that the method exists and doesn't panic
+    let _is_appimage = updater.is_running_from_appimage();
+
+    // Test installation method detection
+    let _method = updater.detect_linux_installation_method();
+  }
+
+  #[cfg(target_os = "linux")]
+  #[test]
+  fn test_appimage_auto_update_disabled() {
+    let updater = AppAutoUpdater::instance();
+
+    // Create mock assets including AppImage
+    let assets = vec![
+      AppReleaseAsset {
+        name: "donutbrowser_0.1.0_amd64.deb".to_string(),
+        browser_download_url: "https://example.com/amd64.deb".to_string(),
+        size: 12345,
+      },
+      AppReleaseAsset {
+        name: "Donut.Browser-0.1.0-x86_64.AppImage".to_string(),
+        browser_download_url: "https://example.com/x86_64.AppImage".to_string(),
+        size: 12345,
+      },
+    ];
+
+    // If we're running from AppImage, should return None (disabled)
+    // If not, should return a suitable download URL
+    let url = updater.get_download_url_for_platform(&assets);
+
+    // The test should pass regardless of whether we're in AppImage or not
+    // If in AppImage: url should be None
+    // If not in AppImage: url should be Some(...)
+    if updater.is_running_from_appimage() {
+      assert!(
+        url.is_none(),
+        "Auto-updates should be disabled for AppImages"
+      );
+    } else {
+      // Should find a suitable non-AppImage download
+      if let Some(url_str) = url {
+        assert!(
+          !url_str.contains("AppImage"),
+          "Should not select AppImage when not running from AppImage"
+        );
+      }
     }
   }
 }
