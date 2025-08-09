@@ -420,7 +420,6 @@ pub fn run() {
 
         // Send a ping request to nodecar to trigger unpacking/warm-up
         match tokio::process::Command::new("nodecar")
-          .arg("--version")
           .output()
           .await
         {
