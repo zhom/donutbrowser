@@ -1156,11 +1156,6 @@ impl BrowserRunner {
     browser_dir.push(browser_type.as_str());
     browser_dir.push(&version);
 
-    // Clean up any failed previous download
-    if let Err(e) = registry.cleanup_failed_download(&browser_str, &version) {
-      println!("Warning: Failed to cleanup previous download: {e}");
-    }
-
     create_dir_all(&browser_dir).map_err(|e| format!("Failed to create browser directory: {e}"))?;
 
     // Mark download as started in registry
@@ -1171,7 +1166,9 @@ impl BrowserRunner {
 
     // Use the download module
     let downloader = crate::download::Downloader::instance();
-    let download_path = match downloader
+    // Attempt to download the archive. If the download fails but an archive with the
+    // expected filename already exists (manual download), continue using that file.
+    let download_path: PathBuf = match downloader
       .download_browser(
         &app_handle,
         browser_type.clone(),
@@ -1183,15 +1180,25 @@ impl BrowserRunner {
     {
       Ok(path) => path,
       Err(e) => {
-        // Clean up failed download
-        let _ = registry.cleanup_failed_download(&browser_str, &version);
-        let _ = registry.save();
-        // Remove browser-version pair from downloading set on error
-        {
-          let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
-          downloading.remove(&download_key);
+        // Check if the expected archive is already present (manual download)
+        let expected_archive_path = browser_dir.join(&download_info.filename);
+        if expected_archive_path.exists() {
+          println!(
+            "Download failed, but found existing archive at {}. Continuing with extraction.",
+            expected_archive_path.display()
+          );
+          expected_archive_path
+        } else {
+          // Remove only the registry entry; keep any files (including a partially downloaded archive)
+          let _ = registry.remove_browser(&browser_str, &version);
+          let _ = registry.save();
+          // Remove browser-version pair from downloading set on error
+          {
+            let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
+            downloading.remove(&download_key);
+          }
+          return Err(format!("Failed to download browser: {e}").into());
         }
-        return Err(format!("Failed to download browser: {e}").into());
       }
     };
 
@@ -1209,14 +1216,12 @@ impl BrowserRunner {
         .await
       {
         Ok(_) => {
-          // Clean up the downloaded archive
-          if let Err(e) = std::fs::remove_file(&download_path) {
-            println!("Warning: Could not delete archive file: {e}");
-          }
+          // Do not remove the archive here. We keep it until verification succeeds.
         }
         Err(e) => {
-          // Clean up failed download
-          let _ = registry.cleanup_failed_download(&browser_str, &version);
+          // Do not remove the archive or extracted files. Just drop the registry entry
+          // so it won't be reported as downloaded.
+          let _ = registry.remove_browser(&browser_str, &version);
           let _ = registry.save();
           // Remove browser-version pair from downloading set on error
           {
@@ -1303,7 +1308,8 @@ impl BrowserRunner {
         }
       }
 
-      let _ = registry.cleanup_failed_download(&browser_str, &version);
+      // Do not delete files on verification failure; keep archive for manual retry.
+      let _ = registry.remove_browser(&browser_str, &version);
       let _ = registry.save();
       // Remove browser-version pair from downloading set on verification failure
       {
@@ -1319,6 +1325,16 @@ impl BrowserRunner {
     registry
       .save()
       .map_err(|e| format!("Failed to save registry: {e}"))?;
+
+    // Now that verification succeeded, remove the archive file if it exists
+    if download_info.is_archive {
+      let archive_path = browser_dir.join(&download_info.filename);
+      if archive_path.exists() {
+        if let Err(e) = std::fs::remove_file(&archive_path) {
+          println!("Warning: Could not delete archive file after verification: {e}");
+        }
+      }
+    }
 
     // If this is Camoufox, automatically download GeoIP database
     if browser_str == "camoufox" {
