@@ -176,6 +176,7 @@ jobs:
           BUILD_TAG: "nightly-${{ steps.timestamp.outputs.timestamp }}"
           GITHUB_REF_NAME: "nightly-${{ steps.timestamp.outputs.timestamp }}"
           GITHUB_SHA: ${{ github.sha }}
+          NO_STRIP: ${{ matrix.platform == 'ubuntu-22.04' && 'true' || '' }}
         with:
           tagName: "nightly-${{ steps.timestamp.outputs.timestamp }}"
           releaseName: "Donut Browser Nightly (Build ${{ steps.timestamp.outputs.timestamp }})"
