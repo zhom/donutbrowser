@@ -220,8 +220,11 @@ export function useBrowserDownload() {
             errorMessage = String(error.message);
           }
 
+          // Ensure the long-running download toast is dismissed, and show a finite error toast
+          dismissToast(`download-${browserStr}-${version}`);
           showErrorToast(`Failed to download ${browserName} ${version}`, {
             description: errorMessage,
+            duration: 8000,
           });
         }
         throw error;
