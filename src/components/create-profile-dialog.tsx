@@ -164,6 +164,20 @@ export function CreateProfileDialog({
     }
   }, []);
 
+  const checkAndDownloadGeoIPDatabase = useCallback(async () => {
+    try {
+      const isAvailable = await invoke<boolean>("is_geoip_database_available");
+      if (!isAvailable) {
+        console.log("GeoIP database not available, downloading...");
+        await invoke("download_geoip_database");
+        console.log("GeoIP database downloaded successfully");
+      }
+    } catch (error) {
+      console.error("Failed to check/download GeoIP database:", error);
+      // Don't show error to user as this is not critical for profile creation
+    }
+  }, []);
+
   const loadReleaseTypes = useCallback(
     async (browser: string) => {
       // Set loading state
@@ -205,8 +219,16 @@ export function CreateProfileDialog({
       void loadStoredProxies();
       // Load camoufox release types when dialog opens
       void loadReleaseTypes("camoufox");
+      // Check and download GeoIP database if needed for Camoufox
+      void checkAndDownloadGeoIPDatabase();
     }
-  }, [isOpen, loadSupportedBrowsers, loadStoredProxies, loadReleaseTypes]);
+  }, [
+    isOpen,
+    loadSupportedBrowsers,
+    loadStoredProxies,
+    loadReleaseTypes,
+    checkAndDownloadGeoIPDatabase,
+  ]);
 
   // Load release types when browser selection changes
   useEffect(() => {

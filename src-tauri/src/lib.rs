@@ -31,13 +31,13 @@ mod version_updater;
 extern crate lazy_static;
 
 use browser_runner::{
-  check_browser_exists, check_browser_status, check_missing_binaries, create_browser_profile_new,
-  delete_profile, download_browser, ensure_all_binaries_exist, fetch_browser_versions_cached_first,
-  fetch_browser_versions_with_count, fetch_browser_versions_with_count_cached_first,
-  get_browser_release_types, get_downloaded_browser_versions, get_supported_browsers,
-  is_browser_supported_on_platform, kill_browser_profile, launch_browser_profile,
-  list_browser_profiles, rename_profile, update_camoufox_config, update_profile_proxy,
-  update_profile_version,
+  check_browser_exists, check_browser_status, check_missing_binaries, check_missing_geoip_database,
+  create_browser_profile_new, delete_profile, download_browser, ensure_all_binaries_exist,
+  fetch_browser_versions_cached_first, fetch_browser_versions_with_count,
+  fetch_browser_versions_with_count_cached_first, get_browser_release_types,
+  get_downloaded_browser_versions, get_supported_browsers, is_browser_supported_on_platform,
+  kill_browser_profile, launch_browser_profile, list_browser_profiles, rename_profile,
+  update_camoufox_config, update_profile_proxy, update_profile_version,
 };
 
 use settings_manager::{
@@ -68,6 +68,8 @@ use group_manager::{
   assign_profiles_to_group, create_profile_group, delete_profile_group, delete_selected_profiles,
   get_groups_with_profile_counts, get_profile_groups, update_profile_group,
 };
+
+use geoip_downloader::GeoIPDownloader;
 
 // Trait to extend WebviewWindow with transparent titlebar functionality
 pub trait WindowExt {
@@ -171,6 +173,20 @@ async fn delete_stored_proxy(proxy_id: String) -> Result<(), String> {
   crate::proxy_manager::PROXY_MANAGER
     .delete_stored_proxy(&proxy_id)
     .map_err(|e| format!("Failed to delete stored proxy: {e}"))
+}
+
+#[tauri::command]
+async fn is_geoip_database_available() -> Result<bool, String> {
+  Ok(GeoIPDownloader::is_geoip_database_available())
+}
+
+#[tauri::command]
+async fn download_geoip_database(app_handle: tauri::AppHandle) -> Result<(), String> {
+  let downloader = GeoIPDownloader::instance();
+  downloader
+    .download_geoip_database(&app_handle)
+    .await
+    .map_err(|e| format!("Failed to download GeoIP database: {e}"))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -386,6 +402,35 @@ pub fn run() {
         }
       });
 
+      // Check and download GeoIP database at startup if needed
+      let app_handle_geoip = app.handle().clone();
+      tauri::async_runtime::spawn(async move {
+        // Wait a bit for the app to fully initialize
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+        let browser_runner = crate::browser_runner::BrowserRunner::instance();
+        match browser_runner.check_missing_geoip_database() {
+          Ok(true) => {
+            println!("GeoIP database is missing for Camoufox profiles, downloading at startup...");
+            let geoip_downloader = GeoIPDownloader::instance();
+            if let Err(e) = geoip_downloader
+              .download_geoip_database(&app_handle_geoip)
+              .await
+            {
+              eprintln!("Failed to download GeoIP database at startup: {e}");
+            } else {
+              println!("GeoIP database downloaded successfully at startup");
+            }
+          }
+          Ok(false) => {
+            // No Camoufox profiles or GeoIP database already available
+          }
+          Err(e) => {
+            eprintln!("Failed to check GeoIP database status at startup: {e}");
+          }
+        }
+      });
+
       // Start proxy cleanup task for dead browser processes
       let app_handle_proxy_cleanup = app.handle().clone();
       tauri::async_runtime::spawn(async move {
@@ -487,6 +532,7 @@ pub fn run() {
       detect_existing_profiles,
       import_browser_profile,
       check_missing_binaries,
+      check_missing_geoip_database,
       ensure_all_binaries_exist,
       create_stored_proxy,
       get_stored_proxies,
@@ -500,6 +546,8 @@ pub fn run() {
       delete_profile_group,
       assign_profiles_to_group,
       delete_selected_profiles,
+      is_geoip_database_available,
+      download_geoip_database,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

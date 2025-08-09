@@ -93,8 +93,18 @@ export default function Home() {
         "check_missing_binaries",
       );
 
-      if (missingBinaries.length > 0) {
-        console.log("Found missing binaries:", missingBinaries);
+      // Also check for missing GeoIP database
+      const missingGeoIP = await invoke<boolean>(
+        "check_missing_geoip_database",
+      );
+
+      if (missingBinaries.length > 0 || missingGeoIP) {
+        if (missingBinaries.length > 0) {
+          console.log("Found missing binaries:", missingBinaries);
+        }
+        if (missingGeoIP) {
+          console.log("Found missing GeoIP database for Camoufox");
+        }
 
         // Group missing binaries by browser type to avoid concurrent downloads
         const browserMap = new Map<string, string[]>();
@@ -109,34 +119,45 @@ export default function Home() {
         }
 
         // Show a toast notification about missing binaries and auto-download them
-        const missingList = Array.from(browserMap.entries())
+        let missingList = Array.from(browserMap.entries())
           .map(([browser, versions]) => `${browser}: ${versions.join(", ")}`)
           .join(", ");
 
-        console.log(`Downloading missing binaries: ${missingList}`);
+        if (missingGeoIP) {
+          if (missingList) {
+            missingList += ", GeoIP database for Camoufox";
+          } else {
+            missingList = "GeoIP database for Camoufox";
+          }
+        }
+
+        console.log(`Downloading missing components: ${missingList}`);
 
         try {
-          // Download missing binaries sequentially by browser type to prevent conflicts
+          // Download missing binaries and GeoIP database sequentially to prevent conflicts
           const downloaded = await invoke<string[]>(
             "ensure_all_binaries_exist",
           );
           if (downloaded.length > 0) {
             console.log(
-              "Successfully downloaded missing binaries:",
+              "Successfully downloaded missing components:",
               downloaded,
             );
           }
         } catch (downloadError) {
-          console.error("Failed to download missing binaries:", downloadError);
+          console.error(
+            "Failed to download missing components:",
+            downloadError,
+          );
           setError(
-            `Failed to download missing binaries: ${JSON.stringify(
+            `Failed to download missing components: ${JSON.stringify(
               downloadError,
             )}`,
           );
         }
       }
     } catch (err: unknown) {
-      console.error("Failed to check missing binaries:", err);
+      console.error("Failed to check missing components:", err);
     }
   }, []);
 

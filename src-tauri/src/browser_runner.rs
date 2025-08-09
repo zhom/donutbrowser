@@ -1044,6 +1044,27 @@ impl BrowserRunner {
     Ok(missing_binaries)
   }
 
+  /// Check if GeoIP database is missing for Camoufox profiles
+  pub fn check_missing_geoip_database(
+    &self,
+  ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    // Get all profiles
+    let profiles = self
+      .list_profiles()
+      .map_err(|e| format!("Failed to list profiles: {e}"))?;
+
+    // Check if there are any Camoufox profiles
+    let has_camoufox_profiles = profiles.iter().any(|profile| profile.browser == "camoufox");
+
+    if has_camoufox_profiles {
+      // Check if GeoIP database is available
+      use crate::geoip_downloader::GeoIPDownloader;
+      return Ok(!GeoIPDownloader::is_geoip_database_available());
+    }
+
+    Ok(false)
+  }
+
   /// Automatically download missing binaries for all profiles
   pub async fn ensure_all_binaries_exist(
     &self,
@@ -1078,6 +1099,25 @@ impl BrowserRunner {
         }
         Err(e) => {
           eprintln!("Failed to download {browser} {version} for profile '{profile_name}': {e}");
+        }
+      }
+    }
+
+    // Check if GeoIP database is missing for Camoufox profiles
+    if self.check_missing_geoip_database()? {
+      println!("GeoIP database is missing for Camoufox profiles, downloading...");
+
+      use crate::geoip_downloader::GeoIPDownloader;
+      let geoip_downloader = GeoIPDownloader::instance();
+
+      match geoip_downloader.download_geoip_database(app_handle).await {
+        Ok(_) => {
+          downloaded.push("GeoIP database for Camoufox".to_string());
+          println!("GeoIP database downloaded successfully");
+        }
+        Err(e) => {
+          eprintln!("Failed to download GeoIP database: {e}");
+          // Don't fail the entire operation if GeoIP download fails
         }
       }
     }
@@ -1792,6 +1832,14 @@ pub async fn check_missing_binaries() -> Result<Vec<(String, String, String)>, S
     .check_missing_binaries()
     .await
     .map_err(|e| format!("Failed to check missing binaries: {e}"))
+}
+
+#[tauri::command]
+pub async fn check_missing_geoip_database() -> Result<bool, String> {
+  let browser_runner = BrowserRunner::instance();
+  browser_runner
+    .check_missing_geoip_database()
+    .map_err(|e| format!("Failed to check missing GeoIP database: {e}"))
 }
 
 #[tauri::command]
