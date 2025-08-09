@@ -1,10 +1,12 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
 import { FiEdit2, FiPlus, FiTrash2, FiWifi } from "react-icons/fi";
 import { toast } from "sonner";
 import { ProxyFormDialog } from "@/components/proxy-form-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -35,6 +37,7 @@ export function ProxyManagementDialog({
   const [loading, setLoading] = useState(false);
   const [showProxyForm, setShowProxyForm] = useState(false);
   const [editingProxy, setEditingProxy] = useState<StoredProxy | null>(null);
+  const [proxyUsage, setProxyUsage] = useState<Record<string, number>>({});
 
   const loadStoredProxies = useCallback(async () => {
     try {
@@ -49,11 +52,44 @@ export function ProxyManagementDialog({
     }
   }, []);
 
+  const loadProxyUsage = useCallback(async () => {
+    try {
+      const profiles = await invoke<Array<{ proxy_id?: string }>>(
+        "list_browser_profiles",
+      );
+      const counts: Record<string, number> = {};
+      for (const p of profiles) {
+        if (p.proxy_id) counts[p.proxy_id] = (counts[p.proxy_id] ?? 0) + 1;
+      }
+      setProxyUsage(counts);
+    } catch (_err) {
+      // ignore non-critical errors
+    }
+  }, []);
+
   useEffect(() => {
     if (isOpen) {
       loadStoredProxies();
+      void loadProxyUsage();
     }
-  }, [isOpen, loadStoredProxies]);
+  }, [isOpen, loadStoredProxies, loadProxyUsage]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    const setup = async () => {
+      try {
+        unlisten = await listen("profile-updated", () => {
+          void loadProxyUsage();
+        });
+      } catch (_err) {
+        // ignore non-critical errors
+      }
+    };
+    if (isOpen) void setup();
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [isOpen, loadProxyUsage]);
 
   const handleDeleteProxy = useCallback(async (proxy: StoredProxy) => {
     if (
@@ -182,6 +218,11 @@ export function ProxyManagementDialog({
                             {proxy.name}
                           </span>
                         )}
+                      </div>
+                      <div className="mr-2">
+                        <Badge variant="secondary">
+                          {proxyUsage[proxy.id] ?? 0}
+                        </Badge>
                       </div>
                       <div className="flex flex-shrink-0 gap-1 items-center">
                         <Tooltip>

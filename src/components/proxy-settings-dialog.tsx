@@ -1,6 +1,7 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
 import { FiPlus } from "react-icons/fi";
 import { toast } from "sonner";
@@ -46,6 +47,7 @@ export function ProxySettingsDialog({
   );
   const [loading, setLoading] = useState(false);
   const [showProxyForm, setShowProxyForm] = useState(false);
+  const [proxyUsage, setProxyUsage] = useState<Record<string, number>>({});
 
   // Helper to determine if proxy should be disabled for the selected browser
   const isProxyDisabled = browserType === "tor-browser";
@@ -63,9 +65,28 @@ export function ProxySettingsDialog({
     }
   }, []);
 
+  const loadProxyUsage = useCallback(async () => {
+    try {
+      const profiles = await invoke<Array<{ proxy_id?: string }>>(
+        "list_browser_profiles",
+      );
+      const counts: Record<string, number> = {};
+      for (const p of profiles) {
+        if (p.proxy_id) {
+          counts[p.proxy_id] = (counts[p.proxy_id] ?? 0) + 1;
+        }
+      }
+      setProxyUsage(counts);
+    } catch (error) {
+      // Non-fatal
+      console.error("Failed to load proxy usage:", error);
+    }
+  }, []);
+
   useEffect(() => {
     if (isOpen) {
       loadStoredProxies();
+      void loadProxyUsage();
       if (isProxyDisabled) {
         setSelectedProxyId(null);
       } else {
@@ -73,7 +94,31 @@ export function ProxySettingsDialog({
         setSelectedProxyId(initialProxyId || null);
       }
     }
-  }, [isOpen, isProxyDisabled, loadStoredProxies, initialProxyId]);
+  }, [
+    isOpen,
+    isProxyDisabled,
+    loadStoredProxies,
+    initialProxyId,
+    loadProxyUsage,
+  ]);
+
+  // Refresh usage when profiles change
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    const setup = async () => {
+      try {
+        unlisten = await listen("profile-updated", () => {
+          void loadProxyUsage();
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    if (isOpen) void setup();
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [isOpen, loadProxyUsage]);
 
   const handleCreateProxy = useCallback(() => {
     setShowProxyForm(true);
@@ -234,6 +279,7 @@ export function ProxySettingsDialog({
                                   <Badge variant="outline">
                                     {proxy.proxy_settings.proxy_type.toUpperCase()}
                                   </Badge>
+                                  <Badge>{proxyUsage[proxy.id] ?? 0}</Badge>
                                 </div>
                               </div>
                             </CardContent>
