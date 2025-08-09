@@ -168,7 +168,7 @@ mod linux {
     install_dir: &Path,
     browser_type: &BrowserType,
   ) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    // Expected structure: install_dir/<browser>/<binary>
+    // Expected structure by default: install_dir/<browser>/<binary>
     let browser_subdir = install_dir.join(browser_type.as_str());
 
     // Try firefox first (preferred), then firefox-bin
@@ -198,8 +198,8 @@ mod linux {
       }
       BrowserType::Camoufox => {
         vec![
-          browser_subdir.join("camoufox-bin"),
-          browser_subdir.join("camoufox"),
+          install_dir.join("camoufox-bin"),
+          install_dir.join("camoufox"),
         ]
       }
       _ => vec![],
@@ -213,9 +213,9 @@ mod linux {
 
     Err(
       format!(
-        "Firefox executable not found in {}/{}",
+        "Executable not found for {} in {}",
+        browser_type.as_str(),
         install_dir.display(),
-        browser_type.as_str()
       )
       .into(),
     )
@@ -256,10 +256,6 @@ mod linux {
     // Expected structure: install_dir/<browser>/<binary>
     let browser_subdir = install_dir.join(browser_type.as_str());
 
-    if !browser_subdir.exists() || !browser_subdir.is_dir() {
-      return false;
-    }
-
     let possible_executables = match browser_type {
       BrowserType::Firefox | BrowserType::FirefoxDeveloper => {
         vec![
@@ -286,8 +282,8 @@ mod linux {
       }
       BrowserType::Camoufox => {
         vec![
-          browser_subdir.join("camoufox-bin"),
-          browser_subdir.join("camoufox"),
+          install_dir.join("camoufox-bin"),
+          install_dir.join("camoufox"),
         ]
       }
       _ => vec![],

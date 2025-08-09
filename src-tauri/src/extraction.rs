@@ -45,6 +45,12 @@ impl Extractor {
       return Ok(());
     };
 
+    // For Camoufox on Linux, we expect the executable directly under version directory
+    // e.g., binaries/camoufox/<version>/camoufox, without an extra camoufox/ subdirectory
+    if browser_type == "camoufox" {
+      return Ok(());
+    }
+
     let expected_subdir = dest_dir.join(browser_type);
 
     // If the executable is not in the expected subdirectory, create the structure

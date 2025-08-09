@@ -25,6 +25,7 @@
     "cmdk",
     "codegen",
     "codesign",
+    "commitish",
     "CTYPE",
     "daijro",
     "dataclasses",
@@ -178,6 +179,7 @@
     "xfconf",
     "xsettings",
     "zhom",
+    "zipball",
     "zoneinfo"
   ]
 }

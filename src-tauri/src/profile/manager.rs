@@ -603,6 +603,11 @@ impl ProfileManager {
         })?;
     }
 
+    // Emit profile update event so frontend UIs can refresh immediately (e.g. proxy manager)
+    if let Err(e) = app_handle.emit("profile-updated", &profile) {
+      println!("Warning: Failed to emit profile update event: {e}");
+    }
+
     Ok(profile)
   }
 
