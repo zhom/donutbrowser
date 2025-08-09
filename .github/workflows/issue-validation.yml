@@ -48,7 +48,7 @@ jobs:
 
       - name: Validate issue with AI
         id: validate
-        uses: actions/ai-inference@9693b137b6566bb66055a713613bf4f0493701eb # v1.2.3
+        uses: actions/ai-inference@b81b2afb8390ee6839b494a404766bef6493c7d9 # v1.2.8
         with:
           prompt-file: issue_analysis.txt
           system-prompt: |
