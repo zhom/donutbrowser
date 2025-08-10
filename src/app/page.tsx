@@ -23,7 +23,7 @@ import { useAppUpdateNotifications } from "@/hooks/use-app-update-notifications"
 import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useUpdateNotifications } from "@/hooks/use-update-notifications";
-import { showErrorToast } from "@/lib/toast-utils";
+import { showErrorToast, showToast } from "@/lib/toast-utils";
 import type { BrowserProfile, CamoufoxConfig, GroupWithCount } from "@/types";
 
 type BrowserTypeString =
@@ -712,6 +712,29 @@ export default function Home() {
     checkCurrentUrl,
     loadGroups,
   ]);
+
+  // Show deprecation warning for unsupported profiles
+  useEffect(() => {
+    if (profiles.length === 0) return;
+
+    const hasDeprecated = profiles.some(
+      (p) =>
+        ["tor-browser", "mullvad-browser"].includes(p.browser) ||
+        (p.release_type === "nightly" && p.browser !== "firefox-developer"),
+    );
+
+    if (hasDeprecated) {
+      // Use a stable id to avoid duplicate toasts on re-renders
+      showToast({
+        id: "deprecated-profiles-warning",
+        type: "error",
+        title: "Some profiles will be deprecated soon",
+        description:
+          "Tor, Mullvad Browser and nightly profiles (except Firefox Developers Edition) will be removed in upcoming versions. Please check GitHub for migration instructions which will be available soon.",
+        duration: 15000,
+      });
+    }
+  }, [profiles]);
 
   useEffect(() => {
     if (profiles.length === 0) return;

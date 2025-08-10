@@ -414,7 +414,7 @@ mod linux {
     Err("Could not detect theme from system files".into())
   }
 
-  fn is_command_available(command: &str) -> bool {
+  pub fn is_command_available(command: &str) -> bool {
     Command::new("which")
       .arg(command)
       .output()

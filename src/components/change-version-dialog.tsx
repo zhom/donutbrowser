@@ -2,11 +2,9 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
-import { LuTriangleAlert } from "react-icons/lu";
 import { LoadingButton } from "@/components/loading-button";
 import { ReleaseTypeSelector } from "@/components/release-type-selector";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Dialog,
   DialogContent,
@@ -39,8 +37,8 @@ export function ChangeVersionDialog({
   const [releaseTypes, setReleaseTypes] = useState<BrowserReleaseTypes>({});
   const [isLoadingReleaseTypes, setIsLoadingReleaseTypes] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [showDowngradeWarning, setShowDowngradeWarning] = useState(false);
-  const [acknowledgeDowngrade, setAcknowledgeDowngrade] = useState(false);
+  // Nightly switching is disabled for non-nightly profiles (except Firefox Developer),
+  // so downgrade warnings are no longer applicable.
 
   const {
     downloadedVersions,
@@ -50,38 +48,36 @@ export function ChangeVersionDialog({
     isVersionDownloaded,
   } = useBrowserDownload();
 
-  const loadReleaseTypes = useCallback(async (browser: string) => {
-    setIsLoadingReleaseTypes(true);
-    try {
-      const releaseTypes = await invoke<BrowserReleaseTypes>(
-        "get_browser_release_types",
-        { browserStr: browser },
-      );
-      setReleaseTypes(releaseTypes);
-    } catch (error) {
-      console.error("Failed to load release types:", error);
-    } finally {
-      setIsLoadingReleaseTypes(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (
-      profile &&
-      selectedReleaseType &&
-      selectedReleaseType !== profile.release_type
-    ) {
-      // For simplicity, we'll show downgrade warning when switching from stable to nightly
-      // since nightly versions might be considered "downgrades" in terms of stability
-      const isDowngrade =
-        profile.release_type === "stable" && selectedReleaseType === "nightly";
-      setShowDowngradeWarning(isDowngrade);
-
-      if (!isDowngrade) {
-        setAcknowledgeDowngrade(false);
+  const loadReleaseTypes = useCallback(
+    async (browser: string) => {
+      setIsLoadingReleaseTypes(true);
+      try {
+        const releaseTypes = await invoke<BrowserReleaseTypes>(
+          "get_browser_release_types",
+          { browserStr: browser },
+        );
+        // Filter nightly visibility based on rules:
+        // - Firefox Developer Edition: allow nightly only
+        // - If profile is currently nightly: allow both stable and nightly
+        // - Otherwise: allow stable only
+        const filtered: BrowserReleaseTypes = {};
+        if (profile?.browser === "firefox-developer") {
+          if (releaseTypes.nightly) filtered.nightly = releaseTypes.nightly;
+        } else if (profile?.release_type === "nightly") {
+          if (releaseTypes.stable) filtered.stable = releaseTypes.stable;
+          if (releaseTypes.nightly) filtered.nightly = releaseTypes.nightly;
+        } else {
+          if (releaseTypes.stable) filtered.stable = releaseTypes.stable;
+        }
+        setReleaseTypes(filtered);
+      } catch (error) {
+        console.error("Failed to load release types:", error);
+      } finally {
+        setIsLoadingReleaseTypes(false);
       }
-    }
-  }, [selectedReleaseType, profile]);
+    },
+    [profile?.browser, profile?.release_type],
+  );
 
   const handleDownload = useCallback(async () => {
     if (!profile || !selectedReleaseType) return;
@@ -129,14 +125,12 @@ export function ChangeVersionDialog({
     selectedReleaseType &&
     selectedReleaseType !== profile.release_type &&
     selectedVersion &&
-    isVersionDownloaded(selectedVersion) &&
-    (!showDowngradeWarning || acknowledgeDowngrade);
+    isVersionDownloaded(selectedVersion);
 
   useEffect(() => {
     if (isOpen && profile) {
       // Set current release type based on profile
       setSelectedReleaseType(profile.release_type as "stable" | "nightly");
-      setAcknowledgeDowngrade(false);
       void loadReleaseTypes(profile.browser);
       void loadDownloadedVersions(profile.browser);
     }
@@ -206,7 +200,6 @@ export function ChangeVersionDialog({
                       selectedReleaseType={selectedReleaseType}
                       onReleaseTypeSelect={setSelectedReleaseType}
                       availableReleaseTypes={releaseTypes}
-                      browser={profile.browser}
                       isDownloading={isBrowserDownloading(profile.browser)}
                       onDownload={() => {
                         void handleDownload();
@@ -246,7 +239,6 @@ export function ChangeVersionDialog({
                     selectedReleaseType={selectedReleaseType}
                     onReleaseTypeSelect={setSelectedReleaseType}
                     availableReleaseTypes={releaseTypes}
-                    browser={profile.browser}
                     isDownloading={isBrowserDownloading(profile.browser)}
                     onDownload={() => {
                       void handleDownload();
@@ -259,32 +251,7 @@ export function ChangeVersionDialog({
             </div>
           )}
 
-          {/* Downgrade Warning */}
-          {showDowngradeWarning && (
-            <Alert className="border-orange-700">
-              <LuTriangleAlert className="w-4 h-4 text-orange-700" />
-              <AlertTitle className="text-orange-700">
-                Stability Warning
-              </AlertTitle>
-              <AlertDescription className="text-orange-700">
-                You are about to switch from stable to nightly releases. Nightly
-                versions may be less stable and could contain bugs or incomplete
-                features.
-                <div className="flex items-center mt-3 space-x-2">
-                  <Checkbox
-                    id="acknowledge-downgrade"
-                    checked={acknowledgeDowngrade}
-                    onCheckedChange={(checked) => {
-                      setAcknowledgeDowngrade(checked as boolean);
-                    }}
-                  />
-                  <Label htmlFor="acknowledge-downgrade" className="text-sm">
-                    I understand the risks and want to proceed
-                  </Label>
-                </div>
-              </AlertDescription>
-            </Alert>
-          )}
+          {/* Nightly switching disabled in UI; no downgrade warning needed. */}
         </div>
 
         <DialogFooter>

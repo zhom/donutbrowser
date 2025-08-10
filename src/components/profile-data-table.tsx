@@ -667,36 +667,6 @@ export function ProfilesDataTable({
         },
       },
       {
-        accessorKey: "release_type",
-        header: "Release",
-        cell: ({ row }) => {
-          const releaseType: string = row.getValue("release_type");
-          const isNightly = releaseType === "nightly";
-          return (
-            <div className="flex items-center">
-              <span
-                className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                  isNightly
-                    ? "text-yellow-800 bg-yellow-100 dark:bg-yellow-900 dark:text-yellow-200"
-                    : "text-green-800 bg-green-100 dark:bg-green-900 dark:text-green-200"
-                }`}
-              >
-                {isNightly ? "Nightly" : "Stable"}
-              </span>
-            </div>
-          );
-        },
-        enableSorting: true,
-        sortingFn: (rowA, rowB, columnId) => {
-          const releaseA: string = rowA.getValue(columnId);
-          const releaseB: string = rowB.getValue(columnId);
-          // Sort with "stable" before "nightly"
-          if (releaseA === "stable" && releaseB === "nightly") return -1;
-          if (releaseA === "nightly" && releaseB === "stable") return 1;
-          return 0;
-        },
-      },
-      {
         id: "proxy",
         header: "Proxy",
         cell: ({ row }) => {

@@ -191,10 +191,19 @@ export function CreateProfileDialog({
 
         // Only update state if this browser is still the one we're loading
         if (loadingBrowserRef.current === browser) {
+          // Filter to enforce stable-only creation, except Firefox Developer (nightly-only)
           if (browser === "camoufox") {
-            setCamoufoxReleaseTypes(releaseTypes);
+            const filtered: BrowserReleaseTypes = {};
+            if (releaseTypes.stable) filtered.stable = releaseTypes.stable;
+            setCamoufoxReleaseTypes(filtered);
+          } else if (browser === "firefox-developer") {
+            const filtered: BrowserReleaseTypes = {};
+            if (releaseTypes.nightly) filtered.nightly = releaseTypes.nightly;
+            setAvailableReleaseTypes(filtered);
           } else {
-            setAvailableReleaseTypes(releaseTypes);
+            const filtered: BrowserReleaseTypes = {};
+            if (releaseTypes.stable) filtered.stable = releaseTypes.stable;
+            setAvailableReleaseTypes(filtered);
           }
 
           // Load downloaded versions for this browser
@@ -241,25 +250,19 @@ export function CreateProfileDialog({
     }
   }, [selectedBrowser, loadReleaseTypes]);
 
-  // Helper function to get the best available version and release type
+  // Helper function to get the best available version respecting rules
   const getBestAvailableVersion = useCallback(
     (releaseTypes: BrowserReleaseTypes, browserType?: string) => {
-      // For Firefox Developer Edition, prefer nightly over stable
+      // Firefox Developer Edition: nightly-only
       if (browserType === "firefox-developer" && releaseTypes.nightly) {
         return {
           version: releaseTypes.nightly,
           releaseType: "nightly" as const,
         };
       }
-
+      // All others: stable-only
       if (releaseTypes.stable) {
         return { version: releaseTypes.stable, releaseType: "stable" as const };
-      }
-      if (releaseTypes.nightly) {
-        return {
-          version: releaseTypes.nightly,
-          releaseType: "nightly" as const,
-        };
       }
       return null;
     },
@@ -438,8 +441,11 @@ export function CreateProfileDialog({
                       <Label>Browser</Label>
                       <Combobox
                         options={browserOptions
-                          .filter((browser) =>
-                            supportedBrowsers.includes(browser.value),
+                          .filter(
+                            (browser) =>
+                              supportedBrowsers.includes(browser.value) &&
+                              browser.value !== "mullvad-browser" &&
+                              browser.value !== "tor-browser",
                           )
                           .map((browser) => {
                             const IconComponent = getBrowserIcon(browser.value);
@@ -473,7 +479,7 @@ export function CreateProfileDialog({
                                     availableReleaseTypes,
                                     selectedBrowser,
                                   );
-                                  return `${bestVersion?.releaseType === "stable" ? "Latest stable" : "Latest nightly"} version (${bestVersion?.version}) needs to be downloaded`;
+                                  return `Latest version (${bestVersion?.version}) needs to be downloaded`;
                                 })()}
                               </p>
                               <LoadingButton
@@ -498,7 +504,7 @@ export function CreateProfileDialog({
                                   availableReleaseTypes,
                                   selectedBrowser,
                                 );
-                                return `✓ ${bestVersion?.releaseType === "stable" ? "Latest stable" : "Latest nightly"} version (${bestVersion?.version}) is available`;
+                                return `✓ Latest version (${bestVersion?.version}) is available`;
                               })()}
                             </div>
                           )}
@@ -509,7 +515,7 @@ export function CreateProfileDialog({
                                 availableReleaseTypes,
                                 selectedBrowser,
                               );
-                              return `Downloading ${bestVersion?.releaseType === "stable" ? "stable" : "nightly"} version (${bestVersion?.version})...`;
+                              return `Downloading version (${bestVersion?.version})...`;
                             })()}
                           </div>
                         )}
@@ -534,7 +540,7 @@ export function CreateProfileDialog({
                                 camoufoxReleaseTypes,
                                 "camoufox",
                               );
-                              return `Camoufox ${bestVersion?.releaseType} version (${bestVersion?.version}) needs to be downloaded`;
+                              return `Camoufox version (${bestVersion?.version}) needs to be downloaded`;
                             })()}
                           </p>
                           <LoadingButton
@@ -559,7 +565,7 @@ export function CreateProfileDialog({
                               camoufoxReleaseTypes,
                               "camoufox",
                             );
-                            return `✓ Camoufox ${bestVersion?.releaseType} version (${bestVersion?.version}) is available`;
+                            return `✓ Camoufox version (${bestVersion?.version}) is available`;
                           })()}
                         </div>
                       )}
@@ -570,7 +576,7 @@ export function CreateProfileDialog({
                             camoufoxReleaseTypes,
                             "camoufox",
                           );
-                          return `Downloading Camoufox ${bestVersion?.releaseType} version (${bestVersion?.version})...`;
+                          return `Downloading Camoufox version (${bestVersion?.version})...`;
                         })()}
                       </div>
                     )}

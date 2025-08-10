@@ -24,7 +24,6 @@ interface ReleaseTypeSelectorProps {
   selectedReleaseType: "stable" | "nightly" | null;
   onReleaseTypeSelect: (releaseType: "stable" | "nightly" | null) => void;
   availableReleaseTypes: BrowserReleaseTypes;
-  browser: string;
   isDownloading: boolean;
   onDownload: () => void;
   placeholder?: string;
@@ -36,7 +35,7 @@ export function ReleaseTypeSelector({
   selectedReleaseType,
   onReleaseTypeSelect,
   availableReleaseTypes,
-  browser,
+  // browser prop removed; callers control availableReleaseTypes
   isDownloading,
   onDownload,
   placeholder = "Select release type...",
@@ -45,11 +44,13 @@ export function ReleaseTypeSelector({
 }: ReleaseTypeSelectorProps) {
   const [popoverOpen, setPopoverOpen] = useState(false);
 
+  // Nightly visibility is controlled by callers. This component will render
+  // whichever options are provided via availableReleaseTypes.
   const releaseOptions = [
     ...(availableReleaseTypes.stable
       ? [{ type: "stable" as const, version: availableReleaseTypes.stable }]
       : []),
-    ...(availableReleaseTypes.nightly && browser !== "chromium"
+    ...(availableReleaseTypes.nightly
       ? [{ type: "nightly" as const, version: availableReleaseTypes.nightly }]
       : []),
   ];
@@ -159,11 +160,6 @@ export function ReleaseTypeSelector({
             <span className="text-sm font-medium capitalize">
               {releaseOptions[0].type}
             </span>
-            {releaseOptions[0].type === "nightly" && (
-              <Badge variant="secondary" className="text-xs">
-                Nightly
-              </Badge>
-            )}
             <Badge variant="outline" className="text-xs">
               {releaseOptions[0].version}
             </Badge>
