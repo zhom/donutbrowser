@@ -25,7 +25,7 @@ mod profile;
 mod profile_importer;
 mod proxy_manager;
 mod settings_manager;
-mod theme_detector;
+// mod theme_detector; // removed: theme detection handled in webview via CSS prefers-color-scheme
 mod version_updater;
 
 extern crate lazy_static;
@@ -62,7 +62,7 @@ use app_auto_updater::{
 
 use profile_importer::{detect_existing_profiles, import_browser_profile};
 
-use theme_detector::get_system_theme;
+// use theme_detector::get_system_theme;
 
 use group_manager::{
   assign_profiles_to_group, create_profile_group, delete_profile_group, delete_selected_profiles,
@@ -528,7 +528,7 @@ pub fn run() {
       check_for_app_updates,
       check_for_app_updates_manual,
       download_and_install_app_update,
-      get_system_theme,
+      // get_system_theme, // removed
       detect_existing_profiles,
       import_browser_profile,
       check_missing_binaries,
