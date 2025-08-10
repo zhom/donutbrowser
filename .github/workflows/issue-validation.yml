@@ -5,6 +5,7 @@ on:
     types: [opened]
 
 permissions:
+  contents: read
   issues: write
   models: read
 
@@ -90,17 +91,25 @@ jobs:
             ```
 
             Be constructive and helpful in your feedback. If the issue is incomplete, provide specific guidance on what's needed.
-          model: gpt-4o
+            model: openai/gpt-4o
 
       - name: Parse validation result and take action
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Get the AI response
-          VALIDATION_RESULT='${{ steps.validate.outputs.response }}'
+          # Prefer reading from the response file to avoid output truncation
+          RESPONSE_FILE='${{ steps.validate.outputs.response-file }}'
+          if [ -n "$RESPONSE_FILE" ] && [ -f "$RESPONSE_FILE" ]; then
+            RAW_OUTPUT=$(cat "$RESPONSE_FILE")
+          else
+            RAW_OUTPUT='${{ steps.validate.outputs.response }}'
+          fi
 
-          # Extract JSON from the response (handle potential markdown formatting)
-          JSON_RESULT=$(echo "$VALIDATION_RESULT" | sed -n '/```json/,/```/p' | sed '1d;$d' || echo "$VALIDATION_RESULT")
+          # Extract JSON if wrapped in markdown code fences; otherwise use raw
+          JSON_RESULT=$(printf "%s" "$RAW_OUTPUT" | sed -n '/```json/,/```/p' | sed '1d;$d')
+          if [ -z "$JSON_RESULT" ]; then
+            JSON_RESULT="$RAW_OUTPUT"
+          fi
 
           # Parse JSON fields
           IS_VALID=$(echo "$JSON_RESULT" | jq -r '.is_valid // false')
@@ -156,7 +165,24 @@ jobs:
             echo "✅ Validation comment posted and 'needs-info' label added"
           else
             echo "✅ Issue contains sufficient information"
-            
+
+            # Prepare a summary comment even when valid
+            cat > comment.md << EOF
+          ## 🤖 Issue Validation
+
+          **Issue Type Detected:** \`$ISSUE_TYPE\`
+
+          **Assessment:** $ASSESSMENT
+
+          $( [ -n "$SUGGESTIONS" ] && echo "### 💡 Suggestions:" && echo "$SUGGESTIONS" )
+
+          ---
+          *This validation was performed automatically to help triage issues.*
+          EOF
+
+            # Post the summary comment
+            gh issue comment ${{ github.event.issue.number }} --body-file comment.md
+
             # Add appropriate labels based on issue type
             case "$ISSUE_TYPE" in
               "bug_report")
