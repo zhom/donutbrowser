@@ -165,6 +165,8 @@ program
   .option("--proxy <proxy>", "proxy URL for config generation")
   .option("--max-width <width>", "maximum screen width", parseInt)
   .option("--max-height <height>", "maximum screen height", parseInt)
+  .option("--min-width <width>", "minimum screen width", parseInt)
+  .option("--min-height <height>", "minimum screen height", parseInt)
   .option("--geoip", "enable geoip")
   .option("--block-images", "block images")
   .option("--block-webrtc", "block WebRTC")
@@ -383,6 +385,14 @@ program
             maxHeight:
               typeof options.maxHeight === "number"
                 ? options.maxHeight
+                : undefined,
+            minWidth:
+              typeof options.minWidth === "number"
+                ? options.minWidth
+                : undefined,
+            minHeight:
+              typeof options.minHeight === "number"
+                ? options.minHeight
                 : undefined,
             geoip: Boolean(options.geoip),
             blockImages:

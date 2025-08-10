@@ -344,6 +344,8 @@ interface GenerateConfigOptions {
   proxy?: string;
   maxWidth?: number;
   maxHeight?: number;
+  minWidth?: number;
+  minHeight?: number;
   geoip?: string | boolean;
   blockImages?: boolean;
   blockWebrtc?: boolean;
@@ -411,11 +413,21 @@ export async function generateCamoufoxConfig(
     } else {
       // Use individual options to build configuration
 
-      if (options.maxWidth && options.maxHeight) {
-        launchOpts.screen = {
-          maxWidth: options.maxWidth,
-          maxHeight: options.maxHeight,
-        };
+      // Build screen configuration with min/max dimensions
+      const screen: {
+        minWidth?: number;
+        maxWidth?: number;
+        minHeight?: number;
+        maxHeight?: number;
+      } = {};
+
+      if (options.minWidth) screen.minWidth = options.minWidth;
+      if (options.maxWidth) screen.maxWidth = options.maxWidth;
+      if (options.minHeight) screen.minHeight = options.minHeight;
+      if (options.maxHeight) screen.maxHeight = options.maxHeight;
+
+      if (Object.keys(screen).length > 0) {
+        launchOpts.screen = screen;
       }
     }
 

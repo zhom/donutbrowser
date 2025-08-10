@@ -74,6 +74,8 @@ export interface CamoufoxConfig {
   proxy?: string;
   screen_max_width?: number;
   screen_max_height?: number;
+  screen_min_width?: number;
+  screen_min_height?: number;
   geoip?: string | boolean;
   block_images?: boolean;
   block_webrtc?: boolean;

@@ -12,6 +12,8 @@ pub struct CamoufoxConfig {
   pub proxy: Option<String>,
   pub screen_max_width: Option<u32>,
   pub screen_max_height: Option<u32>,
+  pub screen_min_width: Option<u32>,
+  pub screen_min_height: Option<u32>,
   pub geoip: Option<serde_json::Value>, // Can be String or bool
   pub block_images: Option<bool>,
   pub block_webrtc: Option<bool>,
@@ -26,6 +28,8 @@ impl Default for CamoufoxConfig {
       proxy: None,
       screen_max_width: None,
       screen_max_height: None,
+      screen_min_width: None,
+      screen_min_height: None,
       geoip: Some(serde_json::Value::Bool(true)),
       block_images: None,
       block_webrtc: None,
@@ -83,6 +87,8 @@ impl CamoufoxNodecarLauncher {
     CamoufoxConfig {
       screen_max_width: Some(1440),
       screen_max_height: Some(900),
+      screen_min_width: Some(800),
+      screen_min_height: Some(600),
       geoip: Some(serde_json::Value::Bool(true)),
       ..Default::default()
     }
@@ -132,6 +138,14 @@ impl CamoufoxNodecarLauncher {
 
     if let Some(max_height) = config.screen_max_height {
       config_args.extend(["--max-height".to_string(), max_height.to_string()]);
+    }
+
+    if let Some(min_width) = config.screen_min_width {
+      config_args.extend(["--min-width".to_string(), min_width.to_string()]);
+    }
+
+    if let Some(min_height) = config.screen_min_height {
+      config_args.extend(["--min-height".to_string(), min_height.to_string()]);
     }
 
     // Add block_* options
@@ -477,6 +491,8 @@ mod tests {
     // Verify test config has expected values
     assert_eq!(test_config.screen_max_width, Some(1440));
     assert_eq!(test_config.screen_max_height, Some(900));
+    assert_eq!(test_config.screen_min_width, Some(800));
+    assert_eq!(test_config.screen_min_height, Some(600));
     assert_eq!(test_config.geoip, Some(serde_json::Value::Bool(true)));
   }
 

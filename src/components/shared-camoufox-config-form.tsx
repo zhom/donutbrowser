@@ -874,6 +874,36 @@ export function SharedCamoufoxConfigForm({
                     placeholder="e.g., 1080"
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="screen-min-width">Min Width</Label>
+                  <Input
+                    id="screen-min-width"
+                    type="number"
+                    value={config.screen_min_width || ""}
+                    onChange={(e) =>
+                      onConfigChange(
+                        "screen_min_width",
+                        e.target.value ? parseInt(e.target.value) : undefined,
+                      )
+                    }
+                    placeholder="e.g., 800"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="screen-min-height">Min Height</Label>
+                  <Input
+                    id="screen-min-height"
+                    type="number"
+                    value={config.screen_min_height || ""}
+                    onChange={(e) =>
+                      onConfigChange(
+                        "screen_min_height",
+                        e.target.value ? parseInt(e.target.value) : undefined,
+                      )
+                    }
+                    placeholder="e.g., 600"
+                  />
+                </div>
               </div>
             </div>
           </TabsContent>
