@@ -778,3 +778,206 @@ pub async fn import_browser_profile(
 lazy_static::lazy_static! {
   static ref PROFILE_IMPORTER: ProfileImporter = ProfileImporter::new();
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::env;
+  use tempfile::TempDir;
+
+  fn create_test_profile_importer() -> (ProfileImporter, TempDir) {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+
+    // Set up a temporary home directory for testing
+    env::set_var("HOME", temp_dir.path());
+
+    let importer = ProfileImporter::new();
+    (importer, temp_dir)
+  }
+
+  #[test]
+  fn test_profile_importer_creation() {
+    let (_importer, _temp_dir) = create_test_profile_importer();
+    // Test passes if no panic occurs
+  }
+
+  #[test]
+  fn test_get_browser_display_name() {
+    let (importer, _temp_dir) = create_test_profile_importer();
+
+    assert_eq!(importer.get_browser_display_name("firefox"), "Firefox");
+    assert_eq!(
+      importer.get_browser_display_name("firefox-developer"),
+      "Firefox Developer"
+    );
+    assert_eq!(
+      importer.get_browser_display_name("chromium"),
+      "Chrome/Chromium"
+    );
+    assert_eq!(importer.get_browser_display_name("brave"), "Brave");
+    assert_eq!(
+      importer.get_browser_display_name("mullvad-browser"),
+      "Mullvad Browser"
+    );
+    assert_eq!(importer.get_browser_display_name("zen"), "Zen Browser");
+    assert_eq!(
+      importer.get_browser_display_name("tor-browser"),
+      "Tor Browser"
+    );
+    assert_eq!(
+      importer.get_browser_display_name("unknown"),
+      "Unknown Browser"
+    );
+  }
+
+  #[test]
+  fn test_detect_existing_profiles_no_panic() {
+    let (importer, _temp_dir) = create_test_profile_importer();
+
+    // This should not panic even if no browser profiles exist
+    let result = importer.detect_existing_profiles();
+    assert!(result.is_ok(), "detect_existing_profiles should not fail");
+
+    let _profiles = result.unwrap();
+    // We can't assert specific profiles since they depend on the system
+    // but we can verify the result is a valid Vec
+    // We can't assert specific profiles since they depend on the system
+    // but we can verify the result is a valid Vec (length check is always true for Vec, but shows intent)
+  }
+
+  #[test]
+  fn test_scan_firefox_profiles_dir_nonexistent() {
+    let (importer, temp_dir) = create_test_profile_importer();
+
+    let nonexistent_dir = temp_dir.path().join("nonexistent");
+    let result = importer.scan_firefox_profiles_dir(&nonexistent_dir, "firefox");
+
+    assert!(
+      result.is_ok(),
+      "Should handle nonexistent directory gracefully"
+    );
+    let profiles = result.unwrap();
+    assert!(
+      profiles.is_empty(),
+      "Should return empty vector for nonexistent directory"
+    );
+  }
+
+  #[test]
+  fn test_scan_chrome_profiles_dir_nonexistent() {
+    let (importer, temp_dir) = create_test_profile_importer();
+
+    let nonexistent_dir = temp_dir.path().join("nonexistent");
+    let result = importer.scan_chrome_profiles_dir(&nonexistent_dir, "chromium");
+
+    assert!(
+      result.is_ok(),
+      "Should handle nonexistent directory gracefully"
+    );
+    let profiles = result.unwrap();
+    assert!(
+      profiles.is_empty(),
+      "Should return empty vector for nonexistent directory"
+    );
+  }
+
+  #[test]
+  fn test_parse_firefox_profiles_ini_empty() {
+    let (importer, _temp_dir) = create_test_profile_importer();
+
+    let empty_content = "";
+    let profiles_dir = Path::new("/tmp");
+    let result = importer.parse_firefox_profiles_ini(empty_content, profiles_dir, "firefox");
+
+    assert!(result.is_ok(), "Should handle empty profiles.ini");
+    let profiles = result.unwrap();
+    assert!(
+      profiles.is_empty(),
+      "Should return empty vector for empty content"
+    );
+  }
+
+  #[test]
+  fn test_parse_firefox_profiles_ini_valid() {
+    let (importer, temp_dir) = create_test_profile_importer();
+
+    // Create a mock profile directory
+    let profiles_dir = temp_dir.path().join("profiles");
+    let profile_dir = profiles_dir.join("test.profile");
+    fs::create_dir_all(&profile_dir).expect("Should create profile directory");
+
+    // Create a prefs.js file to make it look like a valid profile
+    let prefs_file = profile_dir.join("prefs.js");
+    fs::write(&prefs_file, "// Firefox preferences").expect("Should create prefs.js");
+
+    let profiles_ini_content = r#"
+[Profile0]
+Name=Test Profile
+IsRelative=1
+Path=test.profile
+"#;
+
+    let result =
+      importer.parse_firefox_profiles_ini(profiles_ini_content, &profiles_dir, "firefox");
+
+    assert!(result.is_ok(), "Should parse valid profiles.ini");
+    let profiles = result.unwrap();
+    assert_eq!(profiles.len(), 1, "Should find one profile");
+    assert_eq!(profiles[0].name, "Firefox - Test Profile");
+    assert_eq!(profiles[0].browser, "firefox");
+  }
+
+  #[test]
+  fn test_copy_directory_recursive() {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+
+    // Create source directory structure
+    let source_dir = temp_dir.path().join("source");
+    let source_subdir = source_dir.join("subdir");
+    fs::create_dir_all(&source_subdir).expect("Should create source directories");
+
+    // Create some test files
+    let source_file1 = source_dir.join("file1.txt");
+    let source_file2 = source_subdir.join("file2.txt");
+    fs::write(&source_file1, "content1").expect("Should create file1");
+    fs::write(&source_file2, "content2").expect("Should create file2");
+
+    // Create destination directory
+    let dest_dir = temp_dir.path().join("dest");
+
+    // Copy recursively
+    let result = ProfileImporter::copy_directory_recursive(&source_dir, &dest_dir);
+    assert!(result.is_ok(), "Should copy directory successfully");
+
+    // Verify files were copied
+    let dest_file1 = dest_dir.join("file1.txt");
+    let dest_file2 = dest_dir.join("subdir").join("file2.txt");
+
+    assert!(dest_file1.exists(), "file1.txt should be copied");
+    assert!(dest_file2.exists(), "file2.txt should be copied");
+
+    let content1 = fs::read_to_string(&dest_file1).expect("Should read file1");
+    let content2 = fs::read_to_string(&dest_file2).expect("Should read file2");
+
+    assert_eq!(content1, "content1", "file1 content should match");
+    assert_eq!(content2, "content2", "file2 content should match");
+  }
+
+  #[test]
+  fn test_get_default_version_for_browser_no_versions() {
+    let (importer, _temp_dir) = create_test_profile_importer();
+
+    // This should fail since no versions are downloaded in test environment
+    let result = importer.get_default_version_for_browser("firefox");
+    assert!(
+      result.is_err(),
+      "Should fail when no versions are available"
+    );
+
+    let error_msg = result.unwrap_err().to_string();
+    assert!(
+      error_msg.contains("No downloaded versions found"),
+      "Error should mention no versions found"
+    );
+  }
+}

@@ -245,3 +245,213 @@ pub async fn clear_all_version_cache_and_refetch(
 lazy_static::lazy_static! {
   static ref SETTINGS_MANAGER: SettingsManager = SettingsManager::new();
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::env;
+  use tempfile::TempDir;
+
+  fn create_test_settings_manager() -> (SettingsManager, TempDir) {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+
+    // Set up a temporary home directory for testing
+    env::set_var("HOME", temp_dir.path());
+
+    let manager = SettingsManager::new();
+    (manager, temp_dir)
+  }
+
+  #[test]
+  fn test_settings_manager_creation() {
+    let (_manager, _temp_dir) = create_test_settings_manager();
+    // Test passes if no panic occurs
+  }
+
+  #[test]
+  fn test_default_app_settings() {
+    let default_settings = AppSettings::default();
+
+    assert!(
+      !default_settings.set_as_default_browser,
+      "Default should not set as default browser"
+    );
+    assert_eq!(
+      default_settings.theme, "system",
+      "Default theme should be system"
+    );
+  }
+
+  #[test]
+  fn test_default_table_sorting_settings() {
+    let default_sorting = TableSortingSettings::default();
+
+    assert_eq!(
+      default_sorting.column, "name",
+      "Default sort column should be name"
+    );
+    assert_eq!(
+      default_sorting.direction, "asc",
+      "Default sort direction should be asc"
+    );
+  }
+
+  #[test]
+  fn test_load_settings_nonexistent_file() {
+    let (manager, _temp_dir) = create_test_settings_manager();
+
+    let result = manager.load_settings();
+    assert!(
+      result.is_ok(),
+      "Should handle nonexistent settings file gracefully"
+    );
+
+    let settings = result.unwrap();
+    assert!(
+      !settings.set_as_default_browser,
+      "Should return default settings"
+    );
+    assert_eq!(settings.theme, "system", "Should return default theme");
+  }
+
+  #[test]
+  fn test_save_and_load_settings() {
+    let (manager, _temp_dir) = create_test_settings_manager();
+
+    let test_settings = AppSettings {
+      set_as_default_browser: true,
+      theme: "dark".to_string(),
+    };
+
+    // Save settings
+    let save_result = manager.save_settings(&test_settings);
+    assert!(save_result.is_ok(), "Should save settings successfully");
+
+    // Load settings back
+    let load_result = manager.load_settings();
+    assert!(load_result.is_ok(), "Should load settings successfully");
+
+    let loaded_settings = load_result.unwrap();
+    assert!(
+      loaded_settings.set_as_default_browser,
+      "Loaded settings should match saved"
+    );
+    assert_eq!(
+      loaded_settings.theme, "dark",
+      "Loaded theme should match saved"
+    );
+  }
+
+  #[test]
+  fn test_load_table_sorting_nonexistent_file() {
+    let (manager, _temp_dir) = create_test_settings_manager();
+
+    let result = manager.load_table_sorting();
+    assert!(
+      result.is_ok(),
+      "Should handle nonexistent sorting file gracefully"
+    );
+
+    let sorting = result.unwrap();
+    assert_eq!(sorting.column, "name", "Should return default sorting");
+    assert_eq!(sorting.direction, "asc", "Should return default direction");
+  }
+
+  #[test]
+  fn test_save_and_load_table_sorting() {
+    let (manager, _temp_dir) = create_test_settings_manager();
+
+    let test_sorting = TableSortingSettings {
+      column: "browser".to_string(),
+      direction: "desc".to_string(),
+    };
+
+    // Save sorting
+    let save_result = manager.save_table_sorting(&test_sorting);
+    assert!(save_result.is_ok(), "Should save sorting successfully");
+
+    // Load sorting back
+    let load_result = manager.load_table_sorting();
+    assert!(load_result.is_ok(), "Should load sorting successfully");
+
+    let loaded_sorting = load_result.unwrap();
+    assert_eq!(
+      loaded_sorting.column, "browser",
+      "Loaded column should match saved"
+    );
+    assert_eq!(
+      loaded_sorting.direction, "desc",
+      "Loaded direction should match saved"
+    );
+  }
+
+  #[test]
+  fn test_should_show_settings_on_startup() {
+    let (manager, _temp_dir) = create_test_settings_manager();
+
+    let result = manager.should_show_settings_on_startup();
+    assert!(result.is_ok(), "Should not fail");
+
+    let should_show = result.unwrap();
+    assert!(
+      !should_show,
+      "Should always return false as per implementation"
+    );
+  }
+
+  #[test]
+  fn test_load_corrupted_settings_file() {
+    let (manager, _temp_dir) = create_test_settings_manager();
+
+    // Create settings directory
+    let settings_dir = manager.get_settings_dir();
+    fs::create_dir_all(&settings_dir).expect("Should create settings directory");
+
+    // Write corrupted JSON
+    let settings_file = manager.get_settings_file();
+    fs::write(&settings_file, "{ invalid json }").expect("Should write corrupted file");
+
+    // Should handle corrupted file gracefully
+    let result = manager.load_settings();
+    assert!(
+      result.is_ok(),
+      "Should handle corrupted settings file gracefully"
+    );
+
+    let settings = result.unwrap();
+    assert!(
+      !settings.set_as_default_browser,
+      "Should return default settings for corrupted file"
+    );
+    assert_eq!(
+      settings.theme, "system",
+      "Should return default theme for corrupted file"
+    );
+  }
+
+  #[test]
+  fn test_settings_file_paths() {
+    let (manager, _temp_dir) = create_test_settings_manager();
+
+    let settings_dir = manager.get_settings_dir();
+    let settings_file = manager.get_settings_file();
+    let sorting_file = manager.get_table_sorting_file();
+
+    assert!(
+      settings_dir.to_string_lossy().contains("settings"),
+      "Settings dir should contain 'settings'"
+    );
+    assert!(
+      settings_file
+        .to_string_lossy()
+        .ends_with("app_settings.json"),
+      "Settings file should end with app_settings.json"
+    );
+    assert!(
+      sorting_file
+        .to_string_lossy()
+        .ends_with("table_sorting.json"),
+      "Sorting file should end with table_sorting.json"
+    );
+  }
+}

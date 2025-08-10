@@ -889,38 +889,55 @@ mod tests {
     assert_eq!(BrowserType::TorBrowser.as_str(), "tor-browser");
     assert_eq!(BrowserType::Camoufox.as_str(), "camoufox");
 
-    // Test from_str
+    // Test from_str - use expect with descriptive messages instead of unwrap
     assert_eq!(
-      BrowserType::from_str("mullvad-browser").unwrap(),
+      BrowserType::from_str("mullvad-browser").expect("mullvad-browser should be valid"),
       BrowserType::MullvadBrowser
     );
     assert_eq!(
-      BrowserType::from_str("firefox").unwrap(),
+      BrowserType::from_str("firefox").expect("firefox should be valid"),
       BrowserType::Firefox
     );
     assert_eq!(
-      BrowserType::from_str("firefox-developer").unwrap(),
+      BrowserType::from_str("firefox-developer").expect("firefox-developer should be valid"),
       BrowserType::FirefoxDeveloper
     );
     assert_eq!(
-      BrowserType::from_str("chromium").unwrap(),
+      BrowserType::from_str("chromium").expect("chromium should be valid"),
       BrowserType::Chromium
     );
-    assert_eq!(BrowserType::from_str("brave").unwrap(), BrowserType::Brave);
-    assert_eq!(BrowserType::from_str("zen").unwrap(), BrowserType::Zen);
     assert_eq!(
-      BrowserType::from_str("tor-browser").unwrap(),
+      BrowserType::from_str("brave").expect("brave should be valid"),
+      BrowserType::Brave
+    );
+    assert_eq!(
+      BrowserType::from_str("zen").expect("zen should be valid"),
+      BrowserType::Zen
+    );
+    assert_eq!(
+      BrowserType::from_str("tor-browser").expect("tor-browser should be valid"),
       BrowserType::TorBrowser
     );
     assert_eq!(
-      BrowserType::from_str("camoufox").unwrap(),
+      BrowserType::from_str("camoufox").expect("camoufox should be valid"),
       BrowserType::Camoufox
     );
 
-    // Test invalid browser type
-    assert!(BrowserType::from_str("invalid").is_err());
-    assert!(BrowserType::from_str("").is_err());
-    assert!(BrowserType::from_str("Firefox").is_err()); // Case sensitive
+    // Test invalid browser type - these should properly fail
+    let invalid_result = BrowserType::from_str("invalid");
+    assert!(
+      invalid_result.is_err(),
+      "Invalid browser type should return error"
+    );
+
+    let empty_result = BrowserType::from_str("");
+    assert!(empty_result.is_err(), "Empty string should return error");
+
+    let case_sensitive_result = BrowserType::from_str("Firefox");
+    assert!(
+      case_sensitive_result.is_err(),
+      "Case sensitive check should fail"
+    );
   }
 
   #[test]
@@ -929,9 +946,12 @@ mod tests {
     let browser = FirefoxBrowser::new(BrowserType::Firefox);
     let args = browser
       .create_launch_args("/path/to/profile", None, None)
-      .unwrap();
+      .expect("Failed to create launch args for Firefox");
     assert_eq!(args, vec!["-profile", "/path/to/profile"]);
-    assert!(!args.contains(&"-no-remote".to_string()));
+    assert!(
+      !args.contains(&"-no-remote".to_string()),
+      "Firefox should not use -no-remote"
+    );
 
     let args = browser
       .create_launch_args(
@@ -939,7 +959,7 @@ mod tests {
         None,
         Some("https://example.com".to_string()),
       )
-      .unwrap();
+      .expect("Failed to create launch args for Firefox with URL");
     assert_eq!(
       args,
       vec!["-profile", "/path/to/profile", "https://example.com"]
@@ -949,23 +969,26 @@ mod tests {
     let browser = FirefoxBrowser::new(BrowserType::MullvadBrowser);
     let args = browser
       .create_launch_args("/path/to/profile", None, None)
-      .unwrap();
+      .expect("Failed to create launch args for Mullvad Browser");
     assert_eq!(args, vec!["-profile", "/path/to/profile", "-no-remote"]);
 
     // Test Tor Browser (should use -no-remote)
     let browser = FirefoxBrowser::new(BrowserType::TorBrowser);
     let args = browser
       .create_launch_args("/path/to/profile", None, None)
-      .unwrap();
+      .expect("Failed to create launch args for Tor Browser");
     assert_eq!(args, vec!["-profile", "/path/to/profile", "-no-remote"]);
 
     // Test Zen Browser (should not use -no-remote)
     let browser = FirefoxBrowser::new(BrowserType::Zen);
     let args = browser
       .create_launch_args("/path/to/profile", None, None)
-      .unwrap();
+      .expect("Failed to create launch args for Zen Browser");
     assert_eq!(args, vec!["-profile", "/path/to/profile"]);
-    assert!(!args.contains(&"-no-remote".to_string()));
+    assert!(
+      !args.contains(&"-no-remote".to_string()),
+      "Zen Browser should not use -no-remote"
+    );
   }
 
   #[test]
@@ -973,15 +996,27 @@ mod tests {
     let browser = ChromiumBrowser::new(BrowserType::Chromium);
     let args = browser
       .create_launch_args("/path/to/profile", None, None)
-      .unwrap();
+      .expect("Failed to create launch args for Chromium");
 
     // Test that basic required arguments are present
-    assert!(args.contains(&"--user-data-dir=/path/to/profile".to_string()));
-    assert!(args.contains(&"--no-default-browser-check".to_string()));
+    assert!(
+      args.contains(&"--user-data-dir=/path/to/profile".to_string()),
+      "Chromium args should contain user-data-dir"
+    );
+    assert!(
+      args.contains(&"--no-default-browser-check".to_string()),
+      "Chromium args should contain no-default-browser-check"
+    );
 
     // Test that automatic update disabling arguments are present
-    assert!(args.contains(&"--disable-background-mode".to_string()));
-    assert!(args.contains(&"--disable-component-update".to_string()));
+    assert!(
+      args.contains(&"--disable-background-mode".to_string()),
+      "Chromium args should contain disable-background-mode"
+    );
+    assert!(
+      args.contains(&"--disable-component-update".to_string()),
+      "Chromium args should contain disable-component-update"
+    );
 
     let args_with_url = browser
       .create_launch_args(
@@ -989,11 +1024,17 @@ mod tests {
         None,
         Some("https://example.com".to_string()),
       )
-      .unwrap();
-    assert!(args_with_url.contains(&"https://example.com".to_string()));
+      .expect("Failed to create launch args for Chromium with URL");
+    assert!(
+      args_with_url.contains(&"https://example.com".to_string()),
+      "Chromium args should contain the URL"
+    );
 
     // Verify URL is at the end
-    assert_eq!(args_with_url.last().unwrap(), "https://example.com");
+    assert_eq!(
+      args_with_url.last().expect("Args should not be empty"),
+      "https://example.com"
+    );
   }
 
   #[test]
@@ -1026,40 +1067,44 @@ mod tests {
 
   #[test]
   fn test_version_downloaded_check() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let binaries_dir = temp_dir.path();
 
     // Create a mock Firefox browser installation with new path structure: binaries/<browser>/<version>/
     let browser_dir = binaries_dir.join("firefox").join("139.0");
-    fs::create_dir_all(&browser_dir).unwrap();
+    fs::create_dir_all(&browser_dir).expect("Failed to create browser directory");
 
     #[cfg(target_os = "macos")]
     {
       // Create a mock .app directory for macOS
       let app_dir = browser_dir.join("Firefox.app");
-      fs::create_dir_all(&app_dir).unwrap();
+      fs::create_dir_all(&app_dir).expect("Failed to create Firefox.app directory");
     }
 
     #[cfg(target_os = "linux")]
     {
       // Create a mock firefox subdirectory and executable for Linux
       let firefox_subdir = browser_dir.join("firefox");
-      fs::create_dir_all(&firefox_subdir).unwrap();
+      fs::create_dir_all(&firefox_subdir).expect("Failed to create firefox subdirectory");
       let executable_path = firefox_subdir.join("firefox");
-      fs::write(&executable_path, "mock executable").unwrap();
+      fs::write(&executable_path, "mock executable").expect("Failed to write mock executable");
 
       // Set executable permissions on Linux
       use std::os::unix::fs::PermissionsExt;
-      let mut permissions = executable_path.metadata().unwrap().permissions();
+      let mut permissions = executable_path
+        .metadata()
+        .expect("Failed to get file metadata")
+        .permissions();
       permissions.set_mode(0o755);
-      fs::set_permissions(&executable_path, permissions).unwrap();
+      fs::set_permissions(&executable_path, permissions)
+        .expect("Failed to set executable permissions");
     }
 
     #[cfg(target_os = "windows")]
     {
       // Create a mock firefox.exe for Windows
       let executable_path = browser_dir.join("firefox.exe");
-      fs::write(&executable_path, "mock executable").unwrap();
+      fs::write(&executable_path, "mock executable").expect("Failed to write mock executable");
     }
 
     let browser = FirefoxBrowser::new(BrowserType::Firefox);
@@ -1068,60 +1113,76 @@ mod tests {
 
     // Test with Chromium browser with new path structure
     let chromium_dir = binaries_dir.join("chromium").join("1465660");
-    fs::create_dir_all(&chromium_dir).unwrap();
+    fs::create_dir_all(&chromium_dir).expect("Failed to create chromium directory");
 
     #[cfg(target_os = "macos")]
     {
       let chromium_app_dir = chromium_dir.join("Chromium.app");
-      fs::create_dir_all(chromium_app_dir.join("Contents").join("MacOS")).unwrap();
+      fs::create_dir_all(chromium_app_dir.join("Contents").join("MacOS"))
+        .expect("Failed to create Chromium.app structure");
 
       // Create a mock executable
       let executable_path = chromium_app_dir
         .join("Contents")
         .join("MacOS")
         .join("Chromium");
-      fs::write(&executable_path, "mock executable").unwrap();
+      fs::write(&executable_path, "mock executable")
+        .expect("Failed to write mock Chromium executable");
     }
 
     #[cfg(target_os = "linux")]
     {
       // Create a mock chromium executable for Linux
       let executable_path = chromium_dir.join("chromium");
-      fs::write(&executable_path, "mock executable").unwrap();
+      fs::write(&executable_path, "mock executable")
+        .expect("Failed to write mock chromium executable");
 
       // Set executable permissions on Linux
       use std::os::unix::fs::PermissionsExt;
-      let mut permissions = executable_path.metadata().unwrap().permissions();
+      let mut permissions = executable_path
+        .metadata()
+        .expect("Failed to get chromium metadata")
+        .permissions();
       permissions.set_mode(0o755);
-      fs::set_permissions(&executable_path, permissions).unwrap();
+      fs::set_permissions(&executable_path, permissions)
+        .expect("Failed to set chromium permissions");
     }
 
     #[cfg(target_os = "windows")]
     {
       // Create a mock chromium.exe for Windows
       let executable_path = chromium_dir.join("chromium.exe");
-      fs::write(&executable_path, "mock executable").unwrap();
+      fs::write(&executable_path, "mock executable").expect("Failed to write mock chromium.exe");
     }
 
     let chromium_browser = ChromiumBrowser::new(BrowserType::Chromium);
-    assert!(chromium_browser.is_version_downloaded("1465660", binaries_dir));
-    assert!(!chromium_browser.is_version_downloaded("1465661", binaries_dir));
+    assert!(
+      chromium_browser.is_version_downloaded("1465660", binaries_dir),
+      "Chromium version should be detected as downloaded"
+    );
+    assert!(
+      !chromium_browser.is_version_downloaded("1465661", binaries_dir),
+      "Non-existent Chromium version should not be detected as downloaded"
+    );
   }
 
   #[test]
   fn test_version_downloaded_no_app_directory() {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let binaries_dir = temp_dir.path();
 
     // Create browser directory but no proper executable structure
     let browser_dir = binaries_dir.join("firefox").join("139.0");
-    fs::create_dir_all(&browser_dir).unwrap();
+    fs::create_dir_all(&browser_dir).expect("Failed to create browser directory");
 
     // Create some other files but no proper executable structure
-    fs::write(browser_dir.join("readme.txt"), "Some content").unwrap();
+    fs::write(browser_dir.join("readme.txt"), "Some content").expect("Failed to write readme file");
 
     let browser = FirefoxBrowser::new(BrowserType::Firefox);
-    assert!(!browser.is_version_downloaded("139.0", binaries_dir));
+    assert!(
+      !browser.is_version_downloaded("139.0", binaries_dir),
+      "Firefox version should not be detected without proper executable structure"
+    );
   }
 
   #[test]
@@ -1146,16 +1207,20 @@ mod tests {
     };
 
     // Test that it can be serialized (implements Serialize)
-    let json = serde_json::to_string(&proxy).unwrap();
-    assert!(json.contains("127.0.0.1"));
-    assert!(json.contains("8080"));
-    assert!(json.contains("http"));
+    let json = serde_json::to_string(&proxy).expect("Failed to serialize proxy settings");
+    assert!(json.contains("127.0.0.1"), "JSON should contain host IP");
+    assert!(json.contains("8080"), "JSON should contain port number");
+    assert!(json.contains("http"), "JSON should contain proxy type");
 
     // Test that it can be deserialized (implements Deserialize)
-    let deserialized: ProxySettings = serde_json::from_str(&json).unwrap();
-    assert_eq!(deserialized.proxy_type, proxy.proxy_type);
-    assert_eq!(deserialized.host, proxy.host);
-    assert_eq!(deserialized.port, proxy.port);
+    let deserialized: ProxySettings =
+      serde_json::from_str(&json).expect("Failed to deserialize proxy settings");
+    assert_eq!(
+      deserialized.proxy_type, proxy.proxy_type,
+      "Proxy type should match"
+    );
+    assert_eq!(deserialized.host, proxy.host, "Host should match");
+    assert_eq!(deserialized.port, proxy.port, "Port should match");
   }
 }
 

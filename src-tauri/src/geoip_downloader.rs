@@ -293,12 +293,26 @@ mod tests {
 
   #[test]
   fn test_is_geoip_database_available() {
-    // This test will return false unless the database actually exists
-    // In a real environment, this would check the actual file system
+    // Test that the function works correctly regardless of file system state
     let is_available = GeoIPDownloader::is_geoip_database_available();
-    // We can't assert a specific value since it depends on the system state
-    // But we can verify the function doesn't panic
-    println!("GeoIP database available: {is_available}");
+
+    // The function should return a boolean value (either true or false)
+    // The function should return a boolean value - we just verify it doesn't panic
+    // and returns the expected result based on file existence
+
+    // Verify the function logic by checking if the path resolution works
+    let mmdb_path_result = GeoIPDownloader::get_mmdb_file_path();
+    assert!(
+      mmdb_path_result.is_ok(),
+      "Should be able to get MMDB file path"
+    );
+
+    let mmdb_path = mmdb_path_result.unwrap();
+    let expected_available = mmdb_path.exists();
+    assert_eq!(
+      is_available, expected_available,
+      "Function result should match actual file existence"
+    );
   }
 }
 

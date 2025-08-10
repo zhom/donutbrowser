@@ -779,13 +779,15 @@ mod tests {
     let state_file = test_settings_manager
       .get_settings_dir()
       .join("auto_update_state.json");
-    std::fs::create_dir_all(test_settings_manager.get_settings_dir()).unwrap();
-    let json = serde_json::to_string_pretty(&state).unwrap();
-    std::fs::write(&state_file, json).unwrap();
+    std::fs::create_dir_all(test_settings_manager.get_settings_dir())
+      .expect("Failed to create settings directory");
+    let json = serde_json::to_string_pretty(&state).expect("Failed to serialize state");
+    std::fs::write(&state_file, json).expect("Failed to write state file");
 
     // Load state
-    let content = std::fs::read_to_string(&state_file).unwrap();
-    let loaded_state: AutoUpdateState = serde_json::from_str(&content).unwrap();
+    let content = std::fs::read_to_string(&state_file).expect("Failed to read state file");
+    let loaded_state: AutoUpdateState =
+      serde_json::from_str(&content).expect("Failed to deserialize state");
 
     assert_eq!(loaded_state.disabled_browsers.len(), 1);
     assert!(loaded_state.disabled_browsers.contains("firefox"));
@@ -823,11 +825,15 @@ mod tests {
     let state_file = test_settings_manager
       .get_settings_dir()
       .join("auto_update_state.json");
-    std::fs::create_dir_all(test_settings_manager.get_settings_dir()).unwrap();
+    std::fs::create_dir_all(test_settings_manager.get_settings_dir())
+      .expect("Failed to create settings directory");
 
     // Initially not disabled (empty state file means default state)
     let state = AutoUpdateState::default();
-    assert!(!state.disabled_browsers.contains("firefox"));
+    assert!(
+      !state.disabled_browsers.contains("firefox"),
+      "Firefox should not be disabled initially"
+    );
 
     // Start update (should disable)
     let mut state = AutoUpdateState::default();
@@ -835,27 +841,41 @@ mod tests {
     state
       .auto_update_downloads
       .insert("firefox-1.1.0".to_string());
-    let json = serde_json::to_string_pretty(&state).unwrap();
-    std::fs::write(&state_file, json).unwrap();
+    let json = serde_json::to_string_pretty(&state).expect("Failed to serialize state");
+    std::fs::write(&state_file, json).expect("Failed to write state file");
 
     // Check that it's disabled
-    let content = std::fs::read_to_string(&state_file).unwrap();
-    let loaded_state: AutoUpdateState = serde_json::from_str(&content).unwrap();
-    assert!(loaded_state.disabled_browsers.contains("firefox"));
-    assert!(loaded_state.auto_update_downloads.contains("firefox-1.1.0"));
+    let content = std::fs::read_to_string(&state_file).expect("Failed to read state file");
+    let loaded_state: AutoUpdateState =
+      serde_json::from_str(&content).expect("Failed to deserialize state");
+    assert!(
+      loaded_state.disabled_browsers.contains("firefox"),
+      "Firefox should be disabled"
+    );
+    assert!(
+      loaded_state.auto_update_downloads.contains("firefox-1.1.0"),
+      "Firefox download should be tracked"
+    );
 
     // Complete update (should enable)
     let mut state = loaded_state;
     state.disabled_browsers.remove("firefox");
     state.auto_update_downloads.remove("firefox-1.1.0");
-    let json = serde_json::to_string_pretty(&state).unwrap();
-    std::fs::write(&state_file, json).unwrap();
+    let json = serde_json::to_string_pretty(&state).expect("Failed to serialize final state");
+    std::fs::write(&state_file, json).expect("Failed to write final state file");
 
     // Check that it's enabled again
-    let content = std::fs::read_to_string(&state_file).unwrap();
-    let final_state: AutoUpdateState = serde_json::from_str(&content).unwrap();
-    assert!(!final_state.disabled_browsers.contains("firefox"));
-    assert!(!final_state.auto_update_downloads.contains("firefox-1.1.0"));
+    let content = std::fs::read_to_string(&state_file).expect("Failed to read final state file");
+    let final_state: AutoUpdateState =
+      serde_json::from_str(&content).expect("Failed to deserialize final state");
+    assert!(
+      !final_state.disabled_browsers.contains("firefox"),
+      "Firefox should be enabled again"
+    );
+    assert!(
+      !final_state.auto_update_downloads.contains("firefox-1.1.0"),
+      "Firefox download should not be tracked anymore"
+    );
   }
 
   #[test]
@@ -863,7 +883,7 @@ mod tests {
     use tempfile::TempDir;
 
     // Create a temporary directory for testing
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
 
     // Create a mock settings manager that uses the temp directory
     struct TestSettingsManager {
@@ -897,21 +917,27 @@ mod tests {
     let state_file = test_settings_manager
       .get_settings_dir()
       .join("auto_update_state.json");
-    std::fs::create_dir_all(test_settings_manager.get_settings_dir()).unwrap();
-    let json = serde_json::to_string_pretty(&state).unwrap();
-    std::fs::write(&state_file, json).unwrap();
+    std::fs::create_dir_all(test_settings_manager.get_settings_dir())
+      .expect("Failed to create settings directory");
+    let json = serde_json::to_string_pretty(&state).expect("Failed to serialize initial state");
+    std::fs::write(&state_file, json).expect("Failed to write initial state file");
 
     // Dismiss notification (remove from pending updates)
     state
       .pending_updates
       .retain(|n| n.id != "test_notification");
-    let json = serde_json::to_string_pretty(&state).unwrap();
-    std::fs::write(&state_file, json).unwrap();
+    let json = serde_json::to_string_pretty(&state).expect("Failed to serialize updated state");
+    std::fs::write(&state_file, json).expect("Failed to write updated state file");
 
     // Check that it's removed
-    let content = std::fs::read_to_string(&state_file).unwrap();
-    let loaded_state: AutoUpdateState = serde_json::from_str(&content).unwrap();
-    assert_eq!(loaded_state.pending_updates.len(), 0);
+    let content = std::fs::read_to_string(&state_file).expect("Failed to read updated state file");
+    let loaded_state: AutoUpdateState =
+      serde_json::from_str(&content).expect("Failed to deserialize updated state");
+    assert_eq!(
+      loaded_state.pending_updates.len(),
+      0,
+      "Pending updates should be empty after dismissal"
+    );
   }
 }
 

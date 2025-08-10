@@ -519,31 +519,152 @@ mod tests {
 
   #[test]
   fn test_should_run_background_update_logic() {
-    // Note: This test uses the shared state file, so results may vary
-    // depending on previous test runs. This is expected behavior.
+    // Create isolated test states to avoid interference
+    let current_time = VersionUpdater::get_current_timestamp();
 
     // Test with recent update (should not update)
     let recent_state = BackgroundUpdateState {
-      last_update_time: VersionUpdater::get_current_timestamp() - 60, // 1 minute ago
+      last_update_time: current_time - 60, // 1 minute ago
       update_interval_hours: 3,
     };
-    VersionUpdater::save_background_update_state(&recent_state).unwrap();
-    assert!(!VersionUpdater::should_run_background_update());
+
+    // Save and test recent state
+    let save_result = VersionUpdater::save_background_update_state(&recent_state);
+    assert!(save_result.is_ok(), "Should save recent state successfully");
+
+    let should_update_recent = VersionUpdater::should_run_background_update();
+    assert!(
+      !should_update_recent,
+      "Should not update when last update was recent"
+    );
 
     // Test with old update (should update)
     let old_state = BackgroundUpdateState {
-      last_update_time: VersionUpdater::get_current_timestamp() - (4 * 60 * 60), // 4 hours ago
+      last_update_time: current_time - (4 * 60 * 60), // 4 hours ago
       update_interval_hours: 3,
     };
-    VersionUpdater::save_background_update_state(&old_state).unwrap();
-    assert!(VersionUpdater::should_run_background_update());
+
+    // Save and test old state
+    let save_result = VersionUpdater::save_background_update_state(&old_state);
+    assert!(save_result.is_ok(), "Should save old state successfully");
+
+    let should_update_old = VersionUpdater::should_run_background_update();
+    assert!(should_update_old, "Should update when last update was old");
+
+    // Test with never updated (should update)
+    let never_updated_state = BackgroundUpdateState {
+      last_update_time: 0,
+      update_interval_hours: 3,
+    };
+
+    let save_result = VersionUpdater::save_background_update_state(&never_updated_state);
+    assert!(
+      save_result.is_ok(),
+      "Should save never updated state successfully"
+    );
+
+    let should_update_never = VersionUpdater::should_run_background_update();
+    assert!(
+      should_update_never,
+      "Should update when never updated before"
+    );
   }
 
   #[test]
   fn test_cache_dir_creation() {
     // This should not panic and should create the directory if it doesn't exist
-    let cache_dir = VersionUpdater::get_cache_dir().unwrap();
-    assert!(cache_dir.exists());
-    assert!(cache_dir.is_dir());
+    let cache_dir_result = VersionUpdater::get_cache_dir();
+    assert!(
+      cache_dir_result.is_ok(),
+      "Should successfully get cache directory"
+    );
+
+    let cache_dir = cache_dir_result.unwrap();
+    assert!(
+      cache_dir.exists(),
+      "Cache directory should exist after creation"
+    );
+    assert!(cache_dir.is_dir(), "Cache directory should be a directory");
+
+    // Verify the path contains expected components
+    let path_str = cache_dir.to_string_lossy();
+    assert!(
+      path_str.contains("version_cache"),
+      "Path should contain version_cache"
+    );
+
+    // Test that calling it again returns the same directory
+    let cache_dir2 = VersionUpdater::get_cache_dir().unwrap();
+    assert_eq!(
+      cache_dir, cache_dir2,
+      "Multiple calls should return same directory"
+    );
+  }
+
+  #[test]
+  fn test_version_updater_creation() {
+    let updater = VersionUpdater::new();
+
+    // Should have valid references to services
+    assert!(
+      !std::ptr::eq(updater.version_service as *const _, std::ptr::null()),
+      "Version service should not be null"
+    );
+    assert!(
+      !std::ptr::eq(updater.auto_updater as *const _, std::ptr::null()),
+      "Auto updater should not be null"
+    );
+    assert!(
+      updater.app_handle.is_none(),
+      "App handle should initially be None"
+    );
+  }
+
+  #[test]
+  fn test_get_current_timestamp() {
+    let timestamp1 = VersionUpdater::get_current_timestamp();
+
+    // Should be a reasonable timestamp (after year 2020)
+    assert!(
+      timestamp1 > 1577836800,
+      "Timestamp should be after 2020-01-01"
+    ); // 2020-01-01 00:00:00 UTC
+
+    // Should be before year 2100
+    assert!(
+      timestamp1 < 4102444800,
+      "Timestamp should be before 2100-01-01"
+    ); // 2100-01-01 00:00:00 UTC
+
+    // Wait a tiny bit and check it increases
+    std::thread::sleep(std::time::Duration::from_millis(1));
+    let timestamp2 = VersionUpdater::get_current_timestamp();
+    assert!(timestamp2 >= timestamp1, "Timestamp should not decrease");
+  }
+
+  #[test]
+  fn test_background_update_state_default() {
+    let state = BackgroundUpdateState::default();
+
+    assert_eq!(
+      state.last_update_time, 0,
+      "Default last update time should be 0"
+    );
+    assert_eq!(
+      state.update_interval_hours, 3,
+      "Default update interval should be 3 hours"
+    );
+  }
+
+  #[test]
+  fn test_get_version_updater_singleton() {
+    let updater1 = get_version_updater();
+    let updater2 = get_version_updater();
+
+    // Should return the same Arc instance
+    assert!(
+      Arc::ptr_eq(&updater1, &updater2),
+      "Should return same singleton instance"
+    );
   }
 }

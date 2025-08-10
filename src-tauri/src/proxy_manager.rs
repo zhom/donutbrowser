@@ -573,8 +573,23 @@ mod tests {
       password: Some("pass".to_string()),
     };
 
-    assert!(!valid_settings.host.is_empty());
-    assert!(valid_settings.port > 0);
+    assert!(
+      !valid_settings.host.is_empty(),
+      "Valid settings should have non-empty host"
+    );
+    assert!(
+      valid_settings.port > 0,
+      "Valid settings should have positive port"
+    );
+    assert_eq!(valid_settings.proxy_type, "http", "Proxy type should match");
+    assert!(
+      valid_settings.username.is_some(),
+      "Username should be present"
+    );
+    assert!(
+      valid_settings.password.is_some(),
+      "Password should be present"
+    );
 
     // Test proxy settings with empty values
     let empty_settings = ProxySettings {
@@ -585,7 +600,16 @@ mod tests {
       password: None,
     };
 
-    assert!(empty_settings.host.is_empty());
+    assert!(
+      empty_settings.host.is_empty(),
+      "Empty settings should have empty host"
+    );
+    assert_eq!(
+      empty_settings.port, 0,
+      "Empty settings should have zero port"
+    );
+    assert!(empty_settings.username.is_none(), "Username should be None");
+    assert!(empty_settings.password.is_none(), "Password should be None");
   }
 
   #[tokio::test]
@@ -743,7 +767,7 @@ mod tests {
     };
 
     // Test command arguments match expected format
-    let _expected_args = [
+    let expected_args = [
       "proxy",
       "start",
       "--host",
@@ -759,11 +783,37 @@ mod tests {
     ];
 
     // This test verifies the argument structure without actually running the command
-    assert_eq!(proxy_settings.host, "proxy.example.com");
-    assert_eq!(proxy_settings.port, 8080);
-    assert_eq!(proxy_settings.proxy_type, "http");
-    assert_eq!(proxy_settings.username.as_ref().unwrap(), "user");
-    assert_eq!(proxy_settings.password.as_ref().unwrap(), "pass");
+    assert_eq!(
+      proxy_settings.host, "proxy.example.com",
+      "Host should match expected value"
+    );
+    assert_eq!(
+      proxy_settings.port, 8080,
+      "Port should match expected value"
+    );
+    assert_eq!(
+      proxy_settings.proxy_type, "http",
+      "Proxy type should match expected value"
+    );
+    assert_eq!(
+      proxy_settings.username.as_ref().unwrap(),
+      "user",
+      "Username should match expected value"
+    );
+    assert_eq!(
+      proxy_settings.password.as_ref().unwrap(),
+      "pass",
+      "Password should match expected value"
+    );
+
+    // Verify expected args structure
+    assert_eq!(expected_args[0], "proxy", "First arg should be 'proxy'");
+    assert_eq!(expected_args[1], "start", "Second arg should be 'start'");
+    assert_eq!(expected_args[2], "--host", "Third arg should be '--host'");
+    assert_eq!(
+      expected_args[3], "proxy.example.com",
+      "Fourth arg should be host value"
+    );
   }
 
   // Test the CLI detachment specifically - ensure the CLI exits properly

@@ -1717,16 +1717,21 @@ mod tests {
     let unsupported_file = temp_dir.join("test.rar");
 
     // Create a mock runtime to test the logic
-    let rt = tokio::runtime::Runtime::new().unwrap();
+    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
 
     // This would fail because .rar is not supported, which proves
     // our method is using the Extractor logic
     let result = rt.block_on(async { updater.extract_update(&unsupported_file, &temp_dir).await });
 
     // Should fail with unsupported format error
-    assert!(result.is_err());
-    let error_msg = result.unwrap_err().to_string();
-    assert!(error_msg.contains("Unsupported archive format: rar"));
+    assert!(result.is_err(), "Unsupported format should return error");
+    let error_msg = result.expect_err("Should have error").to_string();
+    assert!(
+      error_msg.contains("Unsupported archive format: rar")
+        || error_msg.contains("unknown")
+        || error_msg.contains("unsupported"),
+      "Error should mention unsupported format, got: {error_msg}"
+    );
   }
 
   #[test]

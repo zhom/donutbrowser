@@ -496,15 +496,21 @@ mod tests {
     registry.mark_download_started("firefox", "139.0", PathBuf::from("/test/path"));
 
     // Should be considered downloaded immediately
-    assert!(registry.is_browser_downloaded("firefox", "139.0"));
+    assert!(
+      registry.is_browser_downloaded("firefox", "139.0"),
+      "Browser should be considered downloaded after marking as started"
+    );
 
     // Mark as completed
     registry
       .mark_download_completed("firefox", "139.0")
-      .unwrap();
+      .expect("Failed to mark download as completed");
 
     // Should still be considered downloaded
-    assert!(registry.is_browser_downloaded("firefox", "139.0"));
+    assert!(
+      registry.is_browser_downloaded("firefox", "139.0"),
+      "Browser should still be considered downloaded after completion"
+    );
   }
 
   #[test]
@@ -517,11 +523,20 @@ mod tests {
     };
 
     registry.add_browser(info);
-    assert!(registry.is_browser_downloaded("firefox", "139.0"));
+    assert!(
+      registry.is_browser_downloaded("firefox", "139.0"),
+      "Browser should be downloaded after adding"
+    );
 
     let removed = registry.remove_browser("firefox", "139.0");
-    assert!(removed.is_some());
-    assert!(!registry.is_browser_downloaded("firefox", "139.0"));
+    assert!(
+      removed.is_some(),
+      "Remove operation should return the removed browser info"
+    );
+    assert!(
+      !registry.is_browser_downloaded("firefox", "139.0"),
+      "Browser should not be downloaded after removal"
+    );
   }
 
   #[test]
@@ -532,6 +547,9 @@ mod tests {
     registry.mark_download_started("zen", "twilight", PathBuf::from("/test/zen-twilight"));
 
     // Check that it's registered
-    assert!(registry.is_browser_downloaded("zen", "twilight"));
+    assert!(
+      registry.is_browser_downloaded("zen", "twilight"),
+      "Zen twilight version should be registered as downloaded"
+    );
   }
 }

@@ -529,16 +529,113 @@ mod tests {
   #[test]
   fn test_theme_detector_creation() {
     let detector = ThemeDetector::instance();
+
+    // Should not panic when creating detector
+    assert!(
+      std::ptr::eq(detector, ThemeDetector::instance()),
+      "Should return same instance (singleton)"
+    );
+  }
+
+  #[test]
+  fn test_detect_system_theme_returns_valid_value() {
+    let detector = ThemeDetector::instance();
     let theme = detector.detect_system_theme();
 
     // Should return a valid theme string
-    assert!(matches!(theme.theme.as_str(), "light" | "dark" | "unknown"));
+    assert!(
+      matches!(theme.theme.as_str(), "light" | "dark" | "unknown"),
+      "Theme should be one of: light, dark, unknown. Got: {}",
+      theme.theme
+    );
+
+    // Theme string should not be empty
+    assert!(!theme.theme.is_empty(), "Theme string should not be empty");
   }
 
   #[test]
   fn test_get_system_theme_command() {
     let theme = get_system_theme();
-    assert!(matches!(theme.theme.as_str(), "light" | "dark" | "unknown"));
+
+    assert!(
+      matches!(theme.theme.as_str(), "light" | "dark" | "unknown"),
+      "Command should return valid theme. Got: {}",
+      theme.theme
+    );
+
+    // Should be consistent with direct detector call
+    let detector = ThemeDetector::instance();
+    let direct_theme = detector.detect_system_theme();
+    assert_eq!(
+      theme.theme, direct_theme.theme,
+      "Command and direct call should return same theme"
+    );
+  }
+
+  #[test]
+  fn test_system_theme_serialization() {
+    let theme = SystemTheme {
+      theme: "dark".to_string(),
+    };
+
+    // Test serialization
+    let serialized = serde_json::to_string(&theme);
+    assert!(
+      serialized.is_ok(),
+      "Should serialize SystemTheme successfully"
+    );
+
+    let json_str = serialized.unwrap();
+    assert!(
+      json_str.contains("dark"),
+      "Serialized JSON should contain theme value"
+    );
+
+    // Test deserialization
+    let deserialized: Result<SystemTheme, _> = serde_json::from_str(&json_str);
+    assert!(
+      deserialized.is_ok(),
+      "Should deserialize SystemTheme successfully"
+    );
+
+    let theme_back = deserialized.unwrap();
+    assert_eq!(
+      theme_back.theme, "dark",
+      "Deserialized theme should match original"
+    );
+  }
+
+  #[cfg(target_os = "linux")]
+  #[test]
+  fn test_linux_command_availability_check() {
+    use super::linux::is_command_available;
+
+    // Test with a command that should exist on most systems
+    let ls_available = is_command_available("ls");
+    assert!(ls_available, "ls command should be available on Linux");
+
+    // Test with a command that definitely doesn't exist
+    let fake_available = is_command_available("definitely_nonexistent_command_12345");
+    assert!(!fake_available, "Fake command should not be available");
+  }
+
+  #[test]
+  fn test_theme_detector_consistency() {
+    let detector = ThemeDetector::instance();
+
+    // Call detect_system_theme multiple times - should be consistent
+    let theme1 = detector.detect_system_theme();
+    let theme2 = detector.detect_system_theme();
+    let theme3 = detector.detect_system_theme();
+
+    assert_eq!(
+      theme1.theme, theme2.theme,
+      "Multiple calls should return consistent results"
+    );
+    assert_eq!(
+      theme2.theme, theme3.theme,
+      "Multiple calls should return consistent results"
+    );
   }
 }
 
