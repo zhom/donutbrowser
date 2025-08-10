@@ -460,7 +460,11 @@ impl Downloader {
 
     // Emit initial progress AFTER we've established total size and resume state
     let initial_percentage = if let Some(total) = total_size {
-      if total > 0 { (existing_size as f64 / total as f64) * 100.0 } else { 0.0 }
+      if total > 0 {
+        (existing_size as f64 / total as f64) * 100.0
+      } else {
+        0.0
+      }
     } else {
       0.0
     };
@@ -504,7 +508,11 @@ impl Downloader {
         let elapsed = start_time.elapsed().as_secs_f64();
         // Compute speed based only on bytes downloaded in this session to avoid inflated values when resuming
         let downloaded_since_start = downloaded.saturating_sub(existing_size);
-        let speed = if elapsed > 0.0 { downloaded_since_start as f64 / elapsed } else { 0.0 };
+        let speed = if elapsed > 0.0 {
+          downloaded_since_start as f64 / elapsed
+        } else {
+          0.0
+        };
         let percentage = if let Some(total) = total_size {
           if total > 0 {
             (downloaded as f64 / total as f64) * 100.0
