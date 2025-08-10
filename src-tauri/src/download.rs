@@ -396,24 +396,6 @@ impl Downloader {
     let is_twilight =
       browser_type == BrowserType::Zen && version.to_lowercase().contains("twilight");
 
-    // Emit initial progress
-    let progress = DownloadProgress {
-      browser: browser_type.as_str().to_string(),
-      version: version.to_string(),
-      downloaded_bytes: 0,
-      total_bytes: None,
-      percentage: 0.0,
-      speed_bytes_per_sec: 0.0,
-      eta_seconds: None,
-      stage: if is_twilight {
-        "downloading (twilight rolling release)".to_string()
-      } else {
-        "downloading".to_string()
-      },
-    };
-
-    let _ = app_handle.emit("download-progress", &progress);
-
     // Determine if we have a partial file to resume
     let mut existing_size: u64 = 0;
     if let Ok(meta) = std::fs::metadata(&file_path) {
@@ -476,6 +458,32 @@ impl Downloader {
     let start_time = std::time::Instant::now();
     let mut last_update = start_time;
 
+    // Emit initial progress AFTER we've established total size and resume state
+    let initial_percentage = if let Some(total) = total_size {
+      if total > 0 { (existing_size as f64 / total as f64) * 100.0 } else { 0.0 }
+    } else {
+      0.0
+    };
+
+    let initial_stage = if is_twilight {
+      "downloading (twilight rolling release)".to_string()
+    } else {
+      "downloading".to_string()
+    };
+
+    let progress = DownloadProgress {
+      browser: browser_type.as_str().to_string(),
+      version: version.to_string(),
+      downloaded_bytes: existing_size,
+      total_bytes: total_size,
+      percentage: initial_percentage,
+      speed_bytes_per_sec: 0.0,
+      eta_seconds: None,
+      stage: initial_stage,
+    };
+
+    let _ = app_handle.emit("download-progress", &progress);
+
     // Open file in append mode (resuming) or create new
     use std::fs::OpenOptions;
     let mut file = OpenOptions::new()
@@ -494,11 +502,9 @@ impl Downloader {
       // Update progress every 100ms to avoid too many events
       if now.duration_since(last_update).as_millis() >= 100 {
         let elapsed = start_time.elapsed().as_secs_f64();
-        let speed = if elapsed > 0.0 {
-          downloaded as f64 / elapsed
-        } else {
-          0.0
-        };
+        // Compute speed based only on bytes downloaded in this session to avoid inflated values when resuming
+        let downloaded_since_start = downloaded.saturating_sub(existing_size);
+        let speed = if elapsed > 0.0 { downloaded_since_start as f64 / elapsed } else { 0.0 };
         let percentage = if let Some(total) = total_size {
           if total > 0 {
             (downloaded as f64 / total as f64) * 100.0
