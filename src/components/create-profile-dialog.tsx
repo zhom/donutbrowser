@@ -1,7 +1,7 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GoPlus } from "react-icons/go";
 import { LoadingButton } from "@/components/loading-button";
 import { ProxyFormDialog } from "@/components/proxy-form-dialog";
@@ -109,12 +109,13 @@ export function CreateProfileDialog({
   const [activeTab, setActiveTab] = useState("anti-detect");
 
   // Regular browser states
-  const [selectedBrowser, setSelectedBrowser] = useState<BrowserTypeString>();
+  const [selectedBrowser, setSelectedBrowser] =
+    useState<BrowserTypeString | null>("camoufox");
   const [selectedProxyId, setSelectedProxyId] = useState<string>();
 
   const handleTabChange = (value: string) => {
     if (value === "regular") {
-      setSelectedBrowser(undefined);
+      setSelectedBrowser(null);
     } else if (value === "anti-detect") {
       setSelectedBrowser("camoufox");
     }
@@ -355,7 +356,7 @@ export function CreateProfileDialog({
 
     // Reset all states
     setProfileName("");
-    setSelectedBrowser(undefined);
+    setSelectedBrowser(null);
     setSelectedProxyId(undefined);
     setAvailableReleaseTypes({});
     setCamoufoxReleaseTypes({});
@@ -366,40 +367,49 @@ export function CreateProfileDialog({
     onClose();
   };
 
-  const isCreateDisabled = () => {
-    if (!profileName.trim()) return true;
-
-    if (!selectedBrowser) return true;
-
-    if (isBrowserCurrentlyDownloading(selectedBrowser)) return true;
-
-    if (!isBrowserVersionAvailable(selectedBrowser)) return true;
-
-    if (selectedBrowser === "camoufox") {
-      return !getBestAvailableVersion(camoufoxReleaseTypes, selectedBrowser);
-    }
-
-    return !getBestAvailableVersion(availableReleaseTypes, selectedBrowser);
-  };
-
   const updateCamoufoxConfig = (key: keyof CamoufoxConfig, value: unknown) => {
     setCamoufoxConfig((prev) => ({ ...prev, [key]: value }));
   };
 
   // Check if browser version is downloaded and available
-  const isBrowserVersionAvailable = (browserStr: string) => {
-    const releaseTypes =
-      browserStr === "camoufox" ? camoufoxReleaseTypes : availableReleaseTypes;
-    const bestVersion = getBestAvailableVersion(releaseTypes, browserStr);
-    return bestVersion && isVersionDownloaded(bestVersion.version);
-  };
+  const isBrowserVersionAvailable = useCallback(
+    (browserStr: string) => {
+      const releaseTypes =
+        browserStr === "camoufox"
+          ? camoufoxReleaseTypes
+          : availableReleaseTypes;
+      const bestVersion = getBestAvailableVersion(releaseTypes, browserStr);
+      return bestVersion && isVersionDownloaded(bestVersion.version);
+    },
+    [
+      camoufoxReleaseTypes,
+      availableReleaseTypes,
+      isVersionDownloaded,
+      getBestAvailableVersion,
+    ],
+  );
 
   // Check if browser is currently downloading
-  const isBrowserCurrentlyDownloading = (browserStr: string) => {
-    return isBrowserDownloading(browserStr);
-  };
+  const isBrowserCurrentlyDownloading = useCallback(
+    (browserStr: string) => {
+      return isBrowserDownloading(browserStr);
+    },
+    [isBrowserDownloading],
+  );
 
-  console.log(selectedBrowser);
+  const isCreateDisabled = useMemo(() => {
+    if (!profileName.trim()) return true;
+    if (!selectedBrowser) return true;
+    if (isBrowserCurrentlyDownloading(selectedBrowser)) return true;
+    if (!isBrowserVersionAvailable(selectedBrowser)) return true;
+
+    return false;
+  }, [
+    profileName,
+    selectedBrowser,
+    isBrowserCurrentlyDownloading,
+    isBrowserVersionAvailable,
+  ]);
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -639,7 +649,7 @@ export function CreateProfileDialog({
             <LoadingButton
               onClick={handleCreate}
               isLoading={isCreating}
-              disabled={isCreateDisabled()}
+              disabled={isCreateDisabled}
             >
               Create
             </LoadingButton>

@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { Event as TauriEvent } from "@tauri-apps/api/event";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
 import { getBrowserDisplayName } from "@/lib/browser-utils";
@@ -7,6 +8,7 @@ import {
   showDownloadToast,
   showErrorToast,
   showSuccessToast,
+  showToast,
 } from "@/lib/toast-utils";
 
 interface GithubRelease {
@@ -257,21 +259,22 @@ export function useBrowserDownload() {
   // Legacy isDownloading for backwards compatibility
   const isDownloading = downloadingBrowsers.size > 0;
 
-  // Listen for download progress events
+  // Listen for download progress events (browsers) and GeoIP progress events
   useEffect(() => {
-    let unlistenFn: (() => void) | null = null;
+    let unlistenBrowser: (() => void) | null = null;
+    let unlistenGeoip: (() => void) | null = null;
 
-    const setupListener = async () => {
+    const setupListeners = async () => {
       try {
-        unlistenFn = await listen<DownloadProgress>(
+        // Browser binaries download progress
+        unlistenBrowser = await listen<DownloadProgress>(
           "download-progress",
-          (event) => {
+          async (event: TauriEvent<DownloadProgress>) => {
             const progress = event.payload;
             setDownloadProgress(progress);
 
             const browserName = getBrowserDisplayName(progress.browser);
 
-            // Show toast with progress
             if (progress.stage === "downloading") {
               const speedMBps = (
                 progress.speed_bytes_per_sec /
@@ -291,6 +294,16 @@ export function useBrowserDownload() {
             } else if (progress.stage === "verifying") {
               showDownloadToast(browserName, progress.version, "verifying");
             } else if (progress.stage === "completed") {
+              // On completion, refresh the downloaded versions for this browser and also refresh camoufox,
+              // since the Create dialog implicitly uses camoufox on the anti-detect tab
+              try {
+                await Promise.all([
+                  loadDownloadedVersions(progress.browser),
+                  progress.browser !== "camoufox"
+                    ? loadDownloadedVersions("camoufox")
+                    : Promise.resolve([]),
+                ]);
+              } catch {}
               showDownloadToast(browserName, progress.version, "completed");
               setDownloadProgress(null);
             }
@@ -299,20 +312,65 @@ export function useBrowserDownload() {
       } catch (error) {
         console.error("Failed to setup download progress listener:", error);
       }
+
+      try {
+        // GeoIP database download progress
+        unlistenGeoip = await listen<{
+          stage: string;
+          percentage: number;
+          message: string;
+        }>(
+          "geoip-download-progress",
+          (
+            event: TauriEvent<{
+              stage: string;
+              percentage: number;
+              message: string;
+            }>,
+          ) => {
+            const { stage, percentage } = event.payload;
+            if (stage === "downloading") {
+              showToast({
+                id: "geoip-download",
+                type: "download",
+                title: "Downloading GeoIP database",
+                stage: "downloading",
+                progress: { percentage },
+              });
+            } else if (stage === "completed") {
+              showToast({
+                id: "geoip-download",
+                type: "download",
+                title: "GeoIP database downloaded successfully!",
+                stage: "completed",
+              });
+            }
+          },
+        );
+      } catch (error) {
+        console.error("Failed to setup GeoIP progress listener:", error);
+      }
     };
 
-    setupListener();
+    void setupListeners();
 
     return () => {
-      if (unlistenFn) {
+      if (unlistenBrowser) {
         try {
-          unlistenFn();
+          unlistenBrowser();
         } catch (error) {
-          console.error("Failed to cleanup download progress listener:", error);
+          console.error("Failed to cleanup browser download listener:", error);
+        }
+      }
+      if (unlistenGeoip) {
+        try {
+          unlistenGeoip();
+        } catch (error) {
+          console.error("Failed to cleanup GeoIP progress listener:", error);
         }
       }
     };
-  }, [formatTime]);
+  }, [formatTime, loadDownloadedVersions]);
 
   return {
     availableVersions,

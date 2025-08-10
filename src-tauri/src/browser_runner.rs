@@ -1220,25 +1220,13 @@ impl BrowserRunner {
     {
       Ok(path) => path,
       Err(e) => {
-        // Check if the expected archive is already present (manual download)
-        let expected_archive_path = browser_dir.join(&download_info.filename);
-        if expected_archive_path.exists() {
-          println!(
-            "Download failed, but found existing archive at {}. Continuing with extraction.",
-            expected_archive_path.display()
-          );
-          expected_archive_path
-        } else {
-          // Remove only the registry entry; keep any files (including a partially downloaded archive)
-          let _ = registry.remove_browser(&browser_str, &version);
-          let _ = registry.save();
-          // Remove browser-version pair from downloading set on error
-          {
-            let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
-            downloading.remove(&download_key);
-          }
-          return Err(format!("Failed to download browser: {e}").into());
-        }
+        // Do NOT continue with extraction on failed downloads. Partial files may exist but are invalid.
+        // Clean registry entry and stop here so the UI can show a single, clear error.
+        let _ = registry.remove_browser(&browser_str, &version);
+        let _ = registry.save();
+        let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
+        downloading.remove(&download_key);
+        return Err(format!("Failed to download browser: {e}").into());
       }
     };
 
