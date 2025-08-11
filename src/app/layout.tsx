@@ -27,9 +27,9 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased overflow-hidden`}
       >
         <CustomThemeProvider>
-          <TooltipProvider>{children}</TooltipProvider>
-          <Toaster className="pointer-events-none" />
           <WindowDragArea />
+          <TooltipProvider>{children}</TooltipProvider>
+          <Toaster />
         </CustomThemeProvider>
       </body>
     </html>
