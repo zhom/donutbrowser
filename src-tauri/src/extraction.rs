@@ -712,7 +712,9 @@ impl Extractor {
     fs::copy(appimage_path, &dest_file)?;
 
     // Set executable permissions
-    self.set_executable_permissions_recursive(&dest_file).await?;
+    self
+      .set_executable_permissions_recursive(&dest_file)
+      .await?;
 
     Ok(dest_file)
   }
