@@ -319,6 +319,10 @@ export function useBrowserDownload() {
           stage: string;
           percentage: number;
           message: string;
+          downloaded_bytes?: number;
+          total_bytes?: number;
+          speed_bytes_per_sec?: number;
+          eta_seconds?: number;
         }>(
           "geoip-download-progress",
           (
@@ -326,16 +330,29 @@ export function useBrowserDownload() {
               stage: string;
               percentage: number;
               message: string;
+              downloaded_bytes?: number;
+              total_bytes?: number;
+              speed_bytes_per_sec?: number;
+              eta_seconds?: number;
             }>,
           ) => {
-            const { stage, percentage } = event.payload;
+            const { stage, percentage, speed_bytes_per_sec, eta_seconds } =
+              event.payload;
             if (stage === "downloading") {
+              const speedMBps = speed_bytes_per_sec
+                ? (speed_bytes_per_sec / (1024 * 1024)).toFixed(1)
+                : undefined;
+              const etaText = eta_seconds ? formatTime(eta_seconds) : undefined;
               showToast({
                 id: "geoip-download",
                 type: "download",
                 title: "Downloading GeoIP database",
                 stage: "downloading",
-                progress: { percentage },
+                progress: {
+                  percentage,
+                  ...(speedMBps ? { speed: speedMBps } : {}),
+                  ...(etaText ? { eta: etaText } : {}),
+                },
               });
             } else if (stage === "completed") {
               showToast({

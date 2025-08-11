@@ -14,6 +14,11 @@ pub struct GeoIPDownloadProgress {
   pub stage: String, // "downloading", "extracting", "completed"
   pub percentage: f64,
   pub message: String,
+  // Extra fields to mirror browser download progress payload
+  pub downloaded_bytes: Option<u64>,
+  pub total_bytes: Option<u64>,
+  pub speed_bytes_per_sec: Option<f64>,
+  pub eta_seconds: Option<f64>,
 }
 
 pub struct GeoIPDownloader {
@@ -91,6 +96,10 @@ impl GeoIPDownloader {
         stage: "downloading".to_string(),
         percentage: 0.0,
         message: "Starting GeoIP database download".to_string(),
+        downloaded_bytes: Some(0),
+        total_bytes: None,
+        speed_bytes_per_sec: Some(0.0),
+        eta_seconds: None,
       },
     );
 
@@ -122,26 +131,51 @@ impl GeoIPDownloader {
     }
 
     let total_size = response.content_length().unwrap_or(0);
-    let mut downloaded = 0;
+    let mut downloaded: u64 = 0;
     let mut file = fs::File::create(&mmdb_path).await?;
     let mut stream = response.bytes_stream();
 
     use futures_util::StreamExt;
+    use std::time::Instant;
+    let start_time = Instant::now();
+    let mut last_update = Instant::now();
     while let Some(chunk) = stream.next().await {
       let chunk = chunk?;
       downloaded += chunk.len() as u64;
       file.write_all(&chunk).await?;
 
-      if total_size > 0 {
-        let percentage = (downloaded as f64 / total_size as f64) * 100.0;
+      let now = Instant::now();
+      if now.duration_since(last_update).as_millis() >= 100 {
+        let elapsed = start_time.elapsed().as_secs_f64();
+        let speed = if elapsed > 0.0 {
+          downloaded as f64 / elapsed
+        } else {
+          0.0
+        };
+        let percentage = if total_size > 0 {
+          (downloaded as f64 / total_size as f64) * 100.0
+        } else {
+          0.0
+        };
+        let eta = if speed > 0.0 && total_size > 0 {
+          Some((total_size.saturating_sub(downloaded)) as f64 / speed)
+        } else {
+          None
+        };
+
         let _ = app_handle.emit(
           "geoip-download-progress",
           GeoIPDownloadProgress {
             stage: "downloading".to_string(),
             percentage,
             message: format!("Downloaded {downloaded} / {total_size} bytes"),
+            downloaded_bytes: Some(downloaded),
+            total_bytes: Some(total_size),
+            speed_bytes_per_sec: Some(speed),
+            eta_seconds: eta,
           },
         );
+        last_update = now;
       }
     }
 
@@ -154,6 +188,10 @@ impl GeoIPDownloader {
         stage: "completed".to_string(),
         percentage: 100.0,
         message: "GeoIP database download completed".to_string(),
+        downloaded_bytes: Some(downloaded),
+        total_bytes: Some(total_size),
+        speed_bytes_per_sec: Some(0.0),
+        eta_seconds: Some(0.0),
       },
     );
 
