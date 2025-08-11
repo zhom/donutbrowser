@@ -37,7 +37,7 @@
 - Safely use multiple accounts on one device by using anti-detect browser profiles, powered by [Camoufox](https://camoufox.com)
 - Proxy support with basic auth for all browsers except for TOR Browser
 - Import profiles from your existing browsers
-- Automatic updates both for browsers and for the app itself
+- Automatic updates for browsers
 - Set Donut Browser as your default browser to control in which profile to open links
 
 ## Download
