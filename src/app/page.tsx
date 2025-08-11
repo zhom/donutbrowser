@@ -5,7 +5,6 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrent } from "@tauri-apps/plugin-deep-link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CamoufoxConfigDialog } from "@/components/camoufox-config-dialog";
-import { ChangeVersionDialog } from "@/components/change-version-dialog";
 import { CreateProfileDialog } from "@/components/create-profile-dialog";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
 import { GroupAssignmentDialog } from "@/components/group-assignment-dialog";
@@ -46,7 +45,6 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [proxyDialogOpen, setProxyDialogOpen] = useState(false);
   const [createProfileDialogOpen, setCreateProfileDialogOpen] = useState(false);
-  const [changeVersionDialogOpen, setChangeVersionDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [importProfileDialogOpen, setImportProfileDialogOpen] = useState(false);
   const [proxyManagementDialogOpen, setProxyManagementDialogOpen] =
@@ -64,8 +62,6 @@ export default function Home() {
   const [selectedProfiles, setSelectedProfiles] = useState<string[]>([]);
   const [pendingUrls, setPendingUrls] = useState<PendingUrl[]>([]);
   const [currentProfileForProxy, setCurrentProfileForProxy] =
-    useState<BrowserProfile | null>(null);
-  const [currentProfileForVersionChange, setCurrentProfileForVersionChange] =
     useState<BrowserProfile | null>(null);
   const [currentProfileForCamoufoxConfig, setCurrentProfileForCamoufoxConfig] =
     useState<BrowserProfile | null>(null);
@@ -356,11 +352,6 @@ export default function Home() {
   const openProxyDialog = useCallback((profile: BrowserProfile | null) => {
     setCurrentProfileForProxy(profile);
     setProxyDialogOpen(true);
-  }, []);
-
-  const openChangeVersionDialog = useCallback((profile: BrowserProfile) => {
-    setCurrentProfileForVersionChange(profile);
-    setChangeVersionDialogOpen(true);
   }, []);
 
   const handleConfigureCamoufox = useCallback((profile: BrowserProfile) => {
@@ -797,7 +788,6 @@ export default function Home() {
             onProxySettings={openProxyDialog}
             onDeleteProfile={handleDeleteProfile}
             onRenameProfile={handleRenameProfile}
-            onChangeVersion={openChangeVersionDialog}
             onConfigureCamoufox={handleConfigureCamoufox}
             runningProfiles={runningProfiles}
             isUpdating={isUpdating}
@@ -834,15 +824,6 @@ export default function Home() {
         onClose={() => {
           setSettingsDialogOpen(false);
         }}
-      />
-
-      <ChangeVersionDialog
-        isOpen={changeVersionDialogOpen}
-        onClose={() => {
-          setChangeVersionDialogOpen(false);
-        }}
-        profile={currentProfileForVersionChange}
-        onVersionChanged={() => void loadProfiles()}
       />
 
       <ImportProfileDialog

@@ -52,26 +52,6 @@ impl TestUtils {
     Ok(nodecar_binary)
   }
 
-  /// Get the appropriate build target for the current platform
-  #[allow(dead_code)]
-  fn get_build_target() -> &'static str {
-    if cfg!(target_arch = "aarch64") && cfg!(target_os = "macos") {
-      "build:mac-aarch64"
-    } else if cfg!(target_arch = "x86_64") && cfg!(target_os = "macos") {
-      "build:mac-x86_64"
-    } else if cfg!(target_arch = "x86_64") && cfg!(target_os = "linux") {
-      "build:linux-x64"
-    } else if cfg!(target_arch = "aarch64") && cfg!(target_os = "linux") {
-      "build:linux-arm64"
-    } else if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
-      "build:win-x64"
-    } else if cfg!(target_arch = "aarch64") && cfg!(target_os = "windows") {
-      "build:win-arm64"
-    } else {
-      panic!("Unsupported target architecture for nodecar build")
-    }
-  }
-
   /// Execute a nodecar command with timeout
   pub async fn execute_nodecar_command(
     binary_path: &PathBuf,
@@ -148,60 +128,6 @@ impl TestUtils {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     println!("Test process cleanup completed");
-    Ok(())
-  }
-
-  /// Clean up all running nodecar processes (proxies and camoufox instances)
-  /// WARNING: This will stop ALL processes, including those from actual app usage
-  #[allow(dead_code)]
-  pub async fn cleanup_all_nodecar_processes(
-    nodecar_path: &PathBuf,
-  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    println!("WARNING: Cleaning up ALL nodecar processes...");
-
-    // Get list of all proxies and stop them individually
-    let proxy_list_args = ["proxy", "list"];
-    if let Ok(list_output) = Self::execute_nodecar_command(nodecar_path, &proxy_list_args).await {
-      if list_output.status.success() {
-        let list_stdout = String::from_utf8(list_output.stdout)?;
-        if let Ok(proxies) = serde_json::from_str::<serde_json::Value>(&list_stdout) {
-          if let Some(proxy_array) = proxies.as_array() {
-            for proxy in proxy_array {
-              if let Some(proxy_id) = proxy["id"].as_str() {
-                let stop_args = ["proxy", "stop", "--id", proxy_id];
-                let _ = Self::execute_nodecar_command(nodecar_path, &stop_args).await;
-                println!("Stopped proxy: {proxy_id}");
-              }
-            }
-          }
-        }
-      }
-    }
-
-    // Get list of all camoufox instances and stop them individually
-    let camoufox_list_args = ["camoufox", "list"];
-    if let Ok(list_output) = Self::execute_nodecar_command(nodecar_path, &camoufox_list_args).await
-    {
-      if list_output.status.success() {
-        let list_stdout = String::from_utf8(list_output.stdout)?;
-        if let Ok(instances) = serde_json::from_str::<serde_json::Value>(&list_stdout) {
-          if let Some(instance_array) = instances.as_array() {
-            for instance in instance_array {
-              if let Some(instance_id) = instance["id"].as_str() {
-                let stop_args = ["camoufox", "stop", "--id", instance_id];
-                let _ = Self::execute_nodecar_command(nodecar_path, &stop_args).await;
-                println!("Stopped camoufox instance: {instance_id}");
-              }
-            }
-          }
-        }
-      }
-    }
-
-    // Give processes time to clean up
-    tokio::time::sleep(Duration::from_secs(2)).await;
-
-    println!("Nodecar process cleanup completed");
     Ok(())
   }
 }

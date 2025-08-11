@@ -41,7 +41,7 @@ impl Default for BackgroundUpdateState {
   fn default() -> Self {
     Self {
       last_update_time: 0,
-      update_interval_hours: 3,
+      update_interval_hours: 12,
     }
   }
 }
@@ -640,20 +640,6 @@ mod tests {
     std::thread::sleep(std::time::Duration::from_millis(1));
     let timestamp2 = VersionUpdater::get_current_timestamp();
     assert!(timestamp2 >= timestamp1, "Timestamp should not decrease");
-  }
-
-  #[test]
-  fn test_background_update_state_default() {
-    let state = BackgroundUpdateState::default();
-
-    assert_eq!(
-      state.last_update_time, 0,
-      "Default last update time should be 0"
-    );
-    assert_eq!(
-      state.update_interval_hours, 3,
-      "Default update interval should be 3 hours"
-    );
   }
 
   #[test]

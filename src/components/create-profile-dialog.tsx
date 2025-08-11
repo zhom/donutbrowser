@@ -58,44 +58,36 @@ interface CreateProfileDialogProps {
 interface BrowserOption {
   value: BrowserTypeString;
   label: string;
-  description: string;
 }
 
 const browserOptions: BrowserOption[] = [
   {
     value: "firefox",
     label: "Firefox",
-    description: "Mozilla's main web browser",
   },
   {
     value: "firefox-developer",
     label: "Firefox Developer Edition",
-    description: "Browser for developers with cutting-edge features",
   },
   {
     value: "chromium",
     label: "Chromium",
-    description: "Open-source version of Chrome",
   },
   {
     value: "brave",
     label: "Brave",
-    description: "Privacy-focused browser with ad blocking",
   },
   {
     value: "zen",
     label: "Zen Browser",
-    description: "Beautiful, customizable Firefox-based browser",
   },
   {
     value: "mullvad-browser",
     label: "Mullvad Browser",
-    description: "TOR Browser fork by Mullvad VPN",
   },
   {
     value: "tor-browser",
     label: "Tor Browser",
-    description: "Browse anonymously through the Tor network",
   },
 ];
 
@@ -128,15 +120,11 @@ export function CreateProfileDialog({
     geoip: true, // Default to automatic geoip
   });
 
-  // Common states
-  const [availableReleaseTypes, setAvailableReleaseTypes] =
-    useState<BrowserReleaseTypes>({});
-  const [camoufoxReleaseTypes, setCamoufoxReleaseTypes] =
-    useState<BrowserReleaseTypes>({});
   const [supportedBrowsers, setSupportedBrowsers] = useState<string[]>([]);
   const [storedProxies, setStoredProxies] = useState<StoredProxy[]>([]);
   const [showProxyForm, setShowProxyForm] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [releaseTypes, setReleaseTypes] = useState<BrowserReleaseTypes>();
   const loadingBrowserRef = useRef<string | null>(null);
 
   // Use the browser download hook
@@ -185,7 +173,7 @@ export function CreateProfileDialog({
       loadingBrowserRef.current = browser;
 
       try {
-        const releaseTypes = await invoke<BrowserReleaseTypes>(
+        const rawReleaseTypes = await invoke<BrowserReleaseTypes>(
           "get_browser_release_types",
           { browserStr: browser },
         );
@@ -195,16 +183,19 @@ export function CreateProfileDialog({
           // Filter to enforce stable-only creation, except Firefox Developer (nightly-only)
           if (browser === "camoufox") {
             const filtered: BrowserReleaseTypes = {};
-            if (releaseTypes.stable) filtered.stable = releaseTypes.stable;
-            setCamoufoxReleaseTypes(filtered);
+            if (rawReleaseTypes.stable)
+              filtered.stable = rawReleaseTypes.stable;
+            setReleaseTypes(filtered);
           } else if (browser === "firefox-developer") {
             const filtered: BrowserReleaseTypes = {};
-            if (releaseTypes.nightly) filtered.nightly = releaseTypes.nightly;
-            setAvailableReleaseTypes(filtered);
+            if (rawReleaseTypes.nightly)
+              filtered.nightly = rawReleaseTypes.nightly;
+            setReleaseTypes(filtered);
           } else {
             const filtered: BrowserReleaseTypes = {};
-            if (releaseTypes.stable) filtered.stable = releaseTypes.stable;
-            setAvailableReleaseTypes(filtered);
+            if (rawReleaseTypes.stable)
+              filtered.stable = rawReleaseTypes.stable;
+            setReleaseTypes(filtered);
           }
 
           // Load downloaded versions for this browser
@@ -246,14 +237,16 @@ export function CreateProfileDialog({
       // Cancel any previous loading
       loadingBrowserRef.current = null;
       // Clear previous release types immediately to prevent showing stale data
-      setAvailableReleaseTypes({});
+      setReleaseTypes({});
       void loadReleaseTypes(selectedBrowser);
     }
   }, [selectedBrowser, loadReleaseTypes]);
 
   // Helper function to get the best available version respecting rules
   const getBestAvailableVersion = useCallback(
-    (releaseTypes: BrowserReleaseTypes, browserType?: string) => {
+    (browserType?: string) => {
+      if (!releaseTypes) return null;
+
       // Firefox Developer Edition: nightly-only
       if (browserType === "firefox-developer" && releaseTypes.nightly) {
         return {
@@ -267,13 +260,11 @@ export function CreateProfileDialog({
       }
       return null;
     },
-    [],
+    [releaseTypes],
   );
 
   const handleDownload = async (browserStr: string) => {
-    const releaseTypes =
-      browserStr === "camoufox" ? camoufoxReleaseTypes : availableReleaseTypes;
-    const bestVersion = getBestAvailableVersion(releaseTypes, browserStr);
+    const bestVersion = getBestAvailableVersion(browserStr);
 
     if (!bestVersion) {
       console.error("No version available for download");
@@ -299,10 +290,7 @@ export function CreateProfileDialog({
         }
 
         // Use the best available version (stable preferred, nightly as fallback)
-        const bestVersion = getBestAvailableVersion(
-          availableReleaseTypes,
-          selectedBrowser,
-        );
+        const bestVersion = getBestAvailableVersion(selectedBrowser);
         if (!bestVersion) {
           console.error("No version available");
           return;
@@ -318,10 +306,7 @@ export function CreateProfileDialog({
         });
       } else {
         // Anti-detect tab - always use Camoufox with best available version
-        const bestCamoufoxVersion = getBestAvailableVersion(
-          camoufoxReleaseTypes,
-          "camoufox",
-        );
+        const bestCamoufoxVersion = getBestAvailableVersion("camoufox");
         if (!bestCamoufoxVersion) {
           console.error("No Camoufox version available");
           return;
@@ -358,8 +343,7 @@ export function CreateProfileDialog({
     setProfileName("");
     setSelectedBrowser(null);
     setSelectedProxyId(undefined);
-    setAvailableReleaseTypes({});
-    setCamoufoxReleaseTypes({});
+    setReleaseTypes({});
     setCamoufoxConfig({
       geoip: true, // Reset to automatic geoip
     });
@@ -374,19 +358,10 @@ export function CreateProfileDialog({
   // Check if browser version is downloaded and available
   const isBrowserVersionAvailable = useCallback(
     (browserStr: string) => {
-      const releaseTypes =
-        browserStr === "camoufox"
-          ? camoufoxReleaseTypes
-          : availableReleaseTypes;
-      const bestVersion = getBestAvailableVersion(releaseTypes, browserStr);
+      const bestVersion = getBestAvailableVersion(browserStr);
       return bestVersion && isVersionDownloaded(bestVersion.version);
     },
-    [
-      camoufoxReleaseTypes,
-      availableReleaseTypes,
-      isVersionDownloaded,
-      getBestAvailableVersion,
-    ],
+    [isVersionDownloaded, getBestAvailableVersion],
   );
 
   // Check if browser is currently downloading
@@ -409,6 +384,20 @@ export function CreateProfileDialog({
     selectedBrowser,
     isBrowserCurrentlyDownloading,
     isBrowserVersionAvailable,
+  ]);
+
+  useEffect(() => {
+    console.log(
+      selectedBrowser,
+      selectedBrowser && isBrowserCurrentlyDownloading(selectedBrowser),
+      selectedBrowser && isBrowserVersionAvailable(selectedBrowser),
+      selectedBrowser && getBestAvailableVersion(selectedBrowser),
+    );
+  }, [
+    selectedBrowser,
+    isBrowserCurrentlyDownloading,
+    isBrowserVersionAvailable,
+    getBestAvailableVersion,
   ]);
 
   return (
@@ -478,17 +467,12 @@ export function CreateProfileDialog({
                       <div className="space-y-3">
                         {!isBrowserCurrentlyDownloading(selectedBrowser) &&
                           !isBrowserVersionAvailable(selectedBrowser) &&
-                          getBestAvailableVersion(
-                            availableReleaseTypes,
-                            selectedBrowser,
-                          ) && (
+                          getBestAvailableVersion(selectedBrowser) && (
                             <div className="flex gap-3 items-center">
                               <p className="text-sm text-muted-foreground">
                                 {(() => {
-                                  const bestVersion = getBestAvailableVersion(
-                                    availableReleaseTypes,
-                                    selectedBrowser,
-                                  );
+                                  const bestVersion =
+                                    getBestAvailableVersion(selectedBrowser);
                                   return `Latest version (${bestVersion?.version}) needs to be downloaded`;
                                 })()}
                               </p>
@@ -510,10 +494,8 @@ export function CreateProfileDialog({
                           isBrowserVersionAvailable(selectedBrowser) && (
                             <div className="text-sm text-muted-foreground">
                               {(() => {
-                                const bestVersion = getBestAvailableVersion(
-                                  availableReleaseTypes,
-                                  selectedBrowser,
-                                );
+                                const bestVersion =
+                                  getBestAvailableVersion(selectedBrowser);
                                 return `✓ Latest version (${bestVersion?.version}) is available`;
                               })()}
                             </div>
@@ -521,10 +503,8 @@ export function CreateProfileDialog({
                         {isBrowserCurrentlyDownloading(selectedBrowser) && (
                           <div className="text-sm text-muted-foreground">
                             {(() => {
-                              const bestVersion = getBestAvailableVersion(
-                                availableReleaseTypes,
-                                selectedBrowser,
-                              );
+                              const bestVersion =
+                                getBestAvailableVersion(selectedBrowser);
                               return `Downloading version (${bestVersion?.version})...`;
                             })()}
                           </div>
@@ -539,17 +519,12 @@ export function CreateProfileDialog({
                     {/* Camoufox Download Status */}
                     {!isBrowserCurrentlyDownloading("camoufox") &&
                       !isBrowserVersionAvailable("camoufox") &&
-                      getBestAvailableVersion(
-                        camoufoxReleaseTypes,
-                        "camoufox",
-                      ) && (
+                      getBestAvailableVersion("camoufox") && (
                         <div className="flex gap-3 items-center p-3 rounded-md border">
                           <p className="text-sm text-muted-foreground">
                             {(() => {
-                              const bestVersion = getBestAvailableVersion(
-                                camoufoxReleaseTypes,
-                                "camoufox",
-                              );
+                              const bestVersion =
+                                getBestAvailableVersion("camoufox");
                               return `Camoufox version (${bestVersion?.version}) needs to be downloaded`;
                             })()}
                           </p>
@@ -571,10 +546,8 @@ export function CreateProfileDialog({
                       isBrowserVersionAvailable("camoufox") && (
                         <div className="p-3 text-sm rounded-md border text-muted-foreground">
                           {(() => {
-                            const bestVersion = getBestAvailableVersion(
-                              camoufoxReleaseTypes,
-                              "camoufox",
-                            );
+                            const bestVersion =
+                              getBestAvailableVersion("camoufox");
                             return `✓ Camoufox version (${bestVersion?.version}) is available`;
                           })()}
                         </div>
@@ -582,10 +555,8 @@ export function CreateProfileDialog({
                     {isBrowserCurrentlyDownloading("camoufox") && (
                       <div className="p-3 text-sm rounded-md border text-muted-foreground">
                         {(() => {
-                          const bestVersion = getBestAvailableVersion(
-                            camoufoxReleaseTypes,
-                            "camoufox",
-                          );
+                          const bestVersion =
+                            getBestAvailableVersion("camoufox");
                           return `Downloading Camoufox version (${bestVersion?.version})...`;
                         })()}
                       </div>

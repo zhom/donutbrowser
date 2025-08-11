@@ -116,7 +116,16 @@ impl BrowserVersionManager {
 
   /// Get cached browser versions immediately (returns None if no cache exists)
   pub fn get_cached_browser_versions(&self, browser: &str) -> Option<Vec<String>> {
-    self.api_client.load_cached_versions(browser)
+    if browser == "brave" {
+      return ApiClient::instance()
+        .get_cached_github_releases("brave")
+        .map(|releases| releases.into_iter().map(|r| r.tag_name).collect());
+    }
+
+    self
+      .api_client
+      .load_cached_versions(browser)
+      .map(|releases| releases.into_iter().map(|r| r.version).collect())
   }
 
   /// Get cached detailed browser version information immediately
@@ -124,17 +133,29 @@ impl BrowserVersionManager {
     &self,
     browser: &str,
   ) -> Option<Vec<BrowserVersionInfo>> {
-    let cached_versions = self.api_client.load_cached_versions(browser)?;
+    if browser == "brave" {
+      if let Some(releases) = ApiClient::instance().get_cached_github_releases("brave") {
+        let detailed_info: Vec<BrowserVersionInfo> = releases
+          .into_iter()
+          .map(|r| BrowserVersionInfo {
+            version: r.tag_name,
+            is_prerelease: r.is_nightly,
+            date: r.published_at,
+          })
+          .collect();
+        return Some(detailed_info);
+      }
+    }
+
+    let cached_releases = self.api_client.load_cached_versions(browser)?;
 
     // Convert cached versions to detailed info (without dates since cache doesn't store them)
-    let detailed_info: Vec<BrowserVersionInfo> = cached_versions
+    let detailed_info: Vec<BrowserVersionInfo> = cached_releases
       .into_iter()
-      .map(|version| {
-        BrowserVersionInfo {
-          version: version.clone(),
-          is_prerelease: crate::api_client::is_browser_version_nightly(browser, &version, None),
-          date: "".to_string(), // Cache doesn't store dates
-        }
+      .map(|r| BrowserVersionInfo {
+        version: r.version,
+        is_prerelease: r.is_prerelease,
+        date: r.date,
       })
       .collect();
 
@@ -153,15 +174,6 @@ impl BrowserVersionManager {
   ) -> Result<BrowserReleaseTypes, Box<dyn std::error::Error + Send + Sync>> {
     // Try to get from cache first
     if let Some(cached_versions) = self.get_cached_browser_versions_detailed(browser) {
-      // For Chromium, only return stable since all releases are stable
-      if browser == "chromium" {
-        let latest_stable = cached_versions.first().map(|v| v.version.clone());
-        return Ok(BrowserReleaseTypes {
-          stable: latest_stable,
-          nightly: None,
-        });
-      }
-
       let latest_stable = cached_versions
         .iter()
         .find(|v| !v.is_prerelease)
@@ -175,17 +187,6 @@ impl BrowserVersionManager {
       return Ok(BrowserReleaseTypes {
         stable: latest_stable,
         nightly: latest_nightly,
-      });
-    }
-
-    // Fallback to fetching if not cached
-    // For Chromium, only return stable since all releases are stable
-    if browser == "chromium" {
-      let detailed_versions = self.fetch_browser_versions_detailed(browser, false).await?;
-      let latest_stable = detailed_versions.first().map(|v| v.version.clone());
-      return Ok(BrowserReleaseTypes {
-        stable: latest_stable,
-        nightly: None,
       });
     }
 
@@ -230,7 +231,7 @@ impl BrowserVersionManager {
       .api_client
       .load_cached_versions(browser)
       .unwrap_or_default();
-    let existing_set: HashSet<String> = existing_versions.into_iter().collect();
+    let existing_set: HashSet<String> = existing_versions.into_iter().map(|r| r.version).collect();
 
     // Fetch fresh versions from API
     let fresh_versions = match browser {
@@ -262,10 +263,18 @@ impl BrowserVersionManager {
     crate::api_client::sort_versions(&mut merged_versions);
 
     // Save the merged cache (unless explicitly bypassing cache)
-    if !no_caching {
+    if !no_caching && browser != "brave" {
+      let merged_releases: Vec<BrowserRelease> = merged_versions
+        .iter()
+        .map(|v| BrowserRelease {
+          version: v.clone(),
+          date: "".to_string(),
+          is_prerelease: crate::api_client::is_browser_version_nightly(browser, v, None),
+        })
+        .collect();
       if let Err(e) = self
         .api_client
-        .save_cached_versions(browser, &merged_versions)
+        .save_cached_versions(browser, &merged_releases)
       {
         eprintln!("Failed to save merged cache for {browser}: {e}");
       }
@@ -498,7 +507,7 @@ impl BrowserVersionManager {
       .api_client
       .load_cached_versions(browser)
       .unwrap_or_default();
-    let existing_set: HashSet<String> = existing_versions.into_iter().collect();
+    let existing_set: HashSet<String> = existing_versions.into_iter().map(|r| r.version).collect();
 
     // Fetch new versions (always bypass cache for background updates)
     let new_versions = self.fetch_browser_versions(browser, true).await?;
@@ -515,7 +524,15 @@ impl BrowserVersionManager {
     sort_versions(&mut all_versions);
 
     // Save the updated cache
-    if let Err(e) = self.api_client.save_cached_versions(browser, &all_versions) {
+    let releases: Vec<BrowserRelease> = all_versions
+      .iter()
+      .map(|v| BrowserRelease {
+        version: v.clone(),
+        date: "".to_string(),
+        is_prerelease: crate::api_client::is_browser_version_nightly(browser, v, None),
+      })
+      .collect();
+    if let Err(e) = self.api_client.save_cached_versions(browser, &releases) {
       eprintln!("Failed to save updated cache for {browser}: {e}");
     }
 
@@ -893,6 +910,20 @@ impl BrowserVersionManager {
     no_caching: bool,
   ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
     let releases = self.fetch_brave_releases_detailed(no_caching).await?;
+    // Persist a lightweight versions cache with accurate prerelease info for Brave
+    let converted: Vec<BrowserRelease> = releases
+      .iter()
+      .map(|r| BrowserRelease {
+        version: r.tag_name.clone(),
+        date: r.published_at.clone(),
+        is_prerelease: r.is_nightly,
+      })
+      .collect();
+    // Always save so that other callers without release_name can classify correctly
+    if let Err(e) = self.api_client.save_cached_versions("brave", &converted) {
+      eprintln!("Failed to persist Brave versions cache: {e}");
+    }
+
     Ok(releases.into_iter().map(|r| r.tag_name).collect())
   }
 
@@ -900,10 +931,25 @@ impl BrowserVersionManager {
     &self,
     no_caching: bool,
   ) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
-    self
+    let releases = self
       .api_client
       .fetch_brave_releases_with_caching(no_caching)
-      .await
+      .await?;
+
+    // Save a parallel versions cache for Brave with accurate prerelease flags
+    let converted: Vec<BrowserRelease> = releases
+      .iter()
+      .map(|r| BrowserRelease {
+        version: r.tag_name.clone(),
+        date: r.published_at.clone(),
+        is_prerelease: r.is_nightly,
+      })
+      .collect();
+    if let Err(e) = self.api_client.save_cached_versions("brave", &converted) {
+      eprintln!("Failed to persist Brave versions cache: {e}");
+    }
+
+    Ok(releases)
   }
 
   async fn fetch_chromium_versions(
@@ -959,6 +1005,17 @@ impl BrowserVersionManager {
       .fetch_camoufox_releases_with_caching(no_caching)
       .await
   }
+}
+
+#[tauri::command]
+pub async fn get_browser_release_types(
+  browser_str: String,
+) -> Result<crate::browser_version_manager::BrowserReleaseTypes, String> {
+  let service = BrowserVersionManager::instance();
+  service
+    .get_browser_release_types(&browser_str)
+    .await
+    .map_err(|e| format!("Failed to get release types: {e}"))
 }
 
 #[cfg(test)]

@@ -108,6 +108,7 @@
     "pathex",
     "pathlib",
     "peerconnection",
+    "pids",
     "pixbuf",
     "plasmohq",
     "platformdirs",

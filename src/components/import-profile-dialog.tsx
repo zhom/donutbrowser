@@ -64,6 +64,11 @@ export function ImportProfileDialog({
   const { supportedBrowsers, isLoading: isLoadingSupport } =
     useBrowserSupport();
 
+  // Exclude browsers that are no longer supported for import
+  const importableBrowsers = supportedBrowsers.filter(
+    (b) => b !== "mullvad-browser" && b !== "tor-browser",
+  );
+
   const loadDetectedProfiles = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -410,7 +415,7 @@ export function ImportProfileDialog({
                       />
                     </SelectTrigger>
                     <SelectContent>
-                      {supportedBrowsers.map((browser) => {
+                      {importableBrowsers.map((browser) => {
                         const IconComponent = getBrowserIcon(browser);
                         return (
                           <SelectItem key={browser} value={browser}>

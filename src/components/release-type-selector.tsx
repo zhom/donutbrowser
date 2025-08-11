@@ -35,7 +35,6 @@ export function ReleaseTypeSelector({
   selectedReleaseType,
   onReleaseTypeSelect,
   availableReleaseTypes,
-  // browser prop removed; callers control availableReleaseTypes
   isDownloading,
   onDownload,
   placeholder = "Select release type...",
@@ -44,8 +43,6 @@ export function ReleaseTypeSelector({
 }: ReleaseTypeSelectorProps) {
   const [popoverOpen, setPopoverOpen] = useState(false);
 
-  // Nightly visibility is controlled by callers. This component will render
-  // whichever options are provided via availableReleaseTypes.
   const releaseOptions = [
     ...(availableReleaseTypes.stable
       ? [{ type: "stable" as const, version: availableReleaseTypes.stable }]

@@ -38,20 +38,6 @@ impl BrowserRunner {
     &BROWSER_RUNNER
   }
 
-  // Start periodic cleanup of dead proxies
-  #[allow(dead_code)]
-  pub fn start_proxy_cleanup_task(&self, app_handle: tauri::AppHandle) {
-    tokio::spawn(async move {
-      let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
-      loop {
-        interval.tick().await;
-        if let Err(e) = PROXY_MANAGER.cleanup_dead_proxies(app_handle.clone()).await {
-          println!("Warning: Failed to cleanup dead proxies: {e}");
-        }
-      }
-    });
-  }
-
   // Helper function to check if a process matches TOR/Mullvad browser
   fn is_tor_or_mullvad_browser(
     &self,
@@ -1582,17 +1568,6 @@ pub async fn update_profile_proxy(
 }
 
 #[tauri::command]
-pub fn update_profile_version(
-  profile_name: String,
-  version: String,
-) -> Result<BrowserProfile, String> {
-  let profile_manager = ProfileManager::instance();
-  profile_manager
-    .update_profile_version(&profile_name, &version)
-    .map_err(|e| format!("Failed to update profile version: {e}"))
-}
-
-#[tauri::command]
 pub async fn check_browser_status(
   app_handle: tauri::AppHandle,
   profile: BrowserProfile,
@@ -1800,17 +1775,6 @@ pub async fn fetch_browser_versions_with_count(
 pub fn get_downloaded_browser_versions(browser_str: String) -> Result<Vec<String>, String> {
   let registry = DownloadedBrowsersRegistry::instance();
   Ok(registry.get_downloaded_versions(&browser_str))
-}
-
-#[tauri::command]
-pub async fn get_browser_release_types(
-  browser_str: String,
-) -> Result<crate::browser_version_manager::BrowserReleaseTypes, String> {
-  let service = BrowserVersionManager::instance();
-  service
-    .get_browser_release_types(&browser_str)
-    .await
-    .map_err(|e| format!("Failed to get release types: {e}"))
 }
 
 #[tauri::command]

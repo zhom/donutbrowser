@@ -467,13 +467,6 @@ impl ProxyManager {
 
     Ok(dead_pids)
   }
-
-  // Get all active proxy PIDs for monitoring
-  #[allow(dead_code)]
-  pub fn get_active_proxy_pids(&self) -> Vec<u32> {
-    let proxies = self.active_proxies.lock().unwrap();
-    proxies.keys().copied().collect()
-  }
 }
 
 // Create a singleton instance of the proxy manager

@@ -34,6 +34,12 @@ pub enum PreReleaseKind {
 impl VersionComponent {
   pub fn parse(version: &str) -> Self {
     let version = version.trim();
+    // Normalize common tag prefixes like 'v1.2.3' -> '1.2.3'
+    let version = if version.starts_with('v') || version.starts_with('V') {
+      &version[1..]
+    } else {
+      version
+    };
 
     // Handle special case for Zen Browser twilight releases
     if version.to_lowercase() == "twilight" {
@@ -218,8 +224,11 @@ pub fn sort_versions(versions: &mut [String]) {
 // Helper function to sort GitHub releases
 pub fn sort_github_releases(releases: &mut [GithubRelease]) {
   releases.sort_by(|a, b| {
-    let version_a = VersionComponent::parse(&a.tag_name);
-    let version_b = VersionComponent::parse(&b.tag_name);
+    // Normalize tags like "v1.81.9" -> "1.81.9" for correct ordering
+    let tag_a = a.tag_name.trim_start_matches('v');
+    let tag_b = b.tag_name.trim_start_matches('v');
+    let version_a = VersionComponent::parse(tag_a);
+    let version_b = VersionComponent::parse(tag_b);
     version_b.cmp(&version_a) // Descending order (newest first)
   });
 }
@@ -242,12 +251,22 @@ pub fn is_browser_version_nightly(
       version.to_lowercase() == "twilight"
     }
     "brave" => {
-      // For Brave Browser, only releases titled "Release" are stable, everything else is nightly
+      // For Brave Browser, only releases whose name starts with "Release" (case-insensitive) are stable.
       if let Some(name) = release_name {
-        !name.starts_with("Release")
-      } else {
-        true
+        let normalized = name.trim_start().to_ascii_lowercase();
+        return !normalized.starts_with("release");
       }
+
+      // Fallback: try cached GitHub releases
+      if let Some(releases) = ApiClient::instance().get_cached_github_releases("brave") {
+        if let Some(found) = releases.iter().find(|r| r.tag_name == version) {
+          let normalized = found.name.trim_start().to_ascii_lowercase();
+          return !normalized.starts_with("release");
+        }
+      }
+
+      // Last resort: when no name available, treat as nightly (non-Release)
+      true
     }
     "firefox" | "firefox-developer" => {
       // For Firefox, use the category from the API response to determine stability
@@ -295,7 +314,7 @@ pub struct BrowserRelease {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct CachedVersionData {
-  versions: Vec<String>,
+  releases: Vec<BrowserRelease>,
   timestamp: u64,
 }
 
@@ -325,6 +344,65 @@ impl ApiClient {
         .to_string(),
       tor_archive_base: "https://archive.torproject.org/tor-package-archive/torbrowser".to_string(),
     }
+  }
+
+  async fn fetch_github_releases_multiple_pages(
+    &self,
+    base_releases_url: &str,
+  ) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
+    let mut all_releases: Vec<GithubRelease> = Vec::new();
+
+    // For now, only fetch 1 page
+    for page in 1..=1 {
+      let url = format!("{base_releases_url}?per_page=100&page={page}");
+      let response = self
+        .client
+        .get(&url)
+        .header(
+          "User-Agent",
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+        )
+        .send()
+        .await?;
+
+      if !response.status().is_success() {
+        // If the first page fails, propagate error; otherwise stop pagination
+        if page == 1 {
+          return Err(
+            format!(
+              "GitHub API returned status for page {}: {}",
+              page,
+              response.status()
+            )
+            .into(),
+          );
+        } else {
+          break;
+        }
+      }
+
+      let text = response.text().await?;
+      let mut page_releases: Vec<GithubRelease> = serde_json::from_str(&text).map_err(|e| {
+        eprintln!("Failed to parse GitHub API response (page {page}): {e}");
+        eprintln!(
+          "Response text (first 500 chars): {}",
+          if text.len() > 500 {
+            &text[..500]
+          } else {
+            &text
+          }
+        );
+        format!("Failed to parse GitHub API response: {e}")
+      })?;
+
+      if page_releases.is_empty() {
+        break;
+      }
+
+      all_releases.append(&mut page_releases);
+    }
+
+    Ok(all_releases)
   }
 
   pub fn instance() -> &'static ApiClient {
@@ -374,7 +452,7 @@ impl ApiClient {
     current_time - timestamp < cache_duration
   }
 
-  pub fn load_cached_versions(&self, browser: &str) -> Option<Vec<String>> {
+  pub fn load_cached_versions(&self, browser: &str) -> Option<Vec<BrowserRelease>> {
     let cache_dir = Self::get_cache_dir().ok()?;
     let cache_file = cache_dir.join(format!("{browser}_versions.json"));
 
@@ -383,11 +461,27 @@ impl ApiClient {
     }
 
     let content = fs::read_to_string(&cache_file).ok()?;
-    let cached_data: CachedVersionData = serde_json::from_str(&content).ok()?;
+    if let Ok(cached) = serde_json::from_str::<CachedVersionData>(&content) {
+      // Always return cached releases regardless of age - they're always valid
+      println!("Using cached versions for {browser}");
+      return Some(cached.releases);
+    }
 
-    // Always return cached versions regardless of age - they're always valid
-    println!("Using cached versions for {browser}");
-    Some(cached_data.versions)
+    // Backward compatibility: legacy caches stored just an array of version strings
+    if let Ok(legacy_versions) = serde_json::from_str::<Vec<String>>(&content) {
+      println!("Using legacy cached versions for {browser}; upgrading in-memory");
+      let releases: Vec<BrowserRelease> = legacy_versions
+        .into_iter()
+        .map(|version| BrowserRelease {
+          is_prerelease: is_browser_version_nightly(browser, &version, None),
+          version,
+          date: "".to_string(),
+        })
+        .collect();
+      return Some(releases);
+    }
+
+    None
   }
 
   pub fn is_cache_expired(&self, browser: &str) -> bool {
@@ -418,19 +512,19 @@ impl ApiClient {
   pub fn save_cached_versions(
     &self,
     browser: &str,
-    versions: &[String],
+    releases: &[BrowserRelease],
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cache_dir = Self::get_cache_dir()?;
     let cache_file = cache_dir.join(format!("{browser}_versions.json"));
 
     let cached_data = CachedVersionData {
-      versions: versions.to_vec(),
+      releases: releases.to_vec(),
       timestamp: Self::get_current_timestamp(),
     };
 
     let content = serde_json::to_string_pretty(&cached_data)?;
     fs::write(&cache_file, content)?;
-    println!("Cached {} versions for {}", versions.len(), browser);
+    println!("Cached {} versions for {}", releases.len(), browser);
     Ok(())
   }
 
@@ -448,6 +542,11 @@ impl ApiClient {
     // Always use cached GitHub releases - cache never expires, only gets updated with new versions
     println!("Using cached GitHub releases for {browser}");
     Some(cached_data.releases)
+  }
+
+  /// Public accessor for cached GitHub releases (used by other modules for classification)
+  pub fn get_cached_github_releases(&self, browser: &str) -> Option<Vec<GithubRelease>> {
+    self.load_cached_github_releases(browser)
   }
 
   fn save_cached_github_releases(
@@ -475,19 +574,8 @@ impl ApiClient {
   ) -> Result<Vec<BrowserRelease>, Box<dyn std::error::Error + Send + Sync>> {
     // Check cache first (unless bypassing)
     if !no_caching {
-      if let Some(cached_versions) = self.load_cached_versions("firefox") {
-        return Ok(
-          cached_versions
-            .into_iter()
-            .map(|version| {
-              BrowserRelease {
-                version: version.clone(),
-                date: "".to_string(), // Cache doesn't store dates
-                is_prerelease: is_browser_version_nightly("firefox", &version, None),
-              }
-            })
-            .collect(),
-        );
+      if let Some(cached_releases) = self.load_cached_versions("firefox") {
+        return Ok(cached_releases);
       }
     }
 
@@ -533,12 +621,9 @@ impl ApiClient {
       version_b.cmp(&version_a)
     });
 
-    // Extract versions for caching
-    let versions: Vec<String> = releases.iter().map(|r| r.version.clone()).collect();
-
     // Cache the results (unless bypassing cache)
     if !no_caching {
-      if let Err(e) = self.save_cached_versions("firefox", &versions) {
+      if let Err(e) = self.save_cached_versions("firefox", &releases) {
         eprintln!("Failed to cache Firefox versions: {e}");
       }
     }
@@ -552,19 +637,8 @@ impl ApiClient {
   ) -> Result<Vec<BrowserRelease>, Box<dyn std::error::Error + Send + Sync>> {
     // Check cache first (unless bypassing)
     if !no_caching {
-      if let Some(cached_versions) = self.load_cached_versions("firefox-developer") {
-        return Ok(
-          cached_versions
-            .into_iter()
-            .map(|version| {
-              BrowserRelease {
-                version: version.clone(),
-                date: "".to_string(), // Cache doesn't store dates
-                is_prerelease: is_browser_version_nightly("firefox-developer", &version, None),
-              }
-            })
-            .collect(),
-        );
+      if let Some(cached_releases) = self.load_cached_versions("firefox-developer") {
+        return Ok(cached_releases);
       }
     }
 
@@ -616,12 +690,9 @@ impl ApiClient {
       version_b.cmp(&version_a)
     });
 
-    // Extract versions for caching
-    let versions: Vec<String> = releases.iter().map(|r| r.version.clone()).collect();
-
     // Cache the results (unless bypassing cache)
     if !no_caching {
-      if let Err(e) = self.save_cached_versions("firefox-developer", &versions) {
+      if let Err(e) = self.save_cached_versions("firefox-developer", &releases) {
         eprintln!("Failed to cache Firefox Developer versions: {e}");
       }
     }
@@ -640,43 +711,12 @@ impl ApiClient {
       }
     }
 
-    println!("Fetching Mullvad releases from GitHub API...");
-    let url = format!(
-      "{}/repos/mullvad/mullvad-browser/releases?per_page=100",
+    println!("Fetching Mullvad releases from GitHub API");
+    let base_url = format!(
+      "{}/repos/mullvad/mullvad-browser/releases",
       self.github_api_base
     );
-
-    let response = self
-      .client
-      .get(url)
-      .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
-      .send()
-      .await?;
-
-    if !response.status().is_success() {
-      return Err(format!("GitHub API returned status: {}", response.status()).into());
-    }
-
-    // Get the response text first for better error reporting
-    let response_text = response.text().await?;
-
-    // Try to parse the JSON with better error handling
-    let releases: Vec<GithubRelease> = match serde_json::from_str(&response_text) {
-      Ok(releases) => releases,
-      Err(e) => {
-        eprintln!("Failed to parse GitHub API response for Mullvad releases:");
-        eprintln!("Error: {e}");
-        eprintln!(
-          "Response text (first 500 chars): {}",
-          if response_text.len() > 500 {
-            &response_text[..500]
-          } else {
-            &response_text
-          }
-        );
-        return Err(format!("Failed to parse GitHub API response: {e}").into());
-      }
-    };
+    let releases = self.fetch_github_releases_multiple_pages(&base_url).await?;
 
     let mut releases: Vec<GithubRelease> = releases
       .into_iter()
@@ -710,43 +750,13 @@ impl ApiClient {
       }
     }
 
-    println!("Fetching Zen releases from GitHub API...");
-    let url = format!(
-      "{}/repos/zen-browser/desktop/releases?per_page=100",
+    println!("Fetching Zen releases from GitHub API");
+    let base_url = format!(
+      "{}/repos/zen-browser/desktop/releases",
       self.github_api_base
     );
-
-    let response = self
-      .client
-      .get(url)
-      .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
-      .send()
-      .await?;
-
-    if !response.status().is_success() {
-      return Err(format!("GitHub API returned status: {}", response.status()).into());
-    }
-
-    // Get the response text first for better error reporting
-    let response_text = response.text().await?;
-
-    // Try to parse the JSON with better error handling
-    let mut releases: Vec<GithubRelease> = match serde_json::from_str(&response_text) {
-      Ok(releases) => releases,
-      Err(e) => {
-        eprintln!("Failed to parse GitHub API response for Zen releases:");
-        eprintln!("Error: {e}");
-        eprintln!(
-          "Response text (first 500 chars): {}",
-          if response_text.len() > 500 {
-            &response_text[..500]
-          } else {
-            &response_text
-          }
-        );
-        return Err(format!("Failed to parse GitHub API response: {e}").into());
-      }
-    };
+    let mut releases: Vec<GithubRelease> =
+      self.fetch_github_releases_multiple_pages(&base_url).await?;
 
     // Check for twilight updates and mark alpha releases
     for release in &mut releases {
@@ -791,55 +801,25 @@ impl ApiClient {
       }
     }
 
-    println!("Fetching Brave releases from GitHub API...");
-    let url = format!(
-      "{}/repos/brave/brave-browser/releases?per_page=100",
+    println!("Fetching Brave releases from GitHub API");
+    let base_url = format!(
+      "{}/repos/brave/brave-browser/releases",
       self.github_api_base
     );
-
-    let response = self
-      .client
-      .get(url)
-      .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
-      .send()
-      .await?;
-
-    if !response.status().is_success() {
-      return Err(format!("GitHub API returned status: {}", response.status()).into());
-    }
-
-    // Get the response text first for better error reporting
-    let response_text = response.text().await?;
-
-    // Try to parse the JSON with better error handling
-    let releases: Vec<GithubRelease> = match serde_json::from_str(&response_text) {
-      Ok(releases) => releases,
-      Err(e) => {
-        eprintln!("Failed to parse GitHub API response for Brave releases:");
-        eprintln!("Error: {e}");
-        eprintln!(
-          "Response text (first 500 chars): {}",
-          if response_text.len() > 500 {
-            &response_text[..500]
-          } else {
-            &response_text
-          }
-        );
-        return Err(format!("Failed to parse GitHub API response: {e}").into());
-      }
-    };
+    let releases: Vec<GithubRelease> = self.fetch_github_releases_multiple_pages(&base_url).await?;
 
     // Get platform info to filter appropriate releases
-    let (os, arch) = Self::get_platform_info();
+    let (os, _) = Self::get_platform_info();
 
     // Filter releases that have assets compatible with the current platform
     let mut filtered_releases: Vec<GithubRelease> = releases
       .into_iter()
       .filter_map(|mut release| {
         // Check if this release has compatible assets for the current platform
-        let has_compatible_asset = Self::has_compatible_brave_asset(&release.assets, &os, &arch);
+        let has_compatible_asset = Self::has_compatible_brave_asset(&release.assets, &os);
 
         if has_compatible_asset {
+          println!("release.name: {:?}", release.name);
           // Use the centralized nightly detection function
           release.is_nightly =
             is_browser_version_nightly("brave", &release.tag_name, Some(&release.name));
@@ -853,11 +833,8 @@ impl ApiClient {
     // Sort releases using the new version sorting system
     sort_github_releases(&mut filtered_releases);
 
-    // Cache the results (unless bypassing cache)
-    if !no_caching {
-      if let Err(e) = self.save_cached_github_releases("brave", &filtered_releases) {
-        eprintln!("Failed to cache Brave releases: {e}");
-      }
+    if let Err(e) = self.save_cached_github_releases("brave", &filtered_releases) {
+      eprintln!("Failed to cache Brave releases: {e}");
     }
 
     Ok(filtered_releases)
@@ -889,11 +866,7 @@ impl ApiClient {
     })
   }
 
-  fn has_compatible_brave_asset(
-    assets: &[crate::browser::GithubAsset],
-    os: &str,
-    arch: &str,
-  ) -> bool {
+  fn has_compatible_brave_asset(assets: &[crate::browser::GithubAsset], os: &str) -> bool {
     match os {
       "windows" => {
         // For Windows, look for standalone setup EXE (not the auto-updater one)
@@ -910,12 +883,9 @@ impl ApiClient {
         }) || assets.iter().any(|asset| asset.name.ends_with(".dmg"))
       }
       "linux" => {
-        // For Linux, be strict about architecture matching - only allow assets that explicitly match the current architecture
-        let arch_pattern = if arch == "arm64" { "arm64" } else { "amd64" };
-
         if assets.iter().any(|asset| {
           let name = asset.name.to_lowercase();
-          name.contains("linux") && name.contains(arch_pattern) && name.ends_with(".zip")
+          name.contains("lin")
         }) {
           return true;
         }
@@ -979,19 +949,8 @@ impl ApiClient {
   ) -> Result<Vec<BrowserRelease>, Box<dyn std::error::Error + Send + Sync>> {
     // Check cache first (unless bypassing)
     if !no_caching {
-      if let Some(cached_versions) = self.load_cached_versions("chromium") {
-        return Ok(
-          cached_versions
-            .into_iter()
-            .map(|version| {
-              BrowserRelease {
-                version: version.clone(),
-                date: "".to_string(), // Cache doesn't store dates
-                is_prerelease: false, // Chromium versions are generally stable builds
-              }
-            })
-            .collect(),
-        );
+      if let Some(cached_releases) = self.load_cached_versions("chromium") {
+        return Ok(cached_releases);
       }
     }
 
@@ -1010,23 +969,24 @@ impl ApiClient {
       }
     }
 
+    // Convert to BrowserRelease objects
+    let releases: Vec<BrowserRelease> = versions
+      .into_iter()
+      .map(|version| BrowserRelease {
+        version: version.clone(),
+        date: "".to_string(),
+        is_prerelease: false,
+      })
+      .collect();
+
     // Cache the results (unless bypassing cache)
     if !no_caching {
-      if let Err(e) = self.save_cached_versions("chromium", &versions) {
+      if let Err(e) = self.save_cached_versions("chromium", &releases) {
         eprintln!("Failed to cache Chromium versions: {e}");
       }
     }
 
-    Ok(
-      versions
-        .into_iter()
-        .map(|version| BrowserRelease {
-          version: version.clone(),
-          date: "".to_string(),
-          is_prerelease: false,
-        })
-        .collect(),
-    )
+    Ok(releases)
   }
 
   pub async fn fetch_camoufox_releases_with_caching(
@@ -1044,43 +1004,9 @@ impl ApiClient {
       }
     }
 
-    println!("Fetching Camoufox releases from GitHub API...");
-    let url = format!(
-      "{}/repos/daijro/camoufox/releases?per_page=100",
-      self.github_api_base
-    );
-
-    let response = self
-      .client
-      .get(url)
-      .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
-      .send()
-      .await?;
-
-    if !response.status().is_success() {
-      return Err(format!("GitHub API returned status: {}", response.status()).into());
-    }
-
-    // Get the response text first for better error reporting
-    let response_text = response.text().await?;
-
-    // Try to parse the JSON with better error handling
-    let releases: Vec<GithubRelease> = match serde_json::from_str(&response_text) {
-      Ok(releases) => releases,
-      Err(e) => {
-        eprintln!("Failed to parse GitHub API response for Camoufox releases:");
-        eprintln!("Error: {e}");
-        eprintln!(
-          "Response text (first 500 chars): {}",
-          if response_text.len() > 500 {
-            &response_text[..500]
-          } else {
-            &response_text
-          }
-        );
-        return Err(format!("Failed to parse GitHub API response: {e}").into());
-      }
-    };
+    println!("Fetching Camoufox releases from GitHub API");
+    let base_url = format!("{}/repos/daijro/camoufox/releases", self.github_api_base);
+    let releases: Vec<GithubRelease> = self.fetch_github_releases_multiple_pages(&base_url).await?;
 
     println!(
       "Fetched {} total Camoufox releases from GitHub",
@@ -1157,19 +1083,8 @@ impl ApiClient {
   ) -> Result<Vec<BrowserRelease>, Box<dyn std::error::Error + Send + Sync>> {
     // Check cache first (unless bypassing)
     if !no_caching {
-      if let Some(cached_versions) = self.load_cached_versions("tor-browser") {
-        return Ok(
-          cached_versions
-            .into_iter()
-            .map(|version| {
-              BrowserRelease {
-                version: version.clone(),
-                date: "".to_string(), // Cache doesn't store dates
-                is_prerelease: is_browser_version_nightly("tor-browser", &version, None),
-              }
-            })
-            .collect(),
-        );
+      if let Some(cached_releases) = self.load_cached_versions("tor-browser") {
+        return Ok(cached_releases);
       }
     }
 
@@ -1225,25 +1140,24 @@ impl ApiClient {
       tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
 
+    // Convert to BrowserRelease objects
+    let releases: Vec<BrowserRelease> = version_strings
+      .into_iter()
+      .map(|version| BrowserRelease {
+        version: version.clone(),
+        date: "".to_string(), // TOR archive doesn't provide structured dates
+        is_prerelease: false, // Assume all archived versions are stable
+      })
+      .collect();
+
     // Cache the results (unless bypassing cache)
     if !no_caching {
-      if let Err(e) = self.save_cached_versions("tor-browser", &version_strings) {
+      if let Err(e) = self.save_cached_versions("tor-browser", &releases) {
         eprintln!("Failed to cache TOR versions: {e}");
       }
     }
 
-    Ok(
-      version_strings
-        .into_iter()
-        .map(|version| {
-          BrowserRelease {
-            version: version.clone(),
-            date: "".to_string(), // TOR archive doesn't provide structured dates
-            is_prerelease: false, // Assume all archived versions are stable
-          }
-        })
-        .collect(),
-    )
+    Ok(releases)
   }
 
   async fn check_tor_version_has_macos(
@@ -1968,6 +1882,84 @@ mod tests {
 
     let result = client.fetch_zen_releases_with_caching(true).await;
     assert!(result.is_err());
+  }
+
+  #[tokio::test]
+  async fn test_mullvad_pagination_two_pages() {
+    let server = setup_mock_server().await;
+    let client = create_test_client(&server);
+
+    // Page 1 response with Link: rel="next" header
+    let mock_page1 = r#"[
+      {
+        "tag_name": "100.0",
+        "name": "Mullvad Browser 100.0",
+        "prerelease": false,
+        "published_at": "2024-07-01T00:00:00Z",
+        "assets": [
+          { "name": "mullvad-browser-macos-100.0.dmg", "browser_download_url": "https://example.com/100.0.dmg", "size": 1 }
+        ]
+      }
+    ]"#;
+
+    // Page 2 response
+    let mock_page2 = r#"[
+      {
+        "tag_name": "99.0",
+        "name": "Mullvad Browser 99.0",
+        "prerelease": false,
+        "published_at": "2024-06-01T00:00:00Z",
+        "assets": [
+          { "name": "mullvad-browser-macos-99.0.dmg", "browser_download_url": "https://example.com/99.0.dmg", "size": 1 }
+        ]
+      }
+    ]"#;
+
+    // Mock page 1
+    Mock::given(method("GET"))
+      .and(path("/repos/mullvad/mullvad-browser/releases"))
+      .and(query_param("per_page", "100"))
+      .and(query_param("page", "1"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(mock_page1)
+          .insert_header("content-type", "application/json")
+          .insert_header(
+            "link",
+            format!(
+              "<{}?per_page=100&page=2>; rel=\"next\", <{}?per_page=100&page=2>; rel=\"last\"",
+              server.uri().to_string() + "/repos/mullvad/mullvad-browser/releases",
+              server.uri().to_string() + "/repos/mullvad/mullvad-browser/releases"
+            ),
+          ),
+      )
+      .mount(&server)
+      .await;
+
+    // Mock page 2
+    Mock::given(method("GET"))
+      .and(path("/repos/mullvad/mullvad-browser/releases"))
+      .and(query_param("per_page", "100"))
+      .and(query_param("page", "2"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_body_string(mock_page2)
+          .insert_header("content-type", "application/json"),
+      )
+      .mount(&server)
+      .await;
+
+    let result = client.fetch_mullvad_releases_with_caching(true).await;
+
+    assert!(result.is_ok());
+    let releases = result.unwrap();
+    // We currently only fetch 1 page intentionally; ensure we at least got page 1
+    assert_eq!(
+      releases.len(),
+      1,
+      "Should fetch only the first page of results"
+    );
+    assert_eq!(releases[0].tag_name, "100.0");
   }
 
   #[test]

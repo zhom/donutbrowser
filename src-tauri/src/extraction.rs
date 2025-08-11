@@ -1138,34 +1138,6 @@ impl Extractor {
     false
   }
 
-  /// Set executable permissions on Unix-like systems for extracted binaries
-  #[cfg(unix)]
-  #[allow(dead_code)]
-  async fn set_executable_permissions(
-    &self,
-    path: &Path,
-  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use std::os::unix::fs::PermissionsExt;
-
-    if path.exists() {
-      let mut permissions = path.metadata()?.permissions();
-      // Set executable permissions for owner, group, and others if they have read permission
-      let current_mode = permissions.mode();
-      let new_mode = current_mode | 0o111; // Add execute permission
-      permissions.set_mode(new_mode);
-      std::fs::set_permissions(path, permissions)?;
-    }
-    Ok(())
-  }
-
-  #[cfg(not(unix))]
-  async fn set_executable_permissions(
-    &self,
-    _path: &Path,
-  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    Ok(())
-  }
-
   /// Set executable permissions recursively for all files in a directory
   #[cfg(unix)]
   async fn set_executable_permissions_recursive(

@@ -81,19 +81,6 @@ impl CamoufoxNodecarLauncher {
     &CAMOUFOX_NODECAR_LAUNCHER
   }
 
-  /// Create a test configuration
-  #[allow(dead_code)]
-  pub fn create_test_config() -> CamoufoxConfig {
-    CamoufoxConfig {
-      screen_max_width: Some(1440),
-      screen_max_height: Some(900),
-      screen_min_width: Some(800),
-      screen_min_height: Some(600),
-      geoip: Some(serde_json::Value::Bool(true)),
-      ..Default::default()
-    }
-  }
-
   /// Generate Camoufox fingerprint configuration during profile creation
   pub async fn generate_fingerprint_config(
     &self,
@@ -483,18 +470,6 @@ impl CamoufoxNodecarLauncher {
 #[cfg(test)]
 mod tests {
   use super::*;
-
-  #[test]
-  fn test_camoufox_config_creation() {
-    let test_config = CamoufoxNodecarLauncher::create_test_config();
-
-    // Verify test config has expected values
-    assert_eq!(test_config.screen_max_width, Some(1440));
-    assert_eq!(test_config.screen_max_height, Some(900));
-    assert_eq!(test_config.screen_min_width, Some(800));
-    assert_eq!(test_config.screen_min_height, Some(600));
-    assert_eq!(test_config.geoip, Some(serde_json::Value::Bool(true)));
-  }
 
   #[test]
   fn test_default_config() {
