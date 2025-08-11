@@ -255,14 +255,21 @@ mod linux {
   }
 
   pub fn is_firefox_version_downloaded(install_dir: &Path, browser_type: &BrowserType) -> bool {
-    // Expected structure: install_dir/<browser>/<binary>
+    // Expected structure (most common):
+    //   install_dir/<browser>/<binary>
+    // However, Firefox Developer tarballs often extract to a "firefox" subfolder
+    // rather than "firefox-developer". Support both layouts.
     let browser_subdir = install_dir.join(browser_type.as_str());
 
     let possible_executables = match browser_type {
       BrowserType::Firefox | BrowserType::FirefoxDeveloper => {
         vec![
+          // Preferred: executable inside a subdirectory named after the browser type
           browser_subdir.join("firefox-bin"),
           browser_subdir.join("firefox"),
+          // Fallback: executable inside a generic "firefox" subdirectory
+          install_dir.join("firefox").join("firefox-bin"),
+          install_dir.join("firefox").join("firefox"),
         ]
       }
       BrowserType::MullvadBrowser => {
