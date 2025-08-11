@@ -481,6 +481,7 @@ export function CreateProfileDialog({
                                 isLoading={isBrowserCurrentlyDownloading(
                                   selectedBrowser,
                                 )}
+                                className="ml-auto"
                                 size="sm"
                                 disabled={isBrowserCurrentlyDownloading(
                                   selectedBrowser,
