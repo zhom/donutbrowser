@@ -243,6 +243,16 @@ program
               ",",
             ) as "UBO"[];
 
+          // Executable path: forward through to camoufox-js and ultimately Playwright
+          if (
+            options.executablePath &&
+            typeof options.executablePath === "string"
+          ) {
+            // camoufox-js uses snake_case for this option
+            (camoufoxOptions as any).executable_path =
+              options.executablePath as string;
+          }
+
           // Screen and window
           const screen: {
             minWidth?: number;

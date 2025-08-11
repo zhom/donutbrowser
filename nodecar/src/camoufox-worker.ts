@@ -158,6 +158,15 @@ export async function runCamoufoxWorker(id: string): Promise<void> {
         env: finalEnv,
       };
 
+      // If a custom executable path was provided, ensure Playwright uses it
+      if (
+        (camoufoxOptions as any).executable_path &&
+        typeof (camoufoxOptions as any).executable_path === "string"
+      ) {
+        finalOptions.executablePath = (camoufoxOptions as any)
+          .executable_path as string;
+      }
+
       // Only add proxy if it exists and is valid
       if (camoufoxOptions.proxy) {
         try {
