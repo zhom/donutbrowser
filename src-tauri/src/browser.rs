@@ -168,19 +168,25 @@ mod linux {
     install_dir: &Path,
     browser_type: &BrowserType,
   ) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    // Expected structure by default: install_dir/<browser>/<binary>
+    // Expected structure examples:
+    // - Firefox/Firefox Developer on Linux often extract to: install_dir/firefox/firefox
+    // - Some archives may extract directly under: install_dir/firefox or install_dir/firefox-bin
+    // - For some flavors we may have: install_dir/<browser_type>/<binary>
     let browser_subdir = install_dir.join(browser_type.as_str());
 
-    // Try firefox first (preferred), then firefox-bin
+    // Try common firefox executable locations (nested and flat)
     let possible_executables = match browser_type {
-      BrowserType::Firefox | BrowserType::FirefoxDeveloper => {
-        vec![
-          browser_subdir.join("firefox"),
-          browser_subdir.join("firefox-bin"),
-          install_dir.join("firefox"),
-          install_dir.join("firefox-bin"),
-        ]
-      }
+      BrowserType::Firefox | BrowserType::FirefoxDeveloper => vec![
+        // Nested "firefox/firefox" or "firefox/firefox-bin"
+        install_dir.join("firefox").join("firefox"),
+        install_dir.join("firefox").join("firefox-bin"),
+        // Flat under version directory
+        install_dir.join("firefox"),
+        install_dir.join("firefox-bin"),
+        // Under a subdirectory matching the browser type
+        browser_subdir.join("firefox"),
+        browser_subdir.join("firefox-bin"),
+      ],
       BrowserType::MullvadBrowser => {
         vec![
           browser_subdir.join("firefox"),
@@ -193,9 +199,14 @@ mod linux {
       }
       BrowserType::TorBrowser => {
         vec![
-          browser_subdir.join("firefox"),
+          // Common Tor Browser launchers
           browser_subdir.join("tor-browser"),
+          // Firefox-based binaries
+          browser_subdir.join("firefox"),
           browser_subdir.join("firefox-bin"),
+          // Sometimes packaged similarly to Firefox
+          install_dir.join("firefox").join("firefox"),
+          install_dir.join("firefox").join("firefox-bin"),
         ]
       }
       BrowserType::Camoufox => {
