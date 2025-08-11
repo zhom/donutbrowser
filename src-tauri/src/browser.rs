@@ -177,6 +177,8 @@ mod linux {
         vec![
           browser_subdir.join("firefox"),
           browser_subdir.join("firefox-bin"),
+          install_dir.join("firefox"),
+          install_dir.join("firefox-bin"),
         ]
       }
       BrowserType::MullvadBrowser => {
