@@ -23,7 +23,7 @@
   "dependencies": {
     "@types/node": "^24.2.1",
     "commander": "^14.0.0",
-    "donutbrowser-camoufox-js": "^0.6.5",
+    "donutbrowser-camoufox-js": "^0.6.6",
     "dotenv": "^17.2.1",
     "fingerprint-generator": "^2.1.69",
     "get-port": "^7.1.0",
