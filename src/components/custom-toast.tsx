@@ -47,7 +47,7 @@
  * });
  * ```
  */
-/** biome-ignore-all lint/suspicious/noExplicitAny: <explanation> */
+/** biome-ignore-all lint/suspicious/noExplicitAny: TODO */
 
 import {
   LuCheckCheck,
