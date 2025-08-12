@@ -47,6 +47,7 @@
  * });
  * ```
  */
+/** biome-ignore-all lint/suspicious/noExplicitAny: <explanation> */
 
 import {
   LuCheckCheck,
@@ -56,7 +57,6 @@ import {
   LuTriangleAlert,
 } from "react-icons/lu";
 import type { ExternalToast } from "sonner";
-import { Button } from "./ui/button";
 import { RippleButton } from "./ui/ripple";
 
 interface BaseToastProps {
