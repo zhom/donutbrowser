@@ -1,5 +1,5 @@
 import React from "react";
-import { toast as sonnerToast } from "sonner";
+import { type ExternalToast, toast as sonnerToast } from "sonner";
 import { UnifiedToast } from "@/components/custom-toast";
 
 interface BaseToastProps {
@@ -7,6 +7,7 @@ interface BaseToastProps {
   title: string;
   description?: string;
   duration?: number;
+  action?: ExternalToast["action"];
 }
 
 interface LoadingToastProps extends BaseToastProps {

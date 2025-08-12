@@ -704,25 +704,35 @@ export default function Home() {
     loadGroups,
   ]);
 
-  // Show deprecation warning for unsupported profiles
+  // Show deprecation warning for unsupported profiles (with names)
   useEffect(() => {
     if (profiles.length === 0) return;
 
-    const hasDeprecated = profiles.some(
+    const deprecatedProfiles = profiles.filter(
       (p) =>
         ["tor-browser", "mullvad-browser"].includes(p.browser) ||
         (p.release_type === "nightly" && p.browser !== "firefox-developer"),
     );
 
-    if (hasDeprecated) {
+    if (deprecatedProfiles.length > 0) {
+      const deprecatedNames = deprecatedProfiles.map((p) => p.name).join(", ");
+
       // Use a stable id to avoid duplicate toasts on re-renders
       showToast({
         id: "deprecated-profiles-warning",
         type: "error",
         title: "Some profiles will be deprecated soon",
-        description:
-          "Tor, Mullvad Browser and nightly profiles (except Firefox Developers Edition) will be removed in upcoming versions. Please check GitHub for migration instructions which will be available soon.",
+        description: `The following profiles will be deprecated soon: ${deprecatedNames}. Tor Browser, Mullvad Browser, and nightly profiles (except Firefox Developers Edition) will be removed in upcoming versions. Please check GitHub for migration instructions.`,
         duration: 15000,
+        action: {
+          label: "Learn more",
+          onClick: () => {
+            const event = new CustomEvent("url-open-request", {
+              detail: "https://github.com/zhom/donutbrowser/discussions/66",
+            });
+            window.dispatchEvent(event);
+          },
+        },
       });
     }
   }, [profiles]);

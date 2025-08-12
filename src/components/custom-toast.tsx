@@ -55,12 +55,16 @@ import {
   LuRocket,
   LuTriangleAlert,
 } from "react-icons/lu";
+import type { ExternalToast } from "sonner";
+import { Button } from "./ui/button";
+import { RippleButton } from "./ui/ripple";
 
 interface BaseToastProps {
   id?: string;
   title: string;
   description?: string;
   duration?: number;
+  action?: ExternalToast["action"];
 }
 
 interface LoadingToastProps extends BaseToastProps {
@@ -158,7 +162,7 @@ function getToastIcon(type: ToastProps["type"], stage?: string) {
 }
 
 export function UnifiedToast(props: ToastProps) {
-  const { title, description, type } = props;
+  const { title, description, type, action } = props;
   const stage = "stage" in props ? props.stage : undefined;
   const progress = "progress" in props ? props.progress : undefined;
 
@@ -289,6 +293,19 @@ export function UnifiedToast(props: ToastProps) {
             )}
           </>
         )}
+        {action &&
+          "onClick" in (action as any) &&
+          "label" in (action as any) && (
+            <div className="mt-2 w-full">
+              <RippleButton
+                size="sm"
+                className="ml-auto"
+                onClick={(action as any).onClick}
+              >
+                {(action as any).label}
+              </RippleButton>
+            </div>
+          )}
       </div>
     </div>
   );
