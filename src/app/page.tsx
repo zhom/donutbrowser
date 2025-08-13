@@ -804,8 +804,9 @@ export default function Home() {
       {isInitializing && (
         <div className="fixed inset-0 z-[100000] backdrop-blur-sm bg-black/30 flex items-center justify-center">
           <div className="bg-white dark:bg-neutral-900 rounded-xl p-6 shadow-xl border border-black/10 dark:border-white/10 w-[320px] text-center">
-            <div className="font-medium">
-              Initialization, please don't close the app
+            <div className="text-lg font-medium">Initializing</div>
+            <div className="mt-1 mb-2 text-sm text-gray-600 dark:text-gray-300">
+              please don't close the app
             </div>
             <div className="mx-auto mb-4 w-8 h-8 rounded-full border-2 border-gray-300 animate-spin border-t-gray-900 dark:border-gray-700 dark:border-t-white" />
           </div>
