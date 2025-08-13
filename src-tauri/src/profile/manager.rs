@@ -908,6 +908,15 @@ impl ProfileManager {
       "user_pref(\"browser.preferences.moreFromMozilla\", false);".to_string(),
       "user_pref(\"services.sync.prefs.sync.browser.startup.upgradeDialog.enabled\", false);"
         .to_string(),
+      // Disable welcome / first-run screens
+      "user_pref(\"browser.aboutwelcome.enabled\", false);".to_string(),
+      "user_pref(\"browser.startup.homepage_override.mstone\", \"ignore\");".to_string(),
+      "user_pref(\"startup.homepage_welcome_url\", \"\");".to_string(),
+      "user_pref(\"startup.homepage_welcome_url.additional\", \"\");".to_string(),
+      "user_pref(\"startup.homepage_override_url\", \"\");".to_string(),
+      // Keep extension updates enabled
+      "user_pref(\"extensions.update.enabled\", true);".to_string(),
+      "user_pref(\"extensions.update.autoUpdateDefault\", true);".to_string(),
       "user_pref(\"app.update.enabled\", false);".to_string(),
       "user_pref(\"app.update.staging.enabled\", false);".to_string(),
       "user_pref(\"app.update.timerFirstInterval\", -1);".to_string(),
@@ -923,6 +932,12 @@ impl ProfileManager {
       "user_pref(\"app.update.interval\", -1);".to_string(),
       "user_pref(\"app.update.background.interval\", -1);".to_string(),
       "user_pref(\"app.update.idletime\", -1);".to_string(),
+      // Suppress additional update UI/prompts
+      "user_pref(\"app.update.doorhanger\", false);".to_string(),
+      "user_pref(\"app.update.badge\", false);".to_string(),
+      "user_pref(\"app.update.background.scheduling.enabled\", false);".to_string(),
+      // Suppress upgrade dialogs on startup
+      "user_pref(\"browser.startup.upgradeDialog.enabled\", false);".to_string(),
     ]
   }
 
