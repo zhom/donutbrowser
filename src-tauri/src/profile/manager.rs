@@ -741,25 +741,33 @@ impl ProfileManager {
       }
     }
 
-    // Update the process ID if we found a different one
-    if let Some(pid) = found_pid {
-      if inner_profile.process_id != Some(pid) {
-        inner_profile.process_id = Some(pid);
+    // Only persist status changes if the profile metadata still exists on disk
+    let profiles_dir = self.get_profiles_dir();
+    let profile_uuid_dir = profiles_dir.join(profile.id.to_string());
+    let metadata_file = profile_uuid_dir.join("metadata.json");
+    let metadata_exists = metadata_file.exists();
+
+    if metadata_exists {
+      // Update the process ID if we found a different one
+      if let Some(pid) = found_pid {
+        if inner_profile.process_id != Some(pid) {
+          inner_profile.process_id = Some(pid);
+          if let Err(e) = self.save_profile(&inner_profile) {
+            println!("Warning: Failed to update profile with new PID: {e}");
+          }
+        }
+      } else if inner_profile.process_id.is_some() {
+        // Clear the PID if no process found
+        inner_profile.process_id = None;
         if let Err(e) = self.save_profile(&inner_profile) {
-          println!("Warning: Failed to update profile with new PID: {e}");
+          println!("Warning: Failed to clear profile PID: {e}");
         }
       }
-    } else if inner_profile.process_id.is_some() {
-      // Clear the PID if no process found
-      inner_profile.process_id = None;
-      if let Err(e) = self.save_profile(&inner_profile) {
-        println!("Warning: Failed to clear profile PID: {e}");
-      }
-    }
 
-    // Emit profile update event to frontend
-    if let Err(e) = app_handle.emit("profile-updated", &inner_profile) {
-      println!("Warning: Failed to emit profile update event: {e}");
+      // Emit profile update event to frontend
+      if let Err(e) = app_handle.emit("profile-updated", &inner_profile) {
+        println!("Warning: Failed to emit profile update event: {e}");
+      }
     }
 
     Ok(is_running)
@@ -783,7 +791,13 @@ impl ProfileManager {
       Ok(Some(camoufox_process)) => {
         // Found a running instance, update profile with process info if changed
         let process_id_changed = profile.process_id != camoufox_process.processId;
-        if process_id_changed {
+        // Only write status changes if metadata still exists
+        let profiles_dir = self.get_profiles_dir();
+        let profile_uuid_dir = profiles_dir.join(profile.id.to_string());
+        let metadata_file = profile_uuid_dir.join("metadata.json");
+        let metadata_exists = metadata_file.exists();
+
+        if process_id_changed && metadata_exists {
           let mut updated_profile = profile.clone();
           updated_profile.process_id = camoufox_process.processId;
           if let Err(e) = self.save_profile(&updated_profile) {
@@ -804,7 +818,12 @@ impl ProfileManager {
       }
       Ok(None) => {
         // No running instance found, clear process ID if set
-        if profile.process_id.is_some() {
+        let profiles_dir = self.get_profiles_dir();
+        let profile_uuid_dir = profiles_dir.join(profile.id.to_string());
+        let metadata_file = profile_uuid_dir.join("metadata.json");
+        let metadata_exists = metadata_file.exists();
+
+        if profile.process_id.is_some() && metadata_exists {
           let mut updated_profile = profile.clone();
           updated_profile.process_id = None;
           if let Err(e) = self.save_profile(&updated_profile) {
@@ -821,7 +840,12 @@ impl ProfileManager {
       Err(e) => {
         // Error checking status, assume not running and clear process ID
         println!("Warning: Failed to check Camoufox status via nodecar: {e}");
-        if profile.process_id.is_some() {
+        let profiles_dir = self.get_profiles_dir();
+        let profile_uuid_dir = profiles_dir.join(profile.id.to_string());
+        let metadata_file = profile_uuid_dir.join("metadata.json");
+        let metadata_exists = metadata_file.exists();
+
+        if profile.process_id.is_some() && metadata_exists {
           let mut updated_profile = profile.clone();
           updated_profile.process_id = None;
           if let Err(e) = self.save_profile(&updated_profile) {
