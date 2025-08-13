@@ -350,29 +350,6 @@ impl ProxyManager {
       let _ = self.stop_proxy(app_handle.clone(), browser_pid).await;
     }
 
-    // Check if we have a preferred port for this profile
-    let preferred_port = if let Some(name) = profile_name {
-      let profile_proxies = self.profile_proxies.lock().unwrap();
-      profile_proxies.get(name).and_then(|_settings| {
-        // Find existing proxy with same settings to reuse port
-        let active_proxies = self.active_proxies.lock().unwrap();
-        active_proxies
-          .values()
-          .find(|p| {
-            if let Some(proxy_settings) = proxy_settings {
-              p.upstream_host == proxy_settings.host
-                && p.upstream_port == proxy_settings.port
-                && p.upstream_type == proxy_settings.proxy_type
-            } else {
-              p.upstream_type == "DIRECT"
-            }
-          })
-          .map(|p| p.local_port)
-      })
-    } else {
-      None
-    };
-
     // Start a new proxy using the nodecar binary with the correct CLI interface
     let mut nodecar = app_handle
       .shell()
@@ -398,11 +375,6 @@ impl ProxyManager {
       if let Some(password) = &proxy_settings.password {
         nodecar = nodecar.arg("--password").arg(password);
       }
-    }
-
-    // If we have a preferred port, use it
-    if let Some(port) = preferred_port {
-      nodecar = nodecar.arg("--port").arg(port.to_string());
     }
 
     // Execute the command and wait for it to complete
@@ -448,6 +420,30 @@ impl ProxyManager {
       local_port,
       profile_name: profile_name.map(|s| s.to_string()),
     };
+
+    // Wait for the local proxy port to be ready to accept connections
+    {
+      use tokio::net::TcpStream;
+      use tokio::time::{sleep, Duration};
+      let mut ready = false;
+      for _ in 0..50 {
+        match TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, proxy_info.local_port)).await {
+          Ok(_stream) => {
+            ready = true;
+            break;
+          }
+          Err(_) => {
+            sleep(Duration::from_millis(100)).await;
+          }
+        }
+      }
+      if !ready {
+        return Err(format!(
+          "Local proxy on 127.0.0.1:{} did not become ready in time",
+          proxy_info.local_port
+        ));
+      }
+    }
 
     // Store the proxy info
     {

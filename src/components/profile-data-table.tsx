@@ -132,8 +132,8 @@ export function ProfilesDataTable({
     async (profileName: string, proxyId: string | null) => {
       try {
         await invoke("update_profile_proxy", {
-          profileName: profileName,
-          proxy_id: proxyId,
+          profileName,
+          proxyId,
         });
         setProxyOverrides((prev) => ({ ...prev, [profileName]: proxyId }));
       } catch (error) {

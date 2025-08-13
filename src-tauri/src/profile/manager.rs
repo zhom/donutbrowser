@@ -497,19 +497,6 @@ impl ProfileManager {
         format!("Profile {profile_name} not found").into()
       })?;
 
-    // Check if browser is running to manage proxy accordingly
-    let browser_is_running = profile.process_id.is_some()
-      && self
-        .check_browser_status(app_handle.clone(), &profile)
-        .await?;
-
-    // If browser is running, stop existing proxy
-    if browser_is_running && profile.proxy_id.is_some() {
-      if let Some(pid) = profile.process_id {
-        let _ = PROXY_MANAGER.stop_proxy(app_handle.clone(), pid).await;
-      }
-    }
-
     // Update proxy settings
     profile.proxy_id = proxy_id.clone();
 
@@ -520,68 +507,16 @@ impl ProfileManager {
         format!("Failed to save profile: {e}").into()
       })?;
 
-    // Handle proxy startup/configuration
+    // Update on-disk browser profile config immediately
     if let Some(proxy_id_ref) = &proxy_id {
       if let Some(proxy_settings) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id_ref) {
-        if browser_is_running {
-          // Browser is running and proxy is enabled, start new proxy
-          if let Some(pid) = profile.process_id {
-            match PROXY_MANAGER
-              .start_proxy(
-                app_handle.clone(),
-                Some(&proxy_settings),
-                pid,
-                Some(profile_name),
-              )
-              .await
-            {
-              Ok(internal_proxy_settings) => {
-                let profiles_dir = self.get_profiles_dir();
-                let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
-
-                // Apply the proxy settings with the internal proxy to the profile directory
-                self
-                  .apply_proxy_settings_to_profile(
-                    &profile_path,
-                    &proxy_settings,
-                    Some(&internal_proxy_settings),
-                  )
-                  .map_err(|e| format!("Failed to update profile proxy: {e}"))?;
-
-                println!("Successfully started proxy for profile: {}", profile.name);
-              }
-              Err(e) => {
-                eprintln!("Failed to start proxy: {e}");
-                // Apply proxy settings without internal proxy
-                let profiles_dir = self.get_profiles_dir();
-                let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
-                self
-                  .apply_proxy_settings_to_profile(&profile_path, &proxy_settings, None)
-                  .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
-                    format!("Failed to apply proxy settings: {e}").into()
-                  })?;
-              }
-            }
-          } else {
-            // No PID available, apply proxy settings without internal proxy
-            let profiles_dir = self.get_profiles_dir();
-            let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
-            self
-              .apply_proxy_settings_to_profile(&profile_path, &proxy_settings, None)
-              .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
-                format!("Failed to apply proxy settings: {e}").into()
-              })?;
-          }
-        } else {
-          // Proxy disabled or browser not running, just apply settings
-          let profiles_dir = self.get_profiles_dir();
-          let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
-          self
-            .apply_proxy_settings_to_profile(&profile_path, &proxy_settings, None)
-            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
-              format!("Failed to apply proxy settings: {e}").into()
-            })?;
-        }
+        let profiles_dir = self.get_profiles_dir();
+        let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
+        self
+          .apply_proxy_settings_to_profile(&profile_path, &proxy_settings, None)
+          .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+            format!("Failed to apply proxy settings: {e}").into()
+          })?;
       } else {
         // Proxy ID provided but proxy not found, disable proxy
         let profiles_dir = self.get_profiles_dir();
@@ -624,7 +559,7 @@ impl ProfileManager {
     }
 
     // For non-camoufox browsers, use the existing PID-based logic
-    let mut inner_profile = profile.clone();
+    let inner_profile = profile.clone();
     let system = System::new_all();
     let mut is_running = false;
     let mut found_pid: Option<u32> = None;
@@ -748,24 +683,42 @@ impl ProfileManager {
     let metadata_exists = metadata_file.exists();
 
     if metadata_exists {
-      // Update the process ID if we found a different one
+      // Load the latest profile from disk to avoid overwriting fields like proxy_id
+      let latest_profile: BrowserProfile = match std::fs::read_to_string(&metadata_file)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+      {
+        Some(p) => p,
+        None => inner_profile.clone(),
+      };
+
+      let previous_pid = latest_profile.process_id;
+      let mut merged = latest_profile.clone();
+
       if let Some(pid) = found_pid {
-        if inner_profile.process_id != Some(pid) {
-          inner_profile.process_id = Some(pid);
-          if let Err(e) = self.save_profile(&inner_profile) {
+        if merged.process_id != Some(pid) {
+          merged.process_id = Some(pid);
+          if let Err(e) = self.save_profile(&merged) {
             println!("Warning: Failed to update profile with new PID: {e}");
           }
         }
-      } else if inner_profile.process_id.is_some() {
+      } else if merged.process_id.is_some() {
         // Clear the PID if no process found
-        inner_profile.process_id = None;
-        if let Err(e) = self.save_profile(&inner_profile) {
+        merged.process_id = None;
+        if let Err(e) = self.save_profile(&merged) {
           println!("Warning: Failed to clear profile PID: {e}");
+        }
+
+        // Stop any associated proxy immediately when the browser stops
+        if let Some(old_pid) = previous_pid {
+          let _ = crate::proxy_manager::PROXY_MANAGER
+            .stop_proxy(app_handle.clone(), old_pid)
+            .await;
         }
       }
 
       // Emit profile update event to frontend
-      if let Err(e) = app_handle.emit("profile-updated", &inner_profile) {
+      if let Err(e) = app_handle.emit("profile-updated", &merged) {
         println!("Warning: Failed to emit profile update event: {e}");
       }
     }
@@ -790,49 +743,71 @@ impl ProfileManager {
     match launcher.find_camoufox_by_profile(&profile_path_str).await {
       Ok(Some(camoufox_process)) => {
         // Found a running instance, update profile with process info if changed
-        let process_id_changed = profile.process_id != camoufox_process.processId;
-        // Only write status changes if metadata still exists
         let profiles_dir = self.get_profiles_dir();
         let profile_uuid_dir = profiles_dir.join(profile.id.to_string());
         let metadata_file = profile_uuid_dir.join("metadata.json");
         let metadata_exists = metadata_file.exists();
 
-        if process_id_changed && metadata_exists {
-          let mut updated_profile = profile.clone();
-          updated_profile.process_id = camoufox_process.processId;
-          if let Err(e) = self.save_profile(&updated_profile) {
-            println!("Warning: Failed to update Camoufox profile with process info: {e}");
-          }
+        if metadata_exists {
+          // Load latest to avoid overwriting other fields
+          let mut latest: BrowserProfile = match std::fs::read_to_string(&metadata_file)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+          {
+            Some(p) => p,
+            None => profile.clone(),
+          };
 
-          // Emit profile update event to frontend
-          if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
-            println!("Warning: Failed to emit profile update event: {e}");
-          }
+          if latest.process_id != camoufox_process.processId {
+            latest.process_id = camoufox_process.processId;
+            if let Err(e) = self.save_profile(&latest) {
+              println!("Warning: Failed to update Camoufox profile with process info: {e}");
+            }
 
-          println!(
-            "Camoufox process has started for profile '{}' with PID: {:?}",
-            profile.name, camoufox_process.processId
-          );
+            // Emit profile update event to frontend
+            if let Err(e) = app_handle.emit("profile-updated", &latest) {
+              println!("Warning: Failed to emit profile update event: {e}");
+            }
+
+            println!(
+              "Camoufox process has started for profile '{}' with PID: {:?}",
+              profile.name, camoufox_process.processId
+            );
+          }
         }
         Ok(true)
       }
       Ok(None) => {
-        // No running instance found, clear process ID if set
+        // No running instance found, clear process ID if set and stop proxy
         let profiles_dir = self.get_profiles_dir();
         let profile_uuid_dir = profiles_dir.join(profile.id.to_string());
         let metadata_file = profile_uuid_dir.join("metadata.json");
         let metadata_exists = metadata_file.exists();
 
-        if profile.process_id.is_some() && metadata_exists {
-          let mut updated_profile = profile.clone();
-          updated_profile.process_id = None;
-          if let Err(e) = self.save_profile(&updated_profile) {
-            println!("Warning: Failed to clear Camoufox profile process info: {e}");
-          }
+        if metadata_exists {
+          let mut latest: BrowserProfile = match std::fs::read_to_string(&metadata_file)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+          {
+            Some(p) => p,
+            None => profile.clone(),
+          };
 
-          // Emit profile update event to frontend
-          if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
-            println!("Warning: Failed to emit profile update event: {e}");
+          if let Some(old_pid) = latest.process_id {
+            latest.process_id = None;
+            if let Err(e) = self.save_profile(&latest) {
+              println!("Warning: Failed to clear Camoufox profile process info: {e}");
+            }
+
+            // Stop any proxy tied to this old PID immediately
+            let _ = crate::proxy_manager::PROXY_MANAGER
+              .stop_proxy(app_handle.clone(), old_pid)
+              .await;
+
+            // Emit profile update event to frontend
+            if let Err(e) = app_handle.emit("profile-updated", &latest) {
+              println!("Warning: Failed to emit profile update event: {e}");
+            }
           }
         }
         Ok(false)
@@ -845,16 +820,30 @@ impl ProfileManager {
         let metadata_file = profile_uuid_dir.join("metadata.json");
         let metadata_exists = metadata_file.exists();
 
-        if profile.process_id.is_some() && metadata_exists {
-          let mut updated_profile = profile.clone();
-          updated_profile.process_id = None;
-          if let Err(e) = self.save_profile(&updated_profile) {
-            println!("Warning: Failed to clear Camoufox profile process info after error: {e}");
-          }
+        if metadata_exists {
+          let mut latest: BrowserProfile = match std::fs::read_to_string(&metadata_file)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+          {
+            Some(p) => p,
+            None => profile.clone(),
+          };
 
-          // Emit profile update event to frontend
-          if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
-            println!("Warning: Failed to emit profile update event: {e}");
+          if let Some(old_pid) = latest.process_id {
+            latest.process_id = None;
+            if let Err(e2) = self.save_profile(&latest) {
+              println!("Warning: Failed to clear Camoufox profile process info after error: {e2}");
+            }
+
+            // Best-effort stop of proxy tied to old PID
+            let _ = crate::proxy_manager::PROXY_MANAGER
+              .stop_proxy(app_handle.clone(), old_pid)
+              .await;
+
+            // Emit profile update event to frontend
+            if let Err(e3) = app_handle.emit("profile-updated", &latest) {
+              println!("Warning: Failed to emit profile update event: {e3}");
+            }
           }
         }
         Ok(false)
