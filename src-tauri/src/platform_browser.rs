@@ -48,7 +48,38 @@ pub mod macos {
     args: &[String],
   ) -> Result<std::process::Child, Box<dyn std::error::Error + Send + Sync>> {
     println!("Launching browser on macOS: {executable_path:?} with args: {args:?}");
-    Ok(Command::new(executable_path).args(args).spawn()?)
+    // If the executable is inside an app bundle, launch via Launch Services so
+    // macOS recognizes the real application for privacy permissions (e.g. Screen Recording).
+    // This ensures TCC prompts are attributed to the browser app, not our launcher.
+    let mut current = Some(executable_path);
+    let mut app_bundle: Option<std::path::PathBuf> = None;
+    while let Some(path) = current {
+      if let Some(file_name) = path.file_name().and_then(|s| s.to_str()) {
+        if file_name.ends_with(".app") {
+          app_bundle = Some(path.to_path_buf());
+          break;
+        }
+      }
+      current = path.parent();
+    }
+
+    if let Some(app_path) = app_bundle {
+      // Use `open -n -a <App>.app --args ...` to launch the app bundle.
+      // Note: The returned child PID will belong to `open`, not the browser.
+      // The caller should resolve the actual browser PID after launch.
+      let mut cmd = Command::new("open");
+      cmd.arg("-n");
+      cmd.arg("-a");
+      cmd.arg(app_path);
+      cmd.arg("--args");
+      for a in args {
+        cmd.arg(a);
+      }
+      Ok(cmd.spawn()?)
+    } else {
+      // Fallback: direct spawn if this is not an app bundle
+      Ok(Command::new(executable_path).args(args).spawn()?)
+    }
   }
 
   pub async fn open_url_in_existing_browser_firefox_like(

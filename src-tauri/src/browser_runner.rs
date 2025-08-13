@@ -368,6 +368,82 @@ impl BrowserRunner {
       }
     }
 
+    // On macOS, when launching via `open -a`, the child PID is the `open` helper.
+    // Resolve and store the actual browser PID for all browser types.
+    #[cfg(target_os = "macos")]
+    {
+      // Give the browser a moment to start
+      tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
+
+      let system = System::new_all();
+      let profiles_dir = self.get_profiles_dir();
+      let profile_data_path = profile.get_profile_data_path(&profiles_dir);
+      let profile_data_path_str = profile_data_path.to_string_lossy();
+
+      for (pid, process) in system.processes() {
+        let cmd = process.cmd();
+        if cmd.is_empty() {
+          continue;
+        }
+
+        // Determine if this process matches the intended browser type
+        let exe_name_lower = process.name().to_string_lossy().to_lowercase();
+        let is_correct_browser = match profile.browser.as_str() {
+          "firefox" => {
+            exe_name_lower.contains("firefox")
+              && !exe_name_lower.contains("developer")
+              && !exe_name_lower.contains("tor")
+              && !exe_name_lower.contains("mullvad")
+              && !exe_name_lower.contains("camoufox")
+          }
+          "firefox-developer" => {
+            exe_name_lower.contains("firefox") && exe_name_lower.contains("developer")
+          }
+          "mullvad-browser" => {
+            self.is_tor_or_mullvad_browser(&exe_name_lower, cmd, "mullvad-browser")
+          }
+          "tor-browser" => self.is_tor_or_mullvad_browser(&exe_name_lower, cmd, "tor-browser"),
+          "zen" => exe_name_lower.contains("zen"),
+          "chromium" => exe_name_lower.contains("chromium"),
+          "brave" => exe_name_lower.contains("brave"),
+          // Camoufox uses nodecar, not PID-based here
+          _ => false,
+        };
+
+        if !is_correct_browser {
+          continue;
+        }
+
+        // Check for profile path match in command line args
+        let profile_path_match = cmd.iter().any(|s| {
+          let arg = s.to_str().unwrap_or("");
+          if profile.browser == "tor-browser"
+            || profile.browser == "firefox"
+            || profile.browser == "firefox-developer"
+            || profile.browser == "mullvad-browser"
+            || profile.browser == "zen"
+          {
+            arg == profile_data_path_str || arg == format!("-profile={profile_data_path_str}")
+          } else {
+            // For Chromium-based browsers, look for user-data-dir flag or raw path
+            arg.contains(&format!("--user-data-dir={profile_data_path_str}"))
+              || arg == profile_data_path_str
+          }
+        });
+
+        if profile_path_match {
+          let pid_u32 = pid.as_u32();
+          if pid_u32 != launcher_pid {
+            actual_pid = pid_u32;
+            println!(
+              "Resolved actual macOS browser PID: {actual_pid} (launcher PID: {launcher_pid})"
+            );
+            break;
+          }
+        }
+      }
+    }
+
     // Update profile with process info and save
     let mut updated_profile = profile.clone();
     updated_profile.process_id = Some(actual_pid);
