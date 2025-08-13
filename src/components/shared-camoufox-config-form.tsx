@@ -83,7 +83,7 @@ export function SharedCamoufoxConfigForm({
   forceAdvanced = false,
 }: SharedCamoufoxConfigFormProps) {
   const [activeTab, setActiveTab] = useState(
-    forceAdvanced ? "advanced" : "normal",
+    forceAdvanced ? "manual" : "automatic",
   );
   const [fingerprintConfig, setFingerprintConfig] =
     useState<CamoufoxFingerprintConfig>({});
@@ -817,14 +817,13 @@ export function SharedCamoufoxConfigForm({
         // Advanced mode only (for editing)
         renderAdvancedForm()
       ) : (
-        // Normal/Advanced tabs for creation
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid grid-cols-2 w-full">
-            <TabsTrigger value="normal">Normal</TabsTrigger>
-            <TabsTrigger value="advanced">Advanced</TabsTrigger>
+            <TabsTrigger value="automatic">Automatic</TabsTrigger>
+            <TabsTrigger value="manual">Manual</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="normal" className="space-y-6">
+          <TabsContent value="automatic" className="space-y-6">
             {/* Automatic Location Configuration */}
             <div className="mt-4 space-y-3">
               <div className="flex items-center space-x-2">
@@ -908,7 +907,7 @@ export function SharedCamoufoxConfigForm({
             </div>
           </TabsContent>
 
-          <TabsContent value="advanced" className="space-y-6">
+          <TabsContent value="manual" className="space-y-6">
             {renderAdvancedForm()}
           </TabsContent>
         </Tabs>
