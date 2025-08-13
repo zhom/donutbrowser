@@ -38,6 +38,13 @@ impl GroupManager {
     }
   }
 
+  pub fn with_data_dir_override<P: Into<PathBuf>>(override_dir: P) -> Self {
+    Self {
+      base_dirs: BaseDirs::new().expect("Failed to get base directories"),
+      data_dir_override: Some(override_dir.into()),
+    }
+  }
+
   fn get_groups_file_path(&self) -> PathBuf {
     if let Some(dir) = &self.data_dir_override {
       let mut override_path = dir.clone();
@@ -206,11 +213,9 @@ mod tests {
     // Set up a temporary home directory for testing
     env::set_var("HOME", temp_dir.path());
 
-    // Ensure tests do not conflict by isolating data directory per test instance
+    // Use per-test isolated data directory without relying on global env vars
     let data_override = temp_dir.path().join("donutbrowser_test_data");
-    env::set_var("DONUTBROWSER_DATA_DIR", &data_override);
-
-    let manager = GroupManager::new();
+    let manager = GroupManager::with_data_dir_override(&data_override);
     (manager, temp_dir)
   }
 
