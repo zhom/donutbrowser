@@ -153,7 +153,7 @@ impl BrowserRunner {
     app_handle: tauri::AppHandle,
     profile: &BrowserProfile,
     url: Option<String>,
-    _local_proxy_settings: Option<&ProxySettings>,
+    local_proxy_settings: Option<&ProxySettings>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
     // Check if browser is disabled due to ongoing update
     let auto_updater = crate::auto_updater::AutoUpdater::instance();
@@ -290,8 +290,8 @@ impl BrowserRunner {
       .as_ref()
       .and_then(|id| PROXY_MANAGER.get_proxy_settings_by_id(id));
 
-    // For now, don't use proxy in launch args - we'll set it up after launch
-    let proxy_for_launch_args: Option<&ProxySettings> = None;
+    // Use provided local proxy for Chromium-based browsers launch arguments
+    let proxy_for_launch_args: Option<&ProxySettings> = local_proxy_settings;
 
     // Get profile data path and launch arguments
     let profiles_dir = self.get_profiles_dir();
@@ -464,58 +464,6 @@ impl BrowserRunner {
     {
       // Proxy settings for Firefox-based browsers are applied via user.js file
       // which is already handled in the profile creation process
-    }
-
-    // Always start a local proxy for traffic monitoring and potential upstream routing
-    let upstream_proxy = profile
-      .proxy_id
-      .as_ref()
-      .and_then(|id| PROXY_MANAGER.get_proxy_settings_by_id(id));
-
-    println!(
-      "Starting local proxy for profile: {} (upstream: {})",
-      profile.name,
-      upstream_proxy
-        .as_ref()
-        .map(|p| format!("{}:{}", p.host, p.port))
-        .unwrap_or_else(|| "DIRECT".to_string())
-    );
-
-    match PROXY_MANAGER
-      .start_proxy(
-        app_handle.clone(),
-        upstream_proxy.as_ref(),
-        actual_pid,
-        Some(&profile.name),
-      )
-      .await
-    {
-      Ok(local_proxy) => {
-        println!(
-          "Local proxy started successfully for profile: {} on port: {}",
-          profile.name, local_proxy.port
-        );
-
-        // For Firefox-based browsers, update the PAC file with the local proxy
-        if matches!(
-          browser_type,
-          BrowserType::Firefox
-            | BrowserType::FirefoxDeveloper
-            | BrowserType::Zen
-            | BrowserType::TorBrowser
-            | BrowserType::MullvadBrowser
-        ) {
-          let profiles_dir = self.get_profiles_dir();
-          let profile_path = profiles_dir
-            .join(updated_profile.id.to_string())
-            .join("profile");
-
-          if let Err(e) = self.apply_proxy_settings_to_profile(&profile_path, &local_proxy, None) {
-            println!("Warning: Failed to update Firefox proxy settings: {e}");
-          }
-        }
-      }
-      Err(e) => println!("Warning: Failed to start local proxy: {e}"),
     }
 
     // Emit profile update event to frontend
@@ -1543,54 +1491,68 @@ pub async fn launch_browser_profile(
   // Store the internal proxy settings for passing to launch_browser
   let mut internal_proxy_settings: Option<ProxySettings> = None;
 
-  // If the profile has proxy settings, we need to start the proxy first
-  // and update the profile with proxy settings before launching
+  // Always start a local proxy before launching (non-Camoufox handled here; Camoufox has its own flow)
   let profile_for_launch = profile.clone();
-  if let Some(proxy_id) = &profile.proxy_id {
-    if let Some(proxy) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id) {
-      // Use a temporary PID (1) to start the proxy, we'll update it after browser launch
-      let temp_pid = 1u32;
+  if profile.browser != "camoufox" {
+    // Determine upstream proxy if configured; otherwise use DIRECT
+    let upstream_proxy = profile
+      .proxy_id
+      .as_ref()
+      .and_then(|id| PROXY_MANAGER.get_proxy_settings_by_id(id));
 
-      // Start the proxy first
-      match PROXY_MANAGER
-        .start_proxy(
-          app_handle.clone(),
-          Some(&proxy),
-          temp_pid,
-          Some(&profile.name),
-        )
-        .await
-      {
-        Ok(internal_proxy) => {
-          let browser_runner = BrowserRunner::instance();
+    // Use a temporary PID (1) to start the proxy, we'll update it after browser launch
+    let temp_pid = 1u32;
+
+    match PROXY_MANAGER
+      .start_proxy(
+        app_handle.clone(),
+        upstream_proxy.as_ref(),
+        temp_pid,
+        Some(&profile.name),
+      )
+      .await
+    {
+      Ok(internal_proxy) => {
+        // Use internal proxy for subsequent launch
+        internal_proxy_settings = Some(internal_proxy.clone());
+
+        // For Firefox-based browsers, apply PAC/user.js to point to the local proxy
+        if matches!(
+          profile.browser.as_str(),
+          "firefox" | "firefox-developer" | "zen" | "tor-browser" | "mullvad-browser"
+        ) {
           let profiles_dir = browser_runner.get_profiles_dir();
           let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
 
-          // Store the internal proxy settings for later use
-          internal_proxy_settings = Some(internal_proxy.clone());
+          // Provide a dummy upstream (ignored when internal proxy is provided)
+          let dummy_upstream = ProxySettings {
+            proxy_type: "http".to_string(),
+            host: "127.0.0.1".to_string(),
+            port: internal_proxy.port,
+            username: None,
+            password: None,
+          };
 
-          // Apply the proxy settings with the internal proxy to the profile directory
           browser_runner
-            .apply_proxy_settings_to_profile(&profile_path, &proxy, Some(&internal_proxy))
-            .map_err(|e| format!("Failed to update profile proxy: {e}"))?;
-
-          println!("Successfully started proxy for profile: {}", profile.name);
-
-          // Give the proxy a moment to fully start up
-          tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-        }
-        Err(e) => {
-          eprintln!("Failed to start proxy: {e}");
-          // Still continue with browser launch, but without proxy
-          let browser_runner = BrowserRunner::instance();
-          let profiles_dir = browser_runner.get_profiles_dir();
-          let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
-
-          // Apply proxy settings without internal proxy
-          browser_runner
-            .apply_proxy_settings_to_profile(&profile_path, &proxy, None)
+            .apply_proxy_settings_to_profile(&profile_path, &dummy_upstream, Some(&internal_proxy))
             .map_err(|e| format!("Failed to update profile proxy: {e}"))?;
         }
+
+        println!(
+          "Local proxy prepared for profile: {} on port: {} (upstream: {})",
+          profile.name,
+          internal_proxy.port,
+          upstream_proxy
+            .as_ref()
+            .map(|p| format!("{}:{}", p.host, p.port))
+            .unwrap_or_else(|| "DIRECT".to_string())
+        );
+
+        // Give the proxy a moment to fully start up
+        tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+      }
+      Err(e) => {
+        eprintln!("Failed to start local proxy (will launch without it): {e}");
       }
     }
   }
@@ -1611,20 +1573,9 @@ pub async fn launch_browser_profile(
     })?;
 
   // Now update the proxy with the correct PID if we have one
-  if let Some(proxy_id) = &profile.proxy_id {
-    if PROXY_MANAGER.get_proxy_settings_by_id(proxy_id).is_some() {
-      if let Some(actual_pid) = updated_profile.process_id {
-        // Update the proxy manager with the correct PID
-        match PROXY_MANAGER.update_proxy_pid(1u32, actual_pid) {
-          Ok(()) => {
-            println!("Updated proxy PID mapping from temp (1) to actual PID: {actual_pid}");
-          }
-          Err(e) => {
-            eprintln!("Failed to update proxy PID mapping: {e}");
-          }
-        }
-      }
-    }
+  if let Some(actual_pid) = updated_profile.process_id {
+    // Update the proxy manager with the correct PID (we always started with temp pid 1 for non-Camoufox)
+    let _ = PROXY_MANAGER.update_proxy_pid(1u32, actual_pid);
   }
 
   Ok(updated_profile)
