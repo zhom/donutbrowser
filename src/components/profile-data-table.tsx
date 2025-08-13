@@ -12,10 +12,18 @@ import { invoke } from "@tauri-apps/api/core";
 import * as React from "react";
 import { CiCircleCheck } from "react-icons/ci";
 import { IoEllipsisHorizontal } from "react-icons/io5";
-import { LuChevronDown, LuChevronUp } from "react-icons/lu";
+import { LuCheck, LuChevronDown, LuChevronUp } from "react-icons/lu";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import {
   Dialog,
   DialogContent,
@@ -29,6 +37,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Table,
@@ -61,13 +74,11 @@ interface ProfilesDataTableProps {
   data: BrowserProfile[];
   onLaunchProfile: (profile: BrowserProfile) => void | Promise<void>;
   onKillProfile: (profile: BrowserProfile) => void | Promise<void>;
-  onProxySettings: (profile: BrowserProfile) => void;
   onDeleteProfile: (profile: BrowserProfile) => void | Promise<void>;
   onRenameProfile: (oldName: string, newName: string) => Promise<void>;
   onConfigureCamoufox?: (profile: BrowserProfile) => void;
   runningProfiles: Set<string>;
   isUpdating: (browser: string) => boolean;
-  onReloadProxyData?: () => void | Promise<void>;
   onDeleteSelectedProfiles?: (profileNames: string[]) => Promise<void>;
   onAssignProfilesToGroup?: (profileNames: string[]) => void;
   selectedGroupId?: string | null;
@@ -79,13 +90,11 @@ export function ProfilesDataTable({
   data,
   onLaunchProfile,
   onKillProfile,
-  onProxySettings,
   onDeleteProfile,
   onRenameProfile,
   onConfigureCamoufox,
   runningProfiles,
   isUpdating,
-  onDeleteSelectedProfiles: _onDeleteSelectedProfiles,
   onAssignProfilesToGroup,
   selectedGroupId,
   selectedProfiles: externalSelectedProfiles = [],
@@ -108,38 +117,32 @@ export function ProfilesDataTable({
   );
 
   const [storedProxies, setStoredProxies] = React.useState<StoredProxy[]>([]);
+  const [openProxySelectorFor, setOpenProxySelectorFor] = React.useState<
+    string | null
+  >(null);
+  const [proxyOverrides, setProxyOverrides] = React.useState<
+    Record<string, string | null>
+  >({});
   const [selectedProfiles, setSelectedProfiles] = React.useState<Set<string>>(
     new Set(externalSelectedProfiles),
   );
   const [showCheckboxes, setShowCheckboxes] = React.useState(false);
 
-  // Helper function to check if a profile has a proxy
-  const hasProxy = React.useCallback(
-    (profile: BrowserProfile): boolean => {
-      if (!profile.proxy_id) return false;
-      const proxy = storedProxies.find((p) => p.id === profile.proxy_id);
-      return proxy !== undefined;
+  const handleProxySelection = React.useCallback(
+    async (profileName: string, proxyId: string | null) => {
+      try {
+        await invoke("update_profile_proxy", {
+          profileName,
+          proxyId,
+        });
+        setProxyOverrides((prev) => ({ ...prev, [profileName]: proxyId }));
+      } catch (error) {
+        console.error("Failed to update proxy settings:", error);
+      } finally {
+        setOpenProxySelectorFor(null);
+      }
     },
-    [storedProxies],
-  );
-
-  // Helper function to get proxy info for a profile
-  const getProxyInfo = React.useCallback(
-    (profile: BrowserProfile): StoredProxy | null => {
-      if (!profile.proxy_id) return null;
-      return storedProxies.find((p) => p.id === profile.proxy_id) ?? null;
-    },
-    [storedProxies],
-  );
-
-  // Helper function to get proxy name for display
-  const getProxyDisplayName = React.useCallback(
-    (profile: BrowserProfile): string => {
-      if (!profile.proxy_id) return "Disabled";
-      const proxy = storedProxies.find((p) => p.id === profile.proxy_id);
-      return proxy?.name ?? "Unknown Proxy";
-    },
-    [storedProxies],
+    [],
   );
 
   // Filter data by selected group
@@ -669,41 +672,135 @@ export function ProfilesDataTable({
         header: "Proxy",
         cell: ({ row }) => {
           const profile = row.original;
-          const profileHasProxy = hasProxy(profile);
-          const proxyDisplayName = getProxyDisplayName(profile);
-          const proxyInfo = getProxyInfo(profile);
+          const isRunning =
+            browserState.isClient && runningProfiles.has(profile.name);
+          const isLaunching = launchingProfiles.has(profile.name);
+          const isStopping = stoppingProfiles.has(profile.name);
+          const isBrowserUpdating = isUpdating(profile.browser);
+          const isDisabled =
+            isRunning || isLaunching || isStopping || isBrowserUpdating;
 
+          const hasOverride = Object.hasOwn(proxyOverrides, profile.name);
+          const effectiveProxyId = hasOverride
+            ? proxyOverrides[profile.name]
+            : (profile.proxy_id ?? null);
+          const effectiveProxy = effectiveProxyId
+            ? (storedProxies.find((p) => p.id === effectiveProxyId) ?? null)
+            : null;
+          const displayName =
+            profile.browser === "tor-browser"
+              ? "Not supported"
+              : effectiveProxy
+                ? effectiveProxy.name
+                : "Not Selected";
+          const profileHasProxy = Boolean(effectiveProxy);
           const tooltipText =
             profile.browser === "tor-browser"
               ? "Proxies are not supported for TOR browser"
-              : profileHasProxy && proxyInfo
-                ? `${proxyDisplayName}, ${proxyInfo.proxy_settings.proxy_type.toUpperCase()} (${
-                    proxyInfo.proxy_settings.host
-                  }:${proxyInfo.proxy_settings.port})`
+              : profileHasProxy && effectiveProxy
+                ? `${effectiveProxy.name} (${effectiveProxy.proxy_settings.proxy_type.toUpperCase()})`
                 : "";
+          const isSelectorOpen = openProxySelectorFor === profile.name;
+
+          if (profile.browser === "tor-browser") {
+            return (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="flex gap-2 items-center">
+                    <span className="text-sm text-muted-foreground">
+                      Not supported
+                    </span>
+                  </span>
+                </TooltipTrigger>
+                {tooltipText && <TooltipContent>{tooltipText}</TooltipContent>}
+              </Tooltip>
+            );
+          }
 
           return (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="flex gap-2 items-center">
-                  {profileHasProxy && (
-                    <CiCircleCheck className="w-4 h-4 text-green-500" />
-                  )}
-                  {proxyDisplayName.length > 10 ? (
-                    <span className="text-sm truncate text-muted-foreground">
-                      {proxyDisplayName.slice(0, 10)}...
+            <Popover
+              open={isSelectorOpen}
+              onOpenChange={(open) =>
+                setOpenProxySelectorFor(open ? profile.name : null)
+              }
+            >
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <PopoverTrigger asChild>
+                    <span
+                      className={cn(
+                        "flex gap-2 items-center px-1 rounded",
+                        isDisabled
+                          ? "opacity-60 cursor-not-allowed pointer-events-none"
+                          : "cursor-pointer hover:bg-accent/50",
+                      )}
+                    >
+                      {profileHasProxy && (
+                        <CiCircleCheck className="w-4 h-4 text-green-500" />
+                      )}
+                      {displayName.length > 18 ? (
+                        <span className="text-sm truncate text-muted-foreground max-w-[140px]">
+                          {displayName.slice(0, 18)}...
+                        </span>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">
+                          {displayName}
+                        </span>
+                      )}
                     </span>
-                  ) : (
-                    <span className="text-sm text-muted-foreground">
-                      {profile.browser === "tor-browser"
-                        ? "Not supported"
-                        : proxyDisplayName}
-                    </span>
-                  )}
-                </span>
-              </TooltipTrigger>
-              {tooltipText && <TooltipContent>{tooltipText}</TooltipContent>}
-            </Tooltip>
+                  </PopoverTrigger>
+                </TooltipTrigger>
+                {tooltipText && <TooltipContent>{tooltipText}</TooltipContent>}
+              </Tooltip>
+
+              {!isDisabled && (
+                <PopoverContent className="w-[240px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search proxies..." />
+                    <CommandList>
+                      <CommandEmpty>No proxies found.</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          value="__none__"
+                          onSelect={() =>
+                            void handleProxySelection(profile.name, null)
+                          }
+                        >
+                          <LuCheck
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              effectiveProxyId === null
+                                ? "opacity-100"
+                                : "opacity-0",
+                            )}
+                          />
+                          No Proxy
+                        </CommandItem>
+                        {storedProxies.map((proxy) => (
+                          <CommandItem
+                            key={proxy.id}
+                            value={proxy.name}
+                            onSelect={() =>
+                              void handleProxySelection(profile.name, proxy.id)
+                            }
+                          >
+                            <LuCheck
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                effectiveProxyId === proxy.id
+                                  ? "opacity-100"
+                                  : "opacity-0",
+                              )}
+                            />
+                            {proxy.name}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              )}
+            </Popover>
           );
         },
       },
@@ -734,14 +831,6 @@ export function ProfilesDataTable({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={() => {
-                      onProxySettings(profile);
-                    }}
-                    disabled={isDisabled}
-                  >
-                    Configure Proxy
-                  </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => {
                       if (onAssignProfilesToGroup) {
@@ -794,10 +883,6 @@ export function ProfilesDataTable({
       handleIconClick,
       runningProfiles,
       browserState,
-      hasProxy,
-      getProxyDisplayName,
-      getProxyInfo,
-      onProxySettings,
       onLaunchProfile,
       onKillProfile,
       onConfigureCamoufox,
@@ -807,6 +892,10 @@ export function ProfilesDataTable({
       stoppingProfiles,
       filteredData,
       browserState.isClient,
+      storedProxies,
+      openProxySelectorFor,
+      proxyOverrides,
+      handleProxySelection,
     ],
   );
 

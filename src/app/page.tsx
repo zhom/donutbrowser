@@ -16,7 +16,6 @@ import { PermissionDialog } from "@/components/permission-dialog";
 import { ProfilesDataTable } from "@/components/profile-data-table";
 import { ProfileSelectorDialog } from "@/components/profile-selector-dialog";
 import { ProxyManagementDialog } from "@/components/proxy-management-dialog";
-import { ProxySettingsDialog } from "@/components/proxy-settings-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { useAppUpdateNotifications } from "@/hooks/use-app-update-notifications";
 import type { PermissionType } from "@/hooks/use-permissions";
@@ -43,7 +42,6 @@ interface PendingUrl {
 export default function Home() {
   const [profiles, setProfiles] = useState<BrowserProfile[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [proxyDialogOpen, setProxyDialogOpen] = useState(false);
   const [createProfileDialogOpen, setCreateProfileDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [importProfileDialogOpen, setImportProfileDialogOpen] = useState(false);
@@ -61,8 +59,6 @@ export default function Home() {
   >([]);
   const [selectedProfiles, setSelectedProfiles] = useState<string[]>([]);
   const [pendingUrls, setPendingUrls] = useState<PendingUrl[]>([]);
-  const [currentProfileForProxy, setCurrentProfileForProxy] =
-    useState<BrowserProfile | null>(null);
   const [currentProfileForCamoufoxConfig, setCurrentProfileForCamoufoxConfig] =
     useState<BrowserProfile | null>(null);
   const [hasCheckedStartupPrompt, setHasCheckedStartupPrompt] = useState(false);
@@ -349,11 +345,6 @@ export default function Home() {
     }
   }, [handleUrlOpen]);
 
-  const openProxyDialog = useCallback((profile: BrowserProfile | null) => {
-    setCurrentProfileForProxy(profile);
-    setProxyDialogOpen(true);
-  }, []);
-
   const handleConfigureCamoufox = useCallback((profile: BrowserProfile) => {
     setCurrentProfileForCamoufoxConfig(profile);
     setCamoufoxConfigDialogOpen(true);
@@ -376,28 +367,6 @@ export default function Home() {
       }
     },
     [loadProfiles],
-  );
-
-  const handleSaveProxy = useCallback(
-    async (proxyId: string | null) => {
-      setProxyDialogOpen(false);
-      setError(null);
-
-      try {
-        if (currentProfileForProxy) {
-          await invoke("update_profile_proxy", {
-            profileName: currentProfileForProxy.name,
-            proxyId: proxyId,
-          });
-        }
-        await loadProfiles();
-        // Trigger proxy data reload in the table
-      } catch (err: unknown) {
-        console.error("Failed to update proxy settings:", err);
-        setError(`Failed to update proxy settings: ${JSON.stringify(err)}`);
-      }
-    },
-    [currentProfileForProxy, loadProfiles],
   );
 
   const loadGroups = useCallback(async () => {
@@ -795,7 +764,6 @@ export default function Home() {
             data={profiles}
             onLaunchProfile={launchProfile}
             onKillProfile={handleKillProfile}
-            onProxySettings={openProxyDialog}
             onDeleteProfile={handleDeleteProfile}
             onRenameProfile={handleRenameProfile}
             onConfigureCamoufox={handleConfigureCamoufox}
@@ -809,16 +777,6 @@ export default function Home() {
           />
         </div>
       </main>
-
-      <ProxySettingsDialog
-        isOpen={proxyDialogOpen}
-        onClose={() => {
-          setProxyDialogOpen(false);
-        }}
-        onSave={handleSaveProxy}
-        initialProxyId={currentProfileForProxy?.proxy_id}
-        browserType={currentProfileForProxy?.browser}
-      />
 
       <CreateProfileDialog
         isOpen={createProfileDialogOpen}
