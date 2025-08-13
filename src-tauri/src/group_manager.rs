@@ -38,13 +38,6 @@ impl GroupManager {
     }
   }
 
-  pub fn with_data_dir_override<P: Into<PathBuf>>(override_dir: P) -> Self {
-    Self {
-      base_dirs: BaseDirs::new().expect("Failed to get base directories"),
-      data_dir_override: Some(override_dir.into()),
-    }
-  }
-
   fn get_groups_file_path(&self) -> PathBuf {
     if let Some(dir) = &self.data_dir_override {
       let mut override_path = dir.clone();
