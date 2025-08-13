@@ -759,7 +759,7 @@ export function ProfilesDataTable({
                       }}
                       disabled={isDisabled}
                     >
-                      Configure Camoufox
+                      Configure Fingerprint
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuItem

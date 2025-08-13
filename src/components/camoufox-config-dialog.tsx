@@ -103,7 +103,7 @@ export function CamoufoxConfigDialog({
       <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle>
-            Configure Camoufox Settings - {profile.name}
+            Configure Fingerprint Settings - {profile.name}
           </DialogTitle>
         </DialogHeader>
 
