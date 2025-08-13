@@ -53,7 +53,6 @@ import {
   LuCheckCheck,
   LuDownload,
   LuRefreshCw,
-  LuRocket,
   LuTriangleAlert,
 } from "react-icons/lu";
 import type { ExternalToast } from "sonner";
@@ -142,23 +141,23 @@ function getToastIcon(type: ToastProps["type"], stage?: string) {
 
     case "version-update":
       return (
-        <LuRefreshCw className="flex-shrink-0 w-4 h-4 text-foreground animate-spin" />
+        <LuRefreshCw className="flex-shrink-0 w-4 h-4 animate-spin text-foreground" />
       );
     case "fetching":
       return (
-        <LuRefreshCw className="flex-shrink-0 w-4 h-4 text-foreground animate-spin" />
+        <LuRefreshCw className="flex-shrink-0 w-4 h-4 animate-spin text-foreground" />
       );
     case "twilight-update":
       return (
-        <LuRefreshCw className="flex-shrink-0 w-4 h-4 text-foreground animate-spin" />
+        <LuRefreshCw className="flex-shrink-0 w-4 h-4 animate-spin text-foreground" />
       );
     case "loading":
       return (
-        <div className="flex-shrink-0 w-4 h-4 rounded-full border-2 border-foreground animate-spin border-t-transparent" />
+        <div className="flex-shrink-0 w-4 h-4 rounded-full border-2 animate-spin border-foreground border-t-transparent" />
       );
     default:
       return (
-        <div className="flex-shrink-0 w-4 h-4 rounded-full border-2 border-foreground animate-spin border-t-transparent" />
+        <div className="flex-shrink-0 w-4 h-4 rounded-full border-2 animate-spin border-foreground border-t-transparent" />
       );
   }
 }
@@ -169,10 +168,10 @@ export function UnifiedToast(props: ToastProps) {
   const progress = "progress" in props ? props.progress : undefined;
 
   return (
-    <div className="flex items-start p-4 w-full max-w-md bg-card rounded-lg border border-border shadow-lg text-card-foreground">
+    <div className="flex items-start p-4 w-full max-w-md rounded-lg border shadow-lg bg-card border-border text-card-foreground">
       <div className="mr-3 mt-0.5">{getToastIcon(type, stage)}</div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-foreground leading-tight">
+        <p className="text-sm font-semibold leading-tight text-foreground">
           {title}
         </p>
 
@@ -217,7 +216,7 @@ export function UnifiedToast(props: ToastProps) {
                     }}
                   />
                 </div>
-                <span className="w-8 text-xs text-right text-muted-foreground whitespace-nowrap shrink-0">
+                <span className="w-8 text-xs text-right whitespace-nowrap text-muted-foreground shrink-0">
                   {progress.current}/{progress.total}
                 </span>
               </div>
