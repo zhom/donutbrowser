@@ -133,7 +133,7 @@ async fn warm_up_nodecar(app: tauri::AppHandle) -> Result<(), String> {
     .arg("help");
 
   let exec_future = async { cmd.output().await };
-  match timeout(Duration::from_secs(30), exec_future).await {
+  match timeout(Duration::from_secs(120), exec_future).await {
     Ok(Ok(_output)) => {
       let duration = start_time.elapsed();
       println!(
@@ -143,7 +143,7 @@ async fn warm_up_nodecar(app: tauri::AppHandle) -> Result<(), String> {
       Ok(())
     }
     Ok(Err(e)) => Err(format!("Failed to execute nodecar for warm-up: {e}")),
-    Err(_) => Err("Nodecar warm-up timed out after 30s".to_string()),
+    Err(_) => Err("Nodecar warm-up timed out after 120s".to_string()),
   }
 }
 
