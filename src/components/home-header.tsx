@@ -35,7 +35,7 @@ const HomeHeader = ({
   onImportProfileDialogOpen,
   onCreateProfileDialogOpen,
 }: Props) => {
-  const _handleLogoClick = () => {
+  const handleLogoClick = () => {
     // Trigger the same URL handling logic as if the URL came from the system
     const event = new CustomEvent("url-open-request", {
       detail: "https://donutbrowser.com",
@@ -44,17 +44,17 @@ const HomeHeader = ({
   };
   return (
     <div className="flex justify-between items-center">
-      <div className="flex items-center gap-3">
+      <div className="flex gap-3 items-center">
         <button
           type="button"
           className="p-1 cursor-pointer"
           title="Open donutbrowser.com"
-          onClick={_handleLogoClick}
+          onClick={handleLogoClick}
         >
           <Logo className="w-10 h-10 transition-transform duration-300 ease-out will-change-transform hover:scale-110" />
         </button>
         {selectedProfiles.length > 0 ? (
-          <div className="flex items-center gap-3">
+          <div className="flex gap-3 items-center">
             <span className="text-sm font-medium">
               {selectedProfiles.length} profile
               {selectedProfiles.length !== 1 ? "s" : ""} selected
