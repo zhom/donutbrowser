@@ -18,6 +18,8 @@ pub struct ProxyInfo {
   pub upstream_port: u16,
   pub upstream_type: String,
   pub local_port: u16,
+  // Optional profile name to which this proxy instance is logically tied
+  pub profile_name: Option<String>,
 }
 
 // Stored proxy configuration with name and ID for reuse
@@ -51,7 +53,9 @@ pub struct ProxyManager {
   active_proxies: Mutex<HashMap<u32, ProxyInfo>>, // Maps browser process ID to proxy info
   // Store proxy info by profile name for persistence across browser restarts
   profile_proxies: Mutex<HashMap<String, ProxySettings>>, // Maps profile name to proxy settings
-  stored_proxies: Mutex<HashMap<String, StoredProxy>>,    // Maps proxy ID to stored proxy
+  // Track active proxy IDs by profile name for targeted cleanup
+  profile_active_proxy_ids: Mutex<HashMap<String, String>>, // Maps profile name to proxy id
+  stored_proxies: Mutex<HashMap<String, StoredProxy>>,      // Maps proxy ID to stored proxy
   base_dirs: BaseDirs,
 }
 
@@ -61,6 +65,7 @@ impl ProxyManager {
     let manager = Self {
       active_proxies: Mutex::new(HashMap::new()),
       profile_proxies: Mutex::new(HashMap::new()),
+      profile_active_proxy_ids: Mutex::new(HashMap::new()),
       stored_proxies: Mutex::new(HashMap::new()),
       base_dirs,
     };
@@ -257,18 +262,92 @@ impl ProxyManager {
     browser_pid: u32,
     profile_name: Option<&str>,
   ) -> Result<ProxySettings, String> {
-    // Check if we already have a proxy for this browser
+    // First, proactively cleanup any dead proxies so we don't accidentally reuse stale ones
+    let _ = self.cleanup_dead_proxies(app_handle.clone()).await;
+
+    // If we have a previous proxy tied to this profile, and the upstream settings are changing,
+    // stop it before starting a new one so the change takes effect immediately.
+    if let Some(name) = profile_name {
+      // Check if we have an active proxy recorded for this profile
+      let maybe_existing_id = {
+        let map = self.profile_active_proxy_ids.lock().unwrap();
+        map.get(name).cloned()
+      };
+
+      if let Some(existing_id) = maybe_existing_id {
+        // Find the existing proxy info
+        let existing_info = {
+          let proxies = self.active_proxies.lock().unwrap();
+          proxies.values().find(|p| p.id == existing_id).cloned()
+        };
+
+        if let Some(existing) = existing_info {
+          let desired_type = proxy_settings
+            .map(|p| p.proxy_type.as_str())
+            .unwrap_or("DIRECT");
+          let desired_host = proxy_settings.map(|p| p.host.as_str()).unwrap_or("DIRECT");
+          let desired_port = proxy_settings.map(|p| p.port).unwrap_or(0);
+
+          let is_same_upstream = existing.upstream_type == desired_type
+            && existing.upstream_host == desired_host
+            && existing.upstream_port == desired_port;
+
+          if !is_same_upstream {
+            // Stop the previous proxy tied to this profile (best effort)
+            // We don't know the original PID mapping that created it; iterate to find its key
+            let pid_to_stop = {
+              let proxies = self.active_proxies.lock().unwrap();
+              proxies.iter().find_map(|(pid, info)| {
+                if info.id == existing_id {
+                  Some(*pid)
+                } else {
+                  None
+                }
+              })
+            };
+            if let Some(pid) = pid_to_stop {
+              let _ = self.stop_proxy(app_handle.clone(), pid).await;
+            }
+          }
+        }
+      }
+    }
+    // Check if we already have a proxy for this browser PID. If it exists but the upstream
+    // settings don't match the newly requested ones, stop it and create a new proxy so that
+    // changes take effect immediately.
+    let mut needs_restart = false;
     {
       let proxies = self.active_proxies.lock().unwrap();
-      if let Some(proxy) = proxies.get(&browser_pid) {
-        return Ok(ProxySettings {
-          proxy_type: "http".to_string(),
-          host: "127.0.0.1".to_string(), // Use 127.0.0.1 instead of localhost for better compatibility
-          port: proxy.local_port,
-          username: None,
-          password: None,
-        });
+      if let Some(existing) = proxies.get(&browser_pid) {
+        let desired_type = proxy_settings
+          .map(|p| p.proxy_type.as_str())
+          .unwrap_or("DIRECT");
+        let desired_host = proxy_settings.map(|p| p.host.as_str()).unwrap_or("DIRECT");
+        let desired_port = proxy_settings.map(|p| p.port).unwrap_or(0);
+
+        let is_same_upstream = existing.upstream_type == desired_type
+          && existing.upstream_host == desired_host
+          && existing.upstream_port == desired_port;
+
+        if is_same_upstream {
+          // Reuse existing local proxy
+          return Ok(ProxySettings {
+            proxy_type: "http".to_string(),
+            host: "127.0.0.1".to_string(),
+            port: existing.local_port,
+            username: None,
+            password: None,
+          });
+        } else {
+          // Upstream changed; we must restart the local proxy so that traffic is routed correctly
+          needs_restart = true;
+        }
       }
+    }
+
+    if needs_restart {
+      // Best-effort stop of the old proxy for this PID before starting a new one
+      let _ = self.stop_proxy(app_handle.clone(), browser_pid).await;
     }
 
     // Check if we have a preferred port for this profile
@@ -367,6 +446,7 @@ impl ProxyManager {
         .map(|p| p.proxy_type.clone())
         .unwrap_or_else(|| "DIRECT".to_string()),
       local_port,
+      profile_name: profile_name.map(|s| s.to_string()),
     };
 
     // Store the proxy info
@@ -381,6 +461,9 @@ impl ProxyManager {
         let mut profile_proxies = self.profile_proxies.lock().unwrap();
         profile_proxies.insert(name.to_string(), proxy_settings.clone());
       }
+      // Also record the active proxy id for this profile for quick cleanup on changes
+      let mut map = self.profile_active_proxy_ids.lock().unwrap();
+      map.insert(name.to_string(), proxy_info.id.clone());
     }
 
     // Return proxy settings for the browser
@@ -399,10 +482,10 @@ impl ProxyManager {
     app_handle: tauri::AppHandle,
     browser_pid: u32,
   ) -> Result<(), String> {
-    let proxy_id = {
+    let (proxy_id, profile_name): (String, Option<String>) = {
       let mut proxies = self.active_proxies.lock().unwrap();
       match proxies.remove(&browser_pid) {
-        Some(proxy) => proxy.id,
+        Some(proxy) => (proxy.id, proxy.profile_name.clone()),
         None => return Ok(()), // No proxy to stop
       }
     };
@@ -415,7 +498,7 @@ impl ProxyManager {
       .arg("proxy")
       .arg("stop")
       .arg("--id")
-      .arg(proxy_id);
+      .arg(&proxy_id);
 
     let output = nodecar.output().await.unwrap();
 
@@ -423,6 +506,16 @@ impl ProxyManager {
       let stderr = String::from_utf8_lossy(&output.stderr);
       eprintln!("Proxy stop error: {stderr}");
       // We still return Ok since we've already removed the proxy from our tracking
+    }
+
+    // Clear profile-to-proxy mapping if it references this proxy
+    if let Some(name) = profile_name {
+      let mut map = self.profile_active_proxy_ids.lock().unwrap();
+      if let Some(current_id) = map.get(&name) {
+        if current_id == &proxy_id {
+          map.remove(&name);
+        }
+      }
     }
 
     Ok(())
@@ -624,6 +717,7 @@ mod tests {
           upstream_port: 3128,
           upstream_type: "http".to_string(),
           local_port: (8000 + i) as u16,
+          profile_name: None,
         };
 
         // Add proxy

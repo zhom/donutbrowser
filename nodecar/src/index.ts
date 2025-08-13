@@ -57,10 +57,8 @@ program
 
         // Build upstream URL from individual components if provided
         if (options.host && options.proxyPort && options.type) {
-          const protocol =
-            options.type === "socks4" || options.type === "socks5"
-              ? options.type
-              : "http";
+          // Preserve provided scheme (http, https, socks4, socks5)
+          const protocol = String(options.type).toLowerCase();
           const auth =
             options.username && options.password
               ? `${encodeURIComponent(options.username)}:${encodeURIComponent(

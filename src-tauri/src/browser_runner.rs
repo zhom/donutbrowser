@@ -1491,11 +1491,18 @@ pub async fn launch_browser_profile(
   // Store the internal proxy settings for passing to launch_browser
   let mut internal_proxy_settings: Option<ProxySettings> = None;
 
+  // Resolve the most up-to-date profile from disk by name to avoid using stale proxy_id/browser state
+  let profile_for_launch = browser_runner
+    .list_profiles()
+    .map_err(|e| format!("Failed to list profiles: {e}"))?
+    .into_iter()
+    .find(|p| p.name == profile.name)
+    .unwrap_or_else(|| profile.clone());
+
   // Always start a local proxy before launching (non-Camoufox handled here; Camoufox has its own flow)
-  let profile_for_launch = profile.clone();
   if profile.browser != "camoufox" {
     // Determine upstream proxy if configured; otherwise use DIRECT
-    let upstream_proxy = profile
+    let upstream_proxy = profile_for_launch
       .proxy_id
       .as_ref()
       .and_then(|id| PROXY_MANAGER.get_proxy_settings_by_id(id));
@@ -1518,11 +1525,13 @@ pub async fn launch_browser_profile(
 
         // For Firefox-based browsers, apply PAC/user.js to point to the local proxy
         if matches!(
-          profile.browser.as_str(),
+          profile_for_launch.browser.as_str(),
           "firefox" | "firefox-developer" | "zen" | "tor-browser" | "mullvad-browser"
         ) {
           let profiles_dir = browser_runner.get_profiles_dir();
-          let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
+          let profile_path = profiles_dir
+            .join(profile_for_launch.id.to_string())
+            .join("profile");
 
           // Provide a dummy upstream (ignored when internal proxy is provided)
           let dummy_upstream = ProxySettings {
@@ -1540,7 +1549,7 @@ pub async fn launch_browser_profile(
 
         println!(
           "Local proxy prepared for profile: {} on port: {} (upstream: {})",
-          profile.name,
+          profile_for_launch.name,
           internal_proxy.port,
           upstream_proxy
             .as_ref()
