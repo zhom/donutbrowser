@@ -17,26 +17,20 @@ interface AppUpdateToastProps {
 
 function getStageIcon(stage?: string, isUpdating?: boolean) {
   if (!isUpdating) {
-    return <FaDownload className="flex-shrink-0 w-5 h-5 text-blue-500" />;
+    return <FaDownload className="flex-shrink-0 w-5 h-5" />;
   }
 
   switch (stage) {
     case "downloading":
-      return <FaDownload className="flex-shrink-0 w-5 h-5 text-blue-500" />;
+      return <FaDownload className="flex-shrink-0 w-5 h-5" />;
     case "extracting":
-      return (
-        <LuRefreshCw className="flex-shrink-0 w-5 h-5 text-blue-500 animate-spin" />
-      );
+      return <LuRefreshCw className="flex-shrink-0 w-5 h-5 animate-spin" />;
     case "installing":
-      return (
-        <LuCog className="flex-shrink-0 w-5 h-5 text-blue-500 animate-spin" />
-      );
+      return <LuCog className="flex-shrink-0 w-5 h-5 animate-spin" />;
     case "completed":
-      return <LuCheckCheck className="flex-shrink-0 w-5 h-5 text-green-500" />;
+      return <LuCheckCheck className="flex-shrink-0 w-5 h-5" />;
     default:
-      return (
-        <LuRefreshCw className="flex-shrink-0 w-5 h-5 text-blue-500 animate-spin" />
-      );
+      return <LuRefreshCw className="flex-shrink-0 w-5 h-5 animate-spin" />;
   }
 }
 
@@ -79,7 +73,7 @@ export function AppUpdateToast({
       updateProgress.stage === "completed");
 
   return (
-    <div className="flex items-start p-4 w-full max-w-md bg-card rounded-lg border border-border shadow-lg text-card-foreground">
+    <div className="flex items-start p-4 w-full max-w-md rounded-lg border shadow-lg bg-card border-border text-card-foreground">
       <div className="mr-3 mt-0.5">
         {getStageIcon(updateProgress?.stage, isUpdating)}
       </div>
