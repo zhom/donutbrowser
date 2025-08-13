@@ -152,29 +152,26 @@ impl GroupManager {
       }
     }
 
-    // Create result with counts
+    // Create result including all groups (even those with 0 count)
     let mut result = Vec::new();
     for group in groups {
       let count = group_counts.get(&group.id).copied().unwrap_or(0);
-      if count > 0 {
-        result.push(GroupWithCount {
-          id: group.id,
-          name: group.name,
-          count,
-        });
-      }
+      result.push(GroupWithCount {
+        id: group.id,
+        name: group.name,
+        count,
+      });
     }
 
-    // Add default group count (profiles without group_id)
+    // Add default group count (profiles without group_id), always include even if 0
     let default_count = profiles.iter().filter(|p| p.group_id.is_none()).count();
-    if default_count > 0 {
-      let default_group = GroupWithCount {
-        id: "default".to_string(),
-        name: "Default".to_string(),
-        count: default_count,
-      };
-      result.insert(0, default_group);
-    }
+    let default_group = GroupWithCount {
+      id: "default".to_string(),
+      name: "Default".to_string(),
+      count: default_count,
+    };
+    // Insert at the beginning for consistent ordering with UI expectations
+    result.insert(0, default_group);
 
     Ok(result)
   }
@@ -411,11 +408,11 @@ mod tests {
       .get_groups_with_profile_counts(&profiles)
       .expect("Should get groups with counts");
 
-    // Should have default group + group1 (_group2 has no profiles so shouldn't appear)
+    // Should have default group + group1 + group2 (group2 has 0 profiles but should still appear)
     assert_eq!(
       groups_with_counts.len(),
-      2,
-      "Should have 2 groups with profiles"
+      3,
+      "Should include all groups, even those with 0 profiles"
     );
 
     // Check default group
@@ -434,6 +431,13 @@ mod tests {
       .find(|g| g.id == group1.id)
       .expect("Should have group1");
     assert_eq!(group1_with_count.count, 2, "Group1 should have 2 profiles");
+
+    // Check that group2 exists with 0 profiles
+    let group2_with_count = groups_with_counts
+      .iter()
+      .find(|g| g.name == "Group 2")
+      .expect("Should have group2 present even with 0 profiles");
+    assert_eq!(group2_with_count.count, 0, "Group2 should have 0 profiles");
   }
 }
 

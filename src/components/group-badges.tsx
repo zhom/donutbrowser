@@ -27,9 +27,7 @@ export function GroupBadges({
     );
   }
 
-  if (groups.length === 0) {
-    return null;
-  }
+  // Always show group badges area even if groups list is empty (will just render nothing visible for now)
 
   return (
     <div className="flex flex-wrap gap-2 mb-4">
