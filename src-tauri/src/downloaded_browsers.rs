@@ -135,29 +135,56 @@ impl DownloadedBrowsersRegistry {
     version: &str,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     if let Some(info) = self.remove_browser(browser, version) {
-      // Clean up any files that might have been left behind
+      // Clean up extracted binaries but preserve downloaded archives
       if info.file_path.exists() {
         if info.file_path.is_dir() {
-          fs::remove_dir_all(&info.file_path)?;
+          // Allowed archive extensions to preserve
+          let archive_exts = [
+            "zip", "dmg", "tar.xz", "tar.gz", "tar.bz2", "AppImage", "exe", "pkg", "msi",
+          ];
+
+          for entry in fs::read_dir(&info.file_path)? {
+            let entry = entry?;
+            let path = entry.path();
+
+            if path.is_dir() {
+              fs::remove_dir_all(&path)?;
+              continue;
+            }
+
+            // For files, preserve if they look like downloaded archives/installers
+            let keep = path
+              .file_name()
+              .and_then(|n| n.to_str())
+              .map(|name| {
+                // Match suffixes (handles multi-part extensions like .tar.xz)
+                archive_exts
+                  .iter()
+                  .any(|ext| name.to_lowercase().ends_with(&ext.to_lowercase()))
+              })
+              .unwrap_or(false);
+
+            if !keep {
+              fs::remove_file(&path)?;
+            }
+          }
         } else {
-          fs::remove_file(&info.file_path)?;
+          // It's a file. If it's not an archive, remove it; otherwise preserve it.
+          let file_name = info
+            .file_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+          let archive_exts = [
+            "zip", "dmg", "tar.xz", "tar.gz", "tar.bz2", "AppImage", "exe", "pkg", "msi",
+          ];
+          let is_archive = archive_exts
+            .iter()
+            .any(|ext| file_name.to_lowercase().ends_with(&ext.to_lowercase()));
+          if !is_archive {
+            fs::remove_file(&info.file_path)?;
+          }
         }
-      }
-
-      // Also clean up the browser directory if it exists
-      let base_dirs = BaseDirs::new().ok_or("Failed to get base directories")?;
-      let mut browser_dir = base_dirs.data_local_dir().to_path_buf();
-      browser_dir.push(if cfg!(debug_assertions) {
-        "DonutBrowserDev"
-      } else {
-        "DonutBrowser"
-      });
-      browser_dir.push("binaries");
-      browser_dir.push(browser);
-      browser_dir.push(version);
-
-      if browser_dir.exists() {
-        fs::remove_dir_all(&browser_dir)?;
       }
     }
     Ok(())
@@ -334,16 +361,20 @@ impl DownloadedBrowsersRegistry {
           continue;
         }
 
-        // Check if this browser/version is already in registry
+        // Only add to registry if this looks like a valid installed browser, not just an archive
         if !self.is_browser_downloaded(browser_name, version_name) {
-          // Add to registry
-          let info = DownloadedBrowserInfo {
-            browser: browser_name.to_string(),
-            version: version_name.to_string(),
-            file_path: version_path.clone(),
-          };
-          self.add_browser(info);
-          changes.push(format!("Added {browser_name} {version_name} to registry"));
+          if let Ok(browser_type) = crate::browser::BrowserType::from_str(browser_name) {
+            let browser = crate::browser::create_browser(browser_type);
+            if browser.is_version_downloaded(version_name, binaries_dir) {
+              let info = DownloadedBrowserInfo {
+                browser: browser_name.to_string(),
+                version: version_name.to_string(),
+                file_path: version_path.clone(),
+              };
+              self.add_browser(info);
+              changes.push(format!("Added {browser_name} {version_name} to registry"));
+            }
+          }
         }
       }
     }
