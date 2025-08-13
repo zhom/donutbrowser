@@ -130,7 +130,7 @@ async fn warm_up_nodecar(app: tauri::AppHandle) -> Result<(), String> {
     .shell()
     .sidecar("nodecar")
     .map_err(|e| format!("Failed to create nodecar sidecar: {e}"))?
-    .arg("help")
+    .arg("help");
 
   let exec_future = async { cmd.output().await };
   match timeout(Duration::from_secs(30), exec_future).await {
