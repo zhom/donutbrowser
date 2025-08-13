@@ -119,14 +119,21 @@ impl<R: Runtime> WindowExt for WebviewWindow<R> {
 }
 
 #[tauri::command]
-async fn warm_up_nodecar() -> Result<(), String> {
-  use tokio::process::Command;
+async fn warm_up_nodecar(app: tauri::AppHandle) -> Result<(), String> {
+  use tauri_plugin_shell::ShellExt;
   use tokio::time::{timeout, Duration};
 
   let start_time = std::time::Instant::now();
 
-  let warmup_future = Command::new("nodecar").output();
-  match timeout(Duration::from_secs(15), warmup_future).await {
+  // Use sidecar to execute a fast, harmless command that ensures the binary is loaded
+  let cmd = app
+    .shell()
+    .sidecar("nodecar")
+    .map_err(|e| format!("Failed to create nodecar sidecar: {e}"))?
+    .arg("help")
+
+  let exec_future = async { cmd.output().await };
+  match timeout(Duration::from_secs(30), exec_future).await {
     Ok(Ok(_output)) => {
       let duration = start_time.elapsed();
       println!(
@@ -135,8 +142,8 @@ async fn warm_up_nodecar() -> Result<(), String> {
       );
       Ok(())
     }
-    Ok(Err(e)) => Err(format!("Failed to start nodecar warm-up: {e}")),
-    Err(_) => Err("Nodecar warm-up timed out after 15s".to_string()),
+    Ok(Err(e)) => Err(format!("Failed to execute nodecar for warm-up: {e}")),
+    Err(_) => Err("Nodecar warm-up timed out after 30s".to_string()),
   }
 }
 
