@@ -25,16 +25,28 @@ struct GroupsData {
 
 pub struct GroupManager {
   base_dirs: BaseDirs,
+  data_dir_override: Option<PathBuf>,
 }
 
 impl GroupManager {
   pub fn new() -> Self {
     Self {
       base_dirs: BaseDirs::new().expect("Failed to get base directories"),
+      data_dir_override: std::env::var("DONUTBROWSER_DATA_DIR")
+        .ok()
+        .map(PathBuf::from),
     }
   }
 
   fn get_groups_file_path(&self) -> PathBuf {
+    if let Some(dir) = &self.data_dir_override {
+      let mut override_path = dir.clone();
+      // Ensure the directory exists before returning the path
+      let _ = fs::create_dir_all(&override_path);
+      override_path.push("groups.json");
+      return override_path;
+    }
+
     let mut path = self.base_dirs.data_local_dir().to_path_buf();
     path.push(if cfg!(debug_assertions) {
       "DonutBrowserDev"
@@ -193,6 +205,10 @@ mod tests {
 
     // Set up a temporary home directory for testing
     env::set_var("HOME", temp_dir.path());
+
+    // Ensure tests do not conflict by isolating data directory per test instance
+    let data_override = temp_dir.path().join("donutbrowser_test_data");
+    env::set_var("DONUTBROWSER_DATA_DIR", &data_override);
 
     let manager = GroupManager::new();
     (manager, temp_dir)
