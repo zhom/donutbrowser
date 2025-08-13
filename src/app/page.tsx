@@ -40,6 +40,7 @@ interface PendingUrl {
 }
 
 export default function Home() {
+  const [isInitializing, setIsInitializing] = useState(true);
   const [profiles, setProfiles] = useState<BrowserProfile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [createProfileDialogOpen, setCreateProfileDialogOpen] = useState(false);
@@ -259,6 +260,28 @@ export default function Home() {
       setHasCheckedStartupPrompt(true);
     }
   }, [hasCheckedStartupPrompt]);
+
+  // Warm up nodecar at startup and block UI until complete
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await invoke("warm_up_nodecar");
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            `Initialization failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      } finally {
+        if (!cancelled) setIsInitializing(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const checkAllPermissions = useCallback(async () => {
     try {
@@ -777,6 +800,17 @@ export default function Home() {
           />
         </div>
       </main>
+
+      {isInitializing && (
+        <div className="fixed inset-0 z-[100000] backdrop-blur-sm bg-black/30 flex items-center justify-center">
+          <div className="bg-white dark:bg-neutral-900 rounded-xl p-6 shadow-xl border border-black/10 dark:border-white/10 w-[320px] text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-gray-300 border-t-gray-900 dark:border-gray-700 dark:border-t-white mx-auto mb-4" />
+            <div className="font-medium">
+              Initialization, please don't close the app
+            </div>
+          </div>
+        </div>
+      )}
 
       <CreateProfileDialog
         isOpen={createProfileDialogOpen}

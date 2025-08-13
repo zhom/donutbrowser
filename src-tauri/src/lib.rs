@@ -119,6 +119,28 @@ impl<R: Runtime> WindowExt for WebviewWindow<R> {
 }
 
 #[tauri::command]
+async fn warm_up_nodecar() -> Result<(), String> {
+  use tokio::process::Command;
+  use tokio::time::{timeout, Duration};
+
+  let start_time = std::time::Instant::now();
+
+  let warmup_future = Command::new("nodecar").output();
+  match timeout(Duration::from_secs(15), warmup_future).await {
+    Ok(Ok(_output)) => {
+      let duration = start_time.elapsed();
+      println!(
+        "Nodecar warm-up (frontend-triggered) completed in {:.2}s",
+        duration.as_secs_f64()
+      );
+      Ok(())
+    }
+    Ok(Err(e)) => Err(format!("Failed to start nodecar warm-up: {e}")),
+    Err(_) => Err("Nodecar warm-up timed out after 15s".to_string()),
+  }
+}
+
+#[tauri::command]
 async fn handle_url_open(app: tauri::AppHandle, url: String) -> Result<(), String> {
   println!("handle_url_open called with URL: {url}");
 
@@ -460,36 +482,7 @@ pub fn run() {
         }
       });
 
-      // Warm up nodecar binary in the background
-      tauri::async_runtime::spawn(async move {
-        println!("Starting nodecar warm-up...");
-        let start_time = std::time::Instant::now();
-
-        // Send a ping request to nodecar to trigger unpacking/warm-up
-        match tokio::process::Command::new("nodecar").output().await {
-          Ok(output) => {
-            let duration = start_time.elapsed();
-            if output.status.success() {
-              println!(
-                "Nodecar warm-up completed successfully in {:.2}s",
-                duration.as_secs_f64()
-              );
-            } else {
-              println!(
-                "Nodecar warm-up completed with non-zero exit code in {:.2}s",
-                duration.as_secs_f64()
-              );
-            }
-          }
-          Err(e) => {
-            let duration = start_time.elapsed();
-            println!(
-              "Nodecar warm-up failed after {:.2}s: {e}",
-              duration.as_secs_f64()
-            );
-          }
-        }
-      });
+      // Nodecar warm-up is now triggered from the frontend to allow UI blocking overlay
 
       Ok(())
     })
@@ -549,6 +542,7 @@ pub fn run() {
       delete_selected_profiles,
       is_geoip_database_available,
       download_geoip_database,
+      warm_up_nodecar,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
