@@ -9,6 +9,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { invoke } from "@tauri-apps/api/core";
+import { emit, listen } from "@tauri-apps/api/event";
 import * as React from "react";
 import { CiCircleCheck } from "react-icons/ci";
 import { IoEllipsisHorizontal } from "react-icons/io5";
@@ -136,6 +137,8 @@ export function ProfilesDataTable({
           proxyId,
         });
         setProxyOverrides((prev) => ({ ...prev, [profileName]: proxyId }));
+        // Notify other parts of the app so usage counts and lists refresh
+        await emit("profile-updated");
       } catch (error) {
         console.error("Failed to update proxy settings:", error);
       } finally {
@@ -177,6 +180,24 @@ export function ProfilesDataTable({
     if (browserState.isClient) {
       void loadStoredProxies();
     }
+  }, [browserState.isClient, loadStoredProxies]);
+
+  // Keep stored proxies up-to-date by listening for changes emitted elsewhere in the app
+  React.useEffect(() => {
+    if (!browserState.isClient) return;
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      try {
+        unlisten = await listen("stored-proxies-changed", () => {
+          void loadStoredProxies();
+        });
+      } catch (_err) {
+        // Best-effort only
+      }
+    })();
+    return () => {
+      if (unlisten) unlisten();
+    };
   }, [browserState.isClient, loadStoredProxies]);
 
   // Automatically deselect profiles that become running, updating, launching, or stopping

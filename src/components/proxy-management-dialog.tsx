@@ -1,10 +1,11 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
 import { FiEdit2, FiPlus, FiTrash2, FiWifi } from "react-icons/fi";
 import { toast } from "sonner";
+import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
 import { ProxyFormDialog } from "@/components/proxy-form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,8 @@ export function ProxyManagementDialog({
   const [showProxyForm, setShowProxyForm] = useState(false);
   const [editingProxy, setEditingProxy] = useState<StoredProxy | null>(null);
   const [proxyUsage, setProxyUsage] = useState<Record<string, number>>({});
+  const [proxyToDelete, setProxyToDelete] = useState<StoredProxy | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const loadStoredProxies = useCallback(async () => {
     try {
@@ -91,22 +94,46 @@ export function ProxyManagementDialog({
     };
   }, [isOpen, loadProxyUsage]);
 
-  const handleDeleteProxy = useCallback(async (proxy: StoredProxy) => {
-    if (
-      !confirm(`Are you sure you want to delete the proxy "${proxy.name}"?`)
-    ) {
-      return;
-    }
+  // Keep list in sync with external changes (e.g., created from CreateProfileDialog)
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    const setup = async () => {
+      try {
+        unlisten = await listen("stored-proxies-changed", () => {
+          void loadStoredProxies();
+          void loadProxyUsage();
+        });
+      } catch (_err) {
+        // ignore non-critical errors
+      }
+    };
+    if (isOpen) void setup();
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [isOpen, loadStoredProxies, loadProxyUsage]);
 
+  const handleDeleteProxy = useCallback((proxy: StoredProxy) => {
+    // Open in-app confirmation dialog
+    setProxyToDelete(proxy);
+  }, []);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!proxyToDelete) return;
+    setIsDeleting(true);
     try {
-      await invoke("delete_stored_proxy", { proxyId: proxy.id });
-      setStoredProxies((prev) => prev.filter((p) => p.id !== proxy.id));
+      await invoke("delete_stored_proxy", { proxyId: proxyToDelete.id });
+      setStoredProxies((prev) => prev.filter((p) => p.id !== proxyToDelete.id));
       toast.success("Proxy deleted successfully");
+      await emit("stored-proxies-changed");
     } catch (error) {
       console.error("Failed to delete proxy:", error);
       toast.error("Failed to delete proxy");
+    } finally {
+      setIsDeleting(false);
+      setProxyToDelete(null);
     }
-  }, []);
+  }, [proxyToDelete]);
 
   const handleCreateProxy = useCallback(() => {
     setEditingProxy(null);
@@ -133,6 +160,7 @@ export function ProxyManagementDialog({
     });
     setShowProxyForm(false);
     setEditingProxy(null);
+    void emit("stored-proxies-changed");
   }, []);
 
   const handleProxyFormClose = useCallback(() => {
@@ -241,17 +269,28 @@ export function ProxyManagementDialog({
                         </Tooltip>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteProxy(proxy)}
-                              className="text-destructive hover:text-destructive"
-                            >
-                              <FiTrash2 className="w-4 h-4" />
-                            </Button>
+                            <span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteProxy(proxy)}
+                                className="text-destructive hover:text-destructive"
+                                disabled={(proxyUsage[proxy.id] ?? 0) > 0}
+                              >
+                                <FiTrash2 className="w-4 h-4" />
+                              </Button>
+                            </span>
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>Delete proxy</p>
+                            {(proxyUsage[proxy.id] ?? 0) > 0 ? (
+                              <p>
+                                Cannot delete: in use by {proxyUsage[proxy.id]}{" "}
+                                profile
+                                {proxyUsage[proxy.id] > 1 ? "s" : ""}
+                              </p>
+                            ) : (
+                              <p>Delete proxy</p>
+                            )}
                           </TooltipContent>
                         </Tooltip>
                       </div>
@@ -273,6 +312,15 @@ export function ProxyManagementDialog({
         onClose={handleProxyFormClose}
         onSave={handleProxySaved}
         editingProxy={editingProxy}
+      />
+      <DeleteConfirmationDialog
+        isOpen={proxyToDelete !== null}
+        onClose={() => setProxyToDelete(null)}
+        onConfirm={handleConfirmDelete}
+        title="Delete Proxy"
+        description={`This action cannot be undone. This will permanently delete the proxy "${proxyToDelete?.name ?? ""}".`}
+        confirmButtonText="Delete"
+        isLoading={isDeleting}
       />
     </>
   );

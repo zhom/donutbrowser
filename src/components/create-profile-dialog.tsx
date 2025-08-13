@@ -1,6 +1,7 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
+import { emit } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GoPlus } from "react-icons/go";
 import { LoadingButton } from "@/components/loading-button";
@@ -634,6 +635,7 @@ export function CreateProfileDialog({
         onSave={(proxy) => {
           setStoredProxies((prev) => [...prev, proxy]);
           setSelectedProxyId(proxy.id);
+          void emit("stored-proxies-changed");
         }}
       />
     </Dialog>
