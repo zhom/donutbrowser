@@ -2,7 +2,7 @@ use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,6 +35,15 @@ impl GroupManager {
       data_dir_override: std::env::var("DONUTBROWSER_DATA_DIR")
         .ok()
         .map(PathBuf::from),
+    }
+  }
+
+  // Helper for tests to override data directory without global env var
+  #[allow(dead_code)]
+  pub fn with_data_dir_override(dir: &Path) -> Self {
+    Self {
+      base_dirs: BaseDirs::new().expect("Failed to get base directories"),
+      data_dir_override: Some(dir.to_path_buf()),
     }
   }
 
