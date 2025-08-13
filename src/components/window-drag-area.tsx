@@ -16,11 +16,11 @@ export function WindowDragArea() {
     checkPlatform();
   }, []);
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    // Only handle left mouse button
+  const handlePointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
 
-    // Start dragging asynchronously
     const startDrag = async () => {
       try {
         const window = getCurrentWindow();
@@ -42,7 +42,8 @@ export function WindowDragArea() {
     <button
       type="button"
       className="fixed top-0 right-0 left-0 h-10 bg-transparent border-0 z-[9999] select-none"
-      onMouseDown={handleMouseDown}
+      data-window-drag-area="true"
+      onPointerDown={handlePointerDown}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
