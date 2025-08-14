@@ -26,13 +26,6 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -67,8 +60,9 @@ import {
 import { trimName } from "@/lib/name-utils";
 import { cn } from "@/lib/utils";
 import type { BrowserProfile, StoredProxy } from "@/types";
+import { LoadingButton } from "./loading-button";
 import { Input } from "./ui/input";
-import { Label } from "./ui/label";
+// Label no longer needed after removing dialog-based renaming
 import { RippleButton } from "./ui/ripple";
 
 interface ProfilesDataTableProps {
@@ -107,6 +101,8 @@ export function ProfilesDataTable({
     React.useState<BrowserProfile | null>(null);
   const [newProfileName, setNewProfileName] = React.useState("");
   const [renameError, setRenameError] = React.useState<string | null>(null);
+  const [isRenamingSaving, setIsRenamingSaving] = React.useState(false);
+  const renameContainerRef = React.useRef<HTMLDivElement | null>(null);
   const [profileToDelete, setProfileToDelete] =
     React.useState<BrowserProfile | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
@@ -265,10 +261,11 @@ export function ProfilesDataTable({
     [browserState.isClient, sorting, updateSorting],
   );
 
-  const handleRename = async () => {
+  const handleRename = React.useCallback(async () => {
     if (!profileToRename || !newProfileName.trim()) return;
 
     try {
+      setIsRenamingSaving(true);
       await onRenameProfile(profileToRename.name, newProfileName.trim());
       setProfileToRename(null);
       setNewProfileName("");
@@ -277,8 +274,31 @@ export function ProfilesDataTable({
       setRenameError(
         error instanceof Error ? error.message : "Failed to rename profile",
       );
+    } finally {
+      setIsRenamingSaving(false);
     }
-  };
+  }, [profileToRename, newProfileName, onRenameProfile]);
+
+  // Cancel inline rename on outside click
+  React.useEffect(() => {
+    if (!profileToRename) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (
+        target &&
+        renameContainerRef.current &&
+        !renameContainerRef.current.contains(target)
+      ) {
+        setProfileToRename(null);
+        setNewProfileName("");
+        setRenameError(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [profileToRename]);
 
   const handleDelete = async () => {
     if (!profileToDelete) return;
@@ -622,20 +642,103 @@ export function ProfilesDataTable({
         enableSorting: true,
         sortingFn: "alphanumeric",
         cell: ({ row }) => {
+          const profile = row.original as BrowserProfile;
           const rawName: string = row.getValue("name");
           const name = getBrowserDisplayName(rawName);
+          const isEditing = profileToRename?.name === profile.name;
 
-          if (name.length < 20) {
-            return <div className="font-medium text-left">{name}</div>;
+          if (isEditing) {
+            const isSaveDisabled =
+              isRenamingSaving ||
+              newProfileName.trim().length === 0 ||
+              newProfileName.trim() === profile.name;
+
+            return (
+              <div
+                ref={renameContainerRef}
+                className="overflow-visible relative"
+              >
+                <Input
+                  autoFocus
+                  value={newProfileName}
+                  onChange={(e) => {
+                    setNewProfileName(e.target.value);
+                    if (renameError) setRenameError(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      void handleRename();
+                    } else if (e.key === "Escape") {
+                      setProfileToRename(null);
+                      setNewProfileName("");
+                      setRenameError(null);
+                    }
+                  }}
+                  className="inline-block w-full"
+                />
+                <div className="flex absolute right-0 top-full z-50 gap-1 translate-y-[30%] bg-primary-foreground opacity-100">
+                  <LoadingButton
+                    isLoading={isRenamingSaving}
+                    size="sm"
+                    variant="default"
+                    disabled={isSaveDisabled}
+                    className="cursor-pointer"
+                    onClick={() => void handleRename()}
+                  >
+                    Save
+                  </LoadingButton>
+                </div>
+              </div>
+            );
           }
 
+          const display =
+            name.length < 20 ? (
+              <div className="font-medium text-left">{name}</div>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>{trimName(name, 20)}</span>
+                </TooltipTrigger>
+                <TooltipContent>{name}</TooltipContent>
+              </Tooltip>
+            );
+
+          const isRunning =
+            browserState.isClient && runningProfiles.has(profile.name);
+          const isLaunching = launchingProfiles.has(profile.name);
+          const isStopping = stoppingProfiles.has(profile.name);
+          const isBrowserUpdating = isUpdating(profile.browser);
+          const isDisabled =
+            isRunning || isLaunching || isStopping || isBrowserUpdating;
+
           return (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span>{trimName(name, 20)}</span>
-              </TooltipTrigger>
-              <TooltipContent>{name}</TooltipContent>
-            </Tooltip>
+            <button
+              type="button"
+              className={cn(
+                "p-2 mr-auto w-full text-left bg-transparent rounded border-none",
+                isDisabled
+                  ? "opacity-60 cursor-not-allowed"
+                  : "cursor-pointer hover:bg-accent/50",
+              )}
+              onClick={() => {
+                if (isDisabled) return;
+                setProfileToRename(profile);
+                setNewProfileName(profile.name);
+                setRenameError(null);
+              }}
+              onKeyDown={(e) => {
+                if (isDisabled) return;
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setProfileToRename(profile);
+                  setNewProfileName(profile.name);
+                  setRenameError(null);
+                }
+              }}
+            >
+              {display}
+            </button>
           );
         },
       },
@@ -750,7 +853,7 @@ export function ProfilesDataTable({
                   <PopoverTrigger asChild>
                     <span
                       className={cn(
-                        "flex gap-2 items-center px-1 rounded",
+                        "flex gap-2 items-center p-2 rounded",
                         isDisabled
                           ? "opacity-60 cursor-not-allowed pointer-events-none"
                           : "cursor-pointer hover:bg-accent/50",
@@ -872,15 +975,7 @@ export function ProfilesDataTable({
                       Configure Fingerprint
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setProfileToRename(profile);
-                      setNewProfileName(profile.name);
-                    }}
-                    disabled={isDisabled}
-                  >
-                    Rename
-                  </DropdownMenuItem>
+                  {/* Rename removed from menu; inline on name click */}
                   <DropdownMenuItem
                     onClick={() => {
                       setProfileToDelete(profile);
@@ -917,6 +1012,11 @@ export function ProfilesDataTable({
       openProxySelectorFor,
       proxyOverrides,
       handleProxySelection,
+      profileToRename,
+      newProfileName,
+      renameError,
+      isRenamingSaving,
+      handleRename,
     ],
   );
 
@@ -944,7 +1044,7 @@ export function ProfilesDataTable({
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
+              <TableRow key={headerGroup.id} className="overflow-visible">
                 {headerGroup.headers.map((header) => {
                   return (
                     <TableHead key={header.id}>
@@ -966,10 +1066,10 @@ export function ProfilesDataTable({
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
-                  className="hover:bg-accent/50"
+                  className="overflow-visible hover:bg-accent/50"
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
+                    <TableCell key={cell.id} className="overflow-visible">
                       {flexRender(
                         cell.column.columnDef.cell,
                         cell.getContext(),
@@ -991,55 +1091,6 @@ export function ProfilesDataTable({
           </TableBody>
         </Table>
       </ScrollArea>
-
-      <Dialog
-        open={profileToRename !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setProfileToRename(null);
-            setNewProfileName("");
-            setRenameError(null);
-          }
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Rename Profile</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 gap-4 items-center">
-              <Label htmlFor="name" className="text-right">
-                Name
-              </Label>
-              <Input
-                id="name"
-                value={newProfileName}
-                onChange={(e) => {
-                  setNewProfileName(e.target.value);
-                }}
-                className="col-span-3"
-              />
-            </div>
-            {renameError && (
-              <p className="text-sm text-red-600">{renameError}</p>
-            )}
-          </div>
-          <DialogFooter>
-            <RippleButton
-              variant="outline"
-              onClick={() => {
-                setProfileToRename(null);
-              }}
-            >
-              Cancel
-            </RippleButton>
-            <RippleButton onClick={() => void handleRename()}>
-              Save
-            </RippleButton>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <DeleteConfirmationDialog
         isOpen={profileToDelete !== null}
         onClose={() => setProfileToDelete(null)}
