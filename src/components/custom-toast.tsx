@@ -168,7 +168,7 @@ export function UnifiedToast(props: ToastProps) {
   const progress = "progress" in props ? props.progress : undefined;
 
   return (
-    <div className="flex items-start p-4 w-full max-w-md rounded-lg border shadow-lg bg-card border-border text-card-foreground">
+    <div className="flex items-start p-3 w-96 rounded-lg border shadow-lg bg-card border-border text-card-foreground">
       <div className="mr-3 mt-0.5">{getToastIcon(type, stage)}</div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold leading-tight text-foreground">
