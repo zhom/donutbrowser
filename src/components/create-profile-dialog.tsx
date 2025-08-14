@@ -108,7 +108,7 @@ export function CreateProfileDialog({
 
   const handleTabChange = (value: string) => {
     if (value === "regular") {
-      setSelectedBrowser(null);
+      setSelectedBrowser("firefox");
     } else if (value === "anti-detect") {
       setSelectedBrowser("camoufox");
     }
@@ -179,6 +179,8 @@ export function CreateProfileDialog({
           { browserStr: browser },
         );
 
+        await loadDownloadedVersions(browser);
+
         // Only update state if this browser is still the one we're loading
         if (loadingBrowserRef.current === browser) {
           // Filter to enforce stable-only creation, except Firefox Developer (nightly-only)
@@ -198,12 +200,29 @@ export function CreateProfileDialog({
               filtered.stable = rawReleaseTypes.stable;
             setReleaseTypes(filtered);
           }
-
-          // Load downloaded versions for this browser
-          await loadDownloadedVersions(browser);
         }
       } catch (error) {
         console.error(`Failed to load release types for ${browser}:`, error);
+
+        // Fallback: still load downloaded versions and derive release type from them if possible
+        try {
+          const downloaded = await loadDownloadedVersions(browser);
+          if (loadingBrowserRef.current === browser && downloaded.length > 0) {
+            const latest = downloaded[0];
+            const fallback: BrowserReleaseTypes = {};
+            if (browser === "firefox-developer") {
+              fallback.nightly = latest;
+            } else {
+              fallback.stable = latest;
+            }
+            setReleaseTypes(fallback);
+          }
+        } catch (e) {
+          console.error(
+            `Failed to load downloaded versions for ${browser}:`,
+            e,
+          );
+        }
       } finally {
         // Clear loading state only if we're still loading this browser
         if (loadingBrowserRef.current === browser) {
@@ -385,20 +404,6 @@ export function CreateProfileDialog({
     selectedBrowser,
     isBrowserCurrentlyDownloading,
     isBrowserVersionAvailable,
-  ]);
-
-  useEffect(() => {
-    console.log(
-      selectedBrowser,
-      selectedBrowser && isBrowserCurrentlyDownloading(selectedBrowser),
-      selectedBrowser && isBrowserVersionAvailable(selectedBrowser),
-      selectedBrowser && getBestAvailableVersion(selectedBrowser),
-    );
-  }, [
-    selectedBrowser,
-    isBrowserCurrentlyDownloading,
-    isBrowserVersionAvailable,
-    getBestAvailableVersion,
   ]);
 
   return (
