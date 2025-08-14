@@ -19,7 +19,9 @@ impl TagManager {
   pub fn new() -> Self {
     Self {
       base_dirs: BaseDirs::new().expect("Failed to get base directories"),
-      data_dir_override: std::env::var("DONUTBROWSER_DATA_DIR").ok().map(PathBuf::from),
+      data_dir_override: std::env::var("DONUTBROWSER_DATA_DIR")
+        .ok()
+        .map(PathBuf::from),
     }
   }
 
@@ -40,7 +42,11 @@ impl TagManager {
     }
 
     let mut path = self.base_dirs.data_local_dir().to_path_buf();
-    path.push(if cfg!(debug_assertions) { "DonutBrowserDev" } else { "DonutBrowser" });
+    path.push(if cfg!(debug_assertions) {
+      "DonutBrowserDev"
+    } else {
+      "DonutBrowser"
+    });
     path.push("data");
     path.push("tags.json");
     path
@@ -74,21 +80,6 @@ impl TagManager {
     Ok(all)
   }
 
-  pub fn suggest_tags(&self, query: Option<&str>) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    let all = self.get_all_tags()?;
-    if let Some(q) = query {
-      let q_lower = q.to_lowercase();
-      Ok(
-        all
-          .into_iter()
-          .filter(|t| t.to_lowercase().contains(&q_lower))
-          .collect(),
-      )
-    } else {
-      Ok(all)
-    }
-  }
-
   pub fn rebuild_from_profiles(
     &self,
     profiles: &[BrowserProfile],
@@ -102,21 +93,13 @@ impl TagManager {
       }
     }
     let combined: Vec<String> = set.into_iter().collect();
-    self.save_tags_data(&TagsData { tags: combined.clone() })?;
+    self.save_tags_data(&TagsData {
+      tags: combined.clone(),
+    })?;
     Ok(combined)
-  }
-
-  pub fn add_tags(&self, tags: &[String]) -> Result<(), Box<dyn std::error::Error>> {
-    let mut data = self.load_tags_data()?;
-    data.tags.extend(tags.iter().cloned());
-    data.tags.sort();
-    data.tags.dedup();
-    self.save_tags_data(&data)
   }
 }
 
 lazy_static::lazy_static! {
   pub static ref TAG_MANAGER: std::sync::Mutex<TagManager> = std::sync::Mutex::new(TagManager::new());
 }
-
-

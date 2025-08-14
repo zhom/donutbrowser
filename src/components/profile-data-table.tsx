@@ -15,6 +15,7 @@ import { CiCircleCheck } from "react-icons/ci";
 import { IoEllipsisHorizontal } from "react-icons/io5";
 import { LuCheck, LuChevronDown, LuChevronUp } from "react-icons/lu";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -63,8 +64,182 @@ import type { BrowserProfile, StoredProxy } from "@/types";
 import { LoadingButton } from "./loading-button";
 import MultipleSelector, { type Option } from "./multiple-selector";
 import { Input } from "./ui/input";
-// Label no longer needed after removing dialog-based renaming
 import { RippleButton } from "./ui/ripple";
+
+const TagsCell: React.FC<{
+  profile: BrowserProfile;
+  isDisabled: boolean;
+  tagsOverrides: Record<string, string[]>;
+  allTags: string[];
+  setAllTags: React.Dispatch<React.SetStateAction<string[]>>;
+  openTagsEditorFor: string | null;
+  setOpenTagsEditorFor: React.Dispatch<React.SetStateAction<string | null>>;
+  setTagsOverrides: React.Dispatch<
+    React.SetStateAction<Record<string, string[]>>
+  >;
+}> = ({
+  profile,
+  isDisabled,
+  tagsOverrides,
+  allTags,
+  setAllTags,
+  openTagsEditorFor,
+  setOpenTagsEditorFor,
+  setTagsOverrides,
+}) => {
+  const effectiveTags: string[] = Object.hasOwn(tagsOverrides, profile.name)
+    ? tagsOverrides[profile.name]
+    : (profile.tags ?? []);
+
+  const valueOptions: Option[] = React.useMemo(
+    () => effectiveTags.map((t) => ({ value: t, label: t })),
+    [effectiveTags],
+  );
+  const allOptions: Option[] = React.useMemo(
+    () => allTags.map((t) => ({ value: t, label: t })),
+    [allTags],
+  );
+
+  const onSearch = React.useCallback(
+    async (q: string): Promise<Option[]> => {
+      const query = q.trim().toLowerCase();
+      if (!query) return allOptions;
+      return allOptions.filter((o) => o.value.toLowerCase().includes(query));
+    },
+    [allOptions],
+  );
+
+  const handleChange = React.useCallback(
+    async (opts: Option[]) => {
+      const newTags = opts.map((o) => o.value);
+      setTagsOverrides((prev) => ({ ...prev, [profile.name]: newTags }));
+      try {
+        await invoke<BrowserProfile>("update_profile_tags", {
+          profileName: profile.name,
+          tags: newTags,
+        });
+        setAllTags((prev) => {
+          const next = new Set(prev);
+          for (const t of newTags) next.add(t);
+          return Array.from(next).sort();
+        });
+      } catch (error) {
+        console.error("Failed to update tags:", error);
+      }
+    },
+    [profile.name, setAllTags, setTagsOverrides],
+  );
+
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const [visibleCount, setVisibleCount] = React.useState<number>(
+    effectiveTags.length,
+  );
+
+  React.useLayoutEffect(() => {
+    if (openTagsEditorFor === profile.name) return;
+    const container = containerRef.current;
+    if (!container) return;
+    const compute = () => {
+      const available = container.clientWidth;
+      if (available <= 0) return;
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      const style = window.getComputedStyle(container);
+      const font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+      ctx.font = font;
+      const padding = 16;
+      const gap = 4;
+      let used = 0;
+      let count = 0;
+      for (let i = 0; i < effectiveTags.length; i++) {
+        const text = effectiveTags[i];
+        const width = Math.ceil(ctx.measureText(text).width) + padding;
+        const remaining = effectiveTags.length - (i + 1);
+        let extra = 0;
+        if (remaining > 0) {
+          const plusText = `+${remaining}`;
+          extra = Math.ceil(ctx.measureText(plusText).width) + padding;
+        }
+        const nextUsed =
+          used +
+          (used > 0 ? gap : 0) +
+          width +
+          (remaining > 0 ? gap + extra : 0);
+        if (nextUsed <= available) {
+          used += (used > 0 ? gap : 0) + width;
+          count = i + 1;
+        } else {
+          break;
+        }
+      }
+      setVisibleCount(count);
+    };
+    compute();
+    const ro = new ResizeObserver(() => compute());
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [effectiveTags, openTagsEditorFor, profile.name]);
+
+  if (openTagsEditorFor !== profile.name) {
+    const hiddenCount = Math.max(0, effectiveTags.length - visibleCount);
+    return (
+      <div className="w-48 h-full cursor-pointer">
+        <div
+          ref={containerRef}
+          className={cn(
+            "flex items-center gap-1 overflow-hidden",
+            isDisabled && "opacity-60",
+          )}
+          role="button"
+          tabIndex={0}
+          onClick={() => {
+            if (!isDisabled) setOpenTagsEditorFor(profile.name);
+          }}
+          onKeyDown={(e) => {
+            if (!isDisabled && (e.key === "Enter" || e.key === " ")) {
+              e.preventDefault();
+              setOpenTagsEditorFor(profile.name);
+            }
+          }}
+          onKeyUp={() => {}}
+        >
+          {effectiveTags.slice(0, visibleCount).map((t) => (
+            <Badge key={t} variant="secondary" className="px-2 py-0 text-xs">
+              {t}
+            </Badge>
+          ))}
+          {hiddenCount > 0 && (
+            <Badge variant="outline" className="px-2 py-0 text-xs">
+              +{hiddenCount}
+            </Badge>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn("w-48", isDisabled && "opacity-60 pointer-events-none")}>
+      <MultipleSelector
+        value={valueOptions}
+        options={allOptions}
+        onChange={(opts) => void handleChange(opts)}
+        onSearch={onSearch}
+        creatable
+        placeholder={effectiveTags.length === 0 ? "Add tags" : ""}
+        className="bg-transparent"
+        badgeClassName=""
+        inputProps={{
+          className: "py-1",
+          onKeyDown: (e) => {
+            if (e.key === "Escape") setOpenTagsEditorFor(null);
+          },
+        }}
+      />
+    </div>
+  );
+};
 
 interface ProfilesDataTableProps {
   data: BrowserProfile[];
@@ -129,6 +304,9 @@ export function ProfilesDataTable({
     Record<string, string[]>
   >({});
   const [allTags, setAllTags] = React.useState<string[]>([]);
+  const [openTagsEditorFor, setOpenTagsEditorFor] = React.useState<
+    string | null
+  >(null);
 
   const loadAllTags = React.useCallback(async () => {
     try {
@@ -367,6 +545,12 @@ export function ProfilesDataTable({
     },
     [filteredData, browserState.canSelectProfile, onSelectedProfilesChange],
   );
+
+  React.useEffect(() => {
+    if (browserState.isClient) {
+      void loadAllTags();
+    }
+  }, [browserState.isClient, loadAllTags]);
 
   // Handle checkbox change
   const handleCheckboxChange = React.useCallback(
@@ -761,6 +945,33 @@ export function ProfilesDataTable({
         },
       },
       {
+        id: "tags",
+        header: "Tags",
+        cell: ({ row }) => {
+          const profile = row.original;
+          const isRunning =
+            browserState.isClient && runningProfiles.has(profile.name);
+          const isLaunching = launchingProfiles.has(profile.name);
+          const isStopping = stoppingProfiles.has(profile.name);
+          const isBrowserUpdating = isUpdating(profile.browser);
+          const isDisabled =
+            isRunning || isLaunching || isStopping || isBrowserUpdating;
+
+          return (
+            <TagsCell
+              profile={profile}
+              isDisabled={isDisabled}
+              tagsOverrides={tagsOverrides}
+              allTags={allTags}
+              setAllTags={setAllTags}
+              openTagsEditorFor={openTagsEditorFor}
+              setOpenTagsEditorFor={setOpenTagsEditorFor}
+              setTagsOverrides={setTagsOverrides}
+            />
+          );
+        },
+      },
+      {
         accessorKey: "browser",
         header: ({ column }) => {
           return (
@@ -947,87 +1158,6 @@ export function ProfilesDataTable({
         },
       },
       {
-        id: "tags",
-        header: "Tags",
-        cell: ({ row }) => {
-          const profile = row.original;
-          const isRunning =
-            browserState.isClient && runningProfiles.has(profile.name);
-          const isLaunching = launchingProfiles.has(profile.name);
-          const isStopping = stoppingProfiles.has(profile.name);
-          const isBrowserUpdating = isUpdating(profile.browser);
-          const isDisabled =
-            isRunning || isLaunching || isStopping || isBrowserUpdating;
-
-          const effectiveTags: string[] = Object.hasOwn(
-            tagsOverrides,
-            profile.name,
-          )
-            ? tagsOverrides[profile.name]
-            : (profile.tags ?? []);
-
-          const valueOptions: Option[] = effectiveTags.map((t) => ({
-            value: t,
-            label: t,
-          }));
-          const defaultOptions: Option[] = (profile.tags ?? []).map((t) => ({
-            value: t,
-            label: t,
-          }));
-          const options: Option[] = allTags.map((t) => ({
-            value: t,
-            label: t,
-          }));
-
-          const onSearch = async (q: string) => {
-            const query = q.trim().toLowerCase();
-            if (!query) return options;
-            return options.filter((o) => o.value.toLowerCase().includes(query));
-          };
-
-          const handleChange = async (opts: Option[]) => {
-            const newTags = opts.map((o) => o.value);
-            setTagsOverrides((prev) => ({ ...prev, [profile.name]: newTags }));
-            try {
-              await invoke<BrowserProfile>("update_profile_tags", {
-                profileName: profile.name,
-                tags: newTags,
-              });
-              // Optimistically merge new tags into suggestions list
-              setAllTags((prev) => {
-                const next = new Set(prev);
-                for (const t of newTags) next.add(t);
-                return Array.from(next).sort();
-              });
-            } catch (error) {
-              console.error("Failed to update tags:", error);
-            }
-          };
-
-          return (
-            <div
-              className={cn(
-                "min-w-[220px]",
-                isDisabled && "opacity-60 pointer-events-none",
-              )}
-            >
-              <MultipleSelector
-                value={valueOptions}
-                defaultOptions={defaultOptions}
-                options={options}
-                onChange={(opts) => void handleChange(opts)}
-                onSearch={onSearch}
-                creatable
-                placeholder={effectiveTags.length === 0 ? "Add tags" : ""}
-                className="bg-transparent"
-                badgeClassName=""
-                inputProps={{ className: "py-1" }}
-              />
-            </div>
-          );
-        },
-      },
-      {
         id: "settings",
         cell: ({ row }) => {
           const profile = row.original;
@@ -1118,6 +1248,7 @@ export function ProfilesDataTable({
       renameError,
       isRenamingSaving,
       handleRename,
+      openTagsEditorFor,
     ],
   );
 

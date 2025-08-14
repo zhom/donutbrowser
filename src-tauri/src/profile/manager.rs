@@ -287,11 +287,9 @@ impl ProfileManager {
     self.save_profile(&profile)?;
 
     // Keep tag suggestions up to date after name change (rebuild from all profiles)
-    let _ = crate::tag_manager::TAG_MANAGER
-      .lock()
-      .map(|tm| {
-        let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
-      });
+    let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
+      let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
+    });
 
     Ok(profile)
   }
@@ -331,11 +329,9 @@ impl ProfileManager {
     println!("Profile '{profile_name}' deleted successfully");
 
     // Rebuild tag suggestions after deletion
-    let _ = crate::tag_manager::TAG_MANAGER
-      .lock()
-      .map(|tm| {
-        let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
-      });
+    let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
+      let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
+    });
 
     Ok(())
   }
@@ -412,11 +408,9 @@ impl ProfileManager {
     }
 
     // Rebuild tag suggestions after group changes just in case
-    let _ = crate::tag_manager::TAG_MANAGER
-      .lock()
-      .map(|tm| {
-        let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
-      });
+    let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
+      let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
+    });
 
     Ok(())
   }
@@ -440,11 +434,9 @@ impl ProfileManager {
     self.save_profile(&profile)?;
 
     // Update global tag suggestions from all profiles
-    let _ = crate::tag_manager::TAG_MANAGER
-      .lock()
-      .map(|tm| {
-        let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
-      });
+    let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
+      let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
+    });
 
     Ok(profile)
   }

@@ -142,11 +142,9 @@ impl BrowserRunner {
     let profile_manager = ProfileManager::instance();
     let result = profile_manager.save_profile(profile);
     // Update tag suggestions after any save
-    let _ = crate::tag_manager::TAG_MANAGER
-      .lock()
-      .map(|tm| {
-        let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
-      });
+    let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
+      let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
+    });
     result
   }
 
@@ -154,11 +152,9 @@ impl BrowserRunner {
     let profile_manager = ProfileManager::instance();
     let profiles = profile_manager.list_profiles();
     if let Ok(ref ps) = profiles {
-      let _ = crate::tag_manager::TAG_MANAGER
-        .lock()
-        .map(|tm| {
-          let _ = tm.rebuild_from_profiles(ps);
-        });
+      let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
+        let _ = tm.rebuild_from_profiles(ps);
+      });
     }
     profiles
   }
@@ -264,12 +260,10 @@ impl BrowserRunner {
         println!("Updated proxy PID mapping from temp (0) to actual PID: {process_id}");
       }
 
-    // Save the updated profile
-    self.save_process_info(&updated_profile)?;
-    // Ensure tag suggestions include any tags from this profile
-    let _ = crate::tag_manager::TAG_MANAGER
-      .lock()
-      .map(|tm| {
+      // Save the updated profile
+      self.save_process_info(&updated_profile)?;
+      // Ensure tag suggestions include any tags from this profile
+      let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
         let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
       });
       println!(
@@ -471,11 +465,9 @@ impl BrowserRunner {
     updated_profile.last_launch = Some(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs());
 
     self.save_process_info(&updated_profile)?;
-    let _ = crate::tag_manager::TAG_MANAGER
-      .lock()
-      .map(|tm| {
-        let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
-      });
+    let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
+      let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
+    });
 
     // Apply proxy settings if needed (for Firefox-based browsers)
     if profile.proxy_id.is_some()
@@ -842,11 +834,9 @@ impl BrowserRunner {
     }
 
     // Rebuild tags after deletion
-    let _ = crate::tag_manager::TAG_MANAGER
-      .lock()
-      .map(|tm| {
-        let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
-      });
+    let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
+      let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
+    });
 
     Ok(())
   }
@@ -1642,7 +1632,10 @@ pub async fn update_profile_proxy(
 }
 
 #[tauri::command]
-pub fn update_profile_tags(profile_name: String, tags: Vec<String>) -> Result<BrowserProfile, String> {
+pub fn update_profile_tags(
+  profile_name: String,
+  tags: Vec<String>,
+) -> Result<BrowserProfile, String> {
   let profile_manager = ProfileManager::instance();
   profile_manager
     .update_profile_tags(&profile_name, tags)
