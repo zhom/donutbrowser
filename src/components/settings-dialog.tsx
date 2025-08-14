@@ -1,7 +1,6 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useState } from "react";
 import { BsCamera, BsMic } from "react-icons/bs";
@@ -25,13 +24,7 @@ import {
 } from "@/components/ui/select";
 import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
-import { getBrowserDisplayName } from "@/lib/browser-utils";
-import {
-  dismissToast,
-  showErrorToast,
-  showSuccessToast,
-  showUnifiedVersionUpdateToast,
-} from "@/lib/toast-utils";
+import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { RippleButton } from "./ui/ripple";
 
 interface AppSettings {
@@ -45,14 +38,7 @@ interface PermissionInfo {
   description: string;
 }
 
-interface VersionUpdateProgress {
-  current_browser: string;
-  total_browsers: number;
-  completed_browsers: number;
-  new_versions_found: number;
-  browser_new_versions: number;
-  status: string; // "updating", "completed", "error"
-}
+// Version update progress toasts are handled globally via useVersionUpdater
 
 interface SettingsDialogProps {
   isOpen: boolean;
@@ -265,83 +251,9 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
         checkDefaultBrowserStatus().catch(console.error);
       }, 500); // Check every 500ms
 
-      // Listen for version update progress events
-      let unlistenFn: (() => void) | null = null;
-      const setupVersionUpdateListener = async () => {
-        try {
-          unlistenFn = await listen<VersionUpdateProgress>(
-            "version-update-progress",
-            (event) => {
-              const progress = event.payload;
-
-              if (progress.status === "updating") {
-                // Show unified progress toast
-                const currentBrowserName = progress.current_browser
-                  ? getBrowserDisplayName(progress.current_browser)
-                  : undefined;
-
-                showUnifiedVersionUpdateToast(
-                  "Checking for browser updates...",
-                  {
-                    description: currentBrowserName
-                      ? `Fetching ${currentBrowserName} release information...`
-                      : "Initializing version check...",
-                    progress: {
-                      current: progress.completed_browsers,
-                      total: progress.total_browsers,
-                      found: progress.new_versions_found,
-                      current_browser: currentBrowserName,
-                    },
-                  },
-                );
-              } else if (progress.status === "completed") {
-                dismissToast("unified-version-update");
-
-                if (progress.new_versions_found > 0) {
-                  showSuccessToast("Browser versions updated successfully", {
-                    duration: 5000,
-                    description:
-                      "Auto-downloads will start shortly for available updates.",
-                  });
-                } else {
-                  showSuccessToast("No new browser versions found", {
-                    duration: 3000,
-                    description: "All browser versions are up to date",
-                  });
-                }
-              } else if (progress.status === "error") {
-                dismissToast("unified-version-update");
-
-                showErrorToast("Failed to update browser versions", {
-                  duration: 6000,
-                  description: "Check your internet connection and try again",
-                });
-              }
-            },
-          );
-        } catch (error) {
-          console.error(
-            "Failed to setup version update progress listener:",
-            error,
-          );
-        }
-      };
-
-      setupVersionUpdateListener();
-
-      // Cleanup interval and listener on component unmount or dialog close
+      // Cleanup interval on component unmount or dialog close
       return () => {
         clearInterval(intervalId);
-        if (unlistenFn) {
-          try {
-            unlistenFn();
-          } catch (error) {
-            console.error(
-              "Failed to cleanup version update progress listener:",
-              error,
-            );
-          }
-        }
       };
     }
   }, [isOpen, loadPermissions, checkDefaultBrowserStatus, loadSettings]);

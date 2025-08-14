@@ -21,6 +21,7 @@ import { useAppUpdateNotifications } from "@/hooks/use-app-update-notifications"
 import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useUpdateNotifications } from "@/hooks/use-update-notifications";
+import { useVersionUpdater } from "@/hooks/use-version-updater";
 import { showErrorToast, showToast } from "@/lib/toast-utils";
 import type { BrowserProfile, CamoufoxConfig, GroupWithCount } from "@/types";
 
@@ -40,6 +41,8 @@ interface PendingUrl {
 }
 
 export default function Home() {
+  // Mount global version update listener/toasts
+  useVersionUpdater();
   const [isInitializing, setIsInitializing] = useState(true);
   const [profiles, setProfiles] = useState<BrowserProfile[]>([]);
   const [error, setError] = useState<string | null>(null);
