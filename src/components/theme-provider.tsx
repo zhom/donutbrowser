@@ -29,16 +29,7 @@ export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
         const { invoke } = await import("@tauri-apps/api/core");
         const settings = await invoke<AppSettings>("get_app_settings");
         const themeValue = settings?.theme ?? "system";
-        if (themeValue === "custom") {
-          setDefaultTheme("light");
-          const vars = settings.custom_theme ?? {};
-          try {
-            const root = document.documentElement;
-            Object.entries(vars).forEach(([k, v]) => {
-              root.style.setProperty(k, v);
-            });
-          } catch {}
-        } else if (
+        if (
           themeValue === "light" ||
           themeValue === "dark" ||
           themeValue === "system"

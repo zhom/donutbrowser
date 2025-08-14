@@ -70,41 +70,74 @@ export const ColorPicker = ({
   children,
   ...props
 }: ColorPickerProps) => {
-  const selectedColor = Color(value);
+  const selectedColor = Color(value ?? defaultValue);
   const defaultColor = Color(defaultValue);
 
-  const [hue, setHue] = useState(
-    selectedColor.hue() || defaultColor.hue() || 0,
-  );
-  const [saturation, setSaturation] = useState(
-    selectedColor.saturationl() || defaultColor.saturationl() || 100,
-  );
-  const [lightness, setLightness] = useState(
-    selectedColor.lightness() || defaultColor.lightness() || 50,
-  );
-  const [alpha, setAlpha] = useState(
-    selectedColor.alpha() * 100 || defaultColor.alpha() * 100,
-  );
+  const initialHue = Number.isFinite(selectedColor.hue())
+    ? selectedColor.hue()
+    : Number.isFinite(defaultColor.hue())
+      ? defaultColor.hue()
+      : 0;
+  const initialSaturation = Number.isFinite(selectedColor.saturationl())
+    ? selectedColor.saturationl()
+    : Number.isFinite(defaultColor.saturationl())
+      ? defaultColor.saturationl()
+      : 100;
+  const initialLightness = Number.isFinite(selectedColor.lightness())
+    ? selectedColor.lightness()
+    : Number.isFinite(defaultColor.lightness())
+      ? defaultColor.lightness()
+      : 50;
+  const initialAlpha = Number.isFinite(selectedColor.alpha())
+    ? Math.round(selectedColor.alpha() * 100)
+    : Math.round(defaultColor.alpha() * 100);
+
+  const [hue, setHue] = useState(initialHue);
+  const [saturation, setSaturation] = useState(initialSaturation);
+  const [lightness, setLightness] = useState(initialLightness);
+  const [alpha, setAlpha] = useState(initialAlpha);
   const [mode, setMode] = useState("hex");
+  const lastEmittedRef = useRef<string>(
+    `${Math.round(initialHue)}|${Math.round(initialSaturation)}|${Math.round(initialLightness)}|${Math.round(initialAlpha)}`,
+  );
 
   // Update color when controlled value changes
   useEffect(() => {
-    if (value) {
-      const color = Color.rgb(value).rgb().object();
+    if (value !== undefined) {
+      const c = Color(value).hsl();
+      const nextHue = Number.isFinite(c.hue()) ? c.hue() : 0;
+      const nextSat = Number.isFinite(c.saturationl()) ? c.saturationl() : 0;
+      const nextLight = Number.isFinite(c.lightness()) ? c.lightness() : 0;
+      const nextAlpha = Math.round(
+        (Number.isFinite(c.alpha()) ? c.alpha() : 1) * 100,
+      );
 
-      setHue(color.r);
-      setSaturation(color.g);
-      setLightness(color.b);
-      setAlpha(color.a);
+      // Only update internal state if it actually changed
+      if (
+        Math.round(nextHue) !== Math.round(hue) ||
+        Math.round(nextSat) !== Math.round(saturation) ||
+        Math.round(nextLight) !== Math.round(lightness) ||
+        Math.round(nextAlpha) !== Math.round(alpha)
+      ) {
+        setHue(nextHue);
+        setSaturation(nextSat);
+        setLightness(nextLight);
+        setAlpha(nextAlpha);
+      }
     }
-  }, [value]);
+  }, [value, alpha, hue, lightness, saturation]);
 
   // Notify parent of changes
   useEffect(() => {
     if (onColorChange) {
+      const key = `${Math.round(hue)}|${Math.round(saturation)}|${Math.round(lightness)}|${Math.round(alpha)}`;
+      if (key === lastEmittedRef.current) {
+        return;
+      }
+      lastEmittedRef.current = key;
+
       const color = Color.hsl(hue, saturation, lightness).alpha(alpha / 100);
       const rgba = color.rgb().array();
-
       onColorChange([rgba[0], rgba[1], rgba[2], alpha / 100]);
     }
   }, [hue, saturation, lightness, alpha, onColorChange]);
@@ -191,7 +224,7 @@ export const ColorPickerSelection = memo(
 
     return (
       <div
-        className={cn("relative rounded size-full cursor-crosshair", className)}
+        className={cn("relative rounded cursor-pointer size-full", className)}
         onPointerDown={(e) => {
           e.preventDefault();
           setIsDragging(true);

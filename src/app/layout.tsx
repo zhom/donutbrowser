@@ -24,7 +24,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased overflow-hidden`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased overflow-hidden bg-background`}
       >
         <CustomThemeProvider>
           <WindowDragArea />

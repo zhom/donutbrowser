@@ -187,6 +187,17 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     }
   }, []);
 
+  // Apply or clear custom theme live without restart
+  // Defer application until Save
+  const _applyCustomTheme = useCallback((vars: Record<string, string>) => {
+    const root = document.documentElement;
+    Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
+  }, []);
+  const _clearCustomTheme = useCallback(() => {
+    const root = document.documentElement;
+    THEME_VARIABLES.forEach(({ key }) => root.style.removeProperty(key));
+  }, []);
+
   const loadPermissions = useCallback(async () => {
     setIsLoadingPermissions(true);
     try {
@@ -281,6 +292,26 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     try {
       await invoke("save_app_settings", { settings });
       setTheme(settings.theme === "custom" ? "dark" : settings.theme);
+      // Apply or clear custom variables only on Save
+      if (settings.theme === "custom") {
+        if (settings.custom_theme) {
+          try {
+            const root = document.documentElement;
+            // Clear any previous custom vars first
+            THEME_VARIABLES.forEach(({ key }) =>
+              root.style.removeProperty(key),
+            );
+            Object.entries(settings.custom_theme).forEach(([k, v]) =>
+              root.style.setProperty(k, v),
+            );
+          } catch {}
+        }
+      } else {
+        try {
+          const root = document.documentElement;
+          THEME_VARIABLES.forEach(({ key }) => root.style.removeProperty(key));
+        } catch {}
+      }
       setOriginalSettings(settings);
       onClose();
     } catch (error) {
@@ -418,7 +449,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                             <button
                               type="button"
                               aria-label={label}
-                              className="w-8 h-8 rounded-md border shadow-sm"
+                              className="w-8 h-8 rounded-md border shadow-sm cursor-pointer"
                               style={{ backgroundColor: colorValue }}
                             />
                           </PopoverTrigger>
@@ -432,17 +463,12 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                               onColorChange={([r, g, b, a]) => {
                                 const next = Color({ r, g, b }).alpha(a);
                                 const nextStr = next.hexa();
-                                updateSetting("custom_theme", {
+                                const nextTheme = {
                                   ...(settings.custom_theme ?? {}),
                                   [key]: nextStr,
-                                });
-                                // Live preview
-                                try {
-                                  document.documentElement.style.setProperty(
-                                    key,
-                                    nextStr,
-                                  );
-                                } catch {}
+                                } as Record<string, string>;
+                                updateSetting("custom_theme", nextTheme);
+                                // No live preview; applied on Save
                               }}
                             >
                               <ColorPickerSelection className="h-36 rounded" />
