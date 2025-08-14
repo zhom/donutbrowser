@@ -100,18 +100,18 @@ const TagsCell: React.FC<{
     [allTags],
   );
 
-  const onSearch = React.useCallback(
-    async (q: string): Promise<Option[]> => {
-      const query = q.trim().toLowerCase();
-      if (!query) return allOptions;
-      return allOptions.filter((o) => o.value.toLowerCase().includes(query));
-    },
-    [allOptions],
-  );
-
   const handleChange = React.useCallback(
     async (opts: Option[]) => {
-      const newTags = opts.map((o) => o.value);
+      const newTagsRaw = opts.map((o) => o.value);
+      // Dedupe while preserving order
+      const seen = new Set<string>();
+      const newTags: string[] = [];
+      for (const t of newTagsRaw) {
+        if (!seen.has(t)) {
+          seen.add(t);
+          newTags.push(t);
+        }
+      }
       setTagsOverrides((prev) => ({ ...prev, [profile.name]: newTags }));
       try {
         await invoke<BrowserProfile>("update_profile_tags", {
@@ -131,11 +131,13 @@ const TagsCell: React.FC<{
   );
 
   const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const editorRef = React.useRef<HTMLDivElement | null>(null);
   const [visibleCount, setVisibleCount] = React.useState<number>(
     effectiveTags.length,
   );
 
   React.useLayoutEffect(() => {
+    // Only measure when not editing this profile's tags
     if (openTagsEditorFor === profile.name) return;
     const container = containerRef.current;
     if (!container) return;
@@ -181,62 +183,81 @@ const TagsCell: React.FC<{
     return () => ro.disconnect();
   }, [effectiveTags, openTagsEditorFor, profile.name]);
 
+  React.useEffect(() => {
+    if (openTagsEditorFor !== profile.name) return;
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as Node | null;
+      if (editorRef.current && target && !editorRef.current.contains(target)) {
+        setOpenTagsEditorFor(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [openTagsEditorFor, profile.name, setOpenTagsEditorFor]);
+
+  React.useEffect(() => {
+    if (openTagsEditorFor === profile.name && editorRef.current) {
+      // Focus the inner input of MultipleSelector on open
+      const inputEl = editorRef.current.querySelector("input");
+      if (inputEl) {
+        (inputEl as HTMLInputElement).focus();
+      }
+    }
+  }, [openTagsEditorFor, profile.name]);
+
   if (openTagsEditorFor !== profile.name) {
     const hiddenCount = Math.max(0, effectiveTags.length - visibleCount);
     return (
       <div className="w-48 h-full cursor-pointer">
-        <div
-          ref={containerRef}
+        <button
+          type="button"
+          ref={containerRef as unknown as React.RefObject<HTMLButtonElement>}
           className={cn(
-            "flex items-center gap-1 overflow-hidden",
+            "flex items-center gap-1 overflow-hidden cursor-pointer bg-transparent border-none p-1 w-full h-full",
             isDisabled && "opacity-60",
           )}
-          role="button"
-          tabIndex={0}
           onClick={() => {
             if (!isDisabled) setOpenTagsEditorFor(profile.name);
           }}
-          onKeyDown={(e) => {
-            if (!isDisabled && (e.key === "Enter" || e.key === " ")) {
-              e.preventDefault();
-              setOpenTagsEditorFor(profile.name);
-            }
-          }}
-          onKeyUp={() => {}}
         >
           {effectiveTags.slice(0, visibleCount).map((t) => (
             <Badge key={t} variant="secondary" className="px-2 py-0 text-xs">
               {t}
             </Badge>
           ))}
+          {effectiveTags.length === 0 && (
+            <span className="inline-block h-4 min-w-10" />
+          )}
           {hiddenCount > 0 && (
             <Badge variant="outline" className="px-2 py-0 text-xs">
               +{hiddenCount}
             </Badge>
           )}
-        </div>
+        </button>
       </div>
     );
   }
 
   return (
     <div className={cn("w-48", isDisabled && "opacity-60 pointer-events-none")}>
-      <MultipleSelector
-        value={valueOptions}
-        options={allOptions}
-        onChange={(opts) => void handleChange(opts)}
-        onSearch={onSearch}
-        creatable
-        placeholder={effectiveTags.length === 0 ? "Add tags" : ""}
-        className="bg-transparent"
-        badgeClassName=""
-        inputProps={{
-          className: "py-1",
-          onKeyDown: (e) => {
-            if (e.key === "Escape") setOpenTagsEditorFor(null);
-          },
-        }}
-      />
+      <div ref={editorRef}>
+        <MultipleSelector
+          value={valueOptions}
+          options={allOptions}
+          onChange={(opts) => void handleChange(opts)}
+          creatable
+          selectFirstItem={false}
+          placeholder={effectiveTags.length === 0 ? "Add tags" : ""}
+          className="bg-transparent"
+          badgeClassName=""
+          inputProps={{
+            className: "py-1",
+            onKeyDown: (e) => {
+              if (e.key === "Escape") setOpenTagsEditorFor(null);
+            },
+          }}
+        />
+      </div>
     </div>
   );
 };

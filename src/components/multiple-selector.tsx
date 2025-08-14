@@ -445,6 +445,40 @@ const MultipleSelector = React.forwardRef<
                 setInputValue(value);
                 inputProps?.onValueChange?.(value);
               }}
+              onKeyDown={(e) => {
+                // Allow consumer to handle first
+                inputProps?.onKeyDown?.(
+                  e as unknown as React.KeyboardEvent<HTMLInputElement>,
+                );
+                if (e.defaultPrevented) return;
+                if (e.key === "Enter") {
+                  const value = inputValue.trim();
+                  if (value.length === 0) return;
+                  // If option already exists among available options, pick that; otherwise create
+                  const entries = Object.values(options).flat();
+                  const existing = entries.find(
+                    (o) => o.value === value && !o.disable,
+                  );
+                  // Prevent duplicates in the current selection
+                  if (
+                    selected.some((s) => s.value === (existing?.value ?? value))
+                  ) {
+                    e.preventDefault();
+                    setInputValue("");
+                    return;
+                  }
+                  if (selected.length >= maxSelected) {
+                    onMaxSelected?.(selected.length);
+                    return;
+                  }
+                  e.preventDefault();
+                  setInputValue("");
+                  const picked = existing ?? { value, label: value };
+                  const newOptions = [...selected, picked];
+                  setSelected(newOptions);
+                  onChange?.(newOptions);
+                }
+              }}
               onBlur={(event) => {
                 setOpen(false);
                 inputProps?.onBlur?.(event);

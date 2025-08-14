@@ -427,8 +427,14 @@ impl ProfileManager {
       .find(|p| p.name == profile_name)
       .ok_or_else(|| format!("Profile {profile_name} not found"))?;
 
-    // Update tags as-is; preserve characters and order given by caller
-    profile.tags = tags;
+    let mut seen = std::collections::HashSet::new();
+    let mut deduped: Vec<String> = Vec::with_capacity(tags.len());
+    for t in tags.into_iter() {
+      if seen.insert(t.clone()) {
+        deduped.push(t);
+      }
+    }
+    profile.tags = deduped;
 
     // Save profile
     self.save_profile(&profile)?;
