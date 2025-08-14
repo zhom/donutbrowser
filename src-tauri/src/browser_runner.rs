@@ -140,12 +140,27 @@ impl BrowserRunner {
 
   pub fn save_profile(&self, profile: &BrowserProfile) -> Result<(), Box<dyn std::error::Error>> {
     let profile_manager = ProfileManager::instance();
-    profile_manager.save_profile(profile)
+    let result = profile_manager.save_profile(profile);
+    // Update tag suggestions after any save
+    let _ = crate::tag_manager::TAG_MANAGER
+      .lock()
+      .map(|tm| {
+        let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
+      });
+    result
   }
 
   pub fn list_profiles(&self) -> Result<Vec<BrowserProfile>, Box<dyn std::error::Error>> {
     let profile_manager = ProfileManager::instance();
-    profile_manager.list_profiles()
+    let profiles = profile_manager.list_profiles();
+    if let Ok(ref ps) = profiles {
+      let _ = crate::tag_manager::TAG_MANAGER
+        .lock()
+        .map(|tm| {
+          let _ = tm.rebuild_from_profiles(ps);
+        });
+    }
+    profiles
   }
 
   pub async fn launch_browser(
@@ -249,8 +264,14 @@ impl BrowserRunner {
         println!("Updated proxy PID mapping from temp (0) to actual PID: {process_id}");
       }
 
-      // Save the updated profile
-      self.save_process_info(&updated_profile)?;
+    // Save the updated profile
+    self.save_process_info(&updated_profile)?;
+    // Ensure tag suggestions include any tags from this profile
+    let _ = crate::tag_manager::TAG_MANAGER
+      .lock()
+      .map(|tm| {
+        let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
+      });
       println!(
         "Updated profile with process info: {}",
         updated_profile.name
@@ -450,6 +471,11 @@ impl BrowserRunner {
     updated_profile.last_launch = Some(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs());
 
     self.save_process_info(&updated_profile)?;
+    let _ = crate::tag_manager::TAG_MANAGER
+      .lock()
+      .map(|tm| {
+        let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
+      });
 
     // Apply proxy settings if needed (for Firefox-based browsers)
     if profile.proxy_id.is_some()
@@ -814,6 +840,13 @@ impl BrowserRunner {
     if let Err(e) = self.cleanup_unused_binaries_internal() {
       println!("Warning: Failed to cleanup unused binaries: {e}");
     }
+
+    // Rebuild tags after deletion
+    let _ = crate::tag_manager::TAG_MANAGER
+      .lock()
+      .map(|tm| {
+        let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
+      });
 
     Ok(())
   }
@@ -1442,6 +1475,11 @@ impl BrowserRunner {
 
     files_exist
   }
+
+  pub fn get_all_tags(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    let tag_manager = crate::tag_manager::TAG_MANAGER.lock().unwrap();
+    tag_manager.get_all_tags()
+  }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1604,6 +1642,14 @@ pub async fn update_profile_proxy(
 }
 
 #[tauri::command]
+pub fn update_profile_tags(profile_name: String, tags: Vec<String>) -> Result<BrowserProfile, String> {
+  let profile_manager = ProfileManager::instance();
+  profile_manager
+    .update_profile_tags(&profile_name, tags)
+    .map_err(|e| format!("Failed to update profile tags: {e}"))
+}
+
+#[tauri::command]
 pub async fn check_browser_status(
   app_handle: tauri::AppHandle,
   profile: BrowserProfile,
@@ -1736,6 +1782,14 @@ pub async fn download_browser(
 pub fn is_browser_downloaded(browser_str: String, version: String) -> bool {
   let browser_runner = BrowserRunner::instance();
   browser_runner.is_browser_downloaded(&browser_str, &version)
+}
+
+#[tauri::command]
+pub fn get_all_tags() -> Result<Vec<String>, String> {
+  let browser_runner = BrowserRunner::instance();
+  browser_runner
+    .get_all_tags()
+    .map_err(|e| format!("Failed to get tags: {e}"))
 }
 
 #[tauri::command]

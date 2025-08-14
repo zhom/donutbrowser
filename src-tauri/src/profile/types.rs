@@ -20,6 +20,8 @@ pub struct BrowserProfile {
   pub camoufox_config: Option<CamoufoxConfig>, // Camoufox configuration
   #[serde(default)]
   pub group_id: Option<String>, // Reference to profile group
+  #[serde(default)]
+  pub tags: Vec<String>, // Free-form tags
 }
 
 pub fn default_release_type() -> String {

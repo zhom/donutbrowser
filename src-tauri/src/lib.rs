@@ -27,6 +27,7 @@ mod proxy_manager;
 mod settings_manager;
 // mod theme_detector; // removed: theme detection handled in webview via CSS prefers-color-scheme
 mod version_updater;
+mod tag_manager;
 
 extern crate lazy_static;
 
@@ -68,6 +69,7 @@ use group_manager::{
   assign_profiles_to_group, create_profile_group, delete_profile_group, delete_selected_profiles,
   get_groups_with_profile_counts, get_profile_groups, update_profile_group,
 };
+use tag_manager::TAG_MANAGER;
 
 use geoip_downloader::GeoIPDownloader;
 
@@ -506,8 +508,10 @@ pub fn run() {
       fetch_browser_versions_cached_first,
       fetch_browser_versions_with_count_cached_first,
       get_downloaded_browser_versions,
+      get_all_tags,
       get_browser_release_types,
       update_profile_proxy,
+      update_profile_tags,
       check_browser_status,
       kill_browser_profile,
       rename_profile,

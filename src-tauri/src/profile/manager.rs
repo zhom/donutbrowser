@@ -151,6 +151,7 @@ impl ProfileManager {
           release_type: release_type.to_string(),
           camoufox_config: None,
           group_id: group_id.clone(),
+          tags: Vec::new(),
         };
 
         match camoufox_launcher
@@ -191,6 +192,7 @@ impl ProfileManager {
       release_type: release_type.to_string(),
       camoufox_config: final_camoufox_config,
       group_id: group_id.clone(),
+      tags: Vec::new(),
     };
 
     // Save profile info
@@ -284,6 +286,13 @@ impl ProfileManager {
     // Save profile with new name
     self.save_profile(&profile)?;
 
+    // Keep tag suggestions up to date after name change (rebuild from all profiles)
+    let _ = crate::tag_manager::TAG_MANAGER
+      .lock()
+      .map(|tm| {
+        let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
+      });
+
     Ok(profile)
   }
 
@@ -320,6 +329,13 @@ impl ProfileManager {
     }
 
     println!("Profile '{profile_name}' deleted successfully");
+
+    // Rebuild tag suggestions after deletion
+    let _ = crate::tag_manager::TAG_MANAGER
+      .lock()
+      .map(|tm| {
+        let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
+      });
 
     Ok(())
   }
@@ -395,7 +411,42 @@ impl ProfileManager {
       self.save_profile(&profile)?;
     }
 
+    // Rebuild tag suggestions after group changes just in case
+    let _ = crate::tag_manager::TAG_MANAGER
+      .lock()
+      .map(|tm| {
+        let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
+      });
+
     Ok(())
+  }
+
+  pub fn update_profile_tags(
+    &self,
+    profile_name: &str,
+    tags: Vec<String>,
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+    // Find the profile by name
+    let profiles = self.list_profiles()?;
+    let mut profile = profiles
+      .into_iter()
+      .find(|p| p.name == profile_name)
+      .ok_or_else(|| format!("Profile {profile_name} not found"))?;
+
+    // Update tags as-is; preserve characters and order given by caller
+    profile.tags = tags;
+
+    // Save profile
+    self.save_profile(&profile)?;
+
+    // Update global tag suggestions from all profiles
+    let _ = crate::tag_manager::TAG_MANAGER
+      .lock()
+      .map(|tm| {
+        let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
+      });
+
+    Ok(profile)
   }
 
   pub fn delete_multiple_profiles(

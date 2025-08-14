@@ -22,6 +22,7 @@ export interface BrowserProfile {
   release_type: string; // "stable" or "nightly"
   camoufox_config?: CamoufoxConfig; // Camoufox configuration
   group_id?: string; // Reference to profile group
+  tags?: string[];
 }
 
 export interface StoredProxy {

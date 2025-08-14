@@ -400,6 +400,7 @@ mod tests {
         release_type: "stable".to_string(),
         camoufox_config: None,
         group_id: Some(group1.id.clone()),
+        tags: Vec::new(),
       },
       crate::profile::BrowserProfile {
         id: uuid::Uuid::new_v4(),
@@ -412,6 +413,7 @@ mod tests {
         release_type: "stable".to_string(),
         camoufox_config: None,
         group_id: Some(group1.id.clone()),
+        tags: Vec::new(),
       },
       crate::profile::BrowserProfile {
         id: uuid::Uuid::new_v4(),
@@ -424,6 +426,7 @@ mod tests {
         release_type: "stable".to_string(),
         camoufox_config: None,
         group_id: None, // Default group
+        tags: Vec::new(),
       },
     ];
 

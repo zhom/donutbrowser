@@ -61,6 +61,7 @@ import { trimName } from "@/lib/name-utils";
 import { cn } from "@/lib/utils";
 import type { BrowserProfile, StoredProxy } from "@/types";
 import { LoadingButton } from "./loading-button";
+import MultipleSelector, { type Option } from "./multiple-selector";
 import { Input } from "./ui/input";
 // Label no longer needed after removing dialog-based renaming
 import { RippleButton } from "./ui/ripple";
@@ -124,6 +125,19 @@ export function ProfilesDataTable({
     new Set(externalSelectedProfiles),
   );
   const [showCheckboxes, setShowCheckboxes] = React.useState(false);
+  const [tagsOverrides, setTagsOverrides] = React.useState<
+    Record<string, string[]>
+  >({});
+  const [allTags, setAllTags] = React.useState<string[]>([]);
+
+  const loadAllTags = React.useCallback(async () => {
+    try {
+      const tags = await invoke<string[]>("get_all_tags");
+      setAllTags(tags);
+    } catch (error) {
+      console.error("Failed to load tags:", error);
+    }
+  }, []);
 
   const handleProxySelection = React.useCallback(
     async (profileName: string, proxyId: string | null) => {
@@ -187,6 +201,10 @@ export function ProfilesDataTable({
         unlisten = await listen("stored-proxies-changed", () => {
           void loadStoredProxies();
         });
+        // Also refresh tags on profile updates
+        await listen("profile-updated", () => {
+          void loadAllTags();
+        });
       } catch (_err) {
         // Best-effort only
       }
@@ -194,7 +212,7 @@ export function ProfilesDataTable({
     return () => {
       if (unlisten) unlisten();
     };
-  }, [browserState.isClient, loadStoredProxies]);
+  }, [browserState.isClient, loadStoredProxies, loadAllTags]);
 
   // Automatically deselect profiles that become running, updating, launching, or stopping
   React.useEffect(() => {
@@ -929,6 +947,87 @@ export function ProfilesDataTable({
         },
       },
       {
+        id: "tags",
+        header: "Tags",
+        cell: ({ row }) => {
+          const profile = row.original;
+          const isRunning =
+            browserState.isClient && runningProfiles.has(profile.name);
+          const isLaunching = launchingProfiles.has(profile.name);
+          const isStopping = stoppingProfiles.has(profile.name);
+          const isBrowserUpdating = isUpdating(profile.browser);
+          const isDisabled =
+            isRunning || isLaunching || isStopping || isBrowserUpdating;
+
+          const effectiveTags: string[] = Object.hasOwn(
+            tagsOverrides,
+            profile.name,
+          )
+            ? tagsOverrides[profile.name]
+            : (profile.tags ?? []);
+
+          const valueOptions: Option[] = effectiveTags.map((t) => ({
+            value: t,
+            label: t,
+          }));
+          const defaultOptions: Option[] = (profile.tags ?? []).map((t) => ({
+            value: t,
+            label: t,
+          }));
+          const options: Option[] = allTags.map((t) => ({
+            value: t,
+            label: t,
+          }));
+
+          const onSearch = async (q: string) => {
+            const query = q.trim().toLowerCase();
+            if (!query) return options;
+            return options.filter((o) => o.value.toLowerCase().includes(query));
+          };
+
+          const handleChange = async (opts: Option[]) => {
+            const newTags = opts.map((o) => o.value);
+            setTagsOverrides((prev) => ({ ...prev, [profile.name]: newTags }));
+            try {
+              await invoke<BrowserProfile>("update_profile_tags", {
+                profileName: profile.name,
+                tags: newTags,
+              });
+              // Optimistically merge new tags into suggestions list
+              setAllTags((prev) => {
+                const next = new Set(prev);
+                for (const t of newTags) next.add(t);
+                return Array.from(next).sort();
+              });
+            } catch (error) {
+              console.error("Failed to update tags:", error);
+            }
+          };
+
+          return (
+            <div
+              className={cn(
+                "min-w-[220px]",
+                isDisabled && "opacity-60 pointer-events-none",
+              )}
+            >
+              <MultipleSelector
+                value={valueOptions}
+                defaultOptions={defaultOptions}
+                options={options}
+                onChange={(opts) => void handleChange(opts)}
+                onSearch={onSearch}
+                creatable
+                placeholder={effectiveTags.length === 0 ? "Add tags" : ""}
+                className="bg-transparent"
+                badgeClassName=""
+                inputProps={{ className: "py-1" }}
+              />
+            </div>
+          );
+        },
+      },
+      {
         id: "settings",
         cell: ({ row }) => {
           const profile = row.original;
@@ -1011,6 +1110,8 @@ export function ProfilesDataTable({
       storedProxies,
       openProxySelectorFor,
       proxyOverrides,
+      tagsOverrides,
+      allTags,
       handleProxySelection,
       profileToRename,
       newProfileName,
