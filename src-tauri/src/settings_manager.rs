@@ -27,6 +27,8 @@ pub struct AppSettings {
   pub set_as_default_browser: bool,
   #[serde(default = "default_theme")]
   pub theme: String, // "light", "dark", or "system"
+  #[serde(default)]
+  pub custom_theme: Option<std::collections::HashMap<String, String>>, // CSS var name -> value (e.g., "--background": "#1a1b26")
 }
 
 fn default_theme() -> String {
@@ -38,6 +40,7 @@ impl Default for AppSettings {
     Self {
       set_as_default_browser: false,
       theme: "system".to_string(),
+      custom_theme: None,
     }
   }
 }
@@ -321,6 +324,7 @@ mod tests {
     let test_settings = AppSettings {
       set_as_default_browser: true,
       theme: "dark".to_string(),
+      custom_theme: None,
     };
 
     // Save settings

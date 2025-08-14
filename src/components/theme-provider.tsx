@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 interface AppSettings {
   set_as_default_browser: boolean;
   theme: string;
+  custom_theme?: Record<string, string>;
 }
 
 interface CustomThemeProviderProps {
@@ -27,12 +28,22 @@ export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
         // Lazy import to avoid pulling Tauri API on SSR
         const { invoke } = await import("@tauri-apps/api/core");
         const settings = await invoke<AppSettings>("get_app_settings");
-        if (
-          settings?.theme === "light" ||
-          settings?.theme === "dark" ||
-          settings?.theme === "system"
+        const themeValue = settings?.theme ?? "system";
+        if (themeValue === "custom") {
+          setDefaultTheme("light");
+          const vars = settings.custom_theme ?? {};
+          try {
+            const root = document.documentElement;
+            Object.entries(vars).forEach(([k, v]) => {
+              root.style.setProperty(k, v);
+            });
+          } catch {}
+        } else if (
+          themeValue === "light" ||
+          themeValue === "dark" ||
+          themeValue === "system"
         ) {
-          setDefaultTheme(settings.theme);
+          setDefaultTheme(themeValue);
         } else {
           setDefaultTheme("system");
         }

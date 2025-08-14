@@ -53,17 +53,21 @@ export const useColorPicker = () => {
   return context;
 };
 
-export type ColorPickerProps = HTMLAttributes<HTMLDivElement> & {
+export type ColorPickerProps = Omit<
+  HTMLAttributes<HTMLDivElement>,
+  "onChange"
+> & {
   value?: Parameters<typeof Color>[0];
   defaultValue?: Parameters<typeof Color>[0];
-  onChange?: (value: Parameters<typeof Color.rgb>[0]) => void;
+  onColorChange?: (value: [number, number, number, number]) => void;
 };
 
 export const ColorPicker = ({
   value,
   defaultValue = "#000000",
-  onChange,
+  onColorChange,
   className,
+  children,
   ...props
 }: ColorPickerProps) => {
   const selectedColor = Color(value);
@@ -97,13 +101,13 @@ export const ColorPicker = ({
 
   // Notify parent of changes
   useEffect(() => {
-    if (onChange) {
+    if (onColorChange) {
       const color = Color.hsl(hue, saturation, lightness).alpha(alpha / 100);
       const rgba = color.rgb().array();
 
-      onChange([rgba[0], rgba[1], rgba[2], alpha / 100]);
+      onColorChange([rgba[0], rgba[1], rgba[2], alpha / 100]);
     }
-  }, [hue, saturation, lightness, alpha, onChange]);
+  }, [hue, saturation, lightness, alpha, onColorChange]);
 
   return (
     <ColorPickerContext.Provider
@@ -123,7 +127,9 @@ export const ColorPicker = ({
       <div
         className={cn("flex flex-col gap-4 size-full", className)}
         {...props}
-      />
+      >
+        {children}
+      </div>
     </ColorPickerContext.Provider>
   );
 };

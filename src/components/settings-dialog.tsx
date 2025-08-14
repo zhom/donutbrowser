@@ -1,12 +1,21 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
+import Color from "color";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useState } from "react";
 import { BsCamera, BsMic } from "react-icons/bs";
 import { LoadingButton } from "@/components/loading-button";
 import { Badge } from "@/components/ui/badge";
-
+import {
+  ColorPicker,
+  ColorPickerAlpha,
+  ColorPickerEyeDropper,
+  ColorPickerFormat,
+  ColorPickerHue,
+  ColorPickerOutput,
+  ColorPickerSelection,
+} from "@/components/ui/color-picker";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +24,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -30,6 +44,7 @@ import { RippleButton } from "./ui/ripple";
 interface AppSettings {
   set_as_default_browser: boolean;
   theme: string;
+  custom_theme?: Record<string, string>;
 }
 
 interface PermissionInfo {
@@ -49,10 +64,12 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   const [settings, setSettings] = useState<AppSettings>({
     set_as_default_browser: false,
     theme: "system",
+    custom_theme: undefined,
   });
   const [originalSettings, setOriginalSettings] = useState<AppSettings>({
     set_as_default_browser: false,
     theme: "system",
+    custom_theme: undefined,
   });
   const [isDefaultBrowser, setIsDefaultBrowser] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -109,12 +126,60 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
         return "Access to camera for browser applications";
     }
   }, []);
+  const TOKYO_NIGHT_DEFAULTS: Record<string, string> = {
+    "--background": "#1a1b26",
+    "--foreground": "#c0caf5",
+    "--card": "#24283b",
+    "--card-foreground": "#c0caf5",
+    "--popover": "#24283b",
+    "--popover-foreground": "#c0caf5",
+    "--primary": "#7aa2f7",
+    "--primary-foreground": "#1a1b26",
+    "--secondary": "#2ac3de",
+    "--secondary-foreground": "#1a1b26",
+    "--muted": "#3b4261",
+    "--muted-foreground": "#a9b1d6",
+    "--accent": "#bb9af7",
+    "--accent-foreground": "#1a1b26",
+    "--destructive": "#f7768e",
+    "--destructive-foreground": "#1a1b26",
+    "--border": "#3b4261",
+  };
+
+  const THEME_VARIABLES: Array<{ key: string; label: string }> = [
+    { key: "--background", label: "Background" },
+    { key: "--foreground", label: "Foreground" },
+    { key: "--card", label: "Card" },
+    { key: "--card-foreground", label: "Card FG" },
+    { key: "--popover", label: "Popover" },
+    { key: "--popover-foreground", label: "Popover FG" },
+    { key: "--primary", label: "Primary" },
+    { key: "--primary-foreground", label: "Primary FG" },
+    { key: "--secondary", label: "Secondary" },
+    { key: "--secondary-foreground", label: "Secondary FG" },
+    { key: "--muted", label: "Muted" },
+    { key: "--muted-foreground", label: "Muted FG" },
+    { key: "--accent", label: "Accent" },
+    { key: "--accent-foreground", label: "Accent FG" },
+    { key: "--destructive", label: "Destructive" },
+    { key: "--destructive-foreground", label: "Destructive FG" },
+    { key: "--border", label: "Border" },
+  ];
+
   const loadSettings = useCallback(async () => {
     setIsLoading(true);
     try {
       const appSettings = await invoke<AppSettings>("get_app_settings");
-      setSettings(appSettings);
-      setOriginalSettings(appSettings);
+      const merged: AppSettings = {
+        ...appSettings,
+        custom_theme:
+          appSettings.custom_theme &&
+          Object.keys(appSettings.custom_theme).length > 0
+            ? appSettings.custom_theme
+            : TOKYO_NIGHT_DEFAULTS,
+      };
+      setSettings(merged);
+      setOriginalSettings(merged);
     } catch (error) {
       console.error("Failed to load settings:", error);
     } finally {
@@ -215,7 +280,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     setIsSaving(true);
     try {
       await invoke("save_app_settings", { settings });
-      setTheme(settings.theme);
+      setTheme(settings.theme === "custom" ? "dark" : settings.theme);
       setOriginalSettings(settings);
       onClose();
     } catch (error) {
@@ -226,8 +291,11 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   }, [onClose, setTheme, settings]);
 
   const updateSetting = useCallback(
-    (key: keyof AppSettings, value: boolean | string) => {
-      setSettings((prev) => ({ ...prev, [key]: value }));
+    (
+      key: keyof AppSettings,
+      value: boolean | string | Record<string, string> | undefined,
+    ) => {
+      setSettings((prev) => ({ ...prev, [key]: value as unknown as never }));
     },
     [],
   );
@@ -285,7 +353,10 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   ]);
 
   // Check if settings have changed (excluding default browser setting)
-  const hasChanges = settings.theme !== originalSettings.theme;
+  const hasChanges =
+    settings.theme !== originalSettings.theme ||
+    JSON.stringify(settings.custom_theme ?? {}) !==
+      JSON.stringify(originalSettings.custom_theme ?? {});
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -307,6 +378,9 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                 value={settings.theme}
                 onValueChange={(value) => {
                   updateSetting("theme", value);
+                  if (value === "custom" && !settings.custom_theme) {
+                    updateSetting("custom_theme", TOKYO_NIGHT_DEFAULTS);
+                  }
                 }}
               >
                 <SelectTrigger id="theme-select">
@@ -316,6 +390,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                   <SelectItem value="light">Light</SelectItem>
                   <SelectItem value="dark">Dark</SelectItem>
                   <SelectItem value="system">System</SelectItem>
+                  <SelectItem value="custom">Custom</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -323,6 +398,77 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
             <p className="text-xs text-muted-foreground">
               Choose your preferred theme or follow your system settings.
             </p>
+
+            {settings.theme === "custom" && (
+              <div className="space-y-3">
+                <div className="text-sm font-medium">Custom theme</div>
+                <div className="grid grid-cols-4 gap-3">
+                  {THEME_VARIABLES.map(({ key, label }) => {
+                    const colorValue =
+                      settings.custom_theme?.[key] ??
+                      TOKYO_NIGHT_DEFAULTS[key] ??
+                      "#000000";
+                    return (
+                      <div
+                        key={key}
+                        className="flex flex-col gap-1 items-center"
+                      >
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label={label}
+                              className="w-8 h-8 rounded-md border shadow-sm"
+                              style={{ backgroundColor: colorValue }}
+                            />
+                          </PopoverTrigger>
+                          <PopoverContent
+                            className="w-[320px] p-3"
+                            sideOffset={6}
+                          >
+                            <ColorPicker
+                              className="p-3 rounded-md border shadow-sm bg-background"
+                              value={colorValue}
+                              onColorChange={([r, g, b, a]) => {
+                                const next = Color({ r, g, b }).alpha(a);
+                                const nextStr = next.hexa();
+                                updateSetting("custom_theme", {
+                                  ...(settings.custom_theme ?? {}),
+                                  [key]: nextStr,
+                                });
+                                // Live preview
+                                try {
+                                  document.documentElement.style.setProperty(
+                                    key,
+                                    nextStr,
+                                  );
+                                } catch {}
+                              }}
+                            >
+                              <ColorPickerSelection className="h-36 rounded" />
+                              <div className="flex gap-3 items-center mt-3">
+                                <ColorPickerEyeDropper />
+                                <div className="grid gap-1 w-full">
+                                  <ColorPickerHue />
+                                  <ColorPickerAlpha />
+                                </div>
+                              </div>
+                              <div className="flex gap-2 items-center mt-3">
+                                <ColorPickerOutput />
+                                <ColorPickerFormat />
+                              </div>
+                            </ColorPicker>
+                          </PopoverContent>
+                        </Popover>
+                        <div className="text-[10px] text-muted-foreground text-center leading-tight">
+                          {label}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Default Browser Section */}

@@ -26,8 +26,8 @@ mod profile_importer;
 mod proxy_manager;
 mod settings_manager;
 // mod theme_detector; // removed: theme detection handled in webview via CSS prefers-color-scheme
-mod version_updater;
 mod tag_manager;
+mod version_updater;
 
 extern crate lazy_static;
 
@@ -35,10 +35,10 @@ use browser_runner::{
   check_browser_exists, check_browser_status, check_missing_binaries, check_missing_geoip_database,
   create_browser_profile_new, delete_profile, download_browser, ensure_all_binaries_exist,
   fetch_browser_versions_cached_first, fetch_browser_versions_with_count,
-  fetch_browser_versions_with_count_cached_first, get_downloaded_browser_versions,
+  fetch_browser_versions_with_count_cached_first, get_all_tags, get_downloaded_browser_versions,
   get_supported_browsers, is_browser_supported_on_platform, kill_browser_profile,
   launch_browser_profile, list_browser_profiles, rename_profile, update_camoufox_config,
-  update_profile_proxy,
+  update_profile_proxy, update_profile_tags,
 };
 
 use settings_manager::{
@@ -63,13 +63,10 @@ use app_auto_updater::{
 
 use profile_importer::{detect_existing_profiles, import_browser_profile};
 
-// use theme_detector::get_system_theme;
-
 use group_manager::{
   assign_profiles_to_group, create_profile_group, delete_profile_group, delete_selected_profiles,
   get_groups_with_profile_counts, get_profile_groups, update_profile_group,
 };
-use tag_manager::TAG_MANAGER;
 
 use geoip_downloader::GeoIPDownloader;
 
