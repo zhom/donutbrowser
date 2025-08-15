@@ -274,7 +274,10 @@ const TagsCell = React.memo<{
 
     return (
       <div
-        className={cn("w-48", isDisabled && "opacity-60 pointer-events-none")}
+        className={cn(
+          "w-48 h-8",
+          isDisabled && "opacity-60 pointer-events-none",
+        )}
       >
         <div ref={editorRef}>
           <MultipleSelector
