@@ -239,7 +239,7 @@ const TagsCell = React.memo<{
               </Badge>
             ))}
             {effectiveTags.length === 0 && (
-              <span className="inline-block h-4 min-w-10" />
+              <span className="text-muted-foreground">No tags</span>
             )}
             {hiddenCount > 0 && (
               <Badge variant="outline" className="px-2 py-0 text-xs">
@@ -1008,7 +1008,7 @@ export function ProfilesDataTable({
                   }}
                   className="inline-block w-full"
                 />
-                <div className="flex absolute right-0 top-full z-50 gap-1 translate-y-[30%] bg-primary-foreground opacity-100">
+                <div className="flex absolute right-0 top-full z-50 gap-1 translate-y-[30%] opacity-100">
                   <LoadingButton
                     isLoading={isRenamingSaving}
                     size="sm"
@@ -1458,12 +1458,12 @@ export function ProfilesDataTable({
     <>
       <ScrollArea
         className={cn(
-          "rounded-md border",
+          "rounded-md border [&>div[data-slot='scroll-area-viewport']>div]:overflow-visible",
           platform === "macos" ? "h-[340px]" : "h-[280px]",
         )}
       >
-        <Table>
-          <TableHeader>
+        <Table className="overflow-visible">
+          <TableHeader className="overflow-visible">
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id} className="overflow-visible">
                 {headerGroup.headers.map((header) => {
@@ -1481,7 +1481,7 @@ export function ProfilesDataTable({
               </TableRow>
             ))}
           </TableHeader>
-          <TableBody>
+          <TableBody className="overflow-visible">
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
                 <TableRow
