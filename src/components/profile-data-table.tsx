@@ -66,7 +66,7 @@ import MultipleSelector, { type Option } from "./multiple-selector";
 import { Input } from "./ui/input";
 import { RippleButton } from "./ui/ripple";
 
-const TagsCell: React.FC<{
+const TagsCell = React.memo<{
   profile: BrowserProfile;
   isDisabled: boolean;
   tagsOverrides: Record<string, string[]>;
@@ -77,190 +77,208 @@ const TagsCell: React.FC<{
   setTagsOverrides: React.Dispatch<
     React.SetStateAction<Record<string, string[]>>
   >;
-}> = ({
-  profile,
-  isDisabled,
-  tagsOverrides,
-  allTags,
-  setAllTags,
-  openTagsEditorFor,
-  setOpenTagsEditorFor,
-  setTagsOverrides,
-}) => {
-  const effectiveTags: string[] = Object.hasOwn(tagsOverrides, profile.name)
-    ? tagsOverrides[profile.name]
-    : (profile.tags ?? []);
+}>(
+  ({
+    profile,
+    isDisabled,
+    tagsOverrides,
+    allTags,
+    setAllTags,
+    openTagsEditorFor,
+    setOpenTagsEditorFor,
+    setTagsOverrides,
+  }) => {
+    const effectiveTags: string[] = Object.hasOwn(tagsOverrides, profile.name)
+      ? tagsOverrides[profile.name]
+      : (profile.tags ?? []);
 
-  const valueOptions: Option[] = React.useMemo(
-    () => effectiveTags.map((t) => ({ value: t, label: t })),
-    [effectiveTags],
-  );
-  const allOptions: Option[] = React.useMemo(
-    () => allTags.map((t) => ({ value: t, label: t })),
-    [allTags],
-  );
+    const valueOptions: Option[] = React.useMemo(
+      () => effectiveTags.map((t) => ({ value: t, label: t })),
+      [effectiveTags],
+    );
+    const allOptions: Option[] = React.useMemo(
+      () => allTags.map((t) => ({ value: t, label: t })),
+      [allTags],
+    );
 
-  const handleChange = React.useCallback(
-    async (opts: Option[]) => {
-      const newTagsRaw = opts.map((o) => o.value);
-      // Dedupe while preserving order
-      const seen = new Set<string>();
-      const newTags: string[] = [];
-      for (const t of newTagsRaw) {
-        if (!seen.has(t)) {
-          seen.add(t);
-          newTags.push(t);
+    const handleChange = React.useCallback(
+      async (opts: Option[]) => {
+        const newTagsRaw = opts.map((o) => o.value);
+        // Dedupe while preserving order
+        const seen = new Set<string>();
+        const newTags: string[] = [];
+        for (const t of newTagsRaw) {
+          if (!seen.has(t)) {
+            seen.add(t);
+            newTags.push(t);
+          }
+        }
+        setTagsOverrides((prev) => ({ ...prev, [profile.name]: newTags }));
+        try {
+          await invoke<BrowserProfile>("update_profile_tags", {
+            profileName: profile.name,
+            tags: newTags,
+          });
+          setAllTags((prev) => {
+            const next = new Set(prev);
+            for (const t of newTags) next.add(t);
+            return Array.from(next).sort();
+          });
+        } catch (error) {
+          console.error("Failed to update tags:", error);
+        }
+      },
+      [profile.name, setAllTags, setTagsOverrides],
+    );
+
+    const containerRef = React.useRef<HTMLDivElement | null>(null);
+    const editorRef = React.useRef<HTMLDivElement | null>(null);
+    const [visibleCount, setVisibleCount] = React.useState<number>(
+      effectiveTags.length,
+    );
+
+    React.useLayoutEffect(() => {
+      // Only measure when not editing this profile's tags
+      if (openTagsEditorFor === profile.name) return;
+      const container = containerRef.current;
+      if (!container) return;
+
+      let timeoutId: number | undefined;
+      const compute = () => {
+        if (timeoutId) clearTimeout(timeoutId);
+        timeoutId = window.setTimeout(() => {
+          const available = container.clientWidth;
+          if (available <= 0) return;
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return;
+          const style = window.getComputedStyle(container);
+          const font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+          ctx.font = font;
+          const padding = 16;
+          const gap = 4;
+          let used = 0;
+          let count = 0;
+          for (let i = 0; i < effectiveTags.length; i++) {
+            const text = effectiveTags[i];
+            const width = Math.ceil(ctx.measureText(text).width) + padding;
+            const remaining = effectiveTags.length - (i + 1);
+            let extra = 0;
+            if (remaining > 0) {
+              const plusText = `+${remaining}`;
+              extra = Math.ceil(ctx.measureText(plusText).width) + padding;
+            }
+            const nextUsed =
+              used +
+              (used > 0 ? gap : 0) +
+              width +
+              (remaining > 0 ? gap + extra : 0);
+            if (nextUsed <= available) {
+              used += (used > 0 ? gap : 0) + width;
+              count = i + 1;
+            } else {
+              break;
+            }
+          }
+          setVisibleCount(count);
+        }, 16); // Debounce with RAF timing
+      };
+      compute();
+      const ro = new ResizeObserver(compute);
+      ro.observe(container);
+      return () => {
+        ro.disconnect();
+        if (timeoutId) clearTimeout(timeoutId);
+      };
+    }, [effectiveTags, openTagsEditorFor, profile.name]);
+
+    React.useEffect(() => {
+      if (openTagsEditorFor !== profile.name) return;
+      const handleClick = (e: MouseEvent) => {
+        const target = e.target as Node | null;
+        if (
+          editorRef.current &&
+          target &&
+          !editorRef.current.contains(target)
+        ) {
+          setOpenTagsEditorFor(null);
+        }
+      };
+      document.addEventListener("mousedown", handleClick);
+      return () => document.removeEventListener("mousedown", handleClick);
+    }, [openTagsEditorFor, profile.name, setOpenTagsEditorFor]);
+
+    React.useEffect(() => {
+      if (openTagsEditorFor === profile.name && editorRef.current) {
+        // Focus the inner input of MultipleSelector on open
+        const inputEl = editorRef.current.querySelector("input");
+        if (inputEl) {
+          (inputEl as HTMLInputElement).focus();
         }
       }
-      setTagsOverrides((prev) => ({ ...prev, [profile.name]: newTags }));
-      try {
-        await invoke<BrowserProfile>("update_profile_tags", {
-          profileName: profile.name,
-          tags: newTags,
-        });
-        setAllTags((prev) => {
-          const next = new Set(prev);
-          for (const t of newTags) next.add(t);
-          return Array.from(next).sort();
-        });
-      } catch (error) {
-        console.error("Failed to update tags:", error);
-      }
-    },
-    [profile.name, setAllTags, setTagsOverrides],
-  );
+    }, [openTagsEditorFor, profile.name]);
 
-  const containerRef = React.useRef<HTMLDivElement | null>(null);
-  const editorRef = React.useRef<HTMLDivElement | null>(null);
-  const [visibleCount, setVisibleCount] = React.useState<number>(
-    effectiveTags.length,
-  );
-
-  React.useLayoutEffect(() => {
-    // Only measure when not editing this profile's tags
-    if (openTagsEditorFor === profile.name) return;
-    const container = containerRef.current;
-    if (!container) return;
-    const compute = () => {
-      const available = container.clientWidth;
-      if (available <= 0) return;
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      const style = window.getComputedStyle(container);
-      const font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-      ctx.font = font;
-      const padding = 16;
-      const gap = 4;
-      let used = 0;
-      let count = 0;
-      for (let i = 0; i < effectiveTags.length; i++) {
-        const text = effectiveTags[i];
-        const width = Math.ceil(ctx.measureText(text).width) + padding;
-        const remaining = effectiveTags.length - (i + 1);
-        let extra = 0;
-        if (remaining > 0) {
-          const plusText = `+${remaining}`;
-          extra = Math.ceil(ctx.measureText(plusText).width) + padding;
-        }
-        const nextUsed =
-          used +
-          (used > 0 ? gap : 0) +
-          width +
-          (remaining > 0 ? gap + extra : 0);
-        if (nextUsed <= available) {
-          used += (used > 0 ? gap : 0) + width;
-          count = i + 1;
-        } else {
-          break;
-        }
-      }
-      setVisibleCount(count);
-    };
-    compute();
-    const ro = new ResizeObserver(() => compute());
-    ro.observe(container);
-    return () => ro.disconnect();
-  }, [effectiveTags, openTagsEditorFor, profile.name]);
-
-  React.useEffect(() => {
-    if (openTagsEditorFor !== profile.name) return;
-    const handleClick = (e: MouseEvent) => {
-      const target = e.target as Node | null;
-      if (editorRef.current && target && !editorRef.current.contains(target)) {
-        setOpenTagsEditorFor(null);
-      }
-    };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [openTagsEditorFor, profile.name, setOpenTagsEditorFor]);
-
-  React.useEffect(() => {
-    if (openTagsEditorFor === profile.name && editorRef.current) {
-      // Focus the inner input of MultipleSelector on open
-      const inputEl = editorRef.current.querySelector("input");
-      if (inputEl) {
-        (inputEl as HTMLInputElement).focus();
-      }
+    if (openTagsEditorFor !== profile.name) {
+      const hiddenCount = Math.max(0, effectiveTags.length - visibleCount);
+      return (
+        <div className="w-48 h-full cursor-pointer">
+          <button
+            type="button"
+            ref={containerRef as unknown as React.RefObject<HTMLButtonElement>}
+            className={cn(
+              "flex items-center gap-1 overflow-hidden cursor-pointer bg-transparent border-none p-1 w-full h-full",
+              isDisabled && "opacity-60",
+            )}
+            onClick={() => {
+              if (!isDisabled) setOpenTagsEditorFor(profile.name);
+            }}
+          >
+            {effectiveTags.slice(0, visibleCount).map((t) => (
+              <Badge key={t} variant="secondary" className="px-2 py-0 text-xs">
+                {t}
+              </Badge>
+            ))}
+            {effectiveTags.length === 0 && (
+              <span className="inline-block h-4 min-w-10" />
+            )}
+            {hiddenCount > 0 && (
+              <Badge variant="outline" className="px-2 py-0 text-xs">
+                +{hiddenCount}
+              </Badge>
+            )}
+          </button>
+        </div>
+      );
     }
-  }, [openTagsEditorFor, profile.name]);
 
-  if (openTagsEditorFor !== profile.name) {
-    const hiddenCount = Math.max(0, effectiveTags.length - visibleCount);
     return (
-      <div className="w-48 h-full cursor-pointer">
-        <button
-          type="button"
-          ref={containerRef as unknown as React.RefObject<HTMLButtonElement>}
-          className={cn(
-            "flex items-center gap-1 overflow-hidden cursor-pointer bg-transparent border-none p-1 w-full h-full",
-            isDisabled && "opacity-60",
-          )}
-          onClick={() => {
-            if (!isDisabled) setOpenTagsEditorFor(profile.name);
-          }}
-        >
-          {effectiveTags.slice(0, visibleCount).map((t) => (
-            <Badge key={t} variant="secondary" className="px-2 py-0 text-xs">
-              {t}
-            </Badge>
-          ))}
-          {effectiveTags.length === 0 && (
-            <span className="inline-block h-4 min-w-10" />
-          )}
-          {hiddenCount > 0 && (
-            <Badge variant="outline" className="px-2 py-0 text-xs">
-              +{hiddenCount}
-            </Badge>
-          )}
-        </button>
+      <div
+        className={cn("w-48", isDisabled && "opacity-60 pointer-events-none")}
+      >
+        <div ref={editorRef}>
+          <MultipleSelector
+            value={valueOptions}
+            options={allOptions}
+            onChange={(opts) => void handleChange(opts)}
+            creatable
+            selectFirstItem={false}
+            placeholder={effectiveTags.length === 0 ? "Add tags" : ""}
+            className="bg-transparent"
+            badgeClassName=""
+            inputProps={{
+              className: "py-1",
+              onKeyDown: (e) => {
+                if (e.key === "Escape") setOpenTagsEditorFor(null);
+              },
+            }}
+          />
+        </div>
       </div>
     );
-  }
+  },
+);
 
-  return (
-    <div className={cn("w-48", isDisabled && "opacity-60 pointer-events-none")}>
-      <div ref={editorRef}>
-        <MultipleSelector
-          value={valueOptions}
-          options={allOptions}
-          onChange={(opts) => void handleChange(opts)}
-          creatable
-          selectFirstItem={false}
-          placeholder={effectiveTags.length === 0 ? "Add tags" : ""}
-          className="bg-transparent"
-          badgeClassName=""
-          inputProps={{
-            className: "py-1",
-            onKeyDown: (e) => {
-              if (e.key === "Escape") setOpenTagsEditorFor(null);
-            },
-          }}
-        />
-      </div>
-    </div>
-  );
-};
+TagsCell.displayName = "TagsCell";
 
 interface ProfilesDataTableProps {
   data: BrowserProfile[];
@@ -276,6 +294,40 @@ interface ProfilesDataTableProps {
   selectedGroupId?: string | null;
   selectedProfiles?: string[];
   onSelectedProfilesChange?: (profiles: string[]) => void;
+}
+
+interface TableMeta {
+  tagsOverrides: Record<string, string[]>;
+  allTags: string[];
+  setAllTags: React.Dispatch<React.SetStateAction<string[]>>;
+  openTagsEditorFor: string | null;
+  setOpenTagsEditorFor: React.Dispatch<React.SetStateAction<string | null>>;
+  setTagsOverrides: React.Dispatch<
+    React.SetStateAction<Record<string, string[]>>
+  >;
+  selectedProfiles: Set<string>;
+  showCheckboxes: boolean;
+  browserState: {
+    isClient: boolean;
+    canLaunchProfile: (profile: BrowserProfile) => boolean;
+    canSelectProfile: (profile: BrowserProfile) => boolean;
+    getLaunchTooltipContent: (profile: BrowserProfile) => string | null;
+  };
+  runningProfiles: Set<string>;
+  launchingProfiles: Set<string>;
+  stoppingProfiles: Set<string>;
+  isUpdating: (browser: string) => boolean;
+  proxyOverrides: Record<string, string | null>;
+  storedProxies: StoredProxy[];
+  openProxySelectorFor: string | null;
+  profileToRename: BrowserProfile | null;
+  newProfileName: string;
+  renameError: string | null;
+  isRenamingSaving: boolean;
+  onLaunchProfile: (profile: BrowserProfile) => void | Promise<void>;
+  onKillProfile: (profile: BrowserProfile) => void | Promise<void>;
+  onConfigureCamoufox?: (profile: BrowserProfile) => void;
+  onAssignProfilesToGroup?: (profileNames: string[]) => void;
 }
 
 export function ProfilesDataTable({
@@ -642,22 +694,55 @@ export function ProfilesDataTable({
     ],
   );
 
+  // Memoize selectableProfiles calculation
+  const selectableProfiles = React.useMemo(() => {
+    return filteredData.filter((profile) => {
+      const isRunning =
+        browserState.isClient && runningProfiles.has(profile.name);
+      const isLaunching = launchingProfiles.has(profile.name);
+      const isStopping = stoppingProfiles.has(profile.name);
+      const isBrowserUpdating = isUpdating(profile.browser);
+      return !isRunning && !isLaunching && !isStopping && !isBrowserUpdating;
+    });
+  }, [
+    filteredData,
+    browserState.isClient,
+    runningProfiles,
+    launchingProfiles,
+    stoppingProfiles,
+    isUpdating,
+  ]);
+
+  // Stable handlers that don't change on every render
+  const stableHandlers = React.useMemo(
+    () => ({
+      handleToggleAll,
+      handleCheckboxChange,
+      handleIconClick,
+      handleProxySelection,
+      handleRename,
+      setStoppingProfiles,
+      setLaunchingProfiles,
+      setProfileToRename,
+      setNewProfileName,
+      setRenameError,
+      setProfileToDelete,
+      setOpenProxySelectorFor,
+    }),
+    [
+      handleToggleAll,
+      handleCheckboxChange,
+      handleIconClick,
+      handleProxySelection,
+      handleRename,
+    ],
+  );
+
   const columns: ColumnDef<BrowserProfile>[] = React.useMemo(
     () => [
       {
         id: "select",
         header: () => {
-          const selectableProfiles = filteredData.filter((profile) => {
-            const isRunning =
-              browserState.isClient && runningProfiles.has(profile.name);
-            const isLaunching = launchingProfiles.has(profile.name);
-            const isStopping = stoppingProfiles.has(profile.name);
-            const isBrowserUpdating = isUpdating(profile.browser);
-            return (
-              !isRunning && !isLaunching && !isStopping && !isBrowserUpdating
-            );
-          });
-
           return (
             <span>
               <Checkbox
@@ -665,25 +750,35 @@ export function ProfilesDataTable({
                   selectedProfiles.size === selectableProfiles.length &&
                   selectableProfiles.length !== 0
                 }
-                onCheckedChange={(value) => handleToggleAll(!!value)}
+                onCheckedChange={(value) =>
+                  stableHandlers.handleToggleAll(!!value)
+                }
                 aria-label="Select all"
                 className="cursor-pointer"
               />
             </span>
           );
         },
-        cell: ({ row }) => {
+        cell: ({ row, table }) => {
           const profile = row.original;
           const browser = profile.browser;
           const IconComponent = getBrowserIcon(browser);
-          const isSelected = selectedProfiles.has(profile.name);
+
+          // Get dynamic state from table meta
+          const tableMeta = table.options.meta as TableMeta;
+          const isSelected =
+            tableMeta?.selectedProfiles?.has(profile.name) || false;
           const isRunning =
-            browserState.isClient && runningProfiles.has(profile.name);
-          const isLaunching = launchingProfiles.has(profile.name);
-          const isStopping = stoppingProfiles.has(profile.name);
-          const isBrowserUpdating = isUpdating(browser);
+            tableMeta?.browserState?.isClient &&
+            tableMeta?.runningProfiles?.has(profile.name);
+          const isLaunching =
+            tableMeta?.launchingProfiles?.has(profile.name) || false;
+          const isStopping =
+            tableMeta?.stoppingProfiles?.has(profile.name) || false;
+          const isBrowserUpdating = tableMeta?.isUpdating?.(browser) || false;
           const isDisabled =
             isRunning || isLaunching || isStopping || isBrowserUpdating;
+          const showCheckboxes = tableMeta?.showCheckboxes || false;
 
           // Show tooltip for disabled profiles
           if (isDisabled) {
@@ -717,7 +812,7 @@ export function ProfilesDataTable({
                 <Checkbox
                   checked={isSelected}
                   onCheckedChange={(value) =>
-                    handleCheckboxChange(profile.name, !!value)
+                    stableHandlers.handleCheckboxChange(profile.name, !!value)
                   }
                   aria-label="Select row"
                   className="w-4 h-4"
@@ -731,7 +826,7 @@ export function ProfilesDataTable({
               <button
                 type="button"
                 className="flex justify-center items-center p-0 border-none cursor-pointer"
-                onClick={() => handleIconClick(profile.name)}
+                onClick={() => stableHandlers.handleIconClick(profile.name)}
                 aria-label="Select profile"
               >
                 <span className="w-4 h-4 group">
@@ -750,23 +845,31 @@ export function ProfilesDataTable({
       },
       {
         id: "actions",
-        cell: ({ row }) => {
+        cell: ({ row, table }) => {
           const profile = row.original;
+          const tableMeta = table.options.meta as TableMeta;
           const isRunning =
-            browserState.isClient && runningProfiles.has(profile.name);
-          const isLaunching = launchingProfiles.has(profile.name);
-          const isStopping = stoppingProfiles.has(profile.name);
-          const canLaunch = browserState.canLaunchProfile(profile);
-          const tooltipContent = browserState.getLaunchTooltipContent(profile);
+            tableMeta?.browserState?.isClient &&
+            tableMeta?.runningProfiles?.has(profile.name);
+          const isLaunching =
+            tableMeta?.launchingProfiles?.has(profile.name) || false;
+          const isStopping =
+            tableMeta?.stoppingProfiles?.has(profile.name) || false;
+          const canLaunch =
+            tableMeta?.browserState?.canLaunchProfile(profile) || false;
+          const tooltipContent =
+            tableMeta?.browserState?.getLaunchTooltipContent(profile);
 
           const handleLaunchClick = async () => {
             if (isRunning) {
               console.log(
                 `Stopping ${profile.browser} profile: ${profile.name}`,
               );
-              setStoppingProfiles((prev) => new Set(prev).add(profile.name));
+              stableHandlers.setStoppingProfiles((prev: Set<string>) =>
+                new Set(prev).add(profile.name),
+              );
               try {
-                await onKillProfile(profile);
+                await tableMeta?.onKillProfile(profile);
                 console.log(
                   `Successfully stopped ${profile.browser} profile: ${profile.name}`,
                 );
@@ -776,7 +879,7 @@ export function ProfilesDataTable({
                   error,
                 );
               } finally {
-                setStoppingProfiles((prev) => {
+                stableHandlers.setStoppingProfiles((prev: Set<string>) => {
                   const next = new Set(prev);
                   next.delete(profile.name);
                   return next;
@@ -786,9 +889,11 @@ export function ProfilesDataTable({
               console.log(
                 `Launching ${profile.browser} profile: ${profile.name}`,
               );
-              setLaunchingProfiles((prev) => new Set(prev).add(profile.name));
+              stableHandlers.setLaunchingProfiles((prev: Set<string>) =>
+                new Set(prev).add(profile.name),
+              );
               try {
-                await onLaunchProfile(profile);
+                await tableMeta?.onLaunchProfile(profile);
                 console.log(
                   `Successfully launched ${profile.browser} profile: ${profile.name}`,
                 );
@@ -798,7 +903,7 @@ export function ProfilesDataTable({
                   error,
                 );
               } finally {
-                setLaunchingProfiles((prev) => {
+                stableHandlers.setLaunchingProfiles((prev: Set<string>) => {
                   const next = new Set(prev);
                   next.delete(profile.name);
                   return next;
@@ -864,11 +969,15 @@ export function ProfilesDataTable({
         },
         enableSorting: true,
         sortingFn: "alphanumeric",
-        cell: ({ row }) => {
+        cell: ({ row, table }) => {
           const profile = row.original as BrowserProfile;
           const rawName: string = row.getValue("name");
           const name = getBrowserDisplayName(rawName);
-          const isEditing = profileToRename?.name === profile.name;
+          const tableMeta = table.options.meta as TableMeta;
+          const isEditing = tableMeta?.profileToRename?.name === profile.name;
+          const newProfileName = tableMeta?.newProfileName || "";
+          const renameError = tableMeta?.renameError || null;
+          const isRenamingSaving = tableMeta?.isRenamingSaving || false;
 
           if (isEditing) {
             const isSaveDisabled =
@@ -885,16 +994,16 @@ export function ProfilesDataTable({
                   autoFocus
                   value={newProfileName}
                   onChange={(e) => {
-                    setNewProfileName(e.target.value);
-                    if (renameError) setRenameError(null);
+                    stableHandlers.setNewProfileName(e.target.value);
+                    if (renameError) stableHandlers.setRenameError(null);
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
-                      void handleRename();
+                      void stableHandlers.handleRename();
                     } else if (e.key === "Escape") {
-                      setProfileToRename(null);
-                      setNewProfileName("");
-                      setRenameError(null);
+                      stableHandlers.setProfileToRename(null);
+                      stableHandlers.setNewProfileName("");
+                      stableHandlers.setRenameError(null);
                     }
                   }}
                   className="inline-block w-full"
@@ -906,7 +1015,7 @@ export function ProfilesDataTable({
                     variant="default"
                     disabled={isSaveDisabled}
                     className="cursor-pointer"
-                    onClick={() => void handleRename()}
+                    onClick={() => void stableHandlers.handleRename()}
                   >
                     Save
                   </LoadingButton>
@@ -928,10 +1037,14 @@ export function ProfilesDataTable({
             );
 
           const isRunning =
-            browserState.isClient && runningProfiles.has(profile.name);
-          const isLaunching = launchingProfiles.has(profile.name);
-          const isStopping = stoppingProfiles.has(profile.name);
-          const isBrowserUpdating = isUpdating(profile.browser);
+            tableMeta?.browserState?.isClient &&
+            tableMeta?.runningProfiles?.has(profile.name);
+          const isLaunching =
+            tableMeta?.launchingProfiles?.has(profile.name) || false;
+          const isStopping =
+            tableMeta?.stoppingProfiles?.has(profile.name) || false;
+          const isBrowserUpdating =
+            tableMeta?.isUpdating?.(profile.browser) || false;
           const isDisabled =
             isRunning || isLaunching || isStopping || isBrowserUpdating;
 
@@ -946,17 +1059,17 @@ export function ProfilesDataTable({
               )}
               onClick={() => {
                 if (isDisabled) return;
-                setProfileToRename(profile);
-                setNewProfileName(profile.name);
-                setRenameError(null);
+                stableHandlers.setProfileToRename(profile);
+                stableHandlers.setNewProfileName(profile.name);
+                stableHandlers.setRenameError(null);
               }}
               onKeyDown={(e) => {
                 if (isDisabled) return;
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  setProfileToRename(profile);
-                  setNewProfileName(profile.name);
-                  setRenameError(null);
+                  stableHandlers.setProfileToRename(profile);
+                  stableHandlers.setNewProfileName(profile.name);
+                  stableHandlers.setRenameError(null);
                 }
               }}
             >
@@ -968,13 +1081,18 @@ export function ProfilesDataTable({
       {
         id: "tags",
         header: "Tags",
-        cell: ({ row }) => {
+        cell: ({ row, table }) => {
           const profile = row.original;
+          const tableMeta = table.options.meta as TableMeta;
           const isRunning =
-            browserState.isClient && runningProfiles.has(profile.name);
-          const isLaunching = launchingProfiles.has(profile.name);
-          const isStopping = stoppingProfiles.has(profile.name);
-          const isBrowserUpdating = isUpdating(profile.browser);
+            tableMeta?.browserState?.isClient &&
+            tableMeta?.runningProfiles?.has(profile.name);
+          const isLaunching =
+            tableMeta?.launchingProfiles?.has(profile.name) || false;
+          const isStopping =
+            tableMeta?.stoppingProfiles?.has(profile.name) || false;
+          const isBrowserUpdating =
+            tableMeta?.isUpdating?.(profile.browser) || false;
           const isDisabled =
             isRunning || isLaunching || isStopping || isBrowserUpdating;
 
@@ -982,12 +1100,14 @@ export function ProfilesDataTable({
             <TagsCell
               profile={profile}
               isDisabled={isDisabled}
-              tagsOverrides={tagsOverrides}
-              allTags={allTags}
-              setAllTags={setAllTags}
-              openTagsEditorFor={openTagsEditorFor}
-              setOpenTagsEditorFor={setOpenTagsEditorFor}
-              setTagsOverrides={setTagsOverrides}
+              tagsOverrides={tableMeta?.tagsOverrides || {}}
+              allTags={tableMeta?.allTags || []}
+              setAllTags={tableMeta?.setAllTags || (() => {})}
+              openTagsEditorFor={tableMeta?.openTagsEditorFor || null}
+              setOpenTagsEditorFor={
+                tableMeta?.setOpenTagsEditorFor || (() => {})
+              }
+              setTagsOverrides={tableMeta?.setTagsOverrides || (() => {})}
             />
           );
         },
@@ -1044,15 +1164,24 @@ export function ProfilesDataTable({
       {
         id: "proxy",
         header: "Proxy",
-        cell: ({ row }) => {
+        cell: ({ row, table }) => {
           const profile = row.original;
+          const tableMeta = table.options.meta as TableMeta;
           const isRunning =
-            browserState.isClient && runningProfiles.has(profile.name);
-          const isLaunching = launchingProfiles.has(profile.name);
-          const isStopping = stoppingProfiles.has(profile.name);
-          const isBrowserUpdating = isUpdating(profile.browser);
+            tableMeta?.browserState?.isClient &&
+            tableMeta?.runningProfiles?.has(profile.name);
+          const isLaunching =
+            tableMeta?.launchingProfiles?.has(profile.name) || false;
+          const isStopping =
+            tableMeta?.stoppingProfiles?.has(profile.name) || false;
+          const isBrowserUpdating =
+            tableMeta?.isUpdating?.(profile.browser) || false;
           const isDisabled =
             isRunning || isLaunching || isStopping || isBrowserUpdating;
+
+          const proxyOverrides = tableMeta?.proxyOverrides || {};
+          const storedProxies = tableMeta?.storedProxies || [];
+          const openProxySelectorFor = tableMeta?.openProxySelectorFor || null;
 
           const hasOverride = Object.hasOwn(proxyOverrides, profile.name);
           const effectiveProxyId = hasOverride
@@ -1095,7 +1224,9 @@ export function ProfilesDataTable({
             <Popover
               open={isSelectorOpen}
               onOpenChange={(open) =>
-                setOpenProxySelectorFor(open ? profile.name : null)
+                stableHandlers.setOpenProxySelectorFor(
+                  open ? profile.name : null,
+                )
               }
             >
               <Tooltip>
@@ -1137,7 +1268,10 @@ export function ProfilesDataTable({
                         <CommandItem
                           value="__none__"
                           onSelect={() =>
-                            void handleProxySelection(profile.name, null)
+                            void stableHandlers.handleProxySelection(
+                              profile.name,
+                              null,
+                            )
                           }
                         >
                           <LuCheck
@@ -1155,7 +1289,10 @@ export function ProfilesDataTable({
                             key={proxy.id}
                             value={proxy.name}
                             onSelect={() =>
-                              void handleProxySelection(profile.name, proxy.id)
+                              void stableHandlers.handleProxySelection(
+                                profile.name,
+                                proxy.id,
+                              )
                             }
                           >
                             <LuCheck
@@ -1180,14 +1317,19 @@ export function ProfilesDataTable({
       },
       {
         id: "settings",
-        cell: ({ row }) => {
+        cell: ({ row, table }) => {
           const profile = row.original;
+          const tableMeta = table.options.meta as TableMeta;
           const isRunning =
-            browserState.isClient && runningProfiles.has(profile.name);
+            tableMeta?.browserState?.isClient &&
+            tableMeta?.runningProfiles?.has(profile.name);
           const isBrowserUpdating =
-            browserState.isClient && isUpdating(profile.browser);
-          const isLaunching = launchingProfiles.has(profile.name);
-          const isStopping = stoppingProfiles.has(profile.name);
+            tableMeta?.browserState?.isClient &&
+            tableMeta?.isUpdating?.(profile.browser);
+          const isLaunching =
+            tableMeta?.launchingProfiles?.has(profile.name) || false;
+          const isStopping =
+            tableMeta?.stoppingProfiles?.has(profile.name) || false;
           const isDisabled =
             isRunning || isLaunching || isStopping || isBrowserUpdating;
 
@@ -1198,7 +1340,7 @@ export function ProfilesDataTable({
                   <Button
                     variant="ghost"
                     className="p-0 w-8 h-8"
-                    disabled={!browserState.isClient}
+                    disabled={!tableMeta?.browserState?.isClient}
                   >
                     <span className="sr-only">Open menu</span>
                     <IoEllipsisHorizontal className="w-4 h-4" />
@@ -1207,28 +1349,28 @@ export function ProfilesDataTable({
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem
                     onClick={() => {
-                      if (onAssignProfilesToGroup) {
-                        onAssignProfilesToGroup([profile.name]);
+                      if (tableMeta?.onAssignProfilesToGroup) {
+                        tableMeta.onAssignProfilesToGroup([profile.name]);
                       }
                     }}
                     disabled={isDisabled}
                   >
                     Assign to Group
                   </DropdownMenuItem>
-                  {profile.browser === "camoufox" && onConfigureCamoufox && (
-                    <DropdownMenuItem
-                      onClick={() => {
-                        onConfigureCamoufox(profile);
-                      }}
-                      disabled={isDisabled}
-                    >
-                      Configure Fingerprint
-                    </DropdownMenuItem>
-                  )}
-                  {/* Rename removed from menu; inline on name click */}
+                  {profile.browser === "camoufox" &&
+                    tableMeta?.onConfigureCamoufox && (
+                      <DropdownMenuItem
+                        onClick={() => {
+                          tableMeta.onConfigureCamoufox?.(profile);
+                        }}
+                        disabled={isDisabled}
+                      >
+                        Configure Fingerprint
+                      </DropdownMenuItem>
+                    )}
                   <DropdownMenuItem
                     onClick={() => {
-                      setProfileToDelete(profile);
+                      stableHandlers.setProfileToDelete(profile);
                     }}
                     disabled={isDisabled}
                   >
@@ -1241,35 +1383,60 @@ export function ProfilesDataTable({
         },
       },
     ],
-    [
-      showCheckboxes,
-      selectedProfiles,
-      handleToggleAll,
-      handleCheckboxChange,
-      handleIconClick,
-      runningProfiles,
-      browserState,
-      onLaunchProfile,
-      onKillProfile,
-      onConfigureCamoufox,
-      onAssignProfilesToGroup,
-      isUpdating,
-      launchingProfiles,
-      stoppingProfiles,
-      filteredData,
-      browserState.isClient,
-      storedProxies,
-      openProxySelectorFor,
-      proxyOverrides,
+    [stableHandlers, selectableProfiles, selectedProfiles],
+  );
+
+  // Memoize table meta to prevent unnecessary re-renders
+  const tableMeta = React.useMemo(
+    () => ({
       tagsOverrides,
       allTags,
-      handleProxySelection,
+      setAllTags,
+      openTagsEditorFor,
+      setOpenTagsEditorFor,
+      setTagsOverrides,
+      // Include all the state needed by columns
+      selectedProfiles,
+      showCheckboxes,
+      browserState,
+      runningProfiles,
+      launchingProfiles,
+      stoppingProfiles,
+      isUpdating,
+      proxyOverrides,
+      storedProxies,
+      openProxySelectorFor,
       profileToRename,
       newProfileName,
       renameError,
       isRenamingSaving,
-      handleRename,
+      onLaunchProfile,
+      onKillProfile,
+      onConfigureCamoufox,
+      onAssignProfilesToGroup,
+    }),
+    [
+      tagsOverrides,
+      allTags,
       openTagsEditorFor,
+      selectedProfiles,
+      showCheckboxes,
+      browserState,
+      runningProfiles,
+      launchingProfiles,
+      stoppingProfiles,
+      isUpdating,
+      proxyOverrides,
+      storedProxies,
+      openProxySelectorFor,
+      profileToRename,
+      newProfileName,
+      renameError,
+      isRenamingSaving,
+      onLaunchProfile,
+      onKillProfile,
+      onConfigureCamoufox,
+      onAssignProfilesToGroup,
     ],
   );
 
@@ -1279,6 +1446,7 @@ export function ProfilesDataTable({
     state: {
       sorting,
     },
+    meta: tableMeta,
     onSortingChange: handleSortingChange,
     getSortedRowModel: getSortedRowModel(),
     getCoreRowModel: getCoreRowModel(),
