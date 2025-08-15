@@ -38,7 +38,7 @@ export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
         ) {
           setDefaultTheme(themeValue);
         } else if (themeValue === "custom") {
-          setDefaultTheme("dark");
+          setDefaultTheme("light");
           if (
             settings.custom_theme &&
             Object.keys(settings.custom_theme).length > 0
