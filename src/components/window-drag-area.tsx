@@ -41,7 +41,7 @@ export function WindowDragArea() {
   return (
     <button
       type="button"
-      className="fixed top-0 right-0 left-0 h-10 bg-transparent border-0 z-[9999] select-none"
+      className="fixed top-0 right-0 left-0 h-10 bg-transparent border-0 z-[999999] select-none"
       data-window-drag-area="true"
       onPointerDown={handlePointerDown}
       onContextMenu={(e) => {
