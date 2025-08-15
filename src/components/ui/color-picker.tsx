@@ -112,20 +112,13 @@ export const ColorPicker = ({
         (Number.isFinite(c.alpha()) ? c.alpha() : 1) * 100,
       );
 
-      // Only update internal state if it actually changed
-      if (
-        Math.round(nextHue) !== Math.round(hue) ||
-        Math.round(nextSat) !== Math.round(saturation) ||
-        Math.round(nextLight) !== Math.round(lightness) ||
-        Math.round(nextAlpha) !== Math.round(alpha)
-      ) {
-        setHue(nextHue);
-        setSaturation(nextSat);
-        setLightness(nextLight);
-        setAlpha(nextAlpha);
-      }
+      // Update internal state unconditionally when value prop changes
+      setHue(nextHue);
+      setSaturation(nextSat);
+      setLightness(nextLight);
+      setAlpha(nextAlpha);
     }
-  }, [value, alpha, hue, lightness, saturation]);
+  }, [value]); // Remove state values from dependency array to prevent infinite loop
 
   // Notify parent of changes
   useEffect(() => {
@@ -175,13 +168,25 @@ export const ColorPickerSelection = memo(
     const [isDragging, setIsDragging] = useState(false);
     const [positionX, setPositionX] = useState(0);
     const [positionY, setPositionY] = useState(0);
-    const { hue, setSaturation, setLightness } = useColorPicker();
+    const { hue, saturation, lightness, setSaturation, setLightness } =
+      useColorPicker();
 
     const backgroundGradient = useMemo(() => {
       return `linear-gradient(0deg, rgba(0,0,0,1), rgba(0,0,0,0)),
             linear-gradient(90deg, rgba(255,255,255,1), rgba(255,255,255,0)),
             hsl(${hue}, 100%, 50%)`;
     }, [hue]);
+
+    // Update position indicators when saturation/lightness change externally
+    useEffect(() => {
+      if (!isDragging) {
+        const x = saturation / 100;
+        const topLightness = x < 0.01 ? 100 : 50 + 50 * (1 - x);
+        const y = topLightness > 0 ? 1 - lightness / topLightness : 0;
+        setPositionX(x);
+        setPositionY(Math.max(0, Math.min(1, y)));
+      }
+    }, [saturation, lightness, isDragging]);
 
     const handlePointerMove = useCallback(
       (event: PointerEvent) => {

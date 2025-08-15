@@ -187,13 +187,14 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     }
   }, []);
 
-  // Apply or clear custom theme live without restart
-  // Defer application until Save
-  const _applyCustomTheme = useCallback((vars: Record<string, string>) => {
+  const applyCustomTheme = useCallback((vars: Record<string, string>) => {
     const root = document.documentElement;
-    Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
+    Object.entries(vars).forEach(([k, v]) =>
+      root.style.setProperty(k, v, "important"),
+    );
   }, []);
-  const _clearCustomTheme = useCallback(() => {
+
+  const clearCustomTheme = useCallback(() => {
     const root = document.documentElement;
     THEME_VARIABLES.forEach(({ key }) => root.style.removeProperty(key));
   }, []);
@@ -302,7 +303,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
               root.style.removeProperty(key),
             );
             Object.entries(settings.custom_theme).forEach(([k, v]) =>
-              root.style.setProperty(k, v),
+              root.style.setProperty(k, v, "important"),
             );
           } catch {}
         }
@@ -330,6 +331,36 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     },
     [],
   );
+
+  const handleClose = useCallback(() => {
+    // Restore original theme when closing without saving
+    if (originalSettings.theme === "custom" && originalSettings.custom_theme) {
+      applyCustomTheme(originalSettings.custom_theme);
+    } else {
+      clearCustomTheme();
+    }
+    onClose();
+  }, [
+    originalSettings.theme,
+    originalSettings.custom_theme,
+    applyCustomTheme,
+    clearCustomTheme,
+    onClose,
+  ]);
+
+  // Apply custom theme live when editing
+  useEffect(() => {
+    if (settings.theme === "custom" && settings.custom_theme) {
+      applyCustomTheme(settings.custom_theme);
+    } else if (settings.theme !== "custom") {
+      clearCustomTheme();
+    }
+  }, [
+    settings.theme,
+    settings.custom_theme,
+    applyCustomTheme,
+    clearCustomTheme,
+  ]);
 
   useEffect(() => {
     if (isOpen) {
@@ -390,7 +421,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
       JSON.stringify(originalSettings.custom_theme ?? {});
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-md max-h-[80vh] my-8 flex flex-col">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle>Settings</DialogTitle>
@@ -613,7 +644,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
         </div>
 
         <DialogFooter className="flex-shrink-0">
-          <RippleButton variant="outline" onClick={onClose}>
+          <RippleButton variant="outline" onClick={handleClose}>
             Cancel
           </RippleButton>
           <LoadingButton
