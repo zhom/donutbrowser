@@ -420,7 +420,7 @@ const MultipleSelector = React.forwardRef<
                   <button
                     type="button"
                     className={cn(
-                      "ml-1 rounded-full outline-none ring-offset-background focus:ring-2 focus:ring-ring focus:ring-offset-2",
+                      "cursor-pointer ml-1 rounded-full outline-none ring-offset-background focus:ring-2 focus:ring-ring focus:ring-offset-2",
                       (disabled || option.fixed) && "hidden",
                     )}
                     onKeyDown={(e) => {
