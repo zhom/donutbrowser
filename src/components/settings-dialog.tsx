@@ -38,6 +38,12 @@ import {
 } from "@/components/ui/select";
 import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
+import {
+  getThemeByColors,
+  getThemeById,
+  THEME_VARIABLES,
+  THEMES,
+} from "@/lib/themes";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { RippleButton } from "./ui/ripple";
 
@@ -45,6 +51,11 @@ interface AppSettings {
   set_as_default_browser: boolean;
   theme: string;
   custom_theme?: Record<string, string>;
+}
+
+interface CustomThemeState {
+  selectedThemeId: string | null;
+  colors: Record<string, string>;
 }
 
 interface PermissionInfo {
@@ -70,6 +81,10 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     set_as_default_browser: false,
     theme: "system",
     custom_theme: undefined,
+  });
+  const [customThemeState, setCustomThemeState] = useState<CustomThemeState>({
+    selectedThemeId: null,
+    colors: {},
   });
   const [isDefaultBrowser, setIsDefaultBrowser] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -126,60 +141,40 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
         return "Access to camera for browser applications";
     }
   }, []);
-  const TOKYO_NIGHT_DEFAULTS: Record<string, string> = {
-    "--background": "#1a1b26",
-    "--foreground": "#c0caf5",
-    "--card": "#24283b",
-    "--card-foreground": "#c0caf5",
-    "--popover": "#24283b",
-    "--popover-foreground": "#c0caf5",
-    "--primary": "#7aa2f7",
-    "--primary-foreground": "#1a1b26",
-    "--secondary": "#2ac3de",
-    "--secondary-foreground": "#1a1b26",
-    "--muted": "#3b4261",
-    "--muted-foreground": "#a9b1d6",
-    "--accent": "#bb9af7",
-    "--accent-foreground": "#1a1b26",
-    "--destructive": "#f7768e",
-    "--destructive-foreground": "#1a1b26",
-    "--border": "#3b4261",
-  };
-
-  const THEME_VARIABLES: Array<{ key: string; label: string }> = [
-    { key: "--background", label: "Background" },
-    { key: "--foreground", label: "Foreground" },
-    { key: "--card", label: "Card" },
-    { key: "--card-foreground", label: "Card FG" },
-    { key: "--popover", label: "Popover" },
-    { key: "--popover-foreground", label: "Popover FG" },
-    { key: "--primary", label: "Primary" },
-    { key: "--primary-foreground", label: "Primary FG" },
-    { key: "--secondary", label: "Secondary" },
-    { key: "--secondary-foreground", label: "Secondary FG" },
-    { key: "--muted", label: "Muted" },
-    { key: "--muted-foreground", label: "Muted FG" },
-    { key: "--accent", label: "Accent" },
-    { key: "--accent-foreground", label: "Accent FG" },
-    { key: "--destructive", label: "Destructive" },
-    { key: "--destructive-foreground", label: "Destructive FG" },
-    { key: "--border", label: "Border" },
-  ];
 
   const loadSettings = useCallback(async () => {
     setIsLoading(true);
     try {
       const appSettings = await invoke<AppSettings>("get_app_settings");
+      const tokyoNightTheme = getThemeById("tokyo-night");
+      if (!tokyoNightTheme) {
+        throw new Error("Tokyo Night theme not found");
+      }
       const merged: AppSettings = {
         ...appSettings,
         custom_theme:
           appSettings.custom_theme &&
           Object.keys(appSettings.custom_theme).length > 0
             ? appSettings.custom_theme
-            : TOKYO_NIGHT_DEFAULTS,
+            : tokyoNightTheme.colors,
       };
       setSettings(merged);
       setOriginalSettings(merged);
+
+      // Initialize custom theme state
+      if (merged.theme === "custom" && merged.custom_theme) {
+        const matchingTheme = getThemeByColors(merged.custom_theme);
+        setCustomThemeState({
+          selectedThemeId: matchingTheme?.id || null,
+          colors: merged.custom_theme,
+        });
+      } else if (merged.theme === "custom") {
+        // Initialize with Tokyo Night if no custom theme exists
+        setCustomThemeState({
+          selectedThemeId: "tokyo-night",
+          colors: tokyoNightTheme.colors,
+        });
+      }
     } catch (error) {
       console.error("Failed to load settings:", error);
     } finally {
@@ -196,7 +191,9 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
 
   const clearCustomTheme = useCallback(() => {
     const root = document.documentElement;
-    THEME_VARIABLES.forEach(({ key }) => root.style.removeProperty(key));
+    THEME_VARIABLES.forEach(({ key }) =>
+      root.style.removeProperty(key as string),
+    );
   }, []);
 
   const loadPermissions = useCallback(async () => {
@@ -291,18 +288,31 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   const handleSave = useCallback(async () => {
     setIsSaving(true);
     try {
-      await invoke("save_app_settings", { settings });
+      // Update settings with current custom theme state
+      const settingsToSave = {
+        ...settings,
+        custom_theme:
+          settings.theme === "custom"
+            ? customThemeState.colors
+            : settings.custom_theme,
+      };
+
+      await invoke("save_app_settings", { settings: settingsToSave });
       setTheme(settings.theme === "custom" ? "dark" : settings.theme);
+
       // Apply or clear custom variables only on Save
       if (settings.theme === "custom") {
-        if (settings.custom_theme) {
+        if (
+          customThemeState.colors &&
+          Object.keys(customThemeState.colors).length > 0
+        ) {
           try {
             const root = document.documentElement;
             // Clear any previous custom vars first
             THEME_VARIABLES.forEach(({ key }) =>
-              root.style.removeProperty(key),
+              root.style.removeProperty(key as string),
             );
-            Object.entries(settings.custom_theme).forEach(([k, v]) =>
+            Object.entries(customThemeState.colors).forEach(([k, v]) =>
               root.style.setProperty(k, v, "important"),
             );
           } catch {}
@@ -310,17 +320,20 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
       } else {
         try {
           const root = document.documentElement;
-          THEME_VARIABLES.forEach(({ key }) => root.style.removeProperty(key));
+          THEME_VARIABLES.forEach(({ key }) =>
+            root.style.removeProperty(key as string),
+          );
         } catch {}
       }
-      setOriginalSettings(settings);
+
+      setOriginalSettings(settingsToSave);
       onClose();
     } catch (error) {
       console.error("Failed to save settings:", error);
     } finally {
       setIsSaving(false);
     }
-  }, [onClose, setTheme, settings]);
+  }, [onClose, setTheme, settings, customThemeState]);
 
   const updateSetting = useCallback(
     (
@@ -339,6 +352,16 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     } else {
       clearCustomTheme();
     }
+
+    // Reset custom theme state to original
+    if (originalSettings.theme === "custom" && originalSettings.custom_theme) {
+      const matchingTheme = getThemeByColors(originalSettings.custom_theme);
+      setCustomThemeState({
+        selectedThemeId: matchingTheme?.id || null,
+        colors: originalSettings.custom_theme,
+      });
+    }
+
     onClose();
   }, [
     originalSettings.theme,
@@ -348,19 +371,12 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     onClose,
   ]);
 
-  // Apply custom theme live when editing
+  // Only clear custom theme when switching away from custom, don't apply live changes
   useEffect(() => {
-    if (settings.theme === "custom" && settings.custom_theme) {
-      applyCustomTheme(settings.custom_theme);
-    } else if (settings.theme !== "custom") {
+    if (settings.theme !== "custom") {
       clearCustomTheme();
     }
-  }, [
-    settings.theme,
-    settings.custom_theme,
-    applyCustomTheme,
-    clearCustomTheme,
-  ]);
+  }, [settings.theme, clearCustomTheme]);
 
   useEffect(() => {
     if (isOpen) {
@@ -417,8 +433,12 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   // Check if settings have changed (excluding default browser setting)
   const hasChanges =
     settings.theme !== originalSettings.theme ||
-    JSON.stringify(settings.custom_theme ?? {}) !==
-      JSON.stringify(originalSettings.custom_theme ?? {});
+    (settings.theme === "custom" &&
+      JSON.stringify(customThemeState.colors) !==
+        JSON.stringify(originalSettings.custom_theme ?? {})) ||
+    (settings.theme !== "custom" &&
+      JSON.stringify(settings.custom_theme ?? {}) !==
+        JSON.stringify(originalSettings.custom_theme ?? {}));
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -440,8 +460,14 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                 value={settings.theme}
                 onValueChange={(value) => {
                   updateSetting("theme", value);
-                  if (value === "custom" && !settings.custom_theme) {
-                    updateSetting("custom_theme", TOKYO_NIGHT_DEFAULTS);
+                  if (value === "custom") {
+                    const tokyoNightTheme = getThemeById("tokyo-night");
+                    if (tokyoNightTheme) {
+                      setCustomThemeState({
+                        selectedThemeId: "tokyo-night",
+                        colors: tokyoNightTheme.colors,
+                      });
+                    }
                   }
                 }}
               >
@@ -458,18 +484,57 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Choose your preferred theme or follow your system settings.
+              Choose your preferred theme or follow your system settings. Custom
+              theme changes are applied only when you save.
             </p>
 
             {settings.theme === "custom" && (
               <div className="space-y-3">
-                <div className="text-sm font-medium">Custom theme</div>
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="theme-preset-select"
+                    className="text-sm font-medium"
+                  >
+                    Theme Preset
+                  </Label>
+                  <Select
+                    value={customThemeState.selectedThemeId || "custom"}
+                    onValueChange={(value) => {
+                      if (value === "custom") {
+                        setCustomThemeState((prev) => ({
+                          ...prev,
+                          selectedThemeId: null,
+                        }));
+                      } else {
+                        const theme = getThemeById(value);
+                        if (theme) {
+                          setCustomThemeState({
+                            selectedThemeId: value,
+                            colors: theme.colors,
+                          });
+                        }
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="theme-preset-select">
+                      <SelectValue placeholder="Select a theme preset" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {THEMES.map((theme) => (
+                        <SelectItem key={theme.id} value={theme.id}>
+                          {theme.name}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="custom">Your Own</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="text-sm font-medium">Custom Colors</div>
                 <div className="grid grid-cols-4 gap-3">
                   {THEME_VARIABLES.map(({ key, label }) => {
                     const colorValue =
-                      settings.custom_theme?.[key] ??
-                      TOKYO_NIGHT_DEFAULTS[key] ??
-                      "#000000";
+                      customThemeState.colors[key] || "#000000";
                     return (
                       <div
                         key={key}
@@ -494,12 +559,19 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                               onColorChange={([r, g, b, a]) => {
                                 const next = Color({ r, g, b }).alpha(a);
                                 const nextStr = next.hexa();
-                                const nextTheme = {
-                                  ...(settings.custom_theme ?? {}),
+                                const newColors = {
+                                  ...customThemeState.colors,
                                   [key]: nextStr,
-                                } as Record<string, string>;
-                                updateSetting("custom_theme", nextTheme);
-                                // No live preview; applied on Save
+                                };
+
+                                // Check if colors match any preset theme
+                                const matchingTheme =
+                                  getThemeByColors(newColors);
+
+                                setCustomThemeState({
+                                  selectedThemeId: matchingTheme?.id || null,
+                                  colors: newColors,
+                                });
                               }}
                             >
                               <ColorPickerSelection className="h-36 rounded" />

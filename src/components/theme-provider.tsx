@@ -2,6 +2,7 @@
 
 import { ThemeProvider } from "next-themes";
 import { useEffect, useState } from "react";
+import { applyThemeColors, clearThemeColors } from "@/lib/themes";
 
 interface AppSettings {
   set_as_default_browser: boolean;
@@ -37,17 +38,13 @@ export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
         ) {
           setDefaultTheme(themeValue);
         } else if (themeValue === "custom") {
-          setDefaultTheme("light");
+          setDefaultTheme("dark");
           if (
             settings.custom_theme &&
             Object.keys(settings.custom_theme).length > 0
           ) {
             try {
-              const root = document.documentElement;
-              // Apply with !important to override CSS defaults
-              Object.entries(settings.custom_theme).forEach(([k, v]) => {
-                root.style.setProperty(k, v, "important");
-              });
+              applyThemeColors(settings.custom_theme);
             } catch (error) {
               console.warn("Failed to apply custom theme variables:", error);
             }
@@ -79,10 +76,9 @@ export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
           const settings = await invoke<AppSettings>("get_app_settings");
 
           if (settings?.theme === "custom" && settings.custom_theme) {
-            const root = document.documentElement;
-            Object.entries(settings.custom_theme).forEach(([k, v]) => {
-              root.style.setProperty(k, v, "important");
-            });
+            applyThemeColors(settings.custom_theme);
+          } else {
+            clearThemeColors();
           }
         } catch (error) {
           console.warn("Failed to reapply custom theme:", error);

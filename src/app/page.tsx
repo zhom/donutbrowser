@@ -765,7 +765,7 @@ export default function Home() {
   }, [isInitialized, checkAllPermissions]);
 
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen gap-8 font-[family-name:var(--font-geist-sans)]  bg-white dark:bg-black">
+    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen gap-8 font-[family-name:var(--font-geist-sans)] bg-background">
       <main className="flex flex-col row-start-2 gap-6 items-center w-full max-w-3xl">
         <div className="w-full">
           <HomeHeader
@@ -805,13 +805,13 @@ export default function Home() {
       </main>
 
       {isInitializing && (
-        <div className="fixed inset-0 z-[100000] backdrop-blur-sm bg-black/30 flex items-center justify-center">
-          <div className="bg-white dark:bg-neutral-900 rounded-xl p-6 shadow-xl border border-black/10 dark:border-white/10 w-[320px] text-center">
+        <div className="fixed inset-0 z-[100000] backdrop-blur-sm bg-background/30 flex items-center justify-center">
+          <div className="bg-background rounded-xl p-6 shadow-xl border border-border/10 w-[320px] text-center">
             <div className="text-lg font-medium">Initializing</div>
             <div className="mt-1 mb-2 text-sm text-gray-600 dark:text-gray-300">
               Please don't close the app
             </div>
-            <div className="mx-auto mb-4 w-8 h-8 rounded-full border-2 border-gray-300 animate-spin border-t-gray-900 dark:border-gray-700 dark:border-t-white" />
+            <div className="mx-auto mb-4 w-8 h-8 rounded-full border-2 animate-spin border-border/10 border-t-border/10" />
           </div>
         </div>
       )}
