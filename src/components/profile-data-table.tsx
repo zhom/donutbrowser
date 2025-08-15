@@ -220,33 +220,56 @@ const TagsCell = React.memo<{
 
     if (openTagsEditorFor !== profile.name) {
       const hiddenCount = Math.max(0, effectiveTags.length - visibleCount);
+      const ButtonContent = (
+        <button
+          type="button"
+          ref={containerRef as unknown as React.RefObject<HTMLButtonElement>}
+          className={cn(
+            "flex items-center gap-1 overflow-hidden cursor-pointer bg-transparent border-none p-1 w-full h-full",
+            isDisabled && "opacity-60",
+          )}
+          onClick={() => {
+            if (!isDisabled) setOpenTagsEditorFor(profile.name);
+          }}
+        >
+          {effectiveTags.slice(0, visibleCount).map((t) => (
+            <Badge key={t} variant="secondary" className="px-2 py-0 text-xs">
+              {t}
+            </Badge>
+          ))}
+          {effectiveTags.length === 0 && (
+            <span className="text-muted-foreground">No tags</span>
+          )}
+          {hiddenCount > 0 && (
+            <Badge variant="outline" className="px-2 py-0 text-xs">
+              +{hiddenCount}
+            </Badge>
+          )}
+        </button>
+      );
+
       return (
         <div className="w-48 h-full cursor-pointer">
-          <button
-            type="button"
-            ref={containerRef as unknown as React.RefObject<HTMLButtonElement>}
-            className={cn(
-              "flex items-center gap-1 overflow-hidden cursor-pointer bg-transparent border-none p-1 w-full h-full",
-              isDisabled && "opacity-60",
-            )}
-            onClick={() => {
-              if (!isDisabled) setOpenTagsEditorFor(profile.name);
-            }}
-          >
-            {effectiveTags.slice(0, visibleCount).map((t) => (
-              <Badge key={t} variant="secondary" className="px-2 py-0 text-xs">
-                {t}
-              </Badge>
-            ))}
-            {effectiveTags.length === 0 && (
-              <span className="text-muted-foreground">No tags</span>
-            )}
-            {hiddenCount > 0 && (
-              <Badge variant="outline" className="px-2 py-0 text-xs">
-                +{hiddenCount}
-              </Badge>
-            )}
-          </button>
+          {hiddenCount > 0 ? (
+            <Tooltip>
+              <TooltipTrigger asChild>{ButtonContent}</TooltipTrigger>
+              <TooltipContent className="max-w-[320px]">
+                <div className="flex flex-wrap gap-1">
+                  {effectiveTags.map((t) => (
+                    <Badge
+                      key={t}
+                      variant="secondary"
+                      className="px-2 py-0 text-xs"
+                    >
+                      {t}
+                    </Badge>
+                  ))}
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            ButtonContent
+          )}
         </div>
       );
     }
