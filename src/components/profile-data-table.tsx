@@ -1008,13 +1008,13 @@ export function ProfilesDataTable({
                   }}
                   className="inline-block w-full"
                 />
-                <div className="flex absolute right-0 top-full z-50 gap-1 translate-y-[30%] opacity-100">
+                <div className="flex absolute right-0 top-full z-50 gap-1 translate-y-[30%] opacity-100 bg-black rounded-md">
                   <LoadingButton
                     isLoading={isRenamingSaving}
                     size="sm"
                     variant="default"
                     disabled={isSaveDisabled}
-                    className="cursor-pointer"
+                    className="cursor-pointer [&[disabled]]:bg-primary/80"
                     onClick={() => void stableHandlers.handleRename()}
                   >
                     Save
