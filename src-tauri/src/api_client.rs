@@ -334,15 +334,21 @@ pub struct ApiClient {
 }
 
 impl ApiClient {
-  fn new() -> Self {
+  pub fn new() -> Self {
+    let client = Client::builder()
+      .timeout(std::time::Duration::from_secs(30))
+      .build()
+      .unwrap_or_else(|_| Client::new());
+    
     Self {
-      client: Client::new(),
+      client,
       firefox_api_base: "https://product-details.mozilla.org/1.0".to_string(),
       firefox_dev_api_base: "https://product-details.mozilla.org/1.0".to_string(),
       github_api_base: "https://api.github.com".to_string(),
       chromium_api_base: "https://commondatastorage.googleapis.com/chromium-browser-snapshots"
         .to_string(),
-      tor_archive_base: "https://archive.torproject.org/tor-package-archive/torbrowser".to_string(),
+      tor_archive_base: "https://archive.torproject.org/tor-package-archive/torbrowser"
+        .to_string(),
     }
   }
 
@@ -653,13 +659,12 @@ impl ApiClient {
       .await?;
 
     if !response.status().is_success() {
-      return Err(
-        format!(
-          "Failed to fetch Firefox Developer Edition versions: {}",
-          response.status()
-        )
-        .into(),
+      let error_msg = format!(
+        "Failed to fetch Firefox Developer Edition versions: {} - URL: {}",
+        response.status(), url
       );
+      eprintln!("{}", error_msg);
+      return Err(error_msg.into());
     }
 
     let firefox_response: FirefoxApiResponse = response.json().await?;

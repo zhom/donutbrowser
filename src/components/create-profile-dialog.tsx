@@ -236,10 +236,14 @@ export function CreateProfileDialog({
   // Load data when dialog opens
   useEffect(() => {
     if (isOpen) {
+      // Ensure we have a selected browser
+      if (!selectedBrowser) {
+        setSelectedBrowser("camoufox");
+      }
       void loadSupportedBrowsers();
       void loadStoredProxies();
       // Load camoufox release types when dialog opens
-      void loadReleaseTypes("camoufox");
+      void loadReleaseTypes(selectedBrowser || "camoufox");
       // Check and download GeoIP database if needed for Camoufox
       void checkAndDownloadGeoIPDatabase();
     }
@@ -249,6 +253,7 @@ export function CreateProfileDialog({
     loadStoredProxies,
     loadReleaseTypes,
     checkAndDownloadGeoIPDatabase,
+    selectedBrowser,
   ]);
 
   // Load release types when browser selection changes
@@ -361,7 +366,7 @@ export function CreateProfileDialog({
 
     // Reset all states
     setProfileName("");
-    setSelectedBrowser(null);
+    setSelectedBrowser("camoufox"); // Set default browser instead of null
     setSelectedProxyId(undefined);
     setReleaseTypes({});
     setCamoufoxConfig({
