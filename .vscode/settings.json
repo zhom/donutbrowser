@@ -131,6 +131,7 @@
     "SARIF",
     "scipy",
     "screeninfo",
+    "selectables",
     "serde",
     "setuptools",
     "shadcn",

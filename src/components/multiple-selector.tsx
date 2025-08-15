@@ -352,6 +352,10 @@ const MultipleSelector = React.forwardRef<
       [options, selected],
     );
 
+    const hasAvailableOptions = React.useMemo(() => {
+      return Object.values(selectables).some((group) => group.length > 0);
+    }, [selectables]);
+
     /** Avoid Creatable Selector freezing or lagging when paste a long string. */
     const commandFilter = React.useCallback(() => {
       if (commandProps?.filter) {
@@ -499,7 +503,7 @@ const MultipleSelector = React.forwardRef<
                 "flex-1 bg-transparent outline-none placeholder:text-muted-foreground",
                 {
                   "w-full": hidePlaceholderWhenSelected,
-                  "px-3 py-2": selected.length === 0,
+                  "px-3 mt-1": selected.length === 0,
                   "ml-1": selected.length !== 0,
                 },
                 inputProps?.className,
@@ -508,7 +512,7 @@ const MultipleSelector = React.forwardRef<
           </div>
         </div>
         <div className="relative">
-          {open && (
+          {open && hasAvailableOptions && (
             <CommandList className="absolute top-1 z-10 w-full rounded-md border shadow-md outline-none bg-popover text-popover-foreground animate-in">
               {isLoading ? (
                 loadingIndicator

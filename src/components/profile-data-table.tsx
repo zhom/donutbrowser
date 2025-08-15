@@ -263,7 +263,7 @@ const TagsCell = React.memo<{
             creatable
             selectFirstItem={false}
             placeholder={effectiveTags.length === 0 ? "Add tags" : ""}
-            className="bg-transparent"
+            className="overflow-x-hidden overflow-y-scroll h-7 bg-transparent"
             badgeClassName=""
             inputProps={{
               className: "py-1",
