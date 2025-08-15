@@ -1029,7 +1029,7 @@ export function ProfilesDataTable({
                       stableHandlers.setRenameError(null);
                     }
                   }}
-                  className="inline-block w-full"
+                  className="inline-block w-48"
                 />
                 <div className="flex absolute right-0 top-full z-50 gap-1 translate-y-[30%] opacity-100 bg-black rounded-md">
                   <LoadingButton
@@ -1075,7 +1075,7 @@ export function ProfilesDataTable({
             <button
               type="button"
               className={cn(
-                "p-2 mr-auto w-full text-left bg-transparent rounded border-none",
+                "p-2 mr-auto w-48 text-left bg-transparent rounded border-none",
                 isDisabled
                   ? "opacity-60 cursor-not-allowed"
                   : "cursor-pointer hover:bg-accent/50",
