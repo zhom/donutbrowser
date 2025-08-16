@@ -21,11 +21,11 @@
   "author": "",
   "license": "AGPL-3.0",
   "dependencies": {
-    "@types/node": "^24.2.1",
+    "@types/node": "^24.3.0",
     "commander": "^14.0.0",
     "donutbrowser-camoufox-js": "^0.6.6",
     "dotenv": "^17.2.1",
-    "fingerprint-generator": "^2.1.69",
+    "fingerprint-generator": "^2.1.70",
     "get-port": "^7.1.0",
     "nodemon": "^3.1.10",
     "playwright-core": "^1.54.2",
