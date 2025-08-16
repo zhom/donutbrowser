@@ -3,7 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrent } from "@tauri-apps/plugin-deep-link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CamoufoxConfigDialog } from "@/components/camoufox-config-dialog";
 import { CreateProfileDialog } from "@/components/create-profile-dialog";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
@@ -764,6 +764,15 @@ export default function Home() {
     }
   }, [isInitialized, checkAllPermissions]);
 
+  // Filter data by selected group
+  const filteredProfiles = useMemo(() => {
+    if (!selectedGroupId || selectedGroupId === "default") {
+      return profiles.filter((profile) => !profile.group_id);
+    }
+
+    return profiles.filter((profile) => profile.group_id === selectedGroupId);
+  }, [profiles, selectedGroupId]);
+
   return (
     <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen gap-8 font-[family-name:var(--font-geist-sans)] bg-background">
       <main className="flex flex-col row-start-2 gap-6 items-center w-full max-w-3xl">
@@ -787,7 +796,7 @@ export default function Home() {
             isLoading={areGroupsLoading}
           />
           <ProfilesDataTable
-            data={profiles}
+            profiles={filteredProfiles}
             onLaunchProfile={launchProfile}
             onKillProfile={handleKillProfile}
             onDeleteProfile={handleDeleteProfile}
