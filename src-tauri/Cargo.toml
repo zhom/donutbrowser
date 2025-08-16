@@ -32,7 +32,7 @@ tauri-plugin-macos-permissions = "2"
 directories = "6"
 reqwest = { version = "0.12", features = ["json", "stream"] }
 tokio = { version = "1", features = ["full", "sync"] }
-sysinfo = "0.36"
+sysinfo = "0.37"
 lazy_static = "1.4"
 base64 = "0.22"
 async-trait = "0.1"
@@ -44,7 +44,7 @@ flate2 = "1"
 lzma-rs = "0"
 msi-extract = "0"
 
-uuid = { version = "1.0", features = ["v4", "serde"] }
+uuid = { version = "1.18", features = ["v4", "serde"] }
 url = "2.5"
 chrono = { version = "0.4", features = ["serde"] }
 
@@ -53,7 +53,7 @@ tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"
-objc2 = "0.6.1"
+objc2 = "0.6.2"
 objc2-app-kit = { version = "0.3.1", features = ["NSWindow"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
