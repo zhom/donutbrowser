@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { BsCamera, BsMic } from "react-icons/bs";
 import { LoadingButton } from "@/components/loading-button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   ColorPicker,
   ColorPickerAlpha,
@@ -51,6 +52,8 @@ interface AppSettings {
   set_as_default_browser: boolean;
   theme: string;
   custom_theme?: Record<string, string>;
+  api_enabled: boolean;
+  api_port: number;
 }
 
 interface CustomThemeState {
@@ -76,11 +79,15 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     set_as_default_browser: false,
     theme: "system",
     custom_theme: undefined,
+    api_enabled: false,
+    api_port: 10108,
   });
   const [originalSettings, setOriginalSettings] = useState<AppSettings>({
     set_as_default_browser: false,
     theme: "system",
     custom_theme: undefined,
+    api_enabled: false,
+    api_port: 10108,
   });
   const [customThemeState, setCustomThemeState] = useState<CustomThemeState>({
     selectedThemeId: null,
@@ -96,6 +103,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   const [requestingPermission, setRequestingPermission] =
     useState<PermissionType | null>(null);
   const [isMacOS, setIsMacOS] = useState(false);
+  const [apiServerPort, setApiServerPort] = useState<number | null>(null);
 
   const { setTheme } = useTheme();
   const {
@@ -285,6 +293,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     },
     [getPermissionDisplayName, requestPermission],
   );
+
   const handleSave = useCallback(async () => {
     setIsSaving(true);
     try {
@@ -326,6 +335,43 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
         } catch {}
       }
 
+      // Handle API server start/stop based on settings
+      const wasApiEnabled = originalSettings.api_enabled;
+      const isApiEnabled = settingsToSave.api_enabled;
+
+      if (isApiEnabled && !wasApiEnabled) {
+        // Start API server
+        try {
+          const port = await invoke<number>("start_api_server", {
+            port: settingsToSave.api_port,
+          });
+          setApiServerPort(port);
+          showSuccessToast(`Local API started on port ${port}`);
+        } catch (error) {
+          console.error("Failed to start API server:", error);
+          showErrorToast("Failed to start API server", {
+            description:
+              error instanceof Error ? error.message : "Unknown error occurred",
+          });
+          // Revert the API enabled setting if start failed
+          settingsToSave.api_enabled = false;
+          await invoke("save_app_settings", { settings: settingsToSave });
+        }
+      } else if (!isApiEnabled && wasApiEnabled) {
+        // Stop API server
+        try {
+          await invoke("stop_api_server");
+          setApiServerPort(null);
+          showSuccessToast("Local API stopped");
+        } catch (error) {
+          console.error("Failed to stop API server:", error);
+          showErrorToast("Failed to stop API server", {
+            description:
+              error instanceof Error ? error.message : "Unknown error occurred",
+          });
+        }
+      }
+
       setOriginalSettings(settingsToSave);
       onClose();
     } catch (error) {
@@ -333,7 +379,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     } finally {
       setIsSaving(false);
     }
-  }, [onClose, setTheme, settings, customThemeState]);
+  }, [onClose, setTheme, settings, customThemeState, originalSettings]);
 
   const updateSetting = useCallback(
     (
@@ -344,6 +390,16 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     },
     [],
   );
+
+  const loadApiServerStatus = useCallback(async () => {
+    try {
+      const port = await invoke<number | null>("get_api_server_status");
+      setApiServerPort(port);
+    } catch (error) {
+      console.error("Failed to load API server status:", error);
+      setApiServerPort(null);
+    }
+  }, []);
 
   const handleClose = useCallback(() => {
     // Restore original theme when closing without saving
@@ -382,6 +438,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     if (isOpen) {
       loadSettings().catch(console.error);
       checkDefaultBrowserStatus().catch(console.error);
+      loadApiServerStatus().catch(console.error);
 
       // Check if we're on macOS
       const userAgent = navigator.userAgent;
@@ -402,7 +459,13 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
         clearInterval(intervalId);
       };
     }
-  }, [isOpen, loadPermissions, checkDefaultBrowserStatus, loadSettings]);
+  }, [
+    isOpen,
+    loadPermissions,
+    checkDefaultBrowserStatus,
+    loadSettings,
+    loadApiServerStatus,
+  ]);
 
   // Update permissions when the permission states change
   useEffect(() => {
@@ -433,6 +496,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   // Check if settings have changed (excluding default browser setting)
   const hasChanges =
     settings.theme !== originalSettings.theme ||
+    settings.api_enabled !== originalSettings.api_enabled ||
     (settings.theme === "custom" &&
       JSON.stringify(customThemeState.colors) !==
         JSON.stringify(originalSettings.custom_theme ?? {})) ||
@@ -691,6 +755,39 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
               </p>
             </div>
           )}
+
+          {/* Local API Section */}
+          <div className="space-y-4">
+            <Label className="text-base font-medium">Local API</Label>
+
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="api-enabled"
+                checked={settings.api_enabled}
+                onCheckedChange={(checked: boolean) => {
+                  updateSetting("api_enabled", checked);
+                }}
+              />
+              <div className="grid gap-1.5 leading-none">
+                <Label
+                  htmlFor="api-enabled"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  Enable Local API Server
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Allows external applications to manage profiles via HTTP API.
+                  Server will start on port 10108 or a random port if
+                  unavailable.
+                  {apiServerPort && (
+                    <span className="ml-1 font-medium text-green-600">
+                      (Currently running on port {apiServerPort})
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+          </div>
 
           {/* Advanced Section */}
           <div className="space-y-4">

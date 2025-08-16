@@ -8,6 +8,7 @@ use tauri_plugin_deep_link::DeepLinkExt;
 static PENDING_URLS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 mod api_client;
+mod api_server;
 mod app_auto_updater;
 mod auto_updater;
 mod browser;
@@ -28,8 +29,6 @@ mod settings_manager;
 // mod theme_detector; // removed: theme detection handled in webview via CSS prefers-color-scheme
 mod tag_manager;
 mod version_updater;
-
-extern crate lazy_static;
 
 use browser_runner::{
   check_browser_exists, check_browser_status, check_missing_binaries, check_missing_geoip_database,
@@ -71,6 +70,8 @@ use group_manager::{
 use geoip_downloader::GeoIPDownloader;
 
 use browser_version_manager::get_browser_release_types;
+
+use api_server::{get_api_server_status, start_api_server, stop_api_server};
 
 // Trait to extend WebviewWindow with transparent titlebar functionality
 pub trait WindowExt {
@@ -490,6 +491,55 @@ pub fn run() {
 
       // Nodecar warm-up is now triggered from the frontend to allow UI blocking overlay
 
+      // Start API server if enabled in settings
+      let app_handle_api = app.handle().clone();
+      tauri::async_runtime::spawn(async move {
+        match crate::settings_manager::get_app_settings().await {
+          Ok(settings) => {
+            if settings.api_enabled {
+              println!("API is enabled in settings, starting API server...");
+              match crate::api_server::start_api_server_internal(settings.api_port, &app_handle_api)
+                .await
+              {
+                Ok(port) => {
+                  println!("API server started successfully on port {port}");
+                  // Emit success toast to frontend
+                  if let Err(e) = app_handle_api.emit(
+                    "show-toast",
+                    crate::api_server::ToastPayload {
+                      message: "API server started successfully".to_string(),
+                      variant: "success".to_string(),
+                      title: "Local API Started".to_string(),
+                      description: Some(format!("API server running on port {port}")),
+                    },
+                  ) {
+                    eprintln!("Failed to emit API start toast: {e}");
+                  }
+                }
+                Err(e) => {
+                  eprintln!("Failed to start API server at startup: {e}");
+                  // Emit error toast to frontend
+                  if let Err(toast_err) = app_handle_api.emit(
+                    "show-toast",
+                    crate::api_server::ToastPayload {
+                      message: "Failed to start API server".to_string(),
+                      variant: "error".to_string(),
+                      title: "Failed to Start Local API".to_string(),
+                      description: Some(format!("Error: {e}")),
+                    },
+                  ) {
+                    eprintln!("Failed to emit API error toast: {toast_err}");
+                  }
+                }
+              }
+            }
+          }
+          Err(e) => {
+            eprintln!("Failed to load app settings for API startup: {e}");
+          }
+        }
+      });
+
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
@@ -551,6 +601,9 @@ pub fn run() {
       is_geoip_database_available,
       download_geoip_database,
       warm_up_nodecar,
+      start_api_server,
+      stop_api_server,
+      get_api_server_status,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

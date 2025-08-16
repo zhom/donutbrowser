@@ -32,7 +32,7 @@ tauri-plugin-macos-permissions = "2"
 directories = "6"
 reqwest = { version = "0.12", features = ["json", "stream"] }
 tokio = { version = "1", features = ["full", "sync"] }
-sysinfo = "0.36"
+sysinfo = "0.37"
 lazy_static = "1.4"
 base64 = "0.22"
 async-trait = "0.1"
@@ -47,6 +47,10 @@ msi-extract = "0"
 uuid = { version = "1.0", features = ["v4", "serde"] }
 url = "2.5"
 chrono = { version = "0.4", features = ["serde"] }
+axum = "0.8.4"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors"] }
+rand = "0.9.2"
 
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }

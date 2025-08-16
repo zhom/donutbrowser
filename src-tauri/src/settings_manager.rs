@@ -29,10 +29,18 @@ pub struct AppSettings {
   pub theme: String, // "light", "dark", or "system"
   #[serde(default)]
   pub custom_theme: Option<std::collections::HashMap<String, String>>, // CSS var name -> value (e.g., "--background": "#1a1b26")
+  #[serde(default)]
+  pub api_enabled: bool,
+  #[serde(default = "default_api_port")]
+  pub api_port: u16,
 }
 
 fn default_theme() -> String {
   "system".to_string()
+}
+
+fn default_api_port() -> u16 {
+  10108
 }
 
 impl Default for AppSettings {
@@ -41,6 +49,8 @@ impl Default for AppSettings {
       set_as_default_browser: false,
       theme: "system".to_string(),
       custom_theme: None,
+      api_enabled: false,
+      api_port: 10108,
     }
   }
 }
@@ -325,6 +335,8 @@ mod tests {
       set_as_default_browser: true,
       theme: "dark".to_string(),
       custom_theme: None,
+      api_enabled: false,
+      api_port: 10108,
     };
 
     // Save settings
