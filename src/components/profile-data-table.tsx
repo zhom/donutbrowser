@@ -225,8 +225,8 @@ const TagsCell = React.memo<{
           type="button"
           ref={containerRef as unknown as React.RefObject<HTMLButtonElement>}
           className={cn(
-            "flex items-center gap-1 overflow-hidden cursor-pointer bg-transparent border-none p-1 w-full h-full",
-            isDisabled && "opacity-60",
+            "flex overflow-hidden gap-1 items-center p-2.5 w-full bg-transparent rounded border-none cursor-pointer",
+            isDisabled ? "opacity-60" : "cursor-pointer hover:bg-accent/50",
           )}
           onClick={() => {
             if (!isDisabled) setOpenTagsEditorFor(profile.name);
