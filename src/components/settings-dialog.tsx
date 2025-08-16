@@ -773,10 +773,10 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                   htmlFor="api-enabled"
                   className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                 >
-                  Enable Local API Server
+                  (ALPHA) Enable Local API Server
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Allows external applications to manage profiles via HTTP API.
+                  Allow managing the application data externally via REST API.
                   Server will start on port 10108 or a random port if
                   unavailable.
                   {apiServerPort && (
