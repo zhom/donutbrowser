@@ -727,41 +727,10 @@ pub mod windows {
       cmd.current_dir(parent_dir);
     }
 
-    let output = cmd.output()?;
-
-    if !output.status.success() {
-      // Try fallback without --new-window
-      let mut fallback_cmd = Command::new(&executable_path);
-      fallback_cmd.args([
-        &format!(
-          "--user-data-dir={}",
-          profile
-            .get_profile_data_path(profiles_dir)
-            .to_string_lossy()
-        ),
-        url,
-      ]);
-
-      if let Some(parent_dir) = browser_dir
-        .parent()
-        .or_else(|| browser_dir.ancestors().nth(1))
-      {
-        fallback_cmd.current_dir(parent_dir);
-      }
-
-      let fallback_output = fallback_cmd.output()?;
-
-      if !fallback_output.status.success() {
-        return Err(
-          format!(
-            "Failed to open URL in existing Chromium-based browser: {}",
-            String::from_utf8_lossy(&fallback_output.stderr)
-          )
-          .into(),
-        );
-      }
-    }
-
+    // Do not call output() to avoid blocking the UI thread while the browser processes the request.
+    // Spawn the helper process and return immediately. This applies to Chromium-based browsers
+    // including Brave to prevent UI freezes observed in production.
+    let _child = cmd.spawn()?;
     Ok(())
   }
 

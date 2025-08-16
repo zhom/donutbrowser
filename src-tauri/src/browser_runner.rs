@@ -1380,9 +1380,10 @@ impl BrowserRunner {
       return Err(error_details.into());
     }
 
-    registry
-      .mark_download_completed(&browser_str, &version)
-      .map_err(|e| format!("Failed to mark download as completed: {e}"))?;
+    // Mark completion in registry. If it fails (e.g., rare race during cleanup), log but continue.
+    if let Err(e) = registry.mark_download_completed(&browser_str, &version) {
+      eprintln!("Warning: Could not mark {browser_str} {version} as completed in registry: {e}");
+    }
     registry
       .save()
       .map_err(|e| format!("Failed to save registry: {e}"))?;

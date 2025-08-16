@@ -402,23 +402,44 @@ impl Downloader {
       existing_size = meta.len();
     }
 
-    // Build request, add Range only if we have bytes
-    let mut request = self
-      .client
-      .get(&download_url)
-      .header(
-        "User-Agent",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
-      );
+    // Build request, add Range only if we have bytes. If the server responds with 416 (Range Not
+    // Satisfiable), delete the partial file and retry once without the Range header.
+    let response = {
+      let mut request = self
+        .client
+        .get(&download_url)
+        .header(
+          "User-Agent",
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+        );
 
-    if existing_size > 0 {
-      request = request.header("Range", format!("bytes={existing_size}-"));
-    }
+      if existing_size > 0 {
+        request = request.header("Range", format!("bytes={existing_size}-"));
+      }
 
-    // Start download (or resume)
-    let response = request.send().await?;
+      let first = request.send().await?;
 
-    // Check if the response is successful
+      if first.status().as_u16() == 416 && existing_size > 0 {
+        // Partial file on disk is not acceptable to the server — remove it and retry from scratch
+        let _ = std::fs::remove_file(&file_path);
+        existing_size = 0;
+
+        let retry = self
+          .client
+          .get(&download_url)
+          .header(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+          )
+          .send()
+          .await?;
+        retry
+      } else {
+        first
+      }
+    };
+
+    // Check if the response is successful (200 OK or 206 Partial Content)
     if !(response.status().is_success() || response.status().as_u16() == 206) {
       return Err(format!("Download failed with status: {}", response.status()).into());
     }
