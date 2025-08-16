@@ -820,7 +820,7 @@ export default function Home() {
             <div className="mt-1 mb-2 text-sm text-gray-600 dark:text-gray-300">
               Please don't close the app
             </div>
-            <div className="mx-auto mb-4 w-8 h-8 rounded-full border-2 animate-spin border-border/10 border-t-border/10" />
+            <div className="mx-auto mb-4 w-8 h-8 rounded-full border-2 animate-spin border-muted/40 border-t-primary" />
           </div>
         </div>
       )}
