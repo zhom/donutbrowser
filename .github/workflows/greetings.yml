@@ -13,7 +13,7 @@ jobs:
       issues: write
       pull-requests: write
     steps:
-      - uses: actions/first-interaction@2d4393e6bc0e2efb2e48fba7e06819c3bf61ffc9 # v2.0.0
+      - uses: actions/first-interaction@753c925c8d1ac6fede23781875376600628d9b5d # v3.0.0
         with:
           issue-message: "Thank you for your first issue ❤️ If it's a feature request, please make sure it's clear what you want, why you want it, and how important it is to you. If you posted a bug report, please make sure it includes as much detail as possible."
           pr-message: "Welcome to the community and thank you for your first contribution ❤️ A human will review your PR shortly. Make sure that the pipelines are green, so that the PR is considered ready for a review and could be merged."
