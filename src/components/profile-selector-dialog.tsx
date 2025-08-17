@@ -97,7 +97,7 @@ export function ProfileSelectorDialog({
       if (profileList.length > 0) {
         // First, try to find a running profile that can be used for opening links
         const runningAvailableProfile = profileList.find((profile) => {
-          const isRunning = runningProfiles.has(profile.name);
+          const isRunning = runningProfiles.has(profile.id);
           // Simple check without browserState dependency
           return (
             isRunning &&
@@ -128,7 +128,10 @@ export function ProfileSelectorDialog({
     if (!selectedProfile || !url) return;
 
     setIsLaunching(true);
-    setLaunchingProfiles((prev) => new Set(prev).add(selectedProfile));
+    const selected = profiles.find((p) => p.name === selectedProfile);
+    if (selected) {
+      setLaunchingProfiles((prev) => new Set(prev).add(selected.id));
+    }
     try {
       await invoke("open_url_with_profile", {
         profileName: selectedProfile,
@@ -139,13 +142,15 @@ export function ProfileSelectorDialog({
       console.error("Failed to open URL with profile:", error);
     } finally {
       setIsLaunching(false);
-      setLaunchingProfiles((prev) => {
-        const next = new Set(prev);
-        next.delete(selectedProfile);
-        return next;
-      });
+      if (selected) {
+        setLaunchingProfiles((prev) => {
+          const next = new Set(prev);
+          next.delete(selected.id);
+          return next;
+        });
+      }
     }
-  }, [selectedProfile, url, onClose]);
+  }, [selectedProfile, url, onClose, profiles]);
 
   const handleCancel = useCallback(() => {
     setSelectedProfile(null);
@@ -238,7 +243,7 @@ export function ProfileSelectorDialog({
                 </SelectTrigger>
                 <SelectContent>
                   {profiles.map((profile) => {
-                    const isRunning = runningProfiles.has(profile.name);
+                    const isRunning = runningProfiles.has(profile.id);
                     const canUseForLinks =
                       browserState.canUseProfileForLinks(profile);
                     const tooltipContent = getProfileTooltipContent(profile);

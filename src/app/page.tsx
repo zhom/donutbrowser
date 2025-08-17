@@ -3,7 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrent } from "@tauri-apps/plugin-deep-link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CamoufoxConfigDialog } from "@/components/camoufox-config-dialog";
 import { CreateProfileDialog } from "@/components/create-profile-dialog";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
@@ -76,7 +76,9 @@ export default function Home() {
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const { isMicrophoneAccessGranted, isCameraAccessGranted, isInitialized } =
     usePermissions();
-
+  const [runningProfiles, setRunningProfiles] = useState<Set<string>>(
+    new Set(),
+  );
   const handleSelectGroup = useCallback((groupId: string) => {
     setSelectedGroupId(groupId);
     setSelectedProfiles([]);
@@ -423,20 +425,17 @@ export default function Home() {
       setError(null);
 
       try {
-        const _profile = await invoke<BrowserProfile>(
-          "create_browser_profile_new",
-          {
-            name: profileData.name,
-            browserStr: profileData.browserStr,
-            version: profileData.version,
-            releaseType: profileData.releaseType,
-            proxyId: profileData.proxyId,
-            camoufoxConfig: profileData.camoufoxConfig,
-            groupId:
-              profileData.groupId ||
-              (selectedGroupId !== "default" ? selectedGroupId : undefined),
-          },
-        );
+        await invoke<BrowserProfile>("create_browser_profile_new", {
+          name: profileData.name,
+          browserStr: profileData.browserStr,
+          version: profileData.version,
+          releaseType: profileData.releaseType,
+          proxyId: profileData.proxyId,
+          camoufoxConfig: profileData.camoufoxConfig,
+          groupId:
+            profileData.groupId ||
+            (selectedGroupId !== "default" ? selectedGroupId : undefined),
+        });
 
         await loadProfiles();
         await loadGroups();
@@ -453,77 +452,48 @@ export default function Home() {
     [loadProfiles, loadGroups, selectedGroupId],
   );
 
-  const [runningProfiles, setRunningProfiles] = useState<Set<string>>(
-    new Set(),
-  );
-
-  const runningProfilesRef = useRef<Set<string>>(new Set());
-
-  const checkBrowserStatus = useCallback(async (profile: BrowserProfile) => {
-    try {
-      const isRunning = await invoke<boolean>("check_browser_status", {
-        profile,
-      });
-
-      const currentRunning = runningProfilesRef.current.has(profile.name);
-
-      if (isRunning !== currentRunning) {
-        console.log(
-          `Profile ${profile.name} (${profile.browser}) status changed: ${currentRunning} -> ${isRunning}`,
-        );
-        setRunningProfiles((prev) => {
-          const next = new Set(prev);
-          if (isRunning) {
-            next.add(profile.name);
-          } else {
-            next.delete(profile.name);
-          }
-          runningProfilesRef.current = next;
-          return next;
-        });
-      }
-    } catch (err) {
-      console.error("Failed to check browser status:", err);
-    }
-  }, []);
-
-  const launchProfile = useCallback(
-    async (profile: BrowserProfile) => {
-      setError(null);
-
-      // Check if browser is disabled due to ongoing update
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    (async () => {
       try {
-        const isDisabled = await invoke<boolean>(
-          "is_browser_disabled_for_update",
-          {
-            browser: profile.browser,
+        unlisten = await listen<{ id: string; is_running: boolean }>(
+          "profile-running-changed",
+          (event) => {
+            const { id, is_running } = event.payload;
+            setRunningProfiles((prev) => {
+              const next = new Set(prev);
+              if (is_running) next.add(id);
+              else next.delete(id);
+              return next;
+            });
           },
         );
-
-        if (isDisabled || isUpdating(profile.browser)) {
-          setError(
-            `${profile.browser} is currently being updated. Please wait for the update to complete.`,
-          );
-          return;
-        }
-      } catch (err) {
-        console.error("Failed to check browser update status:", err);
+      } catch {
+        // best-effort listener
       }
+    })();
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
 
-      try {
-        const updatedProfile = await invoke<BrowserProfile>(
-          "launch_browser_profile",
-          { profile },
-        );
-        await loadProfiles();
-        await checkBrowserStatus(updatedProfile);
-      } catch (err: unknown) {
-        console.error("Failed to launch browser:", err);
-        setError(`Failed to launch browser: ${JSON.stringify(err)}`);
-      }
-    },
-    [loadProfiles, checkBrowserStatus, isUpdating],
-  );
+  const launchProfile = useCallback(async (profile: BrowserProfile) => {
+    setError(null);
+    console.log("Starting launch for profile:", profile.name);
+
+    try {
+      const result = await invoke<BrowserProfile>("launch_browser_profile", {
+        profile,
+      });
+      console.log("Successfully launched profile:", result.name);
+    } catch (err: unknown) {
+      console.error("Failed to launch browser:", err);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(`Failed to launch browser: ${errorMessage}`);
+      // Re-throw the error so the table component can handle loading state cleanup
+      throw err;
+    }
+  }, []);
 
   const handleDeleteProfile = useCallback(
     async (profile: BrowserProfile) => {
@@ -582,12 +552,19 @@ export default function Home() {
   const handleKillProfile = useCallback(
     async (profile: BrowserProfile) => {
       setError(null);
+      console.log("Starting kill for profile:", profile.name);
+
       try {
         await invoke("kill_browser_profile", { profile });
         await loadProfiles();
+        console.log("Successfully killed profile:", profile.name);
+        // Don't reload profiles here - let the backend events handle UI updates
       } catch (err: unknown) {
         console.error("Failed to kill browser:", err);
-        setError(`Failed to kill browser: ${JSON.stringify(err)}`);
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        setError(`Failed to kill browser: ${errorMessage}`);
+        // Re-throw the error so the table component can handle loading state cleanup
+        throw err;
       }
     },
     [loadProfiles],
@@ -731,24 +708,6 @@ export default function Home() {
       });
     }
   }, [profiles]);
-
-  useEffect(() => {
-    if (profiles.length === 0) return;
-
-    const interval = setInterval(() => {
-      for (const profile of profiles) {
-        void checkBrowserStatus(profile);
-      }
-    }, 500);
-
-    return () => {
-      clearInterval(interval);
-    };
-  }, [profiles, checkBrowserStatus]);
-
-  useEffect(() => {
-    runningProfilesRef.current = runningProfiles;
-  }, [runningProfiles]);
 
   useEffect(() => {
     if (error) {

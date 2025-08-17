@@ -471,14 +471,6 @@ pub async fn check_for_browser_updates() -> Result<Vec<UpdateNotification>, Stri
 }
 
 #[tauri::command]
-pub async fn is_browser_disabled_for_update(browser: String) -> Result<bool, String> {
-  let updater = AutoUpdater::instance();
-  updater
-    .is_browser_disabled(&browser)
-    .map_err(|e| format!("Failed to check browser status: {e}"))
-}
-
-#[tauri::command]
 pub async fn dismiss_update_notification(notification_id: String) -> Result<(), String> {
   let updater = AutoUpdater::instance();
   updater

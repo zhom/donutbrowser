@@ -2,6 +2,7 @@ use crate::platform_browser;
 use crate::profile::{BrowserProfile, ProfileManager};
 use crate::proxy_manager::PROXY_MANAGER;
 use directories::BaseDirs;
+use serde::Serialize;
 use std::collections::HashSet;
 use std::fs::create_dir_all;
 use std::path::{Path, PathBuf};
@@ -151,11 +152,6 @@ impl BrowserRunner {
   pub fn list_profiles(&self) -> Result<Vec<BrowserProfile>, Box<dyn std::error::Error>> {
     let profile_manager = ProfileManager::instance();
     let profiles = profile_manager.list_profiles();
-    if let Ok(ref ps) = profiles {
-      let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
-        let _ = tm.rebuild_from_profiles(ps);
-      });
-    }
     profiles
   }
 
@@ -271,11 +267,35 @@ impl BrowserRunner {
         updated_profile.name
       );
 
+      println!(
+        "Emitting profile events for successful Camoufox launch: {}",
+        updated_profile.name
+      );
+
       // Emit profile update event to frontend
       if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
         println!("Warning: Failed to emit profile update event: {e}");
+      }
+
+      // Emit minimal running changed event to frontend with a small delay
+      #[derive(Serialize)]
+      struct RunningChangedPayload {
+        id: String,
+        is_running: bool,
+      }
+
+      let payload = RunningChangedPayload {
+        id: updated_profile.id.to_string(),
+        is_running: updated_profile.process_id.is_some(),
+      };
+
+      if let Err(e) = app_handle.emit("profile-running-changed", &payload) {
+        println!("Warning: Failed to emit profile running changed event: {e}");
       } else {
-        println!("Emitted profile update event for: {}", updated_profile.name);
+        println!(
+          "Successfully emitted profile-running-changed event for Camoufox {}: running={}",
+          updated_profile.name, payload.is_running
+        );
       }
 
       return Ok(updated_profile);
@@ -484,9 +504,34 @@ impl BrowserRunner {
       // which is already handled in the profile creation process
     }
 
+    println!(
+      "Emitting profile events for successful launch: {}",
+      updated_profile.name
+    );
+
     // Emit profile update event to frontend
     if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
       println!("Warning: Failed to emit profile update event: {e}");
+    }
+
+    // Emit minimal running changed event to frontend with a small delay to ensure UI consistency
+    #[derive(Serialize)]
+    struct RunningChangedPayload {
+      id: String,
+      is_running: bool,
+    }
+    let payload = RunningChangedPayload {
+      id: updated_profile.id.to_string(),
+      is_running: updated_profile.process_id.is_some(),
+    };
+
+    if let Err(e) = app_handle.emit("profile-running-changed", &payload) {
+      println!("Warning: Failed to emit profile running changed event: {e}");
+    } else {
+      println!(
+        "Successfully emitted profile-running-changed event for {}: running={}",
+        updated_profile.name, payload.is_running
+      );
     }
 
     Ok(updated_profile)
@@ -705,20 +750,27 @@ impl BrowserRunner {
     url: Option<String>,
     internal_proxy_settings: Option<&ProxySettings>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
+    println!("launch_or_open_url called for profile: {}", profile.name);
+    
     // Get the most up-to-date profile data
-    let profiles = self.list_profiles().expect("Failed to list profiles");
+    let profiles = self.list_profiles()
+      .map_err(|e| format!("Failed to list profiles in launch_or_open_url: {}", e))?;
     let updated_profile = profiles
       .into_iter()
       .find(|p| p.name == profile.name)
       .unwrap_or_else(|| profile.clone());
 
+    println!("Checking browser status for profile: {}", updated_profile.name);
+
     // Check if browser is already running
     let is_running = self
       .check_browser_status(app_handle.clone(), &updated_profile)
-      .await?;
+      .await
+      .map_err(|e| format!("Failed to check browser status: {}", e))?;
 
     // Get the updated profile again after status check (PID might have been updated)
-    let profiles = self.list_profiles().expect("Failed to list profiles");
+    let profiles = self.list_profiles()
+      .map_err(|e| format!("Failed to list profiles after status check: {}", e))?;
     let final_profile = profiles
       .into_iter()
       .find(|p| p.name == profile.name)
@@ -927,9 +979,34 @@ impl BrowserRunner {
         .save_process_info(&updated_profile)
         .map_err(|e| format!("Failed to update profile: {e}"))?;
 
+      println!(
+        "Emitting profile events for successful Camoufox kill: {}",
+        updated_profile.name
+      );
+
       // Emit profile update event to frontend
       if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
         println!("Warning: Failed to emit profile update event: {e}");
+      }
+
+      // Emit minimal running changed event to frontend immediately
+      #[derive(Serialize)]
+      struct RunningChangedPayload {
+        id: String,
+        is_running: bool,
+      }
+      let payload = RunningChangedPayload {
+        id: updated_profile.id.to_string(),
+        is_running: false, // Explicitly set to false since we just killed it
+      };
+
+      if let Err(e) = app_handle.emit("profile-running-changed", &payload) {
+        println!("Warning: Failed to emit profile running changed event: {e}");
+      } else {
+        println!(
+          "Successfully emitted profile-running-changed event for Camoufox {}: running={}",
+          updated_profile.name, payload.is_running
+        );
       }
 
       println!(
@@ -1035,6 +1112,36 @@ impl BrowserRunner {
     self
       .save_process_info(&updated_profile)
       .map_err(|e| format!("Failed to update profile: {e}"))?;
+
+    println!(
+      "Emitting profile events for successful kill: {}",
+      updated_profile.name
+    );
+
+    // Emit profile update event to frontend
+    if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
+      println!("Warning: Failed to emit profile update event: {e}");
+    }
+
+    // Emit minimal running changed event to frontend immediately
+    #[derive(Serialize)]
+    struct RunningChangedPayload {
+      id: String,
+      is_running: bool,
+    }
+    let payload = RunningChangedPayload {
+      id: updated_profile.id.to_string(),
+      is_running: false, // Explicitly set to false since we just killed it
+    };
+
+    if let Err(e) = app_handle.emit("profile-running-changed", &payload) {
+      println!("Warning: Failed to emit profile running changed event: {e}");
+    } else {
+      println!(
+        "Successfully emitted profile-running-changed event for {}: running={}",
+        updated_profile.name, payload.is_running
+      );
+    }
 
     Ok(())
   }
@@ -1515,18 +1622,28 @@ pub async fn launch_browser_profile(
   profile: BrowserProfile,
   url: Option<String>,
 ) -> Result<BrowserProfile, String> {
+  println!("Launch request received for profile: {}", profile.name);
+
   let browser_runner = BrowserRunner::instance();
 
   // Store the internal proxy settings for passing to launch_browser
   let mut internal_proxy_settings: Option<ProxySettings> = None;
 
   // Resolve the most up-to-date profile from disk by name to avoid using stale proxy_id/browser state
-  let profile_for_launch = browser_runner
+  let profile_for_launch = match browser_runner
     .list_profiles()
-    .map_err(|e| format!("Failed to list profiles: {e}"))?
-    .into_iter()
-    .find(|p| p.name == profile.name)
-    .unwrap_or_else(|| profile.clone());
+    .map_err(|e| format!("Failed to list profiles: {e}"))
+  {
+    Ok(profiles) => profiles
+      .into_iter()
+      .find(|p| p.name == profile.name)
+      .unwrap_or_else(|| profile.clone()),
+    Err(e) => {
+      return Err(e);
+    }
+  };
+
+  println!("Resolved profile for launch: {}", profile_for_launch.name);
 
   // Always start a local proxy before launching (non-Camoufox handled here; Camoufox has its own flow)
   if profile.browser != "camoufox" {
@@ -1585,9 +1702,6 @@ pub async fn launch_browser_profile(
             .map(|p| format!("{}:{}", p.host, p.port))
             .unwrap_or_else(|| "DIRECT".to_string())
         );
-
-        // Give the proxy a moment to fully start up
-        tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
       }
       Err(e) => {
         eprintln!("Failed to start local proxy (will launch without it): {e}");
@@ -1595,11 +1709,27 @@ pub async fn launch_browser_profile(
     }
   }
 
+  println!("Starting browser launch for profile: {}", profile_for_launch.name);
+
   // Launch browser or open URL in existing instance
   let updated_profile = browser_runner
     .launch_or_open_url(app_handle.clone(), &profile_for_launch, url, internal_proxy_settings.as_ref())
     .await
     .map_err(|e| {
+      println!("Browser launch failed for profile: {}, error: {}", profile_for_launch.name, e);
+      
+      // Emit a failure event to clear loading states in the frontend
+      #[derive(serde::Serialize)]
+      struct RunningChangedPayload {
+        id: String,
+        is_running: bool,
+      }
+      let payload = RunningChangedPayload {
+        id: profile_for_launch.id.to_string(),
+        is_running: false,
+      };
+      let _ = app_handle.emit("profile-running-changed", &payload);
+
       // Check if this is an architecture compatibility issue
       if let Some(io_error) = e.downcast_ref::<std::io::Error>() {
         if io_error.kind() == std::io::ErrorKind::Other
@@ -1609,6 +1739,8 @@ pub async fn launch_browser_profile(
       }
       format!("Failed to launch browser or open URL: {e}")
     })?;
+
+  println!("Browser launch completed for profile: {}", updated_profile.name);
 
   // Now update the proxy with the correct PID if we have one
   if let Some(actual_pid) = updated_profile.process_id {
@@ -1797,11 +1929,37 @@ pub async fn kill_browser_profile(
   app_handle: tauri::AppHandle,
   profile: BrowserProfile,
 ) -> Result<(), String> {
+  println!("Kill request received for profile: {}", profile.name);
+
   let browser_runner = BrowserRunner::instance();
-  browser_runner
-    .kill_browser_process(app_handle, &profile)
+  
+  match browser_runner
+    .kill_browser_process(app_handle.clone(), &profile)
     .await
-    .map_err(|e| format!("Failed to kill browser: {e}"))
+  {
+    Ok(()) => {
+      println!("Successfully killed browser profile: {}", profile.name);
+      Ok(())
+    }
+    Err(e) => {
+      println!("Failed to kill browser profile {}: {}", profile.name, e);
+
+      // Emit a failure event to clear loading states in the frontend
+      #[derive(serde::Serialize)]
+      struct RunningChangedPayload {
+        id: String,
+        is_running: bool,
+      }
+      // On kill failure, we assume the process is still running
+      let payload = RunningChangedPayload {
+        id: profile.id.to_string(),
+        is_running: true,
+      };
+      let _ = app_handle.emit("profile-running-changed", &payload);
+
+      Err(format!("Failed to kill browser: {e}"))
+    }
+  }
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -53,7 +53,6 @@ use version_updater::{
 
 use auto_updater::{
   check_for_browser_updates, complete_browser_update_with_auto_update, dismiss_update_notification,
-  is_browser_disabled_for_update,
 };
 
 use app_auto_updater::{
@@ -489,6 +488,84 @@ pub fn run() {
         }
       });
 
+      // Periodically broadcast browser running status to the frontend
+      let app_handle_status = app.handle().clone();
+      tauri::async_runtime::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(500));
+        let mut last_running_states: std::collections::HashMap<String, bool> =
+          std::collections::HashMap::new();
+
+        loop {
+          interval.tick().await;
+
+          let runner = crate::browser_runner::BrowserRunner::instance();
+          // If listing profiles fails, skip this tick
+          let profiles = match runner.list_profiles() {
+            Ok(p) => p,
+            Err(e) => {
+              println!("Warning: Failed to list profiles in status checker: {}", e);
+              continue;
+            }
+          };
+
+          for profile in profiles {
+            // Check browser status and track changes
+            match runner
+              .check_browser_status(app_handle_status.clone(), &profile)
+              .await
+            {
+              Ok(is_running) => {
+                let profile_id = profile.id.to_string();
+                let last_state = last_running_states
+                  .get(&profile_id)
+                  .copied()
+                  .unwrap_or(false);
+
+                // Only emit event if state actually changed
+                if last_state != is_running {
+                  println!(
+                    "Status checker detected change for profile {}: {} -> {}",
+                    profile.name, last_state, is_running
+                  );
+
+                  #[derive(serde::Serialize)]
+                  struct RunningChangedPayload {
+                    id: String,
+                    is_running: bool,
+                  }
+
+                  let payload = RunningChangedPayload {
+                    id: profile_id.clone(),
+                    is_running,
+                  };
+
+                  if let Err(e) = app_handle_status.emit("profile-running-changed", &payload) {
+                    println!("Warning: Failed to emit profile running changed event: {e}");
+                  } else {
+                    println!(
+                      "Status checker emitted profile-running-changed event for {}: running={}",
+                      profile.name, is_running
+                    );
+                  }
+
+                  last_running_states.insert(profile_id, is_running);
+                } else {
+                  // Update the state even if unchanged to ensure we have it tracked
+                  last_running_states.insert(profile_id, is_running);
+                }
+              }
+              Err(e) => {
+                println!(
+                  "Warning: Status check failed for profile {}: {}",
+                  profile.name, e
+                );
+                continue;
+              }
+            }
+          }
+        }
+      });
+
       // Nodecar warm-up is now triggered from the frontend to allow UI blocking overlay
 
       // Start API server if enabled in settings
@@ -574,7 +651,6 @@ pub fn run() {
       trigger_manual_version_update,
       get_version_update_status,
       check_for_browser_updates,
-      is_browser_disabled_for_update,
       dismiss_update_notification,
       complete_browser_update_with_auto_update,
       check_for_app_updates,
@@ -603,7 +679,7 @@ pub fn run() {
       warm_up_nodecar,
       start_api_server,
       stop_api_server,
-      get_api_server_status,
+      get_api_server_status
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

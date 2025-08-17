@@ -35,7 +35,7 @@ export function useBrowserState(
     (browserType: string): boolean => {
       if (!isClient) return false;
       return profiles.some(
-        (p) => p.browser === browserType && runningProfiles.has(p.name),
+        (p) => p.browser === browserType && runningProfiles.has(p.id),
       );
     },
     [profiles, runningProfiles, isClient],
@@ -48,10 +48,10 @@ export function useBrowserState(
     (profile: BrowserProfile): boolean => {
       if (!isClient) return false;
 
-      const isRunning = runningProfiles.has(profile.name);
-      const isLaunching = launchingProfiles?.has(profile.name) ?? false;
-      const isStopping = stoppingProfiles?.has(profile.name) ?? false;
-      const isBrowserUpdating = isUpdating?.(profile.browser) ?? false;
+      const isRunning = runningProfiles.has(profile.id);
+      const isLaunching = launchingProfiles.has(profile.id);
+      const isStopping = stoppingProfiles.has(profile.id);
+      const isBrowserUpdating = isUpdating(profile.browser);
 
       // If the profile is launching or stopping, disable the button
       if (isLaunching || isStopping) {
@@ -92,10 +92,10 @@ export function useBrowserState(
     (profile: BrowserProfile): boolean => {
       if (!isClient) return false;
 
-      const isRunning = runningProfiles.has(profile.name);
-      const isLaunching = launchingProfiles?.has(profile.name) ?? false;
-      const isStopping = stoppingProfiles?.has(profile.name) ?? false;
-      const isBrowserUpdating = isUpdating?.(profile.browser) ?? false;
+      const isRunning = runningProfiles.has(profile.id);
+      const isLaunching = launchingProfiles.has(profile.id);
+      const isStopping = stoppingProfiles.has(profile.id);
+      const isBrowserUpdating = isUpdating(profile.browser);
 
       // If this specific browser is updating, downloading, launching, or stopping, block it
       if (isBrowserUpdating || isLaunching || isStopping) {
@@ -105,7 +105,7 @@ export function useBrowserState(
       // For single-instance browsers (Tor and Mullvad)
       if (isSingleInstanceBrowser(profile.browser)) {
         const runningInstancesOfType = profiles.filter(
-          (p) => p.browser === profile.browser && runningProfiles.has(p.name),
+          (p) => p.browser === profile.browser && runningProfiles.has(p.id),
         );
 
         // If no instances are running, any profile of this type can be used
@@ -142,10 +142,10 @@ export function useBrowserState(
     (profile: BrowserProfile): boolean => {
       if (!isClient) return false;
 
-      const isRunning = runningProfiles.has(profile.name);
-      const isLaunching = launchingProfiles?.has(profile.name) ?? false;
-      const isStopping = stoppingProfiles?.has(profile.name) ?? false;
-      const isBrowserUpdating = isUpdating?.(profile.browser) ?? false;
+      const isRunning = runningProfiles.has(profile.id);
+      const isLaunching = launchingProfiles.has(profile.id);
+      const isStopping = stoppingProfiles.has(profile.id);
+      const isBrowserUpdating = isUpdating(profile.browser);
 
       // If profile is running, launching, stopping, or browser is updating, block selection
       if (isRunning || isLaunching || isStopping || isBrowserUpdating) {
@@ -170,10 +170,10 @@ export function useBrowserState(
     (profile: BrowserProfile): string => {
       if (!isClient) return "Loading...";
 
-      const isRunning = runningProfiles.has(profile.name);
-      const isLaunching = launchingProfiles?.has(profile.name) ?? false;
-      const isStopping = stoppingProfiles?.has(profile.name) ?? false;
-      const isBrowserUpdating = isUpdating?.(profile.browser) ?? false;
+      const isRunning = runningProfiles.has(profile.id);
+      const isLaunching = launchingProfiles.has(profile.id);
+      const isStopping = stoppingProfiles.has(profile.id);
+      const isBrowserUpdating = isUpdating(profile.browser);
 
       if (isLaunching) {
         return "Launching browser...";
@@ -224,10 +224,10 @@ export function useBrowserState(
 
       if (canUseForLinks) return null;
 
-      const isRunning = runningProfiles.has(profile.name);
-      const isLaunching = launchingProfiles?.has(profile.name) ?? false;
-      const isStopping = stoppingProfiles?.has(profile.name) ?? false;
-      const isBrowserUpdating = isUpdating?.(profile.browser) ?? false;
+      const isRunning = runningProfiles.has(profile.id);
+      const isLaunching = launchingProfiles.has(profile.id);
+      const isStopping = stoppingProfiles.has(profile.id);
+      const isBrowserUpdating = isUpdating(profile.browser);
 
       if (isLaunching) {
         return "Profile is currently launching. Please wait.";
@@ -245,7 +245,7 @@ export function useBrowserState(
         const browserDisplayName =
           profile.browser === "tor-browser" ? "TOR" : "Mullvad";
         const runningInstancesOfType = profiles.filter(
-          (p) => p.browser === profile.browser && runningProfiles.has(p.name),
+          (p) => p.browser === profile.browser && runningProfiles.has(p.id),
         );
 
         if (runningInstancesOfType.length > 0) {
