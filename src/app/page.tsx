@@ -159,6 +159,46 @@ export default function Home() {
     }
   }, []);
 
+  // Function to check and sync profile running states with actual process status
+  const syncProfileRunningStates = useCallback(
+    async (profiles: BrowserProfile[]) => {
+      try {
+        const statusChecks = profiles.map(async (profile) => {
+          try {
+            const isRunning = await invoke<boolean>("check_browser_status", {
+              profile,
+            });
+            return { id: profile.id, isRunning };
+          } catch (error) {
+            console.error(
+              `Failed to check status for profile ${profile.name}:`,
+              error,
+            );
+            return { id: profile.id, isRunning: false };
+          }
+        });
+
+        const statuses = await Promise.all(statusChecks);
+
+        // Update running profiles state based on actual status
+        setRunningProfiles((prev) => {
+          const next = new Set(prev);
+          statuses.forEach(({ id, isRunning }) => {
+            if (isRunning) {
+              next.add(id);
+            } else {
+              next.delete(id);
+            }
+          });
+          return next;
+        });
+      } catch (error) {
+        console.error("Failed to sync profile running states:", error);
+      }
+    },
+    [],
+  );
+
   // Simple profiles loader without updates check (for use as callback)
   const loadProfiles = useCallback(async () => {
     try {
@@ -167,13 +207,16 @@ export default function Home() {
       );
       setProfiles(profileList);
 
+      // Check and sync profile running status after loading profiles
+      await syncProfileRunningStates(profileList);
+
       // Check for missing binaries after loading profiles
       await checkMissingBinaries();
     } catch (err: unknown) {
       console.error("Failed to load profiles:", err);
       setError(`Failed to load profiles: ${JSON.stringify(err)}`);
     }
-  }, [checkMissingBinaries]);
+  }, [checkMissingBinaries, syncProfileRunningStates]);
 
   const [processingUrls, setProcessingUrls] = useState<Set<string>>(new Set());
 
@@ -219,6 +262,9 @@ export default function Home() {
       );
       setProfiles(profileList);
 
+      // Check and sync profile running status after loading profiles
+      await syncProfileRunningStates(profileList);
+
       // Check for updates after loading profiles
       await checkForUpdates();
       await checkMissingBinaries();
@@ -226,7 +272,7 @@ export default function Home() {
       console.error("Failed to load profiles:", err);
       setError(`Failed to load profiles: ${JSON.stringify(err)}`);
     }
-  }, [checkForUpdates, checkMissingBinaries]);
+  }, [checkForUpdates, checkMissingBinaries, syncProfileRunningStates]);
 
   useAppUpdateNotifications();
 

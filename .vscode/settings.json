@@ -112,6 +112,7 @@
     "peerconnection",
     "pids",
     "pixbuf",
+    "pkill",
     "plasmohq",
     "platformdirs",
     "prefs",
