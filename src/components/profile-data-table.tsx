@@ -1086,7 +1086,7 @@ export function ProfilesDataTable({
                       meta.setRenameError(null);
                     }
                   }}
-                  className="inline-block w-48"
+                  className="inline-block w-30"
                 />
                 <div className="flex absolute right-0 top-full z-50 gap-1 translate-y-[30%] opacity-100 bg-black rounded-md">
                   <LoadingButton
@@ -1105,12 +1105,12 @@ export function ProfilesDataTable({
           }
 
           const display =
-            name.length < 20 ? (
+            name.length < 14 ? (
               <div className="font-medium text-left">{name}</div>
             ) : (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span>{trimName(name, 20)}</span>
+                  <span>{trimName(name, 14)}</span>
                 </TooltipTrigger>
                 <TooltipContent>{name}</TooltipContent>
               </Tooltip>
@@ -1128,7 +1128,7 @@ export function ProfilesDataTable({
             <button
               type="button"
               className={cn(
-                "p-2 mr-auto w-48 text-left bg-transparent rounded border-none",
+                "p-2 mr-auto text-left bg-transparent rounded border-none w-30",
                 isDisabled
                   ? "opacity-60 cursor-not-allowed"
                   : "cursor-pointer hover:bg-accent/50",
@@ -1205,7 +1205,7 @@ export function ProfilesDataTable({
         cell: ({ row }) => {
           const browser: string = row.getValue("browser");
           const name = getBrowserDisplayName(browser);
-          if (name.length < 20) {
+          if (name.length < 14) {
             return (
               <div className="flex items-center">
                 <span>{name}</span>
@@ -1216,7 +1216,7 @@ export function ProfilesDataTable({
           return (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span>{trimName(name, 20)}</span>
+                <span>{trimName(name, 14)}</span>
               </TooltipTrigger>
               <TooltipContent>{name}</TooltipContent>
             </Tooltip>
