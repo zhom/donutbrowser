@@ -21,7 +21,7 @@
     "format": "pnpm format:js && pnpm format:rust",
     "cargo": "cd src-tauri && cargo",
     "unused-exports:js": "ts-unused-exports tsconfig.json",
-    "check-unused-commands": "cd src-tauri && cargo run --bin check_unused_commands"
+    "check-unused-commands": "cd src-tauri && cargo test test_no_unused_tauri_commands"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.3.3",
