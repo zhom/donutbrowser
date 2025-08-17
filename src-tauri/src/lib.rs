@@ -503,7 +503,7 @@ pub fn run() {
           let profiles = match runner.list_profiles() {
             Ok(p) => p,
             Err(e) => {
-              println!("Warning: Failed to list profiles in status checker: {}", e);
+              println!("Warning: Failed to list profiles in status checker: {e}");
               continue;
             }
           };

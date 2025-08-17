@@ -221,7 +221,7 @@ end try
 
     // For Chromium-based browsers, use immediate aggressive termination
     // Chromium browsers are notoriously difficult to kill on macOS due to process spawning
-    
+
     // Step 1: Immediate SIGKILL on main process (no graceful shutdown for Chromium)
     println!("Starting immediate SIGKILL for PID: {pid}");
     let _ = Command::new("kill")
@@ -236,13 +236,13 @@ end try
 
     // Step 3: Use multiple kill strategies in parallel
     let pid_str = pid.to_string();
-    
+
     // Kill by parent PID with SIGKILL
     let _ = Command::new("pkill")
       .args(["-KILL", "-P", &pid_str])
       .output();
-      
-    // Kill by process group with SIGKILL  
+
+    // Kill by process group with SIGKILL
     let _ = Command::new("pkill")
       .args(["-KILL", "-g", &pid_str])
       .output();
@@ -258,17 +258,25 @@ end try
     // Step 4: Verify and retry with pattern-based killing for common Chromium process names
     use sysinfo::{Pid, System};
     let system = System::new_all();
-    
+
     // Check if main process still exists
     if system.process(Pid::from(pid as usize)).is_some() {
       println!("Main process {pid} still running, using pattern-based termination");
-      
+
       // Kill by common Chromium process patterns
       let chromium_patterns = [
-        "Chrome", "Chromium", "Brave", "chrome", "chromium", "brave",
-        "Google Chrome", "Brave Browser", "Chrome Helper", "Chromium Helper"
+        "Chrome",
+        "Chromium",
+        "Brave",
+        "chrome",
+        "chromium",
+        "brave",
+        "Google Chrome",
+        "Brave Browser",
+        "Chrome Helper",
+        "Chromium Helper",
       ];
-      
+
       for pattern in &chromium_patterns {
         let _ = Command::new("pkill")
           .args(["-KILL", "-f", pattern])
@@ -278,12 +286,12 @@ end try
 
     // Step 5: Final aggressive cleanup - kill any remaining processes
     tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
-    
+
     // One more round of comprehensive killing
     let _ = Command::new("pkill")
       .args(["-KILL", "-P", &pid_str])
       .output();
-      
+
     let _ = Command::new("pkill")
       .args(["-KILL", "-g", &pid_str])
       .output();
@@ -291,30 +299,28 @@ end try
     // Final verification with extended wait
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     let system = System::new_all();
-    
+
     if system.process(Pid::from(pid as usize)).is_some() {
       // Last resort: try system kill command with different signals
       println!("Process {pid} extremely persistent, trying system-level termination");
-      
-      let _ = Command::new("/bin/kill")
-        .args(["-KILL", &pid_str])
-        .output();
-        
+
+      let _ = Command::new("/bin/kill").args(["-KILL", &pid_str]).output();
+
       let _ = Command::new("/usr/bin/killall")
         .args(["-KILL", "-m", "Chrome"])
         .output();
-        
+
       let _ = Command::new("/usr/bin/killall")
-        .args(["-KILL", "-m", "Chromium"]) 
+        .args(["-KILL", "-m", "Chromium"])
         .output();
-        
+
       let _ = Command::new("/usr/bin/killall")
         .args(["-KILL", "-m", "Brave"])
         .output();
 
       tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
       let system = System::new_all();
-      
+
       if system.process(Pid::from(pid as usize)).is_some() {
         println!("WARNING: Process {pid} could not be terminated despite aggressive attempts");
         // Don't return error - let the UI update anyway since we tried everything
@@ -325,95 +331,109 @@ end try
     Ok(())
   }
 
-// Helper function to kill process tree (Chromium browsers often spawn child processes)
-async fn kill_chromium_process_tree_aggressive(pid: u32) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-  println!("Killing comprehensive process tree for PID: {pid}");
-  
-  // Get all descendant processes using recursive process tree discovery
-  let descendant_pids = get_all_descendant_pids(pid).await;
-  println!("Found {} descendant processes to terminate", descendant_pids.len());
-  
-  // Kill all descendants first (reverse order - children before parents)
-  for &desc_pid in descendant_pids.iter().rev() {
-    if desc_pid != pid {
-      println!("Terminating descendant process: {desc_pid}");
-      let _ = Command::new("kill")
-        .args(["-KILL", &desc_pid.to_string()])
-        .output();
-    }
-  }
-  
-  // No delay for initial termination
-  
-  // Force kill any remaining descendants
-  for &desc_pid in descendant_pids.iter().rev() {
-    if desc_pid != pid {
-      let _ = Command::new("kill")
-        .args(["-KILL", &desc_pid.to_string()])
-        .output();
-    }
-  }
-  
-  // Also use pkill as a backup to catch any processes we might have missed
-  let _ = Command::new("pkill")
-    .args(["-KILL", "-P", &pid.to_string()])
-    .output();
-  
-  // On macOS, also try killing by process group for Chromium browsers
-  let _ = Command::new("pkill")
-    .args(["-KILL", "-g", &pid.to_string()])
-    .output();
-  
-  Ok(())
-}
+  // Helper function to kill process tree (Chromium browsers often spawn child processes)
+  async fn kill_chromium_process_tree_aggressive(
+    pid: u32,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("Killing comprehensive process tree for PID: {pid}");
 
-// Helper function to kill all Chromium-related processes by name patterns
-async fn kill_all_chromium_processes_by_name() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-  println!("Killing all Chromium-related processes by name patterns");
-  
-  let chromium_patterns = [
-    "Chrome", "Chromium", "Brave", "chrome", "chromium", "brave",
-    "Google Chrome", "Brave Browser", "Chrome Helper", "Chromium Helper"
-  ];
-  
-  for pattern in &chromium_patterns {
+    // Get all descendant processes using recursive process tree discovery
+    let descendant_pids = get_all_descendant_pids(pid).await;
+    println!(
+      "Found {} descendant processes to terminate",
+      descendant_pids.len()
+    );
+
+    // Kill all descendants first (reverse order - children before parents)
+    for &desc_pid in descendant_pids.iter().rev() {
+      if desc_pid != pid {
+        println!("Terminating descendant process: {desc_pid}");
+        let _ = Command::new("kill")
+          .args(["-KILL", &desc_pid.to_string()])
+          .output();
+      }
+    }
+
+    // No delay for initial termination
+
+    // Force kill any remaining descendants
+    for &desc_pid in descendant_pids.iter().rev() {
+      if desc_pid != pid {
+        let _ = Command::new("kill")
+          .args(["-KILL", &desc_pid.to_string()])
+          .output();
+      }
+    }
+
+    // Also use pkill as a backup to catch any processes we might have missed
     let _ = Command::new("pkill")
-      .args(["-KILL", "-f", pattern])
+      .args(["-KILL", "-P", &pid.to_string()])
       .output();
-  }
-  
-  Ok(())
-}
 
-// Recursively find all descendant processes
-async fn get_all_descendant_pids(parent_pid: u32) -> Vec<u32> {
-  use sysinfo::{Pid, System};
-  
-  let system = System::new_all();
-  let mut descendants = Vec::new();
-  let mut to_check = vec![parent_pid];
-  let mut checked = std::collections::HashSet::new();
-  
-  while let Some(current_pid) = to_check.pop() {
-    if checked.contains(&current_pid) {
-      continue;
+    // On macOS, also try killing by process group for Chromium browsers
+    let _ = Command::new("pkill")
+      .args(["-KILL", "-g", &pid.to_string()])
+      .output();
+
+    Ok(())
+  }
+
+  // Helper function to kill all Chromium-related processes by name patterns
+  async fn kill_all_chromium_processes_by_name(
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("Killing all Chromium-related processes by name patterns");
+
+    let chromium_patterns = [
+      "Chrome",
+      "Chromium",
+      "Brave",
+      "chrome",
+      "chromium",
+      "brave",
+      "Google Chrome",
+      "Brave Browser",
+      "Chrome Helper",
+      "Chromium Helper",
+    ];
+
+    for pattern in &chromium_patterns {
+      let _ = Command::new("pkill")
+        .args(["-KILL", "-f", pattern])
+        .output();
     }
-    checked.insert(current_pid);
-    
-    // Find direct children of current_pid
-    for (pid, process) in system.processes() {
-      let pid_u32 = pid.as_u32();
-      if let Some(parent) = process.parent() {
-        if parent.as_u32() == current_pid && !checked.contains(&pid_u32) {
-          descendants.push(pid_u32);
-          to_check.push(pid_u32);
+
+    Ok(())
+  }
+
+  // Recursively find all descendant processes
+  async fn get_all_descendant_pids(parent_pid: u32) -> Vec<u32> {
+    use sysinfo::System;
+
+    let system = System::new_all();
+    let mut descendants = Vec::new();
+    let mut to_check = vec![parent_pid];
+    let mut checked = std::collections::HashSet::new();
+
+    while let Some(current_pid) = to_check.pop() {
+      if checked.contains(&current_pid) {
+        continue;
+      }
+      checked.insert(current_pid);
+
+      // Find direct children of current_pid
+      for (pid, process) in system.processes() {
+        let pid_u32 = pid.as_u32();
+        if let Some(parent) = process.parent() {
+          if parent.as_u32() == current_pid && !checked.contains(&pid_u32) {
+            descendants.push(pid_u32);
+            to_check.push(pid_u32);
+          }
         }
       }
     }
+
+    descendants
   }
-  
-  descendants
-}
 
   pub async fn open_url_in_existing_browser_tor_mullvad(
     profile: &BrowserProfile,
