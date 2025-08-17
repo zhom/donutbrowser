@@ -1998,12 +1998,12 @@ pub async fn check_browser_status(
 #[tauri::command]
 pub fn rename_profile(
   _app_handle: tauri::AppHandle,
-  old_id: &str,
+  old_name: &str,
   new_name: &str,
 ) -> Result<BrowserProfile, String> {
   let profile_manager = ProfileManager::instance();
   profile_manager
-    .rename_profile(old_id, new_name)
+    .rename_profile(old_name, new_name)
     .map_err(|e| format!("Failed to rename profile: {e}"))
 }
 

@@ -402,22 +402,22 @@ async fn create_profile(
 }
 
 async fn update_profile(
-  Path(id): Path<String>,
+  Path(name): Path<String>,
   State(state): State<ApiServerState>,
   Json(request): Json<UpdateProfileRequest>,
 ) -> Result<Json<ApiProfileResponse>, StatusCode> {
   let profile_manager = ProfileManager::instance();
 
   // Update profile fields
-  if let Some(name) = request.name {
-    if profile_manager.rename_profile(&id, &name).is_err() {
+  if let Some(new_name) = request.name {
+    if profile_manager.rename_profile(&name, &new_name).is_err() {
       return Err(StatusCode::BAD_REQUEST);
     }
   }
 
   if let Some(version) = request.version {
     if profile_manager
-      .update_profile_version(&id, &version)
+      .update_profile_version(&name, &version)
       .is_err()
     {
       return Err(StatusCode::BAD_REQUEST);
@@ -426,7 +426,7 @@ async fn update_profile(
 
   if let Some(proxy_id) = request.proxy_id {
     if profile_manager
-      .update_profile_proxy(state.app_handle.clone(), &id, Some(proxy_id))
+      .update_profile_proxy(state.app_handle.clone(), &name, Some(proxy_id))
       .await
       .is_err()
     {
@@ -440,7 +440,7 @@ async fn update_profile(
     match config {
       Ok(config) => {
         if profile_manager
-          .update_camoufox_config(state.app_handle.clone(), &id, config)
+          .update_camoufox_config(state.app_handle.clone(), &name, config)
           .await
           .is_err()
         {
@@ -453,7 +453,7 @@ async fn update_profile(
 
   if let Some(group_id) = request.group_id {
     if profile_manager
-      .assign_profiles_to_group(vec![id.clone()], Some(group_id))
+      .assign_profiles_to_group(vec![name.clone()], Some(group_id))
       .is_err()
     {
       return Err(StatusCode::BAD_REQUEST);
@@ -461,7 +461,7 @@ async fn update_profile(
   }
 
   if let Some(tags) = request.tags {
-    if profile_manager.update_profile_tags(&id, tags).is_err() {
+    if profile_manager.update_profile_tags(&name, tags).is_err() {
       return Err(StatusCode::BAD_REQUEST);
     }
 
@@ -474,7 +474,7 @@ async fn update_profile(
   }
 
   // Return updated profile
-  get_profile(Path(id), State(state)).await
+  get_profile(Path(name), State(state)).await
 }
 
 async fn delete_profile(
