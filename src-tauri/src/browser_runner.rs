@@ -1962,24 +1962,24 @@ pub async fn launch_browser_profile(
 #[tauri::command]
 pub async fn update_profile_proxy(
   app_handle: tauri::AppHandle,
-  profile_id: String,
+  profile_name: String,
   proxy_id: Option<String>,
 ) -> Result<BrowserProfile, String> {
   let profile_manager = ProfileManager::instance();
   profile_manager
-    .update_profile_proxy(app_handle, &profile_id, proxy_id)
+    .update_profile_proxy(app_handle, &profile_name, proxy_id)
     .await
     .map_err(|e| format!("Failed to update profile: {e}"))
 }
 
 #[tauri::command]
 pub fn update_profile_tags(
-  profile_id: String,
+  profile_name: String,
   tags: Vec<String>,
 ) -> Result<BrowserProfile, String> {
   let profile_manager = ProfileManager::instance();
   profile_manager
-    .update_profile_tags(&profile_id, tags)
+    .update_profile_tags(&profile_name, tags)
     .map_err(|e| format!("Failed to update profile tags: {e}"))
 }
 

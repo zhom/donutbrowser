@@ -1264,8 +1264,8 @@ export function ProfilesDataTable({
             profile.browser === "tor-browser"
               ? "Proxies are not supported for TOR browser"
               : profileHasProxy && effectiveProxy
-                ? `${effectiveProxy.name} (${effectiveProxy.proxy_settings.proxy_type.toUpperCase()})`
-                : "";
+                ? effectiveProxy.name
+                : null;
           const isSelectorOpen = meta.openProxySelectorFor === profile.name;
 
           if (profile.browser === "tor-browser") {
@@ -1278,7 +1278,9 @@ export function ProfilesDataTable({
                     </span>
                   </span>
                 </TooltipTrigger>
-                {tooltipText && <TooltipContent>{tooltipText}</TooltipContent>}
+                {(tooltipText || displayName.length > 10) && (
+                  <TooltipContent>{tooltipText || displayName}</TooltipContent>
+                )}
               </Tooltip>
             );
           }
@@ -1301,18 +1303,14 @@ export function ProfilesDataTable({
                           : "cursor-pointer hover:bg-accent/50",
                       )}
                     >
-                      {profileHasProxy && (
-                        <CiCircleCheck className="w-4 h-4 text-green-500" />
-                      )}
-                      {displayName.length > 18 ? (
-                        <span className="text-sm truncate text-muted-foreground max-w-[140px]">
-                          {displayName.slice(0, 18)}...
-                        </span>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">
-                          {displayName}
-                        </span>
-                      )}
+                      <span
+                        className={cn(
+                          "text-sm",
+                          !profileHasProxy && "text-muted-foreground",
+                        )}
+                      >
+                        {trimName(displayName, 10)}
+                      </span>
                     </span>
                   </PopoverTrigger>
                 </TooltipTrigger>
