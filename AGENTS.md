@@ -6,3 +6,4 @@
 - Before finishing the task and showing summary, always run "pnpm format && pnpm lint && pnpm test" at the root of the project to ensure that you don't finish with broken application.
 - Anytime you change nodecar's code and try to test, recompile it with "cd nodecar && pnpm build".
 - If there is a global singleton of a struct, only use it inside a method while properly initializing it, unless I have explicitly specified in the request otherwise.
+- If you are modifying the UI, do not add random colors that are not controlled by src/lib/themes.ts file.

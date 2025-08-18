@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+If you are modifying the UI, do not add random colors that are not controlled by src/lib/themes.ts file.
