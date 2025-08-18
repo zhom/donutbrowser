@@ -538,105 +538,6 @@ export function SharedCamoufoxConfigForm({
         </div>
       </div>
 
-      {/* WebGL Properties */}
-      <div className="space-y-3">
-        <Label>WebGL Properties</Label>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="webgl-vendor">WebGL Vendor</Label>
-            <Input
-              id="webgl-vendor"
-              value={fingerprintConfig["webGl:vendor"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "webGl:vendor",
-                  e.target.value || undefined,
-                )
-              }
-              placeholder="e.g., Mesa"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="webgl-renderer">WebGL Renderer</Label>
-            <Input
-              id="webgl-renderer"
-              value={fingerprintConfig["webGl:renderer"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "webGl:renderer",
-                  e.target.value || undefined,
-                )
-              }
-              placeholder="e.g., llvmpipe, or similar"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* WebGL Parameters */}
-      <div className="space-y-3">
-        <ObjectEditor
-          value={
-            (fingerprintConfig["webGl:parameters"] as Record<
-              string,
-              unknown
-            >) || {}
-          }
-          onChange={(value) =>
-            updateFingerprintConfig("webGl:parameters", value)
-          }
-          title="WebGL Parameters"
-        />
-      </div>
-
-      {/* WebGL2 Parameters */}
-      <div className="space-y-3">
-        <ObjectEditor
-          value={
-            (fingerprintConfig["webGl2:parameters"] as Record<
-              string,
-              unknown
-            >) || {}
-          }
-          onChange={(value) =>
-            updateFingerprintConfig("webGl2:parameters", value)
-          }
-          title="WebGL2 Parameters"
-        />
-      </div>
-
-      {/* WebGL Shader Precision Formats */}
-      <div className="space-y-3">
-        <ObjectEditor
-          value={
-            (fingerprintConfig["webGl:shaderPrecisionFormats"] as Record<
-              string,
-              unknown
-            >) || {}
-          }
-          onChange={(value) =>
-            updateFingerprintConfig("webGl:shaderPrecisionFormats", value)
-          }
-          title="WebGL Shader Precision Formats"
-        />
-      </div>
-
-      {/* WebGL2 Shader Precision Formats */}
-      <div className="space-y-3">
-        <ObjectEditor
-          value={
-            (fingerprintConfig["webGl2:shaderPrecisionFormats"] as Record<
-              string,
-              unknown
-            >) || {}
-          }
-          onChange={(value) =>
-            updateFingerprintConfig("webGl2:shaderPrecisionFormats", value)
-          }
-          title="WebGL2 Shader Precision Formats"
-        />
-      </div>
-
       {/* Geolocation */}
       <div className="space-y-3">
         <Label>Geolocation</Label>
@@ -735,6 +636,105 @@ export function SharedCamoufoxConfigForm({
             />
           </div>
         </div>
+      </div>
+
+      {/* WebGL Properties */}
+      <div className="space-y-3">
+        <Label>WebGL Properties</Label>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="webgl-vendor">WebGL Vendor</Label>
+            <Input
+              id="webgl-vendor"
+              value={fingerprintConfig["webGl:vendor"] || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "webGl:vendor",
+                  e.target.value || undefined,
+                )
+              }
+              placeholder="e.g., Mesa"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="webgl-renderer">WebGL Renderer</Label>
+            <Input
+              id="webgl-renderer"
+              value={fingerprintConfig["webGl:renderer"] || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "webGl:renderer",
+                  e.target.value || undefined,
+                )
+              }
+              placeholder="e.g., llvmpipe, or similar"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* WebGL Parameters */}
+      <div className="space-y-3">
+        <ObjectEditor
+          value={
+            (fingerprintConfig["webGl:parameters"] as Record<
+              string,
+              unknown
+            >) || {}
+          }
+          onChange={(value) =>
+            updateFingerprintConfig("webGl:parameters", value)
+          }
+          title="WebGL Parameters"
+        />
+      </div>
+
+      {/* WebGL2 Parameters */}
+      <div className="space-y-3">
+        <ObjectEditor
+          value={
+            (fingerprintConfig["webGl2:parameters"] as Record<
+              string,
+              unknown
+            >) || {}
+          }
+          onChange={(value) =>
+            updateFingerprintConfig("webGl2:parameters", value)
+          }
+          title="WebGL2 Parameters"
+        />
+      </div>
+
+      {/* WebGL Shader Precision Formats */}
+      <div className="space-y-3">
+        <ObjectEditor
+          value={
+            (fingerprintConfig["webGl:shaderPrecisionFormats"] as Record<
+              string,
+              unknown
+            >) || {}
+          }
+          onChange={(value) =>
+            updateFingerprintConfig("webGl:shaderPrecisionFormats", value)
+          }
+          title="WebGL Shader Precision Formats"
+        />
+      </div>
+
+      {/* WebGL2 Shader Precision Formats */}
+      <div className="space-y-3">
+        <ObjectEditor
+          value={
+            (fingerprintConfig["webGl2:shaderPrecisionFormats"] as Record<
+              string,
+              unknown
+            >) || {}
+          }
+          onChange={(value) =>
+            updateFingerprintConfig("webGl2:shaderPrecisionFormats", value)
+          }
+          title="WebGL2 Shader Precision Formats"
+        />
       </div>
 
       {/* Fonts */}
