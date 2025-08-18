@@ -257,7 +257,10 @@ pub async fn get_groups_with_profile_counts() -> Result<Vec<GroupWithCount>, Str
 }
 
 #[tauri::command]
-pub async fn create_profile_group(app_handle: tauri::AppHandle, name: String) -> Result<ProfileGroup, String> {
+pub async fn create_profile_group(
+  app_handle: tauri::AppHandle,
+  name: String,
+) -> Result<ProfileGroup, String> {
   let group_manager = GROUP_MANAGER.lock().unwrap();
   group_manager
     .create_group(&app_handle, name)
@@ -265,7 +268,11 @@ pub async fn create_profile_group(app_handle: tauri::AppHandle, name: String) ->
 }
 
 #[tauri::command]
-pub async fn update_profile_group(app_handle: tauri::AppHandle, group_id: String, name: String) -> Result<ProfileGroup, String> {
+pub async fn update_profile_group(
+  app_handle: tauri::AppHandle,
+  group_id: String,
+  name: String,
+) -> Result<ProfileGroup, String> {
   let group_manager = GROUP_MANAGER.lock().unwrap();
   group_manager
     .update_group(&app_handle, group_id, name)
@@ -273,7 +280,10 @@ pub async fn update_profile_group(app_handle: tauri::AppHandle, group_id: String
 }
 
 #[tauri::command]
-pub async fn delete_profile_group(app_handle: tauri::AppHandle, group_id: String) -> Result<(), String> {
+pub async fn delete_profile_group(
+  app_handle: tauri::AppHandle,
+  group_id: String,
+) -> Result<(), String> {
   let group_manager = GROUP_MANAGER.lock().unwrap();
   group_manager
     .delete_group(&app_handle, group_id)

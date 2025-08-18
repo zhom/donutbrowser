@@ -1,8 +1,8 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
-import { emit, listen } from "@tauri-apps/api/event";
-import { useCallback, useEffect, useState } from "react";
+import { emit } from "@tauri-apps/api/event";
+import { useCallback, useState } from "react";
 import { FiEdit2, FiPlus, FiTrash2, FiWifi } from "react-icons/fi";
 import { toast } from "sonner";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";

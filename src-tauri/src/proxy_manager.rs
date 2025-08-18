@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use tauri_plugin_shell::ShellExt;
 use tauri::Emitter;
+use tauri_plugin_shell::ShellExt;
 
 use crate::browser::ProxySettings;
 
@@ -243,7 +243,11 @@ impl ProxyManager {
   }
 
   // Delete a stored proxy
-  pub fn delete_stored_proxy(&self, app_handle: &tauri::AppHandle, proxy_id: &str) -> Result<(), String> {
+  pub fn delete_stored_proxy(
+    &self,
+    app_handle: &tauri::AppHandle,
+    proxy_id: &str,
+  ) -> Result<(), String> {
     {
       let mut stored_proxies = self.stored_proxies.lock().unwrap();
       if stored_proxies.remove(proxy_id).is_none() {

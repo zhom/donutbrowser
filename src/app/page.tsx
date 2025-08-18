@@ -62,11 +62,7 @@ export default function Home() {
     error: groupsError,
   } = useGroupEvents();
 
-  const {
-    storedProxies,
-    isLoading: proxiesLoading,
-    error: proxiesError,
-  } = useProxyEvents();
+  const { isLoading: proxiesLoading, error: proxiesError } = useProxyEvents();
 
   const [createProfileDialogOpen, setCreateProfileDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
@@ -273,6 +269,20 @@ export default function Home() {
       showErrorToast(profilesError);
     }
   }, [profilesError]);
+
+  // Handle group errors from useGroupEvents hook
+  useEffect(() => {
+    if (groupsError) {
+      showErrorToast(groupsError);
+    }
+  }, [groupsError]);
+
+  // Handle proxy errors from useProxyEvents hook
+  useEffect(() => {
+    if (proxiesError) {
+      showErrorToast(proxiesError);
+    }
+  }, [proxiesError]);
 
   const checkAllPermissions = useCallback(async () => {
     try {

@@ -909,7 +909,11 @@ impl BrowserRunner {
     })
   }
 
-  pub fn delete_profile(&self, app_handle: tauri::AppHandle, profile_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+  pub fn delete_profile(
+    &self,
+    app_handle: tauri::AppHandle,
+    profile_id: &str,
+  ) -> Result<(), Box<dyn std::error::Error>> {
     let profile_manager = ProfileManager::instance();
     profile_manager.delete_profile(&app_handle, profile_id)?;
 
@@ -2009,7 +2013,10 @@ pub fn rename_profile(
 }
 
 #[tauri::command]
-pub async fn delete_profile(app_handle: tauri::AppHandle, profile_id: String) -> Result<(), String> {
+pub async fn delete_profile(
+  app_handle: tauri::AppHandle,
+  profile_id: String,
+) -> Result<(), String> {
   let browser_runner = BrowserRunner::instance();
   browser_runner
     .delete_profile(app_handle, &profile_id)

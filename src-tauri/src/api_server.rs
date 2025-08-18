@@ -410,7 +410,10 @@ async fn update_profile(
 
   // Update profile fields
   if let Some(new_name) = request.name {
-    if profile_manager.rename_profile(&state.app_handle, &name, &new_name).is_err() {
+    if profile_manager
+      .rename_profile(&state.app_handle, &name, &new_name)
+      .is_err()
+    {
       return Err(StatusCode::BAD_REQUEST);
     }
   }
@@ -461,7 +464,10 @@ async fn update_profile(
   }
 
   if let Some(tags) = request.tags {
-    if profile_manager.update_profile_tags(&state.app_handle, &name, tags).is_err() {
+    if profile_manager
+      .update_profile_tags(&state.app_handle, &name, tags)
+      .is_err()
+    {
       return Err(StatusCode::BAD_REQUEST);
     }
 
@@ -635,7 +641,11 @@ async fn create_proxy(
   // Convert JSON value to ProxySettings
   match serde_json::from_value(request.proxy_settings.clone()) {
     Ok(proxy_settings) => {
-      match PROXY_MANAGER.create_stored_proxy(&state.app_handle, request.name.clone(), proxy_settings) {
+      match PROXY_MANAGER.create_stored_proxy(
+        &state.app_handle,
+        request.name.clone(),
+        proxy_settings,
+      ) {
         Ok(_) => {
           // Find the created proxy to return it
           let proxies = PROXY_MANAGER.get_stored_proxies();

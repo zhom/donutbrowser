@@ -546,7 +546,9 @@ impl ProfileManager {
       })?;
 
     // Check if the browser is currently running using the comprehensive status check
-    let is_running = self.check_browser_status(app_handle.clone(), &profile).await?;
+    let is_running = self
+      .check_browser_status(app_handle.clone(), &profile)
+      .await?;
 
     if is_running {
       return Err(
