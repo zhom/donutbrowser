@@ -1,7 +1,6 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
-import { emit } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GoPlus } from "react-icons/go";
 import { LoadingButton } from "@/components/loading-button";
@@ -27,8 +26,9 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useBrowserDownload } from "@/hooks/use-browser-download";
+import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { getBrowserIcon } from "@/lib/browser-utils";
-import type { BrowserReleaseTypes, CamoufoxConfig, StoredProxy } from "@/types";
+import type { BrowserReleaseTypes, CamoufoxConfig } from "@/types";
 import { RippleButton } from "./ui/ripple";
 
 type BrowserTypeString =
@@ -122,7 +122,7 @@ export function CreateProfileDialog({
   });
 
   const [supportedBrowsers, setSupportedBrowsers] = useState<string[]>([]);
-  const [storedProxies, setStoredProxies] = useState<StoredProxy[]>([]);
+  const { storedProxies } = useProxyEvents();
   const [showProxyForm, setShowProxyForm] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [releaseTypes, setReleaseTypes] = useState<BrowserReleaseTypes>();
@@ -142,15 +142,6 @@ export function CreateProfileDialog({
       setSupportedBrowsers(browsers);
     } catch (error) {
       console.error("Failed to load supported browsers:", error);
-    }
-  }, []);
-
-  const loadStoredProxies = useCallback(async () => {
-    try {
-      const proxies = await invoke<StoredProxy[]>("get_stored_proxies");
-      setStoredProxies(proxies);
-    } catch (error) {
-      console.error("Failed to load stored proxies:", error);
     }
   }, []);
 
@@ -241,7 +232,6 @@ export function CreateProfileDialog({
         setSelectedBrowser("camoufox");
       }
       void loadSupportedBrowsers();
-      void loadStoredProxies();
       // Load camoufox release types when dialog opens
       void loadReleaseTypes(selectedBrowser || "camoufox");
       // Check and download GeoIP database if needed for Camoufox
@@ -250,7 +240,6 @@ export function CreateProfileDialog({
   }, [
     isOpen,
     loadSupportedBrowsers,
-    loadStoredProxies,
     loadReleaseTypes,
     checkAndDownloadGeoIPDatabase,
     selectedBrowser,
@@ -642,11 +631,6 @@ export function CreateProfileDialog({
       <ProxyFormDialog
         isOpen={showProxyForm}
         onClose={() => setShowProxyForm(false)}
-        onSave={(proxy) => {
-          setStoredProxies((prev) => [...prev, proxy]);
-          setSelectedProxyId(proxy.id);
-          void emit("stored-proxies-changed");
-        }}
       />
     </Dialog>
   );
