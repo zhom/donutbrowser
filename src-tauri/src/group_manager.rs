@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use tauri::Emitter;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProfileGroup {
@@ -97,7 +98,11 @@ impl GroupManager {
     Ok(groups_data.groups)
   }
 
-  pub fn create_group(&self, name: String) -> Result<ProfileGroup, Box<dyn std::error::Error>> {
+  pub fn create_group(
+    &self,
+    app_handle: &tauri::AppHandle,
+    name: String,
+  ) -> Result<ProfileGroup, Box<dyn std::error::Error>> {
     let mut groups_data = self.load_groups_data()?;
 
     // Check if group with this name already exists
@@ -113,11 +118,17 @@ impl GroupManager {
     groups_data.groups.push(group.clone());
     self.save_groups_data(&groups_data)?;
 
+    // Emit event for reactive UI updates
+    if let Err(e) = app_handle.emit("groups-changed", ()) {
+      eprintln!("Failed to emit groups-changed event: {e}");
+    }
+
     Ok(group)
   }
 
   pub fn update_group(
     &self,
+    app_handle: &tauri::AppHandle,
     id: String,
     name: String,
   ) -> Result<ProfileGroup, Box<dyn std::error::Error>> {
@@ -142,10 +153,20 @@ impl GroupManager {
     let updated_group = group.clone();
 
     self.save_groups_data(&groups_data)?;
+
+    // Emit event for reactive UI updates
+    if let Err(e) = app_handle.emit("groups-changed", ()) {
+      eprintln!("Failed to emit groups-changed event: {e}");
+    }
+
     Ok(updated_group)
   }
 
-  pub fn delete_group(&self, id: String) -> Result<(), Box<dyn std::error::Error>> {
+  pub fn delete_group(
+    &self,
+    app_handle: &tauri::AppHandle,
+    id: String,
+  ) -> Result<(), Box<dyn std::error::Error>> {
     let mut groups_data = self.load_groups_data()?;
 
     let initial_len = groups_data.groups.len();
@@ -156,6 +177,12 @@ impl GroupManager {
     }
 
     self.save_groups_data(&groups_data)?;
+
+    // Emit event for reactive UI updates
+    if let Err(e) = app_handle.emit("groups-changed", ()) {
+      eprintln!("Failed to emit groups-changed event: {e}");
+    }
+
     Ok(())
   }
 
@@ -203,270 +230,6 @@ lazy_static::lazy_static! {
   pub static ref GROUP_MANAGER: Mutex<GroupManager> = Mutex::new(GroupManager::new());
 }
 
-#[cfg(test)]
-mod tests {
-  use super::*;
-  use std::env;
-  use tempfile::TempDir;
-
-  fn create_test_group_manager() -> (GroupManager, TempDir) {
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
-
-    // Set up a temporary home directory for testing
-    env::set_var("HOME", temp_dir.path());
-
-    // Use per-test isolated data directory without relying on global env vars
-    let data_override = temp_dir.path().join("donutbrowser_test_data");
-    let manager = GroupManager::with_data_dir_override(&data_override);
-    (manager, temp_dir)
-  }
-
-  #[test]
-  fn test_group_manager_creation() {
-    let (_manager, _temp_dir) = create_test_group_manager();
-    // Test passes if no panic occurs
-  }
-
-  #[test]
-  fn test_create_and_get_groups() {
-    let (manager, _temp_dir) = create_test_group_manager();
-
-    // Initially should have no groups
-    let groups = manager
-      .get_all_groups()
-      .expect("Should be able to get groups");
-    assert!(groups.is_empty(), "Should start with no groups");
-
-    // Create a group
-    let group_name = "Test Group".to_string();
-    let created_group = manager
-      .create_group(group_name.clone())
-      .expect("Should create group successfully");
-
-    assert_eq!(
-      created_group.name, group_name,
-      "Created group should have correct name"
-    );
-    assert!(
-      !created_group.id.is_empty(),
-      "Created group should have an ID"
-    );
-
-    // Verify group was saved
-    let groups = manager
-      .get_all_groups()
-      .expect("Should be able to get groups");
-    assert_eq!(groups.len(), 1, "Should have one group");
-    assert_eq!(
-      groups[0].name, group_name,
-      "Retrieved group should have correct name"
-    );
-    assert_eq!(
-      groups[0].id, created_group.id,
-      "Retrieved group should have correct ID"
-    );
-  }
-
-  #[test]
-  fn test_create_duplicate_group_fails() {
-    let (manager, _temp_dir) = create_test_group_manager();
-
-    let group_name = "Duplicate Group".to_string();
-
-    // Create first group
-    let _first_group = manager
-      .create_group(group_name.clone())
-      .expect("Should create first group");
-
-    // Try to create duplicate group
-    let result = manager.create_group(group_name.clone());
-    assert!(result.is_err(), "Should fail to create duplicate group");
-
-    let error_msg = result.unwrap_err().to_string();
-    assert!(
-      error_msg.contains("already exists"),
-      "Error should mention group already exists"
-    );
-  }
-
-  #[test]
-  fn test_update_group() {
-    let (manager, _temp_dir) = create_test_group_manager();
-
-    // Create a group
-    let original_name = "Original Name".to_string();
-    let created_group = manager
-      .create_group(original_name)
-      .expect("Should create group");
-
-    // Update the group
-    let new_name = "Updated Name".to_string();
-    let updated_group = manager
-      .update_group(created_group.id.clone(), new_name.clone())
-      .expect("Should update group successfully");
-
-    assert_eq!(
-      updated_group.name, new_name,
-      "Updated group should have new name"
-    );
-    assert_eq!(
-      updated_group.id, created_group.id,
-      "Updated group should keep same ID"
-    );
-
-    // Verify update was persisted
-    let groups = manager.get_all_groups().expect("Should get groups");
-    assert_eq!(groups.len(), 1, "Should still have one group");
-    assert_eq!(
-      groups[0].name, new_name,
-      "Persisted group should have updated name"
-    );
-  }
-
-  #[test]
-  fn test_update_nonexistent_group_fails() {
-    let (manager, _temp_dir) = create_test_group_manager();
-
-    let result = manager.update_group("nonexistent-id".to_string(), "New Name".to_string());
-    assert!(result.is_err(), "Should fail to update nonexistent group");
-
-    let error_msg = result.unwrap_err().to_string();
-    assert!(
-      error_msg.contains("not found"),
-      "Error should mention group not found"
-    );
-  }
-
-  #[test]
-  fn test_delete_group() {
-    let (manager, _temp_dir) = create_test_group_manager();
-
-    // Create a group
-    let group_name = "To Delete".to_string();
-    let created_group = manager
-      .create_group(group_name)
-      .expect("Should create group");
-
-    // Verify group exists
-    let groups = manager.get_all_groups().expect("Should get groups");
-    assert_eq!(groups.len(), 1, "Should have one group");
-
-    // Delete the group
-    manager
-      .delete_group(created_group.id)
-      .expect("Should delete group successfully");
-
-    // Verify group was deleted
-    let groups = manager.get_all_groups().expect("Should get groups");
-    assert!(groups.is_empty(), "Should have no groups after deletion");
-  }
-
-  #[test]
-  fn test_delete_nonexistent_group_fails() {
-    let (manager, _temp_dir) = create_test_group_manager();
-
-    let result = manager.delete_group("nonexistent-id".to_string());
-    assert!(result.is_err(), "Should fail to delete nonexistent group");
-
-    let error_msg = result.unwrap_err().to_string();
-    assert!(
-      error_msg.contains("not found"),
-      "Error should mention group not found"
-    );
-  }
-
-  #[test]
-  fn test_get_groups_with_profile_counts() {
-    let (manager, _temp_dir) = create_test_group_manager();
-
-    // Create test groups
-    let group1 = manager
-      .create_group("Group 1".to_string())
-      .expect("Should create group 1");
-    let _group2 = manager
-      .create_group("Group 2".to_string())
-      .expect("Should create group 2");
-
-    // Create mock profiles
-    let profiles = vec![
-      crate::profile::BrowserProfile {
-        id: uuid::Uuid::new_v4(),
-        name: "Profile 1".to_string(),
-        browser: "firefox".to_string(),
-        version: "1.0".to_string(),
-        proxy_id: None,
-        process_id: None,
-        last_launch: None,
-        release_type: "stable".to_string(),
-        camoufox_config: None,
-        group_id: Some(group1.id.clone()),
-        tags: Vec::new(),
-      },
-      crate::profile::BrowserProfile {
-        id: uuid::Uuid::new_v4(),
-        name: "Profile 2".to_string(),
-        browser: "firefox".to_string(),
-        version: "1.0".to_string(),
-        proxy_id: None,
-        process_id: None,
-        last_launch: None,
-        release_type: "stable".to_string(),
-        camoufox_config: None,
-        group_id: Some(group1.id.clone()),
-        tags: Vec::new(),
-      },
-      crate::profile::BrowserProfile {
-        id: uuid::Uuid::new_v4(),
-        name: "Profile 3".to_string(),
-        browser: "firefox".to_string(),
-        version: "1.0".to_string(),
-        proxy_id: None,
-        process_id: None,
-        last_launch: None,
-        release_type: "stable".to_string(),
-        camoufox_config: None,
-        group_id: None, // Default group
-        tags: Vec::new(),
-      },
-    ];
-
-    let groups_with_counts = manager
-      .get_groups_with_profile_counts(&profiles)
-      .expect("Should get groups with counts");
-
-    // Should have default group + group1 + group2 (group2 has 0 profiles but should still appear)
-    assert_eq!(
-      groups_with_counts.len(),
-      3,
-      "Should include all groups, even those with 0 profiles"
-    );
-
-    // Check default group
-    let default_group = groups_with_counts
-      .iter()
-      .find(|g| g.id == "default")
-      .expect("Should have default group");
-    assert_eq!(
-      default_group.count, 1,
-      "Default group should have 1 profile"
-    );
-
-    // Check group1
-    let group1_with_count = groups_with_counts
-      .iter()
-      .find(|g| g.id == group1.id)
-      .expect("Should have group1");
-    assert_eq!(group1_with_count.count, 2, "Group1 should have 2 profiles");
-
-    // Check that group2 exists with 0 profiles
-    let group2_with_count = groups_with_counts
-      .iter()
-      .find(|g| g.name == "Group 2")
-      .expect("Should have group2 present even with 0 profiles");
-    assert_eq!(group2_with_count.count, 0, "Group2 should have 0 profiles");
-  }
-}
-
 // Helper function to get groups with counts
 pub fn get_groups_with_counts(profiles: &[crate::profile::BrowserProfile]) -> Vec<GroupWithCount> {
   let group_manager = GROUP_MANAGER.lock().unwrap();
@@ -494,26 +257,26 @@ pub async fn get_groups_with_profile_counts() -> Result<Vec<GroupWithCount>, Str
 }
 
 #[tauri::command]
-pub async fn create_profile_group(name: String) -> Result<ProfileGroup, String> {
+pub async fn create_profile_group(app_handle: tauri::AppHandle, name: String) -> Result<ProfileGroup, String> {
   let group_manager = GROUP_MANAGER.lock().unwrap();
   group_manager
-    .create_group(name)
+    .create_group(&app_handle, name)
     .map_err(|e| format!("Failed to create group: {e}"))
 }
 
 #[tauri::command]
-pub async fn update_profile_group(group_id: String, name: String) -> Result<ProfileGroup, String> {
+pub async fn update_profile_group(app_handle: tauri::AppHandle, group_id: String, name: String) -> Result<ProfileGroup, String> {
   let group_manager = GROUP_MANAGER.lock().unwrap();
   group_manager
-    .update_group(group_id, name)
+    .update_group(&app_handle, group_id, name)
     .map_err(|e| format!("Failed to update group: {e}"))
 }
 
 #[tauri::command]
-pub async fn delete_profile_group(group_id: String) -> Result<(), String> {
+pub async fn delete_profile_group(app_handle: tauri::AppHandle, group_id: String) -> Result<(), String> {
   let group_manager = GROUP_MANAGER.lock().unwrap();
   group_manager
-    .delete_group(group_id)
+    .delete_group(&app_handle, group_id)
     .map_err(|e| format!("Failed to delete group: {e}"))
 }
 

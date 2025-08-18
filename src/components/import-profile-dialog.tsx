@@ -31,13 +31,11 @@ import { RippleButton } from "./ui/ripple";
 interface ImportProfileDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onImportComplete?: () => void;
 }
 
 export function ImportProfileDialog({
   isOpen,
   onClose,
-  onImportComplete,
 }: ImportProfileDialogProps) {
   const [detectedProfiles, setDetectedProfiles] = useState<DetectedProfile[]>(
     [],
@@ -140,9 +138,6 @@ export function ImportProfileDialog({
       toast.success(
         `Successfully imported profile "${autoDetectProfileName.trim()}"`,
       );
-      if (onImportComplete) {
-        onImportComplete();
-      }
       onClose();
     } catch (error) {
       console.error("Failed to import profile:", error);
@@ -168,7 +163,6 @@ export function ImportProfileDialog({
     selectedDetectedProfile,
     autoDetectProfileName,
     detectedProfiles,
-    onImportComplete,
     onClose,
   ]);
 
@@ -193,9 +187,6 @@ export function ImportProfileDialog({
       toast.success(
         `Successfully imported profile "${manualProfileName.trim()}"`,
       );
-      if (onImportComplete) {
-        onImportComplete();
-      }
       onClose();
     } catch (error) {
       console.error("Failed to import profile:", error);
@@ -217,13 +208,7 @@ export function ImportProfileDialog({
     } finally {
       setIsImporting(false);
     }
-  }, [
-    manualBrowserType,
-    manualProfilePath,
-    manualProfileName,
-    onImportComplete,
-    onClose,
-  ]);
+  }, [manualBrowserType, manualProfilePath, manualProfileName, onClose]);
 
   const handleClose = () => {
     setSelectedDetectedProfile(null);

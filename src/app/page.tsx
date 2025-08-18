@@ -18,9 +18,11 @@ import { ProfileSelectorDialog } from "@/components/profile-selector-dialog";
 import { ProxyManagementDialog } from "@/components/proxy-management-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { useAppUpdateNotifications } from "@/hooks/use-app-update-notifications";
+import { useGroupEvents } from "@/hooks/use-group-events";
 import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useProfileEvents } from "@/hooks/use-profile-events";
+import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { useUpdateNotifications } from "@/hooks/use-update-notifications";
 import { useVersionUpdater } from "@/hooks/use-version-updater";
 import { showErrorToast, showToast } from "@/lib/toast-utils";
@@ -49,13 +51,22 @@ export default function Home() {
   // Use the new profile events hook for centralized profile management
   const {
     profiles,
-    groups,
     runningProfiles,
     isLoading: profilesLoading,
     error: profilesError,
-    loadProfiles,
-    clearError: clearProfilesError,
   } = useProfileEvents();
+
+  const {
+    groups: groupsData,
+    isLoading: groupsLoading,
+    error: groupsError,
+  } = useGroupEvents();
+
+  const {
+    storedProxies,
+    isLoading: proxiesLoading,
+    error: proxiesError,
+  } = useProxyEvents();
 
   const [createProfileDialogOpen, setCreateProfileDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
@@ -194,7 +205,7 @@ export default function Home() {
   );
 
   // Auto-update functionality - use the existing hook for compatibility
-  const updateNotifications = useUpdateNotifications(loadProfiles);
+  const updateNotifications = useUpdateNotifications();
   const { checkForUpdates, isUpdating } = updateNotifications;
 
   useAppUpdateNotifications();
@@ -260,9 +271,8 @@ export default function Home() {
   useEffect(() => {
     if (profilesError) {
       showErrorToast(profilesError);
-      clearProfilesError();
     }
-  }, [profilesError, clearProfilesError]);
+  }, [profilesError]);
 
   const checkAllPermissions = useCallback(async () => {
     try {
@@ -644,6 +654,9 @@ export default function Home() {
     return profiles.filter((profile) => profile.group_id === selectedGroupId);
   }, [profiles, selectedGroupId]);
 
+  // Update loading states
+  const isLoading = profilesLoading || groupsLoading || proxiesLoading;
+
   return (
     <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen gap-8 font-[family-name:var(--font-geist-sans)] bg-background">
       <main className="flex flex-col row-start-2 gap-6 items-center w-full max-w-3xl">
@@ -663,8 +676,8 @@ export default function Home() {
           <GroupBadges
             selectedGroupId={selectedGroupId}
             onGroupSelect={handleSelectGroup}
-            groups={groups}
-            isLoading={profilesLoading}
+            groups={groupsData}
+            isLoading={isLoading}
           />
           <ProfilesDataTable
             profiles={filteredProfiles}
@@ -717,7 +730,6 @@ export default function Home() {
         onClose={() => {
           setImportProfileDialogOpen(false);
         }}
-        onImportComplete={() => void loadProfiles()}
       />
 
       <ProxyManagementDialog
