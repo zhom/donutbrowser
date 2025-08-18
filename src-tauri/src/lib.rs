@@ -174,11 +174,12 @@ async fn handle_url_open(app: tauri::AppHandle, url: String) -> Result<(), Strin
 
 #[tauri::command]
 async fn create_stored_proxy(
+  app_handle: tauri::AppHandle,
   name: String,
   proxy_settings: crate::browser::ProxySettings,
 ) -> Result<crate::proxy_manager::StoredProxy, String> {
   crate::proxy_manager::PROXY_MANAGER
-    .create_stored_proxy(name, proxy_settings)
+    .create_stored_proxy(&app_handle, name, proxy_settings)
     .map_err(|e| format!("Failed to create stored proxy: {e}"))
 }
 
@@ -189,19 +190,20 @@ async fn get_stored_proxies() -> Result<Vec<crate::proxy_manager::StoredProxy>, 
 
 #[tauri::command]
 async fn update_stored_proxy(
+  app_handle: tauri::AppHandle,
   proxy_id: String,
   name: Option<String>,
   proxy_settings: Option<crate::browser::ProxySettings>,
 ) -> Result<crate::proxy_manager::StoredProxy, String> {
   crate::proxy_manager::PROXY_MANAGER
-    .update_stored_proxy(&proxy_id, name, proxy_settings)
+    .update_stored_proxy(&app_handle, &proxy_id, name, proxy_settings)
     .map_err(|e| format!("Failed to update stored proxy: {e}"))
 }
 
 #[tauri::command]
-async fn delete_stored_proxy(proxy_id: String) -> Result<(), String> {
+async fn delete_stored_proxy(app_handle: tauri::AppHandle, proxy_id: String) -> Result<(), String> {
   crate::proxy_manager::PROXY_MANAGER
-    .delete_stored_proxy(&proxy_id)
+    .delete_stored_proxy(&app_handle, &proxy_id)
     .map_err(|e| format!("Failed to delete stored proxy: {e}"))
 }
 

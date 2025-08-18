@@ -537,11 +537,11 @@ async fn get_group(
 }
 
 async fn create_group(
-  State(_state): State<ApiServerState>,
+  State(state): State<ApiServerState>,
   Json(request): Json<CreateGroupRequest>,
 ) -> Result<Json<ApiGroupResponse>, StatusCode> {
   match GROUP_MANAGER.lock() {
-    Ok(manager) => match manager.create_group(request.name) {
+    Ok(manager) => match manager.create_group(&state.app_handle, request.name) {
       Ok(group) => Ok(Json(ApiGroupResponse {
         id: group.id,
         name: group.name,
@@ -555,11 +555,11 @@ async fn create_group(
 
 async fn update_group(
   Path(id): Path<String>,
-  State(_state): State<ApiServerState>,
+  State(state): State<ApiServerState>,
   Json(request): Json<UpdateGroupRequest>,
 ) -> Result<Json<ApiGroupResponse>, StatusCode> {
   match GROUP_MANAGER.lock() {
-    Ok(manager) => match manager.update_group(id.clone(), request.name) {
+    Ok(manager) => match manager.update_group(&state.app_handle, id.clone(), request.name) {
       Ok(group) => Ok(Json(ApiGroupResponse {
         id: group.id,
         name: group.name,
@@ -573,10 +573,10 @@ async fn update_group(
 
 async fn delete_group(
   Path(id): Path<String>,
-  State(_state): State<ApiServerState>,
+  State(state): State<ApiServerState>,
 ) -> Result<StatusCode, StatusCode> {
   match GROUP_MANAGER.lock() {
-    Ok(manager) => match manager.delete_group(id.clone()) {
+    Ok(manager) => match manager.delete_group(&state.app_handle, id.clone()) {
       Ok(_) => Ok(StatusCode::NO_CONTENT),
       Err(_) => Err(StatusCode::BAD_REQUEST),
     },
@@ -629,13 +629,13 @@ async fn get_proxy(
 }
 
 async fn create_proxy(
-  State(_state): State<ApiServerState>,
+  State(state): State<ApiServerState>,
   Json(request): Json<CreateProxyRequest>,
 ) -> Result<Json<ApiProxyResponse>, StatusCode> {
   // Convert JSON value to ProxySettings
   match serde_json::from_value(request.proxy_settings.clone()) {
     Ok(proxy_settings) => {
-      match PROXY_MANAGER.create_stored_proxy(request.name.clone(), proxy_settings) {
+      match PROXY_MANAGER.create_stored_proxy(&state.app_handle, request.name.clone(), proxy_settings) {
         Ok(_) => {
           // Find the created proxy to return it
           let proxies = PROXY_MANAGER.get_stored_proxies();
@@ -658,7 +658,7 @@ async fn create_proxy(
 
 async fn update_proxy(
   Path(id): Path<String>,
-  State(_state): State<ApiServerState>,
+  State(state): State<ApiServerState>,
   Json(request): Json<UpdateProxyRequest>,
 ) -> Result<Json<ApiProxyResponse>, StatusCode> {
   let proxies = PROXY_MANAGER.get_stored_proxies();
@@ -674,6 +674,7 @@ async fn update_proxy(
     };
 
     match PROXY_MANAGER.update_stored_proxy(
+      &state.app_handle,
       &id,
       Some(new_name.clone()),
       Some(new_proxy_settings.clone()),
@@ -692,9 +693,9 @@ async fn update_proxy(
 
 async fn delete_proxy(
   Path(id): Path<String>,
-  State(_state): State<ApiServerState>,
+  State(state): State<ApiServerState>,
 ) -> Result<StatusCode, StatusCode> {
-  match PROXY_MANAGER.delete_stored_proxy(&id) {
+  match PROXY_MANAGER.delete_stored_proxy(&state.app_handle, &id) {
     Ok(_) => Ok(StatusCode::NO_CONTENT),
     Err(_) => Err(StatusCode::BAD_REQUEST),
   }

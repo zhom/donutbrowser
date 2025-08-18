@@ -21,6 +21,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { trimName } from "@/lib/name-utils";
 import type { StoredProxy } from "@/types";
 import { RippleButton } from "./ui/ripple";
@@ -34,84 +35,12 @@ export function ProxyManagementDialog({
   isOpen,
   onClose,
 }: ProxyManagementDialogProps) {
-  const [storedProxies, setStoredProxies] = useState<StoredProxy[]>([]);
-  const [loading, setLoading] = useState(false);
   const [showProxyForm, setShowProxyForm] = useState(false);
   const [editingProxy, setEditingProxy] = useState<StoredProxy | null>(null);
-  const [proxyUsage, setProxyUsage] = useState<Record<string, number>>({});
   const [proxyToDelete, setProxyToDelete] = useState<StoredProxy | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const loadStoredProxies = useCallback(async () => {
-    try {
-      setLoading(true);
-      const proxies = await invoke<StoredProxy[]>("get_stored_proxies");
-      setStoredProxies(proxies);
-    } catch (error) {
-      console.error("Failed to load stored proxies:", error);
-      toast.error("Failed to load proxies");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const loadProxyUsage = useCallback(async () => {
-    try {
-      const profiles = await invoke<Array<{ proxy_id?: string }>>(
-        "list_browser_profiles",
-      );
-      const counts: Record<string, number> = {};
-      for (const p of profiles) {
-        if (p.proxy_id) counts[p.proxy_id] = (counts[p.proxy_id] ?? 0) + 1;
-      }
-      setProxyUsage(counts);
-    } catch (_err) {
-      // ignore non-critical errors
-    }
-  }, []);
-
-  useEffect(() => {
-    if (isOpen) {
-      loadStoredProxies();
-      void loadProxyUsage();
-    }
-  }, [isOpen, loadStoredProxies, loadProxyUsage]);
-
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    const setup = async () => {
-      try {
-        unlisten = await listen("profile-updated", () => {
-          void loadProxyUsage();
-        });
-      } catch (_err) {
-        // ignore non-critical errors
-      }
-    };
-    if (isOpen) void setup();
-    return () => {
-      if (unlisten) unlisten();
-    };
-  }, [isOpen, loadProxyUsage]);
-
-  // Keep list in sync with external changes (e.g., created from CreateProfileDialog)
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    const setup = async () => {
-      try {
-        unlisten = await listen("stored-proxies-changed", () => {
-          void loadStoredProxies();
-          void loadProxyUsage();
-        });
-      } catch (_err) {
-        // ignore non-critical errors
-      }
-    };
-    if (isOpen) void setup();
-    return () => {
-      if (unlisten) unlisten();
-    };
-  }, [isOpen, loadStoredProxies, loadProxyUsage]);
+  const { storedProxies, proxyUsage, isLoading } = useProxyEvents();
 
   const handleDeleteProxy = useCallback((proxy: StoredProxy) => {
     // Open in-app confirmation dialog
@@ -123,7 +52,6 @@ export function ProxyManagementDialog({
     setIsDeleting(true);
     try {
       await invoke("delete_stored_proxy", { proxyId: proxyToDelete.id });
-      setStoredProxies((prev) => prev.filter((p) => p.id !== proxyToDelete.id));
       toast.success("Proxy deleted successfully");
       await emit("stored-proxies-changed");
     } catch (error) {
@@ -143,24 +71,6 @@ export function ProxyManagementDialog({
   const handleEditProxy = useCallback((proxy: StoredProxy) => {
     setEditingProxy(proxy);
     setShowProxyForm(true);
-  }, []);
-
-  const handleProxySaved = useCallback((savedProxy: StoredProxy) => {
-    setStoredProxies((prev) => {
-      const existingIndex = prev.findIndex((p) => p.id === savedProxy.id);
-      if (existingIndex >= 0) {
-        // Update existing proxy
-        const updated = [...prev];
-        updated[existingIndex] = savedProxy;
-        return updated;
-      } else {
-        // Add new proxy
-        return [...prev, savedProxy];
-      }
-    });
-    setShowProxyForm(false);
-    setEditingProxy(null);
-    void emit("stored-proxies-changed");
   }, []);
 
   const handleProxyFormClose = useCallback(() => {
@@ -200,13 +110,12 @@ export function ProxyManagementDialog({
 
             {/* Proxy List - Scrollable */}
             <div className="flex-1 min-h-0">
-              {loading ? (
-                <div className="flex justify-center items-center h-32">
-                  <p className="text-sm text-muted-foreground">
-                    Loading proxies...
-                  </p>
+              {isLoading && (
+                <div className="flex justify-center items-center py-6">
+                  <div className="w-8 h-8 rounded-full border-b-2 animate-spin border-primary"></div>
                 </div>
-              ) : storedProxies.length === 0 ? (
+              )}
+              {storedProxies.length === 0 && !isLoading ? (
                 <div className="flex flex-col justify-center items-center h-32 text-center">
                   <FiWifi className="mx-auto mb-4 w-12 h-12 text-muted-foreground" />
                   <p className="mb-2 text-muted-foreground">
@@ -310,7 +219,6 @@ export function ProxyManagementDialog({
       <ProxyFormDialog
         isOpen={showProxyForm}
         onClose={handleProxyFormClose}
-        onSave={handleProxySaved}
         editingProxy={editingProxy}
       />
       <DeleteConfirmationDialog

@@ -28,8 +28,9 @@ import {
 } from "@/components/ui/tooltip";
 import { useBrowserState } from "@/hooks/use-browser-state";
 import { useProfileEvents } from "@/hooks/use-profile-events";
+import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { getBrowserDisplayName, getBrowserIcon } from "@/lib/browser-utils";
-import type { BrowserProfile, StoredProxy } from "@/types";
+import type { BrowserProfile } from "@/types";
 import { RippleButton } from "./ui/ripple";
 
 interface ProfileSelectorDialogProps {
@@ -53,9 +54,10 @@ export function ProfileSelectorDialog({
   // Use external runningProfiles if provided, otherwise use hook's runningProfiles
   const runningProfiles = externalRunningProfiles || hookRunningProfiles;
 
+  const { storedProxies } = useProxyEvents();
+
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
   const [isLaunching, setIsLaunching] = useState(false);
-  const [storedProxies, setStoredProxies] = useState<StoredProxy[]>([]);
   const [launchingProfiles, setLaunchingProfiles] = useState<Set<string>>(
     new Set(),
   );
@@ -81,16 +83,6 @@ export function ProfileSelectorDialog({
     },
     [storedProxies],
   );
-
-  // Load stored proxies
-  const loadStoredProxies = useCallback(async () => {
-    try {
-      const proxiesList = await invoke<StoredProxy[]>("get_stored_proxies");
-      setStoredProxies(proxiesList);
-    } catch (err) {
-      console.error("Failed to load stored proxies:", err);
-    }
-  }, []);
 
   // Helper function to get tooltip content for profiles - now uses shared hook
   const getProfileTooltipContent = (profile: BrowserProfile): string | null => {
@@ -181,13 +173,6 @@ export function ProfileSelectorDialog({
       }
     }
   }, [isOpen, profiles, selectedProfile, runningProfiles]);
-
-  // Load stored proxies when dialog opens
-  useEffect(() => {
-    if (isOpen) {
-      void loadStoredProxies();
-    }
-  }, [isOpen, loadStoredProxies]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>

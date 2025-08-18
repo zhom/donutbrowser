@@ -6,6 +6,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri_plugin_shell::ShellExt;
+use tauri::Emitter;
 
 use crate::browser::ProxySettings;
 
@@ -146,6 +147,7 @@ impl ProxyManager {
   // Create a new stored proxy
   pub fn create_stored_proxy(
     &self,
+    app_handle: &tauri::AppHandle,
     name: String,
     proxy_settings: ProxySettings,
   ) -> Result<StoredProxy, String> {
@@ -168,6 +170,11 @@ impl ProxyManager {
       eprintln!("Warning: Failed to save proxy: {e}");
     }
 
+    // Emit event for reactive UI updates
+    if let Err(e) = app_handle.emit("proxies-changed", ()) {
+      eprintln!("Failed to emit proxies-changed event: {e}");
+    }
+
     Ok(stored_proxy)
   }
 
@@ -182,6 +189,7 @@ impl ProxyManager {
   // Update a stored proxy
   pub fn update_stored_proxy(
     &self,
+    app_handle: &tauri::AppHandle,
     proxy_id: &str,
     name: Option<String>,
     proxy_settings: Option<ProxySettings>,
@@ -226,11 +234,16 @@ impl ProxyManager {
       eprintln!("Warning: Failed to save proxy: {e}");
     }
 
+    // Emit event for reactive UI updates
+    if let Err(e) = app_handle.emit("proxies-changed", ()) {
+      eprintln!("Failed to emit proxies-changed event: {e}");
+    }
+
     Ok(updated_proxy)
   }
 
   // Delete a stored proxy
-  pub fn delete_stored_proxy(&self, proxy_id: &str) -> Result<(), String> {
+  pub fn delete_stored_proxy(&self, app_handle: &tauri::AppHandle, proxy_id: &str) -> Result<(), String> {
     {
       let mut stored_proxies = self.stored_proxies.lock().unwrap();
       if stored_proxies.remove(proxy_id).is_none() {
@@ -240,6 +253,11 @@ impl ProxyManager {
 
     if let Err(e) = self.delete_proxy_file(proxy_id) {
       eprintln!("Warning: Failed to delete proxy file: {e}");
+    }
+
+    // Emit event for reactive UI updates
+    if let Err(e) = app_handle.emit("proxies-changed", ()) {
+      eprintln!("Failed to emit proxies-changed event: {e}");
     }
 
     Ok(())
@@ -514,6 +532,11 @@ impl ProxyManager {
       }
     }
 
+    // Emit event for reactive UI updates
+    if let Err(e) = app_handle.emit("proxies-changed", ()) {
+      eprintln!("Failed to emit proxies-changed event: {e}");
+    }
+
     Ok(())
   }
 
@@ -552,6 +575,11 @@ impl ProxyManager {
     for dead_pid in &dead_pids {
       println!("Cleaning up proxy for dead browser process PID: {dead_pid}");
       let _ = self.stop_proxy(app_handle.clone(), *dead_pid).await;
+    }
+
+    // Emit event for reactive UI updates
+    if let Err(e) = app_handle.emit("proxies-changed", ()) {
+      eprintln!("Failed to emit proxies-changed event: {e}");
     }
 
     Ok(dead_pids)

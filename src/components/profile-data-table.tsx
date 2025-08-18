@@ -52,6 +52,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useBrowserState } from "@/hooks/use-browser-state";
+import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { useTableSorting } from "@/hooks/use-table-sorting";
 import {
   getBrowserDisplayName,
@@ -413,10 +414,8 @@ export function ProfilesDataTable({
     new Set(),
   );
 
-  const [storedProxies, setStoredProxies] = React.useState<StoredProxy[]>([]);
-  const [openProxySelectorFor, setOpenProxySelectorFor] = React.useState<
-    string | null
-  >(null);
+  const { storedProxies } = useProxyEvents();
+
   const [proxyOverrides, setProxyOverrides] = React.useState<
     Record<string, string | null>
   >({});
@@ -426,6 +425,9 @@ export function ProfilesDataTable({
   >({});
   const [allTags, setAllTags] = React.useState<string[]>([]);
   const [openTagsEditorFor, setOpenTagsEditorFor] = React.useState<
+    string | null
+  >(null);
+  const [openProxySelectorFor, setOpenProxySelectorFor] = React.useState<
     string | null
   >(null);
 
@@ -466,16 +468,6 @@ export function ProfilesDataTable({
     stoppingProfiles,
   );
 
-  // Load stored proxies
-  const loadStoredProxies = React.useCallback(async () => {
-    try {
-      const proxiesList = await invoke<StoredProxy[]>("get_stored_proxies");
-      setStoredProxies(proxiesList);
-    } catch (error) {
-      console.error("Failed to load stored proxies:", error);
-    }
-  }, []);
-
   // Clear launching/stopping spinners when backend reports running status changes
   React.useEffect(() => {
     if (!browserState.isClient) return;
@@ -511,12 +503,6 @@ export function ProfilesDataTable({
     };
   }, [browserState.isClient]);
 
-  React.useEffect(() => {
-    if (browserState.isClient) {
-      void loadStoredProxies();
-    }
-  }, [browserState.isClient, loadStoredProxies]);
-
   // Keep stored proxies up-to-date by listening for changes emitted elsewhere in the app
   React.useEffect(() => {
     if (!browserState.isClient) return;
@@ -524,10 +510,7 @@ export function ProfilesDataTable({
     (async () => {
       try {
         unlisten = await listen("stored-proxies-changed", () => {
-          void loadStoredProxies();
-        });
-        // Also refresh tags on profile updates
-        await listen("profile-updated", () => {
+          // Also refresh tags on profile updates
           void loadAllTags();
         });
       } catch (_err) {
@@ -537,7 +520,7 @@ export function ProfilesDataTable({
     return () => {
       if (unlisten) unlisten();
     };
-  }, [browserState.isClient, loadStoredProxies, loadAllTags]);
+  }, [browserState.isClient, loadAllTags]);
 
   // Automatically deselect profiles that become running, updating, launching, or stopping
   React.useEffect(() => {

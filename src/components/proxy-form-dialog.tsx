@@ -35,14 +35,12 @@ interface ProxyFormData {
 interface ProxyFormDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (proxy: StoredProxy) => void;
   editingProxy?: StoredProxy | null;
 }
 
 export function ProxyFormDialog({
   isOpen,
   onClose,
-  onSave,
   editingProxy,
 }: ProxyFormDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -105,11 +103,9 @@ export function ProxyFormDialog({
         password: formData.password.trim() || undefined,
       };
 
-      let savedProxy: StoredProxy;
-
       if (editingProxy) {
         // Update existing proxy
-        savedProxy = await invoke<StoredProxy>("update_stored_proxy", {
+        await invoke("update_stored_proxy", {
           proxyId: editingProxy.id,
           name: formData.name.trim(),
           proxySettings,
@@ -117,14 +113,13 @@ export function ProxyFormDialog({
         toast.success("Proxy updated successfully");
       } else {
         // Create new proxy
-        savedProxy = await invoke<StoredProxy>("create_stored_proxy", {
+        await invoke("create_stored_proxy", {
           name: formData.name.trim(),
           proxySettings,
         });
         toast.success("Proxy created successfully");
       }
 
-      onSave(savedProxy);
       onClose();
     } catch (error) {
       console.error("Failed to save proxy:", error);
@@ -134,7 +129,7 @@ export function ProxyFormDialog({
     } finally {
       setIsSubmitting(false);
     }
-  }, [formData, editingProxy, onSave, onClose]);
+  }, [formData, editingProxy, onClose]);
 
   const handleClose = useCallback(() => {
     if (!isSubmitting) {
