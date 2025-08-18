@@ -20,10 +20,11 @@ import { SettingsDialog } from "@/components/settings-dialog";
 import { useAppUpdateNotifications } from "@/hooks/use-app-update-notifications";
 import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useProfileEvents } from "@/hooks/use-profile-events";
 import { useUpdateNotifications } from "@/hooks/use-update-notifications";
 import { useVersionUpdater } from "@/hooks/use-version-updater";
 import { showErrorToast, showToast } from "@/lib/toast-utils";
-import type { BrowserProfile, CamoufoxConfig, GroupWithCount } from "@/types";
+import type { BrowserProfile, CamoufoxConfig } from "@/types";
 
 type BrowserTypeString =
   | "mullvad-browser"
@@ -44,8 +45,18 @@ export default function Home() {
   // Mount global version update listener/toasts
   useVersionUpdater();
   const [isInitializing, setIsInitializing] = useState(true);
-  const [profiles, setProfiles] = useState<BrowserProfile[]>([]);
-  const [error, setError] = useState<string | null>(null);
+
+  // Use the new profile events hook for centralized profile management
+  const {
+    profiles,
+    groups,
+    runningProfiles,
+    isLoading: profilesLoading,
+    error: profilesError,
+    loadProfiles,
+    clearError: clearProfilesError,
+  } = useProfileEvents();
+
   const [createProfileDialogOpen, setCreateProfileDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [importProfileDialogOpen, setImportProfileDialogOpen] = useState(false);
@@ -67,8 +78,6 @@ export default function Home() {
     useState<BrowserProfile | null>(null);
   const [hasCheckedStartupPrompt, setHasCheckedStartupPrompt] = useState(false);
   const [permissionDialogOpen, setPermissionDialogOpen] = useState(false);
-  const [groups, setGroups] = useState<GroupWithCount[]>([]);
-  const [areGroupsLoading, setGroupsLoading] = useState(true);
   const [currentPermissionType, setCurrentPermissionType] =
     useState<PermissionType>("microphone");
   const [showBulkDeleteConfirmation, setShowBulkDeleteConfirmation] =
@@ -76,9 +85,7 @@ export default function Home() {
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const { isMicrophoneAccessGranted, isCameraAccessGranted, isInitialized } =
     usePermissions();
-  const [runningProfiles, setRunningProfiles] = useState<Set<string>>(
-    new Set(),
-  );
+
   const handleSelectGroup = useCallback((groupId: string) => {
     setSelectedGroupId(groupId);
     setSelectedProfiles([]);
@@ -147,76 +154,12 @@ export default function Home() {
             "Failed to download missing components:",
             downloadError,
           );
-          setError(
-            `Failed to download missing components: ${JSON.stringify(
-              downloadError,
-            )}`,
-          );
         }
       }
     } catch (err: unknown) {
       console.error("Failed to check missing components:", err);
     }
   }, []);
-
-  // Function to check and sync profile running states with actual process status
-  const syncProfileRunningStates = useCallback(
-    async (profiles: BrowserProfile[]) => {
-      try {
-        const statusChecks = profiles.map(async (profile) => {
-          try {
-            const isRunning = await invoke<boolean>("check_browser_status", {
-              profile,
-            });
-            return { id: profile.id, isRunning };
-          } catch (error) {
-            console.error(
-              `Failed to check status for profile ${profile.name}:`,
-              error,
-            );
-            return { id: profile.id, isRunning: false };
-          }
-        });
-
-        const statuses = await Promise.all(statusChecks);
-
-        // Update running profiles state based on actual status
-        setRunningProfiles((prev) => {
-          const next = new Set(prev);
-          statuses.forEach(({ id, isRunning }) => {
-            if (isRunning) {
-              next.add(id);
-            } else {
-              next.delete(id);
-            }
-          });
-          return next;
-        });
-      } catch (error) {
-        console.error("Failed to sync profile running states:", error);
-      }
-    },
-    [],
-  );
-
-  // Simple profiles loader without updates check (for use as callback)
-  const loadProfiles = useCallback(async () => {
-    try {
-      const profileList = await invoke<BrowserProfile[]>(
-        "list_browser_profiles",
-      );
-      setProfiles(profileList);
-
-      // Check and sync profile running status after loading profiles
-      await syncProfileRunningStates(profileList);
-
-      // Check for missing binaries after loading profiles
-      await checkMissingBinaries();
-    } catch (err: unknown) {
-      console.error("Failed to load profiles:", err);
-      setError(`Failed to load profiles: ${JSON.stringify(err)}`);
-    }
-  }, [checkMissingBinaries, syncProfileRunningStates]);
 
   const [processingUrls, setProcessingUrls] = useState<Set<string>>(new Set());
 
@@ -253,26 +196,6 @@ export default function Home() {
   // Auto-update functionality - use the existing hook for compatibility
   const updateNotifications = useUpdateNotifications(loadProfiles);
   const { checkForUpdates, isUpdating } = updateNotifications;
-
-  // Profiles loader with update check (for initial load and manual refresh)
-  const loadProfilesWithUpdateCheck = useCallback(async () => {
-    try {
-      const profileList = await invoke<BrowserProfile[]>(
-        "list_browser_profiles",
-      );
-      setProfiles(profileList);
-
-      // Check and sync profile running status after loading profiles
-      await syncProfileRunningStates(profileList);
-
-      // Check for updates after loading profiles
-      await checkForUpdates();
-      await checkMissingBinaries();
-    } catch (err: unknown) {
-      console.error("Failed to load profiles:", err);
-      setError(`Failed to load profiles: ${JSON.stringify(err)}`);
-    }
-  }, [checkForUpdates, checkMissingBinaries, syncProfileRunningStates]);
 
   useAppUpdateNotifications();
 
@@ -320,9 +243,8 @@ export default function Home() {
         await invoke("warm_up_nodecar");
       } catch (err) {
         if (!cancelled) {
-          setError(
-            `Initialization failed: ${err instanceof Error ? err.message : String(err)}`,
-          );
+          // Don't set error here since useProfileEvents handles profile errors
+          console.error("Initialization failed:", err);
         }
       } finally {
         if (!cancelled) setIsInitializing(false);
@@ -333,6 +255,14 @@ export default function Home() {
       cancelled = true;
     };
   }, []);
+
+  // Handle profile errors from useProfileEvents hook
+  useEffect(() => {
+    if (profilesError) {
+      showErrorToast(profilesError);
+      clearProfilesError();
+    }
+  }, [profilesError, clearProfilesError]);
 
   const checkAllPermissions = useCallback(async () => {
     try {
@@ -390,7 +320,7 @@ export default function Home() {
           "Received show create profile dialog request:",
           event.payload,
         );
-        setError(
+        showErrorToast(
           "No profiles available. Please create a profile first before opening URLs.",
         );
         setCreateProfileDialogOpen(true);
@@ -426,37 +356,23 @@ export default function Home() {
 
   const handleSaveCamoufoxConfig = useCallback(
     async (profile: BrowserProfile, config: CamoufoxConfig) => {
-      setError(null);
       try {
         await invoke("update_camoufox_config", {
           profileName: profile.name,
           config,
         });
-        await loadProfiles();
+        // No need to manually reload - useProfileEvents will handle the update
         setCamoufoxConfigDialogOpen(false);
       } catch (err: unknown) {
         console.error("Failed to update camoufox config:", err);
-        setError(`Failed to update camoufox config: ${JSON.stringify(err)}`);
+        showErrorToast(
+          `Failed to update camoufox config: ${JSON.stringify(err)}`,
+        );
         throw err;
       }
     },
-    [loadProfiles],
+    [],
   );
-
-  const loadGroups = useCallback(async () => {
-    setGroupsLoading(true);
-    try {
-      const groupsWithCounts = await invoke<GroupWithCount[]>(
-        "get_groups_with_profile_counts",
-      );
-      setGroups(groupsWithCounts);
-    } catch (err) {
-      console.error("Failed to load groups with counts:", err);
-      setGroups([]);
-    } finally {
-      setGroupsLoading(false);
-    }
-  }, []);
 
   const handleCreateProfile = useCallback(
     async (profileData: {
@@ -468,8 +384,6 @@ export default function Home() {
       camoufoxConfig?: CamoufoxConfig;
       groupId?: string;
     }) => {
-      setError(null);
-
       try {
         await invoke<BrowserProfile>("create_browser_profile_new", {
           name: profileData.name,
@@ -483,11 +397,9 @@ export default function Home() {
             (selectedGroupId !== "default" ? selectedGroupId : undefined),
         });
 
-        await loadProfiles();
-        await loadGroups();
-        // Trigger proxy data reload in the table
+        // No need to manually reload - useProfileEvents will handle the update
       } catch (error) {
-        setError(
+        showErrorToast(
           `Failed to create profile: ${
             error instanceof Error ? error.message : String(error)
           }`,
@@ -495,36 +407,10 @@ export default function Home() {
         throw error;
       }
     },
-    [loadProfiles, loadGroups, selectedGroupId],
+    [selectedGroupId],
   );
 
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    (async () => {
-      try {
-        unlisten = await listen<{ id: string; is_running: boolean }>(
-          "profile-running-changed",
-          (event) => {
-            const { id, is_running } = event.payload;
-            setRunningProfiles((prev) => {
-              const next = new Set(prev);
-              if (is_running) next.add(id);
-              else next.delete(id);
-              return next;
-            });
-          },
-        );
-      } catch {
-        // best-effort listener
-      }
-    })();
-    return () => {
-      if (unlisten) unlisten();
-    };
-  }, []);
-
   const launchProfile = useCallback(async (profile: BrowserProfile) => {
-    setError(null);
     console.log("Starting launch for profile:", profile.name);
 
     try {
@@ -535,100 +421,84 @@ export default function Home() {
     } catch (err: unknown) {
       console.error("Failed to launch browser:", err);
       const errorMessage = err instanceof Error ? err.message : String(err);
-      setError(`Failed to launch browser: ${errorMessage}`);
+      showErrorToast(`Failed to launch browser: ${errorMessage}`);
       // Re-throw the error so the table component can handle loading state cleanup
       throw err;
     }
   }, []);
 
-  const handleDeleteProfile = useCallback(
-    async (profile: BrowserProfile) => {
-      setError(null);
-      console.log("Attempting to delete profile:", profile.name);
+  const handleDeleteProfile = useCallback(async (profile: BrowserProfile) => {
+    console.log("Attempting to delete profile:", profile.name);
 
-      try {
-        // First check if the browser is running for this profile
-        const isRunning = await invoke<boolean>("check_browser_status", {
-          profile,
-        });
+    try {
+      // First check if the browser is running for this profile
+      const isRunning = await invoke<boolean>("check_browser_status", {
+        profile,
+      });
 
-        if (isRunning) {
-          setError(
-            "Cannot delete profile while browser is running. Please stop the browser first.",
-          );
-          return;
-        }
-
-        // Attempt to delete the profile
-        await invoke("delete_profile", { profileName: profile.name });
-        console.log("Profile deletion command completed successfully");
-
-        // Give a small delay to ensure file system operations complete
-        await new Promise((resolve) => setTimeout(resolve, 500));
-
-        // Reload profiles and groups to ensure UI is updated
-        await loadProfiles();
-        await loadGroups();
-
-        console.log("Profile deleted and profiles reloaded successfully");
-      } catch (err: unknown) {
-        console.error("Failed to delete profile:", err);
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        setError(`Failed to delete profile: ${errorMessage}`);
+      if (isRunning) {
+        showErrorToast(
+          "Cannot delete profile while browser is running. Please stop the browser first.",
+        );
+        return;
       }
-    },
-    [loadProfiles, loadGroups],
-  );
+
+      // Attempt to delete the profile
+      await invoke("delete_profile", { profileName: profile.name });
+      console.log("Profile deletion command completed successfully");
+
+      // No need to manually reload - useProfileEvents will handle the update
+      console.log("Profile deleted successfully");
+    } catch (err: unknown) {
+      console.error("Failed to delete profile:", err);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      showErrorToast(`Failed to delete profile: ${errorMessage}`);
+    }
+  }, []);
 
   const handleRenameProfile = useCallback(
     async (oldName: string, newName: string) => {
-      setError(null);
       try {
         await invoke("rename_profile", { oldName, newName });
-        await loadProfiles();
+        // No need to manually reload - useProfileEvents will handle the update
       } catch (err: unknown) {
         console.error("Failed to rename profile:", err);
-        setError(`Failed to rename profile: ${JSON.stringify(err)}`);
+        showErrorToast(`Failed to rename profile: ${JSON.stringify(err)}`);
         throw err;
       }
     },
-    [loadProfiles],
+    [],
   );
 
-  const handleKillProfile = useCallback(
-    async (profile: BrowserProfile) => {
-      setError(null);
-      console.log("Starting kill for profile:", profile.name);
+  const handleKillProfile = useCallback(async (profile: BrowserProfile) => {
+    console.log("Starting kill for profile:", profile.name);
 
-      try {
-        await invoke("kill_browser_profile", { profile });
-        await loadProfiles();
-        console.log("Successfully killed profile:", profile.name);
-        // Don't reload profiles here - let the backend events handle UI updates
-      } catch (err: unknown) {
-        console.error("Failed to kill browser:", err);
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        setError(`Failed to kill browser: ${errorMessage}`);
-        // Re-throw the error so the table component can handle loading state cleanup
-        throw err;
-      }
-    },
-    [loadProfiles],
-  );
+    try {
+      await invoke("kill_browser_profile", { profile });
+      console.log("Successfully killed profile:", profile.name);
+      // No need to manually reload - useProfileEvents will handle the update
+    } catch (err: unknown) {
+      console.error("Failed to kill browser:", err);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      showErrorToast(`Failed to kill browser: ${errorMessage}`);
+      // Re-throw the error so the table component can handle loading state cleanup
+      throw err;
+    }
+  }, []);
 
   const handleDeleteSelectedProfiles = useCallback(
     async (profileNames: string[]) => {
-      setError(null);
       try {
         await invoke("delete_selected_profiles", { profileNames });
-        await loadProfiles();
-        await loadGroups();
+        // No need to manually reload - useProfileEvents will handle the update
       } catch (err: unknown) {
         console.error("Failed to delete selected profiles:", err);
-        setError(`Failed to delete selected profiles: ${JSON.stringify(err)}`);
+        showErrorToast(
+          `Failed to delete selected profiles: ${JSON.stringify(err)}`,
+        );
       }
     },
-    [loadProfiles, loadGroups],
+    [],
   );
 
   const handleAssignProfilesToGroup = useCallback((profileNames: string[]) => {
@@ -649,17 +519,18 @@ export default function Home() {
       await invoke("delete_selected_profiles", {
         profileNames: selectedProfiles,
       });
-      await loadProfiles();
-      await loadGroups();
+      // No need to manually reload - useProfileEvents will handle the update
       setSelectedProfiles([]);
       setShowBulkDeleteConfirmation(false);
     } catch (error) {
       console.error("Failed to delete selected profiles:", error);
-      setError(`Failed to delete selected profiles: ${JSON.stringify(error)}`);
+      showErrorToast(
+        `Failed to delete selected profiles: ${JSON.stringify(error)}`,
+      );
     } finally {
       setIsBulkDeleting(false);
     }
-  }, [selectedProfiles, loadProfiles, loadGroups]);
+  }, [selectedProfiles]);
 
   const handleBulkGroupAssignment = useCallback(() => {
     if (selectedProfiles.length === 0) return;
@@ -668,20 +539,16 @@ export default function Home() {
   }, [selectedProfiles, handleAssignProfilesToGroup]);
 
   const handleGroupAssignmentComplete = useCallback(async () => {
-    await loadProfiles();
-    await loadGroups();
+    // No need to manually reload - useProfileEvents will handle the update
     setGroupAssignmentDialogOpen(false);
     setSelectedProfilesForGroup([]);
-  }, [loadProfiles, loadGroups]);
+  }, []);
 
   const handleGroupManagementComplete = useCallback(async () => {
-    await loadGroups();
-  }, [loadGroups]);
+    // No need to manually reload - useProfileEvents will handle the update
+  }, []);
 
   useEffect(() => {
-    void loadProfilesWithUpdateCheck();
-    void loadGroups();
-
     // Check for startup default browser prompt
     void checkStartupPrompt();
 
@@ -707,6 +574,11 @@ export default function Home() {
       30 * 60 * 1000,
     );
 
+    // Check for missing binaries after initial profile load
+    if (!profilesLoading && profiles.length > 0) {
+      void checkMissingBinaries();
+    }
+
     return () => {
       clearInterval(updateInterval);
       if (cleanup) {
@@ -714,12 +586,13 @@ export default function Home() {
       }
     };
   }, [
-    loadProfilesWithUpdateCheck,
     checkForUpdates,
     checkStartupPrompt,
     listenForUrlEvents,
     checkCurrentUrl,
-    loadGroups,
+    checkMissingBinaries,
+    profilesLoading,
+    profiles.length,
   ]);
 
   // Show deprecation warning for unsupported profiles (with names)
@@ -754,13 +627,6 @@ export default function Home() {
       });
     }
   }, [profiles]);
-
-  useEffect(() => {
-    if (error) {
-      showErrorToast(error);
-      setError(null);
-    }
-  }, [error]);
 
   // Check permissions when they are initialized
   useEffect(() => {
@@ -798,7 +664,7 @@ export default function Home() {
             selectedGroupId={selectedGroupId}
             onGroupSelect={handleSelectGroup}
             groups={groups}
-            isLoading={areGroupsLoading}
+            isLoading={profilesLoading}
           />
           <ProfilesDataTable
             profiles={filteredProfiles}

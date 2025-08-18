@@ -49,7 +49,7 @@ pub struct ApiProfileResponse {
 pub struct CreateProfileRequest {
   pub name: String,
   pub browser: String,
-  pub version: Option<String>,
+  pub version: String,
   pub proxy_id: Option<String>,
   pub release_type: Option<String>,
   pub camoufox_config: Option<serde_json::Value>,
@@ -350,8 +350,8 @@ async fn create_profile(
       &state.app_handle,
       &request.name,
       &request.browser,
-      request.version.as_deref().unwrap_or("stable"),
-      request.release_type.as_deref().unwrap_or("release"),
+      &request.version,
+      request.release_type.as_deref().unwrap_or("stable"),
       request.proxy_id.clone(),
       camoufox_config,
       request.group_id.clone(),
@@ -362,7 +362,7 @@ async fn create_profile(
       // Apply tags if provided
       if let Some(tags) = &request.tags {
         if profile_manager
-          .update_profile_tags(&profile.name, tags.clone())
+          .update_profile_tags(&state.app_handle, &profile.name, tags.clone())
           .is_err()
         {
           return Err(StatusCode::INTERNAL_SERVER_ERROR);
@@ -410,14 +410,14 @@ async fn update_profile(
 
   // Update profile fields
   if let Some(new_name) = request.name {
-    if profile_manager.rename_profile(&name, &new_name).is_err() {
+    if profile_manager.rename_profile(&state.app_handle, &name, &new_name).is_err() {
       return Err(StatusCode::BAD_REQUEST);
     }
   }
 
   if let Some(version) = request.version {
     if profile_manager
-      .update_profile_version(&name, &version)
+      .update_profile_version(&state.app_handle, &name, &version)
       .is_err()
     {
       return Err(StatusCode::BAD_REQUEST);
@@ -453,7 +453,7 @@ async fn update_profile(
 
   if let Some(group_id) = request.group_id {
     if profile_manager
-      .assign_profiles_to_group(vec![name.clone()], Some(group_id))
+      .assign_profiles_to_group(&state.app_handle, vec![name.clone()], Some(group_id))
       .is_err()
     {
       return Err(StatusCode::BAD_REQUEST);
@@ -461,7 +461,7 @@ async fn update_profile(
   }
 
   if let Some(tags) = request.tags {
-    if profile_manager.update_profile_tags(&name, tags).is_err() {
+    if profile_manager.update_profile_tags(&state.app_handle, &name, tags).is_err() {
       return Err(StatusCode::BAD_REQUEST);
     }
 
@@ -479,10 +479,10 @@ async fn update_profile(
 
 async fn delete_profile(
   Path(id): Path<String>,
-  State(_state): State<ApiServerState>,
+  State(state): State<ApiServerState>,
 ) -> Result<StatusCode, StatusCode> {
   let profile_manager = ProfileManager::instance();
-  match profile_manager.delete_profile(&id) {
+  match profile_manager.delete_profile(&state.app_handle, &id) {
     Ok(_) => Ok(StatusCode::NO_CONTENT),
     Err(_) => Err(StatusCode::BAD_REQUEST),
   }

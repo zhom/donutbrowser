@@ -909,9 +909,9 @@ impl BrowserRunner {
     })
   }
 
-  pub fn delete_profile(&self, profile_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+  pub fn delete_profile(&self, app_handle: tauri::AppHandle, profile_id: &str) -> Result<(), Box<dyn std::error::Error>> {
     let profile_manager = ProfileManager::instance();
-    profile_manager.delete_profile(profile_id)?;
+    profile_manager.delete_profile(&app_handle, profile_id)?;
 
     // Always perform cleanup after profile deletion to remove unused binaries
     if let Err(e) = self.cleanup_unused_binaries_internal() {
@@ -1055,7 +1055,7 @@ impl BrowserRunner {
       let system = System::new_all();
       if let Some(process) = system.process(sysinfo::Pid::from(pid as usize)) {
         let cmd = process.cmd();
-        let exe_name = process.name().to_string_lossy().to_lowercase();
+        let exe_name = process.name().to_string_lossy();
 
         // Verify this process is actually our browser
         let is_correct_browser = match profile.browser.as_str() {
@@ -1974,12 +1974,13 @@ pub async fn update_profile_proxy(
 
 #[tauri::command]
 pub fn update_profile_tags(
+  app_handle: tauri::AppHandle,
   profile_name: String,
   tags: Vec<String>,
 ) -> Result<BrowserProfile, String> {
   let profile_manager = ProfileManager::instance();
   profile_manager
-    .update_profile_tags(&profile_name, tags)
+    .update_profile_tags(&app_handle, &profile_name, tags)
     .map_err(|e| format!("Failed to update profile tags: {e}"))
 }
 
@@ -1997,21 +1998,21 @@ pub async fn check_browser_status(
 
 #[tauri::command]
 pub fn rename_profile(
-  _app_handle: tauri::AppHandle,
+  app_handle: tauri::AppHandle,
   old_name: &str,
   new_name: &str,
 ) -> Result<BrowserProfile, String> {
   let profile_manager = ProfileManager::instance();
   profile_manager
-    .rename_profile(old_name, new_name)
+    .rename_profile(&app_handle, old_name, new_name)
     .map_err(|e| format!("Failed to rename profile: {e}"))
 }
 
 #[tauri::command]
-pub fn delete_profile(_app_handle: tauri::AppHandle, profile_id: String) -> Result<(), String> {
+pub async fn delete_profile(app_handle: tauri::AppHandle, profile_id: String) -> Result<(), String> {
   let browser_runner = BrowserRunner::instance();
   browser_runner
-    .delete_profile(profile_id.as_str())
+    .delete_profile(app_handle, &profile_id)
     .map_err(|e| format!("Failed to delete profile: {e}"))
 }
 

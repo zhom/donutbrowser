@@ -148,11 +148,11 @@ impl AutoUpdater {
             );
 
             // Clone app_handle for the async task
-            let app_handle_clone = app_handle.clone();
             let browser = notification.browser.clone();
             let new_version = notification.new_version.clone();
             let notification_id = notification.id.clone();
             let affected_profiles = notification.affected_profiles.clone();
+            let app_handle_clone = app_handle.clone();
 
             // Spawn async task to handle the download and auto-update
             tokio::spawn(async move {
@@ -166,6 +166,7 @@ impl AutoUpdater {
 
                   // Browser already exists, go straight to profile update
                   match crate::auto_updater::complete_browser_update_with_auto_update(
+                    app_handle_clone,
                     browser.clone(),
                     new_version.clone(),
                   )
@@ -293,6 +294,7 @@ impl AutoUpdater {
   /// Automatically update all affected profile versions after browser download
   pub async fn auto_update_profile_versions(
     &self,
+    app_handle: &tauri::AppHandle,
     browser: &str,
     new_version: &str,
   ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
@@ -314,7 +316,7 @@ impl AutoUpdater {
         // Check if this is an update (newer version)
         if self.is_version_newer(new_version, &profile.version) {
           // Update the profile version
-          match profile_manager.update_profile_version(&profile.name, new_version) {
+          match profile_manager.update_profile_version(app_handle, &profile.name, new_version) {
             Ok(_) => {
               updated_profiles.push(profile.name);
             }
@@ -332,12 +334,13 @@ impl AutoUpdater {
   /// Complete browser update process with auto-update of profile versions
   pub async fn complete_browser_update_with_auto_update(
     &self,
+    app_handle: &tauri::AppHandle,
     browser: &str,
     new_version: &str,
   ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
     // Auto-update profile versions first
     let updated_profiles = self
-      .auto_update_profile_versions(browser, new_version)
+      .auto_update_profile_versions(app_handle, browser, new_version)
       .await?;
 
     // Remove browser from disabled list and clean up auto-update tracking
@@ -480,12 +483,13 @@ pub async fn dismiss_update_notification(notification_id: String) -> Result<(), 
 
 #[tauri::command]
 pub async fn complete_browser_update_with_auto_update(
+  app_handle: tauri::AppHandle,
   browser: String,
   new_version: String,
 ) -> Result<Vec<String>, String> {
   let updater = AutoUpdater::instance();
   updater
-    .complete_browser_update_with_auto_update(&browser, &new_version)
+    .complete_browser_update_with_auto_update(&app_handle, &browser, &new_version)
     .await
     .map_err(|e| format!("Failed to complete browser update: {e}"))
 }
@@ -876,7 +880,7 @@ mod tests {
     use tempfile::TempDir;
 
     // Create a temporary directory for testing
-    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let temp_dir = TempDir::new().unwrap();
 
     // Create a mock settings manager that uses the temp directory
     struct TestSettingsManager {

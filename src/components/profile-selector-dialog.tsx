@@ -27,6 +27,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useBrowserState } from "@/hooks/use-browser-state";
+import { useProfileEvents } from "@/hooks/use-profile-events";
 import { getBrowserDisplayName, getBrowserIcon } from "@/lib/browser-utils";
 import type { BrowserProfile, StoredProxy } from "@/types";
 import { RippleButton } from "./ui/ripple";
@@ -43,12 +44,16 @@ export function ProfileSelectorDialog({
   isOpen,
   onClose,
   url,
-  runningProfiles = new Set(),
+  runningProfiles: externalRunningProfiles,
   isUpdating,
 }: ProfileSelectorDialogProps) {
-  const [profiles, setProfiles] = useState<BrowserProfile[]>([]);
+  // Use the centralized profile events hook
+  const { profiles, runningProfiles: hookRunningProfiles } = useProfileEvents();
+
+  // Use external runningProfiles if provided, otherwise use hook's runningProfiles
+  const runningProfiles = externalRunningProfiles || hookRunningProfiles;
+
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const [isLaunching, setIsLaunching] = useState(false);
   const [storedProxies, setStoredProxies] = useState<StoredProxy[]>([]);
   const [launchingProfiles, setLaunchingProfiles] = useState<Set<string>>(
@@ -77,47 +82,15 @@ export function ProfileSelectorDialog({
     [storedProxies],
   );
 
-  const loadProfiles = useCallback(async () => {
-    setIsLoading(true);
+  // Load stored proxies
+  const loadStoredProxies = useCallback(async () => {
     try {
-      // Load both profiles and stored proxies
-      const [profileList, proxiesList] = await Promise.all([
-        invoke<BrowserProfile[]>("list_browser_profiles"),
-        invoke<StoredProxy[]>("get_stored_proxies"),
-      ]);
-
-      // Sort profiles by name
-      profileList.sort((a, b) => a.name.localeCompare(b.name));
-
-      // Set both profiles and proxies
-      setProfiles(profileList);
+      const proxiesList = await invoke<StoredProxy[]>("get_stored_proxies");
       setStoredProxies(proxiesList);
-
-      // Auto-select first available profile for link opening
-      if (profileList.length > 0) {
-        // First, try to find a running profile that can be used for opening links
-        const runningAvailableProfile = profileList.find((profile) => {
-          const isRunning = runningProfiles.has(profile.id);
-          // Simple check without browserState dependency
-          return (
-            isRunning &&
-            profile.browser !== "tor-browser" &&
-            profile.browser !== "mullvad-browser"
-          );
-        });
-
-        if (runningAvailableProfile) {
-          setSelectedProfile(runningAvailableProfile.name);
-        } else {
-          setSelectedProfile(profileList[0].name);
-        }
-      }
     } catch (err) {
-      console.error("Failed to load profiles:", err);
-    } finally {
-      setIsLoading(false);
+      console.error("Failed to load stored proxies:", err);
     }
-  }, [runningProfiles]);
+  }, []);
 
   // Helper function to get tooltip content for profiles - now uses shared hook
   const getProfileTooltipContent = (profile: BrowserProfile): string | null => {
@@ -183,11 +156,38 @@ export function ProfileSelectorDialog({
     return getProfileTooltipContent(selectedProfileData);
   };
 
+  // Auto-select first available profile when dialog opens and profiles are loaded
+  useEffect(() => {
+    if (isOpen && profiles.length > 0 && !selectedProfile) {
+      // First, try to find a running profile that can be used for opening links
+      const runningAvailableProfile = profiles.find((profile) => {
+        const isRunning = runningProfiles.has(profile.id);
+        // Simple check without browserState dependency
+        return (
+          isRunning &&
+          profile.browser !== "tor-browser" &&
+          profile.browser !== "mullvad-browser"
+        );
+      });
+
+      if (runningAvailableProfile) {
+        setSelectedProfile(runningAvailableProfile.name);
+      } else {
+        // Sort profiles by name and select first
+        const sortedProfiles = [...profiles].sort((a, b) =>
+          a.name.localeCompare(b.name),
+        );
+        setSelectedProfile(sortedProfiles[0].name);
+      }
+    }
+  }, [isOpen, profiles, selectedProfile, runningProfiles]);
+
+  // Load stored proxies when dialog opens
   useEffect(() => {
     if (isOpen) {
-      void loadProfiles();
+      void loadStoredProxies();
     }
-  }, [isOpen, loadProfiles]);
+  }, [isOpen, loadStoredProxies]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -219,11 +219,7 @@ export function ProfileSelectorDialog({
 
           <div className="space-y-2">
             <Label htmlFor="profile-select">Select Profile:</Label>
-            {isLoading ? (
-              <div className="text-sm text-muted-foreground">
-                Loading profiles...
-              </div>
-            ) : profiles.length === 0 ? (
+            {profiles.length === 0 ? (
               <div className="space-y-2">
                 <div className="text-sm text-muted-foreground">
                   No profiles available. Please create a profile first.

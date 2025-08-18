@@ -218,6 +218,11 @@ impl ProfileManager {
       self.disable_proxy_settings_in_profile(&profile_data_dir)?;
     }
 
+    // Emit profile creation event
+    if let Err(e) = app_handle.emit("profiles-changed", ()) {
+      println!("Warning: Failed to emit profiles-changed event: {e}");
+    }
+
     Ok(profile)
   }
 
@@ -262,6 +267,7 @@ impl ProfileManager {
 
   pub fn rename_profile(
     &self,
+    app_handle: &tauri::AppHandle,
     old_name: &str,
     new_name: &str,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
@@ -291,10 +297,19 @@ impl ProfileManager {
       let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
     });
 
+    // Emit profile rename event
+    if let Err(e) = app_handle.emit("profiles-changed", ()) {
+      println!("Warning: Failed to emit profiles-changed event: {e}");
+    }
+
     Ok(profile)
   }
 
-  pub fn delete_profile(&self, profile_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+  pub fn delete_profile(
+    &self,
+    app_handle: &tauri::AppHandle,
+    profile_name: &str,
+  ) -> Result<(), Box<dyn std::error::Error>> {
     println!("Attempting to delete profile: {profile_name}");
 
     // Find the profile by name
@@ -333,11 +348,17 @@ impl ProfileManager {
       let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
     });
 
+    // Emit profile deletion event
+    if let Err(e) = app_handle.emit("profiles-changed", ()) {
+      println!("Warning: Failed to emit profiles-changed event: {e}");
+    }
+
     Ok(())
   }
 
   pub fn update_profile_version(
     &self,
+    app_handle: &tauri::AppHandle,
     profile_name: &str,
     version: &str,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
@@ -379,11 +400,17 @@ impl ProfileManager {
     // Save the updated profile
     self.save_profile(&profile)?;
 
+    // Emit profile update event
+    if let Err(e) = app_handle.emit("profiles-changed", ()) {
+      println!("Warning: Failed to emit profiles-changed event: {e}");
+    }
+
     Ok(profile)
   }
 
   pub fn assign_profiles_to_group(
     &self,
+    app_handle: &tauri::AppHandle,
     profile_names: Vec<String>,
     group_id: Option<String>,
   ) -> Result<(), Box<dyn std::error::Error>> {
@@ -412,11 +439,17 @@ impl ProfileManager {
       let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
     });
 
+    // Emit profile group assignment event
+    if let Err(e) = app_handle.emit("profiles-changed", ()) {
+      println!("Warning: Failed to emit profiles-changed event: {e}");
+    }
+
     Ok(())
   }
 
   pub fn update_profile_tags(
     &self,
+    app_handle: &tauri::AppHandle,
     profile_name: &str,
     tags: Vec<String>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
@@ -444,11 +477,17 @@ impl ProfileManager {
       let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
     });
 
+    // Emit profile tags update event
+    if let Err(e) = app_handle.emit("profiles-changed", ()) {
+      println!("Warning: Failed to emit profiles-changed event: {e}");
+    }
+
     Ok(profile)
   }
 
   pub fn delete_multiple_profiles(
     &self,
+    app_handle: &tauri::AppHandle,
     profile_names: Vec<String>,
   ) -> Result<(), Box<dyn std::error::Error>> {
     let profiles = self.list_profiles()?;
@@ -478,6 +517,11 @@ impl ProfileManager {
       }
     }
 
+    // Emit profile deletion event
+    if let Err(e) = app_handle.emit("profiles-changed", ()) {
+      println!("Warning: Failed to emit profiles-changed event: {e}");
+    }
+
     Ok(())
   }
 
@@ -502,7 +546,7 @@ impl ProfileManager {
       })?;
 
     // Check if the browser is currently running using the comprehensive status check
-    let is_running = self.check_browser_status(app_handle, &profile).await?;
+    let is_running = self.check_browser_status(app_handle.clone(), &profile).await?;
 
     if is_running {
       return Err(
@@ -521,6 +565,11 @@ impl ProfileManager {
       })?;
 
     println!("Camoufox configuration updated for profile '{profile_name}'.");
+
+    // Emit profile config update event
+    if let Err(e) = app_handle.emit("profiles-changed", ()) {
+      println!("Warning: Failed to emit profiles-changed event: {e}");
+    }
 
     Ok(())
   }
@@ -590,6 +639,11 @@ impl ProfileManager {
     // Emit profile update event so frontend UIs can refresh immediately (e.g. proxy manager)
     if let Err(e) = app_handle.emit("profile-updated", &profile) {
       println!("Warning: Failed to emit profile update event: {e}");
+    }
+
+    // Emit general profiles changed event for profile list updates
+    if let Err(e) = app_handle.emit("profiles-changed", ()) {
+      println!("Warning: Failed to emit profiles-changed event: {e}");
     }
 
     Ok(profile)
