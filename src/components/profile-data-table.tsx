@@ -1308,7 +1308,9 @@ export function ProfilesDataTable({
                           !profileHasProxy && "text-muted-foreground",
                         )}
                       >
-                        {trimName(displayName, 10)}
+                        {profileHasProxy
+                          ? trimName(displayName, 10)
+                          : displayName}
                       </span>
                     </span>
                   </PopoverTrigger>
