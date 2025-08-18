@@ -1075,7 +1075,7 @@ dependencies = [
 
 [[package]]
 name = "donutbrowser"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "async-trait",
  "axum",
