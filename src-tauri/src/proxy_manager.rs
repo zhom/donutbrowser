@@ -181,7 +181,10 @@ impl ProxyManager {
   // Get all stored proxies
   pub fn get_stored_proxies(&self) -> Vec<StoredProxy> {
     let stored_proxies = self.stored_proxies.lock().unwrap();
-    stored_proxies.values().cloned().collect()
+    let mut list: Vec<StoredProxy> = stored_proxies.values().cloned().collect();
+    // Sort case-insensitively by name for consistent ordering across UI/API consumers
+    list.sort_by_key(|p| p.name.to_lowercase());
+    list
   }
 
   // Get a stored proxy by ID
