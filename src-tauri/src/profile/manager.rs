@@ -281,8 +281,8 @@ impl ProfileManager {
     }
 
     // Find the profile by ID
-    let profile_uuid = uuid::Uuid::parse_str(profile_id)
-      .map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
+    let profile_uuid =
+      uuid::Uuid::parse_str(profile_id).map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
     let mut profile = existing_profiles
       .into_iter()
       .find(|p| p.id == profile_uuid)
@@ -315,8 +315,8 @@ impl ProfileManager {
     println!("Attempting to delete profile with ID: {profile_id}");
 
     // Find the profile by ID
-    let profile_uuid = uuid::Uuid::parse_str(profile_id)
-      .map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
+    let profile_uuid =
+      uuid::Uuid::parse_str(profile_id).map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
     let profiles = self.list_profiles()?;
     let profile = profiles
       .into_iter()
@@ -345,7 +345,10 @@ impl ProfileManager {
       return Err(format!("Failed to completely delete profile '{}'", profile.name).into());
     }
 
-    println!("Profile '{}' (ID: {}) deleted successfully", profile.name, profile_id);
+    println!(
+      "Profile '{}' (ID: {}) deleted successfully",
+      profile.name, profile_id
+    );
 
     // Rebuild tag suggestions after deletion
     let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
@@ -367,8 +370,8 @@ impl ProfileManager {
     version: &str,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
     // Find the profile by ID
-    let profile_uuid = uuid::Uuid::parse_str(profile_id)
-      .map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
+    let profile_uuid =
+      uuid::Uuid::parse_str(profile_id).map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
     let profiles = self.list_profiles()?;
     let mut profile = profiles
       .into_iter()
@@ -462,8 +465,8 @@ impl ProfileManager {
     tags: Vec<String>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
     // Find the profile by ID
-    let profile_uuid = uuid::Uuid::parse_str(profile_id)
-      .map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
+    let profile_uuid =
+      uuid::Uuid::parse_str(profile_id).map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
     let profiles = self.list_profiles()?;
     let mut profile = profiles
       .into_iter()
@@ -514,7 +517,8 @@ impl ProfileManager {
       if profile.process_id.is_some() {
         return Err(
           format!(
-            "Cannot delete profile '{}' while browser is running. Please stop the browser first.", profile.name
+            "Cannot delete profile '{}' while browser is running. Please stop the browser first.",
+            profile.name
           )
           .into(),
         );
@@ -544,10 +548,11 @@ impl ProfileManager {
     config: CamoufoxConfig,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Find the profile by ID
-    let profile_uuid = uuid::Uuid::parse_str(profile_id)
-      .map_err(|_| -> Box<dyn std::error::Error + Send + Sync> {
+    let profile_uuid = uuid::Uuid::parse_str(profile_id).map_err(
+      |_| -> Box<dyn std::error::Error + Send + Sync> {
         format!("Invalid profile ID: {profile_id}").into()
-      })?;
+      },
+    )?;
     let profiles =
       self
         .list_profiles()
@@ -582,7 +587,10 @@ impl ProfileManager {
         format!("Failed to save profile: {e}").into()
       })?;
 
-    println!("Camoufox configuration updated for profile '{}' (ID: {}).", profile.name, profile_id);
+    println!(
+      "Camoufox configuration updated for profile '{}' (ID: {}).",
+      profile.name, profile_id
+    );
 
     // Emit profile config update event
     if let Err(e) = app_handle.emit("profiles-changed", ()) {
@@ -599,10 +607,11 @@ impl ProfileManager {
     proxy_id: Option<String>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
     // Find the profile by ID
-    let profile_uuid = uuid::Uuid::parse_str(profile_id)
-      .map_err(|_| -> Box<dyn std::error::Error + Send + Sync> {
+    let profile_uuid = uuid::Uuid::parse_str(profile_id).map_err(
+      |_| -> Box<dyn std::error::Error + Send + Sync> {
         format!("Invalid profile ID: {profile_id}").into()
-      })?;
+      },
+    )?;
     let profiles =
       self
         .list_profiles()

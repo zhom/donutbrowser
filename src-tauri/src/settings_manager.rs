@@ -8,9 +8,9 @@ use crate::version_updater;
 
 use aes_gcm::{
   aead::{Aead, AeadCore, KeyInit, OsRng},
-  Aes256Gcm, Key, Nonce
+  Aes256Gcm, Key, Nonce,
 };
-use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
+use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TableSortingSettings {
@@ -213,41 +213,43 @@ impl SettingsManager {
     }
 
     let vault_password = Self::get_vault_password();
-    
+
     // Generate a random salt for Argon2
     let salt = SaltString::generate(&mut OsRng);
-    
+
     // Use Argon2 to derive a 32-byte key from the vault password
     let argon2 = Argon2::default();
-    let password_hash = argon2.hash_password(vault_password.as_bytes(), &salt)
-      .map_err(|e| format!("Argon2 key derivation failed: {}", e))?;
+    let password_hash = argon2
+      .hash_password(vault_password.as_bytes(), &salt)
+      .map_err(|e| format!("Argon2 key derivation failed: {e}"))?;
     let hash_value = password_hash.hash.unwrap();
     let hash_bytes = hash_value.as_bytes();
-    
+
     // Take first 32 bytes for AES-256 key
     let key = Key::<Aes256Gcm>::from_slice(&hash_bytes[..32]);
     let cipher = Aes256Gcm::new(key);
-    
+
     // Generate a random nonce
     let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
-    
+
     // Encrypt the token
-    let ciphertext = cipher.encrypt(&nonce, token.as_bytes())
-      .map_err(|e| format!("Encryption failed: {}", e))?;
-    
+    let ciphertext = cipher
+      .encrypt(&nonce, token.as_bytes())
+      .map_err(|e| format!("Encryption failed: {e}"))?;
+
     // Create file data with header, salt, nonce, and encrypted data
     let mut file_data = Vec::new();
     file_data.extend_from_slice(b"DBAPI"); // 5-byte header
     file_data.push(2u8); // Version 2 (Argon2 + AES-GCM)
-    
+
     // Store salt length and salt
     let salt_str = salt.as_str();
     file_data.push(salt_str.len() as u8);
     file_data.extend_from_slice(salt_str.as_bytes());
-    
+
     // Store nonce (12 bytes for AES-GCM)
     file_data.extend_from_slice(&nonce);
-    
+
     // Store ciphertext length and ciphertext
     file_data.extend_from_slice(&(ciphertext.len() as u32).to_le_bytes());
     file_data.extend_from_slice(&ciphertext);
@@ -274,22 +276,22 @@ impl SettingsManager {
     }
 
     let version = file_data[5];
-    
+
     // Only support Argon2 + AES-GCM (version 2)
     if version != 2 {
       return Ok(None);
     }
-    
+
     // Argon2 + AES-GCM decryption
     let mut offset = 6;
-    
+
     // Read salt
     if offset >= file_data.len() {
       return Ok(None);
     }
     let salt_len = file_data[offset] as usize;
     offset += 1;
-    
+
     if offset + salt_len > file_data.len() {
       return Ok(None);
     }
@@ -297,7 +299,7 @@ impl SettingsManager {
     let salt_str = std::str::from_utf8(salt_bytes).map_err(|_| "Invalid salt encoding")?;
     let salt = SaltString::from_b64(salt_str).map_err(|_| "Invalid salt format")?;
     offset += salt_len;
-    
+
     // Read nonce (12 bytes)
     if offset + 12 > file_data.len() {
       return Ok(None);
@@ -305,36 +307,41 @@ impl SettingsManager {
     let nonce_bytes = &file_data[offset..offset + 12];
     let nonce = Nonce::from_slice(nonce_bytes);
     offset += 12;
-    
+
     // Read ciphertext
     if offset + 4 > file_data.len() {
       return Ok(None);
     }
     let ciphertext_len = u32::from_le_bytes([
-      file_data[offset], file_data[offset + 1], file_data[offset + 2], file_data[offset + 3]
+      file_data[offset],
+      file_data[offset + 1],
+      file_data[offset + 2],
+      file_data[offset + 3],
     ]) as usize;
     offset += 4;
-    
+
     if offset + ciphertext_len > file_data.len() {
       return Ok(None);
     }
     let ciphertext = &file_data[offset..offset + ciphertext_len];
-    
+
     // Derive key using Argon2
     let vault_password = Self::get_vault_password();
     let argon2 = Argon2::default();
-    let password_hash = argon2.hash_password(vault_password.as_bytes(), &salt)
-      .map_err(|e| format!("Argon2 key derivation failed: {}", e))?;
+    let password_hash = argon2
+      .hash_password(vault_password.as_bytes(), &salt)
+      .map_err(|e| format!("Argon2 key derivation failed: {e}"))?;
     let hash_value = password_hash.hash.unwrap();
     let hash_bytes = hash_value.as_bytes();
-    
+
     let key = Key::<Aes256Gcm>::from_slice(&hash_bytes[..32]);
     let cipher = Aes256Gcm::new(key);
-    
+
     // Decrypt the token
-    let plaintext = cipher.decrypt(nonce, ciphertext)
+    let plaintext = cipher
+      .decrypt(nonce, ciphertext)
       .map_err(|_| "Decryption failed")?;
-    
+
     match String::from_utf8(plaintext) {
       Ok(token) => Ok(Some(token)),
       Err(_) => Ok(None),
