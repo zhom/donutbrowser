@@ -58,6 +58,8 @@ pub trait Browser: Send + Sync {
     profile_path: &str,
     proxy_settings: Option<&ProxySettings>,
     url: Option<String>,
+    remote_debugging_port: Option<u16>,
+    headless: bool,
   ) -> Result<Vec<String>, Box<dyn std::error::Error>>;
   fn is_version_downloaded(&self, version: &str, binaries_dir: &Path) -> bool;
   fn prepare_executable(&self, executable_path: &Path) -> Result<(), Box<dyn std::error::Error>>;
@@ -557,11 +559,23 @@ impl Browser for FirefoxBrowser {
     profile_path: &str,
     _proxy_settings: Option<&ProxySettings>,
     url: Option<String>,
+    remote_debugging_port: Option<u16>,
+    headless: bool,
   ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let mut args = vec!["-profile".to_string(), profile_path.to_string()];
 
-    // Only use -no-remote for browsers that require it for security (Mullvad, Tor)
-    // Regular Firefox browsers can use remote commands for better URL handling
+    // Add remote debugging if requested
+    if let Some(port) = remote_debugging_port {
+      args.push("--start-debugger-server".to_string());
+      args.push(port.to_string());
+    }
+
+    // Add headless mode if requested
+    if headless {
+      args.push("--headless".to_string());
+    }
+
+    // Use -no-remote for browsers that require it for security (Mullvad, Tor) or when remote debugging
     match self.browser_type {
       BrowserType::MullvadBrowser | BrowserType::TorBrowser => {
         args.push("-no-remote".to_string());
@@ -570,7 +584,11 @@ impl Browser for FirefoxBrowser {
       | BrowserType::FirefoxDeveloper
       | BrowserType::Zen
       | BrowserType::Camoufox => {
-        // Don't use -no-remote so we can communicate with existing instances
+        // Use -no-remote when remote debugging to avoid conflicts
+        if remote_debugging_port.is_some() {
+          args.push("-no-remote".to_string());
+        }
+        // Don't use -no-remote for normal launches so we can communicate with existing instances
       }
       _ => {}
     }
@@ -659,6 +677,8 @@ impl Browser for ChromiumBrowser {
     profile_path: &str,
     proxy_settings: Option<&ProxySettings>,
     url: Option<String>,
+    remote_debugging_port: Option<u16>,
+    headless: bool,
   ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let mut args = vec![
       format!("--user-data-dir={}", profile_path),
@@ -670,9 +690,19 @@ impl Browser for ChromiumBrowser {
       "--disable-updater".to_string(),
     ];
 
+    // Add remote debugging if requested
+    if let Some(port) = remote_debugging_port {
+      args.push("--remote-debugging-address=0.0.0.0".to_string());
+      args.push(format!("--remote-debugging-port={port}"));
+    }
+
+    // Add headless mode if requested
+    if headless {
+      args.push("--headless".to_string());
+    }
+
     // Add proxy configuration if provided
     if let Some(proxy) = proxy_settings {
-      // Apply proxy settings
       args.push(format!(
         "--proxy-server=http://{}:{}",
         proxy.host, proxy.port
@@ -758,6 +788,8 @@ impl Browser for CamoufoxBrowser {
     profile_path: &str,
     _proxy_settings: Option<&ProxySettings>,
     url: Option<String>,
+    remote_debugging_port: Option<u16>,
+    headless: bool,
   ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     // For Camoufox, we handle launching through the camoufox launcher
     // This method won't be used directly, but we provide basic Firefox args as fallback
@@ -766,6 +798,17 @@ impl Browser for CamoufoxBrowser {
       profile_path.to_string(),
       "-no-remote".to_string(),
     ];
+
+    // Add remote debugging if requested
+    if let Some(port) = remote_debugging_port {
+      args.push("--start-debugger-server".to_string());
+      args.push(port.to_string());
+    }
+
+    // Add headless mode if requested
+    if headless {
+      args.push("--headless".to_string());
+    }
 
     if let Some(url) = url {
       args.push(url);
@@ -962,15 +1005,15 @@ mod tests {
 
   #[test]
   fn test_firefox_launch_args() {
-    // Test regular Firefox (should not use -no-remote)
+    // Test regular Firefox (should not use -no-remote for normal launch)
     let browser = FirefoxBrowser::new(BrowserType::Firefox);
     let args = browser
-      .create_launch_args("/path/to/profile", None, None)
+      .create_launch_args("/path/to/profile", None, None, None, false)
       .expect("Failed to create launch args for Firefox");
     assert_eq!(args, vec!["-profile", "/path/to/profile"]);
     assert!(
       !args.contains(&"-no-remote".to_string()),
-      "Firefox should not use -no-remote"
+      "Firefox should not use -no-remote for normal launch"
     );
 
     let args = browser
@@ -978,6 +1021,8 @@ mod tests {
         "/path/to/profile",
         None,
         Some("https://example.com".to_string()),
+        None,
+        false,
       )
       .expect("Failed to create launch args for Firefox with URL");
     assert_eq!(
@@ -985,29 +1030,55 @@ mod tests {
       vec!["-profile", "/path/to/profile", "https://example.com"]
     );
 
-    // Test Mullvad Browser (should use -no-remote)
+    // Test Firefox with remote debugging (should use -no-remote)
+    let args = browser
+      .create_launch_args("/path/to/profile", None, None, Some(9222), false)
+      .expect("Failed to create launch args for Firefox with remote debugging");
+    assert!(
+      args.contains(&"-no-remote".to_string()),
+      "Firefox should use -no-remote for remote debugging"
+    );
+    assert!(
+      args.contains(&"--start-debugger-server".to_string()),
+      "Firefox should include debugger server arg"
+    );
+    assert!(
+      args.contains(&"9222".to_string()),
+      "Firefox should include debugging port"
+    );
+
+    // Test Mullvad Browser (should always use -no-remote)
     let browser = FirefoxBrowser::new(BrowserType::MullvadBrowser);
     let args = browser
-      .create_launch_args("/path/to/profile", None, None)
+      .create_launch_args("/path/to/profile", None, None, None, false)
       .expect("Failed to create launch args for Mullvad Browser");
     assert_eq!(args, vec!["-profile", "/path/to/profile", "-no-remote"]);
 
-    // Test Tor Browser (should use -no-remote)
+    // Test Tor Browser (should always use -no-remote)
     let browser = FirefoxBrowser::new(BrowserType::TorBrowser);
     let args = browser
-      .create_launch_args("/path/to/profile", None, None)
+      .create_launch_args("/path/to/profile", None, None, None, false)
       .expect("Failed to create launch args for Tor Browser");
     assert_eq!(args, vec!["-profile", "/path/to/profile", "-no-remote"]);
 
-    // Test Zen Browser (should not use -no-remote)
+    // Test Zen Browser (should not use -no-remote for normal launch)
     let browser = FirefoxBrowser::new(BrowserType::Zen);
     let args = browser
-      .create_launch_args("/path/to/profile", None, None)
+      .create_launch_args("/path/to/profile", None, None, None, false)
       .expect("Failed to create launch args for Zen Browser");
     assert_eq!(args, vec!["-profile", "/path/to/profile"]);
     assert!(
       !args.contains(&"-no-remote".to_string()),
-      "Zen Browser should not use -no-remote"
+      "Zen Browser should not use -no-remote for normal launch"
+    );
+
+    // Test headless mode
+    let args = browser
+      .create_launch_args("/path/to/profile", None, None, None, true)
+      .expect("Failed to create launch args for Zen Browser headless");
+    assert!(
+      args.contains(&"--headless".to_string()),
+      "Browser should include headless flag when requested"
     );
   }
 
@@ -1015,7 +1086,7 @@ mod tests {
   fn test_chromium_launch_args() {
     let browser = ChromiumBrowser::new(BrowserType::Chromium);
     let args = browser
-      .create_launch_args("/path/to/profile", None, None)
+      .create_launch_args("/path/to/profile", None, None, None, false)
       .expect("Failed to create launch args for Chromium");
 
     // Test that basic required arguments are present
@@ -1043,6 +1114,8 @@ mod tests {
         "/path/to/profile",
         None,
         Some("https://example.com".to_string()),
+        None,
+        false,
       )
       .expect("Failed to create launch args for Chromium with URL");
     assert!(
@@ -1054,6 +1127,28 @@ mod tests {
     assert_eq!(
       args_with_url.last().expect("Args should not be empty"),
       "https://example.com"
+    );
+
+    // Test remote debugging
+    let args_with_debug = browser
+      .create_launch_args("/path/to/profile", None, None, Some(9222), false)
+      .expect("Failed to create launch args for Chromium with remote debugging");
+    assert!(
+      args_with_debug.contains(&"--remote-debugging-port=9222".to_string()),
+      "Chromium args should contain remote debugging port"
+    );
+    assert!(
+      args_with_debug.contains(&"--remote-debugging-address=0.0.0.0".to_string()),
+      "Chromium args should contain remote debugging address"
+    );
+
+    // Test headless mode
+    let args_headless = browser
+      .create_launch_args("/path/to/profile", None, None, None, true)
+      .expect("Failed to create launch args for Chromium headless");
+    assert!(
+      args_headless.contains(&"--headless".to_string()),
+      "Chromium args should contain headless flag when requested"
     );
   }
 

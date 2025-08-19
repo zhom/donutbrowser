@@ -162,6 +162,20 @@ impl BrowserRunner {
     url: Option<String>,
     local_proxy_settings: Option<&ProxySettings>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
+    self
+      .launch_browser_internal(app_handle, profile, url, local_proxy_settings, None, false)
+      .await
+  }
+
+  async fn launch_browser_internal(
+    &self,
+    app_handle: tauri::AppHandle,
+    profile: &BrowserProfile,
+    url: Option<String>,
+    local_proxy_settings: Option<&ProxySettings>,
+    remote_debugging_port: Option<u16>,
+    headless: bool,
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
     // Check if browser is disabled due to ongoing update
     let auto_updater = crate::auto_updater::AutoUpdater::instance();
     if auto_updater.is_browser_disabled(&profile.browser)? {
@@ -336,6 +350,8 @@ impl BrowserRunner {
         &profile_data_path.to_string_lossy(),
         proxy_for_launch_args,
         url,
+        remote_debugging_port,
+        headless,
       )
       .expect("Failed to create launch arguments");
 
@@ -774,6 +790,86 @@ impl BrowserRunner {
     }
   }
 
+  pub async fn launch_browser_with_debugging(
+    &self,
+    app_handle: tauri::AppHandle,
+    profile: &BrowserProfile,
+    url: Option<String>,
+    remote_debugging_port: Option<u16>,
+    headless: bool,
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
+    // Always start a local proxy for API launches
+    let mut internal_proxy_settings: Option<ProxySettings> = None;
+
+    // Determine upstream proxy if configured; otherwise use DIRECT
+    let upstream_proxy = profile
+      .proxy_id
+      .as_ref()
+      .and_then(|id| PROXY_MANAGER.get_proxy_settings_by_id(id));
+
+    // Use a temporary PID (1) to start the proxy, we'll update it after browser launch
+    let temp_pid = 1u32;
+
+    match PROXY_MANAGER
+      .start_proxy(
+        app_handle.clone(),
+        upstream_proxy.as_ref(),
+        temp_pid,
+        Some(&profile.name),
+      )
+      .await
+    {
+      Ok(internal_proxy) => {
+        internal_proxy_settings = Some(internal_proxy.clone());
+
+        // For Firefox-based browsers, apply PAC/user.js to point to the local proxy
+        if matches!(
+          profile.browser.as_str(),
+          "firefox" | "firefox-developer" | "zen" | "tor-browser" | "mullvad-browser"
+        ) {
+          let profiles_dir = self.get_profiles_dir();
+          let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
+
+          // Provide a dummy upstream (ignored when internal proxy is provided)
+          let dummy_upstream = ProxySettings {
+            proxy_type: "http".to_string(),
+            host: "127.0.0.1".to_string(),
+            port: internal_proxy.port,
+            username: None,
+            password: None,
+          };
+
+          self
+            .apply_proxy_settings_to_profile(&profile_path, &dummy_upstream, Some(&internal_proxy))
+            .map_err(|e| format!("Failed to update profile proxy: {e}"))?;
+        }
+      }
+      Err(e) => {
+        eprintln!("Failed to start local proxy (will launch without it): {e}");
+      }
+    }
+
+    let result = self
+      .launch_browser_internal(
+        app_handle.clone(),
+        profile,
+        url,
+        internal_proxy_settings.as_ref(),
+        remote_debugging_port,
+        headless,
+      )
+      .await;
+
+    // Update proxy with correct PID if launch succeeded
+    if let Ok(ref updated_profile) = result {
+      if let Some(actual_pid) = updated_profile.process_id {
+        let _ = PROXY_MANAGER.update_proxy_pid(temp_pid, actual_pid);
+      }
+    }
+
+    result
+  }
+
   pub async fn launch_or_open_url(
     &self,
     app_handle: tauri::AppHandle,
@@ -863,7 +959,7 @@ impl BrowserRunner {
               _ => {
                 println!("Falling back to new instance for browser: {}", final_profile.browser);
                 // Fallback to launching a new instance for other browsers
-                self.launch_browser(app_handle.clone(), &final_profile, url, internal_proxy_settings).await
+                self.launch_browser_internal(app_handle.clone(), &final_profile, url, internal_proxy_settings, None, false).await
               }
             }
           }
@@ -888,11 +984,13 @@ impl BrowserRunner {
         println!("Launching new browser instance - no URL provided");
       }
       self
-        .launch_browser(
+        .launch_browser_internal(
           app_handle.clone(),
           &final_profile,
           url,
           internal_proxy_settings,
+          None,
+          false,
         )
         .await
     }
@@ -2270,6 +2368,20 @@ pub async fn ensure_all_binaries_exist(
     .ensure_all_binaries_exist(&app_handle)
     .await
     .map_err(|e| format!("Failed to ensure all binaries exist: {e}"))
+}
+
+pub async fn launch_browser_profile_with_debugging(
+  app_handle: tauri::AppHandle,
+  profile: BrowserProfile,
+  url: Option<String>,
+  remote_debugging_port: Option<u16>,
+  headless: bool,
+) -> Result<BrowserProfile, String> {
+  let browser_runner = BrowserRunner::instance();
+  browser_runner
+    .launch_browser_with_debugging(app_handle, &profile, url, remote_debugging_port, headless)
+    .await
+    .map_err(|e| format!("Failed to launch browser with debugging: {e}"))
 }
 
 #[cfg(test)]
