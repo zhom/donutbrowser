@@ -131,7 +131,7 @@ export function ProxyManagementDialog({
                   </RippleButton>
                 </div>
               ) : (
-                <ScrollArea className="h-[320px] pr-2">
+                <ScrollArea className="h-[240px] pr-2">
                   <div className="space-y-2">
                     {storedProxies.map((proxy) => (
                       <div
