@@ -94,12 +94,12 @@ export function ProfileSelectorDialog({
 
     setIsLaunching(true);
     const selected = profiles.find((p) => p.name === selectedProfile);
-    if (selected) {
-      setLaunchingProfiles((prev) => new Set(prev).add(selected.id));
-    }
+    if (!selected) return;
+
+    setLaunchingProfiles((prev) => new Set(prev).add(selected.id));
     try {
       await invoke("open_url_with_profile", {
-        profileId: selectedProfile,
+        profileId: selected.id,
         url,
       });
       onClose();
