@@ -854,6 +854,180 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                   Include this token in the Authorization header as "Bearer{" "}
                   {settings.api_token}" for all API requests.
                 </p>
+                {/* Temporary in-app API docs */}
+                <div className="mt-3 p-3 border rounded-md bg-muted/40 text-xs leading-relaxed space-y-2">
+                  <div className="font-medium">
+                    Temporary in-app API docs (alpha)
+                  </div>
+                  <div>
+                    <div>
+                      Base URL:{" "}
+                      <code className="font-mono">{`http://127.0.0.1:${apiServerPort ?? settings.api_port ?? 10108}/v1`}</code>
+                    </div>
+                    <div>
+                      Auth:{" "}
+                      <code className="font-mono">
+                        Authorization: Bearer {settings.api_token}
+                      </code>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="font-medium">Profiles</div>
+                    <ul className="list-disc ml-5 space-y-0.5">
+                      <li>
+                        <code className="font-mono">GET /profiles</code> — list
+                        profiles
+                      </li>
+                      <li>
+                        <code className="font-mono">
+                          GET /profiles/{"{"}id{"}"}
+                        </code>{" "}
+                        — get one
+                      </li>
+                      <li>
+                        <code className="font-mono">POST /profiles</code> —
+                        create
+                        <span className="ml-1 text-muted-foreground">
+                          (required: name, browser, version; optional:
+                          release_type, proxy_id, camoufox_config, group_id,
+                          tags)
+                        </span>
+                      </li>
+                      <li>
+                        <code className="font-mono">
+                          PUT /profiles/{"{"}id{"}"}
+                        </code>{" "}
+                        — update
+                        <span className="ml-1 text-muted-foreground">
+                          (any of: name, version, proxy_id, camoufox_config,
+                          group_id, tags)
+                        </span>
+                      </li>
+                      <li>
+                        <code className="font-mono">
+                          DELETE /profiles/{"{"}id{"}"}
+                        </code>{" "}
+                        — delete
+                      </li>
+                      <li>
+                        <code className="font-mono">
+                          POST /profiles/{"{"}id{"}"}/run?headless=true|false
+                        </code>{" "}
+                        — launch with remote debugging
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="font-medium">Groups</div>
+                    <ul className="list-disc ml-5 space-y-0.5">
+                      <li>
+                        <code className="font-mono">GET /groups</code> — list
+                      </li>
+                      <li>
+                        <code className="font-mono">
+                          GET /groups/{"{"}id{"}"}
+                        </code>{" "}
+                        — get one
+                      </li>
+                      <li>
+                        <code className="font-mono">POST /groups</code> — create
+                        <span className="ml-1 text-muted-foreground">
+                          (required: name)
+                        </span>
+                      </li>
+                      <li>
+                        <code className="font-mono">
+                          PUT /groups/{"{"}id{"}"}
+                        </code>{" "}
+                        — rename
+                        <span className="ml-1 text-muted-foreground">
+                          (required: name)
+                        </span>
+                      </li>
+                      <li>
+                        <code className="font-mono">
+                          DELETE /groups/{"{"}id{"}"}
+                        </code>{" "}
+                        — delete
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="font-medium">Tags</div>
+                    <ul className="list-disc ml-5 space-y-0.5">
+                      <li>
+                        <code className="font-mono">GET /tags</code> — list
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="font-medium">Proxies</div>
+                    <ul className="list-disc ml-5 space-y-0.5">
+                      <li>
+                        <code className="font-mono">GET /proxies</code> — list
+                      </li>
+                      <li>
+                        <code className="font-mono">
+                          GET /proxies/{"{"}id{"}"}
+                        </code>{" "}
+                        — get one
+                      </li>
+                      <li>
+                        <code className="font-mono">POST /proxies</code> —
+                        create
+                        <span className="ml-1 text-muted-foreground">
+                          (required: name, proxy_settings object)
+                        </span>
+                      </li>
+                      <li>
+                        <code className="font-mono">
+                          PUT /proxies/{"{"}id{"}"}
+                        </code>{" "}
+                        — update
+                        <span className="ml-1 text-muted-foreground">
+                          (optional: name, proxy_settings)
+                        </span>
+                      </li>
+                      <li>
+                        <code className="font-mono">
+                          DELETE /proxies/{"{"}id{"}"}
+                        </code>{" "}
+                        — delete
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="font-medium">Browsers</div>
+                    <ul className="list-disc ml-5 space-y-0.5">
+                      <li>
+                        <code className="font-mono">
+                          POST /browsers/download
+                        </code>{" "}
+                        — download
+                        <span className="ml-1 text-muted-foreground">
+                          (required: browser, version)
+                        </span>
+                      </li>
+                      <li>
+                        <code className="font-mono">
+                          GET /browsers/{"{"}browser{"}"}/versions
+                        </code>{" "}
+                        — list versions
+                      </li>
+                      <li>
+                        <code className="font-mono">
+                          GET /browsers/{"{"}browser{"}"}/versions/{"{"}version
+                          {"}"}/downloaded
+                        </code>{" "}
+                        — is downloaded
+                      </li>
+                    </ul>
+                  </div>
+                  <div className="text-muted-foreground">
+                    These docs are temporary and will be replaced with full
+                    documentation later.
+                  </div>
+                </div>
               </div>
             )}
           </div>
