@@ -781,7 +781,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                   updateSetting("api_enabled", checked);
                   try {
                     if (checked) {
-                      // Ask backend to enable API and return settings with token (token stored in Stronghold)
+                      // Ask backend to enable API and return settings with token
                       const next = await invoke<AppSettings>(
                         "save_app_settings",
                         {
@@ -837,7 +837,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                     type="text"
                     value={settings.api_token}
                     readOnly
-                    className="flex-1 px-3 py-2 text-sm bg-muted border rounded-md font-mono"
+                    className="flex-1 px-3 py-2 font-mono text-sm rounded-md border bg-muted"
                   />
                   <RippleButton
                     variant="outline"
@@ -855,7 +855,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                   {settings.api_token}" for all API requests.
                 </p>
                 {/* Temporary in-app API docs */}
-                <div className="mt-3 p-3 border rounded-md bg-muted/40 text-xs leading-relaxed space-y-2">
+                <div className="p-3 mt-3 space-y-2 text-xs leading-relaxed rounded-md border bg-muted/40">
                   <div className="font-medium">
                     Temporary in-app API docs (alpha)
                   </div>

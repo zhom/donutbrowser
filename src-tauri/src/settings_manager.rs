@@ -385,7 +385,6 @@ pub async fn save_app_settings(
 ) -> Result<AppSettings, String> {
   let manager = SettingsManager::instance();
 
-  // If API is being enabled ensure token is stored in Stronghold.
   if settings.api_enabled {
     if let Some(ref token) = settings.api_token {
       manager
@@ -410,7 +409,6 @@ pub async fn save_app_settings(
     settings.api_token = None;
   }
 
-  // Do not persist api_token in settings file (kept in Stronghold). Save a copy without the token.
   let mut persist_settings = settings.clone();
   persist_settings.api_token = None;
   manager
@@ -491,8 +489,6 @@ pub async fn clear_all_version_cache_and_refetch(
   result?;
   Ok(())
 }
-
-// No standalone stronghold commands needed; token ops handled via settings commands
 
 // Global singleton instance
 lazy_static::lazy_static! {

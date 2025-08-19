@@ -29,7 +29,6 @@ tauri-plugin-shell = "2"
 tauri-plugin-deep-link = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-macos-permissions = "2"
-tauri-plugin-stronghold = "2"
 
 
 directories = "6"
