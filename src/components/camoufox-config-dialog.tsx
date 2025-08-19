@@ -107,7 +107,7 @@ export function CamoufoxConfigDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 h-[400px]">
+        <ScrollArea className="flex-1 h-[320px]">
           <div className="py-4">
             <SharedCamoufoxConfigForm
               config={config}

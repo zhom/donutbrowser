@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Tooltip,
   TooltipContent,
@@ -130,82 +131,84 @@ export function ProxyManagementDialog({
                   </RippleButton>
                 </div>
               ) : (
-                <div className="overflow-y-auto pr-2 space-y-2 h-full">
-                  {storedProxies.map((proxy) => (
-                    <div
-                      key={proxy.id}
-                      className="flex justify-between items-center p-1 rounded border bg-card"
-                    >
-                      <div className="flex-1 ml-2 min-w-0">
-                        {proxy.name.length > 30 ? (
+                <ScrollArea className="h-[320px] pr-2">
+                  <div className="space-y-2">
+                    {storedProxies.map((proxy) => (
+                      <div
+                        key={proxy.id}
+                        className="flex justify-between items-center p-1 rounded border bg-card"
+                      >
+                        <div className="flex-1 ml-2 min-w-0">
+                          {proxy.name.length > 30 ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="block font-medium truncate text-card-foreground">
+                                  {trimName(proxy.name)}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <span className="text-sm font-medium text-card-foreground">
+                                  {proxy.name}
+                                </span>
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <span className="text-sm font-medium text-card-foreground">
+                              {proxy.name}
+                            </span>
+                          )}
+                        </div>
+                        <div className="mr-2">
+                          <Badge variant="secondary">
+                            {proxyUsage[proxy.id] ?? 0}
+                          </Badge>
+                        </div>
+                        <div className="flex flex-shrink-0 gap-1 items-center">
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span className="block font-medium truncate text-card-foreground">
-                                {trimName(proxy.name)}
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <span className="text-sm font-medium text-card-foreground">
-                                {proxy.name}
-                              </span>
-                            </TooltipContent>
-                          </Tooltip>
-                        ) : (
-                          <span className="text-sm font-medium text-card-foreground">
-                            {proxy.name}
-                          </span>
-                        )}
-                      </div>
-                      <div className="mr-2">
-                        <Badge variant="secondary">
-                          {proxyUsage[proxy.id] ?? 0}
-                        </Badge>
-                      </div>
-                      <div className="flex flex-shrink-0 gap-1 items-center">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEditProxy(proxy)}
-                            >
-                              <FiEdit2 className="w-4 h-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Edit proxy</p>
-                          </TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span>
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleDeleteProxy(proxy)}
-                                className="text-destructive hover:text-destructive"
-                                disabled={(proxyUsage[proxy.id] ?? 0) > 0}
+                                onClick={() => handleEditProxy(proxy)}
                               >
-                                <FiTrash2 className="w-4 h-4" />
+                                <FiEdit2 className="w-4 h-4" />
                               </Button>
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            {(proxyUsage[proxy.id] ?? 0) > 0 ? (
-                              <p>
-                                Cannot delete: in use by {proxyUsage[proxy.id]}{" "}
-                                profile
-                                {proxyUsage[proxy.id] > 1 ? "s" : ""}
-                              </p>
-                            ) : (
-                              <p>Delete proxy</p>
-                            )}
-                          </TooltipContent>
-                        </Tooltip>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Edit proxy</p>
+                            </TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteProxy(proxy)}
+                                  className="text-destructive hover:text-destructive"
+                                  disabled={(proxyUsage[proxy.id] ?? 0) > 0}
+                                >
+                                  <FiTrash2 className="w-4 h-4" />
+                                </Button>
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {(proxyUsage[proxy.id] ?? 0) > 0 ? (
+                                <p>
+                                  Cannot delete: in use by{" "}
+                                  {proxyUsage[proxy.id]} profile
+                                  {proxyUsage[proxy.id] > 1 ? "s" : ""}
+                                </p>
+                              ) : (
+                                <p>Delete proxy</p>
+                              )}
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                </ScrollArea>
               )}
             </div>
           </div>
