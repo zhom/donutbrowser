@@ -25,6 +25,7 @@ impl TagManager {
     }
   }
 
+  // Helper for tests to override data directory without global env var
   #[allow(dead_code)]
   pub fn with_data_dir_override(dir: &Path) -> Self {
     Self {
