@@ -99,7 +99,7 @@ export function ProfileSelectorDialog({
     }
     try {
       await invoke("open_url_with_profile", {
-        profileName: selectedProfile,
+        profileId: selectedProfile,
         url,
       });
       onClose();

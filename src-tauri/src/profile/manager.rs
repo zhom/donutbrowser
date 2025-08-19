@@ -268,7 +268,7 @@ impl ProfileManager {
   pub fn rename_profile(
     &self,
     app_handle: &tauri::AppHandle,
-    old_name: &str,
+    profile_id: &str,
     new_name: &str,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
     // Check if new name already exists (case insensitive)
@@ -280,11 +280,13 @@ impl ProfileManager {
       return Err(format!("Profile with name '{new_name}' already exists").into());
     }
 
-    // Find the profile by old name
+    // Find the profile by ID
+    let profile_uuid = uuid::Uuid::parse_str(profile_id)
+      .map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
     let mut profile = existing_profiles
       .into_iter()
-      .find(|p| p.name == old_name)
-      .ok_or_else(|| format!("Profile '{old_name}' not found"))?;
+      .find(|p| p.id == profile_uuid)
+      .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
 
     // Update profile name (no need to move directories since we use UUID)
     profile.name = new_name.to_string();
@@ -308,16 +310,18 @@ impl ProfileManager {
   pub fn delete_profile(
     &self,
     app_handle: &tauri::AppHandle,
-    profile_name: &str,
+    profile_id: &str,
   ) -> Result<(), Box<dyn std::error::Error>> {
-    println!("Attempting to delete profile: {profile_name}");
+    println!("Attempting to delete profile with ID: {profile_id}");
 
-    // Find the profile by name
+    // Find the profile by ID
+    let profile_uuid = uuid::Uuid::parse_str(profile_id)
+      .map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
     let profiles = self.list_profiles()?;
     let profile = profiles
       .into_iter()
-      .find(|p| p.name == profile_name)
-      .ok_or_else(|| format!("Profile '{profile_name}' not found"))?;
+      .find(|p| p.id == profile_uuid)
+      .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
 
     // Check if browser is running
     if profile.process_id.is_some() {
@@ -338,10 +342,10 @@ impl ProfileManager {
 
     // Verify deletion was successful
     if profile_uuid_dir.exists() {
-      return Err(format!("Failed to completely delete profile '{profile_name}'").into());
+      return Err(format!("Failed to completely delete profile '{}'", profile.name).into());
     }
 
-    println!("Profile '{profile_name}' deleted successfully");
+    println!("Profile '{}' (ID: {}) deleted successfully", profile.name, profile_id);
 
     // Rebuild tag suggestions after deletion
     let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
@@ -359,15 +363,17 @@ impl ProfileManager {
   pub fn update_profile_version(
     &self,
     app_handle: &tauri::AppHandle,
-    profile_name: &str,
+    profile_id: &str,
     version: &str,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
-    // Find the profile by name
+    // Find the profile by ID
+    let profile_uuid = uuid::Uuid::parse_str(profile_id)
+      .map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
     let profiles = self.list_profiles()?;
     let mut profile = profiles
       .into_iter()
-      .find(|p| p.name == profile_name)
-      .ok_or_else(|| format!("Profile {profile_name} not found"))?;
+      .find(|p| p.id == profile_uuid)
+      .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
 
     // Check if the browser is currently running
     if profile.process_id.is_some() {
@@ -411,22 +417,24 @@ impl ProfileManager {
   pub fn assign_profiles_to_group(
     &self,
     app_handle: &tauri::AppHandle,
-    profile_names: Vec<String>,
+    profile_ids: Vec<String>,
     group_id: Option<String>,
   ) -> Result<(), Box<dyn std::error::Error>> {
     let profiles = self.list_profiles()?;
 
-    for profile_name in profile_names {
+    for profile_id in profile_ids {
+      let profile_uuid = uuid::Uuid::parse_str(&profile_id)
+        .map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
       let mut profile = profiles
         .iter()
-        .find(|p| p.name == profile_name)
-        .ok_or_else(|| format!("Profile '{profile_name}' not found"))?
+        .find(|p| p.id == profile_uuid)
+        .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?
         .clone();
 
       // Check if browser is running
       if profile.process_id.is_some() {
         return Err(format!(
-          "Cannot modify group for profile '{profile_name}' while browser is running. Please stop the browser first."
+          "Cannot modify group for profile '{}' while browser is running. Please stop the browser first.", profile.name
         ).into());
       }
 
@@ -450,15 +458,17 @@ impl ProfileManager {
   pub fn update_profile_tags(
     &self,
     app_handle: &tauri::AppHandle,
-    profile_name: &str,
+    profile_id: &str,
     tags: Vec<String>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
-    // Find the profile by name
+    // Find the profile by ID
+    let profile_uuid = uuid::Uuid::parse_str(profile_id)
+      .map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
     let profiles = self.list_profiles()?;
     let mut profile = profiles
       .into_iter()
-      .find(|p| p.name == profile_name)
-      .ok_or_else(|| format!("Profile {profile_name} not found"))?;
+      .find(|p| p.id == profile_uuid)
+      .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
 
     let mut seen = std::collections::HashSet::new();
     let mut deduped: Vec<String> = Vec::with_capacity(tags.len());
@@ -488,21 +498,23 @@ impl ProfileManager {
   pub fn delete_multiple_profiles(
     &self,
     app_handle: &tauri::AppHandle,
-    profile_names: Vec<String>,
+    profile_ids: Vec<String>,
   ) -> Result<(), Box<dyn std::error::Error>> {
     let profiles = self.list_profiles()?;
 
-    for profile_name in profile_names {
+    for profile_id in profile_ids {
+      let profile_uuid = uuid::Uuid::parse_str(&profile_id)
+        .map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
       let profile = profiles
         .iter()
-        .find(|p| p.name == profile_name)
-        .ok_or_else(|| format!("Profile '{profile_name}' not found"))?;
+        .find(|p| p.id == profile_uuid)
+        .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
 
       // Check if browser is running
       if profile.process_id.is_some() {
         return Err(
           format!(
-            "Cannot delete profile '{profile_name}' while browser is running. Please stop the browser first."
+            "Cannot delete profile '{}' while browser is running. Please stop the browser first.", profile.name
           )
           .into(),
         );
@@ -528,10 +540,14 @@ impl ProfileManager {
   pub async fn update_camoufox_config(
     &self,
     app_handle: tauri::AppHandle,
-    profile_name: &str,
+    profile_id: &str,
     config: CamoufoxConfig,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Find the profile by name
+    // Find the profile by ID
+    let profile_uuid = uuid::Uuid::parse_str(profile_id)
+      .map_err(|_| -> Box<dyn std::error::Error + Send + Sync> {
+        format!("Invalid profile ID: {profile_id}").into()
+      })?;
     let profiles =
       self
         .list_profiles()
@@ -540,9 +556,9 @@ impl ProfileManager {
         })?;
     let mut profile = profiles
       .into_iter()
-      .find(|p| p.name == profile_name)
+      .find(|p| p.id == profile_uuid)
       .ok_or_else(|| -> Box<dyn std::error::Error + Send + Sync> {
-        format!("Profile {profile_name} not found").into()
+        format!("Profile with ID '{profile_id}' not found").into()
       })?;
 
     // Check if the browser is currently running using the comprehensive status check
@@ -566,7 +582,7 @@ impl ProfileManager {
         format!("Failed to save profile: {e}").into()
       })?;
 
-    println!("Camoufox configuration updated for profile '{profile_name}'.");
+    println!("Camoufox configuration updated for profile '{}' (ID: {}).", profile.name, profile_id);
 
     // Emit profile config update event
     if let Err(e) = app_handle.emit("profiles-changed", ()) {
@@ -579,10 +595,14 @@ impl ProfileManager {
   pub async fn update_profile_proxy(
     &self,
     app_handle: tauri::AppHandle,
-    profile_name: &str,
+    profile_id: &str,
     proxy_id: Option<String>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
-    // Find the profile by name
+    // Find the profile by ID
+    let profile_uuid = uuid::Uuid::parse_str(profile_id)
+      .map_err(|_| -> Box<dyn std::error::Error + Send + Sync> {
+        format!("Invalid profile ID: {profile_id}").into()
+      })?;
     let profiles =
       self
         .list_profiles()
@@ -592,9 +612,9 @@ impl ProfileManager {
 
     let mut profile = profiles
       .into_iter()
-      .find(|p| p.name == profile_name)
+      .find(|p| p.id == profile_uuid)
       .ok_or_else(|| -> Box<dyn std::error::Error + Send + Sync> {
-        format!("Profile {profile_name} not found").into()
+        format!("Profile with ID '{profile_id}' not found").into()
       })?;
 
     // Update proxy settings

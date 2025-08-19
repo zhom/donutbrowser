@@ -2064,12 +2064,12 @@ pub async fn launch_browser_profile(
 #[tauri::command]
 pub async fn update_profile_proxy(
   app_handle: tauri::AppHandle,
-  profile_name: String,
+  profile_id: String,
   proxy_id: Option<String>,
 ) -> Result<BrowserProfile, String> {
   let profile_manager = ProfileManager::instance();
   profile_manager
-    .update_profile_proxy(app_handle, &profile_name, proxy_id)
+    .update_profile_proxy(app_handle, &profile_id, proxy_id)
     .await
     .map_err(|e| format!("Failed to update profile: {e}"))
 }
@@ -2077,12 +2077,12 @@ pub async fn update_profile_proxy(
 #[tauri::command]
 pub fn update_profile_tags(
   app_handle: tauri::AppHandle,
-  profile_name: String,
+  profile_id: String,
   tags: Vec<String>,
 ) -> Result<BrowserProfile, String> {
   let profile_manager = ProfileManager::instance();
   profile_manager
-    .update_profile_tags(&app_handle, &profile_name, tags)
+    .update_profile_tags(&app_handle, &profile_id, tags)
     .map_err(|e| format!("Failed to update profile tags: {e}"))
 }
 
@@ -2101,12 +2101,12 @@ pub async fn check_browser_status(
 #[tauri::command]
 pub fn rename_profile(
   app_handle: tauri::AppHandle,
-  old_name: &str,
-  new_name: &str,
+  profile_id: String,
+  new_name: String,
 ) -> Result<BrowserProfile, String> {
   let profile_manager = ProfileManager::instance();
   profile_manager
-    .rename_profile(&app_handle, old_name, new_name)
+    .rename_profile(&app_handle, &profile_id, &new_name)
     .map_err(|e| format!("Failed to rename profile: {e}"))
 }
 

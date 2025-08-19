@@ -96,15 +96,15 @@ type TableMeta = {
   proxyOverrides: Record<string, string | null>;
   storedProxies: StoredProxy[];
   handleProxySelection: (
-    profileName: string,
+    profileId: string,
     proxyId: string | null,
   ) => void | Promise<void>;
 
   // Selection helpers
-  isProfileSelected: (name: string) => boolean;
+  isProfileSelected: (id: string) => boolean;
   handleToggleAll: (checked: boolean) => void;
-  handleCheckboxChange: (name: string, checked: boolean) => void;
-  handleIconClick: (name: string) => void;
+  handleCheckboxChange: (id: string, checked: boolean) => void;
+  handleIconClick: (id: string) => void;
 
   // Rename helpers
   handleRename: () => void | Promise<void>;
@@ -125,7 +125,7 @@ type TableMeta = {
   onLaunchProfile: (profile: BrowserProfile) => void | Promise<void>;
 
   // Overflow actions
-  onAssignProfilesToGroup?: (profileNames: string[]) => void;
+  onAssignProfilesToGroup?: (profileIds: string[]) => void;
   onConfigureCamoufox?: (profile: BrowserProfile) => void;
 };
 
@@ -151,8 +151,8 @@ const TagsCell = React.memo<{
     setOpenTagsEditorFor,
     setTagsOverrides,
   }) => {
-    const effectiveTags: string[] = Object.hasOwn(tagsOverrides, profile.name)
-      ? tagsOverrides[profile.name]
+    const effectiveTags: string[] = Object.hasOwn(tagsOverrides, profile.id)
+      ? tagsOverrides[profile.id]
       : (profile.tags ?? []);
 
     const valueOptions: Option[] = React.useMemo(
@@ -164,10 +164,9 @@ const TagsCell = React.memo<{
       [allTags],
     );
 
-    const handleChange = React.useCallback(
-      async (opts: Option[]) => {
-        const newTagsRaw = opts.map((o) => o.value);
-        // Dedupe while preserving order
+    const onTagsChange = React.useCallback(
+      async (newTagsRaw: string[]) => {
+        // Dedupe tags
         const seen = new Set<string>();
         const newTags: string[] = [];
         for (const t of newTagsRaw) {
@@ -176,10 +175,10 @@ const TagsCell = React.memo<{
             newTags.push(t);
           }
         }
-        setTagsOverrides((prev) => ({ ...prev, [profile.name]: newTags }));
+        setTagsOverrides((prev) => ({ ...prev, [profile.id]: newTags }));
         try {
           await invoke<BrowserProfile>("update_profile_tags", {
-            profileName: profile.name,
+            profileId: profile.id,
             tags: newTags,
           });
           setAllTags((prev) => {
@@ -191,7 +190,15 @@ const TagsCell = React.memo<{
           console.error("Failed to update tags:", error);
         }
       },
-      [profile.name, setAllTags, setTagsOverrides],
+      [profile.id, setTagsOverrides, setAllTags],
+    );
+
+    const handleChange = React.useCallback(
+      async (opts: Option[]) => {
+        const newTagsRaw = opts.map((o) => o.value);
+        await onTagsChange(newTagsRaw);
+      },
+      [onTagsChange],
     );
 
     const containerRef = React.useRef<HTMLDivElement | null>(null);
@@ -202,7 +209,7 @@ const TagsCell = React.memo<{
 
     React.useLayoutEffect(() => {
       // Only measure when not editing this profile's tags
-      if (openTagsEditorFor === profile.name) return;
+      if (openTagsEditorFor === profile.id) return;
       const container = containerRef.current;
       if (!container) return;
 
@@ -253,10 +260,10 @@ const TagsCell = React.memo<{
         ro.disconnect();
         if (timeoutId) clearTimeout(timeoutId);
       };
-    }, [effectiveTags, openTagsEditorFor, profile.name]);
+    }, [effectiveTags, openTagsEditorFor, profile.id]);
 
     React.useEffect(() => {
-      if (openTagsEditorFor !== profile.name) return;
+      if (openTagsEditorFor !== profile.id) return;
       const handleClick = (e: MouseEvent) => {
         const target = e.target as Node | null;
         if (
@@ -269,19 +276,19 @@ const TagsCell = React.memo<{
       };
       document.addEventListener("mousedown", handleClick);
       return () => document.removeEventListener("mousedown", handleClick);
-    }, [openTagsEditorFor, profile.name, setOpenTagsEditorFor]);
+    }, [openTagsEditorFor, profile.id, setOpenTagsEditorFor]);
 
     React.useEffect(() => {
-      if (openTagsEditorFor === profile.name && editorRef.current) {
+      if (openTagsEditorFor === profile.id && editorRef.current) {
         // Focus the inner input of MultipleSelector on open
         const inputEl = editorRef.current.querySelector("input");
         if (inputEl) {
           (inputEl as HTMLInputElement).focus();
         }
       }
-    }, [openTagsEditorFor, profile.name]);
+    }, [openTagsEditorFor, profile.id]);
 
-    if (openTagsEditorFor !== profile.name) {
+    if (openTagsEditorFor !== profile.id) {
       const hiddenCount = Math.max(0, effectiveTags.length - visibleCount);
       const ButtonContent = (
         <button
@@ -292,7 +299,7 @@ const TagsCell = React.memo<{
             isDisabled ? "opacity-60" : "cursor-pointer hover:bg-accent/50",
           )}
           onClick={() => {
-            if (!isDisabled) setOpenTagsEditorFor(profile.name);
+            if (!isDisabled) setOpenTagsEditorFor(profile.id);
           }}
         >
           {effectiveTags.slice(0, visibleCount).map((t) => (
@@ -372,12 +379,12 @@ interface ProfilesDataTableProps {
   onLaunchProfile: (profile: BrowserProfile) => void | Promise<void>;
   onKillProfile: (profile: BrowserProfile) => void | Promise<void>;
   onDeleteProfile: (profile: BrowserProfile) => void | Promise<void>;
-  onRenameProfile: (oldName: string, newName: string) => Promise<void>;
+  onRenameProfile: (profileId: string, newName: string) => Promise<void>;
   onConfigureCamoufox: (profile: BrowserProfile) => void;
   runningProfiles: Set<string>;
   isUpdating: (browser: string) => boolean;
-  onDeleteSelectedProfiles: (profileNames: string[]) => Promise<void>;
-  onAssignProfilesToGroup: (profileNames: string[]) => void;
+  onDeleteSelectedProfiles: (profileIds: string[]) => Promise<void>;
+  onAssignProfilesToGroup: (profileIds: string[]) => void;
   selectedGroupId: string | null;
   selectedProfiles: string[];
   onSelectedProfilesChange: Dispatch<SetStateAction<string[]>>;
@@ -441,13 +448,13 @@ export function ProfilesDataTable({
   }, []);
 
   const handleProxySelection = React.useCallback(
-    async (profileName: string, proxyId: string | null) => {
+    async (profileId: string, proxyId: string | null) => {
       try {
         await invoke("update_profile_proxy", {
-          profileName,
+          profileId,
           proxyId,
         });
-        setProxyOverrides((prev) => ({ ...prev, [profileName]: proxyId }));
+        setProxyOverrides((prev) => ({ ...prev, [profileId]: proxyId }));
         // Notify other parts of the app so usage counts and lists refresh
         await emit("profile-updated");
       } catch (error) {
@@ -527,8 +534,8 @@ export function ProfilesDataTable({
     const newSet = new Set(selectedProfiles);
     let hasChanges = false;
 
-    for (const profileName of selectedProfiles) {
-      const profile = profiles.find((p) => p.name === profileName);
+    for (const profileId of selectedProfiles) {
+      const profile = profiles.find((p) => p.id === profileId);
       if (profile) {
         const isRunning =
           browserState.isClient && runningProfiles.has(profile.id);
@@ -537,7 +544,7 @@ export function ProfilesDataTable({
         const isBrowserUpdating = isUpdating(profile.browser);
 
         if (isRunning || isLaunching || isStopping || isBrowserUpdating) {
-          newSet.delete(profileName);
+          newSet.delete(profileId);
           hasChanges = true;
         }
       }
@@ -581,7 +588,7 @@ export function ProfilesDataTable({
 
     try {
       setIsRenamingSaving(true);
-      await onRenameProfile(profileToRename.name, newProfileName.trim());
+      await onRenameProfile(profileToRename.id, newProfileName.trim());
       setProfileToRename(null);
       setNewProfileName("");
       setRenameError(null);
@@ -631,8 +638,8 @@ export function ProfilesDataTable({
 
   // Handle icon/checkbox click
   const handleIconClick = React.useCallback(
-    (profileName: string) => {
-      const profile = profiles.find((p) => p.name === profileName);
+    (profileId: string) => {
+      const profile = profiles.find((p) => p.id === profileId);
       if (!profile) return;
 
       // Prevent selection of profiles whose browsers are updating
@@ -642,10 +649,10 @@ export function ProfilesDataTable({
 
       setShowCheckboxes(true);
       const newSet = new Set(selectedProfiles);
-      if (newSet.has(profileName)) {
-        newSet.delete(profileName);
+      if (newSet.has(profileId)) {
+        newSet.delete(profileId);
       } else {
-        newSet.add(profileName);
+        newSet.add(profileId);
       }
 
       // Hide checkboxes if no profiles are selected
@@ -671,12 +678,12 @@ export function ProfilesDataTable({
 
   // Handle checkbox change
   const handleCheckboxChange = React.useCallback(
-    (profileName: string, checked: boolean) => {
+    (profileId: string, checked: boolean) => {
       const newSet = new Set(selectedProfiles);
       if (checked) {
-        newSet.add(profileName);
+        newSet.add(profileId);
       } else {
-        newSet.delete(profileName);
+        newSet.delete(profileId);
       }
 
       // Hide checkboxes if no profiles are selected
@@ -708,7 +715,7 @@ export function ProfilesDataTable({
                   !isBrowserUpdating
                 );
               })
-              .map((profile) => profile.name),
+              .map((profile) => profile.id),
           )
         : new Set<string>();
 
@@ -774,7 +781,7 @@ export function ProfilesDataTable({
       handleProxySelection,
 
       // Selection helpers
-      isProfileSelected: (name: string) => selectedProfiles.includes(name),
+      isProfileSelected: (id: string) => selectedProfiles.includes(id),
       handleToggleAll,
       handleCheckboxChange,
       handleIconClick,
@@ -857,7 +864,7 @@ export function ProfilesDataTable({
           const browser = profile.browser;
           const IconComponent = getBrowserIcon(browser);
 
-          const isSelected = meta.isProfileSelected(profile.name);
+          const isSelected = meta.isProfileSelected(profile.id);
           const isRunning =
             meta.isClient && meta.runningProfiles.has(profile.id);
           const isLaunching = meta.launchingProfiles.has(profile.id);
@@ -897,7 +904,7 @@ export function ProfilesDataTable({
                 <Checkbox
                   checked={isSelected}
                   onCheckedChange={(value) =>
-                    meta.handleCheckboxChange(profile.name, !!value)
+                    meta.handleCheckboxChange(profile.id, !!value)
                   }
                   aria-label="Select row"
                   className="w-4 h-4"
@@ -911,7 +918,7 @@ export function ProfilesDataTable({
               <button
                 type="button"
                 className="flex justify-center items-center p-0 border-none cursor-pointer"
-                onClick={() => meta.handleIconClick(profile.name)}
+                onClick={() => meta.handleIconClick(profile.id)}
                 aria-label="Select profile"
               >
                 <span className="w-4 h-4 group">
@@ -1039,7 +1046,7 @@ export function ProfilesDataTable({
           const profile = row.original as BrowserProfile;
           const rawName: string = row.getValue("name");
           const name = getBrowserDisplayName(rawName);
-          const isEditing = meta.profileToRename?.name === profile.name;
+          const isEditing = meta.profileToRename?.id === profile.id;
 
           if (isEditing) {
             const isSaveDisabled =
@@ -1227,9 +1234,9 @@ export function ProfilesDataTable({
           const isDisabled =
             isRunning || isLaunching || isStopping || isBrowserUpdating;
 
-          const hasOverride = Object.hasOwn(meta.proxyOverrides, profile.name);
+          const hasOverride = Object.hasOwn(meta.proxyOverrides, profile.id);
           const effectiveProxyId = hasOverride
-            ? meta.proxyOverrides[profile.name]
+            ? meta.proxyOverrides[profile.id]
             : (profile.proxy_id ?? null);
           const effectiveProxy = effectiveProxyId
             ? (meta.storedProxies.find((p) => p.id === effectiveProxyId) ??
@@ -1248,7 +1255,7 @@ export function ProfilesDataTable({
               : profileHasProxy && effectiveProxy
                 ? effectiveProxy.name
                 : null;
-          const isSelectorOpen = meta.openProxySelectorFor === profile.name;
+          const isSelectorOpen = meta.openProxySelectorFor === profile.id;
 
           if (profile.browser === "tor-browser") {
             return (
@@ -1271,7 +1278,7 @@ export function ProfilesDataTable({
             <Popover
               open={isSelectorOpen}
               onOpenChange={(open) =>
-                meta.setOpenProxySelectorFor(open ? profile.name : null)
+                meta.setOpenProxySelectorFor(open ? profile.id : null)
               }
             >
               <Tooltip>
@@ -1311,7 +1318,7 @@ export function ProfilesDataTable({
                         <CommandItem
                           value="__none__"
                           onSelect={() =>
-                            void meta.handleProxySelection(profile.name, null)
+                            void meta.handleProxySelection(profile.id, null)
                           }
                         >
                           <LuCheck
@@ -1330,7 +1337,7 @@ export function ProfilesDataTable({
                             value={proxy.name}
                             onSelect={() =>
                               void meta.handleProxySelection(
-                                profile.name,
+                                profile.id,
                                 proxy.id,
                               )
                             }
@@ -1385,7 +1392,7 @@ export function ProfilesDataTable({
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem
                     onClick={() => {
-                      meta.onAssignProfilesToGroup?.([profile.name]);
+                      meta.onAssignProfilesToGroup?.([profile.id]);
                     }}
                     disabled={isDisabled}
                   >

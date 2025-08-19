@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { ProfileGroup } from "@/types";
+import type { BrowserProfile, ProfileGroup } from "@/types";
 import { RippleButton } from "./ui/ripple";
 
 interface GroupAssignmentDialogProps {
@@ -30,6 +30,7 @@ interface GroupAssignmentDialogProps {
   onClose: () => void;
   selectedProfiles: string[];
   onAssignmentComplete: () => void;
+  profiles?: BrowserProfile[];
 }
 
 export function GroupAssignmentDialog({
@@ -37,6 +38,7 @@ export function GroupAssignmentDialog({
   onClose,
   selectedProfiles,
   onAssignmentComplete,
+  profiles = [],
 }: GroupAssignmentDialogProps) {
   const [groups, setGroups] = useState<ProfileGroup[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
@@ -64,7 +66,7 @@ export function GroupAssignmentDialog({
     setError(null);
     try {
       await invoke("assign_profiles_to_group", {
-        profileNames: selectedProfiles,
+        profileIds: selectedProfiles,
         groupId: selectedGroupId,
       });
 
@@ -119,11 +121,18 @@ export function GroupAssignmentDialog({
             <Label>Selected Profiles:</Label>
             <div className="p-3 bg-muted rounded-md max-h-32 overflow-y-auto">
               <ul className="text-sm space-y-1">
-                {selectedProfiles.map((profileName) => (
-                  <li key={profileName} className="truncate">
-                    • {profileName}
-                  </li>
-                ))}
+                {selectedProfiles.map((profileId) => {
+                  // Find the profile name for display
+                  const profile = profiles.find(
+                    (p: BrowserProfile) => p.id === profileId,
+                  );
+                  const displayName = profile ? profile.name : profileId;
+                  return (
+                    <li key={profileId} className="truncate">
+                      • {displayName}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           </div>

@@ -378,7 +378,7 @@ export default function Home() {
     async (profile: BrowserProfile, config: CamoufoxConfig) => {
       try {
         await invoke("update_camoufox_config", {
-          profileName: profile.name,
+          profileId: profile.id,
           config,
         });
         // No need to manually reload - useProfileEvents will handle the update
@@ -464,7 +464,7 @@ export default function Home() {
       }
 
       // Attempt to delete the profile
-      await invoke("delete_profile", { profileName: profile.name });
+      await invoke("delete_profile", { profileId: profile.id });
       console.log("Profile deletion command completed successfully");
 
       // No need to manually reload - useProfileEvents will handle the update
@@ -477,9 +477,9 @@ export default function Home() {
   }, []);
 
   const handleRenameProfile = useCallback(
-    async (oldName: string, newName: string) => {
+    async (profileId: string, newName: string) => {
       try {
-        await invoke("rename_profile", { oldName, newName });
+        await invoke("rename_profile", { profileId, newName });
         // No need to manually reload - useProfileEvents will handle the update
       } catch (err: unknown) {
         console.error("Failed to rename profile:", err);
@@ -507,9 +507,9 @@ export default function Home() {
   }, []);
 
   const handleDeleteSelectedProfiles = useCallback(
-    async (profileNames: string[]) => {
+    async (profileIds: string[]) => {
       try {
-        await invoke("delete_selected_profiles", { profileNames });
+        await invoke("delete_selected_profiles", { profileIds });
         // No need to manually reload - useProfileEvents will handle the update
       } catch (err: unknown) {
         console.error("Failed to delete selected profiles:", err);
@@ -521,8 +521,8 @@ export default function Home() {
     [],
   );
 
-  const handleAssignProfilesToGroup = useCallback((profileNames: string[]) => {
-    setSelectedProfilesForGroup(profileNames);
+  const handleAssignProfilesToGroup = useCallback((profileIds: string[]) => {
+    setSelectedProfilesForGroup(profileIds);
     setGroupAssignmentDialogOpen(true);
   }, []);
 
@@ -537,7 +537,7 @@ export default function Home() {
     setIsBulkDeleting(true);
     try {
       await invoke("delete_selected_profiles", {
-        profileNames: selectedProfiles,
+        profileIds: selectedProfiles,
       });
       // No need to manually reload - useProfileEvents will handle the update
       setSelectedProfiles([]);
@@ -797,6 +797,7 @@ export default function Home() {
         }}
         selectedProfiles={selectedProfilesForGroup}
         onAssignmentComplete={handleGroupAssignmentComplete}
+        profiles={profiles}
       />
 
       <DeleteConfirmationDialog
@@ -807,7 +808,8 @@ export default function Home() {
         description={`This action cannot be undone. This will permanently delete ${selectedProfiles.length} profile${selectedProfiles.length !== 1 ? "s" : ""} and all associated data.`}
         confirmButtonText={`Delete ${selectedProfiles.length} Profile${selectedProfiles.length !== 1 ? "s" : ""}`}
         isLoading={isBulkDeleting}
-        profileNames={selectedProfiles}
+        profileIds={selectedProfiles}
+        profiles={profiles.map((p) => ({ id: p.id, name: p.name }))}
       />
     </div>
   );

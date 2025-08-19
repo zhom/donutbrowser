@@ -293,22 +293,22 @@ pub async fn delete_profile_group(
 #[tauri::command]
 pub async fn assign_profiles_to_group(
   app_handle: tauri::AppHandle,
-  profile_names: Vec<String>,
+  profile_ids: Vec<String>,
   group_id: Option<String>,
 ) -> Result<(), String> {
   let profile_manager = crate::profile::ProfileManager::instance();
   profile_manager
-    .assign_profiles_to_group(&app_handle, profile_names, group_id)
+    .assign_profiles_to_group(&app_handle, profile_ids, group_id)
     .map_err(|e| format!("Failed to assign profiles to group: {e}"))
 }
 
 #[tauri::command]
 pub async fn delete_selected_profiles(
   app_handle: tauri::AppHandle,
-  profile_names: Vec<String>,
+  profile_ids: Vec<String>,
 ) -> Result<(), String> {
   let profile_manager = crate::profile::ProfileManager::instance();
   profile_manager
-    .delete_multiple_profiles(&app_handle, profile_names)
+    .delete_multiple_profiles(&app_handle, profile_ids)
     .map_err(|e| format!("Failed to delete profiles: {e}"))
 }

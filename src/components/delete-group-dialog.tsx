@@ -74,13 +74,13 @@ export function DeleteGroupDialog({
     try {
       if (deleteAction === "delete" && associatedProfiles.length > 0) {
         // Delete all associated profiles first
-        const profileNames = associatedProfiles.map((p) => p.name);
-        await invoke("delete_selected_profiles", { profileNames });
+        const profileIds = associatedProfiles.map((p) => p.id);
+        await invoke("delete_selected_profiles", { profileIds });
       } else if (deleteAction === "move" && associatedProfiles.length > 0) {
         // Move profiles to default group (null group_id)
-        const profileNames = associatedProfiles.map((p) => p.name);
+        const profileIds = associatedProfiles.map((p) => p.id);
         await invoke("assign_profiles_to_group", {
-          profileNames,
+          profileIds,
           groupId: null,
         });
       }
