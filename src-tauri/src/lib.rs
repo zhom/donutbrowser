@@ -1,4 +1,5 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+use directories::BaseDirs;
 use std::env;
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
@@ -573,7 +574,7 @@ pub fn run() {
       // Start API server if enabled in settings
       let app_handle_api = app.handle().clone();
       tauri::async_runtime::spawn(async move {
-        match crate::settings_manager::get_app_settings().await {
+        match crate::settings_manager::get_app_settings(app_handle_api.clone()).await {
           Ok(settings) => {
             if settings.api_enabled {
               println!("API is enabled in settings, starting API server...");

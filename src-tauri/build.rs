@@ -26,5 +26,13 @@ fn main() {
     println!("cargo:rustc-env=BUILD_VERSION=dev-{version}");
   }
 
+  // Inject vault password at build time
+  if let Ok(vault_password) = std::env::var("DONUT_BROWSER_VAULT_PASSWORD") {
+    println!("cargo:rustc-env=DONUT_BROWSER_VAULT_PASSWORD={vault_password}");
+  } else {
+    // Use default password if environment variable is not set
+    println!("cargo:rustc-env=DONUT_BROWSER_VAULT_PASSWORD=donutbrowser-api-vault-password");
+  }
+
   tauri_build::build()
 }

@@ -6,6 +6,12 @@ use std::path::PathBuf;
 use crate::api_client::ApiClient;
 use crate::version_updater;
 
+use aes_gcm::{
+  aead::{Aead, AeadCore, KeyInit, OsRng},
+  Aes256Gcm, Key, Nonce
+};
+use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TableSortingSettings {
   pub column: String,    // Column to sort by: "name", "browser", "status"
@@ -33,6 +39,8 @@ pub struct AppSettings {
   pub api_enabled: bool,
   #[serde(default = "default_api_port")]
   pub api_port: u16,
+  #[serde(default)]
+  pub api_token: Option<String>, // Displayed token for user to copy
 }
 
 fn default_theme() -> String {
@@ -51,6 +59,7 @@ impl Default for AppSettings {
       custom_theme: None,
       api_enabled: false,
       api_port: 10108,
+      api_token: None,
     }
   }
 }
@@ -164,22 +173,244 @@ impl SettingsManager {
     // Always return false - we don't show settings on startup anymore
     Ok(false)
   }
+
+  fn get_vault_password() -> String {
+    env!("DONUT_BROWSER_VAULT_PASSWORD").to_string()
+  }
+
+  pub async fn generate_api_token(
+    &self,
+    app_handle: &tauri::AppHandle,
+  ) -> Result<String, Box<dyn std::error::Error>> {
+    // Generate a secure random token (base64 encoded for URL safety)
+    let token_bytes: [u8; 32] = {
+      use rand::RngCore;
+      let mut rng = rand::rng();
+      let mut bytes = [0u8; 32];
+      rng.fill_bytes(&mut bytes);
+      bytes
+    };
+    use base64::{engine::general_purpose, Engine as _};
+    let token = general_purpose::URL_SAFE_NO_PAD.encode(token_bytes);
+
+    // Store token securely
+    self.store_api_token(app_handle, &token).await?;
+
+    Ok(token)
+  }
+
+  pub async fn store_api_token(
+    &self,
+    _app_handle: &tauri::AppHandle,
+    token: &str,
+  ) -> Result<(), Box<dyn std::error::Error>> {
+    // Store token in an encrypted file using Argon2 + AES-GCM
+    let token_file = self.get_settings_dir().join("api_token.dat");
+
+    // Create directory if it doesn't exist
+    if let Some(parent) = token_file.parent() {
+      std::fs::create_dir_all(parent)?;
+    }
+
+    let vault_password = Self::get_vault_password();
+    
+    // Generate a random salt for Argon2
+    let salt = SaltString::generate(&mut OsRng);
+    
+    // Use Argon2 to derive a 32-byte key from the vault password
+    let argon2 = Argon2::default();
+    let password_hash = argon2.hash_password(vault_password.as_bytes(), &salt)
+      .map_err(|e| format!("Argon2 key derivation failed: {}", e))?;
+    let hash_value = password_hash.hash.unwrap();
+    let hash_bytes = hash_value.as_bytes();
+    
+    // Take first 32 bytes for AES-256 key
+    let key = Key::<Aes256Gcm>::from_slice(&hash_bytes[..32]);
+    let cipher = Aes256Gcm::new(key);
+    
+    // Generate a random nonce
+    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+    
+    // Encrypt the token
+    let ciphertext = cipher.encrypt(&nonce, token.as_bytes())
+      .map_err(|e| format!("Encryption failed: {}", e))?;
+    
+    // Create file data with header, salt, nonce, and encrypted data
+    let mut file_data = Vec::new();
+    file_data.extend_from_slice(b"DBAPI"); // 5-byte header
+    file_data.push(2u8); // Version 2 (Argon2 + AES-GCM)
+    
+    // Store salt length and salt
+    let salt_str = salt.as_str();
+    file_data.push(salt_str.len() as u8);
+    file_data.extend_from_slice(salt_str.as_bytes());
+    
+    // Store nonce (12 bytes for AES-GCM)
+    file_data.extend_from_slice(&nonce);
+    
+    // Store ciphertext length and ciphertext
+    file_data.extend_from_slice(&(ciphertext.len() as u32).to_le_bytes());
+    file_data.extend_from_slice(&ciphertext);
+
+    std::fs::write(token_file, file_data)?;
+    Ok(())
+  }
+
+  pub async fn get_api_token(
+    &self,
+    _app_handle: &tauri::AppHandle,
+  ) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    let token_file = self.get_settings_dir().join("api_token.dat");
+
+    if !token_file.exists() {
+      return Ok(None);
+    }
+
+    let file_data = std::fs::read(token_file)?;
+
+    // Validate header
+    if file_data.len() < 6 || &file_data[0..5] != b"DBAPI" {
+      return Ok(None);
+    }
+
+    let version = file_data[5];
+    
+    // Only support Argon2 + AES-GCM (version 2)
+    if version != 2 {
+      return Ok(None);
+    }
+    
+    // Argon2 + AES-GCM decryption
+    let mut offset = 6;
+    
+    // Read salt
+    if offset >= file_data.len() {
+      return Ok(None);
+    }
+    let salt_len = file_data[offset] as usize;
+    offset += 1;
+    
+    if offset + salt_len > file_data.len() {
+      return Ok(None);
+    }
+    let salt_bytes = &file_data[offset..offset + salt_len];
+    let salt_str = std::str::from_utf8(salt_bytes).map_err(|_| "Invalid salt encoding")?;
+    let salt = SaltString::from_b64(salt_str).map_err(|_| "Invalid salt format")?;
+    offset += salt_len;
+    
+    // Read nonce (12 bytes)
+    if offset + 12 > file_data.len() {
+      return Ok(None);
+    }
+    let nonce_bytes = &file_data[offset..offset + 12];
+    let nonce = Nonce::from_slice(nonce_bytes);
+    offset += 12;
+    
+    // Read ciphertext
+    if offset + 4 > file_data.len() {
+      return Ok(None);
+    }
+    let ciphertext_len = u32::from_le_bytes([
+      file_data[offset], file_data[offset + 1], file_data[offset + 2], file_data[offset + 3]
+    ]) as usize;
+    offset += 4;
+    
+    if offset + ciphertext_len > file_data.len() {
+      return Ok(None);
+    }
+    let ciphertext = &file_data[offset..offset + ciphertext_len];
+    
+    // Derive key using Argon2
+    let vault_password = Self::get_vault_password();
+    let argon2 = Argon2::default();
+    let password_hash = argon2.hash_password(vault_password.as_bytes(), &salt)
+      .map_err(|e| format!("Argon2 key derivation failed: {}", e))?;
+    let hash_value = password_hash.hash.unwrap();
+    let hash_bytes = hash_value.as_bytes();
+    
+    let key = Key::<Aes256Gcm>::from_slice(&hash_bytes[..32]);
+    let cipher = Aes256Gcm::new(key);
+    
+    // Decrypt the token
+    let plaintext = cipher.decrypt(nonce, ciphertext)
+      .map_err(|_| "Decryption failed")?;
+    
+    match String::from_utf8(plaintext) {
+      Ok(token) => Ok(Some(token)),
+      Err(_) => Ok(None),
+    }
+  }
+
+  pub async fn remove_api_token(
+    &self,
+    _app_handle: &tauri::AppHandle,
+  ) -> Result<(), Box<dyn std::error::Error>> {
+    let token_file = self.get_settings_dir().join("api_token.dat");
+
+    if token_file.exists() {
+      std::fs::remove_file(token_file)?;
+    }
+
+    Ok(())
+  }
 }
 
 #[tauri::command]
-pub async fn get_app_settings() -> Result<AppSettings, String> {
+pub async fn get_app_settings(app_handle: tauri::AppHandle) -> Result<AppSettings, String> {
   let manager = SettingsManager::instance();
-  manager
+  let mut settings = manager
     .load_settings()
-    .map_err(|e| format!("Failed to load settings: {e}"))
+    .map_err(|e| format!("Failed to load settings: {e}"))?;
+
+  // Always load token for display purposes if it exists
+  settings.api_token = manager
+    .get_api_token(&app_handle)
+    .await
+    .map_err(|e| format!("Failed to load API token: {e}"))?;
+
+  Ok(settings)
 }
 
 #[tauri::command]
-pub async fn save_app_settings(settings: AppSettings) -> Result<(), String> {
+pub async fn save_app_settings(
+  app_handle: tauri::AppHandle,
+  mut settings: AppSettings,
+) -> Result<AppSettings, String> {
   let manager = SettingsManager::instance();
+
+  // If API is being enabled ensure token is stored in Stronghold.
+  if settings.api_enabled {
+    if let Some(ref token) = settings.api_token {
+      manager
+        .store_api_token(&app_handle, token)
+        .await
+        .map_err(|e| format!("Failed to store API token: {e}"))?;
+    } else {
+      let token = manager
+        .generate_api_token(&app_handle)
+        .await
+        .map_err(|e| format!("Failed to generate API token: {e}"))?;
+      settings.api_token = Some(token);
+    }
+  }
+
+  // If API is being disabled, remove the token
+  if !settings.api_enabled {
+    manager
+      .remove_api_token(&app_handle)
+      .await
+      .map_err(|e| format!("Failed to remove API token: {e}"))?;
+    settings.api_token = None;
+  }
+
+  // Do not persist api_token in settings file (kept in Stronghold). Save a copy without the token.
+  let mut persist_settings = settings.clone();
+  persist_settings.api_token = None;
   manager
-    .save_settings(&settings)
-    .map_err(|e| format!("Failed to save settings: {e}"))
+    .save_settings(&persist_settings)
+    .map_err(|e| format!("Failed to save settings: {e}"))?;
+
+  Ok(settings)
 }
 
 #[tauri::command]
@@ -253,6 +484,8 @@ pub async fn clear_all_version_cache_and_refetch(
   result?;
   Ok(())
 }
+
+// No standalone stronghold commands needed; token ops handled via settings commands
 
 // Global singleton instance
 lazy_static::lazy_static! {
@@ -337,6 +570,7 @@ mod tests {
       custom_theme: None,
       api_enabled: false,
       api_port: 10108,
+      api_token: None,
     };
 
     // Save settings

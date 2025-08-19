@@ -3,14 +3,16 @@ use crate::profile::manager::ProfileManager;
 use crate::proxy_manager::PROXY_MANAGER;
 use crate::tag_manager::TAG_MANAGER;
 use axum::{
-  extract::{Path, State},
-  http::StatusCode,
-  response::Json,
+  extract::{Path, Query, State},
+  http::{HeaderMap, StatusCode},
+  middleware::{self, Next},
+  response::{Json, Response},
   routing::{delete, get, post, put},
   Router,
 };
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::Emitter;
 use tokio::net::TcpListener;
@@ -110,12 +112,32 @@ struct UpdateProxyRequest {
   proxy_settings: Option<serde_json::Value>,
 }
 
+#[derive(Debug, Deserialize)]
+struct DownloadBrowserRequest {
+  browser: String,
+  version: String,
+}
+
+#[derive(Debug, Serialize)]
+struct DownloadBrowserResponse {
+  browser: String,
+  version: String,
+  status: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToastPayload {
   pub message: String,
   pub variant: String,
   pub title: String,
   pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct RunProfileResponse {
+  profile_id: String,
+  remote_debugging_port: u16,
+  headless: bool,
 }
 
 pub struct ApiServer {
@@ -174,13 +196,14 @@ impl ApiServer {
       .map_err(|e| format!("Failed to get local address: {e}"))?
       .port();
 
-    // Create router with CORS
-    let app = Router::new()
+    // Create router with CORS, authentication, and versioning
+    let v1_routes = Router::new()
       .route("/profiles", get(get_profiles))
       .route("/profiles", post(create_profile))
       .route("/profiles/{id}", get(get_profile))
       .route("/profiles/{id}", put(update_profile))
       .route("/profiles/{id}", delete(delete_profile))
+      .route("/profiles/{id}/run", post(run_profile))
       .route("/groups", get(get_groups).post(create_group))
       .route(
         "/groups/{id}",
@@ -192,6 +215,19 @@ impl ApiServer {
         "/proxies/{id}",
         get(get_proxy).put(update_proxy).delete(delete_proxy),
       )
+      .route("/browsers/download", post(download_browser_api))
+      .route("/browsers/{browser}/versions", get(get_browser_versions))
+      .route(
+        "/browsers/{browser}/versions/{version}/downloaded",
+        get(check_browser_downloaded),
+      )
+      .layer(middleware::from_fn_with_state(
+        state.clone(),
+        auth_middleware,
+      ));
+
+    let app = Router::new()
+      .nest("/v1", v1_routes)
       .layer(CorsLayer::permissive())
       .with_state(state);
 
@@ -223,6 +259,41 @@ impl ApiServer {
     self.port = None;
     Ok(())
   }
+}
+
+// Authentication middleware
+async fn auth_middleware(
+  State(state): State<ApiServerState>,
+  headers: HeaderMap,
+  request: axum::extract::Request,
+  next: Next,
+) -> Result<Response, StatusCode> {
+  // Get the Authorization header
+  let auth_header = headers
+    .get("Authorization")
+    .and_then(|h| h.to_str().ok())
+    .and_then(|h| h.strip_prefix("Bearer "));
+
+  let token = match auth_header {
+    Some(token) => token,
+    None => return Err(StatusCode::UNAUTHORIZED),
+  };
+
+  // Get the stored token
+  let settings_manager = crate::settings_manager::SettingsManager::instance();
+  let stored_token = match settings_manager.get_api_token(&state.app_handle).await {
+    Ok(Some(stored_token)) => stored_token,
+    Ok(None) => return Err(StatusCode::UNAUTHORIZED),
+    Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+  };
+
+  // Compare tokens
+  if token != stored_token {
+    return Err(StatusCode::UNAUTHORIZED);
+  }
+
+  // Token is valid, continue with the request
+  Ok(next.run(request).await)
 }
 
 // Global API server instance
@@ -283,7 +354,7 @@ async fn get_profiles() -> Result<Json<ApiProfilesResponse>, StatusCode> {
             .and_then(|c| serde_json::to_value(c).ok()),
           group_id: profile.group_id.clone(),
           tags: profile.tags.clone(),
-          is_running: false, // For now, set to false - can add running status later
+          is_running: profile.process_id.is_some(), // Simple check based on process_id
         })
         .collect();
 
@@ -320,7 +391,7 @@ async fn get_profile(
               .and_then(|c| serde_json::to_value(c).ok()),
             group_id: profile.group_id.clone(),
             tags: profile.tags.clone(),
-            is_running: false, // Simplified for now to avoid async complexity
+            is_running: profile.process_id.is_some(), // Simple check based on process_id
           },
         }))
       } else {
@@ -402,7 +473,7 @@ async fn create_profile(
 }
 
 async fn update_profile(
-  Path(name): Path<String>,
+  Path(id): Path<String>,
   State(state): State<ApiServerState>,
   Json(request): Json<UpdateProfileRequest>,
 ) -> Result<Json<ApiProfileResponse>, StatusCode> {
@@ -411,7 +482,7 @@ async fn update_profile(
   // Update profile fields
   if let Some(new_name) = request.name {
     if profile_manager
-      .rename_profile(&state.app_handle, &name, &new_name)
+      .rename_profile(&state.app_handle, &id, &new_name)
       .is_err()
     {
       return Err(StatusCode::BAD_REQUEST);
@@ -420,7 +491,7 @@ async fn update_profile(
 
   if let Some(version) = request.version {
     if profile_manager
-      .update_profile_version(&state.app_handle, &name, &version)
+      .update_profile_version(&state.app_handle, &id, &version)
       .is_err()
     {
       return Err(StatusCode::BAD_REQUEST);
@@ -429,7 +500,7 @@ async fn update_profile(
 
   if let Some(proxy_id) = request.proxy_id {
     if profile_manager
-      .update_profile_proxy(state.app_handle.clone(), &name, Some(proxy_id))
+      .update_profile_proxy(state.app_handle.clone(), &id, Some(proxy_id))
       .await
       .is_err()
     {
@@ -443,7 +514,7 @@ async fn update_profile(
     match config {
       Ok(config) => {
         if profile_manager
-          .update_camoufox_config(state.app_handle.clone(), &name, config)
+          .update_camoufox_config(state.app_handle.clone(), &id, config)
           .await
           .is_err()
         {
@@ -456,7 +527,7 @@ async fn update_profile(
 
   if let Some(group_id) = request.group_id {
     if profile_manager
-      .assign_profiles_to_group(&state.app_handle, vec![name.clone()], Some(group_id))
+      .assign_profiles_to_group(&state.app_handle, vec![id.clone()], Some(group_id))
       .is_err()
     {
       return Err(StatusCode::BAD_REQUEST);
@@ -465,7 +536,7 @@ async fn update_profile(
 
   if let Some(tags) = request.tags {
     if profile_manager
-      .update_profile_tags(&state.app_handle, &name, tags)
+      .update_profile_tags(&state.app_handle, &id, tags)
       .is_err()
     {
       return Err(StatusCode::BAD_REQUEST);
@@ -480,7 +551,7 @@ async fn update_profile(
   }
 
   // Return updated profile
-  get_profile(Path(name), State(state)).await
+  get_profile(Path(id), State(state)).await
 }
 
 async fn delete_profile(
@@ -709,4 +780,97 @@ async fn delete_proxy(
     Ok(_) => Ok(StatusCode::NO_CONTENT),
     Err(_) => Err(StatusCode::BAD_REQUEST),
   }
+}
+
+// API Handler - Run Profile with Remote Debugging
+async fn run_profile(
+  Path(id): Path<String>,
+  Query(params): Query<HashMap<String, String>>,
+  State(state): State<ApiServerState>,
+) -> Result<Json<RunProfileResponse>, StatusCode> {
+  let headless = params
+    .get("headless")
+    .and_then(|v| v.parse::<bool>().ok())
+    .unwrap_or(false);
+
+  let profile_manager = ProfileManager::instance();
+  let profiles = profile_manager
+    .list_profiles()
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+  let profile = profiles
+    .iter()
+    .find(|p| p.id.to_string() == id)
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+  // Generate a random port for remote debugging
+  let remote_debugging_port = rand::random::<u16>().saturating_add(9000).max(9000);
+
+  // Use the same launch method as the main app, but with remote debugging enabled
+  match crate::browser_runner::launch_browser_profile_with_debugging(
+    state.app_handle.clone(),
+    profile.clone(),
+    None,
+    Some(remote_debugging_port),
+    headless,
+  )
+  .await
+  {
+    Ok(updated_profile) => Ok(Json(RunProfileResponse {
+      profile_id: updated_profile.id.to_string(),
+      remote_debugging_port,
+      headless,
+    })),
+    Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+  }
+}
+
+// API Handler - Download Browser
+async fn download_browser_api(
+  State(state): State<ApiServerState>,
+  Json(request): Json<DownloadBrowserRequest>,
+) -> Result<Json<DownloadBrowserResponse>, StatusCode> {
+  let browser_runner = crate::browser_runner::BrowserRunner::instance();
+
+  match browser_runner
+    .download_browser_impl(
+      state.app_handle.clone(),
+      request.browser.clone(),
+      request.version.clone(),
+    )
+    .await
+  {
+    Ok(_) => Ok(Json(DownloadBrowserResponse {
+      browser: request.browser,
+      version: request.version,
+      status: "downloaded".to_string(),
+    })),
+    Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+  }
+}
+
+// API Handler - Get Browser Versions
+async fn get_browser_versions(
+  Path(browser): Path<String>,
+  State(_state): State<ApiServerState>,
+) -> Result<Json<Vec<String>>, StatusCode> {
+  let version_manager = crate::browser_version_manager::BrowserVersionManager::instance();
+
+  match version_manager
+    .fetch_browser_versions_with_count(&browser, false)
+    .await
+  {
+    Ok(result) => Ok(Json(result.versions)),
+    Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+  }
+}
+
+// API Handler - Check if Browser is Downloaded
+async fn check_browser_downloaded(
+  Path((browser, version)): Path<(String, String)>,
+  State(_state): State<ApiServerState>,
+) -> Result<Json<bool>, StatusCode> {
+  let browser_runner = crate::browser_runner::BrowserRunner::instance();
+  let is_downloaded = browser_runner.is_browser_downloaded(&browser, &version);
+  Ok(Json(is_downloaded))
 }

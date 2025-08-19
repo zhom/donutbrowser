@@ -29,6 +29,9 @@ tauri-plugin-shell = "2"
 tauri-plugin-deep-link = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-macos-permissions = "2"
+tauri-plugin-stronghold = "2"
+
+
 directories = "6"
 reqwest = { version = "0.12", features = ["json", "stream"] }
 tokio = { version = "1", features = ["full", "sync"] }
@@ -51,6 +54,8 @@ axum = "0.8.4"
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors"] }
 rand = "0.9.2"
+argon2 = "0.5"
+aes-gcm = "0.10"
 
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }

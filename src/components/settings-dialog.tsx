@@ -54,6 +54,7 @@ interface AppSettings {
   custom_theme?: Record<string, string>;
   api_enabled: boolean;
   api_port: number;
+  api_token?: string;
 }
 
 interface CustomThemeState {
@@ -81,6 +82,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     custom_theme: undefined,
     api_enabled: false,
     api_port: 10108,
+    api_token: undefined,
   });
   const [originalSettings, setOriginalSettings] = useState<AppSettings>({
     set_as_default_browser: false,
@@ -88,6 +90,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     custom_theme: undefined,
     api_enabled: false,
     api_port: 10108,
+    api_token: undefined,
   });
   const [customThemeState, setCustomThemeState] = useState<CustomThemeState>({
     selectedThemeId: null,
@@ -298,7 +301,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     setIsSaving(true);
     try {
       // Update settings with current custom theme state
-      const settingsToSave = {
+      let settingsToSave: AppSettings = {
         ...settings,
         custom_theme:
           settings.theme === "custom"
@@ -306,7 +309,12 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
             : settings.custom_theme,
       };
 
-      await invoke("save_app_settings", { settings: settingsToSave });
+      const savedSettings = await invoke<AppSettings>("save_app_settings", {
+        settings: settingsToSave,
+      });
+      // Update settings with any generated tokens
+      setSettings(savedSettings);
+      settingsToSave = savedSettings;
       setTheme(settings.theme === "custom" ? "dark" : settings.theme);
 
       // Apply or clear custom variables only on Save
@@ -355,7 +363,12 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
           });
           // Revert the API enabled setting if start failed
           settingsToSave.api_enabled = false;
-          await invoke("save_app_settings", { settings: settingsToSave });
+          const revertedSettings = await invoke<AppSettings>(
+            "save_app_settings",
+            { settings: settingsToSave },
+          );
+          setSettings(revertedSettings);
+          settingsToSave = revertedSettings;
         }
       } else if (!isApiEnabled && wasApiEnabled) {
         // Stop API server
@@ -764,8 +777,34 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
               <Checkbox
                 id="api-enabled"
                 checked={settings.api_enabled}
-                onCheckedChange={(checked: boolean) => {
+                onCheckedChange={async (checked: boolean) => {
                   updateSetting("api_enabled", checked);
+                  try {
+                    if (checked) {
+                      // Ask backend to enable API and return settings with token (token stored in Stronghold)
+                      const next = await invoke<AppSettings>(
+                        "save_app_settings",
+                        {
+                          settings: { ...settings, api_enabled: true },
+                        },
+                      );
+                      setSettings(next);
+                    } else {
+                      const next = await invoke<AppSettings>(
+                        "save_app_settings",
+                        {
+                          settings: {
+                            ...settings,
+                            api_enabled: false,
+                            api_token: null,
+                          },
+                        },
+                      );
+                      setSettings(next);
+                    }
+                  } catch (e) {
+                    console.error("Failed to toggle API:", e);
+                  }
                 }}
               />
               <div className="grid gap-1.5 leading-none">
@@ -787,6 +826,36 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                 </p>
               </div>
             </div>
+
+            {settings.api_enabled && settings.api_token && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  API Authentication Token
+                </Label>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="text"
+                    value={settings.api_token}
+                    readOnly
+                    className="flex-1 px-3 py-2 text-sm bg-muted border rounded-md font-mono"
+                  />
+                  <RippleButton
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(settings.api_token || "");
+                      showSuccessToast("API token copied to clipboard");
+                    }}
+                  >
+                    Copy
+                  </RippleButton>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Include this token in the Authorization header as "Bearer{" "}
+                  {settings.api_token}" for all API requests.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Advanced Section */}
