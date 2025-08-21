@@ -229,11 +229,15 @@ impl DownloadedBrowsersRegistry {
       }
     }
 
-    // Remove unused binaries
+    // Remove unused binaries and their version folders
     for (browser, version) in to_remove {
       if let Err(e) = self.cleanup_failed_download(&browser, &version) {
         eprintln!("Failed to cleanup unused binary {browser}:{version}: {e}");
       } else {
+        // After removing the binary, also remove the empty version folder
+        if let Err(e) = self.remove_empty_version_folder(&browser, &version) {
+          eprintln!("Failed to remove empty version folder for {browser}:{version}: {e}");
+        }
         cleaned_up.push(format!("{browser} {version}"));
         println!("Successfully removed unused binary: {browser} {version}");
       }
@@ -403,15 +407,174 @@ impl DownloadedBrowsersRegistry {
     let regular_cleanup = self.cleanup_unused_binaries(active_profiles, running_profiles)?;
     cleanup_results.extend(regular_cleanup);
 
-    // Finally, verify and cleanup stale entries
+    // Verify and cleanup stale entries
     let stale_cleanup = self.verify_and_cleanup_stale_entries_simple(binaries_dir)?;
     cleanup_results.extend(stale_cleanup);
+
+    // Clean up any remaining empty folders
+    let empty_folder_cleanup = self.cleanup_empty_folders(binaries_dir)?;
+    cleanup_results.extend(empty_folder_cleanup);
 
     if !cleanup_results.is_empty() {
       self.save()?;
     }
 
     Ok(cleanup_results)
+  }
+
+  /// Remove empty version folder after cleanup
+  fn remove_empty_version_folder(
+    &self,
+    browser: &str,
+    version: &str,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // Get binaries directory path
+    let base_dirs = directories::BaseDirs::new().ok_or("Failed to get base directories")?;
+    let mut binaries_dir = base_dirs.data_local_dir().to_path_buf();
+    binaries_dir.push(if cfg!(debug_assertions) {
+      "DonutBrowserDev"
+    } else {
+      "DonutBrowser"
+    });
+    binaries_dir.push("binaries");
+
+    let version_dir = binaries_dir.join(browser).join(version);
+
+    // Only remove if the directory exists and is empty
+    if version_dir.exists() && version_dir.is_dir() {
+      match fs::read_dir(&version_dir) {
+        Ok(mut entries) => {
+          if entries.next().is_none() {
+            // Directory is empty, remove it
+            fs::remove_dir(&version_dir)?;
+            println!("Removed empty version folder: {}", version_dir.display());
+
+            // Also check if the browser folder is now empty and remove it too
+            let browser_dir = binaries_dir.join(browser);
+            if browser_dir.exists() && browser_dir.is_dir() {
+              match fs::read_dir(&browser_dir) {
+                Ok(mut browser_entries) => {
+                  if browser_entries.next().is_none() {
+                    fs::remove_dir(&browser_dir)?;
+                    println!("Removed empty browser folder: {}", browser_dir.display());
+                  }
+                }
+                Err(_) => {} // Ignore errors when checking browser directory
+              }
+            }
+          }
+        }
+        Err(_) => {} // Ignore errors when checking if directory is empty
+      }
+    }
+
+    Ok(())
+  }
+
+  /// Clean up existing empty version and browser folders
+  pub fn cleanup_empty_folders(
+    &self,
+    binaries_dir: &std::path::Path,
+  ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    let mut cleaned_up = Vec::new();
+
+    if !binaries_dir.exists() {
+      return Ok(cleaned_up);
+    }
+
+    // Scan for browser directories
+    for browser_entry in fs::read_dir(binaries_dir)? {
+      let browser_entry = browser_entry?;
+      let browser_path = browser_entry.path();
+
+      if !browser_path.is_dir() {
+        continue;
+      }
+
+      let browser_name = browser_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("");
+
+      if browser_name.is_empty() || browser_name.starts_with('.') {
+        continue;
+      }
+
+      let mut empty_version_dirs = Vec::new();
+      let mut has_non_empty_versions = false;
+
+      // Scan for version directories within this browser
+      for version_entry in fs::read_dir(&browser_path)? {
+        let version_entry = version_entry?;
+        let version_path = version_entry.path();
+
+        if !version_path.is_dir() {
+          has_non_empty_versions = true; // Non-directory files count as non-empty
+          continue;
+        }
+
+        let version_name = version_path
+          .file_name()
+          .and_then(|n| n.to_str())
+          .unwrap_or("");
+
+        if version_name.is_empty() || version_name.starts_with('.') {
+          continue;
+        }
+
+        // Check if version directory is empty
+        match fs::read_dir(&version_path) {
+          Ok(mut entries) => {
+            if entries.next().is_none() {
+              // Directory is empty
+              empty_version_dirs.push((version_path.clone(), version_name.to_string()));
+            } else {
+              has_non_empty_versions = true;
+            }
+          }
+          Err(_) => {
+            has_non_empty_versions = true; // Assume non-empty if we can't read
+          }
+        }
+      }
+
+      // Remove empty version directories
+      for (version_path, version_name) in empty_version_dirs {
+        if let Err(e) = fs::remove_dir(&version_path) {
+          eprintln!(
+            "Failed to remove empty version folder {}: {e}",
+            version_path.display()
+          );
+        } else {
+          cleaned_up.push(format!(
+            "Removed empty version folder: {browser_name}/{version_name}"
+          ));
+          println!("Removed empty version folder: {}", version_path.display());
+        }
+      }
+
+      // If browser directory is now empty, remove it too
+      if !has_non_empty_versions {
+        match fs::read_dir(&browser_path) {
+          Ok(mut entries) => {
+            if entries.next().is_none() {
+              if let Err(e) = fs::remove_dir(&browser_path) {
+                eprintln!(
+                  "Failed to remove empty browser folder {}: {e}",
+                  browser_path.display()
+                );
+              } else {
+                cleaned_up.push(format!("Removed empty browser folder: {browser_name}"));
+                println!("Removed empty browser folder: {}", browser_path.display());
+              }
+            }
+          }
+          Err(_) => {} // Ignore errors when checking if directory is empty
+        }
+      }
+    }
+
+    Ok(cleaned_up)
   }
 
   /// Simplified version of verify_and_cleanup_stale_entries that doesn't need BrowserRunner
