@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 #v4.2.2
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
         with:
           fetch-depth: 0 # Fetch full history to compare with previous release
 
@@ -58,7 +58,7 @@ jobs:
 
       - name: Generate release notes with AI
         id: generate-notes
-        uses: actions/ai-inference@b81b2afb8390ee6839b494a404766bef6493c7d9 # v1.2.8
+        uses: actions/ai-inference@f347eae8ebabecb85d17f52960f909b8a4a8dad5 # v2.0.0
         with:
           prompt-file: commits.txt
           system-prompt: |
