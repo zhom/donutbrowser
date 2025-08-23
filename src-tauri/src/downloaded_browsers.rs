@@ -442,29 +442,23 @@ impl DownloadedBrowsersRegistry {
 
     // Only remove if the directory exists and is empty
     if version_dir.exists() && version_dir.is_dir() {
-      match fs::read_dir(&version_dir) {
-        Ok(mut entries) => {
-          if entries.next().is_none() {
-            // Directory is empty, remove it
-            fs::remove_dir(&version_dir)?;
-            println!("Removed empty version folder: {}", version_dir.display());
+      if let Ok(mut entries) = fs::read_dir(&version_dir) {
+        if entries.next().is_none() {
+          // Directory is empty, remove it
+          fs::remove_dir(&version_dir)?;
+          println!("Removed empty version folder: {}", version_dir.display());
 
-            // Also check if the browser folder is now empty and remove it too
-            let browser_dir = binaries_dir.join(browser);
-            if browser_dir.exists() && browser_dir.is_dir() {
-              match fs::read_dir(&browser_dir) {
-                Ok(mut browser_entries) => {
-                  if browser_entries.next().is_none() {
-                    fs::remove_dir(&browser_dir)?;
-                    println!("Removed empty browser folder: {}", browser_dir.display());
-                  }
-                }
-                Err(_) => {} // Ignore errors when checking browser directory
+          // Also check if the browser folder is now empty and remove it too
+          let browser_dir = binaries_dir.join(browser);
+          if browser_dir.exists() && browser_dir.is_dir() {
+            if let Ok(mut browser_entries) = fs::read_dir(&browser_dir) {
+              if browser_entries.next().is_none() {
+                fs::remove_dir(&browser_dir)?;
+                println!("Removed empty browser folder: {}", browser_dir.display());
               }
             }
           }
         }
-        Err(_) => {} // Ignore errors when checking if directory is empty
       }
     }
 
@@ -555,21 +549,18 @@ impl DownloadedBrowsersRegistry {
 
       // If browser directory is now empty, remove it too
       if !has_non_empty_versions {
-        match fs::read_dir(&browser_path) {
-          Ok(mut entries) => {
-            if entries.next().is_none() {
-              if let Err(e) = fs::remove_dir(&browser_path) {
-                eprintln!(
-                  "Failed to remove empty browser folder {}: {e}",
-                  browser_path.display()
-                );
-              } else {
-                cleaned_up.push(format!("Removed empty browser folder: {browser_name}"));
-                println!("Removed empty browser folder: {}", browser_path.display());
-              }
+        if let Ok(mut entries) = fs::read_dir(&browser_path) {
+          if entries.next().is_none() {
+            if let Err(e) = fs::remove_dir(&browser_path) {
+              eprintln!(
+                "Failed to remove empty browser folder {}: {e}",
+                browser_path.display()
+              );
+            } else {
+              cleaned_up.push(format!("Removed empty browser folder: {browser_name}"));
+              println!("Removed empty browser folder: {}", browser_path.display());
             }
           }
-          Err(_) => {} // Ignore errors when checking if directory is empty
         }
       }
     }
