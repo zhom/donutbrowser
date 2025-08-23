@@ -79,9 +79,9 @@ windows = { version = "0.61", features = [
 ] }
 
 [dev-dependencies]
-tempfile = "3.13.0"
+tempfile = "3.21.0"
 wiremock = "0.6"
-hyper = { version = "1.0", features = ["full"] }
+hyper = { version = "1.7", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
 http-body-util = "0.1"
 tower = "0.5"
