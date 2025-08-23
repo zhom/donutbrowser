@@ -20,9 +20,6 @@
       "correctness": {
         "useHookAtTopLevel": "error"
       },
-      "nursery": {
-        "useUniqueElementIds": "off"
-      },
       "a11y": {
         "useSemanticElements": "off"
       }
