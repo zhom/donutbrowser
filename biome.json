@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.0.6/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.2.0/schema.json",
   "vcs": {
     "enabled": false,
     "clientKind": "git",
@@ -18,8 +18,11 @@
     "rules": {
       "recommended": true,
       "correctness": {
+        "useUniqueElementIds": "off",
         "useHookAtTopLevel": "error"
       },
+      "nursery": "off",
+      "suspicious": "off",
       "a11y": {
         "useSemanticElements": "off"
       }

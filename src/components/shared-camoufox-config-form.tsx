@@ -285,7 +285,7 @@ export function SharedCamoufoxConfigForm({
               onChange={(e) =>
                 updateFingerprintConfig(
                   "navigator.hardwareConcurrency",
-                  e.target.value ? parseInt(e.target.value) : undefined,
+                  e.target.value ? parseInt(e.target.value, 10) : undefined,
                 )
               }
               placeholder="e.g., 8"
@@ -300,7 +300,7 @@ export function SharedCamoufoxConfigForm({
               onChange={(e) =>
                 updateFingerprintConfig(
                   "navigator.maxTouchPoints",
-                  e.target.value ? parseInt(e.target.value) : undefined,
+                  e.target.value ? parseInt(e.target.value, 10) : undefined,
                 )
               }
               placeholder="e.g., 0"
@@ -357,7 +357,7 @@ export function SharedCamoufoxConfigForm({
               onChange={(e) =>
                 updateFingerprintConfig(
                   "screen.width",
-                  e.target.value ? parseInt(e.target.value) : undefined,
+                  e.target.value ? parseInt(e.target.value, 10) : undefined,
                 )
               }
               placeholder="e.g., 1920"
@@ -372,7 +372,7 @@ export function SharedCamoufoxConfigForm({
               onChange={(e) =>
                 updateFingerprintConfig(
                   "screen.height",
-                  e.target.value ? parseInt(e.target.value) : undefined,
+                  e.target.value ? parseInt(e.target.value, 10) : undefined,
                 )
               }
               placeholder="e.g., 1080"
@@ -387,7 +387,7 @@ export function SharedCamoufoxConfigForm({
               onChange={(e) =>
                 updateFingerprintConfig(
                   "screen.availWidth",
-                  e.target.value ? parseInt(e.target.value) : undefined,
+                  e.target.value ? parseInt(e.target.value, 10) : undefined,
                 )
               }
               placeholder="e.g., 1920"
@@ -402,7 +402,7 @@ export function SharedCamoufoxConfigForm({
               onChange={(e) =>
                 updateFingerprintConfig(
                   "screen.availHeight",
-                  e.target.value ? parseInt(e.target.value) : undefined,
+                  e.target.value ? parseInt(e.target.value, 10) : undefined,
                 )
               }
               placeholder="e.g., 1055"
@@ -417,7 +417,7 @@ export function SharedCamoufoxConfigForm({
               onChange={(e) =>
                 updateFingerprintConfig(
                   "screen.colorDepth",
-                  e.target.value ? parseInt(e.target.value) : undefined,
+                  e.target.value ? parseInt(e.target.value, 10) : undefined,
                 )
               }
               placeholder="e.g., 30"
@@ -432,7 +432,7 @@ export function SharedCamoufoxConfigForm({
               onChange={(e) =>
                 updateFingerprintConfig(
                   "screen.pixelDepth",
-                  e.target.value ? parseInt(e.target.value) : undefined,
+                  e.target.value ? parseInt(e.target.value, 10) : undefined,
                 )
               }
               placeholder="e.g., 30"
@@ -454,7 +454,7 @@ export function SharedCamoufoxConfigForm({
               onChange={(e) =>
                 updateFingerprintConfig(
                   "window.outerWidth",
-                  e.target.value ? parseInt(e.target.value) : undefined,
+                  e.target.value ? parseInt(e.target.value, 10) : undefined,
                 )
               }
               placeholder="e.g., 1512"
@@ -469,7 +469,7 @@ export function SharedCamoufoxConfigForm({
               onChange={(e) =>
                 updateFingerprintConfig(
                   "window.outerHeight",
-                  e.target.value ? parseInt(e.target.value) : undefined,
+                  e.target.value ? parseInt(e.target.value, 10) : undefined,
                 )
               }
               placeholder="e.g., 886"
@@ -484,7 +484,7 @@ export function SharedCamoufoxConfigForm({
               onChange={(e) =>
                 updateFingerprintConfig(
                   "window.innerWidth",
-                  e.target.value ? parseInt(e.target.value) : undefined,
+                  e.target.value ? parseInt(e.target.value, 10) : undefined,
                 )
               }
               placeholder="e.g., 1512"
@@ -499,7 +499,7 @@ export function SharedCamoufoxConfigForm({
               onChange={(e) =>
                 updateFingerprintConfig(
                   "window.innerHeight",
-                  e.target.value ? parseInt(e.target.value) : undefined,
+                  e.target.value ? parseInt(e.target.value, 10) : undefined,
                 )
               }
               placeholder="e.g., 886"
@@ -514,7 +514,7 @@ export function SharedCamoufoxConfigForm({
               onChange={(e) =>
                 updateFingerprintConfig(
                   "window.screenX",
-                  e.target.value ? parseInt(e.target.value) : undefined,
+                  e.target.value ? parseInt(e.target.value, 10) : undefined,
                 )
               }
               placeholder="e.g., 0"
@@ -529,7 +529,7 @@ export function SharedCamoufoxConfigForm({
               onChange={(e) =>
                 updateFingerprintConfig(
                   "window.screenY",
-                  e.target.value ? parseInt(e.target.value) : undefined,
+                  e.target.value ? parseInt(e.target.value, 10) : undefined,
                 )
               }
               placeholder="e.g., 0"
@@ -852,7 +852,9 @@ export function SharedCamoufoxConfigForm({
                     onChange={(e) =>
                       onConfigChange(
                         "screen_max_width",
-                        e.target.value ? parseInt(e.target.value) : undefined,
+                        e.target.value
+                          ? parseInt(e.target.value, 10)
+                          : undefined,
                       )
                     }
                     placeholder="e.g., 1920"
@@ -867,7 +869,9 @@ export function SharedCamoufoxConfigForm({
                     onChange={(e) =>
                       onConfigChange(
                         "screen_max_height",
-                        e.target.value ? parseInt(e.target.value) : undefined,
+                        e.target.value
+                          ? parseInt(e.target.value, 10)
+                          : undefined,
                       )
                     }
                     placeholder="e.g., 1080"
@@ -882,7 +886,9 @@ export function SharedCamoufoxConfigForm({
                     onChange={(e) =>
                       onConfigChange(
                         "screen_min_width",
-                        e.target.value ? parseInt(e.target.value) : undefined,
+                        e.target.value
+                          ? parseInt(e.target.value, 10)
+                          : undefined,
                       )
                     }
                     placeholder="e.g., 800"
@@ -897,7 +903,9 @@ export function SharedCamoufoxConfigForm({
                     onChange={(e) =>
                       onConfigChange(
                         "screen_min_height",
-                        e.target.value ? parseInt(e.target.value) : undefined,
+                        e.target.value
+                          ? parseInt(e.target.value, 10)
+                          : undefined,
                       )
                     }
                     placeholder="e.g., 600"

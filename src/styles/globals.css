@@ -127,13 +127,13 @@
 /* Ensure Sonner toasts appear above all dialogs and remain interactive */
 .toaster,
 [data-sonner-toaster] {
-  z-index: 99999 !important;
-  pointer-events: auto !important;
+  z-index: 99999;
+  pointer-events: auto;
 }
 
 [data-sonner-toast] {
-  z-index: 99999 !important;
-  pointer-events: auto !important;
+  z-index: 99999;
+  pointer-events: auto;
 }
 
 /* Ensure toast buttons and interactive elements work */
@@ -141,5 +141,5 @@
 [data-sonner-toast] [role="button"],
 [data-sonner-toast] input,
 [data-sonner-toast] select {
-  pointer-events: auto !important;
+  pointer-events: auto;
 }
