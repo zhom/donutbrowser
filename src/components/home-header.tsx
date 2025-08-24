@@ -1,7 +1,7 @@
 import { FaDownload } from "react-icons/fa";
 import { FiWifi } from "react-icons/fi";
 import { GoGear, GoKebabHorizontal, GoPlus } from "react-icons/go";
-import { LuTrash2, LuUsers } from "react-icons/lu";
+import { LuSearch, LuTrash2, LuUsers, LuX } from "react-icons/lu";
 import { Logo } from "./icons/logo";
 import { Button } from "./ui/button";
 import { CardTitle } from "./ui/card";
@@ -11,6 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
+import { Input } from "./ui/input";
 import { RippleButton } from "./ui/ripple";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
@@ -23,6 +24,8 @@ type Props = {
   onGroupManagementDialogOpen: (open: boolean) => void;
   onImportProfileDialogOpen: (open: boolean) => void;
   onCreateProfileDialogOpen: (open: boolean) => void;
+  searchQuery: string;
+  onSearchQueryChange: (query: string) => void;
 };
 
 const HomeHeader = ({
@@ -34,6 +37,8 @@ const HomeHeader = ({
   onGroupManagementDialogOpen,
   onImportProfileDialogOpen,
   onCreateProfileDialogOpen,
+  searchQuery,
+  onSearchQueryChange,
 }: Props) => {
   const handleLogoClick = () => {
     // Trigger the same URL handling logic as if the URL came from the system
@@ -76,7 +81,7 @@ const HomeHeader = ({
                 className="flex gap-2 items-center"
               >
                 <LuTrash2 className="w-4 h-4" />
-                Delete Selected
+                Delete
               </RippleButton>
             </div>
           </div>
@@ -85,12 +90,32 @@ const HomeHeader = ({
         )}
       </div>
       <div className="flex gap-2 items-center">
+        <div className="relative">
+          <Input
+            type="text"
+            placeholder="Search profiles..."
+            value={searchQuery}
+            onChange={(e) => onSearchQueryChange(e.target.value)}
+            className="pr-8 pl-10 w-48"
+          />
+          <LuSearch className="absolute left-3 top-1/2 w-4 h-4 transform -translate-y-1/2 text-muted-foreground" />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => onSearchQueryChange("")}
+              className="absolute right-2 top-1/2 p-1 rounded-sm transition-colors transform -translate-y-1/2 hover:bg-accent"
+              aria-label="Clear search"
+            >
+              <LuX className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+            </button>
+          )}
+        </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               size="sm"
               variant="outline"
-              className="flex gap-2 items-center"
+              className="flex gap-2 items-center h-[36px]"
             >
               <GoKebabHorizontal className="w-4 h-4" />
             </Button>
@@ -138,7 +163,7 @@ const HomeHeader = ({
                 onClick={() => {
                   onCreateProfileDialogOpen(true);
                 }}
-                className="flex gap-2 items-center"
+                className="flex gap-2 items-center h-[36px]"
               >
                 <GoPlus className="w-4 h-4" />
               </Button>

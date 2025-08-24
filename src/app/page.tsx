@@ -80,6 +80,7 @@ export default function Home() {
     string[]
   >([]);
   const [selectedProfiles, setSelectedProfiles] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState<string>("");
   const [pendingUrls, setPendingUrls] = useState<PendingUrl[]>([]);
   const [currentProfileForCamoufoxConfig, setCurrentProfileForCamoufoxConfig] =
     useState<BrowserProfile | null>(null);
@@ -655,14 +656,39 @@ export default function Home() {
     }
   }, [isInitialized, checkAllPermissions]);
 
-  // Filter data by selected group
+  // Filter data by selected group and search query
   const filteredProfiles = useMemo(() => {
+    let filtered = profiles;
+
+    // Filter by group
     if (!selectedGroupId || selectedGroupId === "default") {
-      return profiles.filter((profile) => !profile.group_id);
+      filtered = profiles.filter((profile) => !profile.group_id);
+    } else {
+      filtered = profiles.filter(
+        (profile) => profile.group_id === selectedGroupId,
+      );
     }
 
-    return profiles.filter((profile) => profile.group_id === selectedGroupId);
-  }, [profiles, selectedGroupId]);
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter((profile) => {
+        // Search in profile name
+        if (profile.name.toLowerCase().includes(query)) return true;
+
+        // Search in browser name
+        if (profile.browser.toLowerCase().includes(query)) return true;
+
+        // Search in tags
+        if (profile.tags?.some((tag) => tag.toLowerCase().includes(query)))
+          return true;
+
+        return false;
+      });
+    }
+
+    return filtered;
+  }, [profiles, selectedGroupId, searchQuery]);
 
   // Update loading states
   const isLoading = profilesLoading || groupsLoading || proxiesLoading;
@@ -680,6 +706,8 @@ export default function Home() {
             onImportProfileDialogOpen={setImportProfileDialogOpen}
             onProxyManagementDialogOpen={setProxyManagementDialogOpen}
             onSettingsDialogOpen={setSettingsDialogOpen}
+            searchQuery={searchQuery}
+            onSearchQueryChange={setSearchQuery}
           />
         </div>
         <div className="space-y-4 w-full">
