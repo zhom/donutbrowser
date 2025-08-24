@@ -35,7 +35,7 @@
 
 - Create unlimited number of local browser profiles completely isolated from each other
 - Safely use multiple accounts on one device by using anti-detect browser profiles, powered by [Camoufox](https://camoufox.com)
-- Proxy support with basic auth for all browsers except for TOR Browser
+- Proxy support with basic auth for all browsers
 - Import profiles from your existing browsers
 - Automatic updates for browsers
 - Set Donut Browser as your default browser to control in which profile to open links
