@@ -1007,6 +1007,19 @@ impl BrowserRunner {
     })
   }
 
+  /// Update a profile's browser version
+  pub fn update_profile_version(
+    &self,
+    app_handle: &tauri::AppHandle,
+    profile_id: &str,
+    version: &str,
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
+    let profile_manager = ProfileManager::instance();
+    profile_manager
+      .update_profile_version(app_handle, profile_id, version)
+      .map_err(|e| format!("Failed to update profile version: {e}").into())
+  }
+
   pub fn delete_profile(
     &self,
     app_handle: tauri::AppHandle,
@@ -1110,6 +1123,45 @@ impl BrowserRunner {
       // Clear the process ID from the profile
       let mut updated_profile = profile.clone();
       updated_profile.process_id = None;
+
+      // Check for pending updates and apply them for Camoufox profiles too
+      let auto_updater = crate::auto_updater::AutoUpdater::instance();
+      if let Ok(Some(pending_update)) =
+        auto_updater.get_pending_update(&profile.browser, &profile.version)
+      {
+        println!(
+          "Found pending update for Camoufox profile {}: {} -> {}",
+          profile.name, profile.version, pending_update.new_version
+        );
+
+        // Update the profile to the new version
+        match self.update_profile_version(
+          &app_handle,
+          &profile.id.to_string(),
+          &pending_update.new_version,
+        ) {
+          Ok(updated_profile_after_update) => {
+            println!(
+              "Successfully updated Camoufox profile {} from version {} to {}",
+              profile.name, profile.version, pending_update.new_version
+            );
+            updated_profile = updated_profile_after_update;
+
+            // Remove the pending update from the auto updater state
+            if let Err(e) = auto_updater.dismiss_update_notification(&pending_update.id) {
+              eprintln!("Warning: Failed to dismiss pending update notification: {e}");
+            }
+          }
+          Err(e) => {
+            eprintln!(
+              "Failed to apply pending update for Camoufox profile {}: {}",
+              profile.name, e
+            );
+            // Continue with the original profile update (just clearing process_id)
+          }
+        }
+      }
+
       self
         .save_process_info(&updated_profile)
         .map_err(|e| format!("Failed to update profile: {e}"))?;
@@ -1288,6 +1340,45 @@ impl BrowserRunner {
     // Clear the process ID from the profile
     let mut updated_profile = profile.clone();
     updated_profile.process_id = None;
+
+    // Check for pending updates and apply them
+    let auto_updater = crate::auto_updater::AutoUpdater::instance();
+    if let Ok(Some(pending_update)) =
+      auto_updater.get_pending_update(&profile.browser, &profile.version)
+    {
+      println!(
+        "Found pending update for profile {}: {} -> {}",
+        profile.name, profile.version, pending_update.new_version
+      );
+
+      // Update the profile to the new version
+      match self.update_profile_version(
+        &app_handle,
+        &profile.id.to_string(),
+        &pending_update.new_version,
+      ) {
+        Ok(updated_profile_after_update) => {
+          println!(
+            "Successfully updated profile {} from version {} to {}",
+            profile.name, profile.version, pending_update.new_version
+          );
+          updated_profile = updated_profile_after_update;
+
+          // Remove the pending update from the auto updater state
+          if let Err(e) = auto_updater.dismiss_update_notification(&pending_update.id) {
+            eprintln!("Warning: Failed to dismiss pending update notification: {e}");
+          }
+        }
+        Err(e) => {
+          eprintln!(
+            "Failed to apply pending update for profile {}: {}",
+            profile.name, e
+          );
+          // Continue with the original profile update (just clearing process_id)
+        }
+      }
+    }
+
     self
       .save_process_info(&updated_profile)
       .map_err(|e| format!("Failed to update profile: {e}"))?;

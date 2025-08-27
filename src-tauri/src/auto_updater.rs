@@ -458,6 +458,39 @@ impl AutoUpdater {
 
     Ok(())
   }
+
+  /// Get pending update versions for a specific browser
+  /// Returns a set of (browser, version) pairs that have pending updates
+  pub fn get_pending_update_versions(
+    &self,
+  ) -> Result<std::collections::HashSet<(String, String)>, Box<dyn std::error::Error + Send + Sync>>
+  {
+    let state = self.load_auto_update_state()?;
+    let mut pending_versions = std::collections::HashSet::new();
+
+    for update in &state.pending_updates {
+      pending_versions.insert((update.browser.clone(), update.new_version.clone()));
+    }
+
+    Ok(pending_versions)
+  }
+
+  /// Get pending update for a specific browser version if it exists
+  pub fn get_pending_update(
+    &self,
+    browser: &str,
+    current_version: &str,
+  ) -> Result<Option<UpdateNotification>, Box<dyn std::error::Error + Send + Sync>> {
+    let state = self.load_auto_update_state()?;
+
+    for update in &state.pending_updates {
+      if update.browser == browser && update.current_version == current_version {
+        return Ok(Some(update.clone()));
+      }
+    }
+
+    Ok(None)
+  }
 }
 
 // Tauri commands

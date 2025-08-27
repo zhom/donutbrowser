@@ -202,6 +202,16 @@ impl DownloadedBrowsersRegistry {
       running_profiles.iter().cloned().collect();
     let mut cleaned_up = Vec::new();
 
+    // Get pending update versions from auto updater
+    let pending_updates =
+      match crate::auto_updater::AutoUpdater::instance().get_pending_update_versions() {
+        Ok(updates) => updates,
+        Err(e) => {
+          eprintln!("Warning: Failed to get pending updates for cleanup: {e}");
+          std::collections::HashSet::new()
+        }
+      };
+
     // Collect all downloaded browsers that are not in active profiles
     let mut to_remove = Vec::new();
     {
@@ -220,6 +230,18 @@ impl DownloadedBrowsersRegistry {
           if running_set.contains(&browser_version) {
             println!("Keeping: {browser} {version} (currently running)");
             continue;
+          }
+
+          // Don't remove if this version has a pending update for a running profile
+          // This handles the case where a running profile has an update downloaded but not yet applied
+          if pending_updates.contains(&browser_version) {
+            // Check if there are any running profiles for this browser that could be updated
+            let has_running_profile_for_browser =
+              running_profiles.iter().any(|(b, _)| b == browser);
+            if has_running_profile_for_browser {
+              println!("Keeping: {browser} {version} (pending update for running profile)");
+              continue;
+            }
           }
 
           // Mark for removal
