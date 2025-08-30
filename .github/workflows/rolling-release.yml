@@ -12,7 +12,7 @@ env:
 jobs:
   security-scan:
     name: Security Vulnerability Scan
-    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@456ceb78310755116e0a3738121351006286b797" # v2.2.1
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@90b209d0ea55cea1da9fc0c4e65782cc6acb6e2e" # v2.2.2
     with:
       scan-args: |-
         -r
@@ -170,7 +170,7 @@ jobs:
           echo "Generated timestamp: ${TIMESTAMP}-${COMMIT_HASH}"
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@564aea5a8075c7a54c167bb0cf5b3255314a7f9d #v0.5.22
+        uses: tauri-apps/tauri-action@e834788a94591d81e3ae0bd9ec06366f5afb8994 #v0.5.23
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BUILD_TAG: "nightly-${{ steps.timestamp.outputs.timestamp }}"
