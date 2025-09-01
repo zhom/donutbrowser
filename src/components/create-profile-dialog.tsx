@@ -6,7 +6,7 @@ import { GoPlus } from "react-icons/go";
 import { LoadingButton } from "@/components/loading-button";
 import { ProxyFormDialog } from "@/components/proxy-form-dialog";
 import { SharedCamoufoxConfigForm } from "@/components/shared-camoufox-config-form";
-import { Combobox } from "@/components/ui/combobox";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 import { useBrowserDownload } from "@/hooks/use-browser-download";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { getBrowserIcon } from "@/lib/browser-utils";
@@ -99,27 +100,42 @@ export function CreateProfileDialog({
   selectedGroupId,
 }: CreateProfileDialogProps) {
   const [profileName, setProfileName] = useState("");
+  const [currentStep, setCurrentStep] = useState<
+    "browser-selection" | "browser-config"
+  >("browser-selection");
   const [activeTab, setActiveTab] = useState("anti-detect");
 
-  // Regular browser states
+  // Browser selection states
   const [selectedBrowser, setSelectedBrowser] =
-    useState<BrowserTypeString | null>("camoufox");
+    useState<BrowserTypeString | null>(null);
   const [selectedProxyId, setSelectedProxyId] = useState<string>();
-
-  const handleTabChange = (value: string) => {
-    if (value === "regular") {
-      setSelectedBrowser("firefox");
-    } else if (value === "anti-detect") {
-      setSelectedBrowser("camoufox");
-    }
-
-    setActiveTab(value);
-  };
 
   // Camoufox anti-detect states
   const [camoufoxConfig, setCamoufoxConfig] = useState<CamoufoxConfig>({
     geoip: true, // Default to automatic geoip
   });
+
+  // Handle browser selection from the initial screen
+  const handleBrowserSelect = (browser: BrowserTypeString) => {
+    setSelectedBrowser(browser);
+    setCurrentStep("browser-config");
+  };
+
+  // Handle back button
+  const handleBack = () => {
+    setCurrentStep("browser-selection");
+    setSelectedBrowser(null);
+    setProfileName("");
+    setSelectedProxyId(undefined);
+  };
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    setCurrentStep("browser-selection");
+    setSelectedBrowser(null);
+    setProfileName("");
+    setSelectedProxyId(undefined);
+  };
 
   const [supportedBrowsers, setSupportedBrowsers] = useState<string[]>([]);
   const { storedProxies } = useProxyEvents();
@@ -227,15 +243,15 @@ export function CreateProfileDialog({
   // Load data when dialog opens
   useEffect(() => {
     if (isOpen) {
-      // Ensure we have a selected browser
-      if (!selectedBrowser) {
-        setSelectedBrowser("camoufox");
-      }
       void loadSupportedBrowsers();
-      // Load camoufox release types when dialog opens
-      void loadReleaseTypes(selectedBrowser || "camoufox");
+      // Load release types when a browser is selected
+      if (selectedBrowser) {
+        void loadReleaseTypes(selectedBrowser);
+      }
       // Check and download GeoIP database if needed for Camoufox
-      void checkAndDownloadGeoIPDatabase();
+      if (selectedBrowser === "camoufox") {
+        void checkAndDownloadGeoIPDatabase();
+      }
     }
   }, [
     isOpen,
@@ -297,7 +313,29 @@ export function CreateProfileDialog({
 
     setIsCreating(true);
     try {
-      if (activeTab === "regular") {
+      if (activeTab === "anti-detect") {
+        // Anti-detect browser - always use Camoufox with best available version
+        const bestCamoufoxVersion = getBestAvailableVersion("camoufox");
+        if (!bestCamoufoxVersion) {
+          console.error("No Camoufox version available");
+          return;
+        }
+
+        // The fingerprint will be generated at launch time by the Rust backend
+        // We don't need to generate it here during profile creation
+        const finalCamoufoxConfig = { ...camoufoxConfig };
+
+        await onCreateProfile({
+          name: profileName.trim(),
+          browserStr: "camoufox" as BrowserTypeString,
+          version: bestCamoufoxVersion.version,
+          releaseType: bestCamoufoxVersion.releaseType,
+          proxyId: selectedProxyId,
+          camoufoxConfig: finalCamoufoxConfig,
+          groupId: selectedGroupId !== "default" ? selectedGroupId : undefined,
+        });
+      } else {
+        // Regular browser
         if (!selectedBrowser) {
           console.error("Missing required browser selection");
           return;
@@ -318,27 +356,6 @@ export function CreateProfileDialog({
           proxyId: selectedProxyId,
           groupId: selectedGroupId !== "default" ? selectedGroupId : undefined,
         });
-      } else {
-        // Anti-detect tab - always use Camoufox with best available version
-        const bestCamoufoxVersion = getBestAvailableVersion("camoufox");
-        if (!bestCamoufoxVersion) {
-          console.error("No Camoufox version available");
-          return;
-        }
-
-        // The fingerprint will be generated at launch time by the Rust backend
-        // We don't need to generate it here during profile creation
-        const finalCamoufoxConfig = { ...camoufoxConfig };
-
-        await onCreateProfile({
-          name: profileName.trim(),
-          browserStr: "camoufox" as BrowserTypeString,
-          version: bestCamoufoxVersion.version,
-          releaseType: bestCamoufoxVersion.releaseType,
-          proxyId: selectedProxyId,
-          camoufoxConfig: finalCamoufoxConfig,
-          groupId: selectedGroupId !== "default" ? selectedGroupId : undefined,
-        });
       }
 
       handleClose();
@@ -355,13 +372,14 @@ export function CreateProfileDialog({
 
     // Reset all states
     setProfileName("");
-    setSelectedBrowser("camoufox"); // Set default browser instead of null
+    setCurrentStep("browser-selection");
+    setActiveTab("anti-detect");
+    setSelectedBrowser(null);
     setSelectedProxyId(undefined);
     setReleaseTypes({});
     setCamoufoxConfig({
       geoip: true, // Reset to automatic geoip
     });
-    setActiveTab("anti-detect");
     onClose();
   };
 
@@ -400,11 +418,23 @@ export function CreateProfileDialog({
     isBrowserVersionAvailable,
   ]);
 
+  // Filter supported browsers for regular browsers (excluding mullvad and tor)
+  const regularBrowsers = browserOptions.filter(
+    (browser) =>
+      supportedBrowsers.includes(browser.value) &&
+      browser.value !== "mullvad-browser" &&
+      browser.value !== "tor-browser",
+  );
+
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="w-full max-h-[90vh] flex flex-col">
         <DialogHeader className="flex-shrink-0">
-          <DialogTitle>Create New Profile</DialogTitle>
+          <DialogTitle>
+            {currentStep === "browser-selection"
+              ? "Create New Profile"
+              : "Configure Profile"}
+          </DialogTitle>
         </DialogHeader>
 
         <Tabs
@@ -420,213 +450,428 @@ export function CreateProfileDialog({
             <TabsTrigger value="regular">Regular</TabsTrigger>
           </TabsList>
 
-          <ScrollArea className="flex-1 h-[330px] overflow-y-hidden">
+          <ScrollArea className="overflow-y-auto flex-1">
             <div className="flex flex-col justify-center items-center w-full">
               <div className="py-4 space-y-6 w-full max-w-md">
-                {/* Profile Name - Common to both tabs */}
-                <div className="space-y-2">
-                  <Label htmlFor="profile-name">Profile Name</Label>
-                  <Input
-                    id="profile-name"
-                    value={profileName}
-                    onChange={(e) => setProfileName(e.target.value)}
-                    placeholder="Enter profile name"
-                  />
-                </div>
+                {currentStep === "browser-selection" ? (
+                  <>
+                    <TabsContent value="anti-detect" className="mt-0 space-y-6">
+                      {/* Anti-Detect Browser Selection */}
+                      <div className="space-y-6">
+                        <div className="text-center">
+                          <h3 className="text-lg font-medium">
+                            Anti-Detect Browser
+                          </h3>
+                          <p className="mt-2 text-sm text-muted-foreground">
+                            Choose Firefox for anti-detection capabilities
+                          </p>
+                        </div>
 
-                <TabsContent value="regular" className="mt-0 space-y-6">
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Browser</Label>
-                      <Combobox
-                        options={browserOptions
-                          .filter(
-                            (browser) =>
-                              supportedBrowsers.includes(browser.value) &&
-                              browser.value !== "mullvad-browser" &&
-                              browser.value !== "tor-browser",
-                          )
-                          .map((browser) => {
-                            const IconComponent = getBrowserIcon(browser.value);
-                            return {
-                              value: browser.value,
-                              label: browser.label,
-                              icon: IconComponent,
-                            };
-                          })}
-                        value={selectedBrowser || ""}
-                        onValueChange={(value) =>
-                          setSelectedBrowser(value as BrowserTypeString)
-                        }
-                        placeholder="Select a browser..."
-                        searchPlaceholder="Search browsers..."
-                      />
-                    </div>
-
-                    {selectedBrowser && (
-                      <div className="space-y-3">
-                        {!isBrowserCurrentlyDownloading(selectedBrowser) &&
-                          !isBrowserVersionAvailable(selectedBrowser) &&
-                          getBestAvailableVersion(selectedBrowser) && (
-                            <div className="flex gap-3 items-center">
-                              <p className="text-sm text-muted-foreground">
-                                {(() => {
-                                  const bestVersion =
-                                    getBestAvailableVersion(selectedBrowser);
-                                  return `Latest version (${bestVersion?.version}) needs to be downloaded`;
-                                })()}
-                              </p>
-                              <LoadingButton
-                                onClick={() => handleDownload(selectedBrowser)}
-                                isLoading={isBrowserCurrentlyDownloading(
-                                  selectedBrowser,
-                                )}
-                                className="ml-auto"
-                                size="sm"
-                                disabled={isBrowserCurrentlyDownloading(
-                                  selectedBrowser,
-                                )}
-                              >
-                                Download
-                              </LoadingButton>
-                            </div>
-                          )}
-                        {!isBrowserCurrentlyDownloading(selectedBrowser) &&
-                          isBrowserVersionAvailable(selectedBrowser) && (
-                            <div className="text-sm text-muted-foreground">
-                              {(() => {
-                                const bestVersion =
-                                  getBestAvailableVersion(selectedBrowser);
-                                return `✓ Latest version (${bestVersion?.version}) is available`;
-                              })()}
-                            </div>
-                          )}
-                        {isBrowserCurrentlyDownloading(selectedBrowser) && (
-                          <div className="text-sm text-muted-foreground">
+                        <Button
+                          onClick={() => handleBrowserSelect("camoufox")}
+                          className="flex gap-3 justify-start items-center p-4 w-full h-16 border-2 transition-colors hover:border-primary/50"
+                          variant="outline"
+                        >
+                          <div className="flex justify-center items-center w-8 h-8">
                             {(() => {
-                              const bestVersion =
-                                getBestAvailableVersion(selectedBrowser);
-                              return `Downloading version (${bestVersion?.version})...`;
+                              const IconComponent = getBrowserIcon("firefox");
+                              return IconComponent ? (
+                                <IconComponent className="w-6 h-6" />
+                              ) : null;
                             })()}
                           </div>
-                        )}
+                          <div className="text-left">
+                            <div className="font-medium">Firefox</div>
+                            <div className="text-sm text-muted-foreground">
+                              Anti-Detect Browser
+                            </div>
+                          </div>
+                        </Button>
                       </div>
-                    )}
-                  </div>
-                </TabsContent>
+                    </TabsContent>
 
-                <TabsContent value="anti-detect" className="mt-0 space-y-6">
-                  <div className="space-y-6">
-                    {/* Camoufox Download Status */}
-                    {!isBrowserCurrentlyDownloading("camoufox") &&
-                      !isBrowserVersionAvailable("camoufox") &&
-                      getBestAvailableVersion("camoufox") && (
-                        <div className="flex gap-3 items-center p-3 rounded-md border">
-                          <p className="text-sm text-muted-foreground">
-                            {(() => {
-                              const bestVersion =
-                                getBestAvailableVersion("camoufox");
-                              return `Camoufox version (${bestVersion?.version}) needs to be downloaded`;
-                            })()}
+                    <TabsContent value="regular" className="mt-0 space-y-6">
+                      {/* Regular Browser Selection */}
+                      <div className="space-y-6">
+                        <div className="text-center">
+                          <h3 className="text-lg font-medium">
+                            Regular Browsers
+                          </h3>
+                          <p className="mt-2 text-sm text-muted-foreground">
+                            Choose from supported regular browsers
                           </p>
-                          <LoadingButton
-                            onClick={() => handleDownload("camoufox")}
-                            isLoading={isBrowserCurrentlyDownloading(
-                              "camoufox",
-                            )}
-                            size="sm"
-                            disabled={isBrowserCurrentlyDownloading("camoufox")}
-                          >
-                            {isBrowserCurrentlyDownloading("camoufox")
-                              ? "Downloading..."
-                              : "Download"}
-                          </LoadingButton>
                         </div>
-                      )}
-                    {!isBrowserCurrentlyDownloading("camoufox") &&
-                      isBrowserVersionAvailable("camoufox") && (
-                        <div className="p-3 text-sm rounded-md border text-muted-foreground">
-                          {(() => {
-                            const bestVersion =
-                              getBestAvailableVersion("camoufox");
-                            return `✓ Camoufox version (${bestVersion?.version}) is available`;
-                          })()}
+
+                        <div className="space-y-3">
+                          {regularBrowsers.map((browser) => {
+                            if (browser.value === "camoufox") return null; // Skip camoufox as it's handled in anti-detect tab
+                            const IconComponent = getBrowserIcon(browser.value);
+                            return (
+                              <Button
+                                key={browser.value}
+                                onClick={() =>
+                                  handleBrowserSelect(browser.value)
+                                }
+                                className="flex gap-3 justify-start items-center p-4 w-full h-16 border-2 transition-colors hover:border-primary/50"
+                                variant="outline"
+                              >
+                                <div className="flex justify-center items-center w-8 h-8">
+                                  {IconComponent && (
+                                    <IconComponent className="w-6 h-6" />
+                                  )}
+                                </div>
+                                <div className="text-left">
+                                  <div className="font-medium">
+                                    {browser.label}
+                                  </div>
+                                  <div className="text-sm text-muted-foreground">
+                                    Regular Browser
+                                  </div>
+                                </div>
+                              </Button>
+                            );
+                          })}
                         </div>
-                      )}
-                    {isBrowserCurrentlyDownloading("camoufox") && (
-                      <div className="p-3 text-sm rounded-md border text-muted-foreground">
-                        {(() => {
-                          const bestVersion =
-                            getBestAvailableVersion("camoufox");
-                          return `Downloading Camoufox version (${bestVersion?.version})...`;
-                        })()}
                       </div>
-                    )}
+                    </TabsContent>
+                  </>
+                ) : (
+                  <>
+                    <TabsContent value="anti-detect" className="mt-0">
+                      {/* Anti-Detect Configuration */}
+                      <div className="space-y-6">
+                        {/* Profile Name */}
+                        <div className="space-y-2">
+                          <Label htmlFor="profile-name">Profile Name</Label>
+                          <Input
+                            id="profile-name"
+                            value={profileName}
+                            onChange={(e) => setProfileName(e.target.value)}
+                            placeholder="Enter profile name"
+                          />
+                        </div>
 
-                    <SharedCamoufoxConfigForm
-                      config={camoufoxConfig}
-                      onConfigChange={updateCamoufoxConfig}
-                      isCreating
-                    />
-                  </div>
-                </TabsContent>
+                        {selectedBrowser === "camoufox" ? (
+                          // Camoufox Configuration
+                          <div className="space-y-6">
+                            {/* Camoufox Download Status */}
+                            {!isBrowserCurrentlyDownloading("camoufox") &&
+                              !isBrowserVersionAvailable("camoufox") &&
+                              getBestAvailableVersion("camoufox") && (
+                                <div className="flex gap-3 items-center p-3 rounded-md border">
+                                  <p className="text-sm text-muted-foreground">
+                                    {(() => {
+                                      const bestVersion =
+                                        getBestAvailableVersion("camoufox");
+                                      return `Camoufox version (${bestVersion?.version}) needs to be downloaded`;
+                                    })()}
+                                  </p>
+                                  <LoadingButton
+                                    onClick={() => handleDownload("camoufox")}
+                                    isLoading={isBrowserCurrentlyDownloading(
+                                      "camoufox",
+                                    )}
+                                    size="sm"
+                                    disabled={isBrowserCurrentlyDownloading(
+                                      "camoufox",
+                                    )}
+                                  >
+                                    {isBrowserCurrentlyDownloading("camoufox")
+                                      ? "Downloading..."
+                                      : "Download"}
+                                  </LoadingButton>
+                                </div>
+                              )}
+                            {!isBrowserCurrentlyDownloading("camoufox") &&
+                              isBrowserVersionAvailable("camoufox") && (
+                                <div className="p-3 text-sm rounded-md border text-muted-foreground">
+                                  {(() => {
+                                    const bestVersion =
+                                      getBestAvailableVersion("camoufox");
+                                    return `✓ Camoufox version (${bestVersion?.version}) is available`;
+                                  })()}
+                                </div>
+                              )}
+                            {isBrowserCurrentlyDownloading("camoufox") && (
+                              <div className="p-3 text-sm rounded-md border text-muted-foreground">
+                                {(() => {
+                                  const bestVersion =
+                                    getBestAvailableVersion("camoufox");
+                                  return `Downloading Camoufox version (${bestVersion?.version})...`;
+                                })()}
+                              </div>
+                            )}
 
-                {/* Proxy Selection - Common to both tabs - Always visible */}
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <Label>Proxy</Label>
-                    <RippleButton
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setShowProxyForm(true)}
-                      className="px-2 h-7 text-xs"
-                    >
-                      <GoPlus className="mr-1 w-3 h-3" /> Add Proxy
-                    </RippleButton>
-                  </div>
-                  {storedProxies.length > 0 ? (
-                    <Select
-                      value={selectedProxyId || "none"}
-                      onValueChange={(value) =>
-                        setSelectedProxyId(value === "none" ? undefined : value)
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="No proxy" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No proxy</SelectItem>
-                        {storedProxies.map((proxy) => (
-                          <SelectItem key={proxy.id} value={proxy.id}>
-                            {proxy.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <div className="flex gap-3 items-center p-3 text-sm rounded-md border text-muted-foreground">
-                      No proxies available. Add one to route this profile's
-                      traffic.
-                    </div>
-                  )}
-                </div>
+                            <SharedCamoufoxConfigForm
+                              config={camoufoxConfig}
+                              onConfigChange={updateCamoufoxConfig}
+                              isCreating
+                            />
+                          </div>
+                        ) : (
+                          // Regular Browser Configuration
+                          <div className="space-y-4">
+                            {selectedBrowser && (
+                              <div className="space-y-3">
+                                {!isBrowserCurrentlyDownloading(
+                                  selectedBrowser,
+                                ) &&
+                                  !isBrowserVersionAvailable(selectedBrowser) &&
+                                  getBestAvailableVersion(selectedBrowser) && (
+                                    <div className="flex gap-3 items-center">
+                                      <p className="text-sm text-muted-foreground">
+                                        {(() => {
+                                          const bestVersion =
+                                            getBestAvailableVersion(
+                                              selectedBrowser,
+                                            );
+                                          return `Latest version (${bestVersion?.version}) needs to be downloaded`;
+                                        })()}
+                                      </p>
+                                      <LoadingButton
+                                        onClick={() =>
+                                          handleDownload(selectedBrowser)
+                                        }
+                                        isLoading={isBrowserCurrentlyDownloading(
+                                          selectedBrowser,
+                                        )}
+                                        className="ml-auto"
+                                        size="sm"
+                                        disabled={isBrowserCurrentlyDownloading(
+                                          selectedBrowser,
+                                        )}
+                                      >
+                                        Download
+                                      </LoadingButton>
+                                    </div>
+                                  )}
+                                {!isBrowserCurrentlyDownloading(
+                                  selectedBrowser,
+                                ) &&
+                                  isBrowserVersionAvailable(
+                                    selectedBrowser,
+                                  ) && (
+                                    <div className="text-sm text-muted-foreground">
+                                      {(() => {
+                                        const bestVersion =
+                                          getBestAvailableVersion(
+                                            selectedBrowser,
+                                          );
+                                        return `✓ Latest version (${bestVersion?.version}) is available`;
+                                      })()}
+                                    </div>
+                                  )}
+                                {isBrowserCurrentlyDownloading(
+                                  selectedBrowser,
+                                ) && (
+                                  <div className="text-sm text-muted-foreground">
+                                    {(() => {
+                                      const bestVersion =
+                                        getBestAvailableVersion(
+                                          selectedBrowser,
+                                        );
+                                      return `Downloading version (${bestVersion?.version})...`;
+                                    })()}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Proxy Selection - Always visible */}
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-center">
+                            <Label>Proxy</Label>
+                            <RippleButton
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setShowProxyForm(true)}
+                              className="px-2 h-7 text-xs"
+                            >
+                              <GoPlus className="mr-1 w-3 h-3" /> Add Proxy
+                            </RippleButton>
+                          </div>
+                          {storedProxies.length > 0 ? (
+                            <Select
+                              value={selectedProxyId || "none"}
+                              onValueChange={(value) =>
+                                setSelectedProxyId(
+                                  value === "none" ? undefined : value,
+                                )
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="No proxy" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">No proxy</SelectItem>
+                                {storedProxies.map((proxy) => (
+                                  <SelectItem key={proxy.id} value={proxy.id}>
+                                    {proxy.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <div className="flex gap-3 items-center p-3 text-sm rounded-md border text-muted-foreground">
+                              No proxies available. Add one to route this
+                              profile's traffic.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="regular" className="mt-0">
+                      {/* Regular Browser Configuration */}
+                      <div className="space-y-6">
+                        {/* Profile Name */}
+                        <div className="space-y-2">
+                          <Label htmlFor="profile-name">Profile Name</Label>
+                          <Input
+                            id="profile-name"
+                            value={profileName}
+                            onChange={(e) => setProfileName(e.target.value)}
+                            placeholder="Enter profile name"
+                          />
+                        </div>
+
+                        {/* Regular Browser Configuration */}
+                        <div className="space-y-4">
+                          {selectedBrowser && (
+                            <div className="space-y-3">
+                              {!isBrowserCurrentlyDownloading(
+                                selectedBrowser,
+                              ) &&
+                                !isBrowserVersionAvailable(selectedBrowser) &&
+                                getBestAvailableVersion(selectedBrowser) && (
+                                  <div className="flex gap-3 items-center">
+                                    <p className="text-sm text-muted-foreground">
+                                      {(() => {
+                                        const bestVersion =
+                                          getBestAvailableVersion(
+                                            selectedBrowser,
+                                          );
+                                        return `Latest version (${bestVersion?.version}) needs to be downloaded`;
+                                      })()}
+                                    </p>
+                                    <LoadingButton
+                                      onClick={() =>
+                                        handleDownload(selectedBrowser)
+                                      }
+                                      isLoading={isBrowserCurrentlyDownloading(
+                                        selectedBrowser,
+                                      )}
+                                      className="ml-auto"
+                                      size="sm"
+                                      disabled={isBrowserCurrentlyDownloading(
+                                        selectedBrowser,
+                                      )}
+                                    >
+                                      Download
+                                    </LoadingButton>
+                                  </div>
+                                )}
+                              {!isBrowserCurrentlyDownloading(
+                                selectedBrowser,
+                              ) &&
+                                isBrowserVersionAvailable(selectedBrowser) && (
+                                  <div className="text-sm text-muted-foreground">
+                                    {(() => {
+                                      const bestVersion =
+                                        getBestAvailableVersion(
+                                          selectedBrowser,
+                                        );
+                                      return `✓ Latest version (${bestVersion?.version}) is available`;
+                                    })()}
+                                  </div>
+                                )}
+                              {isBrowserCurrentlyDownloading(
+                                selectedBrowser,
+                              ) && (
+                                <div className="text-sm text-muted-foreground">
+                                  {(() => {
+                                    const bestVersion =
+                                      getBestAvailableVersion(selectedBrowser);
+                                    return `Downloading version (${bestVersion?.version})...`;
+                                  })()}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Proxy Selection - Always visible */}
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-center">
+                            <Label>Proxy</Label>
+                            <RippleButton
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setShowProxyForm(true)}
+                              className="px-2 h-7 text-xs"
+                            >
+                              <GoPlus className="mr-1 w-3 h-3" /> Add Proxy
+                            </RippleButton>
+                          </div>
+                          {storedProxies.length > 0 ? (
+                            <Select
+                              value={selectedProxyId || "none"}
+                              onValueChange={(value) =>
+                                setSelectedProxyId(
+                                  value === "none" ? undefined : value,
+                                )
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="No proxy" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">No proxy</SelectItem>
+                                {storedProxies.map((proxy) => (
+                                  <SelectItem key={proxy.id} value={proxy.id}>
+                                    {proxy.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <div className="flex gap-3 items-center p-3 text-sm rounded-md border text-muted-foreground">
+                              No proxies available. Add one to route this
+                              profile's traffic.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </TabsContent>
+                  </>
+                )}
               </div>
             </div>
           </ScrollArea>
+        </Tabs>
 
-          <DialogFooter className="flex-shrink-0 pt-4 border-t">
+        <DialogFooter className="flex-shrink-0 pt-4 border-t">
+          {currentStep === "browser-config" ? (
+            <>
+              <RippleButton variant="outline" onClick={handleBack}>
+                Back
+              </RippleButton>
+              <LoadingButton
+                onClick={handleCreate}
+                isLoading={isCreating}
+                disabled={isCreateDisabled}
+              >
+                Create
+              </LoadingButton>
+            </>
+          ) : (
             <RippleButton variant="outline" onClick={handleClose}>
               Cancel
             </RippleButton>
-            <LoadingButton
-              onClick={handleCreate}
-              isLoading={isCreating}
-              disabled={isCreateDisabled}
-            >
-              Create
-            </LoadingButton>
-          </DialogFooter>
-        </Tabs>
+          )}
+        </DialogFooter>
       </DialogContent>
       <ProxyFormDialog
         isOpen={showProxyForm}
