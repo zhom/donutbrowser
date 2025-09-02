@@ -411,17 +411,11 @@ impl AutoUpdater {
   }
 
   fn is_version_newer(&self, version1: &str, version2: &str) -> bool {
-    // Use the proper VersionComponent comparison from api_client.rs
-    let version_a = crate::api_client::VersionComponent::parse(version1);
-    let version_b = crate::api_client::VersionComponent::parse(version2);
-    version_a > version_b
+    crate::api_client::is_version_newer(version1, version2)
   }
 
   fn compare_versions(&self, version1: &str, version2: &str) -> std::cmp::Ordering {
-    // Use the proper VersionComponent comparison from api_client.rs
-    let version_a = crate::api_client::VersionComponent::parse(version1);
-    let version_b = crate::api_client::VersionComponent::parse(version2);
-    version_a.cmp(&version_b)
+    crate::api_client::compare_versions(version1, version2)
   }
 
   fn get_auto_update_state_file(&self) -> PathBuf {

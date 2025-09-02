@@ -107,26 +107,31 @@ impl DownloadedBrowsersRegistry {
   }
 
   pub fn mark_download_started(&self, browser: &str, version: &str, file_path: PathBuf) {
+    // Only mark download started, don't add to registry yet
+    // The browser will be added to registry only after verification succeeds
+    println!(
+      "Marking download started for {}:{} at {}",
+      browser,
+      version,
+      file_path.display()
+    );
+  }
+
+  pub fn mark_download_completed(
+    &self,
+    browser: &str,
+    version: &str,
+    file_path: PathBuf,
+  ) -> Result<(), String> {
+    // Only mark as completed after verification succeeds
     let info = DownloadedBrowserInfo {
       browser: browser.to_string(),
       version: version.to_string(),
       file_path,
     };
     self.add_browser(info);
-  }
-
-  pub fn mark_download_completed(&self, browser: &str, version: &str) -> Result<(), String> {
-    let data = self.data.lock().unwrap();
-    if data
-      .browsers
-      .get(browser)
-      .and_then(|versions| versions.get(version))
-      .is_some()
-    {
-      Ok(())
-    } else {
-      Err(format!("Browser {browser}:{version} not found in registry"))
-    }
+    println!("Browser {browser}:{version} successfully added to registry after verification");
+    Ok(())
   }
 
   pub fn cleanup_failed_download(
@@ -590,6 +595,118 @@ impl DownloadedBrowsersRegistry {
     Ok(cleaned_up)
   }
 
+  /// Consolidate browser versions - keep only the latest version per browser
+  pub fn consolidate_browser_versions(
+    &self,
+    app_handle: &tauri::AppHandle,
+    browser_runner: &crate::browser_runner::BrowserRunner,
+  ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    println!("Starting browser version consolidation...");
+
+    let profiles = browser_runner
+      .list_profiles()
+      .map_err(|e| format!("Failed to list profiles: {e}"))?;
+
+    let binaries_dir = browser_runner.get_binaries_dir();
+    let mut consolidated = Vec::new();
+
+    // Group profiles by browser
+    let mut browser_profiles: std::collections::HashMap<String, Vec<_>> =
+      std::collections::HashMap::new();
+    for profile in &profiles {
+      browser_profiles
+        .entry(profile.browser.clone())
+        .or_default()
+        .push(profile);
+    }
+
+    for (browser_name, browser_profiles) in browser_profiles {
+      // Find the latest version among all profiles for this browser
+      let mut versions: Vec<&str> = browser_profiles
+        .iter()
+        .map(|p| p.version.as_str())
+        .collect();
+      versions.sort_by(|a, b| {
+        // Sort versions using semantic versioning logic
+        crate::api_client::compare_versions(b, a)
+      });
+
+      if let Some(&latest_version) = versions.first() {
+        println!("Latest version for {browser_name}: {latest_version}");
+
+        // Check which profiles need to be updated to the latest version
+        let mut profiles_to_update = Vec::new();
+        let mut older_versions_to_remove = std::collections::HashSet::new();
+
+        for profile in &browser_profiles {
+          if profile.version != latest_version {
+            // Only update if profile is not currently running
+            if profile.process_id.is_none() {
+              profiles_to_update.push(profile);
+              older_versions_to_remove.insert(profile.version.clone());
+            } else {
+              println!(
+                "Skipping version update for running profile: {} ({})",
+                profile.name, profile.version
+              );
+            }
+          }
+        }
+
+        // Update profiles to latest version
+        for profile in profiles_to_update {
+          match browser_runner.update_profile_version(
+            app_handle,
+            &profile.id.to_string(),
+            latest_version,
+          ) {
+            Ok(_) => {
+              consolidated.push(format!(
+                "Updated profile '{}' from {} to {}",
+                profile.name, profile.version, latest_version
+              ));
+            }
+            Err(e) => {
+              eprintln!("Failed to update profile '{}': {}", profile.name, e);
+            }
+          }
+        }
+
+        // Remove older version binaries that are no longer needed
+        for old_version in older_versions_to_remove {
+          let old_version_dir = binaries_dir.join(&browser_name).join(&old_version);
+          if old_version_dir.exists() {
+            match std::fs::remove_dir_all(&old_version_dir) {
+              Ok(_) => {
+                consolidated.push(format!("Removed old version: {browser_name} {old_version}"));
+                // Also remove from registry
+                self.remove_browser(&browser_name, &old_version);
+              }
+              Err(e) => {
+                eprintln!(
+                  "Failed to remove old version directory {}: {}",
+                  old_version_dir.display(),
+                  e
+                );
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Save registry after consolidation
+    self
+      .save()
+      .map_err(|e| format!("Failed to save registry after consolidation: {e}"))?;
+
+    println!(
+      "Browser version consolidation completed: {} actions taken",
+      consolidated.len()
+    );
+    Ok(consolidated)
+  }
+
   /// Simplified version of verify_and_cleanup_stale_entries that doesn't need BrowserRunner
   pub fn verify_and_cleanup_stale_entries_simple(
     &self,
@@ -702,21 +819,21 @@ mod tests {
     // Mark download started
     registry.mark_download_started("firefox", "139.0", PathBuf::from("/test/path"));
 
-    // Should be considered downloaded immediately
+    // Should NOT be considered downloaded until verification completes
     assert!(
-      registry.is_browser_downloaded("firefox", "139.0"),
-      "Browser should be considered downloaded after marking as started"
+      !registry.is_browser_downloaded("firefox", "139.0"),
+      "Browser should NOT be considered downloaded after marking as started (only after verification)"
     );
 
-    // Mark as completed
+    // Mark as completed (after verification)
     registry
-      .mark_download_completed("firefox", "139.0")
+      .mark_download_completed("firefox", "139.0", PathBuf::from("/test/path"))
       .expect("Failed to mark download as completed");
 
-    // Should still be considered downloaded
+    // Should now be considered downloaded
     assert!(
       registry.is_browser_downloaded("firefox", "139.0"),
-      "Browser should still be considered downloaded after completion"
+      "Browser should be considered downloaded after verification completes"
     );
   }
 
@@ -753,10 +870,20 @@ mod tests {
     // Mark twilight download started
     registry.mark_download_started("zen", "twilight", PathBuf::from("/test/zen-twilight"));
 
-    // Check that it's registered
+    // Should NOT be registered until verification completes
+    assert!(
+      !registry.is_browser_downloaded("zen", "twilight"),
+      "Zen twilight version should NOT be registered until verification completes"
+    );
+
+    // Mark as completed (after verification)
+    registry.mark_download_completed("zen", "twilight", PathBuf::from("/test/zen-twilight"))
+      .expect("Failed to mark twilight download as completed");
+
+    // Now it should be registered
     assert!(
       registry.is_browser_downloaded("zen", "twilight"),
-      "Zen twilight version should be registered as downloaded"
+      "Zen twilight version should be registered after verification completes"
     );
   }
 }

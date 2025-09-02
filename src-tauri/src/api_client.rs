@@ -221,6 +221,20 @@ pub fn sort_versions(versions: &mut [String]) {
   });
 }
 
+// Helper function to compare two versions
+pub fn compare_versions(version1: &str, version2: &str) -> std::cmp::Ordering {
+  let version_a = VersionComponent::parse(version1);
+  let version_b = VersionComponent::parse(version2);
+  version_a.cmp(&version_b)
+}
+
+pub fn is_version_newer(version1: &str, version2: &str) -> bool {
+  // Use the proper VersionComponent comparison from api_client.rs
+  let version_a = VersionComponent::parse(version1);
+  let version_b = VersionComponent::parse(version2);
+  version_a > version_b
+}
+
 // Helper function to sort GitHub releases
 pub fn sort_github_releases(releases: &mut [GithubRelease]) {
   releases.sort_by(|a, b| {

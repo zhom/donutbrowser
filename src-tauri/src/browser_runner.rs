@@ -1200,6 +1200,18 @@ impl BrowserRunner {
         "Camoufox process cleanup completed for profile: {} (ID: {})",
         profile.name, profile.id
       );
+
+      // Consolidate browser versions after stopping a browser
+      let registry = DownloadedBrowsersRegistry::instance();
+      if let Ok(consolidated) = registry.consolidate_browser_versions(&app_handle, self) {
+        if !consolidated.is_empty() {
+          println!("Post-stop version consolidation results:");
+          for action in &consolidated {
+            println!("  {action}");
+          }
+        }
+      }
+
       return Ok(());
     }
 
@@ -1413,6 +1425,17 @@ impl BrowserRunner {
       );
     }
 
+    // Consolidate browser versions after stopping a browser
+    let registry = DownloadedBrowsersRegistry::instance();
+    if let Ok(consolidated) = registry.consolidate_browser_versions(&app_handle, self) {
+      if !consolidated.is_empty() {
+        println!("Post-stop version consolidation results:");
+        for action in &consolidated {
+          println!("  {action}");
+        }
+      }
+    }
+
     Ok(())
   }
 
@@ -1609,6 +1632,16 @@ impl BrowserRunner {
       }
     }
 
+    // Consolidate browser versions - keep only latest version per browser
+    if let Ok(consolidated) = registry.consolidate_browser_versions(app_handle, self) {
+      if !consolidated.is_empty() {
+        println!("Version consolidation results:");
+        for action in &consolidated {
+          println!("  {action}");
+        }
+      }
+    }
+
     let missing_binaries = self.check_missing_binaries().await?;
     let mut downloaded = Vec::new();
 
@@ -1724,11 +1757,8 @@ impl BrowserRunner {
 
     create_dir_all(&browser_dir).map_err(|e| format!("Failed to create browser directory: {e}"))?;
 
-    // Mark download as started in registry
+    // Mark download as started (but don't add to registry yet)
     registry.mark_download_started(&browser_str, &version, browser_dir.clone());
-    registry
-      .save()
-      .map_err(|e| format!("Failed to save registry: {e}"))?;
 
     // Use the download module
     let downloader = crate::download::Downloader::instance();
@@ -1873,8 +1903,8 @@ impl BrowserRunner {
       return Err(error_details.into());
     }
 
-    // Mark completion in registry. If it fails (e.g., rare race during cleanup), log but continue.
-    if let Err(e) = registry.mark_download_completed(&browser_str, &version) {
+    // Mark completion in registry - only now add to registry after verification
+    if let Err(e) = registry.mark_download_completed(&browser_str, &version, browser_dir.clone()) {
       eprintln!("Warning: Could not mark {browser_str} {version} as completed in registry: {e}");
     }
     registry
