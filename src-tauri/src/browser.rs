@@ -241,12 +241,29 @@ mod linux {
     browser_type: &BrowserType,
   ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let possible_executables = match browser_type {
-      BrowserType::Chromium => vec![install_dir.join("chromium"), install_dir.join("chrome")],
+      BrowserType::Chromium => vec![
+        // Direct paths (for manual installations)
+        install_dir.join("chromium"),
+        install_dir.join("chrome"),
+        install_dir.join("chromium-browser"),
+        // Subdirectory paths (for downloaded archives)
+        install_dir.join("chrome-linux").join("chrome"),
+        install_dir.join("chrome-linux").join("chromium"),
+        install_dir.join("chromium").join("chromium"),
+        install_dir.join("chromium").join("chrome"),
+        // Binary subdirectory
+        install_dir.join("bin").join("chromium"),
+        install_dir.join("bin").join("chrome"),
+      ],
       BrowserType::Brave => vec![
         install_dir.join("brave"),
         install_dir.join("brave-browser"),
         install_dir.join("brave-browser-nightly"),
         install_dir.join("brave-browser-beta"),
+        // Subdirectory paths
+        install_dir.join("brave").join("brave"),
+        install_dir.join("brave-browser").join("brave"),
+        install_dir.join("bin").join("brave"),
       ],
       _ => vec![],
     };
@@ -322,12 +339,29 @@ mod linux {
 
   pub fn is_chromium_version_downloaded(install_dir: &Path, browser_type: &BrowserType) -> bool {
     let possible_executables = match browser_type {
-      BrowserType::Chromium => vec![install_dir.join("chromium"), install_dir.join("chrome")],
+      BrowserType::Chromium => vec![
+        // Direct paths (for manual installations)
+        install_dir.join("chromium"),
+        install_dir.join("chrome"),
+        install_dir.join("chromium-browser"),
+        // Subdirectory paths (for downloaded archives)
+        install_dir.join("chrome-linux").join("chrome"),
+        install_dir.join("chrome-linux").join("chromium"),
+        install_dir.join("chromium").join("chromium"),
+        install_dir.join("chromium").join("chrome"),
+        // Binary subdirectory
+        install_dir.join("bin").join("chromium"),
+        install_dir.join("bin").join("chrome"),
+      ],
       BrowserType::Brave => vec![
         install_dir.join("brave"),
         install_dir.join("brave-browser"),
         install_dir.join("brave-browser-nightly"),
         install_dir.join("brave-browser-beta"),
+        // Subdirectory paths
+        install_dir.join("brave").join("brave"),
+        install_dir.join("brave-browser").join("brave"),
+        install_dir.join("bin").join("brave"),
       ],
       _ => vec![],
     };
@@ -415,11 +449,18 @@ mod windows {
         install_dir.join("chrome.exe"),
         install_dir.join("chromium-browser.exe"),
         install_dir.join("bin").join("chromium.exe"),
+        // Common archive extraction patterns
+        install_dir.join("chrome-win").join("chrome.exe"),
+        install_dir.join("chromium").join("chromium.exe"),
+        install_dir.join("chromium").join("chrome.exe"),
       ],
       BrowserType::Brave => vec![
         install_dir.join("brave.exe"),
         install_dir.join("brave-browser.exe"),
         install_dir.join("bin").join("brave.exe"),
+        // Subdirectory patterns
+        install_dir.join("brave").join("brave.exe"),
+        install_dir.join("brave-browser").join("brave.exe"),
       ],
       _ => vec![],
     };
@@ -491,11 +532,18 @@ mod windows {
         install_dir.join("chrome.exe"),
         install_dir.join("chromium-browser.exe"),
         install_dir.join("bin").join("chromium.exe"),
+        // Common archive extraction patterns
+        install_dir.join("chrome-win").join("chrome.exe"),
+        install_dir.join("chromium").join("chromium.exe"),
+        install_dir.join("chromium").join("chrome.exe"),
       ],
       BrowserType::Brave => vec![
         install_dir.join("brave.exe"),
         install_dir.join("brave-browser.exe"),
         install_dir.join("bin").join("brave.exe"),
+        // Subdirectory patterns
+        install_dir.join("brave").join("brave.exe"),
+        install_dir.join("brave-browser").join("brave.exe"),
       ],
       _ => vec![],
     };
