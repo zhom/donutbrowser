@@ -31,7 +31,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [macos-latest, ubuntu-latest]
+        os: [macos-latest, ubuntu-18.04]
 
     runs-on: ${{ matrix.os }}
 
@@ -65,7 +65,7 @@ jobs:
         run: cargo install banderole
 
       - name: Install dependencies (Ubuntu only)
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-18.04'
         run: |
           sudo apt-get update
           sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
@@ -77,7 +77,7 @@ jobs:
         shell: bash
         working-directory: ./nodecar
         run: |
-          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+          if [[ "${{ matrix.os }}" == "ubuntu-18.04" ]]; then
             pnpm run build:linux-x64
           elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
             pnpm run build:mac-aarch64
@@ -94,7 +94,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p src-tauri/binaries
-          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+          if [[ "${{ matrix.os }}" == "ubuntu-18.04" ]]; then
             cp nodecar/nodecar-bin src-tauri/binaries/nodecar-x86_64-unknown-linux-gnu
           elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
             cp nodecar/nodecar-bin src-tauri/binaries/nodecar-aarch64-apple-darwin
