@@ -1,4 +1,4 @@
-use crate::camoufox::CamoufoxConfig;
+use crate::camoufox_manager::CamoufoxConfig;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 

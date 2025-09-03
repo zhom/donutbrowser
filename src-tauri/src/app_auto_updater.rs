@@ -120,12 +120,14 @@ pub struct AppUpdateProgress {
 
 pub struct AppAutoUpdater {
   client: Client,
+  extractor: &'static crate::extraction::Extractor,
 }
 
 impl AppAutoUpdater {
   fn new() -> Self {
     Self {
       client: Client::new(),
+      extractor: crate::extraction::Extractor::instance(),
     }
   }
 
@@ -829,8 +831,6 @@ impl AppAutoUpdater {
     archive_path: &Path,
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    let extractor = crate::extraction::Extractor::instance();
-
     let file_name = archive_path
       .file_name()
       .and_then(|name| name.to_str())
@@ -838,7 +838,7 @@ impl AppAutoUpdater {
 
     // Handle compound extensions like .tar.gz
     if file_name.ends_with(".tar.gz") {
-      return extractor.extract_tar_gz(archive_path, dest_dir).await;
+      return self.extractor.extract_tar_gz(archive_path, dest_dir).await;
     }
 
     let extension = archive_path
@@ -850,7 +850,7 @@ impl AppAutoUpdater {
       "dmg" => {
         #[cfg(target_os = "macos")]
         {
-          extractor.extract_dmg(archive_path, dest_dir).await
+          self.extractor.extract_dmg(archive_path, dest_dir).await
         }
         #[cfg(not(target_os = "macos"))]
         {
@@ -914,7 +914,7 @@ impl AppAutoUpdater {
           Err("AppImage installation is only supported on Linux".into())
         }
       }
-      "zip" => extractor.extract_zip(archive_path, dest_dir).await,
+      "zip" => self.extractor.extract_zip(archive_path, dest_dir).await,
       _ => Err(format!("Unsupported archive format: {extension}").into()),
     }
   }
@@ -1083,8 +1083,8 @@ impl AppAutoUpdater {
           fs::create_dir_all(&temp_extract_dir)?;
 
           // Extract ZIP file
-          let extractor = crate::extraction::Extractor::instance();
-          let extracted_path = extractor
+          let extracted_path = self
+            .extractor
             .extract_zip(installer_path, &temp_extract_dir)
             .await?;
 
@@ -1314,8 +1314,8 @@ impl AppAutoUpdater {
     fs::create_dir_all(&temp_extract_dir)?;
 
     // Extract tarball
-    let extractor = crate::extraction::Extractor::instance();
-    let extracted_path = extractor
+    let extracted_path = self
+      .extractor
       .extract_tar_gz(tarball_path, &temp_extract_dir)
       .await?;
 

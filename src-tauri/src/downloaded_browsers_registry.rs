@@ -5,6 +5,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
+use crate::geoip_downloader::GeoIPDownloader;
+use crate::profile::{BrowserProfile, ProfileManager};
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DownloadedBrowserInfo {
   pub browser: String,
@@ -19,12 +22,18 @@ struct RegistryData {
 
 pub struct DownloadedBrowsersRegistry {
   data: Mutex<RegistryData>,
+  profile_manager: &'static ProfileManager,
+  auto_updater: &'static crate::auto_updater::AutoUpdater,
+  geoip_downloader: &'static GeoIPDownloader,
 }
 
 impl DownloadedBrowsersRegistry {
   fn new() -> Self {
     Self {
       data: Mutex::new(RegistryData::default()),
+      profile_manager: ProfileManager::instance(),
+      auto_updater: crate::auto_updater::AutoUpdater::instance(),
+      geoip_downloader: GeoIPDownloader::instance(),
     }
   }
 
@@ -88,13 +97,61 @@ impl DownloadedBrowsersRegistry {
     data.browsers.get_mut(browser)?.remove(version)
   }
 
-  pub fn is_browser_downloaded(&self, browser: &str, version: &str) -> bool {
+  /// Check if browser is registered in the registry (without disk validation)
+  /// This method only checks the in-memory registry and does not validate file existence
+  pub fn is_browser_registered(&self, browser: &str, version: &str) -> bool {
     let data = self.data.lock().unwrap();
     data
       .browsers
       .get(browser)
       .and_then(|versions| versions.get(version))
       .is_some()
+  }
+
+  /// Check if browser is downloaded and files exist on disk
+  /// This method validates both registry entry and actual file existence
+  pub fn is_browser_downloaded(&self, browser: &str, version: &str) -> bool {
+    use crate::browser::{create_browser, BrowserType};
+
+    // First check if browser is registered
+    if !self.is_browser_registered(browser, version) {
+      return false;
+    }
+
+    // Always check if files actually exist on disk
+    let browser_type = match BrowserType::from_str(browser) {
+      Ok(bt) => bt,
+      Err(_) => {
+        println!("Invalid browser type: {browser}");
+        return false;
+      }
+    };
+    let browser_instance = create_browser(browser_type.clone());
+
+    // Get binaries directory
+    let binaries_dir = if let Some(base_dirs) = directories::BaseDirs::new() {
+      let mut path = base_dirs.data_local_dir().to_path_buf();
+      path.push(if cfg!(debug_assertions) {
+        "DonutBrowserDev"
+      } else {
+        "DonutBrowser"
+      });
+      path.push("binaries");
+      path
+    } else {
+      return false;
+    };
+
+    let files_exist = browser_instance.is_version_downloaded(version, &binaries_dir);
+
+    // If files don't exist but registry thinks they do, clean up the registry
+    if !files_exist {
+      println!("Cleaning up stale registry entry for {browser} {version}");
+      self.remove_browser(browser, version);
+      let _ = self.save(); // Don't fail if save fails, just log
+    }
+
+    files_exist
   }
 
   pub fn get_downloaded_versions(&self, browser: &str) -> Vec<String> {
@@ -196,7 +253,7 @@ impl DownloadedBrowsersRegistry {
   }
 
   /// Find and remove unused browser binaries that are not referenced by any active profiles
-  pub fn cleanup_unused_binaries(
+  fn cleanup_unused_binaries_internal(
     &self,
     active_profiles: &[(String, String)], // (browser, version) pairs
     running_profiles: &[(String, String)], // (browser, version) pairs for running profiles
@@ -208,14 +265,13 @@ impl DownloadedBrowsersRegistry {
     let mut cleaned_up = Vec::new();
 
     // Get pending update versions from auto updater
-    let pending_updates =
-      match crate::auto_updater::AutoUpdater::instance().get_pending_update_versions() {
-        Ok(updates) => updates,
-        Err(e) => {
-          eprintln!("Warning: Failed to get pending updates for cleanup: {e}");
-          std::collections::HashSet::new()
-        }
-      };
+    let pending_updates = match self.auto_updater.get_pending_update_versions() {
+      Ok(updates) => updates,
+      Err(e) => {
+        eprintln!("Warning: Failed to get pending updates for cleanup: {e}");
+        std::collections::HashSet::new()
+      }
+    };
 
     // Collect all downloaded browsers that are not in active profiles
     let mut to_remove = Vec::new();
@@ -293,11 +349,10 @@ impl DownloadedBrowsersRegistry {
   /// Verify that all registered browsers actually exist on disk and clean up stale entries
   pub fn verify_and_cleanup_stale_entries(
     &self,
-    browser_runner: &crate::browser_runner::BrowserRunner,
   ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
     use crate::browser::{create_browser, BrowserType};
     let mut cleaned_up = Vec::new();
-    let binaries_dir = browser_runner.get_binaries_dir();
+    let binaries_dir = self.profile_manager.get_binaries_dir();
 
     let browsers_to_check: Vec<(String, String)> = {
       let data = self.data.lock().unwrap();
@@ -418,7 +473,7 @@ impl DownloadedBrowsersRegistry {
   }
 
   /// Comprehensive cleanup that removes unused binaries and syncs registry
-  pub fn comprehensive_cleanup(
+  fn comprehensive_cleanup(
     &self,
     binaries_dir: &std::path::Path,
     active_profiles: &[(String, String)],
@@ -431,11 +486,12 @@ impl DownloadedBrowsersRegistry {
     cleanup_results.extend(sync_results);
 
     // Then perform the regular cleanup
-    let regular_cleanup = self.cleanup_unused_binaries(active_profiles, running_profiles)?;
+    let regular_cleanup =
+      self.cleanup_unused_binaries_internal(active_profiles, running_profiles)?;
     cleanup_results.extend(regular_cleanup);
 
     // Verify and cleanup stale entries
-    let stale_cleanup = self.verify_and_cleanup_stale_entries_simple(binaries_dir)?;
+    let stale_cleanup = self.verify_and_cleanup_stale_entries()?;
     cleanup_results.extend(stale_cleanup);
 
     // Clean up any remaining empty folders
@@ -599,19 +655,19 @@ impl DownloadedBrowsersRegistry {
   pub fn consolidate_browser_versions(
     &self,
     app_handle: &tauri::AppHandle,
-    browser_runner: &crate::browser_runner::BrowserRunner,
   ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
     println!("Starting browser version consolidation...");
 
-    let profiles = browser_runner
+    let profiles = self
+      .profile_manager
       .list_profiles()
       .map_err(|e| format!("Failed to list profiles: {e}"))?;
 
-    let binaries_dir = browser_runner.get_binaries_dir();
+    let binaries_dir = self.profile_manager.get_binaries_dir();
     let mut consolidated = Vec::new();
 
     // Group profiles by browser
-    let mut browser_profiles: std::collections::HashMap<String, Vec<_>> =
+    let mut browser_profiles: std::collections::HashMap<String, Vec<&BrowserProfile>> =
       std::collections::HashMap::new();
     for profile in &profiles {
       browser_profiles
@@ -620,7 +676,7 @@ impl DownloadedBrowsersRegistry {
         .push(profile);
     }
 
-    for (browser_name, browser_profiles) in browser_profiles {
+    for (browser_name, browser_profiles) in browser_profiles.iter() {
       // Find the latest version among all profiles for this browser
       let mut versions: Vec<&str> = browser_profiles
         .iter()
@@ -636,9 +692,9 @@ impl DownloadedBrowsersRegistry {
 
         // Check which profiles need to be updated to the latest version
         let mut profiles_to_update = Vec::new();
-        let mut older_versions_to_remove = std::collections::HashSet::new();
+        let mut older_versions_to_remove = std::collections::HashSet::<String>::new();
 
-        for profile in &browser_profiles {
+        for profile in browser_profiles {
           if profile.version != latest_version {
             // Only update if profile is not currently running
             if profile.process_id.is_none() {
@@ -655,7 +711,7 @@ impl DownloadedBrowsersRegistry {
 
         // Update profiles to latest version
         for profile in profiles_to_update {
-          match browser_runner.update_profile_version(
+          match self.profile_manager.update_profile_version(
             app_handle,
             &profile.id.to_string(),
             latest_version,
@@ -673,14 +729,14 @@ impl DownloadedBrowsersRegistry {
         }
 
         // Remove older version binaries that are no longer needed
-        for old_version in older_versions_to_remove {
-          let old_version_dir = binaries_dir.join(&browser_name).join(&old_version);
+        for old_version in &older_versions_to_remove {
+          let old_version_dir = binaries_dir.join(browser_name).join(old_version);
           if old_version_dir.exists() {
             match std::fs::remove_dir_all(&old_version_dir) {
               Ok(_) => {
                 consolidated.push(format!("Removed old version: {browser_name} {old_version}"));
                 // Also remove from registry
-                self.remove_browser(&browser_name, &old_version);
+                self.remove_browser(browser_name, old_version);
               }
               Err(e) => {
                 eprintln!(
@@ -707,36 +763,157 @@ impl DownloadedBrowsersRegistry {
     Ok(consolidated)
   }
 
-  /// Simplified version of verify_and_cleanup_stale_entries that doesn't need BrowserRunner
-  pub fn verify_and_cleanup_stale_entries_simple(
+  /// Check if browser binaries exist for all profiles and return missing binaries
+  pub async fn check_missing_binaries(
     &self,
-    binaries_dir: &std::path::Path,
-  ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
-    let mut cleaned_up = Vec::new();
-    let mut browsers_to_remove = Vec::new();
+  ) -> Result<Vec<(String, String, String)>, Box<dyn std::error::Error + Send + Sync>> {
+    use crate::browser::{create_browser, BrowserType};
+    // Get all profiles
+    let profiles = self
+      .profile_manager
+      .list_profiles()
+      .map_err(|e| format!("Failed to list profiles: {e}"))?;
+    let mut missing_binaries = Vec::new();
 
-    {
-      let data = self.data.lock().unwrap();
-      for (browser_str, versions) in &data.browsers {
-        for version in versions.keys() {
-          // Check if the browser directory actually exists
-          let browser_dir = binaries_dir.join(browser_str).join(version);
-          if !browser_dir.exists() {
-            browsers_to_remove.push((browser_str.clone(), version.clone()));
-          }
+    for profile in profiles {
+      let browser_type = match BrowserType::from_str(&profile.browser) {
+        Ok(bt) => bt,
+        Err(_) => {
+          println!(
+            "Warning: Invalid browser type '{}' for profile '{}'",
+            profile.browser, profile.name
+          );
+          continue;
+        }
+      };
+
+      let browser = create_browser(browser_type.clone());
+
+      // Get binaries directory
+      let binaries_dir = if let Some(base_dirs) = directories::BaseDirs::new() {
+        let mut path = base_dirs.data_local_dir().to_path_buf();
+        path.push(if cfg!(debug_assertions) {
+          "DonutBrowserDev"
+        } else {
+          "DonutBrowser"
+        });
+        path.push("binaries");
+        path
+      } else {
+        return Err("Failed to get base directories".into());
+      };
+
+      println!(
+        "binaries_dir: {binaries_dir:?} for profile: {}",
+        profile.name
+      );
+
+      // Check if the version is downloaded
+      if !browser.is_version_downloaded(&profile.version, &binaries_dir) {
+        missing_binaries.push((profile.name, profile.browser, profile.version));
+      }
+    }
+
+    Ok(missing_binaries)
+  }
+
+  /// Automatically download missing binaries for all profiles
+  pub async fn ensure_all_binaries_exist(
+    &self,
+    app_handle: &tauri::AppHandle,
+  ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    // First, clean up any stale registry entries
+    if let Ok(cleaned_up) = self.verify_and_cleanup_stale_entries() {
+      if !cleaned_up.is_empty() {
+        println!(
+          "Cleaned up {} stale registry entries: {}",
+          cleaned_up.len(),
+          cleaned_up.join(", ")
+        );
+      }
+    }
+
+    // Consolidate browser versions - keep only latest version per browser
+    if let Ok(consolidated) = self.consolidate_browser_versions(app_handle) {
+      if !consolidated.is_empty() {
+        println!("Version consolidation results:");
+        for action in &consolidated {
+          println!("  {action}");
         }
       }
     }
 
-    // Remove stale entries
-    for (browser_str, version) in browsers_to_remove {
-      if let Some(_removed) = self.remove_browser(&browser_str, &version) {
-        cleaned_up.push(format!(
-          "Removed stale registry entry for {browser_str} {version}"
-        ));
+    let missing_binaries = self.check_missing_binaries().await?;
+    let mut downloaded = Vec::new();
+
+    for (profile_name, browser, version) in missing_binaries {
+      println!("Downloading missing binary for profile '{profile_name}': {browser} {version}");
+
+      match crate::downloader::download_browser(
+        app_handle.clone(),
+        browser.clone(),
+        version.clone(),
+      )
+      .await
+      {
+        Ok(_) => {
+          downloaded.push(format!(
+            "{browser} {version} (for profile '{profile_name}')"
+          ));
+        }
+        Err(e) => {
+          eprintln!("Failed to download {browser} {version} for profile '{profile_name}': {e}");
+        }
       }
     }
 
+    // Check if GeoIP database is missing for Camoufox profiles
+    if self.geoip_downloader.check_missing_geoip_database()? {
+      println!("GeoIP database is missing for Camoufox profiles, downloading...");
+
+      match self
+        .geoip_downloader
+        .download_geoip_database(app_handle)
+        .await
+      {
+        Ok(_) => {
+          downloaded.push("GeoIP database for Camoufox".to_string());
+          println!("GeoIP database downloaded successfully");
+        }
+        Err(e) => {
+          eprintln!("Failed to download GeoIP database: {e}");
+          // Don't fail the entire operation if GeoIP download fails
+        }
+      }
+    }
+
+    Ok(downloaded)
+  }
+
+  /// Cleanup unused binaries based on active and running profiles
+  pub fn cleanup_unused_binaries(
+    &self,
+  ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    // Load current profiles using injected ProfileManager
+    let profiles = self
+      .profile_manager
+      .list_profiles()
+      .map_err(|e| format!("Failed to list profiles: {e}"))?;
+
+    // Get active browser versions (all profiles)
+    let active_versions = self.get_active_browser_versions(&profiles);
+
+    // Get running browser versions (only running profiles)
+    let running_versions = self.get_running_browser_versions(&profiles);
+
+    // Get binaries directory from profile manager
+    let binaries_dir = self.profile_manager.get_binaries_dir();
+
+    // Use comprehensive cleanup that syncs registry with disk and removes unused binaries
+    let cleaned_up =
+      self.comprehensive_cleanup(&binaries_dir, &active_versions, &running_versions)?;
+
+    // Registry is already saved by comprehensive_cleanup
     Ok(cleaned_up)
   }
 }
@@ -758,6 +935,7 @@ mod tests {
 
   #[test]
   fn test_registry_creation() {
+    // Create a mock profile manager for testing
     let registry = DownloadedBrowsersRegistry::new();
     let data = registry.data.lock().unwrap();
     assert!(data.browsers.is_empty());
@@ -774,9 +952,9 @@ mod tests {
 
     registry.add_browser(info.clone());
 
-    assert!(registry.is_browser_downloaded("firefox", "139.0"));
-    assert!(!registry.is_browser_downloaded("firefox", "140.0"));
-    assert!(!registry.is_browser_downloaded("chrome", "139.0"));
+    assert!(registry.is_browser_registered("firefox", "139.0"));
+    assert!(!registry.is_browser_registered("firefox", "140.0"));
+    assert!(!registry.is_browser_registered("chrome", "139.0"));
   }
 
   #[test]
@@ -819,10 +997,10 @@ mod tests {
     // Mark download started
     registry.mark_download_started("firefox", "139.0", PathBuf::from("/test/path"));
 
-    // Should NOT be considered downloaded until verification completes
+    // Should NOT be registered until verification completes
     assert!(
-      !registry.is_browser_downloaded("firefox", "139.0"),
-      "Browser should NOT be considered downloaded after marking as started (only after verification)"
+      !registry.is_browser_registered("firefox", "139.0"),
+      "Browser should NOT be registered after marking as started (only after verification)"
     );
 
     // Mark as completed (after verification)
@@ -830,10 +1008,10 @@ mod tests {
       .mark_download_completed("firefox", "139.0", PathBuf::from("/test/path"))
       .expect("Failed to mark download as completed");
 
-    // Should now be considered downloaded
+    // Should now be registered
     assert!(
-      registry.is_browser_downloaded("firefox", "139.0"),
-      "Browser should be considered downloaded after verification completes"
+      registry.is_browser_registered("firefox", "139.0"),
+      "Browser should be registered after verification completes"
     );
   }
 
@@ -848,8 +1026,8 @@ mod tests {
 
     registry.add_browser(info);
     assert!(
-      registry.is_browser_downloaded("firefox", "139.0"),
-      "Browser should be downloaded after adding"
+      registry.is_browser_registered("firefox", "139.0"),
+      "Browser should be registered after adding"
     );
 
     let removed = registry.remove_browser("firefox", "139.0");
@@ -858,8 +1036,8 @@ mod tests {
       "Remove operation should return the removed browser info"
     );
     assert!(
-      !registry.is_browser_downloaded("firefox", "139.0"),
-      "Browser should not be downloaded after removal"
+      !registry.is_browser_registered("firefox", "139.0"),
+      "Browser should not be registered after removal"
     );
   }
 
@@ -872,18 +1050,77 @@ mod tests {
 
     // Should NOT be registered until verification completes
     assert!(
-      !registry.is_browser_downloaded("zen", "twilight"),
+      !registry.is_browser_registered("zen", "twilight"),
       "Zen twilight version should NOT be registered until verification completes"
     );
 
     // Mark as completed (after verification)
-    registry.mark_download_completed("zen", "twilight", PathBuf::from("/test/zen-twilight"))
+    registry
+      .mark_download_completed("zen", "twilight", PathBuf::from("/test/zen-twilight"))
       .expect("Failed to mark twilight download as completed");
 
     // Now it should be registered
     assert!(
-      registry.is_browser_downloaded("zen", "twilight"),
+      registry.is_browser_registered("zen", "twilight"),
       "Zen twilight version should be registered after verification completes"
     );
   }
+
+  #[test]
+  fn test_is_browser_registered_vs_downloaded() {
+    let registry = DownloadedBrowsersRegistry::new();
+    let info = DownloadedBrowserInfo {
+      browser: "firefox".to_string(),
+      version: "139.0".to_string(),
+      file_path: PathBuf::from("/test/path"),
+    };
+
+    // Add browser to registry
+    registry.add_browser(info);
+
+    // Should be registered (in-memory check)
+    assert!(
+      registry.is_browser_registered("firefox", "139.0"),
+      "Browser should be registered after adding to registry"
+    );
+
+    // is_browser_downloaded should return false in test environment because files don't exist
+    // This tests the difference between registered (in registry) vs downloaded (files exist)
+    assert!(
+      !registry.is_browser_downloaded("firefox", "139.0"),
+      "Browser should not be considered downloaded when files don't exist on disk"
+    );
+  }
+}
+
+#[tauri::command]
+pub fn get_downloaded_browser_versions(browser_str: String) -> Result<Vec<String>, String> {
+  let registry = DownloadedBrowsersRegistry::instance();
+  Ok(registry.get_downloaded_versions(&browser_str))
+}
+
+#[tauri::command]
+pub fn is_browser_downloaded(browser_str: String, version: String) -> bool {
+  let registry = DownloadedBrowsersRegistry::instance();
+  registry.is_browser_downloaded(&browser_str, &version)
+}
+
+#[tauri::command]
+pub async fn check_missing_binaries() -> Result<Vec<(String, String, String)>, String> {
+  let registry = DownloadedBrowsersRegistry::instance();
+  registry
+    .check_missing_binaries()
+    .await
+    .map_err(|e| format!("Failed to check missing binaries: {e}"))
+}
+
+#[tauri::command]
+pub async fn ensure_all_binaries_exist(
+  app_handle: tauri::AppHandle,
+) -> Result<Vec<String>, String> {
+  let registry = DownloadedBrowsersRegistry::instance();
+  registry
+    .ensure_all_binaries_exist(&app_handle)
+    .await
+    .map_err(|e| format!("Failed to ensure all binaries exist: {e}"))
 }

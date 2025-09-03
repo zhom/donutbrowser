@@ -46,8 +46,9 @@ impl Default for BackgroundUpdateState {
   }
 }
 
+/// Extension of auto_updater.rs for background updates
 pub struct VersionUpdater {
-  version_service: &'static BrowserVersionManager,
+  browser_version_manager: &'static BrowserVersionManager,
   auto_updater: &'static AutoUpdater,
   app_handle: Option<tauri::AppHandle>,
 }
@@ -55,7 +56,7 @@ pub struct VersionUpdater {
 impl VersionUpdater {
   pub fn new() -> Self {
     Self {
-      version_service: BrowserVersionManager::instance(),
+      browser_version_manager: BrowserVersionManager::instance(),
       auto_updater: AutoUpdater::instance(),
       app_handle: None,
     }
@@ -263,7 +264,7 @@ impl VersionUpdater {
     &self,
     app_handle: &tauri::AppHandle,
   ) -> Result<Vec<BackgroundUpdateResult>, Box<dyn std::error::Error + Send + Sync>> {
-    let supported_browsers = self.version_service.get_supported_browsers();
+    let supported_browsers = self.browser_version_manager.get_supported_browsers();
     let total_browsers = supported_browsers.len();
     let mut results = Vec::new();
     let mut total_new_versions = 0;
@@ -374,7 +375,7 @@ impl VersionUpdater {
     browser: &str,
   ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
     self
-      .version_service
+      .browser_version_manager
       .update_browser_versions_incrementally(browser)
       .await
   }
@@ -453,6 +454,63 @@ pub async fn get_version_update_status() -> Result<(Option<u64>, u64), String> {
   let time_until_next = updater_guard.get_time_until_next_update().await;
 
   Ok((last_update, time_until_next))
+}
+
+#[tauri::command]
+pub async fn clear_all_version_cache_and_refetch(
+  app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+  let api_client = crate::api_client::ApiClient::instance();
+  let version_updater = VersionUpdater::new();
+
+  // Clear all cache first
+  api_client
+    .clear_all_cache()
+    .map_err(|e| format!("Failed to clear version cache: {e}"))?;
+
+  // Disable all browsers during the update process
+  let supported_browsers = version_updater
+    .browser_version_manager
+    .get_supported_browsers();
+
+  // Load current state and disable all browsers
+  let mut state = version_updater
+    .auto_updater
+    .load_auto_update_state()
+    .map_err(|e| format!("Failed to load auto update state: {e}"))?;
+  for browser in &supported_browsers {
+    state.disabled_browsers.insert(browser.clone());
+  }
+  version_updater
+    .auto_updater
+    .save_auto_update_state(&state)
+    .map_err(|e| format!("Failed to save auto update state: {e}"))?;
+
+  let updater = get_version_updater();
+  let updater_guard = updater.lock().await;
+
+  let result = updater_guard
+    .trigger_manual_update(&app_handle)
+    .await
+    .map_err(|e| format!("Failed to trigger version update: {e}"));
+
+  // Re-enable all browsers after the update completes (regardless of success/failure)
+  let mut final_state = version_updater
+    .auto_updater
+    .load_auto_update_state()
+    .unwrap_or_default();
+  for browser in &supported_browsers {
+    final_state.disabled_browsers.remove(browser);
+  }
+  if let Err(e) = version_updater
+    .auto_updater
+    .save_auto_update_state(&final_state)
+  {
+    eprintln!("Warning: Failed to re-enable browsers after cache clear: {e}");
+  }
+
+  result?;
+  Ok(())
 }
 
 #[cfg(test)]
@@ -607,7 +665,10 @@ mod tests {
 
     // Should have valid references to services
     assert!(
-      !std::ptr::eq(updater.version_service as *const _, std::ptr::null()),
+      !std::ptr::eq(
+        updater.browser_version_manager as *const _,
+        std::ptr::null()
+      ),
       "Version service should not be null"
     );
     assert!(

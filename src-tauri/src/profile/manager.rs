@@ -1,5 +1,7 @@
+use crate::api_client::is_browser_version_nightly;
 use crate::browser::{create_browser, BrowserType, ProxySettings};
-use crate::camoufox::CamoufoxConfig;
+use crate::camoufox_manager::CamoufoxConfig;
+use crate::downloaded_browsers_registry::DownloadedBrowsersRegistry;
 use crate::profile::types::BrowserProfile;
 use crate::proxy_manager::PROXY_MANAGER;
 use directories::BaseDirs;
@@ -10,12 +12,14 @@ use tauri::Emitter;
 
 pub struct ProfileManager {
   base_dirs: BaseDirs,
+  camoufox_manager: &'static crate::camoufox_manager::CamoufoxManager,
 }
 
 impl ProfileManager {
   fn new() -> Self {
     Self {
       base_dirs: BaseDirs::new().expect("Failed to get base directories"),
+      camoufox_manager: crate::camoufox_manager::CamoufoxManager::instance(),
     }
   }
 
@@ -31,6 +35,17 @@ impl ProfileManager {
       "DonutBrowser"
     });
     path.push("profiles");
+    path
+  }
+
+  pub fn get_binaries_dir(&self) -> PathBuf {
+    let mut path = self.base_dirs.data_local_dir().to_path_buf();
+    path.push(if cfg!(debug_assertions) {
+      "DonutBrowserDev"
+    } else {
+      "DonutBrowser"
+    });
+    path.push("binaries");
     path
   }
 
@@ -72,13 +87,12 @@ impl ProfileManager {
     let final_camoufox_config = if browser == "camoufox" {
       let mut config = camoufox_config.unwrap_or_else(|| {
         println!("Creating default Camoufox config for profile: {name}");
-        crate::camoufox::CamoufoxConfig::default()
+        crate::camoufox_manager::CamoufoxConfig::default()
       });
 
       // Always ensure executable_path is set to the user's binary location
       if config.executable_path.is_none() {
-        let browser_runner = crate::browser_runner::BrowserRunner::instance();
-        let mut browser_dir = browser_runner.get_binaries_dir();
+        let mut browser_dir = self.get_binaries_dir();
         browser_dir.push(browser);
         browser_dir.push(version);
 
@@ -137,7 +151,6 @@ impl ProfileManager {
         println!("Generating fingerprint for Camoufox profile: {name}");
 
         // Use the camoufox launcher to generate the config
-        let camoufox_launcher = crate::camoufox::CamoufoxNodecarLauncher::instance();
 
         // Create a temporary profile for fingerprint generation
         let temp_profile = BrowserProfile {
@@ -154,7 +167,8 @@ impl ProfileManager {
           tags: Vec::new(),
         };
 
-        match camoufox_launcher
+        match self
+          .camoufox_manager
           .generate_fingerprint_config(app_handle, &temp_profile, &config)
           .await
         {
@@ -236,6 +250,11 @@ impl ProfileManager {
 
     let json = serde_json::to_string_pretty(profile)?;
     fs::write(profile_file, json)?;
+
+    // Update tag suggestions after any save
+    let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
+      let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
+    });
 
     Ok(())
   }
@@ -355,6 +374,11 @@ impl ProfileManager {
       let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
     });
 
+    // Always perform cleanup after profile deletion to remove unused binaries
+    if let Err(e) = DownloadedBrowsersRegistry::instance().cleanup_unused_binaries() {
+      println!("Warning: Failed to cleanup unused binaries after profile deletion: {e}");
+    }
+
     // Emit profile deletion event
     if let Err(e) = app_handle.emit("profiles-changed", ()) {
       println!("Warning: Failed to emit profiles-changed event: {e}");
@@ -399,12 +423,11 @@ impl ProfileManager {
     profile.version = version.to_string();
 
     // Update the release_type based on the version and browser
-    profile.release_type =
-      if crate::api_client::is_browser_version_nightly(&profile.browser, version, None) {
-        "nightly".to_string()
-      } else {
-        "stable".to_string()
-      };
+    profile.release_type = if is_browser_version_nightly(&profile.browser, version, None) {
+      "nightly".to_string()
+    } else {
+      "stable".to_string()
+    };
 
     // Save the updated profile
     self.save_profile(&profile)?;
@@ -866,9 +889,7 @@ impl ProfileManager {
     app_handle: &tauri::AppHandle,
     profile: &BrowserProfile,
   ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-    use crate::camoufox::CamoufoxNodecarLauncher;
-
-    let launcher = CamoufoxNodecarLauncher::instance();
+    let launcher = self.camoufox_manager;
     let profiles_dir = self.get_profiles_dir();
     let profile_data_path = profile.get_profile_data_path(&profiles_dir);
     let profile_path_str = profile_data_path.to_string_lossy();
@@ -1010,17 +1031,6 @@ impl ProfileManager {
       let _ = (exe_name, cmd, browser_type);
       false
     }
-  }
-
-  fn get_binaries_dir(&self) -> PathBuf {
-    let mut path = self.base_dirs.data_local_dir().to_path_buf();
-    path.push(if cfg!(debug_assertions) {
-      "DonutBrowserDev"
-    } else {
-      "DonutBrowser"
-    });
-    path.push("binaries");
-    path
   }
 
   fn get_common_firefox_preferences(&self) -> Vec<String> {
@@ -1203,23 +1213,6 @@ mod tests {
   }
 
   #[test]
-  fn test_list_profiles_empty() {
-    let (manager, _temp_dir) = create_test_profile_manager();
-
-    let result = manager.list_profiles();
-    assert!(
-      result.is_ok(),
-      "Should successfully list profiles even when empty"
-    );
-
-    let profiles = result.unwrap();
-    assert!(
-      profiles.is_empty(),
-      "Should return empty vector when no profiles exist"
-    );
-  }
-
-  #[test]
   fn test_get_common_firefox_preferences() {
     let (manager, _temp_dir) = create_test_profile_manager();
 
@@ -1324,7 +1317,139 @@ mod tests {
   }
 }
 
+#[allow(clippy::too_many_arguments)]
+#[tauri::command]
+pub async fn create_browser_profile_with_group(
+  app_handle: tauri::AppHandle,
+  name: String,
+  browser: String,
+  version: String,
+  release_type: String,
+  proxy_id: Option<String>,
+  camoufox_config: Option<CamoufoxConfig>,
+  group_id: Option<String>,
+) -> Result<BrowserProfile, String> {
+  let profile_manager = ProfileManager::instance();
+  profile_manager
+    .create_profile_with_group(
+      &app_handle,
+      &name,
+      &browser,
+      &version,
+      &release_type,
+      proxy_id,
+      camoufox_config,
+      group_id,
+    )
+    .await
+    .map_err(|e| format!("Failed to create profile: {e}"))
+}
+
+#[tauri::command]
+pub fn list_browser_profiles() -> Result<Vec<BrowserProfile>, String> {
+  let profile_manager = ProfileManager::instance();
+  profile_manager
+    .list_profiles()
+    .map_err(|e| format!("Failed to list profiles: {e}"))
+}
+
+#[tauri::command]
+pub async fn update_profile_proxy(
+  app_handle: tauri::AppHandle,
+  profile_id: String,
+  proxy_id: Option<String>,
+) -> Result<BrowserProfile, String> {
+  let profile_manager = ProfileManager::instance();
+  profile_manager
+    .update_profile_proxy(app_handle, &profile_id, proxy_id)
+    .await
+    .map_err(|e| format!("Failed to update profile: {e}"))
+}
+
+#[tauri::command]
+pub fn update_profile_tags(
+  app_handle: tauri::AppHandle,
+  profile_id: String,
+  tags: Vec<String>,
+) -> Result<BrowserProfile, String> {
+  let profile_manager = ProfileManager::instance();
+  profile_manager
+    .update_profile_tags(&app_handle, &profile_id, tags)
+    .map_err(|e| format!("Failed to update profile tags: {e}"))
+}
+
+#[tauri::command]
+pub async fn check_browser_status(
+  app_handle: tauri::AppHandle,
+  profile: BrowserProfile,
+) -> Result<bool, String> {
+  let profile_manager = ProfileManager::instance();
+  profile_manager
+    .check_browser_status(app_handle, &profile)
+    .await
+    .map_err(|e| format!("Failed to check browser status: {e}"))
+}
+
+#[tauri::command]
+pub fn rename_profile(
+  app_handle: tauri::AppHandle,
+  profile_id: String,
+  new_name: String,
+) -> Result<BrowserProfile, String> {
+  let profile_manager = ProfileManager::instance();
+  profile_manager
+    .rename_profile(&app_handle, &profile_id, &new_name)
+    .map_err(|e| format!("Failed to rename profile: {e}"))
+}
+
+#[allow(clippy::too_many_arguments)]
+#[tauri::command]
+pub async fn create_browser_profile_new(
+  app_handle: tauri::AppHandle,
+  name: String,
+  browser_str: String,
+  version: String,
+  release_type: String,
+  proxy_id: Option<String>,
+  camoufox_config: Option<CamoufoxConfig>,
+  group_id: Option<String>,
+) -> Result<BrowserProfile, String> {
+  let browser_type =
+    BrowserType::from_str(&browser_str).map_err(|e| format!("Invalid browser type: {e}"))?;
+  create_browser_profile_with_group(
+    app_handle,
+    name,
+    browser_type.as_str().to_string(),
+    version,
+    release_type,
+    proxy_id,
+    camoufox_config,
+    group_id,
+  )
+  .await
+}
+
+#[tauri::command]
+pub async fn update_camoufox_config(
+  app_handle: tauri::AppHandle,
+  profile_id: String,
+  config: CamoufoxConfig,
+) -> Result<(), String> {
+  let profile_manager = ProfileManager::instance();
+  profile_manager
+    .update_camoufox_config(app_handle, &profile_id, config)
+    .await
+    .map_err(|e| format!("Failed to update Camoufox config: {e}"))
+}
+
 // Global singleton instance
+#[tauri::command]
+pub fn delete_profile(app_handle: tauri::AppHandle, profile_id: String) -> Result<(), String> {
+  ProfileManager::instance()
+    .delete_profile(&app_handle, &profile_id)
+    .map_err(|e| format!("Failed to delete profile: {e}"))
+}
+
 lazy_static::lazy_static! {
   static ref PROFILE_MANAGER: ProfileManager = ProfileManager::new();
 }

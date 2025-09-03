@@ -1,3 +1,4 @@
+use crate::camoufox_manager::CamoufoxConfig;
 use crate::group_manager::GROUP_MANAGER;
 use crate::profile::manager::ProfileManager;
 use crate::proxy_manager::PROXY_MANAGER;
@@ -509,8 +510,7 @@ async fn update_profile(
   }
 
   if let Some(camoufox_config) = request.camoufox_config {
-    let config: Result<crate::camoufox::CamoufoxConfig, _> =
-      serde_json::from_value(camoufox_config);
+    let config: Result<CamoufoxConfig, _> = serde_json::from_value(camoufox_config);
     match config {
       Ok(config) => {
         if profile_manager
@@ -830,15 +830,12 @@ async fn download_browser_api(
   State(state): State<ApiServerState>,
   Json(request): Json<DownloadBrowserRequest>,
 ) -> Result<Json<DownloadBrowserResponse>, StatusCode> {
-  let browser_runner = crate::browser_runner::BrowserRunner::instance();
-
-  match browser_runner
-    .download_browser_impl(
-      state.app_handle.clone(),
-      request.browser.clone(),
-      request.version.clone(),
-    )
-    .await
+  match crate::downloader::download_browser(
+    state.app_handle.clone(),
+    request.browser.clone(),
+    request.version.clone(),
+  )
+  .await
   {
     Ok(_) => Ok(Json(DownloadBrowserResponse {
       browser: request.browser,
@@ -870,7 +867,6 @@ async fn check_browser_downloaded(
   Path((browser, version)): Path<(String, String)>,
   State(_state): State<ApiServerState>,
 ) -> Result<Json<bool>, StatusCode> {
-  let browser_runner = crate::browser_runner::BrowserRunner::instance();
-  let is_downloaded = browser_runner.is_browser_downloaded(&browser, &version);
+  let is_downloaded = crate::downloaded_browsers_registry::is_browser_downloaded(browser, version);
   Ok(Json(is_downloaded))
 }

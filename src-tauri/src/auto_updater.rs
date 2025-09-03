@@ -1,6 +1,5 @@
-use crate::api_client::is_browser_version_nightly;
 use crate::browser_version_manager::{BrowserVersionInfo, BrowserVersionManager};
-use crate::profile::BrowserProfile;
+use crate::profile::{BrowserProfile, ProfileManager};
 use crate::settings_manager::SettingsManager;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -29,15 +28,17 @@ pub struct AutoUpdateState {
 }
 
 pub struct AutoUpdater {
-  version_service: &'static BrowserVersionManager,
+  browser_version_manager: &'static BrowserVersionManager,
   settings_manager: &'static SettingsManager,
+  profile_manager: &'static ProfileManager,
 }
 
 impl AutoUpdater {
   fn new() -> Self {
     Self {
-      version_service: BrowserVersionManager::instance(),
+      browser_version_manager: BrowserVersionManager::instance(),
       settings_manager: SettingsManager::instance(),
+      profile_manager: ProfileManager::instance(),
     }
   }
 
@@ -53,8 +54,8 @@ impl AutoUpdater {
     let mut browser_versions: HashMap<String, Vec<BrowserVersionInfo>> = HashMap::new();
 
     // Group profiles by browser
-    let profile_manager = crate::profile::ProfileManager::instance();
-    let profiles = profile_manager
+    let profiles = self
+      .profile_manager
       .list_profiles()
       .map_err(|e| format!("Failed to list profiles: {e}"))?;
     let mut browser_profiles: HashMap<String, Vec<BrowserProfile>> = HashMap::new();
@@ -62,7 +63,7 @@ impl AutoUpdater {
     for profile in profiles {
       // Only check supported browsers
       if !self
-        .version_service
+        .browser_version_manager
         .is_browser_supported(&profile.browser)
         .unwrap_or(false)
       {
@@ -78,14 +79,14 @@ impl AutoUpdater {
     for (browser, profiles) in browser_profiles {
       // Get cached versions first, then try to fetch if needed
       let versions = if let Some(cached) = self
-        .version_service
+        .browser_version_manager
         .get_cached_browser_versions_detailed(&browser)
       {
         cached
-      } else if self.version_service.should_update_cache(&browser) {
+      } else if self.browser_version_manager.should_update_cache(&browser) {
         // Try to fetch fresh versions
         match self
-          .version_service
+          .browser_version_manager
           .fetch_browser_versions_detailed(&browser, false)
           .await
         {
@@ -156,8 +157,9 @@ impl AutoUpdater {
 
             // Spawn async task to handle the download and auto-update
             tokio::spawn(async move {
+              // TODO: update the logic to use the downloaded browsers registry instance instead of the static method
               // First, check if browser already exists
-              match crate::browser_runner::is_browser_downloaded(
+              match crate::downloaded_browsers_registry::is_browser_downloaded(
                 browser.clone(),
                 new_version.clone(),
               ) {
@@ -165,12 +167,13 @@ impl AutoUpdater {
                   println!("Browser {browser} {new_version} already downloaded, proceeding to auto-update profiles");
 
                   // Browser already exists, go straight to profile update
-                  match crate::auto_updater::complete_browser_update_with_auto_update(
-                    app_handle_clone,
-                    browser.clone(),
-                    new_version.clone(),
-                  )
-                  .await
+                  match AutoUpdater::instance()
+                    .complete_browser_update_with_auto_update(
+                      &app_handle_clone,
+                      &browser.clone(),
+                      &new_version.clone(),
+                    )
+                    .await
                   {
                     Ok(updated_profiles) => {
                       println!(
@@ -223,7 +226,8 @@ impl AutoUpdater {
     available_versions: &[BrowserVersionInfo],
   ) -> Result<Option<UpdateNotification>, Box<dyn std::error::Error + Send + Sync>> {
     let current_version = &profile.version;
-    let is_current_nightly = is_browser_version_nightly(&profile.browser, current_version, None);
+    let is_current_nightly =
+      crate::api_client::is_browser_version_nightly(&profile.browser, current_version, None);
 
     // Find the best available update
     let best_update = available_versions
@@ -231,7 +235,8 @@ impl AutoUpdater {
       .filter(|v| {
         // Only consider versions newer than current
         self.is_version_newer(&v.version, current_version)
-          && is_browser_version_nightly(&profile.browser, &v.version, None) == is_current_nightly
+          && crate::api_client::is_browser_version_nightly(&profile.browser, &v.version, None)
+            == is_current_nightly
       })
       .max_by(|a, b| self.compare_versions(&a.version, &b.version));
 
@@ -298,8 +303,8 @@ impl AutoUpdater {
     browser: &str,
     new_version: &str,
   ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
-    let profile_manager = crate::profile::ProfileManager::instance();
-    let profiles = profile_manager
+    let profiles = self
+      .profile_manager
       .list_profiles()
       .map_err(|e| format!("Failed to list profiles: {e}"))?;
 
@@ -316,7 +321,10 @@ impl AutoUpdater {
         // Check if this is an update (newer version)
         if self.is_version_newer(new_version, &profile.version) {
           // Update the profile version
-          match profile_manager.update_profile_version(app_handle, &profile.name, new_version) {
+          match self
+            .profile_manager
+            .update_profile_version(app_handle, &profile.name, new_version)
+          {
             Ok(_) => {
               updated_profiles.push(profile.name);
             }
@@ -350,44 +358,7 @@ impl AutoUpdater {
     state.auto_update_downloads.remove(&download_key);
     self.save_auto_update_state(&state)?;
 
-    // Always perform cleanup after auto-update - don't fail the update if cleanup fails
-    if let Err(e) = self.cleanup_unused_binaries_internal() {
-      eprintln!("Warning: Failed to cleanup unused binaries after auto-update: {e}");
-    }
-
     Ok(updated_profiles)
-  }
-
-  /// Internal method to cleanup unused binaries (used by auto-cleanup)
-  fn cleanup_unused_binaries_internal(
-    &self,
-  ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
-    // Load current profiles
-    let profile_manager = crate::profile::ProfileManager::instance();
-    let profiles = profile_manager
-      .list_profiles()
-      .map_err(|e| format!("Failed to load profiles: {e}"))?;
-
-    // Get registry instance
-    let registry = crate::downloaded_browsers::DownloadedBrowsersRegistry::instance();
-
-    // Get active browser versions (all profiles)
-    let active_versions = registry.get_active_browser_versions(&profiles);
-
-    // Get running browser versions (only running profiles)
-    let running_versions = registry.get_running_browser_versions(&profiles);
-
-    // Cleanup unused binaries (but keep running ones)
-    let cleaned_up = registry
-      .cleanup_unused_binaries(&active_versions, &running_versions)
-      .map_err(|e| format!("Failed to cleanup unused binaries: {e}"))?;
-
-    // Save updated registry
-    registry
-      .save()
-      .map_err(|e| format!("Failed to save registry: {e}"))?;
-
-    Ok(cleaned_up)
   }
 
   /// Check if browser is disabled due to ongoing update

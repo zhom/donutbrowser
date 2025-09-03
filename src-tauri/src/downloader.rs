@@ -2,11 +2,18 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use tauri::Emitter;
 
 use crate::api_client::ApiClient;
-use crate::browser::BrowserType;
+use crate::browser::{create_browser, BrowserType};
 use crate::browser_version_manager::DownloadInfo;
+
+// Global state to track currently downloading browser-version pairs
+lazy_static::lazy_static! {
+  static ref DOWNLOADING_BROWSERS: std::sync::Arc<Mutex<std::collections::HashSet<String>>> =
+    std::sync::Arc::new(Mutex::new(std::collections::HashSet::new()));
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DownloadProgress {
@@ -23,6 +30,10 @@ pub struct DownloadProgress {
 pub struct Downloader {
   client: Client,
   api_client: &'static ApiClient,
+  registry: &'static crate::downloaded_browsers_registry::DownloadedBrowsersRegistry,
+  version_service: &'static crate::browser_version_manager::BrowserVersionManager,
+  extractor: &'static crate::extraction::Extractor,
+  geoip_downloader: &'static crate::geoip_downloader::GeoIPDownloader,
 }
 
 impl Downloader {
@@ -30,6 +41,10 @@ impl Downloader {
     Self {
       client: Client::new(),
       api_client: ApiClient::instance(),
+      registry: crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance(),
+      version_service: crate::browser_version_manager::BrowserVersionManager::instance(),
+      extractor: crate::extraction::Extractor::instance(),
+      geoip_downloader: crate::geoip_downloader::GeoIPDownloader::instance(),
     }
   }
 
@@ -42,6 +57,10 @@ impl Downloader {
     Self {
       client: Client::new(),
       api_client: ApiClient::instance(),
+      registry: crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance(),
+      version_service: crate::browser_version_manager::BrowserVersionManager::instance(),
+      extractor: crate::extraction::Extractor::instance(),
+      geoip_downloader: crate::geoip_downloader::GeoIPDownloader::instance(),
     }
   }
 
@@ -573,6 +592,327 @@ impl Downloader {
 
     Ok(file_path)
   }
+
+  /// Download a browser binary, verify it, and register it in the downloaded browsers registry
+  pub async fn download_browser_full(
+    &self,
+    app_handle: &tauri::AppHandle,
+    browser_str: String,
+    version: String,
+  ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    // Check if this browser-version pair is already being downloaded
+    let download_key = format!("{browser_str}-{version}");
+    {
+      let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
+      if downloading.contains(&download_key) {
+        return Err(format!("Browser '{browser_str}' version '{version}' is already being downloaded. Please wait for the current download to complete.").into());
+      }
+      // Mark this browser-version pair as being downloaded
+      downloading.insert(download_key.clone());
+    }
+
+    let browser_type =
+      BrowserType::from_str(&browser_str).map_err(|e| format!("Invalid browser type: {e}"))?;
+    let browser = create_browser(browser_type.clone());
+
+    // Use injected registry instance
+
+    // Get binaries directory - we need to get it from somewhere
+    // This is a bit tricky since we don't have access to BrowserRunner's get_binaries_dir
+    // We'll need to replicate this logic
+    let binaries_dir = if let Some(base_dirs) = directories::BaseDirs::new() {
+      let mut path = base_dirs.data_local_dir().to_path_buf();
+      path.push(if cfg!(debug_assertions) {
+        "DonutBrowserDev"
+      } else {
+        "DonutBrowser"
+      });
+      path.push("binaries");
+      path
+    } else {
+      return Err("Failed to get base directories".into());
+    };
+
+    // Check if registry thinks it's downloaded, but also verify files actually exist
+    if self.registry.is_browser_downloaded(&browser_str, &version) {
+      let actually_exists = browser.is_version_downloaded(&version, &binaries_dir);
+
+      if actually_exists {
+        // Remove from downloading set since it's already downloaded
+        let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
+        downloading.remove(&download_key);
+        return Ok(version);
+      } else {
+        // Registry says it's downloaded but files don't exist - clean up registry
+        println!("Registry indicates {browser_str} {version} is downloaded, but files are missing. Cleaning up registry entry.");
+        self.registry.remove_browser(&browser_str, &version);
+        self
+          .registry
+          .save()
+          .map_err(|e| format!("Failed to save cleaned registry: {e}"))?;
+      }
+    }
+
+    // Check if browser is supported on current platform before attempting download
+    if !self
+      .version_service
+      .is_browser_supported(&browser_str)
+      .unwrap_or(false)
+    {
+      // Remove from downloading set on error
+      let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
+      downloading.remove(&download_key);
+      return Err(
+        format!(
+          "Browser '{}' is not supported on your platform ({} {}). Supported browsers: {}",
+          browser_str,
+          std::env::consts::OS,
+          std::env::consts::ARCH,
+          self.version_service.get_supported_browsers().join(", ")
+        )
+        .into(),
+      );
+    }
+
+    let download_info = self
+      .version_service
+      .get_download_info(&browser_str, &version)
+      .map_err(|e| format!("Failed to get download info: {e}"))?;
+
+    // Create browser directory
+    let mut browser_dir = binaries_dir.clone();
+    browser_dir.push(&browser_str);
+    browser_dir.push(&version);
+
+    std::fs::create_dir_all(&browser_dir)
+      .map_err(|e| format!("Failed to create browser directory: {e}"))?;
+
+    // Mark download as started (but don't add to registry yet)
+    self
+      .registry
+      .mark_download_started(&browser_str, &version, browser_dir.clone());
+
+    // Attempt to download the archive. If the download fails but an archive with the
+    // expected filename already exists (manual download), continue using that file.
+    let download_path: PathBuf = match self
+      .download_browser(
+        app_handle,
+        browser_type.clone(),
+        &version,
+        &download_info,
+        &browser_dir,
+      )
+      .await
+    {
+      Ok(path) => path,
+      Err(e) => {
+        // Do NOT continue with extraction on failed downloads. Partial files may exist but are invalid.
+        // Clean registry entry and stop here so the UI can show a single, clear error.
+        let _ = self.registry.remove_browser(&browser_str, &version);
+        let _ = self.registry.save();
+        let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
+        downloading.remove(&download_key);
+        return Err(format!("Failed to download browser: {e}").into());
+      }
+    };
+
+    // Use the extraction module
+    if download_info.is_archive {
+      match self
+        .extractor
+        .extract_browser(
+          app_handle,
+          browser_type.clone(),
+          &version,
+          &download_path,
+          &browser_dir,
+        )
+        .await
+      {
+        Ok(_) => {
+          // Do not remove the archive here. We keep it until verification succeeds.
+        }
+        Err(e) => {
+          // Do not remove the archive or extracted files. Just drop the registry entry
+          // so it won't be reported as downloaded.
+          let _ = self.registry.remove_browser(&browser_str, &version);
+          let _ = self.registry.save();
+          // Remove browser-version pair from downloading set on error
+          {
+            let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
+            downloading.remove(&download_key);
+          }
+          return Err(format!("Failed to extract browser: {e}").into());
+        }
+      }
+
+      // Give filesystem a moment to settle after extraction
+      tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    }
+
+    // Emit verification progress
+    let progress = DownloadProgress {
+      browser: browser_str.clone(),
+      version: version.clone(),
+      downloaded_bytes: 0,
+      total_bytes: None,
+      percentage: 100.0,
+      speed_bytes_per_sec: 0.0,
+      eta_seconds: None,
+      stage: "verifying".to_string(),
+    };
+    let _ = app_handle.emit("download-progress", &progress);
+
+    // Verify the browser was downloaded correctly
+    println!("Verifying download for browser: {browser_str}, version: {version}");
+
+    // Use the browser's own verification method
+    if !browser.is_version_downloaded(&version, &binaries_dir) {
+      // Provide detailed error information for debugging
+      let browser_dir = binaries_dir.join(&browser_str).join(&version);
+      let mut error_details = format!(
+        "Browser download completed but verification failed for {} {}. Expected directory: {}",
+        browser_str,
+        version,
+        browser_dir.display()
+      );
+
+      // List what files actually exist
+      if browser_dir.exists() {
+        error_details.push_str("\nFiles found in directory:");
+        if let Ok(entries) = std::fs::read_dir(&browser_dir) {
+          for entry in entries.flatten() {
+            let path = entry.path();
+            let file_type = if path.is_dir() { "DIR" } else { "FILE" };
+            error_details.push_str(&format!("\n  {} {}", file_type, path.display()));
+          }
+        } else {
+          error_details.push_str("\n  (Could not read directory contents)");
+        }
+      } else {
+        error_details.push_str("\nDirectory does not exist!");
+      }
+
+      // For Camoufox on Linux, provide specific expected files
+      if browser_str == "camoufox" && cfg!(target_os = "linux") {
+        let camoufox_subdir = browser_dir.join("camoufox");
+        error_details.push_str("\nExpected Camoufox executable locations:");
+        error_details.push_str(&format!("\n  {}/camoufox-bin", camoufox_subdir.display()));
+        error_details.push_str(&format!("\n  {}/camoufox", camoufox_subdir.display()));
+
+        if camoufox_subdir.exists() {
+          error_details.push_str(&format!(
+            "\nCamoufox subdirectory exists: {}",
+            camoufox_subdir.display()
+          ));
+          if let Ok(entries) = std::fs::read_dir(&camoufox_subdir) {
+            error_details.push_str("\nFiles in camoufox subdirectory:");
+            for entry in entries.flatten() {
+              let path = entry.path();
+              let file_type = if path.is_dir() { "DIR" } else { "FILE" };
+              error_details.push_str(&format!("\n  {} {}", file_type, path.display()));
+            }
+          }
+        } else {
+          error_details.push_str(&format!(
+            "\nCamoufox subdirectory does not exist: {}",
+            camoufox_subdir.display()
+          ));
+        }
+      }
+
+      // Do not delete files on verification failure; keep archive for manual retry.
+      let _ = self.registry.remove_browser(&browser_str, &version);
+      let _ = self.registry.save();
+      // Remove browser-version pair from downloading set on verification failure
+      {
+        let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
+        downloading.remove(&download_key);
+      }
+      return Err(error_details.into());
+    }
+
+    // Mark completion in registry - only now add to registry after verification
+    if let Err(e) =
+      self
+        .registry
+        .mark_download_completed(&browser_str, &version, browser_dir.clone())
+    {
+      eprintln!("Warning: Could not mark {browser_str} {version} as completed in registry: {e}");
+    }
+    self
+      .registry
+      .save()
+      .map_err(|e| format!("Failed to save registry: {e}"))?;
+
+    // Now that verification succeeded, remove the archive file if it exists
+    if download_info.is_archive {
+      let archive_path = browser_dir.join(&download_info.filename);
+      if archive_path.exists() {
+        if let Err(e) = std::fs::remove_file(&archive_path) {
+          println!("Warning: Could not delete archive file after verification: {e}");
+        }
+      }
+    }
+
+    // If this is Camoufox, automatically download GeoIP database
+    if browser_str == "camoufox" {
+      // Check if GeoIP database is already available
+      if !crate::geoip_downloader::GeoIPDownloader::is_geoip_database_available() {
+        println!("Downloading GeoIP database for Camoufox...");
+
+        match self
+          .geoip_downloader
+          .download_geoip_database(app_handle)
+          .await
+        {
+          Ok(_) => {
+            println!("GeoIP database downloaded successfully");
+          }
+          Err(e) => {
+            eprintln!("Failed to download GeoIP database: {e}");
+            // Don't fail the browser download if GeoIP download fails
+          }
+        }
+      } else {
+        println!("GeoIP database already available");
+      }
+    }
+
+    // Emit completion
+    let progress = DownloadProgress {
+      browser: browser_str.clone(),
+      version: version.clone(),
+      downloaded_bytes: 0,
+      total_bytes: None,
+      percentage: 100.0,
+      speed_bytes_per_sec: 0.0,
+      eta_seconds: Some(0.0),
+      stage: "completed".to_string(),
+    };
+    let _ = app_handle.emit("download-progress", &progress);
+
+    // Remove browser-version pair from downloading set
+    {
+      let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
+      downloading.remove(&download_key);
+    }
+
+    Ok(version)
+  }
+}
+
+#[tauri::command]
+pub async fn download_browser(
+  app_handle: tauri::AppHandle,
+  browser_str: String,
+  version: String,
+) -> Result<String, String> {
+  let downloader = Downloader::instance();
+  downloader
+    .download_browser_full(&app_handle, browser_str, version)
+    .await
+    .map_err(|e| format!("Failed to download browser: {e}"))
 }
 
 #[cfg(test)]

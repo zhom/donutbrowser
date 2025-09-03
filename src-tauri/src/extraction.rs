@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use tauri::Emitter;
 
 use crate::browser::BrowserType;
-use crate::download::DownloadProgress;
+use crate::downloader::DownloadProgress;
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use std::process::Command;

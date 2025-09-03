@@ -1,4 +1,5 @@
 use crate::browser::GithubRelease;
+use crate::profile::manager::ProfileManager;
 use directories::BaseDirs;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -74,6 +75,25 @@ impl GeoIPDownloader {
     } else {
       false
     }
+  }
+  /// Check if GeoIP database is missing for Camoufox profiles
+  pub fn check_missing_geoip_database(
+    &self,
+  ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    // Get all profiles
+    let profiles = ProfileManager::instance()
+      .list_profiles()
+      .map_err(|e| format!("Failed to list profiles: {e}"))?;
+
+    // Check if there are any Camoufox profiles
+    let has_camoufox_profiles = profiles.iter().any(|profile| profile.browser == "camoufox");
+
+    if has_camoufox_profiles {
+      // Check if GeoIP database is available
+      return Ok(!Self::is_geoip_database_available());
+    }
+
+    Ok(false)
   }
 
   fn find_city_mmdb_asset(&self, release: &GithubRelease) -> Option<String> {
@@ -218,6 +238,19 @@ impl GeoIPDownloader {
   }
 }
 
+#[tauri::command]
+pub fn check_missing_geoip_database() -> Result<bool, String> {
+  let geoip_downloader = GeoIPDownloader::instance();
+  geoip_downloader
+    .check_missing_geoip_database()
+    .map_err(|e| format!("Failed to check missing GeoIP database: {e}"))
+}
+
+// Global singleton instance
+lazy_static::lazy_static! {
+  static ref GEOIP_DOWNLOADER: GeoIPDownloader = GeoIPDownloader::new();
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -352,9 +385,4 @@ mod tests {
       "Function result should match actual file existence"
     );
   }
-}
-
-// Global singleton instance
-lazy_static::lazy_static! {
-  static ref GEOIP_DOWNLOADER: GeoIPDownloader = GeoIPDownloader::new();
 }

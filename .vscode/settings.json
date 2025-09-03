@@ -1,5 +1,6 @@
 {
   "cSpell.words": [
+    "ABORTIFHUNG",
     "adwaita",
     "ahooks",
     "akhilmhdh",
@@ -83,6 +84,7 @@
     "libwebkit",
     "libxdo",
     "localtime",
+    "lpdw",
     "lxml",
     "lzma",
     "Matchalk",
@@ -114,6 +116,7 @@
     "peerconnection",
     "pids",
     "pixbuf",
+    "pkexec",
     "pkill",
     "plasmohq",
     "platformdirs",
@@ -136,6 +139,7 @@
     "screeninfo",
     "selectables",
     "serde",
+    "SETTINGCHANGE",
     "setuptools",
     "shadcn",
     "showcursor",
@@ -143,6 +147,7 @@
     "signon",
     "signum",
     "sklearn",
+    "SMTO",
     "sonner",
     "splitn",
     "sspi",

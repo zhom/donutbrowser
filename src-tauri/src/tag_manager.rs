@@ -101,6 +101,14 @@ impl TagManager {
   }
 }
 
+#[tauri::command]
+pub fn get_all_tags() -> Result<Vec<String>, String> {
+  let tag_manager = crate::tag_manager::TAG_MANAGER.lock().unwrap();
+  tag_manager
+    .get_all_tags()
+    .map_err(|e| format!("Failed to get tags: {e}"))
+}
+
 lazy_static::lazy_static! {
   pub static ref TAG_MANAGER: std::sync::Mutex<TagManager> = std::sync::Mutex::new(TagManager::new());
 }

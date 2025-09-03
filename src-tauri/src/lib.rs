@@ -14,10 +14,10 @@ mod auto_updater;
 mod browser;
 mod browser_runner;
 mod browser_version_manager;
-mod camoufox;
+mod camoufox_manager;
 mod default_browser;
-mod download;
-mod downloaded_browsers;
+mod downloaded_browsers_registry;
+mod downloader;
 mod extraction;
 mod geoip_downloader;
 mod group_manager;
@@ -31,24 +31,38 @@ mod tag_manager;
 mod version_updater;
 
 use browser_runner::{
-  check_browser_exists, check_browser_status, check_missing_binaries, check_missing_geoip_database,
-  create_browser_profile_new, delete_profile, download_browser, ensure_all_binaries_exist,
-  fetch_browser_versions_cached_first, fetch_browser_versions_with_count,
-  fetch_browser_versions_with_count_cached_first, get_all_tags, get_downloaded_browser_versions,
-  get_supported_browsers, is_browser_supported_on_platform, kill_browser_profile,
-  launch_browser_profile, list_browser_profiles, rename_profile, update_camoufox_config,
-  update_profile_proxy, update_profile_tags,
+  check_browser_exists, kill_browser_profile, launch_browser_profile, open_url_with_profile,
 };
+
+use profile::manager::{
+  check_browser_status, create_browser_profile_new, delete_profile, list_browser_profiles,
+  rename_profile, update_camoufox_config, update_profile_proxy, update_profile_tags,
+};
+
+use browser_version_manager::{
+  fetch_browser_versions_cached_first, fetch_browser_versions_with_count,
+  fetch_browser_versions_with_count_cached_first, get_supported_browsers,
+  is_browser_supported_on_platform,
+};
+
+use downloaded_browsers_registry::{
+  check_missing_binaries, ensure_all_binaries_exist, get_downloaded_browser_versions,
+};
+
+use downloader::download_browser;
 
 use settings_manager::{
-  clear_all_version_cache_and_refetch, get_app_settings, get_table_sorting_settings,
-  save_app_settings, save_table_sorting_settings, should_show_settings_on_startup,
+  get_app_settings, get_table_sorting_settings, save_app_settings, save_table_sorting_settings,
+  should_show_settings_on_startup,
 };
 
-use default_browser::{is_default_browser, open_url_with_profile, set_as_default_browser};
+use tag_manager::get_all_tags;
+
+use default_browser::{is_default_browser, set_as_default_browser};
 
 use version_updater::{
-  get_version_update_status, get_version_updater, trigger_manual_version_update,
+  clear_all_version_cache_and_refetch, get_version_update_status, get_version_updater,
+  trigger_manual_version_update,
 };
 
 use auto_updater::{
@@ -66,7 +80,7 @@ use group_manager::{
   get_groups_with_profile_counts, get_profile_groups, update_profile_group,
 };
 
-use geoip_downloader::GeoIPDownloader;
+use geoip_downloader::{check_missing_geoip_database, GeoIPDownloader};
 
 use browser_version_manager::get_browser_release_types;
 
@@ -379,8 +393,9 @@ pub fn run() {
         loop {
           interval.tick().await;
 
-          let browser_runner = crate::browser_runner::BrowserRunner::instance();
-          if let Err(e) = browser_runner.cleanup_unused_binaries_internal() {
+          let registry =
+            crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
+          if let Err(e) = registry.cleanup_unused_binaries() {
             eprintln!("Periodic cleanup failed: {e}");
           } else {
             println!("Periodic cleanup completed successfully");
@@ -417,14 +432,14 @@ pub fn run() {
       // Start Camoufox cleanup task
       let _app_handle_cleanup = app.handle().clone();
       tauri::async_runtime::spawn(async move {
-        let launcher = crate::camoufox::CamoufoxNodecarLauncher::instance();
+        let camoufox_manager = crate::camoufox_manager::CamoufoxManager::instance();
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
 
         loop {
           interval.tick().await;
 
-          match launcher.cleanup_dead_instances().await {
-            Ok(_dead_instances) => {
+          match camoufox_manager.cleanup_dead_instances().await {
+            Ok(_) => {
               // Cleanup completed silently
             }
             Err(e) => {
@@ -440,8 +455,8 @@ pub fn run() {
         // Wait a bit for the app to fully initialize
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
-        let browser_runner = crate::browser_runner::BrowserRunner::instance();
-        match browser_runner.check_missing_geoip_database() {
+        let geoip_downloader = crate::geoip_downloader::GeoIPDownloader::instance();
+        match geoip_downloader.check_missing_geoip_database() {
           Ok(true) => {
             println!("GeoIP database is missing for Camoufox profiles, downloading at startup...");
             let geoip_downloader = GeoIPDownloader::instance();
@@ -502,7 +517,7 @@ pub fn run() {
 
           let runner = crate::browser_runner::BrowserRunner::instance();
           // If listing profiles fails, skip this tick
-          let profiles = match runner.list_profiles() {
+          let profiles = match runner.profile_manager.list_profiles() {
             Ok(p) => p,
             Err(e) => {
               println!("Warning: Failed to list profiles in status checker: {e}");
@@ -658,7 +673,6 @@ pub fn run() {
       check_for_app_updates,
       check_for_app_updates_manual,
       download_and_install_app_update,
-      // get_system_theme, // removed
       detect_existing_profiles,
       import_browser_profile,
       check_missing_binaries,

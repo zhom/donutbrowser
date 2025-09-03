@@ -117,7 +117,8 @@ impl BrowserVersionManager {
   /// Get cached browser versions immediately (returns None if no cache exists)
   pub fn get_cached_browser_versions(&self, browser: &str) -> Option<Vec<String>> {
     if browser == "brave" {
-      return ApiClient::instance()
+      return self
+        .api_client
         .get_cached_github_releases("brave")
         .map(|releases| releases.into_iter().map(|r| r.tag_name).collect());
     }
@@ -134,7 +135,7 @@ impl BrowserVersionManager {
     browser: &str,
   ) -> Option<Vec<BrowserVersionInfo>> {
     if browser == "brave" {
-      if let Some(releases) = ApiClient::instance().get_cached_github_releases("brave") {
+      if let Some(releases) = self.api_client.get_cached_github_releases("brave") {
         let detailed_info: Vec<BrowserVersionInfo> = releases
           .into_iter()
           .map(|r| BrowserVersionInfo {
@@ -1272,6 +1273,101 @@ mod tests {
 
     println!("Download info test passed for all browsers");
   }
+}
+
+#[tauri::command]
+pub fn get_supported_browsers() -> Result<Vec<String>, String> {
+  let service = BrowserVersionManager::instance();
+  Ok(service.get_supported_browsers())
+}
+
+#[tauri::command]
+pub fn is_browser_supported_on_platform(browser_str: String) -> Result<bool, String> {
+  let service = BrowserVersionManager::instance();
+  service
+    .is_browser_supported(&browser_str)
+    .map_err(|e| format!("Failed to check browser support: {e}"))
+}
+
+#[tauri::command]
+pub async fn fetch_browser_versions_cached_first(
+  browser_str: String,
+) -> Result<Vec<BrowserVersionInfo>, String> {
+  let service = BrowserVersionManager::instance();
+
+  // Get cached versions immediately if available
+  if let Some(cached_versions) = service.get_cached_browser_versions_detailed(&browser_str) {
+    // Check if we should update cache in background
+    if service.should_update_cache(&browser_str) {
+      // Start background update but return cached data immediately
+      let service_clone = BrowserVersionManager::instance();
+      let browser_str_clone = browser_str.clone();
+      tokio::spawn(async move {
+        if let Err(e) = service_clone
+          .fetch_browser_versions_detailed(&browser_str_clone, false)
+          .await
+        {
+          eprintln!("Background version update failed for {browser_str_clone}: {e}");
+        }
+      });
+    }
+    Ok(cached_versions)
+  } else {
+    // No cache available, fetch fresh
+    service
+      .fetch_browser_versions_detailed(&browser_str, false)
+      .await
+      .map_err(|e| format!("Failed to fetch detailed browser versions: {e}"))
+  }
+}
+
+#[tauri::command]
+pub async fn fetch_browser_versions_with_count_cached_first(
+  browser_str: String,
+) -> Result<BrowserVersionsResult, String> {
+  let service = BrowserVersionManager::instance();
+
+  // Get cached versions immediately if available
+  if let Some(cached_versions) = service.get_cached_browser_versions(&browser_str) {
+    // Check if we should update cache in background
+    if service.should_update_cache(&browser_str) {
+      // Start background update but return cached data immediately
+      let service_clone = BrowserVersionManager::instance();
+      let browser_str_clone = browser_str.clone();
+      tokio::spawn(async move {
+        if let Err(e) = service_clone
+          .fetch_browser_versions_with_count(&browser_str_clone, false)
+          .await
+        {
+          eprintln!("Background version update failed for {browser_str_clone}: {e}");
+        }
+      });
+    }
+
+    // Return cached data in the expected format
+    Ok(BrowserVersionsResult {
+      versions: cached_versions.clone(),
+      new_versions_count: None, // No new versions when returning cached data
+      total_versions_count: cached_versions.len(),
+    })
+  } else {
+    // No cache available, fetch fresh
+    service
+      .fetch_browser_versions_with_count(&browser_str, false)
+      .await
+      .map_err(|e| format!("Failed to fetch browser versions: {e}"))
+  }
+}
+
+#[tauri::command]
+pub async fn fetch_browser_versions_with_count(
+  browser_str: String,
+) -> Result<BrowserVersionsResult, String> {
+  let service = BrowserVersionManager::instance();
+  service
+    .fetch_browser_versions_with_count(&browser_str, false)
+    .await
+    .map_err(|e| format!("Failed to fetch browser versions: {e}"))
 }
 
 // Global singleton instance

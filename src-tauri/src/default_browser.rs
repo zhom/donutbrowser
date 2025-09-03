@@ -1,10 +1,10 @@
 use tauri::command;
 
-pub struct DefaultBrowser;
+pub struct DefaultBrowser {}
 
 impl DefaultBrowser {
   fn new() -> Self {
-    Self
+    Self {}
   }
 
   pub fn instance() -> &'static DefaultBrowser {
@@ -37,38 +37,6 @@ impl DefaultBrowser {
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     Err("Unsupported platform".to_string())
-  }
-
-  pub async fn open_url_with_profile(
-    &self,
-    app_handle: tauri::AppHandle,
-    profile_id: String,
-    url: String,
-  ) -> Result<(), String> {
-    let runner = crate::browser_runner::BrowserRunner::instance();
-
-    // Get the profile by name
-    let profiles = runner
-      .list_profiles()
-      .map_err(|e| format!("Failed to list profiles: {e}"))?;
-    let profile = profiles
-      .into_iter()
-      .find(|p| p.id.to_string() == profile_id)
-      .ok_or_else(|| format!("Profile '{profile_id}' not found"))?;
-
-    println!("Opening URL '{url}' with profile '{profile_id}'");
-
-    // Use launch_or_open_url which handles both launching new instances and opening in existing ones
-    runner
-      .launch_or_open_url(app_handle, &profile, Some(url.clone()), None)
-      .await
-      .map_err(|e| {
-        println!("Failed to open URL with profile '{profile_id}': {e}");
-        format!("Failed to open URL with profile: {e}")
-      })?;
-
-    println!("Successfully opened URL '{url}' with profile '{profile_id}'");
-    Ok(())
   }
 }
 
@@ -569,16 +537,4 @@ pub async fn is_default_browser() -> Result<bool, String> {
 pub async fn set_as_default_browser() -> Result<(), String> {
   let default_browser = DefaultBrowser::instance();
   default_browser.set_as_default_browser().await
-}
-
-#[tauri::command]
-pub async fn open_url_with_profile(
-  app_handle: tauri::AppHandle,
-  profile_id: String,
-  url: String,
-) -> Result<(), String> {
-  let default_browser = DefaultBrowser::instance();
-  default_browser
-    .open_url_with_profile(app_handle, profile_id, url)
-    .await
 }

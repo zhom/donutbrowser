@@ -3,9 +3,6 @@ use serde::{Deserialize, Serialize};
 use std::fs::{self, create_dir_all};
 use std::path::PathBuf;
 
-use crate::api_client::ApiClient;
-use crate::version_updater;
-
 use aes_gcm::{
   aead::{Aead, AeadCore, KeyInit, OsRng},
   Aes256Gcm, Key, Nonce,
@@ -440,54 +437,6 @@ pub async fn save_table_sorting_settings(sorting: TableSortingSettings) -> Resul
   manager
     .save_table_sorting(&sorting)
     .map_err(|e| format!("Failed to save table sorting settings: {e}"))
-}
-
-#[tauri::command]
-pub async fn clear_all_version_cache_and_refetch(
-  app_handle: tauri::AppHandle,
-) -> Result<(), String> {
-  let api_client = ApiClient::instance();
-
-  // Clear all cache first
-  api_client
-    .clear_all_cache()
-    .map_err(|e| format!("Failed to clear version cache: {e}"))?;
-
-  // Disable all browsers during the update process
-  let auto_updater = crate::auto_updater::AutoUpdater::instance();
-  let supported_browsers =
-    crate::browser_version_manager::BrowserVersionManager::instance().get_supported_browsers();
-
-  // Load current state and disable all browsers
-  let mut state = auto_updater
-    .load_auto_update_state()
-    .map_err(|e| format!("Failed to load auto update state: {e}"))?;
-  for browser in &supported_browsers {
-    state.disabled_browsers.insert(browser.clone());
-  }
-  auto_updater
-    .save_auto_update_state(&state)
-    .map_err(|e| format!("Failed to save auto update state: {e}"))?;
-
-  let updater = version_updater::get_version_updater();
-  let updater_guard = updater.lock().await;
-
-  let result = updater_guard
-    .trigger_manual_update(&app_handle)
-    .await
-    .map_err(|e| format!("Failed to trigger version update: {e}"));
-
-  // Re-enable all browsers after the update completes (regardless of success/failure)
-  let mut final_state = auto_updater.load_auto_update_state().unwrap_or_default();
-  for browser in &supported_browsers {
-    final_state.disabled_browsers.remove(browser);
-  }
-  if let Err(e) = auto_updater.save_auto_update_state(&final_state) {
-    eprintln!("Warning: Failed to re-enable browsers after cache clear: {e}");
-  }
-
-  result?;
-  Ok(())
 }
 
 // Global singleton instance

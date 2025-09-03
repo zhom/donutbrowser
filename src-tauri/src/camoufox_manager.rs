@@ -1,8 +1,10 @@
+use crate::browser_runner::BrowserRunner;
 use crate::profile::BrowserProfile;
+use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
-
 use tauri::AppHandle;
 use tauri_plugin_shell::ShellExt;
 use tokio::sync::Mutex as AsyncMutex;
@@ -60,25 +62,38 @@ struct CamoufoxInstance {
   url: Option<String>,
 }
 
-struct CamoufoxNodecarLauncherInner {
+struct CamoufoxManagerInner {
   instances: HashMap<String, CamoufoxInstance>,
 }
 
-pub struct CamoufoxNodecarLauncher {
-  inner: Arc<AsyncMutex<CamoufoxNodecarLauncherInner>>,
+pub struct CamoufoxManager {
+  inner: Arc<AsyncMutex<CamoufoxManagerInner>>,
+  base_dirs: BaseDirs,
 }
 
-impl CamoufoxNodecarLauncher {
+impl CamoufoxManager {
   fn new() -> Self {
     Self {
-      inner: Arc::new(AsyncMutex::new(CamoufoxNodecarLauncherInner {
+      inner: Arc::new(AsyncMutex::new(CamoufoxManagerInner {
         instances: HashMap::new(),
       })),
+      base_dirs: BaseDirs::new().expect("Failed to get base directories"),
     }
   }
 
-  pub fn instance() -> &'static CamoufoxNodecarLauncher {
+  pub fn instance() -> &'static CamoufoxManager {
     &CAMOUFOX_NODECAR_LAUNCHER
+  }
+
+  pub fn get_profiles_dir(&self) -> PathBuf {
+    let mut path = self.base_dirs.data_local_dir().to_path_buf();
+    path.push(if cfg!(debug_assertions) {
+      "DonutBrowserDev"
+    } else {
+      "DonutBrowser"
+    });
+    path.push("profiles");
+    path
   }
 
   /// Generate Camoufox fingerprint configuration during profile creation
@@ -95,8 +110,8 @@ impl CamoufoxNodecarLauncher {
       path.clone()
     } else {
       // Use the browser runner helper with the real profile
-      let browser_runner = crate::browser_runner::BrowserRunner::instance();
-      browser_runner
+      // Use self.browser_runner instead of instance()
+      BrowserRunner::instance()
         .get_browser_executable_path(profile)
         .map_err(|e| format!("Failed to get Camoufox executable path: {e}"))?
         .to_string_lossy()
@@ -202,8 +217,8 @@ impl CamoufoxNodecarLauncher {
       path.clone()
     } else {
       // Use the browser runner helper with the real profile
-      let browser_runner = crate::browser_runner::BrowserRunner::instance();
-      browser_runner
+      // Use self.browser_runner instead of instance()
+      BrowserRunner::instance()
         .get_browser_executable_path(profile)
         .map_err(|e| format!("Failed to get Camoufox executable path: {e}"))?
         .to_string_lossy()
@@ -431,7 +446,7 @@ impl CamoufoxNodecarLauncher {
   }
 }
 
-impl CamoufoxNodecarLauncher {
+impl CamoufoxManager {
   pub async fn launch_camoufox_profile_nodecar(
     &self,
     app_handle: AppHandle,
@@ -440,8 +455,7 @@ impl CamoufoxNodecarLauncher {
     url: Option<String>,
   ) -> Result<CamoufoxLaunchResult, String> {
     // Get profile path
-    let browser_runner = crate::browser_runner::BrowserRunner::instance();
-    let profiles_dir = browser_runner.get_profiles_dir();
+    let profiles_dir = self.get_profiles_dir();
     let profile_path = profile.get_profile_data_path(&profiles_dir);
     let profile_path_str = profile_path.to_string_lossy();
 
@@ -484,5 +498,5 @@ mod tests {
 
 // Global singleton instance
 lazy_static::lazy_static! {
-  static ref CAMOUFOX_NODECAR_LAUNCHER: CamoufoxNodecarLauncher = CamoufoxNodecarLauncher::new();
+  static ref CAMOUFOX_NODECAR_LAUNCHER: CamoufoxManager = CamoufoxManager::new();
 }
