@@ -321,10 +321,11 @@ impl AutoUpdater {
         // Check if this is an update (newer version)
         if self.is_version_newer(new_version, &profile.version) {
           // Update the profile version
-          match self
-            .profile_manager
-            .update_profile_version(app_handle, &profile.name, new_version)
-          {
+          match self.profile_manager.update_profile_version(
+            app_handle,
+            &profile.id.to_string(),
+            new_version,
+          ) {
             Ok(_) => {
               updated_profiles.push(profile.name);
             }

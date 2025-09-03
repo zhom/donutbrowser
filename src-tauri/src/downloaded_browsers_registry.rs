@@ -677,40 +677,61 @@ impl DownloadedBrowsersRegistry {
     }
 
     for (browser_name, browser_profiles) in browser_profiles.iter() {
-      // Find the latest version among all profiles for this browser
-      let mut versions: Vec<&str> = browser_profiles
-        .iter()
-        .map(|p| p.version.as_str())
-        .collect();
-      versions.sort_by(|a, b| {
+      // Find the latest version among all profiles for this browser that actually exists on disk
+      let mut available_versions: Vec<String> = Vec::new();
+
+      for profile in browser_profiles {
+        // Only consider versions that actually exist on disk
+        let browser_type = match crate::browser::BrowserType::from_str(browser_name) {
+          Ok(bt) => bt,
+          Err(_) => continue,
+        };
+        let browser = crate::browser::create_browser(browser_type.clone());
+
+        if browser.is_version_downloaded(&profile.version, &binaries_dir) {
+          available_versions.push(profile.version.clone());
+        } else {
+          println!(
+            "Profile '{}' references version {} that doesn't exist on disk",
+            profile.name, profile.version
+          );
+        }
+      }
+
+      if available_versions.is_empty() {
+        println!("No available versions found for {browser_name}, skipping consolidation");
+        continue;
+      }
+
+      // Sort available versions to find the latest
+      available_versions.sort_by(|a, b| {
         // Sort versions using semantic versioning logic
         crate::api_client::compare_versions(b, a)
       });
 
-      if let Some(&latest_version) = versions.first() {
-        println!("Latest version for {browser_name}: {latest_version}");
+      let latest_version = &available_versions[0];
+      println!("Latest available version for {browser_name}: {latest_version}");
 
-        // Check which profiles need to be updated to the latest version
-        let mut profiles_to_update = Vec::new();
-        let mut older_versions_to_remove = std::collections::HashSet::<String>::new();
+      // Check which profiles need to be updated to the latest version
+      let mut profiles_to_update = Vec::new();
+      let mut older_versions_to_remove = std::collections::HashSet::<String>::new();
 
-        for profile in browser_profiles {
-          if profile.version != latest_version {
-            // Only update if profile is not currently running
-            if profile.process_id.is_none() {
-              profiles_to_update.push(profile);
-              older_versions_to_remove.insert(profile.version.clone());
-            } else {
-              println!(
-                "Skipping version update for running profile: {} ({})",
-                profile.name, profile.version
-              );
-            }
+      for profile in browser_profiles {
+        if profile.version != *latest_version {
+          // Only update if profile is not currently running
+          if profile.process_id.is_none() {
+            profiles_to_update.push(profile);
+            older_versions_to_remove.insert(profile.version.clone());
+          } else {
+            println!(
+              "Skipping version update for running profile: {} ({})",
+              profile.name, profile.version
+            );
           }
         }
 
         // Update profiles to latest version
-        for profile in profiles_to_update {
+        for profile in &profiles_to_update {
           match self.profile_manager.update_profile_version(
             app_handle,
             &profile.id.to_string(),
@@ -730,21 +751,14 @@ impl DownloadedBrowsersRegistry {
 
         // Remove older version binaries that are no longer needed
         for old_version in &older_versions_to_remove {
-          let old_version_dir = binaries_dir.join(browser_name).join(old_version);
-          if old_version_dir.exists() {
-            match std::fs::remove_dir_all(&old_version_dir) {
-              Ok(_) => {
-                consolidated.push(format!("Removed old version: {browser_name} {old_version}"));
-                // Also remove from registry
-                self.remove_browser(browser_name, old_version);
-              }
-              Err(e) => {
-                eprintln!(
-                  "Failed to remove old version directory {}: {}",
-                  old_version_dir.display(),
-                  e
-                );
-              }
+          println!("Consolidating: removing old version {browser_name} {old_version}");
+          match self.cleanup_failed_download(browser_name, old_version) {
+            Ok(_) => {
+              consolidated.push(format!("Removed old version: {browser_name} {old_version}"));
+              println!("Successfully removed old version: {browser_name} {old_version}");
+            }
+            Err(e) => {
+              eprintln!("Failed to cleanup old version {browser_name} {old_version}: {e}");
             }
           }
         }
@@ -860,6 +874,29 @@ impl DownloadedBrowsersRegistry {
           downloaded.push(format!(
             "{browser} {version} (for profile '{profile_name}')"
           ));
+
+          // After successful download, update profiles that use this browser to the new version
+          match self
+            .update_profiles_to_version(app_handle, &browser, &version)
+            .await
+          {
+            Ok(updated_profiles) => {
+              if !updated_profiles.is_empty() {
+                println!(
+                  "Successfully updated {} profiles to version {}:",
+                  updated_profiles.len(),
+                  version
+                );
+                for update_msg in updated_profiles {
+                  println!("  {update_msg}");
+                }
+              }
+            }
+            Err(e) => {
+              eprintln!("CRITICAL: Failed to update profiles to version {version}: {e}");
+              eprintln!("This may cause profile version inconsistencies and cleanup issues");
+            }
+          }
         }
         Err(e) => {
           eprintln!("Failed to download {browser} {version} for profile '{profile_name}': {e}");
@@ -888,6 +925,62 @@ impl DownloadedBrowsersRegistry {
     }
 
     Ok(downloaded)
+  }
+
+  /// Update all profiles using a specific browser to a new version
+  async fn update_profiles_to_version(
+    &self,
+    app_handle: &tauri::AppHandle,
+    browser: &str,
+    version: &str,
+  ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    let profiles = self
+      .profile_manager
+      .list_profiles()
+      .map_err(|e| format!("Failed to list profiles: {e}"))?;
+
+    let mut updated_profiles = Vec::new();
+
+    for profile in profiles {
+      if profile.browser == browser && profile.version != version {
+        // Check if profile is currently running
+        if profile.process_id.is_some() {
+          println!(
+            "Skipping version update for running profile: {} ({})",
+            profile.name, profile.version
+          );
+          continue;
+        }
+
+        // Update the profile version
+        match self.profile_manager.update_profile_version(
+          app_handle,
+          &profile.id.to_string(),
+          version,
+        ) {
+          Ok(_) => {
+            updated_profiles.push(format!(
+              "Updated profile '{}' from {} to {}",
+              profile.name, profile.version, version
+            ));
+            println!(
+              "Successfully updated profile '{}' to version {}",
+              profile.name, version
+            );
+
+            // Save registry after each profile update to ensure consistency
+            if let Err(e) = self.save() {
+              eprintln!("Warning: Failed to save registry after profile update: {e}");
+            }
+          }
+          Err(e) => {
+            eprintln!("Failed to update profile '{}': {}", profile.name, e);
+          }
+        }
+      }
+    }
+
+    Ok(updated_profiles)
   }
 
   /// Cleanup unused binaries based on active and running profiles
