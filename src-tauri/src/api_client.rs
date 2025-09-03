@@ -282,7 +282,12 @@ pub fn is_browser_version_nightly(
       // Last resort: when no name available, treat as nightly (non-Release)
       true
     }
-    "firefox" | "firefox-developer" => {
+    "firefox-developer" => {
+      // For Firefox Developer Edition, always treat as nightly/prerelease
+      // This ensures consistent behavior regardless of cache state or API response parsing
+      true
+    }
+    "firefox" => {
       // For Firefox, use the category from the API response to determine stability
       // This will be handled in the API parsing, so this fallback is for cached versions
       is_nightly_version(version)
