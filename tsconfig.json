@@ -31,5 +31,5 @@
     "next-env.d.ts",
     "dist/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "nodecar"]
+  "exclude": ["node_modules", "nodecar", "src-tauri/target"]
 }
