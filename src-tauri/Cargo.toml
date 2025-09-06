@@ -39,14 +39,14 @@ lazy_static = "1.4"
 base64 = "0.22"
 async-trait = "0.1"
 futures-util = "0.3"
-zip = "4"
+zip = "5"
 tar = "0"
 bzip2 = "0"
 flate2 = "1"
 lzma-rs = "0"
 msi-extract = "0"
 
-uuid = { version = "1.0", features = ["v4", "serde"] }
+uuid = { version = "1.18", features = ["v4", "serde"] }
 url = "2.5"
 chrono = { version = "0.4", features = ["serde"] }
 axum = "0.8.4"
@@ -66,7 +66,7 @@ objc2-app-kit = { version = "0.3.1", features = ["NSWindow"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winreg = "0.55"
-windows = { version = "0.61", features = [
+windows = { version = "0.62", features = [
   "Win32_Foundation",
   "Win32_System_ProcessStatus",
   "Win32_System_Threading",
