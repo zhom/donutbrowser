@@ -21,8 +21,8 @@
   "author": "",
   "license": "AGPL-3.0",
   "dependencies": {
-    "@types/node": "^24.3.1",
-    "commander": "^14.0.0",
+    "@types/node": "^24.5.2",
+    "commander": "^14.0.1",
     "donutbrowser-camoufox-js": "^0.6.6",
     "dotenv": "^17.2.2",
     "fingerprint-generator": "^2.1.72",
