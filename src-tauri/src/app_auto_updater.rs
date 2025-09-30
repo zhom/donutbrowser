@@ -1614,14 +1614,6 @@ pub async fn check_for_app_updates_manual() -> Result<Option<AppUpdateInfo>, Str
     .map_err(|e| format!("Failed to check for app updates: {e}"))
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct PlatformInfo {
-  pub os: String,
-  pub arch: String,
-  pub installation_method: String,
-  pub supported_formats: Vec<String>,
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;
