@@ -2,6 +2,9 @@
 Version=1.0
 Type=Application
 Name=Donut Browser
+Name[en]=Donut Browser
+GenericName=Web Browser
+X-GNOME-FullName=Donut Browser
 Comment=Simple Yet Powerful Anti-Detect Browser
 Exec=donutbrowser %u
 Icon=donutbrowser

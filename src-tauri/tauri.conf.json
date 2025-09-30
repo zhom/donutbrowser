@@ -41,16 +41,12 @@
     },
     "linux": {
       "deb": {
-        "depends": ["xdg-utils"],
-        "files": {
-          "/usr/share/applications/donutbrowser.desktop": "donutbrowser.desktop"
-        }
+        "desktopTemplate": "donutbrowser.desktop",
+        "depends": ["xdg-utils"]
       },
       "rpm": {
-        "depends": ["xdg-utils"],
-        "files": {
-          "/usr/share/applications/donutbrowser.desktop": "donutbrowser.desktop"
-        }
+        "desktopTemplate": "donutbrowser.desktop",
+        "depends": ["xdg-utils"]
       },
       "appimage": {
         "files": {
