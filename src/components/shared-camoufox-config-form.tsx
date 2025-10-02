@@ -810,7 +810,7 @@ export function SharedCamoufoxConfigForm({
       </div>
 
       {/* Browser Behavior */}
-      <div className="space-y-3">
+      {/* <div className="space-y-3">
         <Label>Browser Behavior</Label>
         <div className="flex items-center space-x-2">
           <Checkbox
@@ -824,7 +824,7 @@ export function SharedCamoufoxConfigForm({
             Allow browser addons to open new tabs automatically
           </Label>
         </div>
-      </div>
+      </div> */}
     </div>
   );
 
