@@ -431,6 +431,8 @@ export async function generateCamoufoxConfig(
       }
     }
 
+    launchOpts.allowAddonNewTab = true;
+
     // Generate the configuration using launchOptions
     const generatedOptions = await launchOptions(launchOpts);
 

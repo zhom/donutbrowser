@@ -808,6 +808,23 @@ export function SharedCamoufoxConfigForm({
           </div>
         </div>
       </div>
+
+      {/* Browser Behavior */}
+      <div className="space-y-3">
+        <Label>Browser Behavior</Label>
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id="allow-addon-new-tab"
+            checked={fingerprintConfig.allowAddonNewTab}
+            onCheckedChange={(checked) =>
+              updateFingerprintConfig("allowAddonNewTab", checked)
+            }
+          />
+          <Label htmlFor="allow-addon-new-tab">
+            Allow browser addons to open new tabs automatically
+          </Label>
+        </div>
+      </div>
     </div>
   );
 

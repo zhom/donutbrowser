@@ -1,8 +1,10 @@
 packages:
   - nodecar
+
 onlyBuiltDependencies:
   - '@biomejs/biome'
   - '@tailwindcss/oxide'
+  - better-sqlite3
   - esbuild
   - sharp
   - sqlite3

@@ -87,6 +87,9 @@ export interface CamoufoxConfig {
 
 // Extended interface for the advanced fingerprint configuration
 export interface CamoufoxFingerprintConfig {
+  // Browser behavior
+  allowAddonNewTab?: boolean;
+
   // Navigator properties
   "navigator.userAgent"?: string;
   "navigator.appVersion"?: string;
