@@ -13,7 +13,7 @@ jobs:
   security-scan:
     name: Security Vulnerability Scan
     if: ${{ github.actor == 'dependabot[bot]' }}
-    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@90b209d0ea55cea1da9fc0c4e65782cc6acb6e2e" # v2.2.2
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@e92b5d07338d4f0ba0981dffed17c48976ca4730" # v2.2.3
     with:
       scan-args: |-
         -r
@@ -73,7 +73,7 @@ jobs:
           compat-lookup: true
           github-token: "${{ secrets.GITHUB_TOKEN }}"
       - name: Auto-merge minor and patch updates
-        uses: ridedott/merge-me-action@a310eac074af628e0fd6c6d78858bba5bcf01179 #v2.10.130
+        uses: ridedott/merge-me-action@a3b9ffd551d69f9f4375a87e9fa56235a0749518 #v2.10.131
         with:
           GITHUB_TOKEN: ${{ secrets.SECRET_DEPENDABOT_GITHUB_TOKEN }}
           MERGE_METHOD: SQUASH

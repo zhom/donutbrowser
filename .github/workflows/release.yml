@@ -13,7 +13,7 @@ env:
 jobs:
   security-scan:
     name: Security Vulnerability Scan
-    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@90b209d0ea55cea1da9fc0c4e65782cc6acb6e2e" # v2.2.2
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@e92b5d07338d4f0ba0981dffed17c48976ca4730" # v2.2.3
     with:
       scan-args: |-
         -r
