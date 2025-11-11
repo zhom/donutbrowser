@@ -3,15 +3,15 @@
 <plist version="1.0">
 <dict>
 	<key>NSCameraUsageDescription</key>
-	<string>Donut Browser needs camera access to enable camera functionality in web browsers. Each website will still ask for your permission individually.</string>
+	<string>Donut needs camera access to enable camera functionality in web browsers. Each website will still ask for your permission individually.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Donut Browser needs microphone access to enable microphone functionality in web browsers. Each website will still ask for your permission individually.</string>
+	<string>Donut needs microphone access to enable microphone functionality in web browsers. Each website will still ask for your permission individually.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Donut Browser has proxy functionality that requires local network access. You can deny this functionality if you don't plan on setting proxies for browser profiles.</string>
+	<string>Donut has proxy functionality that requires local network access. You can deny this functionality if you don't plan on setting proxies for browser profiles.</string>
 	<key>CFBundleDisplayName</key>
-	<string>Donut Browser</string>
+	<string>Donut</string>
 	<key>CFBundleName</key>
-	<string>Donut Browser</string>
+	<string>Donut</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.donutbrowser</string>
     <key>CFBundleURLName</key>
@@ -25,7 +25,7 @@
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.productivity</string>
 	<key>NSHumanReadableCopyright</key>
-	<string>Copyright © 2025 Donut Browser</string>
+	<string>Copyright © 2025 Donut</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>

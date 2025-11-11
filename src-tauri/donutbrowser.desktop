@@ -1,10 +1,10 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Donut Browser
-Name[en]=Donut Browser
+Name=Donut
+Name[en]=Donut
 GenericName=Web Browser
-X-GNOME-FullName=Donut Browser
+X-GNOME-FullName=Donut
 Comment=Simple Yet Powerful Anti-Detect Browser
 Exec=donutbrowser %u
 Icon=donutbrowser
