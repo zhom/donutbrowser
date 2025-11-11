@@ -694,7 +694,7 @@ export default function Home() {
   const isLoading = profilesLoading || groupsLoading || proxiesLoading;
 
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen gap-8 font-[family-name:var(--font-geist-sans)] bg-background">
+    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen gap-8 font-(family-name:--font-geist-sans) bg-background">
       <main className="flex flex-col row-start-2 gap-6 items-center w-full max-w-3xl">
         <div className="w-full">
           <HomeHeader
@@ -736,7 +736,7 @@ export default function Home() {
       </main>
 
       {isInitializing && (
-        <div className="fixed inset-0 z-[1000] backdrop-blur-sm bg-background/30 flex items-center justify-center">
+        <div className="fixed inset-0 z-1000 backdrop-blur-sm bg-background/30 flex items-center justify-center">
           <div className="bg-background rounded-xl p-6 shadow-xl border border-border/10 w-[320px] text-center">
             <div className="text-lg font-medium">Initializing</div>
             <div className="mt-1 mb-2 text-sm text-gray-600 dark:text-gray-300">
