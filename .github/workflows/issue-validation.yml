@@ -167,6 +167,15 @@ jobs:
             echo "✅ Issue contains sufficient information"
 
             # Prepare a summary comment even when valid
+            # Build suggestions section conditionally
+            SUGGESTIONS_SECTION=""
+            if [ -n "$SUGGESTIONS" ]; then
+              SUGGESTIONS_SECTION="### 💡 Suggestions:
+          $SUGGESTIONS
+
+          "
+            fi
+
             cat > comment.md << EOF
           ## 🤖 Issue Validation
 
@@ -174,8 +183,7 @@ jobs:
 
           **Assessment:** $ASSESSMENT
 
-          $( [ -n "$SUGGESTIONS" ] && echo "### 💡 Suggestions:" && echo "$SUGGESTIONS" )
-
+          $SUGGESTIONS_SECTION
           ---
           *This validation was performed automatically to help triage issues.*
           EOF
