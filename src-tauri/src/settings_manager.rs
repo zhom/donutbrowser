@@ -223,8 +223,11 @@ impl SettingsManager {
     let hash_bytes = hash_value.as_bytes();
 
     // Take first 32 bytes for AES-256 key
-    let key = Key::<Aes256Gcm>::from_slice(&hash_bytes[..32]);
-    let cipher = Aes256Gcm::new(key);
+    let key_bytes: [u8; 32] = hash_bytes[..32]
+      .try_into()
+      .map_err(|_| "Invalid key length")?;
+    let key = Key::<Aes256Gcm>::from(key_bytes);
+    let cipher = Aes256Gcm::new(&key);
 
     // Generate a random nonce
     let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
@@ -301,8 +304,10 @@ impl SettingsManager {
     if offset + 12 > file_data.len() {
       return Ok(None);
     }
-    let nonce_bytes = &file_data[offset..offset + 12];
-    let nonce = Nonce::from_slice(nonce_bytes);
+    let nonce_bytes: [u8; 12] = file_data[offset..offset + 12]
+      .try_into()
+      .map_err(|_| "Invalid nonce length")?;
+    let nonce = Nonce::from(nonce_bytes);
     offset += 12;
 
     // Read ciphertext
@@ -331,12 +336,15 @@ impl SettingsManager {
     let hash_value = password_hash.hash.unwrap();
     let hash_bytes = hash_value.as_bytes();
 
-    let key = Key::<Aes256Gcm>::from_slice(&hash_bytes[..32]);
-    let cipher = Aes256Gcm::new(key);
+    let key_bytes: [u8; 32] = hash_bytes[..32]
+      .try_into()
+      .map_err(|_| "Invalid key length")?;
+    let key = Key::<Aes256Gcm>::from(key_bytes);
+    let cipher = Aes256Gcm::new(&key);
 
     // Decrypt the token
     let plaintext = cipher
-      .decrypt(nonce, ciphertext)
+      .decrypt(&nonce, ciphertext)
       .map_err(|_| "Decryption failed")?;
 
     match String::from_utf8(plaintext) {
