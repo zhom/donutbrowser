@@ -75,7 +75,7 @@ jobs:
       - name: Auto-merge minor and patch updates
         uses: ridedott/merge-me-action@18dd4f01d259faf0a2d900a56cd6b7e765009209 #v2.10.138
         with:
-          GITHUB_TOKEN: ${{ secrets.SECRET_DEPENDABOT_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MERGE_METHOD: SQUASH
           PRESET: DEPENDABOT_MINOR
           MAXIMUM_RETRIES: 5
