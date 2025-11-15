@@ -3,8 +3,6 @@ name: Greetings
 on:
   pull_request:
     types: [opened]
-  issues:
-    types: [opened]
 
 jobs:
   greeting:
@@ -15,5 +13,5 @@ jobs:
     steps:
       - uses: actions/first-interaction@1c4688942c71f71d4f5502a26ea67c331730fa4d # v3.1.0
         with:
-          issue-message: "Thank you for your first issue ❤️ If it's a feature request, please make sure it's clear what you want, why you want it, and how important it is to you. If you posted a bug report, please make sure it includes as much detail as possible."
-          pr-message: "Welcome to the community and thank you for your first contribution ❤️ A human will review your PR shortly. Make sure that the pipelines are green, so that the PR is considered ready for a review and could be merged."
+          issue_message: "Thank you for your first issue ❤️ If it's a feature request, please make sure it's clear what you want, why you want it, and how important it is to you. If you posted a bug report, please make sure it includes as much detail as possible."
+          pr_message: "Welcome to the community and thank you for your first contribution ❤️ A human will review your PR shortly. Make sure that the pipelines are green, so that the PR is considered ready for a review and could be merged."

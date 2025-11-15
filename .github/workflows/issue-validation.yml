@@ -93,6 +93,25 @@ jobs:
             Be constructive and helpful in your feedback. If the issue is incomplete, provide specific guidance on what's needed.
             model: openai/gpt-4o
 
+      - name: Check if first-time contributor
+        id: check-first-time
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+        run: |
+          # Check if user has created issues before (excluding the current one)
+          ISSUE_COUNT=$(gh api "/repos/${{ github.repository }}/issues" \
+            --jq "map(select(.user.login == \"$ISSUE_AUTHOR\" and .number != ${{ github.event.issue.number }})) | length" \
+            --paginate || echo "0")
+          
+          if [ "$ISSUE_COUNT" = "0" ]; then
+            echo "is_first_time=true" >> $GITHUB_OUTPUT
+            echo "✅ First-time contributor detected"
+          else
+            echo "is_first_time=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ Returning contributor"
+          fi
+
       - name: Parse validation result and take action
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -120,41 +139,53 @@ jobs:
 
           echo "Issue validation result: $IS_VALID"
           echo "Issue type: $ISSUE_TYPE"
+          
+          # Prepare greeting message for first-time contributors
+          IS_FIRST_TIME="${{ steps.check-first-time.outputs.is_first_time }}"
+          GREETING_SECTION=""
+          if [ "$IS_FIRST_TIME" = "true" ]; then
+            GREETING_SECTION="## 👋 Welcome!
+
+Thank you for your first issue ❤️ If it's a feature request, please make sure it's clear what you want, why you want it, and how important it is to you. If you posted a bug report, please make sure it includes as much detail as possible.
+
+---"
+          fi
 
           if [ "$IS_VALID" = "false" ]; then
             # Create a comment asking for more information
             cat > comment.md << EOF
-          ## 🤖 Issue Validation
+$GREETING_SECTION
+## 🤖 Issue Validation
 
-          Thank you for submitting this issue! However, it appears that some required information might be missing to help us better understand and address your concern.
+Thank you for submitting this issue! However, it appears that some required information might be missing to help us better understand and address your concern.
 
-          **Issue Type Detected:** \`$ISSUE_TYPE\`
+**Issue Type Detected:** \`$ISSUE_TYPE\`
 
-          **Assessment:** $ASSESSMENT
+**Assessment:** $ASSESSMENT
 
-          ### 📋 Missing Information:
-          $MISSING_INFO
+### 📋 Missing Information:
+$MISSING_INFO
 
-          ### 💡 Suggestions for Improvement:
-          $SUGGESTIONS
+### 💡 Suggestions for Improvement:
+$SUGGESTIONS
 
-          ### 📝 How to Provide Additional Information:
+### 📝 How to Provide Additional Information:
 
-          Please edit your original issue description to include the missing information. Here are our issue templates for reference:
+Please edit your original issue description to include the missing information. Here are our issue templates for reference:
 
-          - **Bug Report Template:** [View Template](.github/ISSUE_TEMPLATE/01-bug-report.md)
-          - **Feature Request Template:** [View Template](.github/ISSUE_TEMPLATE/02-feature-request.md)
+- **Bug Report Template:** [View Template](.github/ISSUE_TEMPLATE/01-bug-report.md)
+- **Feature Request Template:** [View Template](.github/ISSUE_TEMPLATE/02-feature-request.md)
 
-          ### 🔧 Quick Tips:
-          - For **bug reports**: Include step-by-step reproduction instructions, your environment details, and any error messages
-          - For **feature requests**: Describe the use case, expected behavior, and why this feature would be valuable
-          - Add **screenshots** or **logs** when applicable
+### 🔧 Quick Tips:
+- For **bug reports**: Include step-by-step reproduction instructions, your environment details, and any error messages
+- For **feature requests**: Describe the use case, expected behavior, and why this feature would be valuable
+- Add **screenshots** or **logs** when applicable
 
-          Once you've updated the issue with the missing information, feel free to remove this comment or reply to let us know you've made the updates.
+Once you've updated the issue with the missing information, feel free to remove this comment or reply to let us know you've made the updates.
 
-          ---
-          *This validation was performed automatically to ensure we have all the information needed to help you effectively.*
-          EOF
+---
+*This validation was performed automatically to ensure we have all the information needed to help you effectively.*
+EOF
 
             # Post the comment
             gh issue comment ${{ github.event.issue.number }} --body-file comment.md
@@ -171,22 +202,22 @@ jobs:
             SUGGESTIONS_SECTION=""
             if [ -n "$SUGGESTIONS" ]; then
               SUGGESTIONS_SECTION="### 💡 Suggestions:
-          $SUGGESTIONS
+$SUGGESTIONS
 
-          "
+"
             fi
 
             cat > comment.md << EOF
-          ## 🤖 Issue Validation
+$GREETING_SECTION
+## 🤖 Issue Validation
 
-          **Issue Type Detected:** \`$ISSUE_TYPE\`
+**Issue Type Detected:** \`$ISSUE_TYPE\`
 
-          **Assessment:** $ASSESSMENT
+**Assessment:** $ASSESSMENT
 
-          $SUGGESTIONS_SECTION
-          ---
-          *This validation was performed automatically to help triage issues.*
-          EOF
+$SUGGESTIONS_SECTION---
+*This validation was performed automatically to help triage issues.*
+EOF
 
             # Post the summary comment
             gh issue comment ${{ github.event.issue.number }} --body-file comment.md
