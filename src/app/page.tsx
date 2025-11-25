@@ -694,8 +694,8 @@ export default function Home() {
   const isLoading = profilesLoading || groupsLoading || proxiesLoading;
 
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen gap-8 font-(family-name:--font-geist-sans) bg-background">
-      <main className="flex flex-col row-start-2 gap-6 items-center w-full max-w-3xl">
+    <div className="grid items-center justify-items-center min-h-screen gap-8 font-(family-name:--font-geist-sans) bg-background">
+      <main className="flex flex-col gap-6 items-center w-full max-w-3xl">
         <div className="w-full">
           <HomeHeader
             selectedProfiles={selectedProfiles}

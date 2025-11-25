@@ -279,7 +279,7 @@ pub fn run() {
       #[allow(unused_variables)]
       let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
         .title("Donut Browser")
-        .inner_size(900.0, 600.0)
+        .inner_size(800.0, 500.0)
         .resizable(false)
         .fullscreen(false)
         .center()
