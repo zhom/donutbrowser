@@ -16,22 +16,24 @@ import type { ProxyCheckResult, StoredProxy } from "@/types";
 
 interface ProxyCheckButtonProps {
   proxy: StoredProxy;
-  checkingProxyId: string | null;
+  profileId: string;
+  checkingProfileId: string | null;
   cachedResult?: ProxyCheckResult;
   onCheckComplete?: (result: ProxyCheckResult) => void;
   onCheckFailed?: (result: ProxyCheckResult) => void;
   disabled?: boolean;
-  setCheckingProxyId?: (id: string | null) => void;
+  setCheckingProfileId?: (id: string | null) => void;
 }
 
 export function ProxyCheckButton({
   proxy,
-  checkingProxyId,
+  profileId,
+  checkingProfileId,
   cachedResult,
   onCheckComplete,
   onCheckFailed,
   disabled = false,
-  setCheckingProxyId,
+  setCheckingProfileId,
 }: ProxyCheckButtonProps) {
   const [localResult, setLocalResult] = React.useState<
     ProxyCheckResult | undefined
@@ -42,9 +44,9 @@ export function ProxyCheckButton({
   }, [cachedResult]);
 
   const handleCheck = React.useCallback(async () => {
-    if (checkingProxyId === proxy.id) return;
+    if (checkingProfileId === profileId) return;
 
-    setCheckingProxyId?.(proxy.id);
+    setCheckingProfileId?.(profileId);
     try {
       const result = await invoke<ProxyCheckResult>("check_proxy_validity", {
         proxyId: proxy.id,
@@ -86,17 +88,18 @@ export function ProxyCheckButton({
       setLocalResult(failedResult);
       onCheckFailed?.(failedResult);
     } finally {
-      setCheckingProxyId?.(null);
+      setCheckingProfileId?.(null);
     }
   }, [
     proxy,
-    checkingProxyId,
+    profileId,
+    checkingProfileId,
     onCheckComplete,
     onCheckFailed,
-    setCheckingProxyId,
+    setCheckingProfileId,
   ]);
 
-  const isCurrentlyChecking = checkingProxyId === proxy.id;
+  const isCurrentlyChecking = checkingProfileId === profileId;
   const result = localResult;
 
   return (
@@ -117,7 +120,7 @@ export function ProxyCheckButton({
               <FiCheck className="absolute bottom-[-6px] right-[-4px]" />
             </span>
           ) : result && !result.is_valid ? (
-            <span className="text-red-600 text-sm">✕</span>
+            <span className="text-destructive text-sm">✕</span>
           ) : (
             <FiCheck className="w-3 h-3" />
           )}
@@ -135,15 +138,17 @@ export function ProxyCheckButton({
               {[result.city, result.country].filter(Boolean).join(", ") ||
                 "Unknown"}
             </p>
-            <p className="text-xs text-muted-foreground">IP: {result.ip}</p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-primary-foreground/70">
+              IP: {result.ip}
+            </p>
+            <p className="text-xs text-primary-foreground/70">
               Checked {formatRelativeTime(result.timestamp)}
             </p>
           </div>
         ) : result && !result.is_valid ? (
           <div>
             <p>Proxy check failed</p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-primary-foreground/70">
               Failed {formatRelativeTime(result.timestamp)}
             </p>
           </div>

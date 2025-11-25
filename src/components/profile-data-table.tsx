@@ -100,7 +100,7 @@ type TableMeta = {
     profileId: string,
     proxyId: string | null,
   ) => void | Promise<void>;
-  checkingProxyId: string | null;
+  checkingProfileId: string | null;
   proxyCheckResults: Record<string, ProxyCheckResult>;
 
   // Selection helpers
@@ -209,6 +209,7 @@ const TagsCell = React.memo<{
     const [visibleCount, setVisibleCount] = React.useState<number>(
       effectiveTags.length,
     );
+    const [isFocused, setIsFocused] = React.useState(false);
 
     React.useLayoutEffect(() => {
       // Only measure when not editing this profile's tags
@@ -298,7 +299,7 @@ const TagsCell = React.memo<{
           type="button"
           ref={containerRef as unknown as React.RefObject<HTMLButtonElement>}
           className={cn(
-            "flex overflow-hidden gap-1 items-center p-2.5 w-full bg-transparent rounded border-none cursor-pointer",
+            "flex overflow-hidden gap-1 items-center px-2 py-1 h-6 w-full bg-transparent rounded border-none cursor-pointer",
             isDisabled ? "opacity-60" : "cursor-pointer hover:bg-accent/50",
           )}
           onClick={() => {
@@ -322,7 +323,7 @@ const TagsCell = React.memo<{
       );
 
       return (
-        <div className="w-48 h-full cursor-pointer">
+        <div className="w-48 h-6 cursor-pointer">
           <Tooltip>
             <TooltipTrigger asChild>{ButtonContent}</TooltipTrigger>
             {hiddenCount > 0 && (
@@ -348,11 +349,14 @@ const TagsCell = React.memo<{
     return (
       <div
         className={cn(
-          "w-48 h-8",
+          "w-48 h-6 relative",
           isDisabled && "opacity-60 pointer-events-none",
         )}
       >
-        <div ref={editorRef}>
+        <div
+          ref={editorRef}
+          className="absolute top-0 left-0 z-50 w-48 min-h-6 bg-popover rounded-md shadow-md"
+        >
           <MultipleSelector
             value={valueOptions}
             options={allOptions}
@@ -360,13 +364,22 @@ const TagsCell = React.memo<{
             creatable
             selectFirstItem={false}
             placeholder={effectiveTags.length === 0 ? "Add tags" : ""}
-            className="overflow-x-hidden overflow-y-scroll h-7 bg-transparent"
-            badgeClassName=""
+            className={cn(
+              "bg-transparent !border-0 focus-within:!ring-0",
+              "[&_div:first-child]:!border-0 [&_div:first-child]:!ring-0 [&_div:first-child]:focus-within:!ring-0",
+              "[&_div:first-child]:!min-h-6 [&_div:first-child]:!px-2 [&_div:first-child]:!py-1",
+              "[&_div:first-child>div]:items-center [&_div:first-child>div]:!h-6",
+              "[&_input]:!ml-0 [&_input]:!mt-0 [&_input]:!px-0",
+              !isFocused && "[&_div:first-child>div]:justify-center",
+            )}
+            badgeClassName="shrink-0"
             inputProps={{
-              className: "py-1",
+              className: "!py-0 text-sm caret-current !ml-0 !mt-0 !px-0",
               onKeyDown: (e) => {
                 if (e.key === "Escape") setOpenTagsEditorFor(null);
               },
+              onFocus: () => setIsFocused(true),
+              onBlur: () => setIsFocused(false),
             }}
           />
         </div>
@@ -440,9 +453,9 @@ export function ProfilesDataTable({
   const [openProxySelectorFor, setOpenProxySelectorFor] = React.useState<
     string | null
   >(null);
-  const [checkingProxyId, setCheckingProxyId] = React.useState<string | null>(
-    null,
-  );
+  const [checkingProfileId, setCheckingProfileId] = React.useState<
+    string | null
+  >(null);
   const [proxyCheckResults, setProxyCheckResults] = React.useState<
     Record<string, ProxyCheckResult>
   >({});
@@ -818,7 +831,7 @@ export function ProfilesDataTable({
       proxyOverrides,
       storedProxies,
       handleProxySelection,
-      checkingProxyId,
+      checkingProfileId,
       proxyCheckResults,
 
       // Selection helpers
@@ -864,7 +877,7 @@ export function ProfilesDataTable({
       proxyOverrides,
       storedProxies,
       handleProxySelection,
-      checkingProxyId,
+      checkingProfileId,
       proxyCheckResults,
       handleToggleAll,
       handleCheckboxChange,
@@ -1033,7 +1046,7 @@ export function ProfilesDataTable({
                       size="sm"
                       disabled={!canLaunch || isLaunching || isStopping}
                       className={cn(
-                        "cursor-pointer min-w-[70px]",
+                        "cursor-pointer min-w-[70px] h-7",
                         !canLaunch && "opacity-50",
                       )}
                       onClick={() =>
@@ -1118,7 +1131,7 @@ export function ProfilesDataTable({
                       meta.setRenameError(null);
                     }
                   }}
-                  className="inline-block w-30"
+                  className="w-30 h-6 px-2 py-1 text-sm font-medium leading-none border-0 shadow-none focus-visible:ring-0"
                 />
                 <div className="flex absolute right-0 top-full z-50 gap-1 translate-y-[30%] opacity-100 bg-black rounded-md">
                   <LoadingButton
@@ -1138,11 +1151,11 @@ export function ProfilesDataTable({
 
           const display =
             name.length < 14 ? (
-              <div className="font-medium text-left">{name}</div>
+              <div className="font-medium text-left leading-none">{name}</div>
             ) : (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span>{trimName(name, 14)}</span>
+                  <span className="leading-none">{trimName(name, 14)}</span>
                 </TooltipTrigger>
                 <TooltipContent>{name}</TooltipContent>
               </Tooltip>
@@ -1160,7 +1173,7 @@ export function ProfilesDataTable({
             <button
               type="button"
               className={cn(
-                "p-2 mr-auto text-left bg-transparent rounded border-none w-30",
+                "px-2 py-1 mr-auto text-left bg-transparent rounded border-none w-30 h-6",
                 isDisabled
                   ? "opacity-60 cursor-not-allowed"
                   : "cursor-pointer hover:bg-accent/50",
@@ -1330,7 +1343,7 @@ export function ProfilesDataTable({
                     <PopoverTrigger asChild>
                       <span
                         className={cn(
-                          "flex gap-2 items-center p-2 rounded",
+                          "flex gap-2 items-center px-2 py-1 rounded",
                           isDisabled
                             ? "opacity-60 cursor-not-allowed pointer-events-none"
                             : "cursor-pointer hover:bg-accent/50",
@@ -1355,7 +1368,11 @@ export function ProfilesDataTable({
                 </Tooltip>
 
                 {!isDisabled && (
-                  <PopoverContent className="w-[240px] p-0" align="start">
+                  <PopoverContent
+                    className="w-[240px] p-0"
+                    align="end"
+                    sideOffset={8}
+                  >
                     <Command>
                       <CommandInput placeholder="Search proxies..." />
                       <CommandList>
@@ -1408,9 +1425,10 @@ export function ProfilesDataTable({
               {profileHasProxy && effectiveProxy && !isDisabled && (
                 <ProxyCheckButton
                   proxy={effectiveProxy}
-                  checkingProxyId={meta.checkingProxyId}
+                  profileId={profile.id}
+                  checkingProfileId={meta.checkingProfileId}
                   cachedResult={meta.proxyCheckResults[effectiveProxy.id]}
-                  setCheckingProxyId={setCheckingProxyId}
+                  setCheckingProfileId={setCheckingProfileId}
                   onCheckComplete={(result) => {
                     setProxyCheckResults((prev) => ({
                       ...prev,
