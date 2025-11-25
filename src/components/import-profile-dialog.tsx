@@ -330,9 +330,6 @@ export function ImportProfileDialog({
                                   <span className="font-medium">
                                     {profile.name}
                                   </span>
-                                  <span className="text-xs text-muted-foreground">
-                                    {profile.description}
-                                  </span>
                                 </div>
                               </div>
                             </SelectItem>
