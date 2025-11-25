@@ -695,7 +695,7 @@ export default function Home() {
 
   return (
     <div className="grid items-center justify-items-center min-h-screen gap-8 font-(family-name:--font-geist-sans) bg-background">
-      <main className="flex flex-col gap-6 items-center w-full max-w-3xl">
+      <main className="flex flex-col items-center w-full max-w-3xl">
         <div className="w-full">
           <HomeHeader
             selectedProfiles={selectedProfiles}
@@ -710,7 +710,7 @@ export default function Home() {
             onSearchQueryChange={setSearchQuery}
           />
         </div>
-        <div className="space-y-4 w-full">
+        <div className="w-full mt-2.5">
           <GroupBadges
             selectedGroupId={selectedGroupId}
             onGroupSelect={handleSelectGroup}
