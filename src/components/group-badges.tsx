@@ -39,6 +39,8 @@ export function GroupBadges({
     const container = scrollContainerRef.current;
     if (!container) return;
 
+    e.preventDefault();
+
     dragStartRef.current = {
       x: e.clientX,
       scrollLeft: container.scrollLeft,
