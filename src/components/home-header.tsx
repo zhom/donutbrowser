@@ -48,7 +48,7 @@ const HomeHeader = ({
     window.dispatchEvent(event);
   };
   return (
-    <div className="flex justify-between items-center mt-4">
+    <div className="flex justify-between items-center mt-3">
       <div className="flex gap-3 items-center">
         <button
           type="button"
