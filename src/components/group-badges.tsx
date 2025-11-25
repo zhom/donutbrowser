@@ -21,6 +21,10 @@ export function GroupBadges({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showLeftFade, setShowLeftFade] = useState(false);
   const [showRightFade, setShowRightFade] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef<{ x: number; scrollLeft: number } | null>(null);
+  const hasMovedRef = useRef(false);
+  const clickBlockedRef = useRef(false);
 
   const checkScrollPosition = useCallback(() => {
     const container = scrollContainerRef.current;
@@ -30,6 +34,70 @@ export function GroupBadges({
     setShowLeftFade(scrollLeft > 0);
     setShowRightFade(scrollLeft < scrollWidth - clientWidth - 1);
   }, []);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    dragStartRef.current = {
+      x: e.clientX,
+      scrollLeft: container.scrollLeft,
+    };
+    hasMovedRef.current = false;
+    setIsDragging(true);
+    container.style.cursor = "grabbing";
+    container.style.userSelect = "none";
+  }, []);
+
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!isDragging || !dragStartRef.current) return;
+
+      const container = scrollContainerRef.current;
+      if (!container) return;
+
+      const deltaX = e.clientX - dragStartRef.current.x;
+      const distance = Math.abs(deltaX);
+
+      if (distance > 5) {
+        hasMovedRef.current = true;
+      }
+
+      container.scrollLeft = dragStartRef.current.scrollLeft - deltaX;
+      checkScrollPosition();
+    },
+    [isDragging, checkScrollPosition],
+  );
+
+  const handleMouseUp = useCallback(() => {
+    if (!isDragging) return;
+
+    const container = scrollContainerRef.current;
+    if (container) {
+      container.style.cursor = "";
+      container.style.userSelect = "";
+    }
+
+    clickBlockedRef.current = hasMovedRef.current;
+    setIsDragging(false);
+    dragStartRef.current = null;
+
+    setTimeout(() => {
+      hasMovedRef.current = false;
+      clickBlockedRef.current = false;
+    }, 100);
+  }, [isDragging]);
+
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+      return () => {
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+      };
+    }
+  }, [isDragging, handleMouseMove, handleMouseUp]);
 
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -66,18 +134,32 @@ export function GroupBadges({
       )}
       <div
         ref={scrollContainerRef}
-        className="flex gap-2 overflow-x-auto pb-2 -mb-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        role="region"
+        aria-label="Profile groups"
+        className={`flex gap-2 overflow-x-auto pb-2 -mb-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${isDragging ? "cursor-grabbing" : "cursor-grab"}`}
         onScroll={checkScrollPosition}
+        onMouseDown={handleMouseDown}
       >
         {groups.map((group) => (
           <Badge
             key={group.id}
             variant={selectedGroupId === group.id ? "default" : "secondary"}
             className="flex gap-2 items-center px-3 py-1 transition-colors cursor-pointer dark:hover:bg-primary/60 hover:bg-primary/80 flex-shrink-0"
-            onClick={() => {
+            onClick={(e) => {
+              if (hasMovedRef.current || clickBlockedRef.current) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+              }
               onGroupSelect(
                 selectedGroupId === group.id ? "default" : group.id,
               );
+            }}
+            onMouseDown={(e) => {
+              if (isDragging) {
+                e.preventDefault();
+                e.stopPropagation();
+              }
             }}
           >
             <span>{group.name}</span>
