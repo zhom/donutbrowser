@@ -300,9 +300,9 @@ pub fn run() {
       // Set up deep link handler
       let handle = app.handle().clone();
 
-      #[cfg(any(windows, target_os = "linux"))]
+      #[cfg(windows)]
       {
-        // For Windows and Linux, register all deep links at runtime for development
+        // For Windows, register all deep links at runtime
         if let Err(e) = app.deep_link().register_all() {
           eprintln!("Failed to register deep links: {e}");
         }
