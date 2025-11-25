@@ -23,6 +23,3 @@ fi
 
 # Copy the file with target triple suffix
 cp "nodecar-bin" "../src-tauri/binaries/nodecar-${TARGET_TRIPLE}${EXT}"
-
-# Also copy a generic version for Tauri to find
-cp "nodecar-bin" "../src-tauri/binaries/nodecar${EXT}"

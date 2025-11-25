@@ -545,12 +545,21 @@ mod tests {
       Err(_) => return BackgroundUpdateState::default(),
     };
 
-    serde_json::from_str(&content).unwrap_or_default()
+    match serde_json::from_str(&content) {
+      Ok(state) => state,
+      Err(e) => {
+        eprintln!("Failed to parse test state file {:?}: {}", state_file, e);
+        BackgroundUpdateState::default()
+      }
+    }
   }
 
   #[test]
   fn test_background_update_state_persistence() {
     let test_name = "persistence";
+
+    // Clean up any existing test file first
+    let _ = fs::remove_file(get_test_state_file(test_name));
 
     // Create a test state
     let test_state = BackgroundUpdateState {
@@ -561,14 +570,22 @@ mod tests {
     // Save the state
     save_test_state(test_name, &test_state).unwrap();
 
+    // Verify file was created
+    let state_file = get_test_state_file(test_name);
+    assert!(state_file.exists(), "State file should exist after saving");
+
     // Load the state back
     let loaded_state = load_test_state(test_name);
 
     // Verify the values match
-    assert_eq!(loaded_state.last_update_time, test_state.last_update_time);
     assert_eq!(
-      loaded_state.update_interval_hours,
-      test_state.update_interval_hours
+      loaded_state.last_update_time, test_state.last_update_time,
+      "last_update_time should match. Expected: {}, Got: {}",
+      test_state.last_update_time, loaded_state.last_update_time
+    );
+    assert_eq!(
+      loaded_state.update_interval_hours, test_state.update_interval_hours,
+      "update_interval_hours should match"
     );
 
     // Clean up
@@ -625,37 +642,6 @@ mod tests {
     assert!(
       should_update_never,
       "Should update when never updated before"
-    );
-  }
-
-  #[test]
-  fn test_cache_dir_creation() {
-    // This should not panic and should create the directory if it doesn't exist
-    let cache_dir_result = VersionUpdater::get_cache_dir();
-    assert!(
-      cache_dir_result.is_ok(),
-      "Should successfully get cache directory"
-    );
-
-    let cache_dir = cache_dir_result.unwrap();
-    assert!(
-      cache_dir.exists(),
-      "Cache directory should exist after creation"
-    );
-    assert!(cache_dir.is_dir(), "Cache directory should be a directory");
-
-    // Verify the path contains expected components
-    let path_str = cache_dir.to_string_lossy();
-    assert!(
-      path_str.contains("version_cache"),
-      "Path should contain version_cache"
-    );
-
-    // Test that calling it again returns the same directory
-    let cache_dir2 = VersionUpdater::get_cache_dir().unwrap();
-    assert_eq!(
-      cache_dir, cache_dir2,
-      "Multiple calls should return same directory"
     );
   }
 

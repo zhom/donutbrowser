@@ -1081,6 +1081,15 @@ impl ProfileManager {
     internal_proxy: Option<&ProxySettings>,
   ) -> Result<(), Box<dyn std::error::Error>> {
     let user_js_path = profile_data_path.join("user.js");
+    let prefs_js_path = profile_data_path.join("prefs.js");
+
+    // Remove prefs.js if it exists to ensure Firefox reads user.js instead
+    // Firefox may cache proxy settings in prefs.js, so we need to clear it
+    if prefs_js_path.exists() {
+      println!("Removing prefs.js to ensure Firefox reads updated user.js settings");
+      let _ = fs::remove_file(&prefs_js_path);
+    }
+
     let mut preferences = Vec::new();
 
     // Get the UUID directory (parent of profile data directory)
@@ -1098,10 +1107,19 @@ impl ProfileManager {
 
     // Format proxy URL based on type and whether we have an internal proxy
     let proxy_url = if let Some(internal) = internal_proxy {
-      // Use internal proxy as the primary proxy
+      // Use internal proxy (local proxy) as the primary proxy
+      // This is the local proxy that forwards to the upstream proxy
+      println!(
+        "Applying local proxy settings to Firefox profile: {}:{}",
+        internal.host, internal.port
+      );
       format!("HTTP {}:{}", internal.host, internal.port)
     } else {
-      // Use user-configured proxy directly
+      // Use user-configured proxy directly (upstream proxy)
+      println!(
+        "Applying upstream proxy settings to Firefox profile: {}:{} ({})",
+        proxy.host, proxy.port, proxy.proxy_type
+      );
       match proxy.proxy_type.as_str() {
         "http" => format!("HTTP {}:{}", proxy.host, proxy.port),
         "https" => format!("HTTPS {}:{}", proxy.host, proxy.port),
@@ -1118,14 +1136,40 @@ impl ProfileManager {
 
     // Save PAC file in UUID directory
     let pac_path = uuid_dir.join("proxy.pac");
-    fs::write(&pac_path, pac_content)?;
+    println!(
+      "Creating PAC file at: {} with proxy: {}",
+      pac_path.display(),
+      proxy_url
+    );
+    fs::write(&pac_path, &pac_content)?;
+    println!(
+      "Created PAC file at: {} with content: {}",
+      pac_path.display(),
+      pac_content
+    );
 
     // Configure Firefox to use the PAC file
+    // Convert path to absolute and properly format for file:// URL
+    let pac_path_absolute = pac_path.canonicalize().unwrap_or_else(|_| pac_path.clone());
+    let pac_url = if cfg!(windows) {
+      // Windows: file:///C:/path/to/file.pac
+      format!(
+        "file:///{}",
+        pac_path_absolute.to_string_lossy().replace('\\', "/")
+      )
+    } else {
+      // Unix/macOS: file:///absolute/path/to/file.pac (three slashes for absolute path)
+      format!("file://{}", pac_path_absolute.to_string_lossy())
+    };
+
+    println!("PAC file path (absolute): {}", pac_path_absolute.display());
+    println!("PAC file URL for Firefox: {}", pac_url);
+
     preferences.extend([
       "user_pref(\"network.proxy.type\", 2);".to_string(),
       format!(
-        "user_pref(\"network.proxy.autoconfig_url\", \"file://{}\");",
-        pac_path.to_string_lossy()
+        "user_pref(\"network.proxy.autoconfig_url\", \"{}\");",
+        pac_url
       ),
       "user_pref(\"network.proxy.failover_direct\", false);".to_string(),
       "user_pref(\"network.proxy.socks_remote_dns\", true);".to_string(),
@@ -1137,7 +1181,20 @@ impl ProfileManager {
     ]);
 
     // Write settings to user.js file
-    fs::write(user_js_path, preferences.join("\n"))?;
+    let user_js_content = preferences.join("\n");
+    fs::write(user_js_path, &user_js_content)?;
+    println!("Updated user.js with proxy settings. PAC URL: {}", pac_url);
+    if let Some(internal) = internal_proxy {
+      println!(
+        "Firefox will use LOCAL proxy: {}:{} (which forwards to upstream)",
+        internal.host, internal.port
+      );
+    } else {
+      println!(
+        "Firefox will use UPSTREAM proxy directly: {}:{}",
+        proxy.host, proxy.port
+      );
+    }
 
     Ok(())
   }

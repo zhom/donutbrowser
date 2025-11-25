@@ -34,5 +34,63 @@ fn main() {
     println!("cargo:rustc-env=DONUT_BROWSER_VAULT_PASSWORD=donutbrowser-api-vault-password");
   }
 
+  // Tell Cargo to rebuild if the proxy binary source changes
+  println!("cargo:rerun-if-changed=src/bin/proxy_server.rs");
+  println!("cargo:rerun-if-changed=src/proxy_server.rs");
+  println!("cargo:rerun-if-changed=src/proxy_runner.rs");
+  println!("cargo:rerun-if-changed=src/proxy_storage.rs");
+
+  // Ensure the proxy binary exists before Tauri checks for it
+  // Tauri looks for binaries in the binaries/ directory relative to the manifest
+  ensure_proxy_binary_exists();
+
   tauri_build::build()
+}
+
+fn ensure_proxy_binary_exists() {
+  use std::env;
+  use std::path::PathBuf;
+
+  let manifest_dir = match env::var("CARGO_MANIFEST_DIR") {
+    Ok(dir) => dir,
+    Err(_) => return,
+  };
+
+  let target = match env::var("TARGET") {
+    Ok(t) => t,
+    Err(_) => return,
+  };
+
+  let binaries_dir = PathBuf::from(&manifest_dir).join("binaries");
+  let binary_name = format!("donut-proxy-{}", target);
+  let binary_path = binaries_dir.join(&binary_name);
+
+  // If binary doesn't exist, try to copy it from target directory
+  if !binary_path.exists() {
+    let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
+    let source_binary_name = if target.contains("windows") {
+      "donut-proxy.exe"
+    } else {
+      "donut-proxy"
+    };
+
+    let source_dir = if target == env::var("HOST").unwrap_or_default() {
+      format!("{manifest_dir}/target/{}", profile)
+    } else {
+      format!("{manifest_dir}/target/{target}/{}", profile)
+    };
+
+    let source = PathBuf::from(&source_dir).join(source_binary_name);
+    if source.exists() {
+      if let Err(e) = std::fs::create_dir_all(&binaries_dir) {
+        eprintln!("cargo:warning=Failed to create binaries directory: {}", e);
+        return;
+      }
+      if let Err(e) = std::fs::copy(&source, &binary_path) {
+        eprintln!("cargo:warning=Failed to copy proxy binary: {}", e);
+      }
+    } else {
+      eprintln!("cargo:warning=Proxy binary not found at {} and source {} doesn't exist. Run 'pnpm copy-proxy-binary' first.", binary_path.display(), source.display());
+    }
+  }
 }

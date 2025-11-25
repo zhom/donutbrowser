@@ -21,7 +21,11 @@
     "format": "pnpm format:js && pnpm format:rust",
     "cargo": "cd src-tauri && cargo",
     "unused-exports:js": "ts-unused-exports tsconfig.json",
-    "check-unused-commands": "cd src-tauri && cargo test test_no_unused_tauri_commands"
+    "check-unused-commands": "cd src-tauri && cargo test test_no_unused_tauri_commands",
+    "copy-proxy-binary": "cd src-tauri && bash copy-proxy-binary.sh",
+    "prebuild": "pnpm copy-proxy-binary",
+    "pretauri:dev": "pnpm copy-proxy-binary",
+    "precargo": "pnpm copy-proxy-binary"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.3.3",

@@ -16,6 +16,10 @@ name = "donutbrowser"
 crate-type = ["staticlib", "cdylib", "rlib"]
 doctest = false
 
+[[bin]]
+name = "donut-proxy"
+path = "src/bin/proxy_server.rs"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -32,11 +36,12 @@ tauri-plugin-macos-permissions = "2"
 
 
 directories = "6"
-reqwest = { version = "0.12", features = ["json", "stream"] }
+reqwest = { version = "0.12", features = ["json", "stream", "socks"] }
 tokio = { version = "1", features = ["full", "sync"] }
 sysinfo = "0.37"
 lazy_static = "1.4"
 base64 = "0.22"
+libc = "0.2"
 async-trait = "0.1"
 futures-util = "0.3"
 zip = "5"
@@ -56,6 +61,11 @@ tower-http = { version = "0.6", features = ["cors"] }
 rand = "0.9.2"
 argon2 = "0.5"
 aes-gcm = "0.10"
+hyper = { version = "1.7", features = ["full"] }
+hyper-util = { version = "0.1", features = ["full"] }
+http-body-util = "0.1"
+clap = { version = "4", features = ["derive"] }
+async-socks5 = "0.6"
 
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
@@ -91,8 +101,8 @@ futures-util = "0.3"
 
 # Integration test configuration
 [[test]]
-name = "nodecar_integration"
-path = "tests/nodecar_integration.rs"
+name = "donut_proxy_integration"
+path = "tests/donut_proxy_integration.rs"
 
 [features]
 # by default Tauri runs in production mode

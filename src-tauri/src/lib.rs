@@ -25,6 +25,9 @@ mod platform_browser;
 mod profile;
 mod profile_importer;
 mod proxy_manager;
+pub mod proxy_runner;
+pub mod proxy_server;
+pub mod proxy_storage;
 mod settings_manager;
 // mod theme_detector; // removed: theme detection handled in webview via CSS prefers-color-scheme
 mod tag_manager;

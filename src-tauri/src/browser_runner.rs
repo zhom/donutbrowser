@@ -148,6 +148,7 @@ impl BrowserRunner {
       );
 
       // Start the proxy and get local proxy settings
+      // If proxy startup fails, DO NOT launch Camoufox - it requires local proxy
       let local_proxy = PROXY_MANAGER
         .start_proxy(
           app_handle.clone(),
@@ -156,7 +157,11 @@ impl BrowserRunner {
           Some(&profile.name),
         )
         .await
-        .map_err(|e| format!("Failed to start local proxy for Camoufox: {e}"))?;
+        .map_err(|e| {
+          let error_msg = format!("Failed to start local proxy for Camoufox: {e}");
+          eprintln!("{}", error_msg);
+          error_msg
+        })?;
 
       // Format proxy URL for camoufox - always use HTTP for the local proxy
       let proxy_url = format!("http://{}:{}", local_proxy.host, local_proxy.port);
@@ -734,8 +739,6 @@ impl BrowserRunner {
     headless: bool,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
     // Always start a local proxy for API launches
-    let mut internal_proxy_settings: Option<ProxySettings> = None;
-
     // Determine upstream proxy if configured; otherwise use DIRECT
     let upstream_proxy = profile
       .proxy_id
@@ -745,7 +748,8 @@ impl BrowserRunner {
     // Use a temporary PID (1) to start the proxy, we'll update it after browser launch
     let temp_pid = 1u32;
 
-    match PROXY_MANAGER
+    // Start local proxy - if this fails, DO NOT launch browser
+    let internal_proxy = PROXY_MANAGER
       .start_proxy(
         app_handle.clone(),
         upstream_proxy.as_ref(),
@@ -753,35 +757,37 @@ impl BrowserRunner {
         Some(&profile.name),
       )
       .await
+      .map_err(|e| {
+        let error_msg = format!("Failed to start local proxy: {e}");
+        eprintln!("{}", error_msg);
+        error_msg
+      })?;
+
+    let internal_proxy_settings = Some(internal_proxy.clone());
+
+    // Configure Firefox profiles to use local proxy
     {
-      Ok(internal_proxy) => {
-        internal_proxy_settings = Some(internal_proxy.clone());
+      // For Firefox-based browsers, apply PAC/user.js to point to the local proxy
+      if matches!(
+        profile.browser.as_str(),
+        "firefox" | "firefox-developer" | "zen" | "tor-browser" | "mullvad-browser"
+      ) {
+        let profiles_dir = self.profile_manager.get_profiles_dir();
+        let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
 
-        // For Firefox-based browsers, apply PAC/user.js to point to the local proxy
-        if matches!(
-          profile.browser.as_str(),
-          "firefox" | "firefox-developer" | "zen" | "tor-browser" | "mullvad-browser"
-        ) {
-          let profiles_dir = self.profile_manager.get_profiles_dir();
-          let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
+        // Provide a dummy upstream (ignored when internal proxy is provided)
+        let dummy_upstream = ProxySettings {
+          proxy_type: "http".to_string(),
+          host: "127.0.0.1".to_string(),
+          port: internal_proxy.port,
+          username: None,
+          password: None,
+        };
 
-          // Provide a dummy upstream (ignored when internal proxy is provided)
-          let dummy_upstream = ProxySettings {
-            proxy_type: "http".to_string(),
-            host: "127.0.0.1".to_string(),
-            port: internal_proxy.port,
-            username: None,
-            password: None,
-          };
-
-          self
-            .profile_manager
-            .apply_proxy_settings_to_profile(&profile_path, &dummy_upstream, Some(&internal_proxy))
-            .map_err(|e| format!("Failed to update profile proxy: {e}"))?;
-        }
-      }
-      Err(e) => {
-        eprintln!("Failed to start local proxy (will launch without it): {e}");
+        self
+          .profile_manager
+          .apply_proxy_settings_to_profile(&profile_path, &dummy_upstream, Some(&internal_proxy))
+          .map_err(|e| format!("Failed to update profile proxy: {e}"))?;
       }
     }
 
@@ -1539,8 +1545,9 @@ pub async fn launch_browser_profile(
   );
 
   // Always start a local proxy before launching (non-Camoufox handled here; Camoufox has its own flow)
+  // This ensures all traffic goes through the local proxy for monitoring and future features
   if profile.browser != "camoufox" {
-    // Determine upstream proxy if configured; otherwise use DIRECT
+    // Determine upstream proxy if configured; otherwise use DIRECT (no upstream)
     let upstream_proxy = profile_for_launch
       .proxy_id
       .as_ref()
@@ -1549,6 +1556,8 @@ pub async fn launch_browser_profile(
     // Use a temporary PID (1) to start the proxy, we'll update it after browser launch
     let temp_pid = 1u32;
 
+    // Always start a local proxy, even if there's no upstream proxy
+    // This allows for traffic monitoring and future features
     match PROXY_MANAGER
       .start_proxy(
         app_handle.clone(),
@@ -1562,7 +1571,7 @@ pub async fn launch_browser_profile(
         // Use internal proxy for subsequent launch
         internal_proxy_settings = Some(internal_proxy.clone());
 
-        // For Firefox-based browsers, apply PAC/user.js to point to the local proxy
+        // For Firefox-based browsers, always apply PAC/user.js to point to the local proxy
         if matches!(
           profile_for_launch.browser.as_str(),
           "firefox" | "firefox-developer" | "zen" | "tor-browser" | "mullvad-browser"
@@ -1598,7 +1607,10 @@ pub async fn launch_browser_profile(
         );
       }
       Err(e) => {
-        eprintln!("Failed to start local proxy (will launch without it): {e}");
+        let error_msg = format!("Failed to start local proxy: {e}");
+        eprintln!("{}", error_msg);
+        // DO NOT launch browser if proxy startup fails - all browsers must use local proxy
+        return Err(error_msg);
       }
     }
   }

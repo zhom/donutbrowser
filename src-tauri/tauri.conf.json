@@ -4,9 +4,9 @@
   "version": "0.12.3",
   "identifier": "com.donutbrowser",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "pnpm copy-proxy-binary && pnpm dev",
     "devUrl": "http://localhost:3000",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "pnpm copy-proxy-binary && pnpm build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -19,7 +19,7 @@
     "active": true,
     "targets": "all",
     "category": "Productivity",
-    "externalBin": ["binaries/nodecar"],
+    "externalBin": ["binaries/nodecar", "binaries/donut-proxy"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
