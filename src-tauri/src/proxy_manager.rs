@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
 use tauri_plugin_shell::ShellExt;
 
@@ -21,6 +22,17 @@ pub struct ProxyInfo {
   pub local_port: u16,
   // Optional profile name to which this proxy instance is logically tied
   pub profile_name: Option<String>,
+}
+
+// Proxy check result cache
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxyCheckResult {
+  pub ip: String,
+  pub city: Option<String>,
+  pub country: Option<String>,
+  pub country_code: Option<String>,
+  pub timestamp: u64,
+  pub is_valid: bool,
 }
 
 // Stored proxy configuration with name and ID for reuse
@@ -89,6 +101,115 @@ impl ProxyManager {
     });
     path.push("proxies");
     path
+  }
+
+  // Get the path to the proxy check cache directory
+  fn get_proxy_check_cache_dir(&self) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let mut path = self.base_dirs.cache_dir().to_path_buf();
+    path.push(if cfg!(debug_assertions) {
+      "DonutBrowserDev"
+    } else {
+      "DonutBrowser"
+    });
+    path.push("proxy_checks");
+    fs::create_dir_all(&path)?;
+    Ok(path)
+  }
+
+  // Get the path to a specific proxy check cache file
+  fn get_proxy_check_cache_file(
+    &self,
+    proxy_id: &str,
+  ) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let cache_dir = self.get_proxy_check_cache_dir()?;
+    Ok(cache_dir.join(format!("{proxy_id}.json")))
+  }
+
+  // Load cached proxy check result
+  fn load_proxy_check_cache(&self, proxy_id: &str) -> Option<ProxyCheckResult> {
+    let cache_file = match self.get_proxy_check_cache_file(proxy_id) {
+      Ok(file) => file,
+      Err(_) => return None,
+    };
+
+    if !cache_file.exists() {
+      return None;
+    }
+
+    let content = match fs::read_to_string(&cache_file) {
+      Ok(content) => content,
+      Err(_) => return None,
+    };
+
+    serde_json::from_str::<ProxyCheckResult>(&content).ok()
+  }
+
+  // Save proxy check result to cache
+  fn save_proxy_check_cache(
+    &self,
+    proxy_id: &str,
+    result: &ProxyCheckResult,
+  ) -> Result<(), Box<dyn std::error::Error>> {
+    let cache_file = self.get_proxy_check_cache_file(proxy_id)?;
+    let content = serde_json::to_string_pretty(result)?;
+    fs::write(&cache_file, content)?;
+    Ok(())
+  }
+
+  // Get current timestamp
+  fn get_current_timestamp() -> u64 {
+    SystemTime::now()
+      .duration_since(UNIX_EPOCH)
+      .unwrap_or_default()
+      .as_secs()
+  }
+
+  // Get geolocation for an IP address
+  async fn get_ip_geolocation(
+    ip: &str,
+  ) -> Result<(Option<String>, Option<String>, Option<String>), String> {
+    // Use ip-api.com (free, no API key required)
+    let url = format!(
+      "http://ip-api.com/json/{}?fields=status,message,country,countryCode,city",
+      ip
+    );
+
+    let client = reqwest::Client::builder()
+      .timeout(std::time::Duration::from_secs(5))
+      .build()
+      .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
+
+    match client.get(&url).send().await {
+      Ok(response) => {
+        if response.status().is_success() {
+          match response.json::<serde_json::Value>().await {
+            Ok(json) => {
+              if json.get("status").and_then(|s| s.as_str()) == Some("success") {
+                let country = json
+                  .get("country")
+                  .and_then(|v| v.as_str())
+                  .map(|s| s.to_string());
+                let country_code = json
+                  .get("countryCode")
+                  .and_then(|v| v.as_str())
+                  .map(|s| s.to_string());
+                let city = json
+                  .get("city")
+                  .and_then(|v| v.as_str())
+                  .map(|s| s.to_string());
+                Ok((city, country, country_code))
+              } else {
+                Ok((None, None, None))
+              }
+            }
+            Err(e) => Err(format!("Failed to parse geolocation response: {e}")),
+          }
+        } else {
+          Ok((None, None, None))
+        }
+      }
+      Err(e) => Err(format!("Failed to fetch geolocation: {e}")),
+    }
   }
 
   // Get the path to a specific proxy file
@@ -276,6 +397,159 @@ impl ProxyManager {
     stored_proxies
       .get(proxy_id)
       .map(|p| p.proxy_settings.clone())
+  }
+
+  // Build proxy URL string from ProxySettings
+  fn build_proxy_url(proxy_settings: &ProxySettings) -> String {
+    let mut url = format!("{}://", proxy_settings.proxy_type);
+
+    if let (Some(username), Some(password)) = (&proxy_settings.username, &proxy_settings.password) {
+      url.push_str(&urlencoding::encode(username));
+      url.push(':');
+      url.push_str(&urlencoding::encode(password));
+      url.push('@');
+    } else if let Some(username) = &proxy_settings.username {
+      url.push_str(&urlencoding::encode(username));
+      url.push('@');
+    }
+
+    url.push_str(&proxy_settings.host);
+    url.push(':');
+    url.push_str(&proxy_settings.port.to_string());
+
+    url
+  }
+
+  // Validate IP address (IPv4 or IPv6)
+  fn validate_ip(ip: &str) -> bool {
+    // IPv4 validation
+    if ip.matches('.').count() == 3 {
+      let parts: Vec<&str> = ip.split('.').collect();
+      if parts.len() == 4 {
+        return parts.iter().all(|part| part.parse::<u8>().is_ok());
+      }
+    }
+
+    // IPv6 validation (simplified - checks for colons and hex digits)
+    if ip.matches(':').count() >= 2 {
+      let parts: Vec<&str> = ip.split(':').collect();
+      return parts
+        .iter()
+        .all(|part| part.is_empty() || part.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    false
+  }
+
+  // Check if a proxy is valid by making HTTP requests through it
+  pub async fn check_proxy_validity(
+    &self,
+    proxy_id: &str,
+    proxy_settings: &ProxySettings,
+  ) -> Result<ProxyCheckResult, String> {
+    let proxy_url = Self::build_proxy_url(proxy_settings);
+
+    // List of IP check endpoints to try
+    let ip_check_urls = vec![
+      "https://api.ipify.org",
+      "https://checkip.amazonaws.com",
+      "https://ipinfo.io/ip",
+      "https://icanhazip.com",
+      "https://ifconfig.co/ip",
+      "https://ipecho.net/plain",
+    ];
+
+    // Create HTTP client with proxy
+    // reqwest::Proxy::all expects http/https URLs, but we need to handle socks proxies differently
+    let proxy = match proxy_settings.proxy_type.as_str() {
+      "socks4" | "socks5" => {
+        // For SOCKS proxies, reqwest doesn't support them directly via Proxy::all
+        // We'll need to use a different approach or return an error
+        return Err("SOCKS proxy validation not yet supported".to_string());
+      }
+      _ => reqwest::Proxy::all(&proxy_url).map_err(|e| format!("Failed to create proxy: {e}"))?,
+    };
+
+    let client = reqwest::Client::builder()
+      .proxy(proxy)
+      .timeout(std::time::Duration::from_secs(5))
+      .build()
+      .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
+
+    // Try each endpoint until one succeeds
+    let mut last_error = None;
+    let mut ip: Option<String> = None;
+
+    for url_str in ip_check_urls {
+      match client.get(url_str).send().await {
+        Ok(response) => {
+          if response.status().is_success() {
+            match response.text().await {
+              Ok(ip_text) => {
+                let ip_str = ip_text.trim();
+                if Self::validate_ip(ip_str) {
+                  ip = Some(ip_str.to_string());
+                  break;
+                } else {
+                  last_error = Some(format!("Invalid IP address returned: {ip_str}"));
+                }
+              }
+              Err(e) => {
+                last_error = Some(format!("Failed to read response from {url_str}: {e}"));
+              }
+            }
+          } else {
+            last_error = Some(format!("HTTP error from {url_str}: {}", response.status()));
+          }
+        }
+        Err(e) => {
+          last_error = Some(format!("Request to {url_str} failed: {e}"));
+        }
+      }
+    }
+
+    let ip = match ip {
+      Some(ip) => ip,
+      None => {
+        // Save failed check result
+        let failed_result = ProxyCheckResult {
+          ip: String::new(),
+          city: None,
+          country: None,
+          country_code: None,
+          timestamp: Self::get_current_timestamp(),
+          is_valid: false,
+        };
+        let _ = self.save_proxy_check_cache(proxy_id, &failed_result);
+        return Err(
+          last_error.unwrap_or_else(|| "Failed to get public IP from any endpoint".to_string()),
+        );
+      }
+    };
+
+    // Get geolocation
+    let (city, country, country_code): (Option<String>, Option<String>, Option<String>) =
+      Self::get_ip_geolocation(&ip).await.unwrap_or_default();
+
+    // Create successful result
+    let result = ProxyCheckResult {
+      ip: ip.clone(),
+      city,
+      country,
+      country_code,
+      timestamp: Self::get_current_timestamp(),
+      is_valid: true,
+    };
+
+    // Save to cache
+    let _ = self.save_proxy_check_cache(proxy_id, &result);
+
+    Ok(result)
+  }
+
+  // Get cached proxy check result
+  pub fn get_cached_proxy_check(&self, proxy_id: &str) -> Option<ProxyCheckResult> {
+    self.load_proxy_check_cache(proxy_id)
   }
 
   // Start a proxy for given proxy settings and associate it with a browser process ID

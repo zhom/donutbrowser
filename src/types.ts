@@ -25,6 +25,15 @@ export interface BrowserProfile {
   tags?: string[];
 }
 
+export interface ProxyCheckResult {
+  ip: string;
+  city?: string;
+  country?: string;
+  country_code?: string;
+  timestamp: number;
+  is_valid: boolean;
+}
+
 export interface StoredProxy {
   id: string;
   name: string;

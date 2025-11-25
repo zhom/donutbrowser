@@ -2,6 +2,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
+import * as React from "react";
 import { useCallback, useState } from "react";
 import { FiEdit2, FiPlus, FiTrash2, FiWifi } from "react-icons/fi";
 import { toast } from "sonner";
@@ -24,7 +25,8 @@ import {
 } from "@/components/ui/tooltip";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { trimName } from "@/lib/name-utils";
-import type { StoredProxy } from "@/types";
+import type { ProxyCheckResult, StoredProxy } from "@/types";
+import { ProxyCheckButton } from "./proxy-check-button";
 import { RippleButton } from "./ui/ripple";
 
 interface ProxyManagementDialogProps {
@@ -40,8 +42,36 @@ export function ProxyManagementDialog({
   const [editingProxy, setEditingProxy] = useState<StoredProxy | null>(null);
   const [proxyToDelete, setProxyToDelete] = useState<StoredProxy | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [checkingProxyId, setCheckingProxyId] = useState<string | null>(null);
+  const [proxyCheckResults, setProxyCheckResults] = useState<
+    Record<string, ProxyCheckResult>
+  >({});
 
   const { storedProxies, proxyUsage, isLoading } = useProxyEvents();
+
+  // Load cached check results on mount and when proxies change
+  React.useEffect(() => {
+    const loadCachedResults = async () => {
+      const results: Record<string, ProxyCheckResult> = {};
+      for (const proxy of storedProxies) {
+        try {
+          const cached = await invoke<ProxyCheckResult | null>(
+            "get_cached_proxy_check",
+            { proxyId: proxy.id },
+          );
+          if (cached) {
+            results[proxy.id] = cached;
+          }
+        } catch (_error) {
+          // Ignore errors
+        }
+      }
+      setProxyCheckResults(results);
+    };
+    if (storedProxies.length > 0) {
+      void loadCachedResults();
+    }
+  }, [storedProxies]);
 
   const handleDeleteProxy = useCallback((proxy: StoredProxy) => {
     // Open in-app confirmation dialog
@@ -163,7 +193,25 @@ export function ProxyManagementDialog({
                             {proxyUsage[proxy.id] ?? 0}
                           </Badge>
                         </div>
-                        <div className="flex flex-shrink-0 gap-1 items-center">
+                        <div className="flex shrink-0 gap-1 items-center">
+                          <ProxyCheckButton
+                            proxy={proxy}
+                            checkingProxyId={checkingProxyId}
+                            cachedResult={proxyCheckResults[proxy.id]}
+                            setCheckingProxyId={setCheckingProxyId}
+                            onCheckComplete={(result) => {
+                              setProxyCheckResults((prev) => ({
+                                ...prev,
+                                [proxy.id]: result,
+                              }));
+                            }}
+                            onCheckFailed={(result) => {
+                              setProxyCheckResults((prev) => ({
+                                ...prev,
+                                [proxy.id]: result,
+                              }));
+                            }}
+                          />
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button

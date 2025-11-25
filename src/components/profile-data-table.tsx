@@ -61,9 +61,10 @@ import {
 } from "@/lib/browser-utils";
 import { trimName } from "@/lib/name-utils";
 import { cn } from "@/lib/utils";
-import type { BrowserProfile, StoredProxy } from "@/types";
+import type { BrowserProfile, ProxyCheckResult, StoredProxy } from "@/types";
 import { LoadingButton } from "./loading-button";
 import MultipleSelector, { type Option } from "./multiple-selector";
+import { ProxyCheckButton } from "./proxy-check-button";
 import { Input } from "./ui/input";
 import { RippleButton } from "./ui/ripple";
 
@@ -99,6 +100,8 @@ type TableMeta = {
     profileId: string,
     proxyId: string | null,
   ) => void | Promise<void>;
+  checkingProxyId: string | null;
+  proxyCheckResults: Record<string, ProxyCheckResult>;
 
   // Selection helpers
   isProfileSelected: (id: string) => boolean;
@@ -437,6 +440,42 @@ export function ProfilesDataTable({
   const [openProxySelectorFor, setOpenProxySelectorFor] = React.useState<
     string | null
   >(null);
+  const [checkingProxyId, setCheckingProxyId] = React.useState<string | null>(
+    null,
+  );
+  const [proxyCheckResults, setProxyCheckResults] = React.useState<
+    Record<string, ProxyCheckResult>
+  >({});
+
+  // Load cached check results for proxies
+  React.useEffect(() => {
+    const loadCachedResults = async () => {
+      const results: Record<string, ProxyCheckResult> = {};
+      const proxyIds = new Set<string>();
+      for (const profile of profiles) {
+        if (profile.proxy_id) {
+          proxyIds.add(profile.proxy_id);
+        }
+      }
+      for (const proxyId of proxyIds) {
+        try {
+          const cached = await invoke<ProxyCheckResult | null>(
+            "get_cached_proxy_check",
+            { proxyId },
+          );
+          if (cached) {
+            results[proxyId] = cached;
+          }
+        } catch (_error) {
+          // Ignore errors
+        }
+      }
+      setProxyCheckResults(results);
+    };
+    if (profiles.length > 0) {
+      void loadCachedResults();
+    }
+  }, [profiles]);
 
   const loadAllTags = React.useCallback(async () => {
     try {
@@ -779,6 +818,8 @@ export function ProfilesDataTable({
       proxyOverrides,
       storedProxies,
       handleProxySelection,
+      checkingProxyId,
+      proxyCheckResults,
 
       // Selection helpers
       isProfileSelected: (id: string) => selectedProfiles.includes(id),
@@ -823,6 +864,8 @@ export function ProfilesDataTable({
       proxyOverrides,
       storedProxies,
       handleProxySelection,
+      checkingProxyId,
+      proxyCheckResults,
       handleToggleAll,
       handleCheckboxChange,
       handleIconClick,
@@ -1275,90 +1318,114 @@ export function ProfilesDataTable({
           }
 
           return (
-            <Popover
-              open={isSelectorOpen}
-              onOpenChange={(open) =>
-                meta.setOpenProxySelectorFor(open ? profile.id : null)
-              }
-            >
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <PopoverTrigger asChild>
-                    <span
-                      className={cn(
-                        "flex gap-2 items-center p-2 rounded",
-                        isDisabled
-                          ? "opacity-60 cursor-not-allowed pointer-events-none"
-                          : "cursor-pointer hover:bg-accent/50",
-                      )}
-                    >
+            <div className="flex gap-2 items-center">
+              <Popover
+                open={isSelectorOpen}
+                onOpenChange={(open) =>
+                  meta.setOpenProxySelectorFor(open ? profile.id : null)
+                }
+              >
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <PopoverTrigger asChild>
                       <span
                         className={cn(
-                          "text-sm",
-                          !profileHasProxy && "text-muted-foreground",
+                          "flex gap-2 items-center p-2 rounded",
+                          isDisabled
+                            ? "opacity-60 cursor-not-allowed pointer-events-none"
+                            : "cursor-pointer hover:bg-accent/50",
                         )}
                       >
-                        {profileHasProxy
-                          ? trimName(displayName, 10)
-                          : displayName}
-                      </span>
-                    </span>
-                  </PopoverTrigger>
-                </TooltipTrigger>
-                {tooltipText && <TooltipContent>{tooltipText}</TooltipContent>}
-              </Tooltip>
-
-              {!isDisabled && (
-                <PopoverContent className="w-[240px] p-0" align="start">
-                  <Command>
-                    <CommandInput placeholder="Search proxies..." />
-                    <CommandList>
-                      <CommandEmpty>No proxies found.</CommandEmpty>
-                      <CommandGroup>
-                        <CommandItem
-                          value="__none__"
-                          onSelect={() =>
-                            void meta.handleProxySelection(profile.id, null)
-                          }
+                        <span
+                          className={cn(
+                            "text-sm",
+                            !profileHasProxy && "text-muted-foreground",
+                          )}
                         >
-                          <LuCheck
-                            className={cn(
-                              "mr-2 h-4 w-4",
-                              effectiveProxyId === null
-                                ? "opacity-100"
-                                : "opacity-0",
-                            )}
-                          />
-                          No Proxy
-                        </CommandItem>
-                        {meta.storedProxies.map((proxy) => (
+                          {profileHasProxy
+                            ? trimName(displayName, 10)
+                            : displayName}
+                        </span>
+                      </span>
+                    </PopoverTrigger>
+                  </TooltipTrigger>
+                  {tooltipText && (
+                    <TooltipContent>{tooltipText}</TooltipContent>
+                  )}
+                </Tooltip>
+
+                {!isDisabled && (
+                  <PopoverContent className="w-[240px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search proxies..." />
+                      <CommandList>
+                        <CommandEmpty>No proxies found.</CommandEmpty>
+                        <CommandGroup>
                           <CommandItem
-                            key={proxy.id}
-                            value={proxy.name}
+                            value="__none__"
                             onSelect={() =>
-                              void meta.handleProxySelection(
-                                profile.id,
-                                proxy.id,
-                              )
+                              void meta.handleProxySelection(profile.id, null)
                             }
                           >
                             <LuCheck
                               className={cn(
                                 "mr-2 h-4 w-4",
-                                effectiveProxyId === proxy.id
+                                effectiveProxyId === null
                                   ? "opacity-100"
                                   : "opacity-0",
                               )}
                             />
-                            {proxy.name}
+                            No Proxy
                           </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
+                          {meta.storedProxies.map((proxy) => (
+                            <CommandItem
+                              key={proxy.id}
+                              value={proxy.name}
+                              onSelect={() =>
+                                void meta.handleProxySelection(
+                                  profile.id,
+                                  proxy.id,
+                                )
+                              }
+                            >
+                              <LuCheck
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  effectiveProxyId === proxy.id
+                                    ? "opacity-100"
+                                    : "opacity-0",
+                                )}
+                              />
+                              {proxy.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                )}
+              </Popover>
+              {profileHasProxy && effectiveProxy && !isDisabled && (
+                <ProxyCheckButton
+                  proxy={effectiveProxy}
+                  checkingProxyId={meta.checkingProxyId}
+                  cachedResult={meta.proxyCheckResults[effectiveProxy.id]}
+                  setCheckingProxyId={setCheckingProxyId}
+                  onCheckComplete={(result) => {
+                    setProxyCheckResults((prev) => ({
+                      ...prev,
+                      [effectiveProxy.id]: result,
+                    }));
+                  }}
+                  onCheckFailed={(result) => {
+                    setProxyCheckResults((prev) => ({
+                      ...prev,
+                      [effectiveProxy.id]: result,
+                    }));
+                  }}
+                />
               )}
-            </Popover>
+            </div>
           );
         },
       },

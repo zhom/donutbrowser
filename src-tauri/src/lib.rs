@@ -222,6 +222,21 @@ async fn delete_stored_proxy(app_handle: tauri::AppHandle, proxy_id: String) -> 
 }
 
 #[tauri::command]
+async fn check_proxy_validity(
+  proxy_id: String,
+  proxy_settings: crate::browser::ProxySettings,
+) -> Result<crate::proxy_manager::ProxyCheckResult, String> {
+  crate::proxy_manager::PROXY_MANAGER
+    .check_proxy_validity(&proxy_id, &proxy_settings)
+    .await
+}
+
+#[tauri::command]
+fn get_cached_proxy_check(proxy_id: String) -> Option<crate::proxy_manager::ProxyCheckResult> {
+  crate::proxy_manager::PROXY_MANAGER.get_cached_proxy_check(&proxy_id)
+}
+
+#[tauri::command]
 async fn is_geoip_database_available() -> Result<bool, String> {
   Ok(GeoIPDownloader::is_geoip_database_available())
 }
@@ -682,6 +697,8 @@ pub fn run() {
       get_stored_proxies,
       update_stored_proxy,
       delete_stored_proxy,
+      check_proxy_validity,
+      get_cached_proxy_check,
       update_camoufox_config,
       get_profile_groups,
       get_groups_with_profile_counts,

@@ -48,6 +48,7 @@ msi-extract = "0"
 
 uuid = { version = "1.18", features = ["v4", "serde"] }
 url = "2.5"
+urlencoding = "2.1"
 chrono = { version = "0.4", features = ["serde"] }
 axum = "0.8.4"
 tower = "0.5"
