@@ -116,6 +116,23 @@ export function GroupBadges({
     };
   }, [checkScrollPosition]);
 
+  useEffect(() => {
+    if (groups.length === 0) {
+      setShowLeftFade(false);
+      setShowRightFade(false);
+      return;
+    }
+
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        checkScrollPosition();
+      });
+    });
+  }, [groups, checkScrollPosition]);
+
   if (isLoading && !groups.length) {
     return (
       <div className="flex gap-2 mb-4">
