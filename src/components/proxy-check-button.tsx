@@ -63,12 +63,17 @@ export function ProxyCheckButton({
         locationParts.length > 0 ? locationParts.join(", ") : "Unknown";
 
       toast.success(
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col">
           Your proxy location is:
-          <span>{location}</span>
-          {result.country_code && (
-            <FlagIcon countryCode={result.country_code} className="text-base" />
-          )}
+          <div className="flex items-center whitespace-nowrap">
+            {location}
+            {result.country_code && (
+              <FlagIcon
+                countryCode={result.country_code}
+                className="ml-1 text-sm"
+              />
+            )}
+          </div>
         </div>,
       );
     } catch (error) {

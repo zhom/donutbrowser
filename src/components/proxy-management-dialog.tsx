@@ -4,7 +4,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import * as React from "react";
 import { useCallback, useState } from "react";
-import { FiEdit2, FiPlus, FiTrash2, FiWifi } from "react-icons/fi";
+import { GoPlus } from "react-icons/go";
+import { LuPencil, LuTrash2 } from "react-icons/lu";
 import { toast } from "sonner";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
 import { ProxyFormDialog } from "@/components/proxy-form-dialog";
@@ -13,18 +14,27 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
-import { trimName } from "@/lib/name-utils";
 import type { ProxyCheckResult, StoredProxy } from "@/types";
 import { ProxyCheckButton } from "./proxy-check-button";
 import { RippleButton } from "./ui/ripple";
@@ -112,157 +122,135 @@ export function ProxyManagementDialog({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
-          <DialogHeader className="flex-shrink-0">
-            <div className="flex gap-2 items-center">
-              <FiWifi className="w-5 h-5" />
-              <DialogTitle>Proxy Management</DialogTitle>
-            </div>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Proxy Management</DialogTitle>
+            <DialogDescription>
+              Manage your saved proxy configurations for reuse across profiles
+            </DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-col flex-1 gap-4 py-4 min-h-0">
-            {/* Header with Create Button */}
-            <div className="flex flex-shrink-0 justify-between items-center">
-              <div>
-                <h3 className="text-lg font-medium">Stored Proxies</h3>
-                <p className="text-sm text-muted-foreground">
-                  Manage your saved proxy configurations for reuse across
-                  profiles
-                </p>
-              </div>
+          <div className="space-y-4">
+            {/* Create new proxy button */}
+            <div className="flex justify-between items-center">
+              <Label>Proxies</Label>
               <RippleButton
+                size="sm"
                 onClick={handleCreateProxy}
                 className="flex gap-2 items-center"
               >
-                <FiPlus className="w-4 h-4" />
-                Create Proxy
+                <GoPlus className="w-4 h-4" />
+                Create
               </RippleButton>
             </div>
 
-            {/* Proxy List - Scrollable */}
-            <div className="flex-1 min-h-0">
-              {isLoading && (
-                <div className="flex justify-center items-center py-6">
-                  <div className="w-8 h-8 rounded-full border-b-2 animate-spin border-primary"></div>
-                </div>
-              )}
-              {storedProxies.length === 0 && !isLoading ? (
-                <div className="flex flex-col justify-center items-center h-32 text-center">
-                  <FiWifi className="mx-auto mb-4 w-12 h-12 text-muted-foreground" />
-                  <p className="mb-2 text-muted-foreground">
-                    No proxies configured
-                  </p>
-                  <p className="mb-4 text-sm text-muted-foreground">
-                    Create your first proxy configuration to get started
-                  </p>
-                  <RippleButton variant="outline" onClick={handleCreateProxy}>
-                    <FiPlus className="mr-2 w-4 h-4" />
-                    Create First Proxy
-                  </RippleButton>
-                </div>
-              ) : (
-                <ScrollArea className="h-[240px] pr-2">
-                  <div className="space-y-2">
-                    {storedProxies.map((proxy) => (
-                      <div
-                        key={proxy.id}
-                        className="flex justify-between items-center p-1 rounded border bg-card"
-                      >
-                        <div className="flex-1 ml-2 min-w-0">
-                          {proxy.name.length > 30 ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="block font-medium truncate text-card-foreground">
-                                  {trimName(proxy.name)}
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <span className="text-sm font-medium text-card-foreground">
-                                  {proxy.name}
-                                </span>
-                              </TooltipContent>
-                            </Tooltip>
-                          ) : (
-                            <span className="text-sm font-medium text-card-foreground">
-                              {proxy.name}
-                            </span>
-                          )}
-                        </div>
-                        <div className="mr-2">
-                          <Badge variant="secondary">
-                            {proxyUsage[proxy.id] ?? 0}
-                          </Badge>
-                        </div>
-                        <div className="flex shrink-0 gap-1 items-center">
-                          <ProxyCheckButton
-                            proxy={proxy}
-                            checkingProxyId={checkingProxyId}
-                            cachedResult={proxyCheckResults[proxy.id]}
-                            setCheckingProxyId={setCheckingProxyId}
-                            onCheckComplete={(result) => {
-                              setProxyCheckResults((prev) => ({
-                                ...prev,
-                                [proxy.id]: result,
-                              }));
-                            }}
-                            onCheckFailed={(result) => {
-                              setProxyCheckResults((prev) => ({
-                                ...prev,
-                                [proxy.id]: result,
-                              }));
-                            }}
-                          />
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleEditProxy(proxy)}
-                              >
-                                <FiEdit2 className="w-4 h-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Edit proxy</p>
-                            </TooltipContent>
-                          </Tooltip>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleDeleteProxy(proxy)}
-                                  className="text-destructive hover:text-destructive"
-                                  disabled={(proxyUsage[proxy.id] ?? 0) > 0}
-                                >
-                                  <FiTrash2 className="w-4 h-4" />
-                                </Button>
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              {(proxyUsage[proxy.id] ?? 0) > 0 ? (
-                                <p>
-                                  Cannot delete: in use by{" "}
-                                  {proxyUsage[proxy.id]} profile
-                                  {proxyUsage[proxy.id] > 1 ? "s" : ""}
-                                </p>
-                              ) : (
-                                <p>Delete proxy</p>
-                              )}
-                            </TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+            {/* Proxies list */}
+            {isLoading ? (
+              <div className="text-sm text-muted-foreground">
+                Loading proxies...
+              </div>
+            ) : storedProxies.length === 0 ? (
+              <div className="text-sm text-muted-foreground">
+                No proxies created yet. Create your first proxy using the button
+                above.
+              </div>
+            ) : (
+              <div className="border rounded-md">
+                <ScrollArea className="h-[240px]">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead className="w-20">Usage</TableHead>
+                        <TableHead className="w-24">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {storedProxies.map((proxy) => (
+                        <TableRow key={proxy.id}>
+                          <TableCell className="font-medium">
+                            {proxy.name}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">
+                              {proxyUsage[proxy.id] ?? 0}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <ProxyCheckButton
+                                proxy={proxy}
+                                profileId={proxy.id}
+                                checkingProfileId={checkingProxyId}
+                                cachedResult={proxyCheckResults[proxy.id]}
+                                setCheckingProfileId={setCheckingProxyId}
+                                onCheckComplete={(result) => {
+                                  setProxyCheckResults((prev) => ({
+                                    ...prev,
+                                    [proxy.id]: result,
+                                  }));
+                                }}
+                                onCheckFailed={(result) => {
+                                  setProxyCheckResults((prev) => ({
+                                    ...prev,
+                                    [proxy.id]: result,
+                                  }));
+                                }}
+                              />
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleEditProxy(proxy)}
+                                  >
+                                    <LuPencil className="w-4 h-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Edit proxy</p>
+                                </TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleDeleteProxy(proxy)}
+                                      disabled={(proxyUsage[proxy.id] ?? 0) > 0}
+                                    >
+                                      <LuTrash2 className="w-4 h-4" />
+                                    </Button>
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  {(proxyUsage[proxy.id] ?? 0) > 0 ? (
+                                    <p>
+                                      Cannot delete: in use by{" "}
+                                      {proxyUsage[proxy.id]} profile
+                                      {proxyUsage[proxy.id] > 1 ? "s" : ""}
+                                    </p>
+                                  ) : (
+                                    <p>Delete proxy</p>
+                                  )}
+                                </TooltipContent>
+                              </Tooltip>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </ScrollArea>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
-          <DialogFooter className="flex-shrink-0">
-            <RippleButton onClick={onClose}>Close</RippleButton>
+          <DialogFooter>
+            <RippleButton variant="outline" onClick={onClose}>
+              Close
+            </RippleButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>

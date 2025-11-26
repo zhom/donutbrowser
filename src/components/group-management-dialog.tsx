@@ -7,6 +7,7 @@ import { LuPencil, LuTrash2 } from "react-icons/lu";
 import { CreateGroupDialog } from "@/components/create-group-dialog";
 import { DeleteGroupDialog } from "@/components/delete-group-dialog";
 import { EditGroupDialog } from "@/components/edit-group-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,7 +27,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { ProfileGroup } from "@/types";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import type { GroupWithCount, ProfileGroup } from "@/types";
 import { RippleButton } from "./ui/ripple";
 
 interface GroupManagementDialogProps {
@@ -40,7 +46,7 @@ export function GroupManagementDialog({
   onClose,
   onGroupManagementComplete,
 }: GroupManagementDialogProps) {
-  const [groups, setGroups] = useState<ProfileGroup[]>([]);
+  const [groups, setGroups] = useState<GroupWithCount[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,13 +54,17 @@ export function GroupManagementDialog({
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [selectedGroup, setSelectedGroup] = useState<ProfileGroup | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<GroupWithCount | null>(
+    null,
+  );
 
   const loadGroups = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const groupList = await invoke<ProfileGroup[]>("get_profile_groups");
+      const groupList = await invoke<GroupWithCount[]>(
+        "get_groups_with_profile_counts",
+      );
       setGroups(groupList);
     } catch (err) {
       console.error("Failed to load groups:", err);
@@ -65,23 +75,19 @@ export function GroupManagementDialog({
   }, []);
 
   const handleGroupCreated = useCallback(
-    (newGroup: ProfileGroup) => {
-      setGroups((prev) => [...prev, newGroup]);
+    (_newGroup: ProfileGroup) => {
+      void loadGroups();
       onGroupManagementComplete();
     },
-    [onGroupManagementComplete],
+    [loadGroups, onGroupManagementComplete],
   );
 
   const handleGroupUpdated = useCallback(
-    (updatedGroup: ProfileGroup) => {
-      setGroups((prev) =>
-        prev.map((group) =>
-          group.id === updatedGroup.id ? updatedGroup : group,
-        ),
-      );
+    (_updatedGroup: ProfileGroup) => {
+      void loadGroups();
       onGroupManagementComplete();
     },
-    [onGroupManagementComplete],
+    [loadGroups, onGroupManagementComplete],
   );
 
   const handleGroupDeleted = useCallback(() => {
@@ -89,12 +95,12 @@ export function GroupManagementDialog({
     onGroupManagementComplete();
   }, [loadGroups, onGroupManagementComplete]);
 
-  const handleEditGroup = useCallback((group: ProfileGroup) => {
+  const handleEditGroup = useCallback((group: GroupWithCount) => {
     setSelectedGroup(group);
     setEditDialogOpen(true);
   }, []);
 
-  const handleDeleteGroup = useCallback((group: ProfileGroup) => {
+  const handleDeleteGroup = useCallback((group: GroupWithCount) => {
     setSelectedGroup(group);
     setDeleteDialogOpen(true);
   }, []);
@@ -154,6 +160,7 @@ export function GroupManagementDialog({
                     <TableHeader>
                       <TableRow>
                         <TableHead>Name</TableHead>
+                        <TableHead className="w-20">Profiles</TableHead>
                         <TableHead className="w-24">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -164,21 +171,38 @@ export function GroupManagementDialog({
                             {group.name}
                           </TableCell>
                           <TableCell>
+                            <Badge variant="secondary">{group.count}</Badge>
+                          </TableCell>
+                          <TableCell>
                             <div className="flex gap-1">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleEditGroup(group)}
-                              >
-                                <LuPencil className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDeleteGroup(group)}
-                              >
-                                <LuTrash2 className="w-4 h-4" />
-                              </Button>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleEditGroup(group)}
+                                  >
+                                    <LuPencil className="w-4 h-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Edit group</p>
+                                </TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleDeleteGroup(group)}
+                                  >
+                                    <LuTrash2 className="w-4 h-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Delete group</p>
+                                </TooltipContent>
+                              </Tooltip>
                             </div>
                           </TableCell>
                         </TableRow>
