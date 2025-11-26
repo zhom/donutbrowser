@@ -231,23 +231,20 @@ end try
     // Step 2: Comprehensive process tree termination using multiple methods simultaneously
     let _ = kill_chromium_process_tree_aggressive(pid).await;
 
-    // Step 2.5: Nuclear option - kill all Chromium processes by name pattern
-    let _ = kill_all_chromium_processes_by_name().await;
-
-    // Step 3: Use multiple kill strategies in parallel
+    // Step 3: Use multiple kill strategies in parallel (all PID-specific)
     let pid_str = pid.to_string();
 
-    // Kill by parent PID with SIGKILL
+    // Kill by parent PID with SIGKILL (only processes with this PID as parent)
     let _ = Command::new("pkill")
       .args(["-KILL", "-P", &pid_str])
       .output();
 
-    // Kill by process group with SIGKILL
+    // Kill by process group with SIGKILL (only processes in this process group)
     let _ = Command::new("pkill")
       .args(["-KILL", "-g", &pid_str])
       .output();
 
-    // Kill by session ID
+    // Kill by session ID (only processes in this session)
     let _ = Command::new("pkill")
       .args(["-KILL", "-s", &pid_str])
       .output();
@@ -255,39 +252,25 @@ end try
     // Wait briefly for initial termination
     tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
 
-    // Step 4: Verify and retry with pattern-based killing for common Chromium process names
+    // Step 4: Verify and retry PID-specific termination if needed
     use sysinfo::{Pid, System};
     let system = System::new_all();
 
     // Check if main process still exists
     if system.process(Pid::from(pid as usize)).is_some() {
-      log::info!("Main process {pid} still running, using pattern-based termination");
+      log::info!("Main process {pid} still running, retrying PID-specific termination");
 
-      // Kill by common Chromium process patterns
-      let chromium_patterns = [
-        "Chrome",
-        "Chromium",
-        "Brave",
-        "chrome",
-        "chromium",
-        "brave",
-        "Google Chrome",
-        "Brave Browser",
-        "Chrome Helper",
-        "Chromium Helper",
-      ];
+      // Retry direct kill on the main process
+      let _ = Command::new("kill").args(["-KILL", &pid_str]).output();
 
-      for pattern in &chromium_patterns {
-        let _ = Command::new("pkill")
-          .args(["-KILL", "-f", pattern])
-          .output();
-      }
+      // Retry process tree termination
+      let _ = kill_chromium_process_tree_aggressive(pid).await;
     }
 
-    // Step 5: Final aggressive cleanup - kill any remaining processes
+    // Step 5: Final cleanup - kill any remaining processes in the tree
     tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
 
-    // One more round of comprehensive killing
+    // One more round of PID-specific killing
     let _ = Command::new("pkill")
       .args(["-KILL", "-P", &pid_str])
       .output();
@@ -301,22 +284,13 @@ end try
     let system = System::new_all();
 
     if system.process(Pid::from(pid as usize)).is_some() {
-      // Last resort: try system kill command with different signals
-      log::info!("Process {pid} extremely persistent, trying system-level termination");
+      // Last resort: try direct kill command one more time
+      log::info!("Process {pid} extremely persistent, trying final direct termination");
 
       let _ = Command::new("/bin/kill").args(["-KILL", &pid_str]).output();
 
-      let _ = Command::new("/usr/bin/killall")
-        .args(["-KILL", "-m", "Chrome"])
-        .output();
-
-      let _ = Command::new("/usr/bin/killall")
-        .args(["-KILL", "-m", "Chromium"])
-        .output();
-
-      let _ = Command::new("/usr/bin/killall")
-        .args(["-KILL", "-m", "Brave"])
-        .output();
+      // Retry process tree termination one final time
+      let _ = kill_chromium_process_tree_aggressive(pid).await;
 
       tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
       let system = System::new_all();
@@ -327,7 +301,7 @@ end try
       }
     }
 
-    log::info!("Aggressive browser termination completed for PID: {pid}");
+    log::info!("Browser termination completed for PID: {pid}");
     Ok(())
   }
 
@@ -374,33 +348,6 @@ end try
     let _ = Command::new("pkill")
       .args(["-KILL", "-g", &pid.to_string()])
       .output();
-
-    Ok(())
-  }
-
-  // Helper function to kill all Chromium-related processes by name patterns
-  async fn kill_all_chromium_processes_by_name(
-  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    log::info!("Killing all Chromium-related processes by name patterns");
-
-    let chromium_patterns = [
-      "Chrome",
-      "Chromium",
-      "Brave",
-      "chrome",
-      "chromium",
-      "brave",
-      "Google Chrome",
-      "Brave Browser",
-      "Chrome Helper",
-      "Chromium Helper",
-    ];
-
-    for pattern in &chromium_patterns {
-      let _ = Command::new("pkill")
-        .args(["-KILL", "-f", pattern])
-        .output();
-    }
 
     Ok(())
   }
