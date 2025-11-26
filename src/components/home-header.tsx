@@ -112,13 +112,22 @@ const HomeHeader = ({
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button
-              size="sm"
-              variant="outline"
-              className="flex gap-2 items-center h-[36px]"
-            >
-              <GoKebabHorizontal className="w-4 h-4" />
-            </Button>
+            <span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex gap-2 items-center h-[36px]"
+                    >
+                      <GoKebabHorizontal className="w-4 h-4" />
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>More actions</TooltipContent>
+              </Tooltip>
+            </span>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem
