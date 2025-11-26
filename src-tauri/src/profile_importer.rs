@@ -566,7 +566,7 @@ impl ProfileImporter {
     // Save the profile metadata
     self.profile_manager.save_profile(&profile)?;
 
-    println!(
+    log::info!(
       "Successfully imported profile '{}' from '{}'",
       new_profile_name,
       source_path.display()

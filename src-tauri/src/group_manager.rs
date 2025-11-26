@@ -120,7 +120,7 @@ impl GroupManager {
 
     // Emit event for reactive UI updates
     if let Err(e) = app_handle.emit("groups-changed", ()) {
-      eprintln!("Failed to emit groups-changed event: {e}");
+      log::error!("Failed to emit groups-changed event: {e}");
     }
 
     Ok(group)
@@ -156,7 +156,7 @@ impl GroupManager {
 
     // Emit event for reactive UI updates
     if let Err(e) = app_handle.emit("groups-changed", ()) {
-      eprintln!("Failed to emit groups-changed event: {e}");
+      log::error!("Failed to emit groups-changed event: {e}");
     }
 
     Ok(updated_group)
@@ -180,7 +180,7 @@ impl GroupManager {
 
     // Emit event for reactive UI updates
     if let Err(e) = app_handle.emit("groups-changed", ()) {
-      eprintln!("Failed to emit groups-changed event: {e}");
+      log::error!("Failed to emit groups-changed event: {e}");
     }
 
     Ok(())

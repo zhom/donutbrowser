@@ -377,7 +377,7 @@ mod linux {
 
   pub fn prepare_executable(executable_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     // On Linux, ensure the executable has proper permissions
-    println!("Setting execute permissions for: {:?}", executable_path);
+    log::info!("Setting execute permissions for: {:?}", executable_path);
 
     let metadata = std::fs::metadata(executable_path)?;
     let mut permissions = metadata.permissions();
@@ -388,7 +388,7 @@ mod linux {
 
     std::fs::set_permissions(executable_path, permissions)?;
 
-    println!(
+    log::info!(
       "Execute permissions set successfully for: {:?}",
       executable_path
     );
@@ -653,14 +653,14 @@ impl Browser for FirefoxBrowser {
     // Expected structure: binaries/<browser>/<version>
     let browser_dir = binaries_dir.join(self.browser_type.as_str()).join(version);
 
-    println!("Firefox browser checking version {version} in directory: {browser_dir:?}");
+    log::info!("Firefox browser checking version {version} in directory: {browser_dir:?}");
 
     if !browser_dir.exists() {
-      println!("Directory does not exist: {browser_dir:?}");
+      log::info!("Directory does not exist: {browser_dir:?}");
       return false;
     }
 
-    println!("Directory exists, checking for browser files...");
+    log::info!("Directory exists, checking for browser files...");
 
     #[cfg(target_os = "macos")]
     return macos::is_firefox_version_downloaded(&browser_dir);
@@ -673,7 +673,7 @@ impl Browser for FirefoxBrowser {
 
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
-      println!("Unsupported platform for browser verification");
+      log::info!("Unsupported platform for browser verification");
       false
     }
   }
@@ -768,14 +768,14 @@ impl Browser for ChromiumBrowser {
     // Expected structure: binaries/<browser>/<version>
     let browser_dir = binaries_dir.join(self.browser_type.as_str()).join(version);
 
-    println!("Chromium browser checking version {version} in directory: {browser_dir:?}");
+    log::info!("Chromium browser checking version {version} in directory: {browser_dir:?}");
 
     if !browser_dir.exists() {
-      println!("Directory does not exist: {browser_dir:?}");
+      log::info!("Directory does not exist: {browser_dir:?}");
       return false;
     }
 
-    println!("Directory exists, checking for browser files...");
+    log::info!("Directory exists, checking for browser files...");
 
     #[cfg(target_os = "macos")]
     return macos::is_chromium_version_downloaded(&browser_dir);
@@ -788,7 +788,7 @@ impl Browser for ChromiumBrowser {
 
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {
-      println!("Unsupported platform for browser verification");
+      log::info!("Unsupported platform for browser verification");
       false
     }
   }

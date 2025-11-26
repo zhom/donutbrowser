@@ -85,7 +85,7 @@ impl ProxyManager {
 
     // Load stored proxies on initialization
     if let Err(e) = manager.load_stored_proxies() {
-      eprintln!("Warning: Failed to load stored proxies: {e}");
+      log::warn!("Failed to load stored proxies: {e}");
     }
 
     manager
@@ -222,11 +222,11 @@ impl ProxyManager {
     let proxies_dir = self.get_proxies_dir();
 
     if !proxies_dir.exists() {
-      eprintln!("Proxies directory does not exist: {:?}", proxies_dir);
+      log::debug!("Proxies directory does not exist: {:?}", proxies_dir);
       return Ok(()); // No proxies directory yet
     }
 
-    eprintln!("Loading stored proxies from: {:?}", proxies_dir);
+    log::debug!("Loading stored proxies from: {:?}", proxies_dir);
 
     let mut stored_proxies = self.stored_proxies.lock().unwrap();
     let mut loaded_count = 0;
@@ -242,18 +242,19 @@ impl ProxyManager {
           Ok(content) => {
             match serde_json::from_str::<StoredProxy>(&content) {
               Ok(proxy) => {
-                eprintln!("Loaded stored proxy: {} ({})", proxy.name, proxy.id);
+                log::debug!("Loaded stored proxy: {} ({})", proxy.name, proxy.id);
                 stored_proxies.insert(proxy.id.clone(), proxy);
                 loaded_count += 1;
               }
               Err(e) => {
                 // Check if this is a ProxyConfig file (from proxy_storage.rs) - skip it
                 if serde_json::from_str::<crate::proxy_storage::ProxyConfig>(&content).is_ok() {
-                  eprintln!("Skipping ProxyConfig file (not a StoredProxy): {:?}", path);
+                  log::debug!("Skipping ProxyConfig file (not a StoredProxy): {:?}", path);
                 } else {
-                  eprintln!(
+                  log::warn!(
                     "Failed to parse proxy file {:?} as StoredProxy: {}",
-                    path, e
+                    path,
+                    e
                   );
                   error_count += 1;
                 }
@@ -261,16 +262,17 @@ impl ProxyManager {
             }
           }
           Err(e) => {
-            eprintln!("Failed to read proxy file {:?}: {}", path, e);
+            log::warn!("Failed to read proxy file {:?}: {}", path, e);
             error_count += 1;
           }
         }
       }
     }
 
-    eprintln!(
+    log::info!(
       "Loaded {} stored proxies ({} errors)",
-      loaded_count, error_count
+      loaded_count,
+      error_count
     );
     Ok(())
   }
@@ -321,12 +323,12 @@ impl ProxyManager {
     }
 
     if let Err(e) = self.save_proxy(&stored_proxy) {
-      eprintln!("Warning: Failed to save proxy: {e}");
+      log::warn!("Failed to save proxy: {e}");
     }
 
     // Emit event for reactive UI updates
     if let Err(e) = app_handle.emit("proxies-changed", ()) {
-      eprintln!("Failed to emit proxies-changed event: {e}");
+      log::error!("Failed to emit proxies-changed event: {e}");
     }
 
     Ok(stored_proxy)
@@ -388,12 +390,12 @@ impl ProxyManager {
     };
 
     if let Err(e) = self.save_proxy(&updated_proxy) {
-      eprintln!("Warning: Failed to save proxy: {e}");
+      log::warn!("Failed to save proxy: {e}");
     }
 
     // Emit event for reactive UI updates
     if let Err(e) = app_handle.emit("proxies-changed", ()) {
-      eprintln!("Failed to emit proxies-changed event: {e}");
+      log::error!("Failed to emit proxies-changed event: {e}");
     }
 
     Ok(updated_proxy)
@@ -413,12 +415,12 @@ impl ProxyManager {
     }
 
     if let Err(e) = self.delete_proxy_file(proxy_id) {
-      eprintln!("Warning: Failed to delete proxy file: {e}");
+      log::warn!("Failed to delete proxy file: {e}");
     }
 
     // Emit event for reactive UI updates
     if let Err(e) = app_handle.emit("proxies-changed", ()) {
-      eprintln!("Failed to emit proxies-changed event: {e}");
+      log::error!("Failed to emit proxies-changed event: {e}");
     }
 
     Ok(())
@@ -835,7 +837,7 @@ impl ProxyManager {
 
     if !output.status.success() {
       let stderr = String::from_utf8_lossy(&output.stderr);
-      eprintln!("Proxy stop error: {stderr}");
+      log::warn!("Proxy stop error: {stderr}");
       // We still return Ok since we've already removed the proxy from our tracking
     }
 
@@ -851,7 +853,7 @@ impl ProxyManager {
 
     // Emit event for reactive UI updates
     if let Err(e) = app_handle.emit("proxies-changed", ()) {
-      eprintln!("Failed to emit proxies-changed event: {e}");
+      log::error!("Failed to emit proxies-changed event: {e}");
     }
 
     Ok(())
@@ -890,13 +892,13 @@ impl ProxyManager {
     };
 
     for dead_pid in &dead_pids {
-      println!("Cleaning up proxy for dead browser process PID: {dead_pid}");
+      log::info!("Cleaning up proxy for dead browser process PID: {dead_pid}");
       let _ = self.stop_proxy(app_handle.clone(), *dead_pid).await;
     }
 
     // Emit event for reactive UI updates
     if let Err(e) = app_handle.emit("proxies-changed", ()) {
-      eprintln!("Failed to emit proxies-changed event: {e}");
+      log::error!("Failed to emit proxies-changed event: {e}");
     }
 
     Ok(dead_pids)

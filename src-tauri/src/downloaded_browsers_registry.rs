@@ -122,7 +122,7 @@ impl DownloadedBrowsersRegistry {
     let browser_type = match BrowserType::from_str(browser) {
       Ok(bt) => bt,
       Err(_) => {
-        println!("Invalid browser type: {browser}");
+        log::info!("Invalid browser type: {browser}");
         return false;
       }
     };
@@ -146,7 +146,7 @@ impl DownloadedBrowsersRegistry {
 
     // If files don't exist but registry thinks they do, clean up the registry
     if !files_exist {
-      println!("Cleaning up stale registry entry for {browser} {version}");
+      log::info!("Cleaning up stale registry entry for {browser} {version}");
       self.remove_browser(browser, version);
       let _ = self.save(); // Don't fail if save fails, just log
     }
@@ -166,7 +166,7 @@ impl DownloadedBrowsersRegistry {
   pub fn mark_download_started(&self, browser: &str, version: &str, file_path: PathBuf) {
     // Only mark download started, don't add to registry yet
     // The browser will be added to registry only after verification succeeds
-    println!(
+    log::info!(
       "Marking download started for {}:{} at {}",
       browser,
       version,
@@ -187,7 +187,7 @@ impl DownloadedBrowsersRegistry {
       file_path,
     };
     self.add_browser(info);
-    println!("Browser {browser}:{version} successfully added to registry after verification");
+    log::info!("Browser {browser}:{version} successfully added to registry after verification");
     Ok(())
   }
 
@@ -268,7 +268,7 @@ impl DownloadedBrowsersRegistry {
     let pending_updates = match self.auto_updater.get_pending_update_versions() {
       Ok(updates) => updates,
       Err(e) => {
-        eprintln!("Warning: Failed to get pending updates for cleanup: {e}");
+        log::warn!("Warning: Failed to get pending updates for cleanup: {e}");
         std::collections::HashSet::new()
       }
     };
@@ -283,13 +283,13 @@ impl DownloadedBrowsersRegistry {
 
           // Don't remove if it's used by any active profile
           if active_set.contains(&browser_version) {
-            println!("Keeping: {browser} {version} (in use by profile)");
+            log::info!("Keeping: {browser} {version} (in use by profile)");
             continue;
           }
 
           // Don't remove if it's currently running (even if not in active profiles)
           if running_set.contains(&browser_version) {
-            println!("Keeping: {browser} {version} (currently running)");
+            log::info!("Keeping: {browser} {version} (currently running)");
             continue;
           }
 
@@ -300,14 +300,14 @@ impl DownloadedBrowsersRegistry {
             let has_running_profile_for_browser =
               running_profiles.iter().any(|(b, _)| b == browser);
             if has_running_profile_for_browser {
-              println!("Keeping: {browser} {version} (pending update for running profile)");
+              log::info!("Keeping: {browser} {version} (pending update for running profile)");
               continue;
             }
           }
 
           // Mark for removal
           to_remove.push(browser_version);
-          println!("Marking for removal: {browser} {version} (not used by any profile)");
+          log::info!("Marking for removal: {browser} {version} (not used by any profile)");
         }
       }
     }
@@ -315,21 +315,21 @@ impl DownloadedBrowsersRegistry {
     // Remove unused binaries and their version folders
     for (browser, version) in to_remove {
       if let Err(e) = self.cleanup_failed_download(&browser, &version) {
-        eprintln!("Failed to cleanup unused binary {browser}:{version}: {e}");
+        log::error!("Failed to cleanup unused binary {browser}:{version}: {e}");
       } else {
         // After removing the binary, also remove the empty version folder
         if let Err(e) = self.remove_empty_version_folder(&browser, &version) {
-          eprintln!("Failed to remove empty version folder for {browser}:{version}: {e}");
+          log::error!("Failed to remove empty version folder for {browser}:{version}: {e}");
         }
         cleaned_up.push(format!("{browser} {version}"));
-        println!("Successfully removed unused binary: {browser} {version}");
+        log::info!("Successfully removed unused binary: {browser} {version}");
       }
     }
 
     if cleaned_up.is_empty() {
-      println!("No unused binaries found to clean up");
+      log::info!("No unused binaries found to clean up");
     } else {
-      println!("Cleaned up {} unused binaries", cleaned_up.len());
+      log::info!("Cleaned up {} unused binaries", cleaned_up.len());
     }
 
     Ok(cleaned_up)
@@ -374,7 +374,7 @@ impl DownloadedBrowsersRegistry {
           // Files don't exist, remove from registry
           if let Some(_removed) = self.remove_browser(&browser_str, &version) {
             cleaned_up.push(format!("{browser_str} {version}"));
-            println!("Removed stale registry entry for {browser_str} {version}");
+            log::info!("Removed stale registry entry for {browser_str} {version}");
           }
         }
       }
@@ -529,7 +529,7 @@ impl DownloadedBrowsersRegistry {
         if entries.next().is_none() {
           // Directory is empty, remove it
           fs::remove_dir(&version_dir)?;
-          println!("Removed empty version folder: {}", version_dir.display());
+          log::info!("Removed empty version folder: {}", version_dir.display());
 
           // Also check if the browser folder is now empty and remove it too
           let browser_dir = binaries_dir.join(browser);
@@ -537,7 +537,7 @@ impl DownloadedBrowsersRegistry {
             if let Ok(mut browser_entries) = fs::read_dir(&browser_dir) {
               if browser_entries.next().is_none() {
                 fs::remove_dir(&browser_dir)?;
-                println!("Removed empty browser folder: {}", browser_dir.display());
+                log::info!("Removed empty browser folder: {}", browser_dir.display());
               }
             }
           }
@@ -618,7 +618,7 @@ impl DownloadedBrowsersRegistry {
       // Remove empty version directories
       for (version_path, version_name) in empty_version_dirs {
         if let Err(e) = fs::remove_dir(&version_path) {
-          eprintln!(
+          log::error!(
             "Failed to remove empty version folder {}: {e}",
             version_path.display()
           );
@@ -626,7 +626,7 @@ impl DownloadedBrowsersRegistry {
           cleaned_up.push(format!(
             "Removed empty version folder: {browser_name}/{version_name}"
           ));
-          println!("Removed empty version folder: {}", version_path.display());
+          log::info!("Removed empty version folder: {}", version_path.display());
         }
       }
 
@@ -635,13 +635,13 @@ impl DownloadedBrowsersRegistry {
         if let Ok(mut entries) = fs::read_dir(&browser_path) {
           if entries.next().is_none() {
             if let Err(e) = fs::remove_dir(&browser_path) {
-              eprintln!(
+              log::error!(
                 "Failed to remove empty browser folder {}: {e}",
                 browser_path.display()
               );
             } else {
               cleaned_up.push(format!("Removed empty browser folder: {browser_name}"));
-              println!("Removed empty browser folder: {}", browser_path.display());
+              log::info!("Removed empty browser folder: {}", browser_path.display());
             }
           }
         }
@@ -656,7 +656,7 @@ impl DownloadedBrowsersRegistry {
     &self,
     app_handle: &tauri::AppHandle,
   ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
-    println!("Starting browser version consolidation...");
+    log::info!("Starting browser version consolidation...");
 
     let profiles = self
       .profile_manager
@@ -691,15 +691,16 @@ impl DownloadedBrowsersRegistry {
         if browser.is_version_downloaded(&profile.version, &binaries_dir) {
           available_versions.push(profile.version.clone());
         } else {
-          println!(
+          log::info!(
             "Profile '{}' references version {} that doesn't exist on disk",
-            profile.name, profile.version
+            profile.name,
+            profile.version
           );
         }
       }
 
       if available_versions.is_empty() {
-        println!("No available versions found for {browser_name}, skipping consolidation");
+        log::info!("No available versions found for {browser_name}, skipping consolidation");
         continue;
       }
 
@@ -710,7 +711,7 @@ impl DownloadedBrowsersRegistry {
       });
 
       let latest_version = &available_versions[0];
-      println!("Latest available version for {browser_name}: {latest_version}");
+      log::info!("Latest available version for {browser_name}: {latest_version}");
 
       // Check which profiles need to be updated to the latest version
       let mut profiles_to_update = Vec::new();
@@ -723,9 +724,10 @@ impl DownloadedBrowsersRegistry {
             profiles_to_update.push(profile);
             older_versions_to_remove.insert(profile.version.clone());
           } else {
-            println!(
+            log::info!(
               "Skipping version update for running profile: {} ({})",
-              profile.name, profile.version
+              profile.name,
+              profile.version
             );
           }
         }
@@ -744,21 +746,21 @@ impl DownloadedBrowsersRegistry {
               ));
             }
             Err(e) => {
-              eprintln!("Failed to update profile '{}': {}", profile.name, e);
+              log::error!("Failed to update profile '{}': {}", profile.name, e);
             }
           }
         }
 
         // Remove older version binaries that are no longer needed
         for old_version in &older_versions_to_remove {
-          println!("Consolidating: removing old version {browser_name} {old_version}");
+          log::info!("Consolidating: removing old version {browser_name} {old_version}");
           match self.cleanup_failed_download(browser_name, old_version) {
             Ok(_) => {
               consolidated.push(format!("Removed old version: {browser_name} {old_version}"));
-              println!("Successfully removed old version: {browser_name} {old_version}");
+              log::info!("Successfully removed old version: {browser_name} {old_version}");
             }
             Err(e) => {
-              eprintln!("Failed to cleanup old version {browser_name} {old_version}: {e}");
+              log::error!("Failed to cleanup old version {browser_name} {old_version}: {e}");
             }
           }
         }
@@ -770,7 +772,7 @@ impl DownloadedBrowsersRegistry {
       .save()
       .map_err(|e| format!("Failed to save registry after consolidation: {e}"))?;
 
-    println!(
+    log::info!(
       "Browser version consolidation completed: {} actions taken",
       consolidated.len()
     );
@@ -793,9 +795,10 @@ impl DownloadedBrowsersRegistry {
       let browser_type = match BrowserType::from_str(&profile.browser) {
         Ok(bt) => bt,
         Err(_) => {
-          println!(
+          log::info!(
             "Warning: Invalid browser type '{}' for profile '{}'",
-            profile.browser, profile.name
+            profile.browser,
+            profile.name
           );
           continue;
         }
@@ -817,7 +820,7 @@ impl DownloadedBrowsersRegistry {
         return Err("Failed to get base directories".into());
       };
 
-      println!(
+      log::info!(
         "binaries_dir: {binaries_dir:?} for profile: {}",
         profile.name
       );
@@ -839,7 +842,7 @@ impl DownloadedBrowsersRegistry {
     // First, clean up any stale registry entries
     if let Ok(cleaned_up) = self.verify_and_cleanup_stale_entries() {
       if !cleaned_up.is_empty() {
-        println!(
+        log::info!(
           "Cleaned up {} stale registry entries: {}",
           cleaned_up.len(),
           cleaned_up.join(", ")
@@ -850,9 +853,9 @@ impl DownloadedBrowsersRegistry {
     // Consolidate browser versions - keep only latest version per browser
     if let Ok(consolidated) = self.consolidate_browser_versions(app_handle) {
       if !consolidated.is_empty() {
-        println!("Version consolidation results:");
+        log::info!("Version consolidation results:");
         for action in &consolidated {
-          println!("  {action}");
+          log::info!("  {action}");
         }
       }
     }
@@ -861,7 +864,7 @@ impl DownloadedBrowsersRegistry {
     let mut downloaded = Vec::new();
 
     for (profile_name, browser, version) in missing_binaries {
-      println!("Downloading missing binary for profile '{profile_name}': {browser} {version}");
+      log::info!("Downloading missing binary for profile '{profile_name}': {browser} {version}");
 
       match crate::downloader::download_browser(
         app_handle.clone(),
@@ -882,31 +885,31 @@ impl DownloadedBrowsersRegistry {
           {
             Ok(updated_profiles) => {
               if !updated_profiles.is_empty() {
-                println!(
+                log::info!(
                   "Successfully updated {} profiles to version {}:",
                   updated_profiles.len(),
                   version
                 );
                 for update_msg in updated_profiles {
-                  println!("  {update_msg}");
+                  log::info!("  {update_msg}");
                 }
               }
             }
             Err(e) => {
-              eprintln!("CRITICAL: Failed to update profiles to version {version}: {e}");
-              eprintln!("This may cause profile version inconsistencies and cleanup issues");
+              log::error!("CRITICAL: Failed to update profiles to version {version}: {e}");
+              log::error!("This may cause profile version inconsistencies and cleanup issues");
             }
           }
         }
         Err(e) => {
-          eprintln!("Failed to download {browser} {version} for profile '{profile_name}': {e}");
+          log::error!("Failed to download {browser} {version} for profile '{profile_name}': {e}");
         }
       }
     }
 
     // Check if GeoIP database is missing for Camoufox profiles
     if self.geoip_downloader.check_missing_geoip_database()? {
-      println!("GeoIP database is missing for Camoufox profiles, downloading...");
+      log::info!("GeoIP database is missing for Camoufox profiles, downloading...");
 
       match self
         .geoip_downloader
@@ -915,10 +918,10 @@ impl DownloadedBrowsersRegistry {
       {
         Ok(_) => {
           downloaded.push("GeoIP database for Camoufox".to_string());
-          println!("GeoIP database downloaded successfully");
+          log::info!("GeoIP database downloaded successfully");
         }
         Err(e) => {
-          eprintln!("Failed to download GeoIP database: {e}");
+          log::error!("Failed to download GeoIP database: {e}");
           // Don't fail the entire operation if GeoIP download fails
         }
       }
@@ -945,9 +948,10 @@ impl DownloadedBrowsersRegistry {
       if profile.browser == browser && profile.version != version {
         // Check if profile is currently running
         if profile.process_id.is_some() {
-          println!(
+          log::info!(
             "Skipping version update for running profile: {} ({})",
-            profile.name, profile.version
+            profile.name,
+            profile.version
           );
           continue;
         }
@@ -963,18 +967,19 @@ impl DownloadedBrowsersRegistry {
               "Updated profile '{}' from {} to {}",
               profile.name, profile.version, version
             ));
-            println!(
+            log::info!(
               "Successfully updated profile '{}' to version {}",
-              profile.name, version
+              profile.name,
+              version
             );
 
             // Save registry after each profile update to ensure consistency
             if let Err(e) = self.save() {
-              eprintln!("Warning: Failed to save registry after profile update: {e}");
+              log::warn!("Warning: Failed to save registry after profile update: {e}");
             }
           }
           Err(e) => {
-            eprintln!("Failed to update profile '{}': {}", profile.name, e);
+            log::error!("Failed to update profile '{}': {}", profile.name, e);
           }
         }
       }
@@ -1016,7 +1021,7 @@ lazy_static::lazy_static! {
   static ref DOWNLOADED_BROWSERS_REGISTRY: DownloadedBrowsersRegistry = {
     let registry = DownloadedBrowsersRegistry::new();
     if let Err(e) = registry.load() {
-      eprintln!("Warning: Failed to load downloaded browsers registry: {e}");
+      log::warn!("Warning: Failed to load downloaded browsers registry: {e}");
     }
     registry
   };

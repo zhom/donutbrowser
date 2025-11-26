@@ -61,7 +61,7 @@ impl ProfileManager {
     camoufox_config: Option<CamoufoxConfig>,
     group_id: Option<String>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
-    println!("Attempting to create profile: {name}");
+    log::info!("Attempting to create profile: {name}");
 
     // Check if a profile with this name already exists (case insensitive)
     let existing_profiles = self.list_profiles()?;
@@ -86,7 +86,7 @@ impl ProfileManager {
     // For Camoufox profiles, generate fingerprint during creation
     let final_camoufox_config = if browser == "camoufox" {
       let mut config = camoufox_config.unwrap_or_else(|| {
-        println!("Creating default Camoufox config for profile: {name}");
+        log::info!("Creating default Camoufox config for profile: {name}");
         crate::camoufox_manager::CamoufoxConfig::default()
       });
 
@@ -110,7 +110,7 @@ impl ProfileManager {
         let binary_path = browser_dir.join("camoufox");
 
         config.executable_path = Some(binary_path.to_string_lossy().to_string());
-        println!("Set Camoufox executable path: {:?}", config.executable_path);
+        log::info!("Set Camoufox executable path: {:?}", config.executable_path);
       }
 
       // Pass upstream proxy information to config for fingerprint generation
@@ -137,7 +137,7 @@ impl ProfileManager {
             )
           };
           config.proxy = Some(proxy_url);
-          println!(
+          log::info!(
             "Using upstream proxy for Camoufox fingerprint generation: {}://{}:{}",
             proxy_settings.proxy_type.to_lowercase(),
             proxy_settings.host,
@@ -148,7 +148,7 @@ impl ProfileManager {
 
       // Generate fingerprint if not already provided
       if config.fingerprint.is_none() {
-        println!("Generating fingerprint for Camoufox profile: {name}");
+        log::info!("Generating fingerprint for Camoufox profile: {name}");
 
         // Use the camoufox launcher to generate the config
 
@@ -174,7 +174,7 @@ impl ProfileManager {
         {
           Ok(generated_fingerprint) => {
             config.fingerprint = Some(generated_fingerprint);
-            println!("Successfully generated fingerprint for profile: {name}");
+            log::info!("Successfully generated fingerprint for profile: {name}");
           }
           Err(e) => {
             return Err(
@@ -183,7 +183,7 @@ impl ProfileManager {
           }
         }
       } else {
-        println!("Using provided fingerprint for Camoufox profile: {name}");
+        log::info!("Using provided fingerprint for Camoufox profile: {name}");
       }
 
       // Clear the proxy from config after fingerprint generation
@@ -217,7 +217,7 @@ impl ProfileManager {
       return Err(format!("Failed to create profile file for '{name}'").into());
     }
 
-    println!("Profile '{name}' created successfully with ID: {profile_id}");
+    log::info!("Profile '{name}' created successfully with ID: {profile_id}");
 
     // Create user.js with common Firefox preferences and apply proxy settings if provided
     if let Some(proxy_id_ref) = &proxy_id {
@@ -234,7 +234,7 @@ impl ProfileManager {
 
     // Emit profile creation event
     if let Err(e) = app_handle.emit("profiles-changed", ()) {
-      println!("Warning: Failed to emit profiles-changed event: {e}");
+      log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
 
     Ok(profile)
@@ -320,7 +320,7 @@ impl ProfileManager {
 
     // Emit profile rename event
     if let Err(e) = app_handle.emit("profiles-changed", ()) {
-      println!("Warning: Failed to emit profiles-changed event: {e}");
+      log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
 
     Ok(profile)
@@ -331,7 +331,7 @@ impl ProfileManager {
     app_handle: &tauri::AppHandle,
     profile_id: &str,
   ) -> Result<(), Box<dyn std::error::Error>> {
-    println!("Attempting to delete profile with ID: {profile_id}");
+    log::info!("Attempting to delete profile with ID: {profile_id}");
 
     // Find the profile by ID
     let profile_uuid =
@@ -354,9 +354,9 @@ impl ProfileManager {
 
     // Delete the entire UUID directory (contains both metadata.json and profile data)
     if profile_uuid_dir.exists() {
-      println!("Deleting profile directory: {}", profile_uuid_dir.display());
+      log::info!("Deleting profile directory: {}", profile_uuid_dir.display());
       fs::remove_dir_all(&profile_uuid_dir)?;
-      println!("Profile directory deleted successfully");
+      log::info!("Profile directory deleted successfully");
     }
 
     // Verify deletion was successful
@@ -364,9 +364,10 @@ impl ProfileManager {
       return Err(format!("Failed to completely delete profile '{}'", profile.name).into());
     }
 
-    println!(
+    log::info!(
       "Profile '{}' (ID: {}) deleted successfully",
-      profile.name, profile_id
+      profile.name,
+      profile_id
     );
 
     // Rebuild tag suggestions after deletion
@@ -376,12 +377,12 @@ impl ProfileManager {
 
     // Always perform cleanup after profile deletion to remove unused binaries
     if let Err(e) = DownloadedBrowsersRegistry::instance().cleanup_unused_binaries() {
-      println!("Warning: Failed to cleanup unused binaries after profile deletion: {e}");
+      log::warn!("Warning: Failed to cleanup unused binaries after profile deletion: {e}");
     }
 
     // Emit profile deletion event
     if let Err(e) = app_handle.emit("profiles-changed", ()) {
-      println!("Warning: Failed to emit profiles-changed event: {e}");
+      log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
 
     Ok(())
@@ -434,7 +435,7 @@ impl ProfileManager {
 
     // Emit profile update event
     if let Err(e) = app_handle.emit("profiles-changed", ()) {
-      println!("Warning: Failed to emit profiles-changed event: {e}");
+      log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
 
     Ok(profile)
@@ -475,7 +476,7 @@ impl ProfileManager {
 
     // Emit profile group assignment event
     if let Err(e) = app_handle.emit("profiles-changed", ()) {
-      println!("Warning: Failed to emit profiles-changed event: {e}");
+      log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
 
     Ok(())
@@ -515,7 +516,7 @@ impl ProfileManager {
 
     // Emit profile tags update event
     if let Err(e) = app_handle.emit("profiles-changed", ()) {
-      println!("Warning: Failed to emit profiles-changed event: {e}");
+      log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
 
     Ok(profile)
@@ -558,7 +559,7 @@ impl ProfileManager {
 
     // Emit profile deletion event
     if let Err(e) = app_handle.emit("profiles-changed", ()) {
-      println!("Warning: Failed to emit profiles-changed event: {e}");
+      log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
 
     Ok(())
@@ -610,14 +611,15 @@ impl ProfileManager {
         format!("Failed to save profile: {e}").into()
       })?;
 
-    println!(
+    log::info!(
       "Camoufox configuration updated for profile '{}' (ID: {}).",
-      profile.name, profile_id
+      profile.name,
+      profile_id
     );
 
     // Emit profile config update event
     if let Err(e) = app_handle.emit("profiles-changed", ()) {
-      println!("Warning: Failed to emit profiles-changed event: {e}");
+      log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
 
     Ok(())
@@ -692,12 +694,12 @@ impl ProfileManager {
 
     // Emit profile update event so frontend UIs can refresh immediately (e.g. proxy manager)
     if let Err(e) = app_handle.emit("profile-updated", &profile) {
-      println!("Warning: Failed to emit profile update event: {e}");
+      log::warn!("Warning: Failed to emit profile update event: {e}");
     }
 
     // Emit general profiles changed event for profile list updates
     if let Err(e) = app_handle.emit("profiles-changed", ()) {
-      println!("Warning: Failed to emit profiles-changed event: {e}");
+      log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
 
     Ok(profile)
@@ -822,7 +824,7 @@ impl ProfileManager {
             // Found a matching process
             found_pid = Some(pid.as_u32());
             is_running = true;
-            println!(
+            log::info!(
               "Found browser process with PID: {} for profile: {}",
               pid.as_u32(),
               profile.name
@@ -856,14 +858,14 @@ impl ProfileManager {
         if merged.process_id != Some(pid) {
           merged.process_id = Some(pid);
           if let Err(e) = self.save_profile(&merged) {
-            println!("Warning: Failed to update profile with new PID: {e}");
+            log::warn!("Warning: Failed to update profile with new PID: {e}");
           }
         }
       } else if merged.process_id.is_some() {
         // Clear the PID if no process found
         merged.process_id = None;
         if let Err(e) = self.save_profile(&merged) {
-          println!("Warning: Failed to clear profile PID: {e}");
+          log::warn!("Warning: Failed to clear profile PID: {e}");
         }
 
         // Stop any associated proxy immediately when the browser stops
@@ -876,7 +878,7 @@ impl ProfileManager {
 
       // Emit profile update event to frontend
       if let Err(e) = app_handle.emit("profile-updated", &merged) {
-        println!("Warning: Failed to emit profile update event: {e}");
+        log::warn!("Warning: Failed to emit profile update event: {e}");
       }
     }
 
@@ -916,17 +918,18 @@ impl ProfileManager {
           if latest.process_id != camoufox_process.processId {
             latest.process_id = camoufox_process.processId;
             if let Err(e) = self.save_profile(&latest) {
-              println!("Warning: Failed to update Camoufox profile with process info: {e}");
+              log::warn!("Warning: Failed to update Camoufox profile with process info: {e}");
             }
 
             // Emit profile update event to frontend
             if let Err(e) = app_handle.emit("profile-updated", &latest) {
-              println!("Warning: Failed to emit profile update event: {e}");
+              log::warn!("Warning: Failed to emit profile update event: {e}");
             }
 
-            println!(
+            log::info!(
               "Camoufox process has started for profile '{}' with PID: {:?}",
-              profile.name, camoufox_process.processId
+              profile.name,
+              camoufox_process.processId
             );
           }
         }
@@ -951,7 +954,7 @@ impl ProfileManager {
           if let Some(old_pid) = latest.process_id {
             latest.process_id = None;
             if let Err(e) = self.save_profile(&latest) {
-              println!("Warning: Failed to clear Camoufox profile process info: {e}");
+              log::warn!("Warning: Failed to clear Camoufox profile process info: {e}");
             }
 
             // Stop any proxy tied to this old PID immediately
@@ -961,7 +964,7 @@ impl ProfileManager {
 
             // Emit profile update event to frontend
             if let Err(e) = app_handle.emit("profile-updated", &latest) {
-              println!("Warning: Failed to emit profile update event: {e}");
+              log::warn!("Warning: Failed to emit profile update event: {e}");
             }
           }
         }
@@ -969,7 +972,7 @@ impl ProfileManager {
       }
       Err(e) => {
         // Error checking status, assume not running and clear process ID
-        println!("Warning: Failed to check Camoufox status via nodecar: {e}");
+        log::warn!("Warning: Failed to check Camoufox status via nodecar: {e}");
         let profiles_dir = self.get_profiles_dir();
         let profile_uuid_dir = profiles_dir.join(profile.id.to_string());
         let metadata_file = profile_uuid_dir.join("metadata.json");
@@ -987,7 +990,9 @@ impl ProfileManager {
           if let Some(old_pid) = latest.process_id {
             latest.process_id = None;
             if let Err(e2) = self.save_profile(&latest) {
-              println!("Warning: Failed to clear Camoufox profile process info after error: {e2}");
+              log::warn!(
+                "Warning: Failed to clear Camoufox profile process info after error: {e2}"
+              );
             }
 
             // Best-effort stop of proxy tied to old PID
@@ -997,7 +1002,7 @@ impl ProfileManager {
 
             // Emit profile update event to frontend
             if let Err(e3) = app_handle.emit("profile-updated", &latest) {
-              println!("Warning: Failed to emit profile update event: {e3}");
+              log::warn!("Warning: Failed to emit profile update event: {e3}");
             }
           }
         }
@@ -1086,7 +1091,7 @@ impl ProfileManager {
     // Remove prefs.js if it exists to ensure Firefox reads user.js instead
     // Firefox may cache proxy settings in prefs.js, so we need to clear it
     if prefs_js_path.exists() {
-      println!("Removing prefs.js to ensure Firefox reads updated user.js settings");
+      log::info!("Removing prefs.js to ensure Firefox reads updated user.js settings");
       let _ = fs::remove_file(&prefs_js_path);
     }
 
@@ -1109,16 +1114,19 @@ impl ProfileManager {
     let proxy_url = if let Some(internal) = internal_proxy {
       // Use internal proxy (local proxy) as the primary proxy
       // This is the local proxy that forwards to the upstream proxy
-      println!(
+      log::info!(
         "Applying local proxy settings to Firefox profile: {}:{}",
-        internal.host, internal.port
+        internal.host,
+        internal.port
       );
       format!("HTTP {}:{}", internal.host, internal.port)
     } else {
       // Use user-configured proxy directly (upstream proxy)
-      println!(
+      log::info!(
         "Applying upstream proxy settings to Firefox profile: {}:{} ({})",
-        proxy.host, proxy.port, proxy.proxy_type
+        proxy.host,
+        proxy.port,
+        proxy.proxy_type
       );
       match proxy.proxy_type.as_str() {
         "http" => format!("HTTP {}:{}", proxy.host, proxy.port),
@@ -1136,13 +1144,13 @@ impl ProfileManager {
 
     // Save PAC file in UUID directory
     let pac_path = uuid_dir.join("proxy.pac");
-    println!(
+    log::info!(
       "Creating PAC file at: {} with proxy: {}",
       pac_path.display(),
       proxy_url
     );
     fs::write(&pac_path, &pac_content)?;
-    println!(
+    log::info!(
       "Created PAC file at: {} with content: {}",
       pac_path.display(),
       pac_content
@@ -1162,8 +1170,8 @@ impl ProfileManager {
       format!("file://{}", pac_path_absolute.to_string_lossy())
     };
 
-    println!("PAC file path (absolute): {}", pac_path_absolute.display());
-    println!("PAC file URL for Firefox: {}", pac_url);
+    log::info!("PAC file path (absolute): {}", pac_path_absolute.display());
+    log::info!("PAC file URL for Firefox: {}", pac_url);
 
     preferences.extend([
       "user_pref(\"network.proxy.type\", 2);".to_string(),
@@ -1183,16 +1191,18 @@ impl ProfileManager {
     // Write settings to user.js file
     let user_js_content = preferences.join("\n");
     fs::write(user_js_path, &user_js_content)?;
-    println!("Updated user.js with proxy settings. PAC URL: {}", pac_url);
+    log::info!("Updated user.js with proxy settings. PAC URL: {}", pac_url);
     if let Some(internal) = internal_proxy {
-      println!(
+      log::info!(
         "Firefox will use LOCAL proxy: {}:{} (which forwards to upstream)",
-        internal.host, internal.port
+        internal.host,
+        internal.port
       );
     } else {
-      println!(
+      log::info!(
         "Firefox will use UPSTREAM proxy directly: {}:{}",
-        proxy.host, proxy.port
+        proxy.host,
+        proxy.port
       );
     }
 

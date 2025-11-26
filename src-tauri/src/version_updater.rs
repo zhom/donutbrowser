@@ -129,14 +129,14 @@ impl VersionUpdater {
     let should_update = state.last_update_time == 0 || elapsed_secs >= update_interval_secs;
 
     if should_update {
-      println!(
+      log::debug!(
         "Background update needed: last_update={}, elapsed={}h, required={}h",
         state.last_update_time,
         elapsed_secs / 3600,
         state.update_interval_hours
       );
     } else {
-      println!(
+      log::debug!(
         "Background update not needed: last_update={}, elapsed={}h, required={}h",
         state.last_update_time,
         elapsed_secs / 3600,
@@ -152,12 +152,12 @@ impl VersionUpdater {
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Only run if an update is actually needed
     if !Self::should_run_background_update() {
-      println!("No startup version update needed");
+      log::debug!("No startup version update needed");
       return Ok(());
     }
 
     if let Some(ref app_handle) = self.app_handle {
-      println!("Running startup version update...");
+      log::info!("Running startup version update...");
 
       match self.update_all_browser_versions(app_handle).await {
         Ok(_) => {
@@ -168,13 +168,13 @@ impl VersionUpdater {
           };
 
           if let Err(e) = Self::save_background_update_state(&state) {
-            eprintln!("Failed to save background update state: {e}");
+            log::error!("Failed to save background update state: {e}");
           } else {
-            println!("Startup version update completed successfully");
+            log::info!("Startup version update completed successfully");
           }
         }
         Err(e) => {
-          eprintln!("Startup version update failed: {e}");
+          log::error!("Startup version update failed: {e}");
           return Err(e);
         }
       }
@@ -280,11 +280,11 @@ impl VersionUpdater {
     };
 
     if let Err(e) = app_handle.emit("version-update-progress", &initial_progress) {
-      eprintln!("Failed to emit initial progress: {e}");
+      log::error!("Failed to emit initial progress: {e}");
     }
 
     for (index, browser) in supported_browsers.iter().enumerate() {
-      println!("Updating browser versions for: {browser}");
+      log::debug!("Updating browser versions for: {browser}");
 
       // Emit progress update for current browser
       let progress = VersionUpdateProgress {
@@ -297,7 +297,7 @@ impl VersionUpdater {
       };
 
       if let Err(e) = app_handle.emit("version-update-progress", &progress) {
-        eprintln!("Failed to emit progress for {browser}: {e}");
+        log::error!("Failed to emit progress for {browser}: {e}");
       }
 
       match self.update_browser_versions(browser).await {
@@ -323,7 +323,7 @@ impl VersionUpdater {
           };
 
           if let Err(e) = app_handle.emit("version-update-progress", &progress) {
-            eprintln!("Failed to emit progress with versions for {browser}: {e}");
+            log::error!("Failed to emit progress with versions for {browser}: {e}");
           }
         }
         Err(e) => {
@@ -393,7 +393,7 @@ impl VersionUpdater {
     };
 
     if let Err(e) = Self::save_background_update_state(&state) {
-      eprintln!("Failed to save background update state after manual update: {e}");
+      log::error!("Failed to save background update state after manual update: {e}");
     }
 
     Ok(results)
@@ -506,7 +506,7 @@ pub async fn clear_all_version_cache_and_refetch(
     .auto_updater
     .save_auto_update_state(&final_state)
   {
-    eprintln!("Warning: Failed to re-enable browsers after cache clear: {e}");
+    log::warn!("Failed to re-enable browsers after cache clear: {e}");
   }
 
   result?;

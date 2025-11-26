@@ -104,7 +104,7 @@ impl Downloader {
         let releases = match self.api_client.fetch_zen_releases_with_caching(true).await {
           Ok(releases) => releases,
           Err(e) => {
-            eprintln!("Failed to fetch Zen releases: {e}");
+            log::error!("Failed to fetch Zen releases: {e}");
             return Err(format!("Failed to fetch Zen releases from GitHub API: {e}. This might be due to GitHub API rate limiting or network issues. Please try again later.").into());
           }
         };
@@ -644,7 +644,7 @@ impl Downloader {
         return Ok(version);
       } else {
         // Registry says it's downloaded but files don't exist - clean up registry
-        println!("Registry indicates {browser_str} {version} is downloaded, but files are missing. Cleaning up registry entry.");
+        log::info!("Registry indicates {browser_str} {version} is downloaded, but files are missing. Cleaning up registry entry.");
         self.registry.remove_browser(&browser_str, &version);
         self
           .registry
@@ -764,7 +764,7 @@ impl Downloader {
     let _ = app_handle.emit("download-progress", &progress);
 
     // Verify the browser was downloaded correctly
-    println!("Verifying download for browser: {browser_str}, version: {version}");
+    log::info!("Verifying download for browser: {browser_str}, version: {version}");
 
     // Use the browser's own verification method
     if !browser.is_version_downloaded(&version, &binaries_dir) {
@@ -838,7 +838,7 @@ impl Downloader {
         .registry
         .mark_download_completed(&browser_str, &version, browser_dir.clone())
     {
-      eprintln!("Warning: Could not mark {browser_str} {version} as completed in registry: {e}");
+      log::warn!("Warning: Could not mark {browser_str} {version} as completed in registry: {e}");
     }
     self
       .registry
@@ -850,7 +850,7 @@ impl Downloader {
       let archive_path = browser_dir.join(&download_info.filename);
       if archive_path.exists() {
         if let Err(e) = std::fs::remove_file(&archive_path) {
-          println!("Warning: Could not delete archive file after verification: {e}");
+          log::warn!("Warning: Could not delete archive file after verification: {e}");
         }
       }
     }
@@ -859,7 +859,7 @@ impl Downloader {
     if browser_str == "camoufox" {
       // Check if GeoIP database is already available
       if !crate::geoip_downloader::GeoIPDownloader::is_geoip_database_available() {
-        println!("Downloading GeoIP database for Camoufox...");
+        log::info!("Downloading GeoIP database for Camoufox...");
 
         match self
           .geoip_downloader
@@ -867,15 +867,15 @@ impl Downloader {
           .await
         {
           Ok(_) => {
-            println!("GeoIP database downloaded successfully");
+            log::info!("GeoIP database downloaded successfully");
           }
           Err(e) => {
-            eprintln!("Failed to download GeoIP database: {e}");
+            log::error!("Failed to download GeoIP database: {e}");
             // Don't fail the browser download if GeoIP download fails
           }
         }
       } else {
-        println!("GeoIP database already available");
+        log::info!("GeoIP database already available");
       }
     }
 

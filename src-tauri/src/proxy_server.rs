@@ -105,7 +105,7 @@ async fn handle_connect(
           return Ok(response);
         }
         Err(e) => {
-          eprintln!("Failed to connect to {}: {}", target_addr, e);
+          log::error!("Failed to connect to {}: {}", target_addr, e);
           let mut response =
             Response::new(Full::new(Bytes::from(format!("Connection failed: {}", e))));
           *response.status_mut() = StatusCode::BAD_GATEWAY;
@@ -135,7 +135,7 @@ async fn handle_connect(
             Ok(response)
           }
           Err(e) => {
-            eprintln!("HTTP proxy CONNECT failed: {}", e);
+            log::error!("HTTP proxy CONNECT failed: {}", e);
             let mut response = Response::new(Full::new(Bytes::from(format!(
               "Proxy connection failed: {}",
               e
@@ -173,7 +173,7 @@ async fn handle_connect(
             Ok(response)
           }
           Err(e) => {
-            eprintln!("SOCKS connection failed: {}", e);
+            log::error!("SOCKS connection failed: {}", e);
             let mut response = Response::new(Full::new(Bytes::from(format!(
               "SOCKS connection failed: {}",
               e
@@ -306,7 +306,7 @@ async fn handle_http(
       match build_reqwest_client_with_proxy(upstream) {
         Ok(c) => c,
         Err(e) => {
-          eprintln!("Failed to create proxy client: {}", e);
+          log::error!("Failed to create proxy client: {}", e);
           let mut response = Response::new(Full::new(Bytes::from(format!(
             "Proxy configuration error: {}",
             e
@@ -385,7 +385,7 @@ async fn handle_http(
       Ok(hyper_response)
     }
     Err(e) => {
-      eprintln!("Request failed: {}", e);
+      log::error!("Request failed: {}", e);
       let mut response = Response::new(Full::new(Bytes::from(format!("Request failed: {}", e))));
       *response.status_mut() = StatusCode::BAD_GATEWAY;
       Ok(response)
@@ -426,7 +426,7 @@ fn build_reqwest_client_with_proxy(
 }
 
 pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::error::Error>> {
-  eprintln!(
+  log::error!(
     "Proxy worker starting, looking for config id: {}",
     config.id
   );
@@ -435,28 +435,30 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
   let config = match crate::proxy_storage::get_proxy_config(&config.id) {
     Some(c) => c,
     None => {
-      eprintln!("Config not found for id: {}", config.id);
+      log::error!("Config not found for id: {}", config.id);
       return Err("Config not found".into());
     }
   };
 
-  eprintln!(
+  log::error!(
     "Found config: id={}, port={:?}, upstream={}",
-    config.id, config.local_port, config.upstream_url
+    config.id,
+    config.local_port,
+    config.upstream_url
   );
 
-  eprintln!("Starting proxy server for config id: {}", config.id);
+  log::error!("Starting proxy server for config id: {}", config.id);
 
   // Determine the bind address
   let bind_addr = SocketAddr::from(([127, 0, 0, 1], config.local_port.unwrap_or(0)));
 
-  eprintln!("Attempting to bind proxy server to {}", bind_addr);
+  log::error!("Attempting to bind proxy server to {}", bind_addr);
 
   // Bind to the port
   let listener = TcpListener::bind(bind_addr).await?;
   let actual_port = listener.local_addr()?.port();
 
-  eprintln!("Successfully bound to port {}", actual_port);
+  log::error!("Successfully bound to port {}", actual_port);
 
   // Update config with actual port and local_url
   let mut updated_config = config.clone();
@@ -464,12 +466,12 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
   updated_config.local_url = Some(format!("http://127.0.0.1:{}", actual_port));
 
   // Save the updated config
-  eprintln!(
+  log::error!(
     "Saving updated config with local_url={:?}",
     updated_config.local_url
   );
   if !crate::proxy_storage::update_proxy_config(&updated_config) {
-    eprintln!("Failed to update proxy config");
+    log::error!("Failed to update proxy config");
     return Err("Failed to update proxy config".into());
   }
 
@@ -479,12 +481,12 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
     Some(updated_config.upstream_url.clone())
   };
 
-  eprintln!("Proxy server bound to 127.0.0.1:{}", actual_port);
-  eprintln!(
+  log::error!("Proxy server bound to 127.0.0.1:{}", actual_port);
+  log::error!(
     "Proxy server listening on 127.0.0.1:{} (ready to accept connections)",
     actual_port
   );
-  eprintln!("Proxy server entering accept loop - process should stay alive");
+  log::error!("Proxy server entering accept loop - process should stay alive");
 
   // Keep the runtime alive with an infinite loop
   // This ensures the process doesn't exit even if there are no active connections
@@ -521,14 +523,14 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
                 }
 
                 // Handle CONNECT manually
-                eprintln!(
+                log::error!(
                   "DEBUG: Handling CONNECT manually for: {}",
                   String::from_utf8_lossy(&full_request[..full_request.len().min(100)])
                 );
                 if let Err(e) = handle_connect_from_buffer(stream, full_request, upstream).await {
-                  eprintln!("Error handling CONNECT request: {:?}", e);
+                  log::error!("Error handling CONNECT request: {:?}", e);
                 } else {
-                  eprintln!("DEBUG: CONNECT handled successfully");
+                  log::error!("DEBUG: CONNECT handled successfully");
                 }
                 return;
               }
@@ -543,7 +545,7 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
               let service = service_fn(move |req| handle_request(req, upstream.clone()));
 
               if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
-                eprintln!("Error serving connection: {:?}", err);
+                log::error!("Error serving connection: {:?}", err);
               }
               return;
             }
@@ -555,12 +557,12 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
           let service = service_fn(move |req| handle_request(req, upstream.clone()));
 
           if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
-            eprintln!("Error serving connection: {:?}", err);
+            log::error!("Error serving connection: {:?}", err);
           }
         });
       }
       Err(e) => {
-        eprintln!("Error accepting connection: {:?}", e);
+        log::error!("Error accepting connection: {:?}", e);
         // Continue accepting connections even if one fails
         // Add a small delay to avoid busy-waiting on errors
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -689,24 +691,24 @@ async fn handle_connect_from_buffer(
     .await?;
   client_stream.flush().await?;
 
-  eprintln!("DEBUG: Sent 200 Connection Established response, starting tunnel");
+  log::error!("DEBUG: Sent 200 Connection Established response, starting tunnel");
 
   // Now tunnel data bidirectionally
   // Split streams for bidirectional copying
   let (mut client_read, mut client_write) = tokio::io::split(client_stream);
   let (mut target_read, mut target_write) = tokio::io::split(target_stream);
 
-  eprintln!("DEBUG: Starting bidirectional tunnel");
+  log::error!("DEBUG: Starting bidirectional tunnel");
 
   // Spawn two tasks to forward data in both directions
   let client_to_target = tokio::spawn(async move {
     let result = tokio::io::copy(&mut client_read, &mut target_write).await;
     match result {
       Ok(bytes) => {
-        eprintln!("DEBUG: Tunneled {} bytes from client->target", bytes);
+        log::error!("DEBUG: Tunneled {} bytes from client->target", bytes);
       }
       Err(e) => {
-        eprintln!("Error forwarding client->target: {:?}", e);
+        log::error!("Error forwarding client->target: {:?}", e);
       }
     }
   });
@@ -715,10 +717,10 @@ async fn handle_connect_from_buffer(
     let result = tokio::io::copy(&mut target_read, &mut client_write).await;
     match result {
       Ok(bytes) => {
-        eprintln!("DEBUG: Tunneled {} bytes from target->client", bytes);
+        log::error!("DEBUG: Tunneled {} bytes from target->client", bytes);
       }
       Err(e) => {
-        eprintln!("Error forwarding target->client: {:?}", e);
+        log::error!("Error forwarding target->client: {:?}", e);
       }
     }
   });
@@ -726,10 +728,10 @@ async fn handle_connect_from_buffer(
   // Wait for either direction to finish (connection closed)
   tokio::select! {
     _ = client_to_target => {
-      eprintln!("DEBUG: Client->target tunnel closed");
+      log::error!("DEBUG: Client->target tunnel closed");
     }
     _ = target_to_client => {
-      eprintln!("DEBUG: Target->client tunnel closed");
+      log::error!("DEBUG: Target->client tunnel closed");
     }
   }
 

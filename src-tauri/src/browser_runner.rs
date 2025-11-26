@@ -125,7 +125,7 @@ impl BrowserRunner {
     if profile.browser == "camoufox" {
       // Get or create camoufox config
       let mut camoufox_config = profile.camoufox_config.clone().unwrap_or_else(|| {
-        println!(
+        log::info!(
           "No camoufox config found for profile {}, using default",
           profile.name
         );
@@ -138,7 +138,7 @@ impl BrowserRunner {
         .as_ref()
         .and_then(|id| PROXY_MANAGER.get_proxy_settings_by_id(id));
 
-      println!(
+      log::info!(
         "Starting local proxy for Camoufox profile: {} (upstream: {})",
         profile.name,
         upstream_proxy
@@ -159,7 +159,7 @@ impl BrowserRunner {
         .await
         .map_err(|e| {
           let error_msg = format!("Failed to start local proxy for Camoufox: {e}");
-          eprintln!("{}", error_msg);
+          log::error!("{}", error_msg);
           error_msg
         })?;
 
@@ -174,13 +174,14 @@ impl BrowserRunner {
         camoufox_config.geoip = Some(serde_json::Value::Bool(true));
       }
 
-      println!(
+      log::info!(
         "Configured local proxy for Camoufox: {:?}, geoip: {:?}",
-        camoufox_config.proxy, camoufox_config.geoip
+        camoufox_config.proxy,
+        camoufox_config.geoip
       );
 
       // Use the nodecar camoufox launcher
-      println!(
+      log::info!(
         "Launching Camoufox via nodecar for profile: {}",
         profile.name
       );
@@ -194,7 +195,7 @@ impl BrowserRunner {
 
       // For server-based Camoufox, we use the process_id
       let process_id = camoufox_result.processId.unwrap_or(0);
-      println!("Camoufox launched successfully with PID: {process_id}");
+      log::info!("Camoufox launched successfully with PID: {process_id}");
 
       // Update profile with the process info from camoufox result
       let mut updated_profile = profile.clone();
@@ -203,9 +204,9 @@ impl BrowserRunner {
 
       // Update the proxy manager with the correct PID
       if let Err(e) = PROXY_MANAGER.update_proxy_pid(0, process_id) {
-        println!("Warning: Failed to update proxy PID mapping: {e}");
+        log::warn!("Warning: Failed to update proxy PID mapping: {e}");
       } else {
-        println!("Updated proxy PID mapping from temp (0) to actual PID: {process_id}");
+        log::info!("Updated proxy PID mapping from temp (0) to actual PID: {process_id}");
       }
 
       // Save the updated profile
@@ -214,19 +215,19 @@ impl BrowserRunner {
       let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
         let _ = tm.rebuild_from_profiles(&self.profile_manager.list_profiles().unwrap_or_default());
       });
-      println!(
+      log::info!(
         "Updated profile with process info: {}",
         updated_profile.name
       );
 
-      println!(
+      log::info!(
         "Emitting profile events for successful Camoufox launch: {}",
         updated_profile.name
       );
 
       // Emit profile update event to frontend
       if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
-        println!("Warning: Failed to emit profile update event: {e}");
+        log::warn!("Warning: Failed to emit profile update event: {e}");
       }
 
       // Emit minimal running changed event to frontend with a small delay
@@ -242,11 +243,12 @@ impl BrowserRunner {
       };
 
       if let Err(e) = app_handle.emit("profile-running-changed", &payload) {
-        println!("Warning: Failed to emit profile running changed event: {e}");
+        log::warn!("Warning: Failed to emit profile running changed event: {e}");
       } else {
-        println!(
+        log::info!(
           "Successfully emitted profile-running-changed event for Camoufox {}: running={}",
-          updated_profile.name, payload.is_running
+          updated_profile.name,
+          payload.is_running
         );
       }
 
@@ -263,11 +265,11 @@ impl BrowserRunner {
       .get_browser_executable_path(profile)
       .expect("Failed to get executable path");
 
-    println!("Executable path: {executable_path:?}");
+    log::info!("Executable path: {executable_path:?}");
 
     // Prepare the executable (set permissions, etc.)
     if let Err(e) = browser.prepare_executable(&executable_path) {
-      println!("Warning: Failed to prepare executable: {e}");
+      log::warn!("Warning: Failed to prepare executable: {e}");
       // Continue anyway, the error might not be critical
     }
 
@@ -318,9 +320,11 @@ impl BrowserRunner {
 
     let launcher_pid = child.id();
 
-    println!(
+    log::info!(
       "Launched browser with launcher PID: {} for profile: {} (ID: {})",
-      launcher_pid, profile.name, profile.id
+      launcher_pid,
+      profile.name,
+      profile.id
     );
 
     // For TOR and Mullvad browsers, we need to find the actual browser process
@@ -347,9 +351,11 @@ impl BrowserRunner {
         }
 
         if self.is_tor_or_mullvad_browser(process_name, process_cmd, &profile.browser) {
-          println!(
+          log::info!(
             "Found actual {} browser process: PID {} ({})",
-            profile.browser, pid_u32, process_name
+            profile.browser,
+            pid_u32,
+            process_name
           );
           actual_pid = pid_u32;
           break;
@@ -489,14 +495,15 @@ impl BrowserRunner {
       // which is already handled in the profile creation process
     }
 
-    println!(
+    log::info!(
       "Emitting profile events for successful launch: {} (ID: {})",
-      updated_profile.name, updated_profile.id
+      updated_profile.name,
+      updated_profile.id
     );
 
     // Emit profile update event to frontend
     if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
-      println!("Warning: Failed to emit profile update event: {e}");
+      log::warn!("Warning: Failed to emit profile update event: {e}");
     }
 
     // Emit minimal running changed event to frontend with a small delay to ensure UI consistency
@@ -511,11 +518,12 @@ impl BrowserRunner {
     };
 
     if let Err(e) = app_handle.emit("profile-running-changed", &payload) {
-      println!("Warning: Failed to emit profile running changed event: {e}");
+      log::warn!("Warning: Failed to emit profile running changed event: {e}");
     } else {
-      println!(
+      log::info!(
         "Successfully emitted profile-running-changed event for {}: running={}",
-        updated_profile.name, payload.is_running
+        updated_profile.name,
+        payload.is_running
       );
     }
 
@@ -543,9 +551,10 @@ impl BrowserRunner {
         .await
       {
         Ok(Some(_camoufox_process)) => {
-          println!(
+          log::info!(
             "Opening URL in existing Camoufox process for profile: {} (ID: {})",
-            profile.name, profile.id
+            profile.name,
+            profile.id
           );
 
           // For Camoufox, we need to launch a new instance with the URL since it doesn't support remote commands
@@ -759,7 +768,7 @@ impl BrowserRunner {
       .await
       .map_err(|e| {
         let error_msg = format!("Failed to start local proxy: {e}");
-        eprintln!("{}", error_msg);
+        log::error!("{}", error_msg);
         error_msg
       })?;
 
@@ -819,9 +828,10 @@ impl BrowserRunner {
     url: Option<String>,
     internal_proxy_settings: Option<&ProxySettings>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
-    println!(
+    log::info!(
       "launch_or_open_url called for profile: {} (ID: {})",
-      profile.name, profile.id
+      profile.name,
+      profile.id
     );
 
     // Get the most up-to-date profile data
@@ -834,9 +844,10 @@ impl BrowserRunner {
       .find(|p| p.id == profile.id)
       .unwrap_or_else(|| profile.clone());
 
-    println!(
+    log::info!(
       "Checking browser status for profile: {} (ID: {})",
-      updated_profile.name, updated_profile.id
+      updated_profile.name,
+      updated_profile.id
     );
 
     // Check if browser is already running
@@ -855,24 +866,28 @@ impl BrowserRunner {
       .find(|p| p.id == profile.id)
       .unwrap_or_else(|| updated_profile.clone());
 
-    println!(
+    log::info!(
       "Browser status check - Profile: {} (ID: {}), Running: {}, URL: {:?}, PID: {:?}",
-      final_profile.name, final_profile.id, is_running, url, final_profile.process_id
+      final_profile.name,
+      final_profile.id,
+      is_running,
+      url,
+      final_profile.process_id
     );
 
     if is_running && url.is_some() {
       // Browser is running and we have a URL to open
       if let Some(url_ref) = url.as_ref() {
-        println!("Opening URL in existing browser: {url_ref}");
+        log::info!("Opening URL in existing browser: {url_ref}");
 
         // For TOR/Mullvad browsers, add extra verification
         if matches!(
           final_profile.browser.as_str(),
           "tor-browser" | "mullvad-browser"
         ) {
-          println!("TOR/Mullvad browser detected - ensuring we have correct PID");
+          log::info!("TOR/Mullvad browser detected - ensuring we have correct PID");
           if final_profile.process_id.is_none() {
-            println!(
+            log::info!(
               "ERROR: No PID found for running TOR/Mullvad browser - this should not happen"
             );
             return Err("No PID found for running browser".into());
@@ -888,11 +903,11 @@ impl BrowserRunner {
           .await
         {
           Ok(()) => {
-            println!("Successfully opened URL in existing browser");
+            log::info!("Successfully opened URL in existing browser");
             Ok(final_profile)
           }
           Err(e) => {
-            println!("Failed to open URL in existing browser: {e}");
+            log::info!("Failed to open URL in existing browser: {e}");
 
             // For Mullvad and Tor browsers, don't fall back to new instance since they use -no-remote
             // and can't have multiple instances with the same profile
@@ -901,7 +916,7 @@ impl BrowserRunner {
                 Err(format!("Failed to open URL in existing {} browser. Cannot launch new instance due to profile conflict: {}", final_profile.browser, e).into())
               }
               _ => {
-                println!("Falling back to new instance for browser: {}", final_profile.browser);
+                log::info!("Falling back to new instance for browser: {}", final_profile.browser);
                 // Fallback to launching a new instance for other browsers
                 self.launch_browser_internal(app_handle.clone(), &final_profile, url, internal_proxy_settings, None, false).await
               }
@@ -910,7 +925,7 @@ impl BrowserRunner {
         }
       } else {
         // This case shouldn't happen since we checked is_some() above, but handle it gracefully
-        println!("URL was unexpectedly None, launching new browser instance");
+        log::info!("URL was unexpectedly None, launching new browser instance");
         self
           .launch_browser(
             app_handle.clone(),
@@ -923,9 +938,9 @@ impl BrowserRunner {
     } else {
       // Browser is not running or no URL provided, launch new instance
       if !is_running {
-        println!("Launching new browser instance - browser not running");
+        log::info!("Launching new browser instance - browser not running");
       } else {
-        println!("Launching new browser instance - no URL provided");
+        log::info!("Launching new browser instance - no URL provided");
       }
       self
         .launch_browser_internal(
@@ -974,9 +989,10 @@ impl BrowserRunner {
       let profile_data_path = profile.get_profile_data_path(&profiles_dir);
       let profile_path_str = profile_data_path.to_string_lossy();
 
-      println!(
+      log::info!(
         "Attempting to kill Camoufox process for profile: {} (ID: {})",
-        profile.name, profile.id
+        profile.name,
+        profile.id
       );
 
       match self
@@ -985,9 +1001,10 @@ impl BrowserRunner {
         .await
       {
         Ok(Some(camoufox_process)) => {
-          println!(
+          log::info!(
             "Found Camoufox process: {} (PID: {:?})",
-            camoufox_process.id, camoufox_process.processId
+            camoufox_process.id,
+            camoufox_process.processId
           );
 
           match self
@@ -997,35 +1014,40 @@ impl BrowserRunner {
           {
             Ok(stopped) => {
               if stopped {
-                println!(
+                log::info!(
                   "Successfully stopped Camoufox process: {} (PID: {:?})",
-                  camoufox_process.id, camoufox_process.processId
+                  camoufox_process.id,
+                  camoufox_process.processId
                 );
               } else {
-                println!(
+                log::info!(
                   "Failed to stop Camoufox process: {} (PID: {:?})",
-                  camoufox_process.id, camoufox_process.processId
+                  camoufox_process.id,
+                  camoufox_process.processId
                 );
               }
             }
             Err(e) => {
-              println!(
+              log::info!(
                 "Error stopping Camoufox process {}: {}",
-                camoufox_process.id, e
+                camoufox_process.id,
+                e
               );
             }
           }
         }
         Ok(None) => {
-          println!(
+          log::info!(
             "No running Camoufox process found for profile: {} (ID: {})",
-            profile.name, profile.id
+            profile.name,
+            profile.id
           );
         }
         Err(e) => {
-          println!(
+          log::info!(
             "Error finding Camoufox process for profile {}: {}",
-            profile.name, e
+            profile.name,
+            e
           );
         }
       }
@@ -1039,9 +1061,11 @@ impl BrowserRunner {
         .auto_updater
         .get_pending_update(&profile.browser, &profile.version)
       {
-        println!(
+        log::info!(
           "Found pending update for Camoufox profile {}: {} -> {}",
-          profile.name, profile.version, pending_update.new_version
+          profile.name,
+          profile.version,
+          pending_update.new_version
         );
 
         // Update the profile to the new version
@@ -1051,9 +1075,11 @@ impl BrowserRunner {
           &pending_update.new_version,
         ) {
           Ok(updated_profile_after_update) => {
-            println!(
+            log::info!(
               "Successfully updated Camoufox profile {} from version {} to {}",
-              profile.name, profile.version, pending_update.new_version
+              profile.name,
+              profile.version,
+              pending_update.new_version
             );
             updated_profile = updated_profile_after_update;
 
@@ -1062,13 +1088,14 @@ impl BrowserRunner {
               .auto_updater
               .dismiss_update_notification(&pending_update.id)
             {
-              eprintln!("Warning: Failed to dismiss pending update notification: {e}");
+              log::warn!("Warning: Failed to dismiss pending update notification: {e}");
             }
           }
           Err(e) => {
-            eprintln!(
+            log::error!(
               "Failed to apply pending update for Camoufox profile {}: {}",
-              profile.name, e
+              profile.name,
+              e
             );
             // Continue with the original profile update (just clearing process_id)
           }
@@ -1079,14 +1106,14 @@ impl BrowserRunner {
         .save_process_info(&updated_profile)
         .map_err(|e| format!("Failed to update profile: {e}"))?;
 
-      println!(
+      log::info!(
         "Emitting profile events for successful Camoufox kill: {}",
         updated_profile.name
       );
 
       // Emit profile update event to frontend
       if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
-        println!("Warning: Failed to emit profile update event: {e}");
+        log::warn!("Warning: Failed to emit profile update event: {e}");
       }
 
       // Emit minimal running changed event to frontend immediately
@@ -1101,17 +1128,19 @@ impl BrowserRunner {
       };
 
       if let Err(e) = app_handle.emit("profile-running-changed", &payload) {
-        println!("Warning: Failed to emit profile running changed event: {e}");
+        log::warn!("Warning: Failed to emit profile running changed event: {e}");
       } else {
-        println!(
+        log::info!(
           "Successfully emitted profile-running-changed event for Camoufox {}: running={}",
-          updated_profile.name, payload.is_running
+          updated_profile.name,
+          payload.is_running
         );
       }
 
-      println!(
+      log::info!(
         "Camoufox process cleanup completed for profile: {} (ID: {})",
-        profile.name, profile.id
+        profile.name,
+        profile.id
       );
 
       // Consolidate browser versions after stopping a browser
@@ -1120,9 +1149,9 @@ impl BrowserRunner {
         .consolidate_browser_versions(&app_handle)
       {
         if !consolidated.is_empty() {
-          println!("Post-stop version consolidation results:");
+          log::info!("Post-stop version consolidation results:");
           for action in &consolidated {
-            println!("  {action}");
+            log::info!("  {action}");
           }
         }
       }
@@ -1216,25 +1245,29 @@ impl BrowserRunner {
           };
 
           if profile_path_match {
-            println!(
+            log::info!(
               "Verified stored PID {} is valid for profile {} (ID: {})",
-              pid, profile.name, profile.id
+              pid,
+              profile.name,
+              profile.id
             );
             pid
           } else {
-            println!("Stored PID {} doesn't match profile path for {} (ID: {}), searching for correct process", pid, profile.name, profile.id);
+            log::info!("Stored PID {} doesn't match profile path for {} (ID: {}), searching for correct process", pid, profile.name, profile.id);
             // Fall through to search for correct process
             self.find_browser_process_by_profile(profile)?
           }
         } else {
-          println!("Stored PID {} doesn't match browser type for {} (ID: {}), searching for correct process", pid, profile.name, profile.id);
+          log::info!("Stored PID {} doesn't match browser type for {} (ID: {}), searching for correct process", pid, profile.name, profile.id);
           // Fall through to search for correct process
           self.find_browser_process_by_profile(profile)?
         }
       } else {
-        println!(
+        log::info!(
           "Stored PID {} is no longer valid for profile {} (ID: {}), searching for correct process",
-          pid, profile.name, profile.id
+          pid,
+          profile.name,
+          profile.id
         );
         // Fall through to search for correct process
         self.find_browser_process_by_profile(profile)?
@@ -1244,11 +1277,11 @@ impl BrowserRunner {
       self.find_browser_process_by_profile(profile)?
     };
 
-    println!("Attempting to kill browser process with PID: {pid}");
+    log::info!("Attempting to kill browser process with PID: {pid}");
 
     // Stop any associated proxy first
     if let Err(e) = PROXY_MANAGER.stop_proxy(app_handle.clone(), pid).await {
-      println!("Warning: Failed to stop proxy for PID {pid}: {e}");
+      log::warn!("Warning: Failed to stop proxy for PID {pid}: {e}");
     }
 
     // Kill the process using platform-specific implementation
@@ -1273,9 +1306,11 @@ impl BrowserRunner {
       .auto_updater
       .get_pending_update(&profile.browser, &profile.version)
     {
-      println!(
+      log::info!(
         "Found pending update for profile {}: {} -> {}",
-        profile.name, profile.version, pending_update.new_version
+        profile.name,
+        profile.version,
+        pending_update.new_version
       );
 
       // Update the profile to the new version
@@ -1285,9 +1320,11 @@ impl BrowserRunner {
         &pending_update.new_version,
       ) {
         Ok(updated_profile_after_update) => {
-          println!(
+          log::info!(
             "Successfully updated profile {} from version {} to {}",
-            profile.name, profile.version, pending_update.new_version
+            profile.name,
+            profile.version,
+            pending_update.new_version
           );
           updated_profile = updated_profile_after_update;
 
@@ -1296,13 +1333,14 @@ impl BrowserRunner {
             .auto_updater
             .dismiss_update_notification(&pending_update.id)
           {
-            eprintln!("Warning: Failed to dismiss pending update notification: {e}");
+            log::warn!("Warning: Failed to dismiss pending update notification: {e}");
           }
         }
         Err(e) => {
-          eprintln!(
+          log::error!(
             "Failed to apply pending update for profile {}: {}",
-            profile.name, e
+            profile.name,
+            e
           );
           // Continue with the original profile update (just clearing process_id)
         }
@@ -1313,14 +1351,14 @@ impl BrowserRunner {
       .save_process_info(&updated_profile)
       .map_err(|e| format!("Failed to update profile: {e}"))?;
 
-    println!(
+    log::info!(
       "Emitting profile events for successful kill: {}",
       updated_profile.name
     );
 
     // Emit profile update event to frontend
     if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
-      println!("Warning: Failed to emit profile update event: {e}");
+      log::warn!("Warning: Failed to emit profile update event: {e}");
     }
 
     // Emit minimal running changed event to frontend immediately
@@ -1335,11 +1373,12 @@ impl BrowserRunner {
     };
 
     if let Err(e) = app_handle.emit("profile-running-changed", &payload) {
-      println!("Warning: Failed to emit profile running changed event: {e}");
+      log::warn!("Warning: Failed to emit profile running changed event: {e}");
     } else {
-      println!(
+      log::info!(
         "Successfully emitted profile-running-changed event for {}: running={}",
-        updated_profile.name, payload.is_running
+        updated_profile.name,
+        payload.is_running
       );
     }
 
@@ -1349,9 +1388,9 @@ impl BrowserRunner {
       .consolidate_browser_versions(&app_handle)
     {
       if !consolidated.is_empty() {
-        println!("Post-stop version consolidation results:");
+        log::info!("Post-stop version consolidation results:");
         for action in &consolidated {
-          println!("  {action}");
+          log::info!("  {action}");
         }
       }
     }
@@ -1369,9 +1408,10 @@ impl BrowserRunner {
     let profile_data_path = profile.get_profile_data_path(&profiles_dir);
     let profile_data_path_str = profile_data_path.to_string_lossy();
 
-    println!(
+    log::info!(
       "Searching for {} browser process with profile path: {}",
-      profile.browser, profile_data_path_str
+      profile.browser,
+      profile_data_path_str
     );
 
     for (pid, process) in system.processes() {
@@ -1459,9 +1499,12 @@ impl BrowserRunner {
 
       if profile_path_match {
         let pid_u32 = pid.as_u32();
-        println!(
+        log::info!(
           "Found matching {} browser process with PID: {} for profile: {} (ID: {})",
-          profile.browser, pid_u32, profile.name, profile.id
+          profile.browser,
+          pid_u32,
+          profile.name,
+          profile.id
         );
         return Ok(pid_u32);
       }
@@ -1492,18 +1535,18 @@ impl BrowserRunner {
       .find(|p| p.id.to_string() == profile_id)
       .ok_or_else(|| format!("Profile '{profile_id}' not found"))?;
 
-    println!("Opening URL '{url}' with profile '{profile_id}'");
+    log::info!("Opening URL '{url}' with profile '{profile_id}'");
 
     // Use launch_or_open_url which handles both launching new instances and opening in existing ones
     self
       .launch_or_open_url(app_handle, &profile, Some(url.clone()), None)
       .await
       .map_err(|e| {
-        println!("Failed to open URL with profile '{profile_id}': {e}");
+        log::info!("Failed to open URL with profile '{profile_id}': {e}");
         format!("Failed to open URL with profile: {e}")
       })?;
 
-    println!("Successfully opened URL '{url}' with profile '{profile_id}'");
+    log::info!("Successfully opened URL '{url}' with profile '{profile_id}'");
     Ok(())
   }
 }
@@ -1514,9 +1557,10 @@ pub async fn launch_browser_profile(
   profile: BrowserProfile,
   url: Option<String>,
 ) -> Result<BrowserProfile, String> {
-  println!(
+  log::info!(
     "Launch request received for profile: {} (ID: {})",
-    profile.name, profile.id
+    profile.name,
+    profile.id
   );
 
   let browser_runner = BrowserRunner::instance();
@@ -1539,9 +1583,10 @@ pub async fn launch_browser_profile(
     }
   };
 
-  println!(
+  log::info!(
     "Resolved profile for launch: {} (ID: {})",
-    profile_for_launch.name, profile_for_launch.id
+    profile_for_launch.name,
+    profile_for_launch.id
   );
 
   // Always start a local proxy before launching (non-Camoufox handled here; Camoufox has its own flow)
@@ -1596,7 +1641,7 @@ pub async fn launch_browser_profile(
             .map_err(|e| format!("Failed to update profile proxy: {e}"))?;
         }
 
-        println!(
+        log::info!(
           "Local proxy prepared for profile: {} on port: {} (upstream: {})",
           profile_for_launch.name,
           internal_proxy.port,
@@ -1608,21 +1653,22 @@ pub async fn launch_browser_profile(
       }
       Err(e) => {
         let error_msg = format!("Failed to start local proxy: {e}");
-        eprintln!("{}", error_msg);
+        log::error!("{}", error_msg);
         // DO NOT launch browser if proxy startup fails - all browsers must use local proxy
         return Err(error_msg);
       }
     }
   }
 
-  println!(
+  log::info!(
     "Starting browser launch for profile: {} (ID: {})",
-    profile_for_launch.name, profile_for_launch.id
+    profile_for_launch.name,
+    profile_for_launch.id
   );
 
   // Launch browser or open URL in existing instance
   let updated_profile = browser_runner.launch_or_open_url(app_handle.clone(), &profile_for_launch, url, internal_proxy_settings.as_ref()).await.map_err(|e| {
-    println!("Browser launch failed for profile: {}, error: {}", profile_for_launch.name, e);
+    log::info!("Browser launch failed for profile: {}, error: {}", profile_for_launch.name, e);
 
     // Emit a failure event to clear loading states in the frontend
     #[derive(serde::Serialize)]
@@ -1636,7 +1682,7 @@ pub async fn launch_browser_profile(
     };
 
     if let Err(e) = app_handle.emit("profile-running-changed", &payload) {
-      println!("Warning: Failed to emit profile running changed event: {e}");
+      log::warn!("Warning: Failed to emit profile running changed event: {e}");
     }
 
     // Check if this is an architecture compatibility issue
@@ -1648,9 +1694,10 @@ pub async fn launch_browser_profile(
     format!("Failed to launch browser or open URL: {e}")
   })?;
 
-  println!(
+  log::info!(
     "Browser launch completed for profile: {} (ID: {})",
-    updated_profile.name, updated_profile.id
+    updated_profile.name,
+    updated_profile.id
   );
 
   // Now update the proxy with the correct PID if we have one
@@ -1676,9 +1723,10 @@ pub async fn kill_browser_profile(
   app_handle: tauri::AppHandle,
   profile: BrowserProfile,
 ) -> Result<(), String> {
-  println!(
+  log::info!(
     "Kill request received for profile: {} (ID: {})",
-    profile.name, profile.id
+    profile.name,
+    profile.id
   );
 
   let browser_runner = BrowserRunner::instance();
@@ -1688,14 +1736,15 @@ pub async fn kill_browser_profile(
     .await
   {
     Ok(()) => {
-      println!(
+      log::info!(
         "Successfully killed browser profile: {} (ID: {})",
-        profile.name, profile.id
+        profile.name,
+        profile.id
       );
       Ok(())
     }
     Err(e) => {
-      println!("Failed to kill browser profile {}: {}", profile.name, e);
+      log::info!("Failed to kill browser profile {}: {}", profile.name, e);
 
       // Emit a failure event to clear loading states in the frontend
       #[derive(serde::Serialize)]
@@ -1710,7 +1759,7 @@ pub async fn kill_browser_profile(
       };
 
       if let Err(e) = app_handle.emit("profile-running-changed", &payload) {
-        println!("Warning: Failed to emit profile running changed event: {e}");
+        log::warn!("Warning: Failed to emit profile running changed event: {e}");
       }
 
       Err(format!("Failed to kill browser: {e}"))

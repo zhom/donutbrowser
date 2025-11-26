@@ -35,9 +35,9 @@ fn build_proxy_url(
 async fn main() {
   // Set up panic handler to log panics before process exits
   std::panic::set_hook(Box::new(|panic_info| {
-    eprintln!("PANIC in proxy worker: {:?}", panic_info);
+    log::error!("PANIC in proxy worker: {:?}", panic_info);
     if let Some(location) = panic_info.location() {
-      eprintln!(
+      log::error!(
         "Location: {}:{}:{}",
         location.file(),
         location.line(),
@@ -45,7 +45,7 @@ async fn main() {
       );
     }
     if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
-      eprintln!("Message: {}", s);
+      log::error!("Message: {}", s);
     }
   }));
 
@@ -142,6 +142,7 @@ async fn main() {
       match start_proxy_process(upstream_url, port).await {
         Ok(config) => {
           // Output the configuration as JSON for the Rust side to parse
+          // Use println! here because this needs to go to stdout for parsing
           println!(
             "{}",
             serde_json::json!({
@@ -162,6 +163,7 @@ async fn main() {
       if let Some(id) = stop_matches.get_one::<String>("id") {
         match stop_proxy_process(id).await {
           Ok(success) => {
+            // Use println! here because this needs to go to stdout for parsing
             println!("{}", serde_json::json!({ "success": success }));
             process::exit(0);
           }
@@ -187,12 +189,14 @@ async fn main() {
           let _ = stop_proxy_process(&config.id).await;
         }
 
+        // Use println! here because this needs to go to stdout for parsing
         println!("{}", serde_json::json!({ "success": true }));
         process::exit(0);
       } else {
         // Stop all proxies
         match stop_all_proxy_processes().await {
           Ok(_) => {
+            // Use println! here because this needs to go to stdout for parsing
             println!("{}", serde_json::json!({ "success": true }));
             process::exit(0);
           }
@@ -204,10 +208,11 @@ async fn main() {
       }
     } else if proxy_matches.subcommand_matches("list").is_some() {
       let configs = donutbrowser::proxy_storage::list_proxy_configs();
+      // Use println! here because this needs to go to stdout for parsing
       println!("{}", serde_json::to_string(&configs).unwrap());
       process::exit(0);
     } else {
-      eprintln!("Invalid action. Use 'start', 'stop', or 'list'");
+      log::error!("Invalid action. Use 'start', 'stop', or 'list'");
       process::exit(1);
     }
   } else if let Some(worker_matches) = matches.subcommand_matches("proxy-worker") {
@@ -219,39 +224,41 @@ async fn main() {
       .expect("action is required");
 
     if action == "start" {
-      eprintln!("Proxy worker starting, looking for config id: {}", id);
-      eprintln!("Process PID: {}", std::process::id());
+      log::error!("Proxy worker starting, looking for config id: {}", id);
+      log::error!("Process PID: {}", std::process::id());
 
       let config = match get_proxy_config(id) {
         Some(config) => {
-          eprintln!(
+          log::error!(
             "Found config: id={}, port={:?}, upstream={}",
-            config.id, config.local_port, config.upstream_url
+            config.id,
+            config.local_port,
+            config.upstream_url
           );
           config
         }
         None => {
-          eprintln!("Proxy configuration {} not found", id);
+          log::error!("Proxy configuration {} not found", id);
           process::exit(1);
         }
       };
 
       // Run the proxy server - this should never return (infinite loop)
-      eprintln!("Starting proxy server for config id: {}", id);
+      log::error!("Starting proxy server for config id: {}", id);
       if let Err(e) = run_proxy_server(config).await {
-        eprintln!("Failed to run proxy server: {}", e);
-        eprintln!("Error details: {:?}", e);
+        log::error!("Failed to run proxy server: {}", e);
+        log::error!("Error details: {:?}", e);
         process::exit(1);
       }
       // This should never be reached - run_proxy_server has an infinite loop
-      eprintln!("ERROR: Proxy server returned unexpectedly (this should never happen)");
+      log::error!("ERROR: Proxy server returned unexpectedly (this should never happen)");
       process::exit(1);
     } else {
-      eprintln!("Invalid action for proxy-worker. Use 'start'");
+      log::error!("Invalid action for proxy-worker. Use 'start'");
       process::exit(1);
     }
   } else {
-    eprintln!("No command specified");
+    log::error!("No command specified");
     process::exit(1);
   }
 }

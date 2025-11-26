@@ -166,13 +166,13 @@ impl AppAutoUpdater {
     let current_version = Self::get_current_version();
     let is_nightly = Self::is_nightly_build();
 
-    println!("=== App Update Check ===");
-    println!("Current version: {current_version}");
-    println!("Is nightly build: {is_nightly}");
-    println!("STABLE_RELEASE env: {:?}", option_env!("STABLE_RELEASE"));
+    log::info!("=== App Update Check ===");
+    log::info!("Current version: {current_version}");
+    log::info!("Is nightly build: {is_nightly}");
+    log::info!("STABLE_RELEASE env: {:?}", option_env!("STABLE_RELEASE"));
 
     let releases = self.fetch_app_releases().await?;
-    println!("Fetched {} releases from GitHub", releases.len());
+    log::info!("Fetched {} releases from GitHub", releases.len());
 
     // Filter releases based on build type
     let filtered_releases: Vec<&AppRelease> = if is_nightly {
@@ -181,7 +181,7 @@ impl AppAutoUpdater {
         .iter()
         .filter(|release| release.tag_name.starts_with("nightly-"))
         .collect();
-      println!("Found {} nightly releases", nightly_releases.len());
+      log::info!("Found {} nightly releases", nightly_releases.len());
       nightly_releases
     } else {
       // For stable builds, look for stable releases (semver format)
@@ -189,25 +189,26 @@ impl AppAutoUpdater {
         .iter()
         .filter(|release| release.tag_name.starts_with('v'))
         .collect();
-      println!("Found {} stable releases", stable_releases.len());
+      log::info!("Found {} stable releases", stable_releases.len());
       stable_releases
     };
 
     if filtered_releases.is_empty() {
-      println!("No releases found for build type (nightly: {is_nightly})");
+      log::info!("No releases found for build type (nightly: {is_nightly})");
       return Ok(None);
     }
 
     // Get the latest release
     let latest_release = filtered_releases[0];
-    println!(
+    log::info!(
       "Latest release: {} ({})",
-      latest_release.tag_name, latest_release.name
+      latest_release.tag_name,
+      latest_release.name
     );
 
     // Check if we need to update
     if self.should_update(&current_version, &latest_release.tag_name, is_nightly) {
-      println!("Update available!");
+      log::info!("Update available!");
 
       // Find the appropriate asset for current platform
       if let Some(download_url) = self.get_download_url_for_platform(&latest_release.assets) {
@@ -220,16 +221,17 @@ impl AppAutoUpdater {
           published_at: latest_release.published_at.clone(),
         };
 
-        println!(
+        log::info!(
           "Update info prepared: {} -> {}",
-          update_info.current_version, update_info.new_version
+          update_info.current_version,
+          update_info.new_version
         );
         return Ok(Some(update_info));
       } else {
-        println!("No suitable download asset found for current platform");
+        log::info!("No suitable download asset found for current platform");
       }
     } else {
-      println!("No update needed");
+      log::info!("No update needed");
     }
 
     Ok(None)
@@ -261,7 +263,7 @@ impl AppAutoUpdater {
       return false;
     }
 
-    println!(
+    log::info!(
       "Comparing versions: current={current_version}, new={new_version}, is_nightly={is_nightly}"
     );
 
@@ -273,20 +275,20 @@ impl AppAutoUpdater {
       ) {
         // Different commit hashes mean we should update
         let should_update = new_hash != current_hash;
-        println!("Nightly comparison: current_hash={current_hash}, new_hash={new_hash}, should_update={should_update}");
+        log::info!("Nightly comparison: current_hash={current_hash}, new_hash={new_hash}, should_update={should_update}");
         return should_update;
       }
 
       // If current version doesn't have nightly prefix but we're in nightly mode,
       // this could be a dev build or stable build upgrading to nightly
       if !current_version.starts_with("nightly-") {
-        println!("Upgrading from non-nightly to nightly: {new_version}");
+        log::info!("Upgrading from non-nightly to nightly: {new_version}");
         return true;
       }
     } else {
       // For stable builds, use semantic versioning comparison
       let should_update = self.is_version_newer(new_version, current_version);
-      println!("Stable comparison: {new_version} > {current_version} = {should_update}");
+      log::info!("Stable comparison: {new_version} > {current_version} = {should_update}");
       return should_update;
     }
 
@@ -354,7 +356,7 @@ impl AppAutoUpdater {
     };
 
     let exe_path_str = exe_path.to_string_lossy();
-    println!("Detecting installation method for: {exe_path_str}");
+    log::info!("Detecting installation method for: {exe_path_str}");
 
     // Check if installed via package manager by querying package databases
     if let Some(exe_name) = exe_path.file_name().and_then(|n| n.to_str()) {
@@ -365,7 +367,7 @@ impl AppAutoUpdater {
         if output.status.success() {
           let stdout = String::from_utf8_lossy(&output.stdout);
           if !stdout.trim().is_empty() && !stdout.contains("no path found") {
-            println!("Found DEB package owning the executable");
+            log::info!("Found DEB package owning the executable");
             return LinuxInstallationMethod::Deb;
           }
         }
@@ -376,7 +378,7 @@ impl AppAutoUpdater {
         if output.status.success() {
           let stdout = String::from_utf8_lossy(&output.stdout);
           if !stdout.trim().is_empty() && !stdout.contains("not owned") {
-            println!("Found RPM package owning the executable");
+            log::info!("Found RPM package owning the executable");
             return LinuxInstallationMethod::Rpm;
           }
         }
@@ -391,7 +393,7 @@ impl AppAutoUpdater {
           if output.status.success() {
             let stdout = String::from_utf8_lossy(&output.stdout);
             if !stdout.trim().is_empty() && stdout.contains(exe_name) {
-              println!("Found RPM package via {rpm_cmd}");
+              log::info!("Found RPM package via {rpm_cmd}");
               return LinuxInstallationMethod::Rpm;
             }
           }
@@ -402,7 +404,7 @@ impl AppAutoUpdater {
     // Check installation location to infer method
     if exe_path_str.starts_with("/usr/bin/") || exe_path_str.starts_with("/usr/local/bin/") {
       // Likely installed via package manager or system-wide installation
-      println!("Executable in system directory, assuming package installation");
+      log::info!("Executable in system directory, assuming package installation");
 
       // Try to determine which package system is available
       if Command::new("dpkg").arg("--version").output().is_ok() {
@@ -414,11 +416,11 @@ impl AppAutoUpdater {
       return LinuxInstallationMethod::Manual;
     } else if exe_path_str.contains("/.local/") || exe_path_str.starts_with("/home/") {
       // User-local installation
-      println!("Executable in user directory, assuming manual installation");
+      log::info!("Executable in user directory, assuming manual installation");
       return LinuxInstallationMethod::Manual;
     }
 
-    println!("Could not determine installation method");
+    log::info!("Could not determine installation method");
     LinuxInstallationMethod::Unknown
   }
 
@@ -432,13 +434,13 @@ impl AppAutoUpdater {
       "unknown"
     };
 
-    println!("Looking for platform-specific asset for arch: {arch}");
+    log::info!("Looking for platform-specific asset for arch: {arch}");
 
     #[cfg(target_os = "linux")]
     {
       // If we're running from an AppImage, disable auto-updates for safety
       if self.is_running_from_appimage() {
-        println!("Running from AppImage - auto-updates disabled for safety");
+        log::info!("Running from AppImage - auto-updates disabled for safety");
         return None;
       }
     }
@@ -460,7 +462,7 @@ impl AppAutoUpdater {
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
-      println!("Unsupported platform for auto-update");
+      log::info!("Unsupported platform for auto-update");
       None
     }
   }
@@ -475,7 +477,7 @@ impl AppAutoUpdater {
           || asset.name.contains(&format!("_{arch}_"))
           || asset.name.contains(&format!("-{arch}-")))
       {
-        println!("Found exact architecture match: {}", asset.name);
+        log::info!("Found exact architecture match: {}", asset.name);
         return Some(asset.browser_download_url.clone());
       }
     }
@@ -486,7 +488,7 @@ impl AppAutoUpdater {
         if asset.name.contains(".dmg")
           && (asset.name.contains("x86_64") || asset.name.contains("x86-64"))
         {
-          println!("Found x86_64 variant: {}", asset.name);
+          log::info!("Found x86_64 variant: {}", asset.name);
           return Some(asset.browser_download_url.clone());
         }
       }
@@ -498,7 +500,7 @@ impl AppAutoUpdater {
         if asset.name.contains(".dmg")
           && (asset.name.contains("arm64") || asset.name.contains("aarch64"))
         {
-          println!("Found arm64 variant: {}", asset.name);
+          log::info!("Found arm64 variant: {}", asset.name);
           return Some(asset.browser_download_url.clone());
         }
       }
@@ -511,7 +513,7 @@ impl AppAutoUpdater {
           || asset.name.to_lowercase().contains("darwin")
           || !asset.name.contains(".app.tar.gz"))
       {
-        println!("Found fallback DMG: {}", asset.name);
+        log::info!("Found fallback DMG: {}", asset.name);
         return Some(asset.browser_download_url.clone());
       }
     }
@@ -533,7 +535,7 @@ impl AppAutoUpdater {
             || asset.name.contains(&format!("_{arch}_"))
             || asset.name.contains(&format!("-{arch}-")))
         {
-          println!("Found Windows {ext} with exact arch match: {}", asset.name);
+          log::info!("Found Windows {ext} with exact arch match: {}", asset.name);
           return Some(asset.browser_download_url.clone());
         }
       }
@@ -544,7 +546,7 @@ impl AppAutoUpdater {
           if asset.name.to_lowercase().ends_with(&format!(".{ext}"))
             && (asset.name.contains("x86_64") || asset.name.contains("x86-64"))
           {
-            println!("Found Windows {ext} with x86_64 variant: {}", asset.name);
+            log::info!("Found Windows {ext} with x86_64 variant: {}", asset.name);
             return Some(asset.browser_download_url.clone());
           }
         }
@@ -557,7 +559,7 @@ impl AppAutoUpdater {
             || asset.name.to_lowercase().contains("win32")
             || asset.name.to_lowercase().contains("win64"))
         {
-          println!("Found Windows {ext} fallback: {}", asset.name);
+          log::info!("Found Windows {ext} fallback: {}", asset.name);
           return Some(asset.browser_download_url.clone());
         }
       }
@@ -570,7 +572,7 @@ impl AppAutoUpdater {
   fn get_linux_download_url(&self, assets: &[AppReleaseAsset], arch: &str) -> Option<String> {
     // Detect installation method to prioritize appropriate formats
     let installation_method = self.detect_linux_installation_method();
-    println!("Detected Linux installation method: {installation_method:?}");
+    log::info!("Detected Linux installation method: {installation_method:?}");
 
     // Priority order based on installation method
     let extensions = match installation_method {
@@ -578,7 +580,7 @@ impl AppAutoUpdater {
       LinuxInstallationMethod::Rpm => vec!["rpm", "tar.gz"],
       LinuxInstallationMethod::AppImage => {
         // AppImages should not auto-update for safety
-        println!("AppImage installation detected - auto-updates disabled");
+        log::info!("AppImage installation detected - auto-updates disabled");
         return None;
       }
       LinuxInstallationMethod::Manual | LinuxInstallationMethod::Unknown => {
@@ -596,7 +598,7 @@ impl AppAutoUpdater {
             || asset.name.contains(&format!("_{arch}_"))
             || asset.name.contains(&format!("-{arch}-")))
         {
-          println!("Found Linux {ext} with exact arch match: {}", asset.name);
+          log::info!("Found Linux {ext} with exact arch match: {}", asset.name);
           return Some(asset.browser_download_url.clone());
         }
       }
@@ -610,7 +612,7 @@ impl AppAutoUpdater {
               || asset.name.contains("x86-64")
               || asset.name.contains("amd64"))
           {
-            println!("Found Linux {ext} with x86_64 variant: {}", asset.name);
+            log::info!("Found Linux {ext} with x86_64 variant: {}", asset.name);
             return Some(asset.browser_download_url.clone());
           }
         }
@@ -623,7 +625,7 @@ impl AppAutoUpdater {
           if asset_name_lower.ends_with(&format!(".{ext}"))
             && (asset.name.contains("arm64") || asset.name.contains("aarch64"))
           {
-            println!("Found Linux {ext} with arm64 variant: {}", asset.name);
+            log::info!("Found Linux {ext} with arm64 variant: {}", asset.name);
             return Some(asset.browser_download_url.clone());
           }
         }
@@ -637,7 +639,7 @@ impl AppAutoUpdater {
             || asset_name_lower.contains("ubuntu")
             || asset_name_lower.contains("debian"))
         {
-          println!("Found Linux {ext} fallback: {}", asset.name);
+          log::info!("Found Linux {ext} fallback: {}", asset.name);
           return Some(asset.browser_download_url.clone());
         }
       }
@@ -967,12 +969,12 @@ impl AppAutoUpdater {
         .and_then(|ext| ext.to_str())
         .unwrap_or("");
 
-      println!("Installing Windows update with extension: {extension}");
+      log::info!("Installing Windows update with extension: {extension}");
 
       match extension {
         "msi" => {
           // Install MSI silently with enhanced error handling
-          println!("Running MSI installer: {}", installer_path.display());
+          log::info!("Running MSI installer: {}", installer_path.display());
 
           let mut cmd = Command::new("msiexec");
           cmd.args([
@@ -995,10 +997,10 @@ impl AppAutoUpdater {
             let log_path = format!("{}.log", installer_path.to_str().unwrap());
             let log_content = fs::read_to_string(&log_path).unwrap_or_default();
 
-            println!("MSI installation failed with exit code: {exit_code}");
-            println!("Error output: {error_msg}");
+            log::info!("MSI installation failed with exit code: {exit_code}");
+            log::info!("Error output: {error_msg}");
             if !log_content.is_empty() {
-              println!(
+              log::info!(
                 "Log file content (last 500 chars): {}",
                 &log_content
                   .chars()
@@ -1016,11 +1018,11 @@ impl AppAutoUpdater {
             );
           }
 
-          println!("MSI installation completed successfully");
+          log::info!("MSI installation completed successfully");
         }
         "exe" => {
           // Run exe installer silently with multiple fallback options
-          println!("Running EXE installer: {}", installer_path.display());
+          log::info!("Running EXE installer: {}", installer_path.display());
 
           // Try NSIS silent flag first (most common for Tauri)
           let mut success = false;
@@ -1035,12 +1037,12 @@ impl AppAutoUpdater {
           ];
 
           for args in nsis_args {
-            println!("Trying installer with args: {:?}", args);
+            log::info!("Trying installer with args: {:?}", args);
             let output = Command::new(installer_path).args(&args).output();
 
             match output {
               Ok(output) if output.status.success() => {
-                println!(
+                log::info!(
                   "EXE installation completed successfully with args: {:?}",
                   args
                 );
@@ -1054,13 +1056,14 @@ impl AppAutoUpdater {
                   output.status.code().unwrap_or(-1),
                   error_msg
                 );
-                println!("Installer failed with args {:?}: {}", args, last_error);
+                log::info!("Installer failed with args {:?}: {}", args, last_error);
               }
               Err(e) => {
                 last_error = format!("Failed to execute installer: {e}");
-                println!(
+                log::info!(
                   "Failed to execute installer with args {:?}: {}",
-                  args, last_error
+                  args,
+                  last_error
                 );
               }
             }
@@ -1077,7 +1080,7 @@ impl AppAutoUpdater {
         }
         "zip" => {
           // Handle ZIP files by extracting and replacing the current executable
-          println!("Handling ZIP update: {}", installer_path.display());
+          log::info!("Handling ZIP update: {}", installer_path.display());
 
           let temp_extract_dir = installer_path.parent().unwrap().join("extracted");
           fs::create_dir_all(&temp_extract_dir)?;
@@ -1124,7 +1127,7 @@ impl AppAutoUpdater {
           // Clean up
           let _ = fs::remove_dir_all(&temp_extract_dir);
 
-          println!("ZIP update completed successfully");
+          log::info!("ZIP update completed successfully");
         }
         _ => {
           return Err(format!("Unsupported installer format: {extension}").into());
@@ -1141,7 +1144,7 @@ impl AppAutoUpdater {
         .and_then(|name| name.to_str())
         .unwrap_or("");
 
-      println!("Installing Linux update: {}", installer_path.display());
+      log::info!("Installing Linux update: {}", installer_path.display());
 
       // Handle compound extensions like .tar.gz
       if file_name.ends_with(".tar.gz") {
@@ -1173,7 +1176,7 @@ impl AppAutoUpdater {
     &self,
     deb_path: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    println!("Installing DEB package: {}", deb_path.display());
+    log::info!("Installing DEB package: {}", deb_path.display());
 
     // Try different package managers in order of preference
     let package_managers = [
@@ -1186,23 +1189,23 @@ impl AppAutoUpdater {
     for (manager, args) in &package_managers {
       // Check if package manager exists
       if Command::new("which").arg(manager).output().is_ok() {
-        println!("Trying to install with {manager}");
+        log::info!("Trying to install with {manager}");
 
         let output = Command::new("pkexec").arg(manager).args(args).output();
 
         match output {
           Ok(output) if output.status.success() => {
-            println!("DEB installation completed successfully with {manager}");
+            log::info!("DEB installation completed successfully with {manager}");
             return Ok(());
           }
           Ok(output) => {
             let error_msg = String::from_utf8_lossy(&output.stderr);
             last_error = format!("{manager} failed: {error_msg}");
-            println!("Installation failed with {manager}: {error_msg}");
+            log::info!("Installation failed with {manager}: {error_msg}");
           }
           Err(e) => {
             last_error = format!("Failed to execute {manager}: {e}");
-            println!("Failed to execute {manager}: {e}");
+            log::info!("Failed to execute {manager}: {e}");
           }
         }
       }
@@ -1217,7 +1220,7 @@ impl AppAutoUpdater {
     &self,
     rpm_path: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    println!("Installing RPM package: {}", rpm_path.display());
+    log::info!("Installing RPM package: {}", rpm_path.display());
 
     // Try different package managers in order of preference
     let package_managers = [
@@ -1232,23 +1235,23 @@ impl AppAutoUpdater {
     for (manager, args) in &package_managers {
       // Check if package manager exists
       if Command::new("which").arg(manager).output().is_ok() {
-        println!("Trying to install with {manager}");
+        log::info!("Trying to install with {manager}");
 
         let output = Command::new("pkexec").arg(manager).args(args).output();
 
         match output {
           Ok(output) if output.status.success() => {
-            println!("RPM installation completed successfully with {manager}");
+            log::info!("RPM installation completed successfully with {manager}");
             return Ok(());
           }
           Ok(output) => {
             let error_msg = String::from_utf8_lossy(&output.stderr);
             last_error = format!("{manager} failed: {error_msg}");
-            println!("Installation failed with {manager}: {error_msg}");
+            log::info!("Installation failed with {manager}: {error_msg}");
           }
           Err(e) => {
             last_error = format!("Failed to execute {manager}: {e}");
-            println!("Failed to execute {manager}: {e}");
+            log::info!("Failed to execute {manager}: {e}");
           }
         }
       }
@@ -1263,7 +1266,7 @@ impl AppAutoUpdater {
     &self,
     appimage_path: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    println!("Installing AppImage: {}", appimage_path.display());
+    log::info!("Installing AppImage: {}", appimage_path.display());
 
     // This function should not be called for AppImages since we disable auto-updates for them
     // But if it somehow gets called, we'll handle it safely
@@ -1297,7 +1300,7 @@ impl AppAutoUpdater {
     // Replace the AppImage
     fs::copy(appimage_path, &current_appimage)?;
 
-    println!("AppImage replacement completed successfully");
+    log::info!("AppImage replacement completed successfully");
     Ok(())
   }
 
@@ -1307,7 +1310,7 @@ impl AppAutoUpdater {
     &self,
     tarball_path: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    println!("Installing tarball: {}", tarball_path.display());
+    log::info!("Installing tarball: {}", tarball_path.display());
 
     let current_exe = self.get_current_app_path()?;
     let temp_extract_dir = tarball_path.parent().unwrap().join("extracted");
@@ -1369,7 +1372,7 @@ impl AppAutoUpdater {
     // Clean up
     let _ = fs::remove_dir_all(&temp_extract_dir);
 
-    println!("Tarball installation completed successfully");
+    log::info!("Tarball installation completed successfully");
     Ok(())
   }
 
@@ -1606,7 +1609,7 @@ pub async fn download_and_install_app_update(
 
 #[tauri::command]
 pub async fn check_for_app_updates_manual() -> Result<Option<AppUpdateInfo>, String> {
-  println!("Manual app update check triggered");
+  log::info!("Manual app update check triggered");
   let updater = AppAutoUpdater::instance();
   updater
     .check_for_updates()
@@ -1622,7 +1625,7 @@ mod tests {
   fn test_is_nightly_build() {
     // This will depend on whether STABLE_RELEASE is set during test compilation
     let is_nightly = AppAutoUpdater::is_nightly_build();
-    println!("Is nightly build: {is_nightly}");
+    log::info!("Is nightly build: {is_nightly}");
 
     // The result should be true for test builds since STABLE_RELEASE is not set
     // unless the test is run in a stable release environment

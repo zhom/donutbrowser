@@ -407,8 +407,8 @@ impl ApiClient {
 
       let text = response.text().await?;
       let mut page_releases: Vec<GithubRelease> = serde_json::from_str(&text).map_err(|e| {
-        eprintln!("Failed to parse GitHub API response (page {page}): {e}");
-        eprintln!(
+        log::error!("Failed to parse GitHub API response (page {page}): {e}");
+        log::error!(
           "Response text (first 500 chars): {}",
           if text.len() > 500 {
             &text[..500]
@@ -487,13 +487,13 @@ impl ApiClient {
     let content = fs::read_to_string(&cache_file).ok()?;
     if let Ok(cached) = serde_json::from_str::<CachedVersionData>(&content) {
       // Always return cached releases regardless of age - they're always valid
-      println!("Using cached versions for {browser}");
+      log::info!("Using cached versions for {browser}");
       return Some(cached.releases);
     }
 
     // Backward compatibility: legacy caches stored just an array of version strings
     if let Ok(legacy_versions) = serde_json::from_str::<Vec<String>>(&content) {
-      println!("Using legacy cached versions for {browser}; upgrading in-memory");
+      log::info!("Using legacy cached versions for {browser}; upgrading in-memory");
       let releases: Vec<BrowserRelease> = legacy_versions
         .into_iter()
         .map(|version| BrowserRelease {
@@ -548,7 +548,7 @@ impl ApiClient {
 
     let content = serde_json::to_string_pretty(&cached_data)?;
     fs::write(&cache_file, content)?;
-    println!("Cached {} versions for {}", releases.len(), browser);
+    log::info!("Cached {} versions for {}", releases.len(), browser);
     Ok(())
   }
 
@@ -564,7 +564,7 @@ impl ApiClient {
     let cached_data: CachedGithubData = serde_json::from_str(&content).ok()?;
 
     // Always use cached GitHub releases - cache never expires, only gets updated with new versions
-    println!("Using cached GitHub releases for {browser}");
+    log::info!("Using cached GitHub releases for {browser}");
     Some(cached_data.releases)
   }
 
@@ -588,7 +588,7 @@ impl ApiClient {
 
     let content = serde_json::to_string_pretty(&cached_data)?;
     fs::write(&cache_file, content)?;
-    println!("Cached {} GitHub releases for {}", releases.len(), browser);
+    log::info!("Cached {} GitHub releases for {}", releases.len(), browser);
     Ok(())
   }
 
@@ -603,7 +603,7 @@ impl ApiClient {
       }
     }
 
-    println!("Fetching Firefox releases from Mozilla API...");
+    log::info!("Fetching Firefox releases from Mozilla API...");
     let url = format!("{}/firefox.json", self.firefox_api_base);
 
     let response = self
@@ -648,7 +648,7 @@ impl ApiClient {
     // Cache the results (unless bypassing cache)
     if !no_caching {
       if let Err(e) = self.save_cached_versions("firefox", &releases) {
-        eprintln!("Failed to cache Firefox versions: {e}");
+        log::error!("Failed to cache Firefox versions: {e}");
       }
     }
 
@@ -666,7 +666,7 @@ impl ApiClient {
       }
     }
 
-    println!("Fetching Firefox Developer Edition releases from Mozilla API...");
+    log::info!("Fetching Firefox Developer Edition releases from Mozilla API...");
     let url = format!("{}/devedition.json", self.firefox_dev_api_base);
 
     let response = self
@@ -682,7 +682,7 @@ impl ApiClient {
         response.status(),
         url
       );
-      eprintln!("{error_msg}");
+      log::error!("{error_msg}");
       return Err(error_msg.into());
     }
 
@@ -717,7 +717,7 @@ impl ApiClient {
     // Cache the results (unless bypassing cache)
     if !no_caching {
       if let Err(e) = self.save_cached_versions("firefox-developer", &releases) {
-        eprintln!("Failed to cache Firefox Developer versions: {e}");
+        log::error!("Failed to cache Firefox Developer versions: {e}");
       }
     }
 
@@ -735,7 +735,7 @@ impl ApiClient {
       }
     }
 
-    println!("Fetching Mullvad releases from GitHub API");
+    log::info!("Fetching Mullvad releases from GitHub API");
     let base_url = format!(
       "{}/repos/mullvad/mullvad-browser/releases",
       self.github_api_base
@@ -756,7 +756,7 @@ impl ApiClient {
     // Cache the results (unless bypassing cache)
     if !no_caching {
       if let Err(e) = self.save_cached_github_releases("mullvad", &releases) {
-        eprintln!("Failed to cache Mullvad releases: {e}");
+        log::error!("Failed to cache Mullvad releases: {e}");
       }
     }
 
@@ -774,7 +774,7 @@ impl ApiClient {
       }
     }
 
-    println!("Fetching Zen releases from GitHub API");
+    log::info!("Fetching Zen releases from GitHub API");
     let base_url = format!(
       "{}/repos/zen-browser/desktop/releases",
       self.github_api_base
@@ -792,7 +792,7 @@ impl ApiClient {
       if release.tag_name.to_lowercase() == "twilight" {
         if let Ok(has_update) = self.check_twilight_update(release).await {
           if has_update {
-            println!(
+            log::info!(
               "Detected update for Zen twilight release: {}",
               release.tag_name
             );
@@ -807,7 +807,7 @@ impl ApiClient {
     // Cache the results (unless bypassing cache)
     if !no_caching {
       if let Err(e) = self.save_cached_github_releases("zen", &releases) {
-        eprintln!("Failed to cache Zen releases: {e}");
+        log::error!("Failed to cache Zen releases: {e}");
       }
     }
 
@@ -825,7 +825,7 @@ impl ApiClient {
       }
     }
 
-    println!("Fetching Brave releases from GitHub API");
+    log::info!("Fetching Brave releases from GitHub API");
     let base_url = format!(
       "{}/repos/brave/brave-browser/releases",
       self.github_api_base
@@ -843,7 +843,7 @@ impl ApiClient {
         let has_compatible_asset = Self::has_compatible_brave_asset(&release.assets, &os);
 
         if has_compatible_asset {
-          println!("release.name: {:?}", release.name);
+          log::info!("release.name: {:?}", release.name);
           // Use the centralized nightly detection function
           release.is_nightly =
             is_browser_version_nightly("brave", &release.tag_name, Some(&release.name));
@@ -858,7 +858,7 @@ impl ApiClient {
     sort_github_releases(&mut filtered_releases);
 
     if let Err(e) = self.save_cached_github_releases("brave", &filtered_releases) {
-      eprintln!("Failed to cache Brave releases: {e}");
+      log::error!("Failed to cache Brave releases: {e}");
     }
 
     Ok(filtered_releases)
@@ -978,7 +978,7 @@ impl ApiClient {
       }
     }
 
-    println!("Fetching Chromium releases...");
+    log::info!("Fetching Chromium releases...");
 
     // Get the latest version first
     let latest_version = self.fetch_chromium_latest_version().await?;
@@ -1006,7 +1006,7 @@ impl ApiClient {
     // Cache the results (unless bypassing cache)
     if !no_caching {
       if let Err(e) = self.save_cached_versions("chromium", &releases) {
-        eprintln!("Failed to cache Chromium versions: {e}");
+        log::error!("Failed to cache Chromium versions: {e}");
       }
     }
 
@@ -1020,7 +1020,7 @@ impl ApiClient {
     // Check cache first (unless bypassing)
     if !no_caching {
       if let Some(cached_releases) = self.load_cached_github_releases("camoufox") {
-        println!(
+        log::info!(
           "Using cached Camoufox releases, count: {}",
           cached_releases.len()
         );
@@ -1028,18 +1028,18 @@ impl ApiClient {
       }
     }
 
-    println!("Fetching Camoufox releases from GitHub API");
+    log::info!("Fetching Camoufox releases from GitHub API");
     let base_url = format!("{}/repos/daijro/camoufox/releases", self.github_api_base);
     let releases: Vec<GithubRelease> = self.fetch_github_releases_multiple_pages(&base_url).await?;
 
-    println!(
+    log::info!(
       "Fetched {} total Camoufox releases from GitHub",
       releases.len()
     );
 
     // Get platform info to filter appropriate releases
     let (os, arch) = Self::get_platform_info();
-    println!("Filtering for platform: {os}/{arch}");
+    log::info!("Filtering for platform: {os}/{arch}");
 
     // Filter releases that have assets compatible with the current platform
     let mut compatible_releases: Vec<GithubRelease> = releases
@@ -1048,11 +1048,14 @@ impl ApiClient {
       .filter_map(|(i, release)| {
         let has_compatible = self.has_compatible_camoufox_asset(&release.assets, &os, &arch);
         if !has_compatible {
-          println!(
+          log::info!(
             "Release {} ({}) has no compatible assets for {}/{}",
-            i, release.tag_name, os, arch
+            i,
+            release.tag_name,
+            os,
+            arch
           );
-          println!(
+          log::info!(
             "  Available assets: {:?}",
             release.assets.iter().map(|a| &a.name).collect::<Vec<_>>()
           );
@@ -1065,13 +1068,13 @@ impl ApiClient {
       })
       .collect();
 
-    println!(
+    log::info!(
       "After platform filtering: {} compatible releases",
       compatible_releases.len()
     );
 
     // Sort by version (latest first) with debugging
-    println!(
+    log::info!(
       "Before sorting: {:?}",
       compatible_releases
         .iter()
@@ -1080,7 +1083,7 @@ impl ApiClient {
         .collect::<Vec<_>>()
     );
     sort_github_releases(&mut compatible_releases);
-    println!(
+    log::info!(
       "After sorting: {:?}",
       compatible_releases
         .iter()
@@ -1092,9 +1095,9 @@ impl ApiClient {
     // Cache the results (unless bypassing cache)
     if !no_caching {
       if let Err(e) = self.save_cached_github_releases("camoufox", &compatible_releases) {
-        eprintln!("Failed to cache Camoufox releases: {e}");
+        log::error!("Failed to cache Camoufox releases: {e}");
       } else {
-        println!("Cached {} Camoufox releases", compatible_releases.len());
+        log::info!("Cached {} Camoufox releases", compatible_releases.len());
       }
     }
 
@@ -1112,7 +1115,7 @@ impl ApiClient {
       }
     }
 
-    println!("Fetching TOR releases from archive...");
+    log::info!("Fetching TOR releases from archive...");
     let url = format!("{}/", self.tor_archive_base);
     let html = self
       .client
@@ -1177,7 +1180,7 @@ impl ApiClient {
     // Cache the results (unless bypassing cache)
     if !no_caching {
       if let Err(e) = self.save_cached_versions("tor-browser", &releases) {
-        eprintln!("Failed to cache TOR versions: {e}");
+        log::error!("Failed to cache TOR versions: {e}");
       }
     }
 
@@ -1248,9 +1251,10 @@ impl ApiClient {
       // File size changed, update cache and return true
       let content = serde_json::to_string_pretty(&current_info)?;
       fs::write(&twilight_cache_file, content)?;
-      println!(
+      log::info!(
         "Zen twilight release updated: file size changed from {} to {}",
-        cached_info.file_size, current_info.file_size
+        cached_info.file_size,
+        current_info.file_size
       );
       return Ok(true);
     }
@@ -1268,10 +1272,10 @@ impl ApiClient {
         let path = entry.path();
         if path.is_file() {
           fs::remove_file(&path)?;
-          println!("Removed cache file: {path:?}");
+          log::info!("Removed cache file: {path:?}");
         }
       }
-      println!("All version cache cleared successfully");
+      log::info!("All version cache cleared successfully");
     }
 
     Ok(())
@@ -1474,7 +1478,7 @@ mod tests {
     let result = client.fetch_firefox_releases_with_caching(true).await;
 
     if let Err(e) = &result {
-      println!("Firefox API test error: {e}");
+      log::info!("Firefox API test error: {e}");
     }
     assert!(result.is_ok());
     let releases = result.unwrap();
@@ -1516,7 +1520,7 @@ mod tests {
       .await;
 
     if let Err(e) = &result {
-      println!("Firefox Developer API test error: {e}");
+      log::info!("Firefox Developer API test error: {e}");
     }
     assert!(result.is_ok());
     let releases = result.unwrap();
@@ -1651,7 +1655,7 @@ mod tests {
     let result = client.fetch_brave_releases_with_caching(true).await;
 
     if let Err(e) = &result {
-      println!("Brave API test error: {e}");
+      log::info!("Brave API test error: {e}");
     }
     assert!(result.is_ok());
     let releases = result.unwrap();
@@ -1992,8 +1996,8 @@ mod tests {
     let v22 = VersionComponent::parse("135.0.5beta22");
     let v24 = VersionComponent::parse("135.0.5beta24");
 
-    println!("v22: {v22:?}");
-    println!("v24: {v24:?}");
+    log::info!("v22: {v22:?}");
+    log::info!("v24: {v24:?}");
 
     // v24 should be greater than v22
     assert!(
@@ -2016,7 +2020,7 @@ mod tests {
 
     sort_versions(&mut versions);
 
-    println!("Sorted versions: {versions:?}");
+    log::info!("Sorted versions: {versions:?}");
 
     // Should be sorted from newest to oldest
     assert_eq!(versions[0], "135.0.5beta24");
@@ -2031,8 +2035,8 @@ mod tests {
     let v22 = VersionComponent::parse("135.0beta22");
     let v24 = VersionComponent::parse("135.0.1beta24");
 
-    println!("User reported v22: {v22:?}");
-    println!("User reported v24: {v24:?}");
+    log::info!("User reported v22: {v22:?}");
+    log::info!("User reported v24: {v24:?}");
 
     // 135.0.1beta24 should be greater than 135.0beta22 (newer patch version)
     assert!(
@@ -2045,7 +2049,7 @@ mod tests {
 
     sort_versions(&mut versions);
 
-    println!("User reported sorted versions: {versions:?}");
+    log::info!("User reported sorted versions: {versions:?}");
 
     // Should be sorted from newest to oldest
     assert_eq!(

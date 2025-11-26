@@ -206,7 +206,7 @@ impl CamoufoxManager {
     url: Option<&str>,
   ) -> Result<CamoufoxLaunchResult, Box<dyn std::error::Error + Send + Sync>> {
     let custom_config = if let Some(existing_fingerprint) = &config.fingerprint {
-      println!("Using existing fingerprint from profile metadata");
+      log::info!("Using existing fingerprint from profile metadata");
       existing_fingerprint.clone()
     } else {
       return Err("No fingerprint provided".into());
@@ -266,18 +266,18 @@ impl CamoufoxManager {
     }
 
     // Execute nodecar sidecar command
-    println!("Executing nodecar command with args: {args:?}");
+    log::info!("Executing nodecar command with args: {args:?}");
     let output = sidecar_command.output().await?;
 
     if !output.status.success() {
       let stderr = String::from_utf8_lossy(&output.stderr);
       let stdout = String::from_utf8_lossy(&output.stdout);
-      println!("nodecar camoufox failed - stdout: {stdout}, stderr: {stderr}");
+      log::info!("nodecar camoufox failed - stdout: {stdout}, stderr: {stderr}");
       return Err(format!("nodecar camoufox failed: {stderr}").into());
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    println!("nodecar camoufox output: {stdout}");
+    log::info!("nodecar camoufox output: {stdout}");
 
     // Parse the JSON output
     let launch_result: CamoufoxLaunchResult = serde_json::from_str(&stdout)

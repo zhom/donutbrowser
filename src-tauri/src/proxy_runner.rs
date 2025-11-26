@@ -47,7 +47,7 @@ pub async fn start_proxy_process(
     {
       let log_path = std::path::PathBuf::from("/tmp").join(format!("donut-proxy-{}.log", id));
       if let Ok(file) = std::fs::File::create(&log_path) {
-        eprintln!("Proxy worker stderr will be logged to: {:?}", log_path);
+        log::error!("Proxy worker stderr will be logged to: {:?}", log_path);
         cmd.stderr(Stdio::from(file));
       } else {
         cmd.stderr(Stdio::null());

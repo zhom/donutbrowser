@@ -277,7 +277,7 @@ impl BrowserVersionManager {
         .api_client
         .save_cached_versions(browser, &merged_releases)
       {
-        eprintln!("Failed to save merged cache for {browser}: {e}");
+        log::error!("Failed to save merged cache for {browser}: {e}");
       }
     }
 
@@ -534,7 +534,7 @@ impl BrowserVersionManager {
       })
       .collect();
     if let Err(e) = self.api_client.save_cached_versions(browser, &releases) {
-      eprintln!("Failed to save updated cache for {browser}: {e}");
+      log::error!("Failed to save updated cache for {browser}: {e}");
     }
 
     Ok(new_versions_count)
@@ -922,7 +922,7 @@ impl BrowserVersionManager {
       .collect();
     // Always save so that other callers without release_name can classify correctly
     if let Err(e) = self.api_client.save_cached_versions("brave", &converted) {
-      eprintln!("Failed to persist Brave versions cache: {e}");
+      log::error!("Failed to persist Brave versions cache: {e}");
     }
 
     Ok(releases.into_iter().map(|r| r.tag_name).collect())
@@ -947,7 +947,7 @@ impl BrowserVersionManager {
       })
       .collect();
     if let Err(e) = self.api_client.save_cached_versions("brave", &converted) {
-      eprintln!("Failed to persist Brave versions cache: {e}");
+      log::error!("Failed to persist Brave versions cache: {e}");
     }
 
     Ok(releases)
@@ -1271,7 +1271,7 @@ mod tests {
     let unsupported_result = service.get_download_info("unsupported", "1.0.0");
     assert!(unsupported_result.is_err());
 
-    println!("Download info test passed for all browsers");
+    log::info!("Download info test passed for all browsers");
   }
 }
 
@@ -1307,7 +1307,7 @@ pub async fn fetch_browser_versions_cached_first(
           .fetch_browser_versions_detailed(&browser_str_clone, false)
           .await
         {
-          eprintln!("Background version update failed for {browser_str_clone}: {e}");
+          log::error!("Background version update failed for {browser_str_clone}: {e}");
         }
       });
     }
@@ -1339,7 +1339,7 @@ pub async fn fetch_browser_versions_with_count_cached_first(
           .fetch_browser_versions_with_count(&browser_str_clone, false)
           .await
         {
-          eprintln!("Background version update failed for {browser_str_clone}: {e}");
+          log::error!("Background version update failed for {browser_str_clone}: {e}");
         }
       });
     }

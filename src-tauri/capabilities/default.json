@@ -29,6 +29,7 @@
     "macos-permissions:allow-request-microphone-permission",
     "macos-permissions:allow-request-camera-permission",
     "macos-permissions:allow-check-microphone-permission",
-    "macos-permissions:allow-check-camera-permission"
+    "macos-permissions:allow-check-camera-permission",
+    "log:default"
   ]
 }

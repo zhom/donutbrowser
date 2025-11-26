@@ -110,17 +110,17 @@ impl SettingsManager {
       Ok(settings) => {
         // Save the settings back to ensure any missing fields are written with defaults
         if let Err(e) = self.save_settings(&settings) {
-          eprintln!("Warning: Failed to update settings file with defaults: {e}");
+          log::warn!("Warning: Failed to update settings file with defaults: {e}");
         }
         Ok(settings)
       }
       Err(e) => {
-        eprintln!("Warning: Failed to parse settings file, using defaults: {e}");
+        log::warn!("Warning: Failed to parse settings file, using defaults: {e}");
         let default_settings = AppSettings::default();
 
         // Try to save default settings to fix the corrupted file
         if let Err(save_error) = self.save_settings(&default_settings) {
-          eprintln!("Warning: Failed to save default settings: {save_error}");
+          log::warn!("Warning: Failed to save default settings: {save_error}");
         }
 
         Ok(default_settings)

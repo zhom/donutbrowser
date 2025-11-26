@@ -3,6 +3,7 @@ use std::env;
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_deep_link::DeepLinkExt;
+use tauri_plugin_log::{Target, TargetKind};
 
 // Store pending URLs that need to be handled when the window is ready
 static PENDING_URLS: Mutex<Vec<String>> = Mutex::new(Vec::new());
@@ -152,7 +153,7 @@ async fn warm_up_nodecar(app: tauri::AppHandle) -> Result<(), String> {
   match timeout(Duration::from_secs(120), exec_future).await {
     Ok(Ok(_output)) => {
       let duration = start_time.elapsed();
-      println!(
+      log::info!(
         "Nodecar warm-up (frontend-triggered) completed in {:.2}s",
         duration.as_secs_f64()
       );
@@ -165,11 +166,11 @@ async fn warm_up_nodecar(app: tauri::AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 async fn handle_url_open(app: tauri::AppHandle, url: String) -> Result<(), String> {
-  println!("handle_url_open called with URL: {url}");
+  log::info!("handle_url_open called with URL: {url}");
 
   // Check if the main window exists and is ready
   if let Some(window) = app.get_webview_window("main") {
-    println!("Main window exists");
+    log::debug!("Main window exists");
 
     // Try to show and focus the window first
     let _ = window.show();
@@ -181,7 +182,7 @@ async fn handle_url_open(app: tauri::AppHandle, url: String) -> Result<(), Strin
       .map_err(|e| format!("Failed to emit URL open event: {e}"))?;
   } else {
     // Window doesn't exist yet - add to pending URLs
-    println!("Main window doesn't exist, adding URL to pending list");
+    log::debug!("Main window doesn't exist, adding URL to pending list");
     let mut pending = PENDING_URLS.lock().unwrap();
     pending.push(url);
   }
@@ -259,14 +260,49 @@ pub fn run() {
   let startup_url = args.iter().find(|arg| arg.starts_with("http")).cloned();
 
   if let Some(url) = startup_url.clone() {
-    println!("Found startup URL in command line: {url}");
+    log::info!("Found startup URL in command line: {url}");
     let mut pending = PENDING_URLS.lock().unwrap();
     pending.push(url.clone());
   }
 
+  // Configure logging plugin with separate logs for dev and production
+  let log_file_name = if cfg!(debug_assertions) {
+    "DonutBrowserDev"
+  } else {
+    "DonutBrowser"
+  };
+
   tauri::Builder::default()
+    .plugin(
+      tauri_plugin_log::Builder::new()
+        .clear_targets() // Clear default targets to avoid duplicates
+        .target(Target::new(TargetKind::Stdout))
+        .target(Target::new(TargetKind::Webview))
+        .target(Target::new(TargetKind::LogDir {
+          file_name: Some(log_file_name.to_string()),
+        }))
+        .max_file_size(100_000) // 100KB
+        .level(log::LevelFilter::Info)
+        .format(|out, message, record| {
+          use chrono::Local;
+          let now = Local::now();
+          let timestamp = format!(
+            "{}.{:03}",
+            now.format("%Y-%m-%d %H:%M:%S"),
+            now.timestamp_subsec_millis()
+          );
+          out.finish(format_args!(
+            "[{}][{}][{}] {}",
+            timestamp,
+            record.target(),
+            record.level(),
+            message
+          ))
+        })
+        .build(),
+    )
     .plugin(tauri_plugin_single_instance::init(|_, args, _cwd| {
-      println!("Single instance triggered with args: {args:?}");
+      log::info!("Single instance triggered with args: {args:?}");
     }))
     .plugin(tauri_plugin_deep_link::init())
     .plugin(tauri_plugin_fs::init())
@@ -293,7 +329,7 @@ pub fn run() {
       #[cfg(target_os = "macos")]
       {
         if let Err(e) = window.set_transparent_titlebar(true) {
-          eprintln!("Failed to set transparent titlebar: {e}");
+          log::warn!("Failed to set transparent titlebar: {e}");
         }
       }
 
@@ -304,7 +340,7 @@ pub fn run() {
       {
         // For Windows, register all deep links at runtime
         if let Err(e) = app.deep_link().register_all() {
-          eprintln!("Failed to register deep links: {e}");
+          log::warn!("Failed to register deep links: {e}");
         }
       }
 
@@ -312,7 +348,7 @@ pub fn run() {
       {
         // On macOS, try to register deep links for development builds
         if let Err(e) = app.deep_link().register_all() {
-          eprintln!(
+          log::debug!(
             "Note: Deep link registration failed on macOS (this is normal for production): {e}"
           );
         }
@@ -322,11 +358,11 @@ pub fn run() {
         let handle = handle.clone();
         move |event| {
           let urls = event.urls();
-          println!("Deep link event received with {} URLs", urls.len());
+          log::info!("Deep link event received with {} URLs", urls.len());
 
           for url in urls {
             let url_string = url.to_string();
-            println!("Deep link received: {url_string}");
+            log::info!("Deep link received: {url_string}");
 
             // Clone the handle for each async task
             let handle_clone = handle.clone();
@@ -334,7 +370,7 @@ pub fn run() {
             // Handle the URL asynchronously
             tauri::async_runtime::spawn(async move {
               if let Err(e) = handle_url_open(handle_clone, url_string.clone()).await {
-                eprintln!("Failed to handle deep link URL: {e}");
+                log::error!("Failed to handle deep link URL: {e}");
               }
             });
           }
@@ -344,9 +380,9 @@ pub fn run() {
       if let Some(startup_url) = startup_url {
         let handle_clone = handle.clone();
         tauri::async_runtime::spawn(async move {
-          println!("Processing startup URL from command line: {startup_url}");
+          log::info!("Processing startup URL from command line: {startup_url}");
           if let Err(e) = handle_url_open(handle_clone, startup_url.clone()).await {
-            eprintln!("Failed to handle startup URL: {e}");
+            log::error!("Failed to handle startup URL: {e}");
           }
         });
       }
@@ -366,7 +402,7 @@ pub fn run() {
         {
           let updater_guard = version_updater.lock().await;
           if let Err(e) = updater_guard.start_background_updates().await {
-            eprintln!("Failed to start background updates: {e}");
+            log::error!("Failed to start background updates: {e}");
           }
         }
       });
@@ -397,9 +433,9 @@ pub fn run() {
         };
 
         for url in pending_urls {
-          println!("Processing pending URL: {url}");
+          log::info!("Processing pending URL: {url}");
           if let Err(e) = handle_url_open(handle_pending.clone(), url).await {
-            eprintln!("Failed to handle pending URL: {e}");
+            log::error!("Failed to handle pending URL: {e}");
           }
         }
       });
@@ -414,35 +450,36 @@ pub fn run() {
           let registry =
             crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
           if let Err(e) = registry.cleanup_unused_binaries() {
-            eprintln!("Periodic cleanup failed: {e}");
+            log::error!("Periodic cleanup failed: {e}");
           } else {
-            println!("Periodic cleanup completed successfully");
+            log::debug!("Periodic cleanup completed successfully");
           }
         }
       });
 
       let app_handle_update = app.handle().clone();
       tauri::async_runtime::spawn(async move {
-        println!("Starting app update check at startup...");
+        log::info!("Starting app update check at startup...");
         let updater = app_auto_updater::AppAutoUpdater::instance();
         match updater.check_for_updates().await {
           Ok(Some(update_info)) => {
-            println!(
+            log::info!(
               "App update available: {} -> {}",
-              update_info.current_version, update_info.new_version
+              update_info.current_version,
+              update_info.new_version
             );
             // Emit update available event to the frontend
             if let Err(e) = app_handle_update.emit("app-update-available", &update_info) {
-              eprintln!("Failed to emit app update event: {e}");
+              log::error!("Failed to emit app update event: {e}");
             } else {
-              println!("App update event emitted successfully");
+              log::debug!("App update event emitted successfully");
             }
           }
           Ok(None) => {
-            println!("No app updates available");
+            log::debug!("No app updates available");
           }
           Err(e) => {
-            eprintln!("Failed to check for app updates: {e}");
+            log::error!("Failed to check for app updates: {e}");
           }
         }
       });
@@ -461,7 +498,7 @@ pub fn run() {
               // Cleanup completed silently
             }
             Err(e) => {
-              eprintln!("Error during Camoufox cleanup: {e}");
+              log::error!("Error during Camoufox cleanup: {e}");
             }
           }
         }
@@ -476,22 +513,24 @@ pub fn run() {
         let geoip_downloader = crate::geoip_downloader::GeoIPDownloader::instance();
         match geoip_downloader.check_missing_geoip_database() {
           Ok(true) => {
-            println!("GeoIP database is missing for Camoufox profiles, downloading at startup...");
+            log::info!(
+              "GeoIP database is missing for Camoufox profiles, downloading at startup..."
+            );
             let geoip_downloader = GeoIPDownloader::instance();
             if let Err(e) = geoip_downloader
               .download_geoip_database(&app_handle_geoip)
               .await
             {
-              eprintln!("Failed to download GeoIP database at startup: {e}");
+              log::error!("Failed to download GeoIP database at startup: {e}");
             } else {
-              println!("GeoIP database downloaded successfully at startup");
+              log::info!("GeoIP database downloaded successfully at startup");
             }
           }
           Ok(false) => {
             // No Camoufox profiles or GeoIP database already available
           }
           Err(e) => {
-            eprintln!("Failed to check GeoIP database status at startup: {e}");
+            log::error!("Failed to check GeoIP database status at startup: {e}");
           }
         }
       });
@@ -510,14 +549,14 @@ pub fn run() {
           {
             Ok(dead_pids) => {
               if !dead_pids.is_empty() {
-                println!(
+                log::info!(
                   "Cleaned up proxies for {} dead browser processes",
                   dead_pids.len()
                 );
               }
             }
             Err(e) => {
-              eprintln!("Error during proxy cleanup: {e}");
+              log::error!("Error during proxy cleanup: {e}");
             }
           }
         }
@@ -538,7 +577,7 @@ pub fn run() {
           let profiles = match runner.profile_manager.list_profiles() {
             Ok(p) => p,
             Err(e) => {
-              println!("Warning: Failed to list profiles in status checker: {e}");
+              log::warn!("Failed to list profiles in status checker: {e}");
               continue;
             }
           };
@@ -558,9 +597,11 @@ pub fn run() {
 
                 // Only emit event if state actually changed
                 if last_state != is_running {
-                  println!(
+                  log::debug!(
                     "Status checker detected change for profile {}: {} -> {}",
-                    profile.name, last_state, is_running
+                    profile.name,
+                    last_state,
+                    is_running
                   );
 
                   #[derive(serde::Serialize)]
@@ -575,11 +616,12 @@ pub fn run() {
                   };
 
                   if let Err(e) = app_handle_status.emit("profile-running-changed", &payload) {
-                    println!("Warning: Failed to emit profile running changed event: {e}");
+                    log::warn!("Failed to emit profile running changed event: {e}");
                   } else {
-                    println!(
+                    log::debug!(
                       "Status checker emitted profile-running-changed event for {}: running={}",
-                      profile.name, is_running
+                      profile.name,
+                      is_running
                     );
                   }
 
@@ -590,10 +632,7 @@ pub fn run() {
                 }
               }
               Err(e) => {
-                println!(
-                  "Warning: Status check failed for profile {}: {}",
-                  profile.name, e
-                );
+                log::warn!("Status check failed for profile {}: {}", profile.name, e);
                 continue;
               }
             }
@@ -609,12 +648,12 @@ pub fn run() {
         match crate::settings_manager::get_app_settings(app_handle_api.clone()).await {
           Ok(settings) => {
             if settings.api_enabled {
-              println!("API is enabled in settings, starting API server...");
+              log::info!("API is enabled in settings, starting API server...");
               match crate::api_server::start_api_server_internal(settings.api_port, &app_handle_api)
                 .await
               {
                 Ok(port) => {
-                  println!("API server started successfully on port {port}");
+                  log::info!("API server started successfully on port {port}");
                   // Emit success toast to frontend
                   if let Err(e) = app_handle_api.emit(
                     "show-toast",
@@ -625,11 +664,11 @@ pub fn run() {
                       description: Some(format!("API server running on port {port}")),
                     },
                   ) {
-                    eprintln!("Failed to emit API start toast: {e}");
+                    log::error!("Failed to emit API start toast: {e}");
                   }
                 }
                 Err(e) => {
-                  eprintln!("Failed to start API server at startup: {e}");
+                  log::error!("Failed to start API server at startup: {e}");
                   // Emit error toast to frontend
                   if let Err(toast_err) = app_handle_api.emit(
                     "show-toast",
@@ -640,14 +679,14 @@ pub fn run() {
                       description: Some(format!("Error: {e}")),
                     },
                   ) {
-                    eprintln!("Failed to emit API error toast: {toast_err}");
+                    log::error!("Failed to emit API error toast: {toast_err}");
                   }
                 }
               }
             }
           }
           Err(e) => {
-            eprintln!("Failed to load app settings for API startup: {e}");
+            log::error!("Failed to load app settings for API startup: {e}");
           }
         }
       });

@@ -55,7 +55,7 @@ impl Extractor {
 
     // If the executable is not in the expected subdirectory, create the structure
     if !exe_path.starts_with(&expected_subdir) {
-      println!("Reorganizing directory structure for {}", browser_type);
+      log::info!("Reorganizing directory structure for {}", browser_type);
 
       // Create the expected subdirectory
       std::fs::create_dir_all(&expected_subdir)?;
@@ -78,19 +78,19 @@ impl Extractor {
 
           // Move the file/directory
           if let Err(e) = std::fs::rename(&path, &target_path) {
-            println!(
+            log::info!(
               "Warning: Failed to move {} to {}: {}",
               path.display(),
               target_path.display(),
               e
             );
           } else {
-            println!("Moved {} to {}", path.display(), target_path.display());
+            log::info!("Moved {} to {}", path.display(), target_path.display());
           }
         }
       }
 
-      println!("Directory structure reorganized for {}", browser_type);
+      log::info!("Directory structure reorganized for {}", browser_type);
     }
 
     Ok(())
@@ -117,7 +117,7 @@ impl Extractor {
     };
     let _ = app_handle.emit("download-progress", &progress);
 
-    println!(
+    log::info!(
       "Starting extraction of {} for browser {} version {}",
       archive_path.display(),
       browser_type.as_str(),
@@ -132,7 +132,7 @@ impl Extractor {
         e
       )
     })?;
-    println!("Detected format: {actual_format}");
+    log::info!("Detected format: {actual_format}");
 
     let extraction_result = match actual_format.as_str() {
       "dmg" => {
@@ -210,7 +210,7 @@ impl Extractor {
 
     match extraction_result {
       Ok(path) => {
-        println!(
+        log::info!(
           "Successfully extracted {} {} to: {}",
           browser_type.as_str(),
           version,
@@ -219,7 +219,7 @@ impl Extractor {
         Ok(path)
       }
       Err(e) => {
-        eprintln!(
+        log::error!(
           "Extraction failed for {} {}: {}",
           browser_type.as_str(),
           version,
@@ -337,7 +337,7 @@ impl Extractor {
     dmg_path: &Path,
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    println!(
+    log::info!(
       "Extracting DMG: {} to {}",
       dmg_path.display(),
       dest_dir.display()
@@ -353,7 +353,7 @@ impl Extractor {
     ));
     create_dir_all(&mount_point)?;
 
-    println!("Created mount point: {}", mount_point.display());
+    log::info!("Created mount point: {}", mount_point.display());
 
     // Mount the DMG
     let output = Command::new("hdiutil")
@@ -369,7 +369,7 @@ impl Extractor {
     if !output.status.success() {
       let stderr = String::from_utf8_lossy(&output.stderr);
       let stdout = String::from_utf8_lossy(&output.stdout);
-      println!("Failed to mount DMG. stdout: {stdout}, stderr: {stderr}");
+      log::info!("Failed to mount DMG. stdout: {stdout}, stderr: {stderr}");
 
       // Clean up mount point before returning error
       let _ = fs::remove_dir_all(&mount_point);
@@ -377,7 +377,7 @@ impl Extractor {
       return Err(format!("Failed to mount DMG: {stderr}").into());
     }
 
-    println!("Successfully mounted DMG");
+    log::info!("Successfully mounted DMG");
 
     // Find the .app directory in the mount point
     let app_result = self.find_app_in_directory(&mount_point).await;
@@ -385,7 +385,7 @@ impl Extractor {
     let app_entry = match app_result {
       Ok(app_path) => app_path,
       Err(e) => {
-        println!("Failed to find .app in mount point: {e}");
+        log::info!("Failed to find .app in mount point: {e}");
 
         // Try to unmount before returning error
         let _ = Command::new("hdiutil")
@@ -397,12 +397,12 @@ impl Extractor {
       }
     };
 
-    println!("Found .app bundle: {}", app_entry.display());
+    log::info!("Found .app bundle: {}", app_entry.display());
 
     // Copy the .app to the destination
     let app_path = dest_dir.join(app_entry.file_name().unwrap());
 
-    println!("Copying .app to: {}", app_path.display());
+    log::info!("Copying .app to: {}", app_path.display());
 
     let output = Command::new("cp")
       .args([
@@ -414,7 +414,7 @@ impl Extractor {
 
     if !output.status.success() {
       let stderr = String::from_utf8_lossy(&output.stderr);
-      println!("Failed to copy app: {stderr}");
+      log::info!("Failed to copy app: {stderr}");
 
       // Unmount before returning error
       let _ = Command::new("hdiutil")
@@ -425,7 +425,7 @@ impl Extractor {
       return Err(format!("Failed to copy app: {stderr}").into());
     }
 
-    println!("Successfully copied .app bundle");
+    log::info!("Successfully copied .app bundle");
 
     // Remove quarantine attributes
     let _ = Command::new("xattr")
@@ -436,7 +436,7 @@ impl Extractor {
       .args(["-cr", app_path.to_str().unwrap()])
       .output();
 
-    println!("Removed quarantine attributes");
+    log::info!("Removed quarantine attributes");
 
     // Unmount the DMG
     let output = Command::new("hdiutil")
@@ -445,10 +445,10 @@ impl Extractor {
 
     if !output.status.success() {
       let stderr = String::from_utf8_lossy(&output.stderr);
-      println!("Warning: Failed to unmount DMG: {stderr}");
+      log::warn!("Warning: Failed to unmount DMG: {stderr}");
       // Don't fail if unmount fails - the extraction was successful
     } else {
-      println!("Successfully unmounted DMG");
+      log::info!("Successfully unmounted DMG");
     }
 
     // Clean up mount point directory
@@ -486,7 +486,7 @@ impl Extractor {
         if path.is_dir() {
           if let Some(extension) = path.extension() {
             if extension == "app" {
-              println!("Found .app bundle at depth {}: {}", depth, path.display());
+              log::info!("Found .app bundle at depth {}: {}", depth, path.display());
               return Ok(path);
             }
           }
@@ -535,7 +535,7 @@ impl Extractor {
     zip_path: &Path,
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    println!("Extracting ZIP archive: {}", zip_path.display());
+    log::info!("Extracting ZIP archive: {}", zip_path.display());
     std::fs::create_dir_all(dest_dir)?;
 
     let file = File::open(zip_path)
@@ -544,7 +544,7 @@ impl Extractor {
     let mut archive = zip::ZipArchive::new(BufReader::new(file))
       .map_err(|e| format!("Failed to read ZIP archive {}: {}", zip_path.display(), e))?;
 
-    println!("ZIP archive contains {} files", archive.len());
+    log::info!("ZIP archive contains {} files", archive.len());
 
     for i in 0..archive.len() {
       let mut entry = archive
@@ -591,7 +591,7 @@ impl Extractor {
       }
     }
 
-    println!("ZIP extraction completed. Searching for executable...");
+    log::info!("ZIP extraction completed. Searching for executable...");
     self
       .find_extracted_executable(dest_dir)
       .await
@@ -603,7 +603,7 @@ impl Extractor {
     tar_path: &Path,
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    println!("Extracting tar.gz archive: {}", tar_path.display());
+    log::info!("Extracting tar.gz archive: {}", tar_path.display());
     std::fs::create_dir_all(dest_dir)?;
 
     let file = File::open(tar_path)?;
@@ -615,7 +615,7 @@ impl Extractor {
     // Set executable permissions for extracted files
     self.set_executable_permissions_recursive(dest_dir).await?;
 
-    println!("tar.gz extraction completed. Searching for executable...");
+    log::info!("tar.gz extraction completed. Searching for executable...");
     self.find_extracted_executable(dest_dir).await
   }
 
@@ -624,7 +624,7 @@ impl Extractor {
     tar_path: &Path,
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    println!("Extracting tar.bz2 archive: {}", tar_path.display());
+    log::info!("Extracting tar.bz2 archive: {}", tar_path.display());
     std::fs::create_dir_all(dest_dir)?;
 
     let file = File::open(tar_path)?;
@@ -636,7 +636,7 @@ impl Extractor {
     // Set executable permissions for extracted files
     self.set_executable_permissions_recursive(dest_dir).await?;
 
-    println!("tar.bz2 extraction completed. Searching for executable...");
+    log::info!("tar.bz2 extraction completed. Searching for executable...");
     self.find_extracted_executable(dest_dir).await
   }
 
@@ -645,7 +645,7 @@ impl Extractor {
     tar_path: &Path,
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    println!("Extracting tar.xz archive: {}", tar_path.display());
+    log::info!("Extracting tar.xz archive: {}", tar_path.display());
     std::fs::create_dir_all(dest_dir)?;
 
     let file = File::open(tar_path)?;
@@ -671,7 +671,7 @@ impl Extractor {
     // Set executable permissions for extracted files
     self.set_executable_permissions_recursive(dest_dir).await?;
 
-    println!("tar.xz extraction completed. Searching for executable...");
+    log::info!("tar.xz extraction completed. Searching for executable...");
     self.find_extracted_executable(dest_dir).await
   }
 
@@ -680,7 +680,7 @@ impl Extractor {
     msi_path: &Path,
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    println!("Extracting MSI archive: {}", msi_path.display());
+    log::info!("Extracting MSI archive: {}", msi_path.display());
     std::fs::create_dir_all(dest_dir)?;
 
     // Extract MSI in a separate scope to avoid Send issues
@@ -689,7 +689,7 @@ impl Extractor {
       extractor.to(dest_dir);
     }
 
-    println!("MSI extraction completed. Searching for executable...");
+    log::info!("MSI extraction completed. Searching for executable...");
     self.find_extracted_executable(dest_dir).await
   }
 
@@ -812,7 +812,7 @@ impl Extractor {
     &self,
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    println!("Searching for .app bundle in: {}", dest_dir.display());
+    log::info!("Searching for .app bundle in: {}", dest_dir.display());
 
     // Use the enhanced recursive search
     match self.find_app_in_directory(dest_dir).await {
@@ -820,7 +820,7 @@ impl Extractor {
         // Check if the app is in a subdirectory and move it to the root if needed
         let app_parent = app_path.parent().unwrap();
         if app_parent != dest_dir {
-          println!(
+          log::info!(
             "Found .app in subdirectory, moving to root: {} -> {}",
             app_path.display(),
             dest_dir.display()
@@ -837,15 +837,15 @@ impl Extractor {
             }
           }
 
-          println!("Successfully moved .app to: {}", target_path.display());
+          log::info!("Successfully moved .app to: {}", target_path.display());
           Ok(target_path)
         } else {
-          println!("Found .app at root level: {}", app_path.display());
+          log::info!("Found .app at root level: {}", app_path.display());
           Ok(app_path)
         }
       }
       Err(e) => {
-        println!("Failed to find .app bundle: {e}");
+        log::info!("Failed to find .app bundle: {e}");
         Err("No .app found after extraction".into())
       }
     }
@@ -856,7 +856,7 @@ impl Extractor {
     &self,
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    println!(
+    log::info!(
       "Searching for Windows executable in: {}",
       dest_dir.display()
     );
@@ -877,7 +877,7 @@ impl Extractor {
     for exe_name in &priority_exe_names {
       let exe_path = dest_dir.join(exe_name);
       if exe_path.exists() {
-        println!("Found priority executable: {}", exe_path.display());
+        log::info!("Found priority executable: {}", exe_path.display());
         return Ok(exe_path);
       }
     }
@@ -885,7 +885,7 @@ impl Extractor {
     // Recursively search for executables with depth limit
     match self.find_windows_executable_recursive(dest_dir, 0, 3).await {
       Ok(exe_path) => {
-        println!(
+        log::info!(
           "Found executable via recursive search: {}",
           exe_path.display()
         );
@@ -983,7 +983,7 @@ impl Extractor {
     &self,
     dest_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    println!("Searching for Linux executable in: {}", dest_dir.display());
+    log::info!("Searching for Linux executable in: {}", dest_dir.display());
 
     // Enhanced list of common browser executable names
     let exe_names = [
@@ -1031,7 +1031,7 @@ impl Extractor {
     for exe_name in &exe_names {
       let exe_path = dest_dir.join(exe_name);
       if exe_path.exists() && self.is_executable(&exe_path) {
-        println!("Found executable at root level: {}", exe_path.display());
+        log::info!("Found executable at root level: {}", exe_path.display());
         return Ok(exe_path);
       }
     }
@@ -1078,7 +1078,7 @@ impl Extractor {
         for exe_name in &exe_names {
           let exe_path = subdir_path.join(exe_name);
           if exe_path.exists() && self.is_executable(&exe_path) {
-            println!("Found executable in subdirectory: {}", exe_path.display());
+            log::info!("Found executable in subdirectory: {}", exe_path.display());
             return Ok(exe_path);
           }
         }
@@ -1091,7 +1091,7 @@ impl Extractor {
         let path = entry.path();
         if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
           if file_name.ends_with(".AppImage") && self.is_executable(&path) {
-            println!("Found AppImage: {}", path.display());
+            log::info!("Found AppImage: {}", path.display());
             return Ok(path);
           }
         }
@@ -1099,15 +1099,15 @@ impl Extractor {
     }
 
     // Last resort: recursive search for any executable file
-    println!("Performing recursive search for executables...");
+    log::info!("Performing recursive search for executables...");
     match self.find_any_executable_recursive(dest_dir, 0).await {
       Ok(path) => {
-        println!("Found executable via recursive search: {}", path.display());
+        log::info!("Found executable via recursive search: {}", path.display());
         Ok(path)
       }
       Err(e) => {
         // List all files in the directory for debugging
-        println!("Failed to find executable. Directory contents:");
+        log::info!("Failed to find executable. Directory contents:");
         if let Ok(entries) = fs::read_dir(dest_dir) {
           for entry in entries.flatten() {
             let path = entry.path();
@@ -1116,7 +1116,7 @@ impl Extractor {
             } else {
               false
             };
-            println!("  {} (executable: {})", path.display(), is_exec);
+            log::info!("  {} (executable: {})", path.display(), is_exec);
           }
         }
         Err(
@@ -1220,7 +1220,7 @@ impl Extractor {
               || name_lower.contains("camoufox")
               || file_name.ends_with(".AppImage")
             {
-              println!(
+              log::info!(
                 "Found priority executable at depth {}: {}",
                 depth,
                 path.display()
@@ -1262,7 +1262,7 @@ impl Extractor {
           a_name.len().cmp(&b_name.len())
         });
 
-        println!(
+        log::info!(
           "Found potential executable at depth {}: {}",
           depth,
           potential_executables[0].display()

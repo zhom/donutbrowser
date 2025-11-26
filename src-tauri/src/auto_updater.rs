@@ -109,13 +109,13 @@ impl AutoUpdater {
             let new_version = &update.new_version.parse::<u32>().unwrap();
 
             let result = new_version - current_version;
-            println!(
+            log::info!(
               "Current version: {current_version}, New version: {new_version}, Result: {result}"
             );
             if result > 400 {
               notifications.push(update);
             } else {
-              println!(
+              log::info!(
                 "Skipping chromium update notification: only {result} new versions (need 400+)"
               );
             }
@@ -130,22 +130,23 @@ impl AutoUpdater {
   }
 
   pub async fn check_for_updates_with_progress(&self, app_handle: &tauri::AppHandle) {
-    println!("Starting auto-update check with progress...");
+    log::info!("Starting auto-update check with progress...");
 
     // Check for browser updates and trigger auto-downloads
     match self.check_for_updates().await {
       Ok(update_notifications) => {
         if !update_notifications.is_empty() {
-          println!(
+          log::info!(
             "Found {} browser updates to auto-download",
             update_notifications.len()
           );
 
           // Trigger automatic downloads for each update
           for notification in update_notifications {
-            println!(
+            log::info!(
               "Auto-downloading {} version {}",
-              notification.browser, notification.new_version
+              notification.browser,
+              notification.new_version
             );
 
             // Clone app_handle for the async task
@@ -164,7 +165,7 @@ impl AutoUpdater {
                 new_version.clone(),
               ) {
                 true => {
-                  println!("Browser {browser} {new_version} already downloaded, proceeding to auto-update profiles");
+                  log::info!("Browser {browser} {new_version} already downloaded, proceeding to auto-update profiles");
 
                   // Browser already exists, go straight to profile update
                   match AutoUpdater::instance()
@@ -176,19 +177,19 @@ impl AutoUpdater {
                     .await
                   {
                     Ok(updated_profiles) => {
-                      println!(
+                      log::info!(
                         "Auto-update completed for {} profiles: {:?}",
                         updated_profiles.len(),
                         updated_profiles
                       );
                     }
                     Err(e) => {
-                      eprintln!("Failed to complete auto-update for {browser}: {e}");
+                      log::error!("Failed to complete auto-update for {browser}: {e}");
                     }
                   }
                 }
                 false => {
-                  println!("Downloading browser {browser} version {new_version}...");
+                  log::info!("Downloading browser {browser} version {new_version}...");
 
                   // Emit the auto-update event to trigger frontend handling
                   let auto_update_event = serde_json::json!({
@@ -201,20 +202,20 @@ impl AutoUpdater {
                   if let Err(e) =
                     app_handle_clone.emit("browser-auto-update-available", &auto_update_event)
                   {
-                    eprintln!("Failed to emit auto-update event for {browser}: {e}");
+                    log::error!("Failed to emit auto-update event for {browser}: {e}");
                   } else {
-                    println!("Emitted auto-update event for {browser}");
+                    log::info!("Emitted auto-update event for {browser}");
                   }
                 }
               }
             });
           }
         } else {
-          println!("No browser updates needed");
+          log::info!("No browser updates needed");
         }
       }
       Err(e) => {
-        eprintln!("Failed to check for browser updates: {e}");
+        log::error!("Failed to check for browser updates: {e}");
       }
     }
   }
@@ -330,7 +331,7 @@ impl AutoUpdater {
               updated_profiles.push(profile.name);
             }
             Err(e) => {
-              eprintln!("Failed to update profile {}: {}", profile.name, e);
+              log::error!("Failed to update profile {}: {}", profile.name, e);
             }
           }
         }

@@ -47,7 +47,7 @@ pub mod macos {
     executable_path: &std::path::Path,
     args: &[String],
   ) -> Result<std::process::Child, Box<dyn std::error::Error + Send + Sync>> {
-    println!("Launching browser on macOS: {executable_path:?} with args: {args:?}");
+    log::info!("Launching browser on macOS: {executable_path:?} with args: {args:?}");
     // If the executable is inside an app bundle, launch via Launch Services so
     // macOS recognizes the real application for privacy permissions (e.g. Screen Recording).
     // This ensures TCC prompts are attributed to the browser app, not our launcher.
@@ -93,7 +93,7 @@ pub mod macos {
     let profile_data_path = profile.get_profile_data_path(profiles_dir);
 
     // First try: Use Firefox remote command
-    println!("Trying Firefox remote command for PID: {pid}");
+    log::info!("Trying Firefox remote command for PID: {pid}");
     let browser = create_browser(browser_type);
     if let Ok(executable_path) = browser.get_executable_path(browser_dir) {
       let remote_args = vec![
@@ -107,17 +107,17 @@ pub mod macos {
 
       match remote_output {
         Ok(output) if output.status.success() => {
-          println!("Firefox remote command succeeded");
+          log::info!("Firefox remote command succeeded");
           return Ok(());
         }
         Ok(output) => {
           let stderr = String::from_utf8_lossy(&output.stderr);
-          println!(
+          log::info!(
             "Firefox remote command failed with stderr: {stderr}, trying AppleScript fallback"
           );
         }
         Err(e) => {
-          println!("Firefox remote command error: {e}, trying AppleScript fallback");
+          log::info!("Firefox remote command error: {e}, trying AppleScript fallback");
         }
       }
     }
@@ -195,12 +195,12 @@ end try
       "#
     );
 
-    println!("Executing AppleScript fallback for Firefox-based browser (PID: {pid})...");
+    log::info!("Executing AppleScript fallback for Firefox-based browser (PID: {pid})...");
     let output = Command::new("osascript").args(["-e", &script]).output()?;
 
     if !output.status.success() {
       let error_msg = String::from_utf8_lossy(&output.stderr);
-      println!("AppleScript failed: {error_msg}");
+      log::info!("AppleScript failed: {error_msg}");
       return Err(
         format!(
           "Both Firefox remote command and AppleScript failed. AppleScript error: {error_msg}"
@@ -208,7 +208,7 @@ end try
         .into(),
       );
     } else {
-      println!("AppleScript succeeded");
+      log::info!("AppleScript succeeded");
     }
 
     Ok(())
@@ -217,13 +217,13 @@ end try
   pub async fn kill_browser_process_impl(
     pid: u32,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    println!("Attempting to kill browser process with PID: {pid}");
+    log::info!("Attempting to kill browser process with PID: {pid}");
 
     // For Chromium-based browsers, use immediate aggressive termination
     // Chromium browsers are notoriously difficult to kill on macOS due to process spawning
 
     // Step 1: Immediate SIGKILL on main process (no graceful shutdown for Chromium)
-    println!("Starting immediate SIGKILL for PID: {pid}");
+    log::info!("Starting immediate SIGKILL for PID: {pid}");
     let _ = Command::new("kill")
       .args(["-KILL", &pid.to_string()])
       .output();
@@ -261,7 +261,7 @@ end try
 
     // Check if main process still exists
     if system.process(Pid::from(pid as usize)).is_some() {
-      println!("Main process {pid} still running, using pattern-based termination");
+      log::info!("Main process {pid} still running, using pattern-based termination");
 
       // Kill by common Chromium process patterns
       let chromium_patterns = [
@@ -302,7 +302,7 @@ end try
 
     if system.process(Pid::from(pid as usize)).is_some() {
       // Last resort: try system kill command with different signals
-      println!("Process {pid} extremely persistent, trying system-level termination");
+      log::info!("Process {pid} extremely persistent, trying system-level termination");
 
       let _ = Command::new("/bin/kill").args(["-KILL", &pid_str]).output();
 
@@ -322,12 +322,12 @@ end try
       let system = System::new_all();
 
       if system.process(Pid::from(pid as usize)).is_some() {
-        println!("WARNING: Process {pid} could not be terminated despite aggressive attempts");
+        log::info!("WARNING: Process {pid} could not be terminated despite aggressive attempts");
         // Don't return error - let the UI update anyway since we tried everything
       }
     }
 
-    println!("Aggressive browser termination completed for PID: {pid}");
+    log::info!("Aggressive browser termination completed for PID: {pid}");
     Ok(())
   }
 
@@ -335,11 +335,11 @@ end try
   async fn kill_chromium_process_tree_aggressive(
     pid: u32,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    println!("Killing comprehensive process tree for PID: {pid}");
+    log::info!("Killing comprehensive process tree for PID: {pid}");
 
     // Get all descendant processes using recursive process tree discovery
     let descendant_pids = get_all_descendant_pids(pid).await;
-    println!(
+    log::info!(
       "Found {} descendant processes to terminate",
       descendant_pids.len()
     );
@@ -347,7 +347,7 @@ end try
     // Kill all descendants first (reverse order - children before parents)
     for &desc_pid in descendant_pids.iter().rev() {
       if desc_pid != pid {
-        println!("Terminating descendant process: {desc_pid}");
+        log::info!("Terminating descendant process: {desc_pid}");
         let _ = Command::new("kill")
           .args(["-KILL", &desc_pid.to_string()])
           .output();
@@ -381,7 +381,7 @@ end try
   // Helper function to kill all Chromium-related processes by name patterns
   async fn kill_all_chromium_processes_by_name(
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    println!("Killing all Chromium-related processes by name patterns");
+    log::info!("Killing all Chromium-related processes by name patterns");
 
     let chromium_patterns = [
       "Chrome",
@@ -444,10 +444,10 @@ end try
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let pid = profile.process_id.unwrap();
 
-    println!("Opening URL in TOR/Mullvad browser using file-based approach (PID: {pid})");
+    log::info!("Opening URL in TOR/Mullvad browser using file-based approach (PID: {pid})");
 
     // Method 1: Try using a temporary HTML file approach
-    println!("Attempting file-based URL opening for TOR/Mullvad browser");
+    log::info!("Attempting file-based URL opening for TOR/Mullvad browser");
 
     let temp_dir = std::env::temp_dir();
     let temp_file_name = format!("donut_browser_url_{}.html", std::process::id());
@@ -472,7 +472,7 @@ end try
 
     match std::fs::write(&temp_file_path, html_content) {
       Ok(()) => {
-        println!("Created temporary HTML file: {temp_file_path:?}");
+        log::info!("Created temporary HTML file: {temp_file_path:?}");
 
         let browser = create_browser(browser_type.clone());
         if let Ok(executable_path) = browser.get_executable_path(browser_dir) {
@@ -493,15 +493,15 @@ end try
 
           match open_result {
             Ok(output) if output.status.success() => {
-              println!("Successfully opened URL using file-based approach");
+              log::info!("Successfully opened URL using file-based approach");
               return Ok(());
             }
             Ok(output) => {
               let stderr = String::from_utf8_lossy(&output.stderr);
-              println!("File-based approach failed: {stderr}");
+              log::info!("File-based approach failed: {stderr}");
             }
             Err(e) => {
-              println!("File-based approach error: {e}");
+              log::info!("File-based approach error: {e}");
             }
           }
         }
@@ -509,12 +509,12 @@ end try
         let _ = std::fs::remove_file(&temp_file_path);
       }
       Err(e) => {
-        println!("Failed to create temporary HTML file: {e}");
+        log::info!("Failed to create temporary HTML file: {e}");
       }
     }
 
     // Method 2: Try using the 'open' command directly with the URL
-    println!("Attempting direct URL opening with 'open' command");
+    log::info!("Attempting direct URL opening with 'open' command");
 
     let browser = create_browser(browser_type.clone());
     if let Ok(executable_path) = browser.get_executable_path(browser_dir) {
@@ -524,15 +524,15 @@ end try
 
       match direct_open_result {
         Ok(output) if output.status.success() => {
-          println!("Successfully opened URL using direct 'open' command");
+          log::info!("Successfully opened URL using direct 'open' command");
           return Ok(());
         }
         Ok(output) => {
           let stderr = String::from_utf8_lossy(&output.stderr);
-          println!("Direct 'open' command failed: {stderr}");
+          log::info!("Direct 'open' command failed: {stderr}");
         }
         Err(e) => {
-          println!("Direct 'open' command error: {e}");
+          log::info!("Direct 'open' command error: {e}");
         }
       }
     }
@@ -561,7 +561,7 @@ end try
     let pid = profile.process_id.unwrap();
 
     // First, try using the browser's built-in URL opening capability
-    println!("Trying Chromium URL opening for PID: {pid}");
+    log::info!("Trying Chromium URL opening for PID: {pid}");
 
     let browser = create_browser(browser_type);
     if let Ok(executable_path) = browser.get_executable_path(browser_dir) {
@@ -575,15 +575,15 @@ end try
 
       match remote_output {
         Ok(output) if output.status.success() => {
-          println!("Chromium URL opening succeeded");
+          log::info!("Chromium URL opening succeeded");
           return Ok(());
         }
         Ok(output) => {
           let stderr = String::from_utf8_lossy(&output.stderr);
-          println!("Chromium URL opening failed: {stderr}, trying AppleScript");
+          log::info!("Chromium URL opening failed: {stderr}, trying AppleScript");
         }
         Err(e) => {
-          println!("Chromium URL opening error: {e}, trying AppleScript");
+          log::info!("Chromium URL opening error: {e}, trying AppleScript");
         }
       }
     }
@@ -661,17 +661,17 @@ end try
       "#
     );
 
-    println!("Executing AppleScript for Chromium-based browser (PID: {pid})...");
+    log::info!("Executing AppleScript for Chromium-based browser (PID: {pid})...");
     let output = Command::new("osascript").args(["-e", &script]).output()?;
 
     if !output.status.success() {
       let error_msg = String::from_utf8_lossy(&output.stderr);
-      println!("AppleScript failed: {error_msg}");
+      log::info!("AppleScript failed: {error_msg}");
       return Err(
         format!("Failed to open URL in existing Chromium-based browser: {error_msg}").into(),
       );
     } else {
-      println!("AppleScript succeeded");
+      log::info!("AppleScript succeeded");
     }
 
     Ok(())
@@ -722,9 +722,10 @@ pub mod windows {
     executable_path: &std::path::Path,
     args: &[String],
   ) -> Result<std::process::Child, Box<dyn std::error::Error + Send + Sync>> {
-    println!(
+    log::info!(
       "Launching browser on Windows: {:?} with args: {:?}",
-      executable_path, args
+      executable_path,
+      args
     );
 
     // Check if the executable exists
@@ -763,7 +764,7 @@ pub mod windows {
       .spawn()
       .map_err(|e| format!("Failed to launch browser process: {}", e))?;
 
-    println!(
+    log::info!(
       "Successfully launched browser process with PID: {}",
       child.id()
     );
@@ -930,7 +931,7 @@ pub mod windows {
     let system = System::new_all();
     if let Some(process) = system.process(Pid::from(pid as usize)) {
       if process.kill() {
-        println!("Successfully killed browser process with PID: {pid}");
+        log::info!("Successfully killed browser process with PID: {pid}");
         return Ok(());
       }
     }
@@ -946,7 +947,7 @@ pub mod windows {
     match output {
       Ok(result) => {
         if result.status.success() {
-          println!("Successfully killed browser process with PID: {pid} using taskkill");
+          log::info!("Successfully killed browser process with PID: {pid} using taskkill");
           Ok(())
         } else {
           Err(
@@ -981,9 +982,10 @@ pub mod linux {
     executable_path: &std::path::Path,
     args: &[String],
   ) -> Result<std::process::Child, Box<dyn std::error::Error + Send + Sync>> {
-    println!(
+    log::info!(
       "Launching browser on Linux: {:?} with args: {:?}",
-      executable_path, args
+      executable_path,
+      args
     );
 
     // Check if the executable exists and is executable
@@ -1047,7 +1049,7 @@ pub mod linux {
       // Set the combined LD_LIBRARY_PATH
       if !ld_library_path.is_empty() {
         cmd.env("LD_LIBRARY_PATH", ld_library_path.join(":"));
-        println!("Set LD_LIBRARY_PATH to: {}", ld_library_path.join(":"));
+        log::info!("Set LD_LIBRARY_PATH to: {}", ld_library_path.join(":"));
       }
     }
 
@@ -1064,7 +1066,7 @@ pub mod linux {
 
     // Disable GPU acceleration if running in headless environments
     if std::env::var("DISPLAY").is_err() || std::env::var("WAYLAND_DISPLAY").is_err() {
-      println!("No display detected, browser may fail to start");
+      log::info!("No display detected, browser may fail to start");
     }
 
     // Attempt to spawn with better error handling for architecture issues
@@ -1188,7 +1190,7 @@ pub mod linux {
       return Err(format!("Process {} not found", pid).into());
     }
 
-    println!("Successfully killed browser process with PID: {pid}");
+    log::info!("Successfully killed browser process with PID: {pid}");
     Ok(())
   }
 }
