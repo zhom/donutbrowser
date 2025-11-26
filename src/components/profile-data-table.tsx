@@ -365,11 +365,11 @@ const TagsCell = React.memo<{
             selectFirstItem={false}
             placeholder={effectiveTags.length === 0 ? "Add tags" : ""}
             className={cn(
-              "bg-transparent !border-0 focus-within:!ring-0",
-              "[&_div:first-child]:!border-0 [&_div:first-child]:!ring-0 [&_div:first-child]:focus-within:!ring-0",
-              "[&_div:first-child]:!min-h-6 [&_div:first-child]:!px-2 [&_div:first-child]:!py-1",
-              "[&_div:first-child>div]:items-center [&_div:first-child>div]:!h-6",
-              "[&_input]:!ml-0 [&_input]:!mt-0 [&_input]:!px-0",
+              "bg-transparent border-0! focus-within:ring-0!",
+              "[&_div:first-child]:border-0! [&_div:first-child]:ring-0! [&_div:first-child]:focus-within:ring-0!",
+              "[&_div:first-child]:min-h-6! [&_div:first-child]:px-2! [&_div:first-child]:py-1!",
+              "[&_div:first-child>div]:items-center [&_div:first-child>div]:h-6!",
+              "[&_input]:ml-0! [&_input]:mt-0! [&_input]:px-0!",
               !isFocused && "[&_div:first-child>div]:justify-center",
             )}
             badgeClassName="shrink-0"
@@ -1139,7 +1139,7 @@ export function ProfilesDataTable({
                     size="sm"
                     variant="default"
                     disabled={isSaveDisabled}
-                    className="cursor-pointer [&[disabled]]:bg-primary/80"
+                    className="cursor-pointer [[disabled]]:bg-primary/80"
                     onClick={() => void meta.handleRename()}
                   >
                     Save
