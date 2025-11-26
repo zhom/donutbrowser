@@ -843,7 +843,6 @@ impl ApiClient {
         let has_compatible_asset = Self::has_compatible_brave_asset(&release.assets, &os);
 
         if has_compatible_asset {
-          log::info!("release.name: {:?}", release.name);
           // Use the centralized nightly detection function
           release.is_nightly =
             is_browser_version_nightly("brave", &release.tag_name, Some(&release.name));
