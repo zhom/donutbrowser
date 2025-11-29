@@ -129,8 +129,10 @@ jobs:
             chmod +x src-tauri/binaries/donut-proxy-${HOST_TARGET}
           fi
 
-      - name: Create empty 'dist' directory
-        run: mkdir dist
+      - name: Create dist directory with minimal index.html for Tauri
+        run: |
+          mkdir -p dist
+          echo '<!DOCTYPE html><html><head></head><body></body></html>' > dist/index.html
 
       - name: Run rustfmt check
         run: cargo fmt --all -- --check
