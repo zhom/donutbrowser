@@ -1,6 +1,7 @@
 mod common;
 use common::TestUtils;
 use serde_json::Value;
+use serial_test::serial;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -81,6 +82,7 @@ impl Drop for ProxyTestTracker {
 
 /// Test starting a local proxy without upstream proxy (DIRECT)
 #[tokio::test]
+#[serial]
 async fn test_local_proxy_direct() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
   let binary_path = setup_test().await?;
   let mut tracker = ProxyTestTracker::new(binary_path.clone());
@@ -148,6 +150,7 @@ async fn test_local_proxy_direct() -> Result<(), Box<dyn std::error::Error + Sen
 
 /// Test chaining local proxies (local proxy -> local proxy -> internet)
 #[tokio::test]
+#[serial]
 async fn test_chained_local_proxies() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
   let binary_path = setup_test().await?;
   let mut tracker = ProxyTestTracker::new(binary_path.clone());
@@ -238,6 +241,7 @@ async fn test_chained_local_proxies() -> Result<(), Box<dyn std::error::Error + 
 
 /// Test starting a local proxy with HTTP upstream proxy
 #[tokio::test]
+#[serial]
 async fn test_local_proxy_with_http_upstream(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
   let binary_path = setup_test().await?;
@@ -328,6 +332,7 @@ async fn test_local_proxy_with_http_upstream(
 
 /// Test multiple proxies running simultaneously
 #[tokio::test]
+#[serial]
 async fn test_multiple_proxies_simultaneously(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
   let binary_path = setup_test().await?;
@@ -376,6 +381,7 @@ async fn test_multiple_proxies_simultaneously(
 
 /// Test proxy listing
 #[tokio::test]
+#[serial]
 async fn test_proxy_list() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
   let binary_path = setup_test().await?;
   let mut tracker = ProxyTestTracker::new(binary_path.clone());
@@ -411,6 +417,7 @@ async fn test_proxy_list() -> Result<(), Box<dyn std::error::Error + Send + Sync
 
 /// Test proxy stop
 #[tokio::test]
+#[serial]
 async fn test_proxy_stop() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
   let binary_path = setup_test().await?;
   let _tracker = ProxyTestTracker::new(binary_path.clone());
