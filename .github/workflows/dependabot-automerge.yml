@@ -70,13 +70,11 @@ jobs:
         id: metadata
         uses: dependabot/fetch-metadata@08eff52bf64351f401fb50d4972fa95b9f2c2d1b #v2.4.0
         with:
-          compat-lookup: true
           github-token: "${{ secrets.GITHUB_TOKEN }}"
-      - name: Auto-merge minor and patch updates
-        uses: ridedott/merge-me-action@18dd4f01d259faf0a2d900a56cd6b7e765009209 #v2.10.138
-        with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MERGE_METHOD: SQUASH
-          PRESET: DEPENDABOT_MINOR
-          MAXIMUM_RETRIES: 5
+      - name: Enable auto-merge for minor and patch updates
+        if: ${{ steps.metadata.outputs.update-type == 'version-update:semver-minor' || steps.metadata.outputs.update-type == 'version-update:semver-patch' }}
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     timeout-minutes: 10
