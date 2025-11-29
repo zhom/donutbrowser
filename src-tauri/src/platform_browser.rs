@@ -3,6 +3,7 @@ use crate::profile::BrowserProfile;
 use std::ffi::OsString;
 use std::path::Path;
 use std::process::Command;
+use sysinfo::{Pid, System};
 
 // Platform-specific modules
 #[cfg(target_os = "macos")]
@@ -216,61 +217,36 @@ end try
 
   pub async fn kill_browser_process_impl(
     pid: u32,
+    profile_data_path: Option<&str>,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     log::info!("Attempting to kill browser process with PID: {pid}");
 
-    // For Chromium-based browsers, use immediate aggressive termination
-    // Chromium browsers are notoriously difficult to kill on macOS due to process spawning
+    let mut pids_to_kill = vec![pid];
 
-    // Step 1: Immediate SIGKILL on main process (no graceful shutdown for Chromium)
-    log::info!("Starting immediate SIGKILL for PID: {pid}");
-    let _ = Command::new("kill")
-      .args(["-KILL", &pid.to_string()])
-      .output();
+    let descendants = get_all_descendant_pids(pid).await;
+    pids_to_kill.extend(descendants);
 
-    // Step 2: Comprehensive process tree termination using multiple methods simultaneously
-    let _ = kill_chromium_process_tree_aggressive(pid).await;
-
-    // Step 3: Use multiple kill strategies in parallel (all PID-specific)
-    let pid_str = pid.to_string();
-
-    // Kill by parent PID with SIGKILL (only processes with this PID as parent)
-    let _ = Command::new("pkill")
-      .args(["-KILL", "-P", &pid_str])
-      .output();
-
-    // Kill by process group with SIGKILL (only processes in this process group)
-    let _ = Command::new("pkill")
-      .args(["-KILL", "-g", &pid_str])
-      .output();
-
-    // Kill by session ID (only processes in this session)
-    let _ = Command::new("pkill")
-      .args(["-KILL", "-s", &pid_str])
-      .output();
-
-    // Wait briefly for initial termination
-    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-
-    // Step 4: Verify and retry PID-specific termination if needed
-    use sysinfo::{Pid, System};
-    let system = System::new_all();
-
-    // Check if main process still exists
-    if system.process(Pid::from(pid as usize)).is_some() {
-      log::info!("Main process {pid} still running, retrying PID-specific termination");
-
-      // Retry direct kill on the main process
-      let _ = Command::new("kill").args(["-KILL", &pid_str]).output();
-
-      // Retry process tree termination
-      let _ = kill_chromium_process_tree_aggressive(pid).await;
+    if let Some(profile_path) = profile_data_path {
+      let additional_pids = find_processes_by_profile_path(profile_path).await;
+      for p in additional_pids {
+        if !pids_to_kill.contains(&p) {
+          log::info!("Found additional process {} using profile path", p);
+          pids_to_kill.push(p);
+        }
+      }
     }
 
-    // Step 5: Final cleanup - kill any remaining processes in the tree
-    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+    log::info!("Total processes to kill: {:?}", pids_to_kill);
 
-    // One more round of PID-specific killing
+    for &p in &pids_to_kill {
+      log::info!("Sending SIGKILL to PID: {p}");
+      let _ = Command::new("kill")
+        .args(["-KILL", &p.to_string()])
+        .output();
+    }
+
+    let pid_str = pid.to_string();
+
     let _ = Command::new("pkill")
       .args(["-KILL", "-P", &pid_str])
       .output();
@@ -279,25 +255,60 @@ end try
       .args(["-KILL", "-g", &pid_str])
       .output();
 
-    // Final verification with extended wait
+    for &p in &pids_to_kill {
+      let system = System::new_all();
+      if system.process(Pid::from(p as usize)).is_some() {
+        log::info!("Process {p} still running, retrying kill");
+        let _ = Command::new("kill")
+          .args(["-KILL", &p.to_string()])
+          .output();
+      }
+    }
+
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
     let system = System::new_all();
+    let mut still_running = Vec::new();
+    for &p in &pids_to_kill {
+      if system.process(Pid::from(p as usize)).is_some() {
+        still_running.push(p);
+      }
+    }
 
-    if system.process(Pid::from(pid as usize)).is_some() {
-      // Last resort: try direct kill command one more time
-      log::info!("Process {pid} extremely persistent, trying final direct termination");
+    if !still_running.is_empty() {
+      log::info!(
+        "Processes {:?} still running, trying final termination",
+        still_running
+      );
 
-      let _ = Command::new("/bin/kill").args(["-KILL", &pid_str]).output();
-
-      // Retry process tree termination one final time
-      let _ = kill_chromium_process_tree_aggressive(pid).await;
+      for p in &still_running {
+        let _ = Command::new("/bin/kill")
+          .args(["-KILL", &p.to_string()])
+          .output();
+      }
 
       tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-      let system = System::new_all();
 
-      if system.process(Pid::from(pid as usize)).is_some() {
-        log::info!("WARNING: Process {pid} could not be terminated despite aggressive attempts");
-        // Don't return error - let the UI update anyway since we tried everything
+      let system = System::new_all();
+      let mut final_still_running = Vec::new();
+      for &p in &pids_to_kill {
+        if system.process(Pid::from(p as usize)).is_some() {
+          final_still_running.push(p);
+        }
+      }
+
+      if !final_still_running.is_empty() {
+        log::error!(
+          "ERROR: Processes {:?} could not be terminated despite aggressive attempts",
+          final_still_running
+        );
+        return Err(
+          format!(
+            "Failed to terminate browser processes {:?} - still running",
+            final_still_running
+          )
+          .into(),
+        );
       }
     }
 
@@ -305,51 +316,33 @@ end try
     Ok(())
   }
 
-  // Helper function to kill process tree (Chromium browsers often spawn child processes)
-  async fn kill_chromium_process_tree_aggressive(
-    pid: u32,
-  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    log::info!("Killing comprehensive process tree for PID: {pid}");
+  async fn find_processes_by_profile_path(profile_path: &str) -> Vec<u32> {
+    use sysinfo::System;
 
-    // Get all descendant processes using recursive process tree discovery
-    let descendant_pids = get_all_descendant_pids(pid).await;
-    log::info!(
-      "Found {} descendant processes to terminate",
-      descendant_pids.len()
-    );
+    let mut pids = Vec::new();
+    let system = System::new_all();
 
-    // Kill all descendants first (reverse order - children before parents)
-    for &desc_pid in descendant_pids.iter().rev() {
-      if desc_pid != pid {
-        log::info!("Terminating descendant process: {desc_pid}");
-        let _ = Command::new("kill")
-          .args(["-KILL", &desc_pid.to_string()])
-          .output();
+    for (pid, process) in system.processes() {
+      let cmd = process.cmd();
+      if cmd.is_empty() {
+        continue;
+      }
+
+      // Check if any command line argument contains the profile path
+      let has_profile = cmd.iter().any(|arg| {
+        if let Some(arg_str) = arg.to_str() {
+          arg_str.contains(profile_path)
+        } else {
+          false
+        }
+      });
+
+      if has_profile {
+        pids.push(pid.as_u32());
       }
     }
 
-    // No delay for initial termination
-
-    // Force kill any remaining descendants
-    for &desc_pid in descendant_pids.iter().rev() {
-      if desc_pid != pid {
-        let _ = Command::new("kill")
-          .args(["-KILL", &desc_pid.to_string()])
-          .output();
-      }
-    }
-
-    // Also use pkill as a backup to catch any processes we might have missed
-    let _ = Command::new("pkill")
-      .args(["-KILL", "-P", &pid.to_string()])
-      .output();
-
-    // On macOS, also try killing by process group for Chromium browsers
-    let _ = Command::new("pkill")
-      .args(["-KILL", "-g", &pid.to_string()])
-      .output();
-
-    Ok(())
+    pids
   }
 
   // Recursively find all descendant processes

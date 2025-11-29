@@ -1284,9 +1284,12 @@ impl BrowserRunner {
       log::warn!("Warning: Failed to stop proxy for PID {pid}: {e}");
     }
 
-    // Kill the process using platform-specific implementation
+    let profiles_dir = self.profile_manager.get_profiles_dir();
+    let profile_data_path = profile.get_profile_data_path(&profiles_dir);
+    let profile_path_str = profile_data_path.to_string_lossy().to_string();
+
     #[cfg(target_os = "macos")]
-    platform_browser::macos::kill_browser_process_impl(pid).await?;
+    platform_browser::macos::kill_browser_process_impl(pid, Some(&profile_path_str)).await?;
 
     #[cfg(target_os = "windows")]
     platform_browser::windows::kill_browser_process_impl(pid).await?;
@@ -1296,6 +1299,30 @@ impl BrowserRunner {
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     return Err("Unsupported platform".into());
+
+    let system = System::new_all();
+    if system.process(sysinfo::Pid::from(pid as usize)).is_some() {
+      log::error!(
+        "Browser process {} is still running after kill attempt for profile: {} (ID: {})",
+        pid,
+        profile.name,
+        profile.id
+      );
+      return Err(
+        format!(
+          "Browser process {} is still running after kill attempt",
+          pid
+        )
+        .into(),
+      );
+    }
+
+    log::info!(
+      "Verified browser process {} is terminated for profile: {} (ID: {})",
+      pid,
+      profile.name,
+      profile.id
+    );
 
     // Clear the process ID from the profile
     let mut updated_profile = profile.clone();
