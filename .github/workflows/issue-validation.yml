@@ -144,48 +144,30 @@ jobs:
           IS_FIRST_TIME="${{ steps.check-first-time.outputs.is_first_time }}"
           GREETING_SECTION=""
           if [ "$IS_FIRST_TIME" = "true" ]; then
-            GREETING_SECTION="## 👋 Welcome!
-
-          Thank you for your first issue ❤️ If this is a feature request, please make sure it is clear what you want, why you want it, and how important it is to you. If you posted a bug report, please make sure it includes as much detail as possible.
-
-          ---"
+            GREETING_SECTION="## 👋 Welcome!\n\nThank you for your first issue ❤️ If this is a feature request, please make sure it is clear what you want, why you want it, and how important it is to you. If you posted a bug report, please make sure it includes as much detail as possible.\n\n---\n\n"
           fi
 
           if [ "$IS_VALID" = "false" ]; then
             # Create a comment asking for more information
-            cat > comment.md << EOF
-$GREETING_SECTION
-## 🤖 Issue Validation
-
-Thank you for submitting this issue! However, it appears that some required information might be missing to help us better understand and address your concern.
-
-**Issue Type Detected:** \`$ISSUE_TYPE\`
-
-**Assessment:** $ASSESSMENT
-
-### 📋 Missing Information:
-$MISSING_INFO
-
-### 💡 Suggestions for Improvement:
-$SUGGESTIONS
-
-### 📝 How to Provide Additional Information:
-
-Please edit your original issue description to include the missing information. Here are our issue templates for reference:
-
-- **Bug Report Template:** [View Template](.github/ISSUE_TEMPLATE/01-bug-report.md)
-- **Feature Request Template:** [View Template](.github/ISSUE_TEMPLATE/02-feature-request.md)
-
-### 🔧 Quick Tips:
-- For **bug reports**: Include step-by-step reproduction instructions, your environment details, and any error messages
-- For **feature requests**: Describe the use case, expected behavior, and why this feature would be valuable
-- Add **screenshots** or **logs** when applicable
-
-Once you've updated the issue with the missing information, feel free to remove this comment or reply to let us know you've made the updates.
-
----
-*This validation was performed automatically to ensure we have all the information needed to help you effectively.*
-EOF
+            {
+              printf "%b" "$GREETING_SECTION"
+              printf "## 🤖 Issue Validation\n\n"
+              printf "Thank you for submitting this issue! However, it appears that some required information might be missing to help us better understand and address your concern.\n\n"
+              printf "**Issue Type Detected:** \`%s\`\n\n" "$ISSUE_TYPE"
+              printf "**Assessment:** %s\n\n" "$ASSESSMENT"
+              printf "### 📋 Missing Information:\n%s\n\n" "$MISSING_INFO"
+              printf "### 💡 Suggestions for Improvement:\n%s\n\n" "$SUGGESTIONS"
+              printf "### 📝 How to Provide Additional Information:\n\n"
+              printf "Please edit your original issue description to include the missing information. Here are our issue templates for reference:\n\n"
+              printf -- "- **Bug Report Template:** [View Template](.github/ISSUE_TEMPLATE/01-bug-report.md)\n"
+              printf -- "- **Feature Request Template:** [View Template](.github/ISSUE_TEMPLATE/02-feature-request.md)\n\n"
+              printf "### 🔧 Quick Tips:\n"
+              printf -- "- For **bug reports**: Include step-by-step reproduction instructions, your environment details, and any error messages\n"
+              printf -- "- For **feature requests**: Describe the use case, expected behavior, and why this feature would be valuable\n"
+              printf -- "- Add **screenshots** or **logs** when applicable\n\n"
+              printf "Once you have updated the issue with the missing information, feel free to remove this comment or reply to let us know you have made the updates.\n\n"
+              printf -- "---\n*This validation was performed automatically to ensure we have all the information needed to help you effectively.*\n"
+            } > comment.md
 
             # Post the comment
             gh issue comment ${{ github.event.issue.number }} --body-file comment.md
@@ -198,26 +180,19 @@ EOF
             echo "✅ Issue contains sufficient information"
 
             # Prepare a summary comment even when valid
-            # Build suggestions section conditionally
             SUGGESTIONS_SECTION=""
             if [ -n "$SUGGESTIONS" ]; then
-              SUGGESTIONS_SECTION="### 💡 Suggestions:
-$SUGGESTIONS
-
-"
+              SUGGESTIONS_SECTION=$(printf "### 💡 Suggestions:\n%s\n\n" "$SUGGESTIONS")
             fi
 
-            cat > comment.md << EOF
-$GREETING_SECTION
-## 🤖 Issue Validation
-
-**Issue Type Detected:** \`$ISSUE_TYPE\`
-
-**Assessment:** $ASSESSMENT
-
-$SUGGESTIONS_SECTION---
-*This validation was performed automatically to help triage issues.*
-EOF
+            {
+              printf "%b" "$GREETING_SECTION"
+              printf "## 🤖 Issue Validation\n\n"
+              printf "**Issue Type Detected:** \`%s\`\n\n" "$ISSUE_TYPE"
+              printf "**Assessment:** %s\n\n" "$ASSESSMENT"
+              printf "%b" "$SUGGESTIONS_SECTION"
+              printf -- "---\n*This validation was performed automatically to help triage issues.*\n"
+            } > comment.md
 
             # Post the summary comment
             gh issue comment ${{ github.event.issue.number }} --body-file comment.md
