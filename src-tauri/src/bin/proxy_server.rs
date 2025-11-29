@@ -1,9 +1,9 @@
 use clap::{Arg, Command};
-use donutbrowser::proxy_runner::{
+use donutbrowser_lib::proxy_runner::{
   start_proxy_process, stop_all_proxy_processes, stop_proxy_process,
 };
-use donutbrowser::proxy_server::run_proxy_server;
-use donutbrowser::proxy_storage::get_proxy_config;
+use donutbrowser_lib::proxy_server::run_proxy_server;
+use donutbrowser_lib::proxy_storage::get_proxy_config;
 use std::process;
 
 fn build_proxy_url(
@@ -174,7 +174,7 @@ async fn main() {
         }
       } else if let Some(upstream) = stop_matches.get_one::<String>("upstream") {
         // Find proxies with this upstream URL
-        let configs = donutbrowser::proxy_storage::list_proxy_configs();
+        let configs = donutbrowser_lib::proxy_storage::list_proxy_configs();
         let matching_configs: Vec<_> = configs
           .iter()
           .filter(|config| config.upstream_url == *upstream)
@@ -207,7 +207,7 @@ async fn main() {
         }
       }
     } else if proxy_matches.subcommand_matches("list").is_some() {
-      let configs = donutbrowser::proxy_storage::list_proxy_configs();
+      let configs = donutbrowser_lib::proxy_storage::list_proxy_configs();
       // Use println! here because this needs to go to stdout for parsing
       println!("{}", serde_json::to_string(&configs).unwrap());
       process::exit(0);
