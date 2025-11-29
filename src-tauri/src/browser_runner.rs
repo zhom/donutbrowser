@@ -1284,12 +1284,13 @@ impl BrowserRunner {
       log::warn!("Warning: Failed to stop proxy for PID {pid}: {e}");
     }
 
-    let profiles_dir = self.profile_manager.get_profiles_dir();
-    let profile_data_path = profile.get_profile_data_path(&profiles_dir);
-    let profile_path_str = profile_data_path.to_string_lossy().to_string();
-
     #[cfg(target_os = "macos")]
-    platform_browser::macos::kill_browser_process_impl(pid, Some(&profile_path_str)).await?;
+    {
+      let profiles_dir = self.profile_manager.get_profiles_dir();
+      let profile_data_path = profile.get_profile_data_path(&profiles_dir);
+      let profile_path_str = profile_data_path.to_string_lossy().to_string();
+      platform_browser::macos::kill_browser_process_impl(pid, Some(&profile_path_str)).await?;
+    }
 
     #[cfg(target_os = "windows")]
     platform_browser::windows::kill_browser_process_impl(pid).await?;

@@ -3,12 +3,12 @@ use crate::profile::BrowserProfile;
 use std::ffi::OsString;
 use std::path::Path;
 use std::process::Command;
-use sysinfo::{Pid, System};
 
 // Platform-specific modules
 #[cfg(target_os = "macos")]
 pub mod macos {
   use super::*;
+  use sysinfo::{Pid, System};
 
   pub fn is_tor_or_mullvad_browser(exe_name: &str, cmd: &[OsString], browser_type: &str) -> bool {
     match browser_type {
