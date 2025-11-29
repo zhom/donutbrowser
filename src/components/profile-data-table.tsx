@@ -5,6 +5,7 @@ import {
   flexRender,
   getCoreRowModel,
   getSortedRowModel,
+  type RowSelectionState,
   type SortingState,
   useReactTable,
 } from "@tanstack/react-table";
@@ -13,7 +14,13 @@ import { emit, listen } from "@tauri-apps/api/event";
 import type { Dispatch, SetStateAction } from "react";
 import * as React from "react";
 import { IoEllipsisHorizontal } from "react-icons/io5";
-import { LuCheck, LuChevronDown, LuChevronUp } from "react-icons/lu";
+import {
+  LuCheck,
+  LuChevronDown,
+  LuChevronUp,
+  LuTrash2,
+  LuUsers,
+} from "react-icons/lu";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -62,6 +69,11 @@ import {
 import { trimName } from "@/lib/name-utils";
 import { cn } from "@/lib/utils";
 import type { BrowserProfile, ProxyCheckResult, StoredProxy } from "@/types";
+import {
+  DataTableActionBar,
+  DataTableActionBarAction,
+  DataTableActionBarSelection,
+} from "./data-table-action-bar";
 import { LoadingButton } from "./loading-button";
 import MultipleSelector, { type Option } from "./multiple-selector";
 import { ProxyCheckButton } from "./proxy-check-button";
@@ -404,6 +416,8 @@ interface ProfilesDataTableProps {
   selectedGroupId: string | null;
   selectedProfiles: string[];
   onSelectedProfilesChange: Dispatch<SetStateAction<string[]>>;
+  onBulkDelete?: () => void;
+  onBulkGroupAssignment?: () => void;
 }
 
 export function ProfilesDataTable({
@@ -418,9 +432,62 @@ export function ProfilesDataTable({
   onAssignProfilesToGroup,
   selectedProfiles,
   onSelectedProfilesChange,
+  onBulkDelete,
+  onBulkGroupAssignment,
 }: ProfilesDataTableProps) {
   const { getTableSorting, updateSorting, isLoaded } = useTableSorting();
   const [sorting, setSorting] = React.useState<SortingState>([]);
+
+  // Sync external selectedProfiles with table's row selection state
+  const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
+  const prevSelectedProfilesRef = React.useRef<string[]>(selectedProfiles);
+
+  // Update row selection when external selectedProfiles changes
+  React.useEffect(() => {
+    // Only update if selectedProfiles actually changed
+    if (
+      prevSelectedProfilesRef.current.length !== selectedProfiles.length ||
+      !prevSelectedProfilesRef.current.every((id) =>
+        selectedProfiles.includes(id),
+      )
+    ) {
+      const newSelection: RowSelectionState = {};
+      for (const profileId of selectedProfiles) {
+        newSelection[profileId] = true;
+      }
+      setRowSelection(newSelection);
+      prevSelectedProfilesRef.current = selectedProfiles;
+    }
+  }, [selectedProfiles]);
+
+  // Update external selectedProfiles when table selection changes
+  const handleRowSelectionChange = React.useCallback(
+    (updater: React.SetStateAction<RowSelectionState>) => {
+      setRowSelection((prevSelection) => {
+        const newSelection =
+          typeof updater === "function" ? updater(prevSelection) : updater;
+
+        const selectedIds = Object.keys(newSelection).filter(
+          (id) => newSelection[id],
+        );
+
+        // Only update external state if selection actually changed
+        const prevIds = Object.keys(prevSelection).filter(
+          (id) => prevSelection[id],
+        );
+
+        if (
+          selectedIds.length !== prevIds.length ||
+          !selectedIds.every((id) => prevIds.includes(id))
+        ) {
+          onSelectedProfilesChange(selectedIds);
+        }
+
+        return newSelection;
+      });
+    },
+    [onSelectedProfilesChange],
+  );
   const [profileToRename, setProfileToRename] =
     React.useState<BrowserProfile | null>(null);
   const [newProfileName, setNewProfileName] = React.useState("");
@@ -1517,8 +1584,19 @@ export function ProfilesDataTable({
     columns,
     state: {
       sorting,
+      rowSelection,
     },
     onSortingChange: handleSortingChange,
+    onRowSelectionChange: handleRowSelectionChange,
+    enableRowSelection: (row) => {
+      const profile = row.original;
+      const isRunning =
+        browserState.isClient && runningProfiles.has(profile.id);
+      const isLaunching = launchingProfiles.has(profile.id);
+      const isStopping = stoppingProfiles.has(profile.id);
+      const isBrowserUpdating = isUpdating(profile.browser);
+      return !isRunning && !isLaunching && !isStopping && !isBrowserUpdating;
+    },
     getSortedRowModel: getSortedRowModel(),
     getCoreRowModel: getCoreRowModel(),
     getRowId: (row) => row.id,
@@ -1594,6 +1672,29 @@ export function ProfilesDataTable({
         confirmButtonText="Delete Profile"
         isLoading={isDeleting}
       />
+      <DataTableActionBar table={table}>
+        <DataTableActionBarSelection table={table} />
+        {onBulkGroupAssignment && (
+          <DataTableActionBarAction
+            tooltip="Assign to Group"
+            onClick={onBulkGroupAssignment}
+            size="icon"
+          >
+            <LuUsers />
+          </DataTableActionBarAction>
+        )}
+        {onBulkDelete && (
+          <DataTableActionBarAction
+            tooltip="Delete"
+            onClick={onBulkDelete}
+            size="icon"
+            variant="destructive"
+            className="border-destructive bg-destructive/50 hover:bg-destructive/70"
+          >
+            <LuTrash2 />
+          </DataTableActionBarAction>
+        )}
+      </DataTableActionBar>
     </>
   );
 }

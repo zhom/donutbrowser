@@ -1,7 +1,7 @@
 import { FaDownload } from "react-icons/fa";
 import { FiWifi } from "react-icons/fi";
 import { GoGear, GoKebabHorizontal, GoPlus } from "react-icons/go";
-import { LuSearch, LuTrash2, LuUsers, LuX } from "react-icons/lu";
+import { LuSearch, LuUsers, LuX } from "react-icons/lu";
 import { Logo } from "./icons/logo";
 import { Button } from "./ui/button";
 import { CardTitle } from "./ui/card";
@@ -12,13 +12,9 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { Input } from "./ui/input";
-import { RippleButton } from "./ui/ripple";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 type Props = {
-  selectedProfiles: string[];
-  onBulkGroupAssignment: () => void;
-  onBulkDelete: () => void;
   onSettingsDialogOpen: (open: boolean) => void;
   onProxyManagementDialogOpen: (open: boolean) => void;
   onGroupManagementDialogOpen: (open: boolean) => void;
@@ -29,9 +25,6 @@ type Props = {
 };
 
 const HomeHeader = ({
-  selectedProfiles,
-  onBulkGroupAssignment,
-  onBulkDelete,
   onSettingsDialogOpen,
   onProxyManagementDialogOpen,
   onGroupManagementDialogOpen,
@@ -58,36 +51,7 @@ const HomeHeader = ({
         >
           <Logo className="w-10 h-10 transition-transform duration-300 ease-out will-change-transform hover:scale-110" />
         </button>
-        {selectedProfiles.length > 0 ? (
-          <div className="flex gap-3 items-center">
-            <span className="text-sm font-medium">
-              {selectedProfiles.length} profile
-              {selectedProfiles.length !== 1 ? "s" : ""} selected
-            </span>
-            <div className="flex gap-2">
-              <RippleButton
-                variant="outline"
-                size="sm"
-                onClick={onBulkGroupAssignment}
-                className="flex gap-2 items-center"
-              >
-                <LuUsers className="w-4 h-4" />
-                Assign to Group
-              </RippleButton>
-              <RippleButton
-                variant="destructive"
-                size="sm"
-                onClick={onBulkDelete}
-                className="flex gap-2 items-center"
-              >
-                <LuTrash2 className="w-4 h-4" />
-                Delete
-              </RippleButton>
-            </div>
-          </div>
-        ) : (
-          <CardTitle>Donut</CardTitle>
-        )}
+        <CardTitle>Donut</CardTitle>
       </div>
       <div className="flex gap-2 items-center">
         <div className="relative">

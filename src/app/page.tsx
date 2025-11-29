@@ -698,9 +698,6 @@ export default function Home() {
       <main className="flex flex-col items-center w-full max-w-3xl">
         <div className="w-full">
           <HomeHeader
-            selectedProfiles={selectedProfiles}
-            onBulkDelete={handleBulkDelete}
-            onBulkGroupAssignment={handleBulkGroupAssignment}
             onCreateProfileDialogOpen={setCreateProfileDialogOpen}
             onGroupManagementDialogOpen={setGroupManagementDialogOpen}
             onImportProfileDialogOpen={setImportProfileDialogOpen}
@@ -731,6 +728,8 @@ export default function Home() {
             selectedGroupId={selectedGroupId}
             selectedProfiles={selectedProfiles}
             onSelectedProfilesChange={setSelectedProfiles}
+            onBulkDelete={handleBulkDelete}
+            onBulkGroupAssignment={handleBulkGroupAssignment}
           />
         </div>
       </main>
