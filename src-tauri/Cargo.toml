@@ -17,6 +17,10 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 doctest = false
 
 [[bin]]
+name = "donutbrowser"
+path = "src/main.rs"
+
+[[bin]]
 name = "donut-proxy"
 path = "src/bin/proxy_server.rs"
 
