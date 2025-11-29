@@ -180,12 +180,25 @@ jobs:
       - name: Build frontend
         run: pnpm build
 
+      - name: Verify frontend dist exists
+        shell: bash
+        run: |
+          if [ ! -d "dist" ]; then
+            echo "Error: dist directory not found after build"
+            ls -la
+            exit 1
+          fi
+          echo "Frontend dist directory verified at $(pwd)/dist"
+          echo "Checking from src-tauri perspective:"
+          ls -la src-tauri/../dist || echo "Warning: dist not accessible from src-tauri"
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@19b93bb55601e3e373a93cfb6eb4242e45f5af20 #v0.6.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
         with:
+          projectPath: ./src-tauri
           tagName: ${{ github.ref_name }}
           releaseName: "Donut Browser ${{ github.ref_name }}"
           releaseBody: "See the assets to download this version and install."

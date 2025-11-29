@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "pnpm copy-proxy-binary && pnpm dev",
     "devUrl": "http://localhost:3000",
-    "beforeBuildCommand": "pnpm copy-proxy-binary && pnpm build",
+    "beforeBuildCommand": "pnpm copy-proxy-binary && (test -d ../dist || pnpm build)",
     "frontendDist": "../dist"
   },
   "app": {

@@ -179,6 +179,18 @@ jobs:
       - name: Build frontend
         run: pnpm build
 
+      - name: Verify frontend dist exists
+        shell: bash
+        run: |
+          if [ ! -d "dist" ]; then
+            echo "Error: dist directory not found after build"
+            ls -la
+            exit 1
+          fi
+          echo "Frontend dist directory verified at $(pwd)/dist"
+          echo "Checking from src-tauri perspective:"
+          ls -la src-tauri/../dist || echo "Warning: dist not accessible from src-tauri"
+
       - name: Generate nightly timestamp
         id: timestamp
         shell: bash
@@ -196,6 +208,7 @@ jobs:
           GITHUB_REF_NAME: "nightly-${{ steps.timestamp.outputs.timestamp }}"
           GITHUB_SHA: ${{ github.sha }}
         with:
+          projectPath: ./src-tauri
           tagName: "nightly-${{ steps.timestamp.outputs.timestamp }}"
           releaseName: "Donut Browser Nightly (Build ${{ steps.timestamp.outputs.timestamp }})"
           releaseBody: "⚠️ **Nightly Release** - This is an automatically generated pre-release build from the latest main branch. Use with caution.\n\nCommit: ${{ github.sha }}\nBuild: ${{ steps.timestamp.outputs.timestamp }}"
