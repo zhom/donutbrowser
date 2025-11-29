@@ -174,12 +174,22 @@ jobs:
           fi
           # Verify binary was copied
           ls -la src-tauri/binaries/donut-proxy-${{ matrix.target }}*
+          # Ensure binary exists and is executable
+          if [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
+            test -f src-tauri/binaries/donut-proxy-${{ matrix.target }}.exe || exit 1
+          else
+            test -f src-tauri/binaries/donut-proxy-${{ matrix.target }} || exit 1
+            chmod +x src-tauri/binaries/donut-proxy-${{ matrix.target }}
+          fi
 
       # - name: Download Camoufox for testing
       #   run: npx camoufox-js fetch
       #   continue-on-error: true
 
       - name: Build frontend
+        env:
+          TARGET: ${{ matrix.target }}
+          PROFILE: release
         run: pnpm build
 
       - name: Build Tauri app
