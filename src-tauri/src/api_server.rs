@@ -4,7 +4,7 @@ use crate::profile::manager::ProfileManager;
 use crate::proxy_manager::PROXY_MANAGER;
 use crate::tag_manager::TAG_MANAGER;
 use axum::{
-  extract::{Path, Query, State},
+  extract::{Path, State},
   http::{HeaderMap, StatusCode},
   middleware::{self, Next},
   response::{Json, Response},
@@ -13,7 +13,6 @@ use axum::{
 };
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::Emitter;
 use tokio::net::TcpListener;
@@ -141,6 +140,17 @@ struct RunProfileResponse {
   headless: bool,
 }
 
+#[derive(Debug, Deserialize)]
+struct RunProfileRequest {
+  url: Option<String>,
+  headless: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenUrlRequest {
+  url: String,
+}
+
 pub struct ApiServer {
   port: Option<u16>,
   shutdown_tx: Option<mpsc::Sender<()>>,
@@ -205,6 +215,8 @@ impl ApiServer {
       .route("/profiles/{id}", put(update_profile))
       .route("/profiles/{id}", delete(delete_profile))
       .route("/profiles/{id}/run", post(run_profile))
+      .route("/profiles/{id}/open-url", post(open_url_in_profile))
+      .route("/profiles/{id}/kill", post(kill_profile))
       .route("/groups", get(get_groups).post(create_group))
       .route(
         "/groups/{id}",
@@ -785,13 +797,11 @@ async fn delete_proxy(
 // API Handler - Run Profile with Remote Debugging
 async fn run_profile(
   Path(id): Path<String>,
-  Query(params): Query<HashMap<String, String>>,
   State(state): State<ApiServerState>,
+  Json(request): Json<RunProfileRequest>,
 ) -> Result<Json<RunProfileResponse>, StatusCode> {
-  let headless = params
-    .get("headless")
-    .and_then(|v| v.parse::<bool>().ok())
-    .unwrap_or(false);
+  let headless = request.headless.unwrap_or(false);
+  let url = request.url;
 
   let profile_manager = ProfileManager::instance();
   let profiles = profile_manager
@@ -810,7 +820,7 @@ async fn run_profile(
   match crate::browser_runner::launch_browser_profile_with_debugging(
     state.app_handle.clone(),
     profile.clone(),
-    None,
+    url,
     Some(remote_debugging_port),
     headless,
   )
@@ -823,6 +833,46 @@ async fn run_profile(
     })),
     Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
   }
+}
+
+// API Handler - Open URL in existing browser
+async fn open_url_in_profile(
+  Path(id): Path<String>,
+  State(state): State<ApiServerState>,
+  Json(request): Json<OpenUrlRequest>,
+) -> Result<StatusCode, StatusCode> {
+  let browser_runner = crate::browser_runner::BrowserRunner::instance();
+
+  browser_runner
+    .open_url_with_profile(state.app_handle.clone(), id, request.url)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+  Ok(StatusCode::OK)
+}
+
+// API Handler - Kill browser process
+async fn kill_profile(
+  Path(id): Path<String>,
+  State(state): State<ApiServerState>,
+) -> Result<StatusCode, StatusCode> {
+  let profile_manager = ProfileManager::instance();
+  let profiles = profile_manager
+    .list_profiles()
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+  let profile = profiles
+    .iter()
+    .find(|p| p.id.to_string() == id)
+    .ok_or(StatusCode::NOT_FOUND)?;
+
+  let browser_runner = crate::browser_runner::BrowserRunner::instance();
+  browser_runner
+    .kill_browser_process(state.app_handle.clone(), profile)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+  Ok(StatusCode::NO_CONTENT)
 }
 
 // API Handler - Download Browser

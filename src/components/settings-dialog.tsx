@@ -911,9 +911,27 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                       </li>
                       <li>
                         <code className="font-mono">
-                          POST /profiles/{"{"}id{"}"}/run?headless=true|false
+                          POST /profiles/{"{"}id{"}"}/run
                         </code>{" "}
                         — launch with remote debugging
+                        <span className="ml-1 text-muted-foreground">
+                          (body: {"{"}url?, headless?{"}"})
+                        </span>
+                      </li>
+                      <li>
+                        <code className="font-mono">
+                          POST /profiles/{"{"}id{"}"}/open-url
+                        </code>{" "}
+                        — open URL in running profile
+                        <span className="ml-1 text-muted-foreground">
+                          (body: {"{"}url{"}"})
+                        </span>
+                      </li>
+                      <li>
+                        <code className="font-mono">
+                          POST /profiles/{"{"}id{"}"}/kill
+                        </code>{" "}
+                        — stop browser process
                       </li>
                     </ul>
                   </div>
