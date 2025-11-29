@@ -104,6 +104,9 @@ jobs:
             cp nodecar/nodecar-bin.exe src-tauri/binaries/nodecar-x86_64-pc-windows-msvc.exe
           fi
 
+      - name: Build frontend
+        run: pnpm build
+
       - name: Get host target
         id: host_target
         shell: bash
@@ -128,9 +131,6 @@ jobs:
             cp src-tauri/target/debug/donut-proxy src-tauri/binaries/donut-proxy-${HOST_TARGET}
             chmod +x src-tauri/binaries/donut-proxy-${HOST_TARGET}
           fi
-
-      - name: Build frontend
-        run: pnpm build
 
       - name: Run rustfmt check
         run: cargo fmt --all -- --check
