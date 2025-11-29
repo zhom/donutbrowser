@@ -1,4 +1,6 @@
 fn main() {
+  println!("cargo::rustc-check-cfg=cfg(mobile)");
+
   #[cfg(target_os = "macos")]
   {
     println!("cargo:rustc-link-lib=framework=CoreFoundation");
