@@ -104,8 +104,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Get the generated release notes
-          RELEASE_NOTES="${{ steps.generate-notes.outputs.response }}"
+          # Prefer reading from the response file to avoid output truncation
+          RESPONSE_FILE='${{ steps.generate-notes.outputs.response-file }}'
+          if [ -n "$RESPONSE_FILE" ] && [ -f "$RESPONSE_FILE" ]; then
+            RELEASE_NOTES=$(cat "$RESPONSE_FILE")
+          else
+            RELEASE_NOTES='${{ steps.generate-notes.outputs.response }}'
+          fi
 
           # Update the release with the generated notes
           gh api --method PATCH /repos/${{ github.repository }}/releases/${{ github.event.release.id }} \
