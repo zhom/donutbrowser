@@ -2,8 +2,6 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
-import { LuCopy } from "react-icons/lu";
-import { toast } from "sonner";
 import { LoadingButton } from "@/components/loading-button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -31,6 +29,7 @@ import { useProfileEvents } from "@/hooks/use-profile-events";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { getBrowserDisplayName, getBrowserIcon } from "@/lib/browser-utils";
 import type { BrowserProfile } from "@/types";
+import { CopyToClipboard } from "./ui/copy-to-clipboard";
 import { RippleButton } from "./ui/ripple";
 
 interface ProfileSelectorDialogProps {
@@ -122,18 +121,6 @@ export function ProfileSelectorDialog({
     onClose();
   }, [onClose]);
 
-  const handleCopyUrl = useCallback(async () => {
-    if (!url) return;
-
-    try {
-      await navigator.clipboard.writeText(url);
-      toast.success("URL copied to clipboard!");
-    } catch (error) {
-      console.error("Failed to copy URL:", error);
-      toast.error("Failed to copy URL to clipboard");
-    }
-  }, [url]);
-
   const selectedProfileData = profiles.find((p) => p.name === selectedProfile);
 
   // Check if the selected profile can be used for opening links
@@ -186,15 +173,10 @@ export function ProfileSelectorDialog({
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <Label className="text-sm font-medium">Opening URL:</Label>
-                <RippleButton
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void handleCopyUrl()}
-                  className="flex gap-2 items-center"
-                >
-                  <LuCopy className="w-3 h-3" />
-                  Copy
-                </RippleButton>
+                <CopyToClipboard
+                  text={url}
+                  successMessage="URL copied to clipboard!"
+                />
               </div>
               <div className="p-2 text-sm break-all rounded bg-muted">
                 {url}

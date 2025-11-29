@@ -46,6 +46,7 @@ import {
   THEMES,
 } from "@/lib/themes";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
+import { CopyToClipboard } from "./ui/copy-to-clipboard";
 import { RippleButton } from "./ui/ripple";
 
 interface AppSettings {
@@ -839,16 +840,10 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                     readOnly
                     className="flex-1 px-3 py-2 font-mono text-sm rounded-md border bg-muted"
                   />
-                  <RippleButton
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      navigator.clipboard.writeText(settings.api_token || "");
-                      showSuccessToast("API token copied to clipboard");
-                    }}
-                  >
-                    Copy
-                  </RippleButton>
+                  <CopyToClipboard
+                    text={settings.api_token || ""}
+                    successMessage="API token copied to clipboard"
+                  />
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Include this token in the Authorization header as "Bearer{" "}
