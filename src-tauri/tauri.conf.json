@@ -17,7 +17,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "dmg", "nsis", "deb", "rpm", "appimage"],
+    "targets": ["all"],
     "category": "Productivity",
     "externalBin": ["binaries/nodecar", "binaries/donut-proxy"],
     "icon": [
