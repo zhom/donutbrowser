@@ -7,7 +7,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::time::sleep;
 
-/// Setup function to ensure donut-proxy binary exists
+/// Setup function to ensure donut-proxy binary exists and cleanup stale proxies
 async fn setup_test() -> Result<std::path::PathBuf, Box<dyn std::error::Error + Send + Sync>> {
   let cargo_manifest_dir = std::env::var("CARGO_MANIFEST_DIR")?;
   let project_root = std::path::PathBuf::from(cargo_manifest_dir)
@@ -37,6 +37,9 @@ async fn setup_test() -> Result<std::path::PathBuf, Box<dyn std::error::Error + 
   if !proxy_binary.exists() {
     return Err("donut-proxy binary was not created successfully".into());
   }
+
+  // Clean up any stale proxies from previous test runs
+  let _ = TestUtils::execute_command(&proxy_binary, &["proxy", "stop"]).await;
 
   Ok(proxy_binary)
 }
@@ -160,7 +163,9 @@ async fn test_chained_local_proxies() -> Result<(), Box<dyn std::error::Error + 
   // Start first proxy (DIRECT - connects to internet)
   let output1 = TestUtils::execute_command(&binary_path, &["proxy", "start"]).await?;
   if !output1.status.success() {
-    return Err("Failed to start first proxy".into());
+    let stderr = String::from_utf8_lossy(&output1.stderr);
+    let stdout = String::from_utf8_lossy(&output1.stdout);
+    return Err(format!("Failed to start first proxy - stdout: {stdout}, stderr: {stderr}").into());
   }
 
   let config1: Value = serde_json::from_str(&String::from_utf8(output1.stdout)?)?;
@@ -194,7 +199,11 @@ async fn test_chained_local_proxies() -> Result<(), Box<dyn std::error::Error + 
   .await?;
 
   if !output2.status.success() {
-    return Err("Failed to start second proxy".into());
+    let stderr = String::from_utf8_lossy(&output2.stderr);
+    let stdout = String::from_utf8_lossy(&output2.stdout);
+    return Err(
+      format!("Failed to start second proxy - stdout: {stdout}, stderr: {stderr}").into(),
+    );
   }
 
   let config2: Value = serde_json::from_str(&String::from_utf8(output2.stdout)?)?;
@@ -342,11 +351,21 @@ async fn test_multiple_proxies_simultaneously(
 
   let mut proxy_ports = Vec::new();
 
-  // Start 3 proxies
+  // Start 3 proxies with a small delay between each to avoid race conditions
   for i in 0..3 {
     let output = TestUtils::execute_command(&binary_path, &["proxy", "start"]).await?;
     if !output.status.success() {
-      return Err(format!("Failed to start proxy {}", i + 1).into());
+      let stderr = String::from_utf8_lossy(&output.stderr);
+      let stdout = String::from_utf8_lossy(&output.stdout);
+      return Err(
+        format!(
+          "Failed to start proxy {} - stdout: {}, stderr: {}",
+          i + 1,
+          stdout,
+          stderr
+        )
+        .into(),
+      );
     }
 
     let config: Value = serde_json::from_str(&String::from_utf8(output.stdout)?)?;
@@ -356,6 +375,9 @@ async fn test_multiple_proxies_simultaneously(
     proxy_ports.push(local_port);
 
     println!("Proxy {} started on port {}", i + 1, local_port);
+
+    // Small delay between starting proxies to avoid resource contention
+    sleep(Duration::from_millis(100)).await;
   }
 
   // Wait for all proxies to be ready
@@ -389,7 +411,9 @@ async fn test_proxy_list() -> Result<(), Box<dyn std::error::Error + Send + Sync
   // Start a proxy
   let output = TestUtils::execute_command(&binary_path, &["proxy", "start"]).await?;
   if !output.status.success() {
-    return Err("Failed to start proxy".into());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    return Err(format!("Failed to start proxy - stdout: {stdout}, stderr: {stderr}").into());
   }
 
   let config: Value = serde_json::from_str(&String::from_utf8(output.stdout)?)?;
@@ -425,7 +449,9 @@ async fn test_proxy_stop() -> Result<(), Box<dyn std::error::Error + Send + Sync
   // Start a proxy
   let output = TestUtils::execute_command(&binary_path, &["proxy", "start"]).await?;
   if !output.status.success() {
-    return Err("Failed to start proxy".into());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    return Err(format!("Failed to start proxy - stdout: {stdout}, stderr: {stderr}").into());
   }
 
   let config: Value = serde_json::from_str(&String::from_utf8(output.stdout)?)?;
