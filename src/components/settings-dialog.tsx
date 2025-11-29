@@ -520,7 +520,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-md max-h-[80vh] my-8 flex flex-col">
-        <DialogHeader className="flex-shrink-0">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Settings</DialogTitle>
         </DialogHeader>
 
@@ -1073,7 +1073,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
           </div>
         </div>
 
-        <DialogFooter className="flex-shrink-0">
+        <DialogFooter className="shrink-0">
           <RippleButton variant="outline" onClick={handleClose}>
             Cancel
           </RippleButton>
