@@ -162,7 +162,7 @@ jobs:
       #   continue-on-error: true
 
       - name: Build frontend
-        run: pnpm build
+        run: pnpm exec next build
 
       - name: Verify frontend dist exists
         shell: bash
