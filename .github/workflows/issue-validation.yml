@@ -144,11 +144,14 @@ jobs:
           IS_FIRST_TIME="${{ steps.check-first-time.outputs.is_first_time }}"
           GREETING_SECTION=""
           if [ "$IS_FIRST_TIME" = "true" ]; then
-            GREETING_SECTION="## 👋 Welcome!
+            GREETING_SECTION=$(cat << 'GREETING_EOF'
+## 👋 Welcome!
 
 Thank you for your first issue ❤️ If it's a feature request, please make sure it's clear what you want, why you want it, and how important it is to you. If you posted a bug report, please make sure it includes as much detail as possible.
 
----"
+---
+GREETING_EOF
+            )
           fi
 
           if [ "$IS_VALID" = "false" ]; then
