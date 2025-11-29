@@ -1,3 +1,4 @@
+use crate::browser::ProxySettings;
 use crate::camoufox_manager::CamoufoxConfig;
 use crate::group_manager::GROUP_MANAGER;
 use crate::profile::manager::ProfileManager;
@@ -8,7 +9,7 @@ use axum::{
   http::{HeaderMap, StatusCode},
   middleware::{self, Next},
   response::{Json, Response},
-  routing::{delete, get, post, put},
+  routing::get,
   Router,
 };
 use lazy_static::lazy_static;
@@ -18,9 +19,11 @@ use tauri::Emitter;
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, Mutex};
 use tower_http::cors::CorsLayer;
+use utoipa::{OpenApi, ToSchema};
+use utoipa_axum::{router::OpenApiRouter, routes};
 
 // API Types
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 pub struct ApiProfile {
   pub id: String,
   pub name: String,
@@ -30,42 +33,45 @@ pub struct ApiProfile {
   pub process_id: Option<u32>,
   pub last_launch: Option<u64>,
   pub release_type: String,
+  #[schema(value_type = Object)]
   pub camoufox_config: Option<serde_json::Value>,
   pub group_id: Option<String>,
   pub tags: Vec<String>,
   pub is_running: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct ApiProfilesResponse {
   pub profiles: Vec<ApiProfile>,
   pub total: usize,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct ApiProfileResponse {
   pub profile: ApiProfile,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct CreateProfileRequest {
   pub name: String,
   pub browser: String,
   pub version: String,
   pub proxy_id: Option<String>,
   pub release_type: Option<String>,
+  #[schema(value_type = Object)]
   pub camoufox_config: Option<serde_json::Value>,
   pub group_id: Option<String>,
   pub tags: Option<Vec<String>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct UpdateProfileRequest {
   pub name: Option<String>,
   pub browser: Option<String>,
   pub version: Option<String>,
   pub proxy_id: Option<String>,
   pub release_type: Option<String>,
+  #[schema(value_type = Object)]
   pub camoufox_config: Option<serde_json::Value>,
   pub group_id: Option<String>,
   pub tags: Option<Vec<String>>,
@@ -76,56 +82,59 @@ struct ApiServerState {
   app_handle: tauri::AppHandle,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 struct ApiGroupResponse {
   id: String,
   name: String,
   profile_count: usize,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 struct CreateGroupRequest {
   name: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 struct UpdateGroupRequest {
   name: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 struct ApiProxyResponse {
   id: String,
   name: String,
-  proxy_settings: serde_json::Value,
+  #[schema(value_type = Object)]
+  proxy_settings: ProxySettings,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 struct CreateProxyRequest {
   name: String,
-  proxy_settings: serde_json::Value,
+  #[schema(value_type = Object)]
+  proxy_settings: ProxySettings,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 struct UpdateProxyRequest {
   name: Option<String>,
-  proxy_settings: Option<serde_json::Value>,
+  #[schema(value_type = Object)]
+  proxy_settings: Option<ProxySettings>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 struct DownloadBrowserRequest {
   browser: String,
   version: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 struct DownloadBrowserResponse {
   browser: String,
   version: String,
   status: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ToastPayload {
   pub message: String,
   pub variant: String,
@@ -133,22 +142,96 @@ pub struct ToastPayload {
   pub description: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 struct RunProfileResponse {
   profile_id: String,
   remote_debugging_port: u16,
   headless: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 struct RunProfileRequest {
   url: Option<String>,
   headless: Option<bool>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 struct OpenUrlRequest {
   url: String,
+}
+
+#[derive(OpenApi)]
+#[openapi(
+  paths(
+    get_profiles,
+    get_profile,
+    create_profile,
+    update_profile,
+    delete_profile,
+    run_profile,
+    open_url_in_profile,
+    kill_profile,
+    get_groups,
+    get_group,
+    create_group,
+    update_group,
+    delete_group,
+    get_tags,
+    get_proxies,
+    get_proxy,
+    create_proxy,
+    update_proxy,
+    delete_proxy,
+    download_browser_api,
+    get_browser_versions,
+    check_browser_downloaded,
+  ),
+  components(schemas(
+    ApiProfile,
+    ApiProfilesResponse,
+    ApiProfileResponse,
+    CreateProfileRequest,
+    UpdateProfileRequest,
+    ApiGroupResponse,
+    CreateGroupRequest,
+    UpdateGroupRequest,
+    ApiProxyResponse,
+    CreateProxyRequest,
+    UpdateProxyRequest,
+    DownloadBrowserRequest,
+    DownloadBrowserResponse,
+    RunProfileResponse,
+    RunProfileRequest,
+    OpenUrlRequest,
+    ProxySettings,
+  )),
+  tags(
+    (name = "profiles", description = "Profile management endpoints"),
+    (name = "groups", description = "Group management endpoints"),
+    (name = "tags", description = "Tag management endpoints"),
+    (name = "proxies", description = "Proxy management endpoints"),
+    (name = "browsers", description = "Browser management endpoints"),
+  ),
+  modifiers(&SecurityAddon),
+)]
+struct ApiDoc;
+
+struct SecurityAddon;
+
+impl utoipa::Modify for SecurityAddon {
+  fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+    if let Some(components) = openapi.components.as_mut() {
+      components.add_security_scheme(
+        "bearer_auth",
+        utoipa::openapi::security::SecurityScheme::Http(
+          utoipa::openapi::security::HttpBuilder::new()
+            .scheme(utoipa::openapi::security::HttpAuthScheme::Bearer)
+            .bearer_format("JWT")
+            .build(),
+        ),
+      );
+    }
+  }
 }
 
 pub struct ApiServer {
@@ -207,40 +290,44 @@ impl ApiServer {
       .map_err(|e| format!("Failed to get local address: {e}"))?
       .port();
 
-    // Create router with CORS, authentication, and versioning
-    let v1_routes = Router::new()
-      .route("/profiles", get(get_profiles))
-      .route("/profiles", post(create_profile))
-      .route("/profiles/{id}", get(get_profile))
-      .route("/profiles/{id}", put(update_profile))
-      .route("/profiles/{id}", delete(delete_profile))
-      .route("/profiles/{id}/run", post(run_profile))
-      .route("/profiles/{id}/open-url", post(open_url_in_profile))
-      .route("/profiles/{id}/kill", post(kill_profile))
-      .route("/groups", get(get_groups).post(create_group))
-      .route(
-        "/groups/{id}",
-        get(get_group).put(update_group).delete(delete_group),
-      )
-      .route("/tags", get(get_tags))
-      .route("/proxies", get(get_proxies).post(create_proxy))
-      .route(
-        "/proxies/{id}",
-        get(get_proxy).put(update_proxy).delete(delete_proxy),
-      )
-      .route("/browsers/download", post(download_browser_api))
-      .route("/browsers/{browser}/versions", get(get_browser_versions))
-      .route(
-        "/browsers/{browser}/versions/{version}/downloaded",
-        get(check_browser_downloaded),
-      )
-      .layer(middleware::from_fn_with_state(
-        state.clone(),
-        auth_middleware,
-      ));
+    // Create router with OpenAPI documentation
+    let (v1_routes, _) = OpenApiRouter::new()
+      .routes(routes!(
+        get_profiles,
+        create_profile,
+        get_profile,
+        update_profile,
+        delete_profile,
+        run_profile,
+        open_url_in_profile,
+        kill_profile,
+        get_groups,
+        create_group,
+        get_group,
+        update_group,
+        delete_group,
+        get_tags,
+        get_proxies,
+        create_proxy,
+        get_proxy,
+        update_proxy,
+        delete_proxy,
+        download_browser_api,
+        get_browser_versions,
+        check_browser_downloaded,
+      ))
+      .split_for_parts();
+
+    let api = ApiDoc::openapi();
+
+    let v1_routes = v1_routes.layer(middleware::from_fn_with_state(
+      state.clone(),
+      auth_middleware,
+    ));
 
     let app = Router::new()
       .nest("/v1", v1_routes)
+      .route("/openapi.json", get(move || async move { Json(api) }))
       .layer(CorsLayer::permissive())
       .with_state(state);
 
@@ -346,6 +433,19 @@ pub async fn get_api_server_status() -> Result<Option<u16>, String> {
 }
 
 // API Handlers - Profiles
+#[utoipa::path(
+  get,
+  path = "/v1/profiles",
+  responses(
+    (status = 200, description = "List of all profiles", body = ApiProfilesResponse),
+    (status = 401, description = "Unauthorized"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "profiles"
+)]
 async fn get_profiles() -> Result<Json<ApiProfilesResponse>, StatusCode> {
   let profile_manager = ProfileManager::instance();
   match profile_manager.list_profiles() {
@@ -380,6 +480,23 @@ async fn get_profiles() -> Result<Json<ApiProfilesResponse>, StatusCode> {
   }
 }
 
+#[utoipa::path(
+  get,
+  path = "/v1/profiles/{id}",
+  params(
+    ("id" = String, Path, description = "Profile ID")
+  ),
+  responses(
+    (status = 200, description = "Profile details", body = ApiProfileResponse),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Profile not found"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "profiles"
+)]
 async fn get_profile(
   Path(id): Path<String>,
   State(_state): State<ApiServerState>,
@@ -415,6 +532,21 @@ async fn get_profile(
   }
 }
 
+#[utoipa::path(
+  post,
+  path = "/v1/profiles",
+  request_body = CreateProfileRequest,
+  responses(
+    (status = 200, description = "Profile created successfully", body = ApiProfileResponse),
+    (status = 400, description = "Bad request"),
+    (status = 401, description = "Unauthorized"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "profiles"
+)]
 async fn create_profile(
   State(state): State<ApiServerState>,
   Json(request): Json<CreateProfileRequest>,
@@ -485,6 +617,25 @@ async fn create_profile(
   }
 }
 
+#[utoipa::path(
+  put,
+  path = "/v1/profiles/{id}",
+  params(
+    ("id" = String, Path, description = "Profile ID")
+  ),
+  request_body = UpdateProfileRequest,
+  responses(
+    (status = 200, description = "Profile updated successfully", body = ApiProfileResponse),
+    (status = 400, description = "Bad request"),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Profile not found"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "profiles"
+)]
 async fn update_profile(
   Path(id): Path<String>,
   State(state): State<ApiServerState>,
@@ -566,6 +717,23 @@ async fn update_profile(
   get_profile(Path(id), State(state)).await
 }
 
+#[utoipa::path(
+  delete,
+  path = "/v1/profiles/{id}",
+  params(
+    ("id" = String, Path, description = "Profile ID")
+  ),
+  responses(
+    (status = 204, description = "Profile deleted successfully"),
+    (status = 400, description = "Bad request"),
+    (status = 401, description = "Unauthorized"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "profiles"
+)]
 async fn delete_profile(
   Path(id): Path<String>,
   State(state): State<ApiServerState>,
@@ -578,6 +746,19 @@ async fn delete_profile(
 }
 
 // API Handlers - Groups
+#[utoipa::path(
+  get,
+  path = "/v1/groups",
+  responses(
+    (status = 200, description = "List of all groups", body = Vec<ApiGroupResponse>),
+    (status = 401, description = "Unauthorized"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "groups"
+)]
 async fn get_groups(
   State(_state): State<ApiServerState>,
 ) -> Result<Json<Vec<ApiGroupResponse>>, StatusCode> {
@@ -602,6 +783,23 @@ async fn get_groups(
   }
 }
 
+#[utoipa::path(
+  get,
+  path = "/v1/groups/{id}",
+  params(
+    ("id" = String, Path, description = "Group ID")
+  ),
+  responses(
+    (status = 200, description = "Group details", body = ApiGroupResponse),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Group not found"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "groups"
+)]
 async fn get_group(
   Path(id): Path<String>,
   State(_state): State<ApiServerState>,
@@ -625,6 +823,21 @@ async fn get_group(
   }
 }
 
+#[utoipa::path(
+  post,
+  path = "/v1/groups",
+  request_body = CreateGroupRequest,
+  responses(
+    (status = 200, description = "Group created successfully", body = ApiGroupResponse),
+    (status = 400, description = "Bad request"),
+    (status = 401, description = "Unauthorized"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "groups"
+)]
 async fn create_group(
   State(state): State<ApiServerState>,
   Json(request): Json<CreateGroupRequest>,
@@ -642,6 +855,25 @@ async fn create_group(
   }
 }
 
+#[utoipa::path(
+  put,
+  path = "/v1/groups/{id}",
+  params(
+    ("id" = String, Path, description = "Group ID")
+  ),
+  request_body = UpdateGroupRequest,
+  responses(
+    (status = 200, description = "Group updated successfully", body = ApiGroupResponse),
+    (status = 400, description = "Bad request"),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Group not found"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "groups"
+)]
 async fn update_group(
   Path(id): Path<String>,
   State(state): State<ApiServerState>,
@@ -660,6 +892,23 @@ async fn update_group(
   }
 }
 
+#[utoipa::path(
+  delete,
+  path = "/v1/groups/{id}",
+  params(
+    ("id" = String, Path, description = "Group ID")
+  ),
+  responses(
+    (status = 204, description = "Group deleted successfully"),
+    (status = 400, description = "Bad request"),
+    (status = 401, description = "Unauthorized"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "groups"
+)]
 async fn delete_group(
   Path(id): Path<String>,
   State(state): State<ApiServerState>,
@@ -674,6 +923,19 @@ async fn delete_group(
 }
 
 // API Handlers - Tags
+#[utoipa::path(
+  get,
+  path = "/v1/tags",
+  responses(
+    (status = 200, description = "List of all tags", body = Vec<String>),
+    (status = 401, description = "Unauthorized"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "tags"
+)]
 async fn get_tags(State(_state): State<ApiServerState>) -> Result<Json<Vec<String>>, StatusCode> {
   match TAG_MANAGER.lock() {
     Ok(manager) => match manager.get_all_tags() {
@@ -685,6 +947,19 @@ async fn get_tags(State(_state): State<ApiServerState>) -> Result<Json<Vec<Strin
 }
 
 // API Handlers - Proxies
+#[utoipa::path(
+  get,
+  path = "/v1/proxies",
+  responses(
+    (status = 200, description = "List of all proxies", body = Vec<ApiProxyResponse>),
+    (status = 401, description = "Unauthorized"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "proxies"
+)]
 async fn get_proxies(
   State(_state): State<ApiServerState>,
 ) -> Result<Json<Vec<ApiProxyResponse>>, StatusCode> {
@@ -695,12 +970,29 @@ async fn get_proxies(
       .map(|p| ApiProxyResponse {
         id: p.id,
         name: p.name,
-        proxy_settings: serde_json::to_value(p.proxy_settings).unwrap_or_default(),
+        proxy_settings: p.proxy_settings,
       })
       .collect(),
   ))
 }
 
+#[utoipa::path(
+  get,
+  path = "/v1/proxies/{id}",
+  params(
+    ("id" = String, Path, description = "Proxy ID")
+  ),
+  responses(
+    (status = 200, description = "Proxy details", body = ApiProxyResponse),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Proxy not found"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "proxies"
+)]
 async fn get_proxy(
   Path(id): Path<String>,
   State(_state): State<ApiServerState>,
@@ -710,45 +1002,65 @@ async fn get_proxy(
     Ok(Json(ApiProxyResponse {
       id: proxy.id,
       name: proxy.name,
-      proxy_settings: serde_json::to_value(proxy.proxy_settings).unwrap_or_default(),
+      proxy_settings: proxy.proxy_settings,
     }))
   } else {
     Err(StatusCode::NOT_FOUND)
   }
 }
 
+#[utoipa::path(
+  post,
+  path = "/v1/proxies",
+  request_body = CreateProxyRequest,
+  responses(
+    (status = 200, description = "Proxy created successfully", body = ApiProxyResponse),
+    (status = 400, description = "Bad request"),
+    (status = 401, description = "Unauthorized"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "proxies"
+)]
 async fn create_proxy(
   State(state): State<ApiServerState>,
   Json(request): Json<CreateProxyRequest>,
 ) -> Result<Json<ApiProxyResponse>, StatusCode> {
-  // Convert JSON value to ProxySettings
-  match serde_json::from_value(request.proxy_settings.clone()) {
-    Ok(proxy_settings) => {
-      match PROXY_MANAGER.create_stored_proxy(
-        &state.app_handle,
-        request.name.clone(),
-        proxy_settings,
-      ) {
-        Ok(_) => {
-          // Find the created proxy to return it
-          let proxies = PROXY_MANAGER.get_stored_proxies();
-          if let Some(proxy) = proxies.into_iter().find(|p| p.name == request.name) {
-            Ok(Json(ApiProxyResponse {
-              id: proxy.id,
-              name: proxy.name,
-              proxy_settings: request.proxy_settings,
-            }))
-          } else {
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
-          }
-        }
-        Err(_) => Err(StatusCode::BAD_REQUEST),
-      }
-    }
+  match PROXY_MANAGER.create_stored_proxy(
+    &state.app_handle,
+    request.name.clone(),
+    request.proxy_settings,
+  ) {
+    Ok(proxy) => Ok(Json(ApiProxyResponse {
+      id: proxy.id,
+      name: proxy.name,
+      proxy_settings: proxy.proxy_settings,
+    })),
     Err(_) => Err(StatusCode::BAD_REQUEST),
   }
 }
 
+#[utoipa::path(
+  put,
+  path = "/v1/proxies/{id}",
+  params(
+    ("id" = String, Path, description = "Proxy ID")
+  ),
+  request_body = UpdateProxyRequest,
+  responses(
+    (status = 200, description = "Proxy updated successfully", body = ApiProxyResponse),
+    (status = 400, description = "Bad request"),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Proxy not found"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "proxies"
+)]
 async fn update_proxy(
   Path(id): Path<String>,
   State(state): State<ApiServerState>,
@@ -757,14 +1069,9 @@ async fn update_proxy(
   let proxies = PROXY_MANAGER.get_stored_proxies();
   if let Some(proxy) = proxies.into_iter().find(|p| p.id == id) {
     let new_name = request.name.unwrap_or(proxy.name.clone());
-    let new_proxy_settings = if let Some(settings_json) = request.proxy_settings {
-      match serde_json::from_value(settings_json) {
-        Ok(settings) => settings,
-        Err(_) => return Err(StatusCode::BAD_REQUEST),
-      }
-    } else {
-      proxy.proxy_settings.clone()
-    };
+    let new_proxy_settings = request
+      .proxy_settings
+      .unwrap_or(proxy.proxy_settings.clone());
 
     match PROXY_MANAGER.update_stored_proxy(
       &state.app_handle,
@@ -775,7 +1082,7 @@ async fn update_proxy(
       Ok(_) => Ok(Json(ApiProxyResponse {
         id,
         name: new_name,
-        proxy_settings: serde_json::to_value(new_proxy_settings).unwrap_or_default(),
+        proxy_settings: new_proxy_settings,
       })),
       Err(_) => Err(StatusCode::BAD_REQUEST),
     }
@@ -784,6 +1091,23 @@ async fn update_proxy(
   }
 }
 
+#[utoipa::path(
+  delete,
+  path = "/v1/proxies/{id}",
+  params(
+    ("id" = String, Path, description = "Proxy ID")
+  ),
+  responses(
+    (status = 204, description = "Proxy deleted successfully"),
+    (status = 400, description = "Bad request"),
+    (status = 401, description = "Unauthorized"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "proxies"
+)]
 async fn delete_proxy(
   Path(id): Path<String>,
   State(state): State<ApiServerState>,
@@ -795,6 +1119,24 @@ async fn delete_proxy(
 }
 
 // API Handler - Run Profile with Remote Debugging
+#[utoipa::path(
+  post,
+  path = "/v1/profiles/{id}/run",
+  params(
+    ("id" = String, Path, description = "Profile ID")
+  ),
+  request_body = RunProfileRequest,
+  responses(
+    (status = 200, description = "Profile launched successfully", body = RunProfileResponse),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Profile not found"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "profiles"
+)]
 async fn run_profile(
   Path(id): Path<String>,
   State(state): State<ApiServerState>,
@@ -836,6 +1178,24 @@ async fn run_profile(
 }
 
 // API Handler - Open URL in existing browser
+#[utoipa::path(
+  post,
+  path = "/v1/profiles/{id}/open-url",
+  params(
+    ("id" = String, Path, description = "Profile ID")
+  ),
+  request_body = OpenUrlRequest,
+  responses(
+    (status = 200, description = "URL opened successfully"),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Profile not found"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "profiles"
+)]
 async fn open_url_in_profile(
   Path(id): Path<String>,
   State(state): State<ApiServerState>,
@@ -852,6 +1212,23 @@ async fn open_url_in_profile(
 }
 
 // API Handler - Kill browser process
+#[utoipa::path(
+  post,
+  path = "/v1/profiles/{id}/kill",
+  params(
+    ("id" = String, Path, description = "Profile ID")
+  ),
+  responses(
+    (status = 204, description = "Browser process killed successfully"),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Profile not found"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "profiles"
+)]
 async fn kill_profile(
   Path(id): Path<String>,
   State(state): State<ApiServerState>,
@@ -876,6 +1253,20 @@ async fn kill_profile(
 }
 
 // API Handler - Download Browser
+#[utoipa::path(
+  post,
+  path = "/v1/browsers/download",
+  request_body = DownloadBrowserRequest,
+  responses(
+    (status = 200, description = "Browser download initiated", body = DownloadBrowserResponse),
+    (status = 401, description = "Unauthorized"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "browsers"
+)]
 async fn download_browser_api(
   State(state): State<ApiServerState>,
   Json(request): Json<DownloadBrowserRequest>,
@@ -897,6 +1288,22 @@ async fn download_browser_api(
 }
 
 // API Handler - Get Browser Versions
+#[utoipa::path(
+  get,
+  path = "/v1/browsers/{browser}/versions",
+  params(
+    ("browser" = String, Path, description = "Browser name")
+  ),
+  responses(
+    (status = 200, description = "List of available browser versions", body = Vec<String>),
+    (status = 401, description = "Unauthorized"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "browsers"
+)]
 async fn get_browser_versions(
   Path(browser): Path<String>,
   State(_state): State<ApiServerState>,
@@ -913,6 +1320,23 @@ async fn get_browser_versions(
 }
 
 // API Handler - Check if Browser is Downloaded
+#[utoipa::path(
+  get,
+  path = "/v1/browsers/{browser}/versions/{version}/downloaded",
+  params(
+    ("browser" = String, Path, description = "Browser name"),
+    ("version" = String, Path, description = "Browser version")
+  ),
+  responses(
+    (status = 200, description = "Browser download status", body = bool),
+    (status = 401, description = "Unauthorized"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "browsers"
+)]
 async fn check_browser_downloaded(
   Path((browser, version)): Path<(String, String)>,
   State(_state): State<ApiServerState>,
