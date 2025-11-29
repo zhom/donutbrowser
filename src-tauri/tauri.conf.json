@@ -17,7 +17,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["all"],
+    "targets": "all",
     "category": "Productivity",
     "externalBin": ["binaries/nodecar", "binaries/donut-proxy"],
     "icon": [
