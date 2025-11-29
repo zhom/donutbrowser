@@ -23,6 +23,7 @@ pub struct CamoufoxConfig {
   pub executable_path: Option<String>,
   pub fingerprint: Option<String>, // JSON string of the complete fingerprint config
   pub randomize_fingerprint_on_launch: Option<bool>, // Generate new fingerprint on every launch
+  pub os: Option<String>, // Operating system for fingerprint generation: "windows", "macos", or "linux"
 }
 
 impl Default for CamoufoxConfig {
@@ -40,6 +41,7 @@ impl Default for CamoufoxConfig {
       executable_path: None,
       fingerprint: None,
       randomize_fingerprint_on_launch: None,
+      os: None,
     }
   }
 }
@@ -169,6 +171,11 @@ impl CamoufoxManager {
       if block_webgl {
         config_args.push("--block-webgl".to_string());
       }
+    }
+
+    // Add OS option for fingerprint generation
+    if let Some(os) = &config.os {
+      config_args.extend(["--os".to_string(), os.clone()]);
     }
 
     // Execute config generation command
@@ -496,6 +503,7 @@ mod tests {
     assert_eq!(default_config.proxy, None);
     assert_eq!(default_config.fingerprint, None);
     assert_eq!(default_config.randomize_fingerprint_on_launch, None);
+    assert_eq!(default_config.os, None);
   }
 }
 

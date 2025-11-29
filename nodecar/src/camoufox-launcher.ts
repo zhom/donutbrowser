@@ -352,6 +352,7 @@ interface GenerateConfigOptions {
   blockWebgl?: boolean;
   executablePath?: string;
   fingerprint?: string;
+  os?: "windows" | "macos" | "linux";
 }
 
 /**
@@ -432,6 +433,11 @@ export async function generateCamoufoxConfig(
     }
 
     launchOpts.allowAddonNewTab = true;
+
+    // Add OS option for fingerprint generation
+    if (options.os) {
+      launchOpts.os = options.os;
+    }
 
     // Generate the configuration using launchOptions
     const generatedOptions = await launchOptions(launchOpts);

@@ -15,7 +15,11 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import type { CamoufoxConfig, CamoufoxFingerprintConfig } from "@/types";
+import type {
+  CamoufoxConfig,
+  CamoufoxFingerprintConfig,
+  CamoufoxOS,
+} from "@/types";
 
 interface SharedCamoufoxConfigFormProps {
   config: CamoufoxConfig;
@@ -29,6 +33,22 @@ interface SharedCamoufoxConfigFormProps {
 // Determine if fingerprint editing should be disabled
 const isFingerprintEditingDisabled = (config: CamoufoxConfig): boolean => {
   return config.randomize_fingerprint_on_launch === true;
+};
+
+// Detect the current operating system
+const getCurrentOS = (): CamoufoxOS => {
+  if (typeof navigator === "undefined") return "linux";
+  const platform = navigator.platform.toLowerCase();
+  if (platform.includes("win")) return "windows";
+  if (platform.includes("mac")) return "macos";
+  return "linux";
+};
+
+// OS display labels
+const osLabels: Record<CamoufoxOS, string> = {
+  windows: "Windows",
+  macos: "macOS",
+  linux: "Linux",
 };
 
 // Component for editing nested objects like webGl:parameters
@@ -102,6 +122,11 @@ export function SharedCamoufoxConfigForm({
   );
   const [fingerprintConfig, setFingerprintConfig] =
     useState<CamoufoxFingerprintConfig>({});
+  const [currentOS] = useState<CamoufoxOS>(getCurrentOS);
+
+  // Get selected OS (defaults to current OS)
+  const selectedOS = config.os || currentOS;
+  const isOSDifferent = selectedOS !== currentOS;
 
   // Set screen resolution to user's screen size when creating a new profile
   useEffect(() => {
@@ -188,6 +213,35 @@ export function SharedCamoufoxConfigForm({
 
   const renderAdvancedForm = () => (
     <div className="space-y-6">
+      {/* Operating System Selection */}
+      <div className="space-y-3">
+        <Label>Operating System Fingerprint</Label>
+        <Select
+          value={selectedOS}
+          onValueChange={(value: CamoufoxOS) => onConfigChange("os", value)}
+          disabled={readOnly}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Select operating system" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="windows">{osLabels.windows}</SelectItem>
+            <SelectItem value="macos">{osLabels.macos}</SelectItem>
+            <SelectItem value="linux">{osLabels.linux}</SelectItem>
+          </SelectContent>
+        </Select>
+        {isOSDifferent && (
+          <Alert className="border-yellow-500/50 bg-yellow-500/10">
+            <AlertDescription className="text-yellow-600 dark:text-yellow-400">
+              ⚠️ Warning: Selecting an OS different from your current system (
+              {osLabels[currentOS]}) increases the risk of detection. Websites
+              can detect mismatches between your fingerprint and actual system
+              behavior.
+            </AlertDescription>
+          </Alert>
+        )}
+      </div>
+
       {/* Randomize Fingerprint Option */}
       <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
         <div className="flex items-center space-x-2">
@@ -906,8 +960,40 @@ export function SharedCamoufoxConfigForm({
           </TabsList>
 
           <TabsContent value="automatic" className="space-y-6">
+            {/* Operating System Selection */}
+            <div className="mt-4 space-y-3">
+              <Label>Operating System Fingerprint</Label>
+              <Select
+                value={selectedOS}
+                onValueChange={(value: CamoufoxOS) =>
+                  onConfigChange("os", value)
+                }
+                disabled={readOnly}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select operating system" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="windows">{osLabels.windows}</SelectItem>
+                  <SelectItem value="macos">{osLabels.macos}</SelectItem>
+                  <SelectItem value="linux">{osLabels.linux}</SelectItem>
+                </SelectContent>
+              </Select>
+              {isOSDifferent && (
+                <Alert className="border-yellow-500/50 bg-yellow-500/10">
+                  <AlertDescription className="text-yellow-600 dark:text-yellow-400">
+                    ⚠️ Warning: Selecting an OS different from your current
+                    system ({osLabels[currentOS]}) increases the risk of
+                    detection. Websites with advanced protections can detect
+                    mismatches between your fingerprint and actual system
+                    behavior.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </div>
+
             {/* Randomize Fingerprint Option */}
-            <div className="mt-4 space-y-3 p-4 border rounded-lg bg-muted/30">
+            <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
               <div className="flex items-center space-x-2">
                 <Checkbox
                   id="randomize-fingerprint-auto"

@@ -82,6 +82,8 @@ export interface AppUpdateProgress {
   message: string;
 }
 
+export type CamoufoxOS = "windows" | "macos" | "linux";
+
 export interface CamoufoxConfig {
   proxy?: string;
   screen_max_width?: number;
@@ -95,6 +97,7 @@ export interface CamoufoxConfig {
   executable_path?: string;
   fingerprint?: string; // JSON string of the complete fingerprint config
   randomize_fingerprint_on_launch?: boolean; // Generate new fingerprint on every launch
+  os?: CamoufoxOS; // Operating system for fingerprint generation
 }
 
 // Extended interface for the advanced fingerprint configuration

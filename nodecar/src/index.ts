@@ -34,6 +34,10 @@ program
   .option("--fingerprint <json>", "fingerprint JSON string")
   .option("--headless", "run in headless mode")
   .option("--custom-config <json>", "custom config JSON string")
+  .option(
+    "--os <os>",
+    "operating system for fingerprint: windows, macos, linux",
+  )
 
   .description("manage Camoufox browser instances")
   .action(
@@ -283,6 +287,10 @@ program
             fingerprint:
               typeof options.fingerprint === "string"
                 ? options.fingerprint
+                : undefined,
+            os:
+              typeof options.os === "string"
+                ? (options.os as "windows" | "macos" | "linux")
                 : undefined,
           });
           console.log(config);

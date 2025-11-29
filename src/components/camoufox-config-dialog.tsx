@@ -10,7 +10,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { BrowserProfile, CamoufoxConfig } from "@/types";
+import type { BrowserProfile, CamoufoxConfig, CamoufoxOS } from "@/types";
+
+const getCurrentOS = (): CamoufoxOS => {
+  if (typeof navigator === "undefined") return "linux";
+  const platform = navigator.platform.toLowerCase();
+  if (platform.includes("win")) return "windows";
+  if (platform.includes("mac")) return "macos";
+  return "linux";
+};
+
 import { LoadingButton } from "./loading-button";
 import { RippleButton } from "./ui/ripple";
 
@@ -29,9 +38,10 @@ export function CamoufoxConfigDialog({
   onSave,
   isRunning = false,
 }: CamoufoxConfigDialogProps) {
-  const [config, setConfig] = useState<CamoufoxConfig>({
+  const [config, setConfig] = useState<CamoufoxConfig>(() => ({
     geoip: true,
-  });
+    os: getCurrentOS(),
+  }));
   const [isSaving, setIsSaving] = useState(false);
 
   // Initialize config when profile changes
@@ -40,6 +50,7 @@ export function CamoufoxConfigDialog({
       setConfig(
         profile.camoufox_config || {
           geoip: true,
+          os: getCurrentOS(),
         },
       );
     }
@@ -88,6 +99,7 @@ export function CamoufoxConfigDialog({
       setConfig(
         profile.camoufox_config || {
           geoip: true,
+          os: getCurrentOS(),
         },
       );
     }

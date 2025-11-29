@@ -29,7 +29,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useBrowserDownload } from "@/hooks/use-browser-download";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { getBrowserIcon } from "@/lib/browser-utils";
-import type { BrowserReleaseTypes, CamoufoxConfig } from "@/types";
+import type { BrowserReleaseTypes, CamoufoxConfig, CamoufoxOS } from "@/types";
+
+const getCurrentOS = (): CamoufoxOS => {
+  if (typeof navigator === "undefined") return "linux";
+  const platform = navigator.platform.toLowerCase();
+  if (platform.includes("win")) return "windows";
+  if (platform.includes("mac")) return "macos";
+  return "linux";
+};
+
 import { RippleButton } from "./ui/ripple";
 
 type BrowserTypeString =
@@ -111,9 +120,10 @@ export function CreateProfileDialog({
   const [selectedProxyId, setSelectedProxyId] = useState<string>();
 
   // Camoufox anti-detect states
-  const [camoufoxConfig, setCamoufoxConfig] = useState<CamoufoxConfig>({
+  const [camoufoxConfig, setCamoufoxConfig] = useState<CamoufoxConfig>(() => ({
     geoip: true, // Default to automatic geoip
-  });
+    os: getCurrentOS(), // Default to current OS
+  }));
 
   // Handle browser selection from the initial screen
   const handleBrowserSelect = (browser: BrowserTypeString) => {
@@ -379,6 +389,7 @@ export function CreateProfileDialog({
     setReleaseTypes({});
     setCamoufoxConfig({
       geoip: true, // Reset to automatic geoip
+      os: getCurrentOS(), // Reset to current OS
     });
     onClose();
   };

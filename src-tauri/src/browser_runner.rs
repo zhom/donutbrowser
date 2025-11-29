@@ -214,6 +214,10 @@ impl BrowserRunner {
         updated_camoufox_config.fingerprint = Some(new_fingerprint);
         // Preserve the randomize flag so it persists across launches
         updated_camoufox_config.randomize_fingerprint_on_launch = Some(true);
+        // Preserve the OS setting so it's used for future fingerprint generation
+        if camoufox_config.os.is_some() {
+          updated_camoufox_config.os = camoufox_config.os.clone();
+        }
         updated_profile.camoufox_config = Some(updated_camoufox_config.clone());
 
         log::info!(
