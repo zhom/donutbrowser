@@ -1,0 +1,4 @@
+[build]
+# Omit jobs setting to use all cores
+
+incremental = true

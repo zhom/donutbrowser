@@ -37,6 +37,7 @@
     "datas",
     "DBAPI",
     "dconf",
+    "debuginfo",
     "devedition",
     "distro",
     "doctest",

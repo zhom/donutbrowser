@@ -105,6 +105,25 @@ futures-util = "0.3"
 name = "donut_proxy_integration"
 path = "tests/donut_proxy_integration.rs"
 
+[profile.dev]
+codegen-units = 256
+incremental = true
+opt-level = 0
+# Split debuginfo on macOS for faster linking (ignored on other platforms)
+split-debuginfo = "unpacked"
+
+[profile.release]
+codegen-units = 1
+opt-level = 3
+lto = "thin"
+# Split debuginfo on macOS for faster linking (ignored on other platforms)
+split-debuginfo = "unpacked"
+
+[profile.test]
+# Optimize test builds for faster compilation
+codegen-units = 256
+incremental = true
+
 [features]
 # by default Tauri runs in production mode
 # when `tauri dev` runs it is executed with `cargo run --no-default-features` if `devPath` points to the filesystem
