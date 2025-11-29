@@ -57,7 +57,10 @@
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
-      "timestampUrl": ""
+      "timestampUrl": "",
+      "resizable": false,
+      "fullscreen": false,
+      "title": "Donut"
     }
   },
   "plugins": {
