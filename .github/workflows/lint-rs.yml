@@ -115,8 +115,6 @@ jobs:
       - name: Build donut-proxy sidecar
         shell: bash
         working-directory: ./src-tauri
-        env:
-          TARGET: ${{ steps.host_target.outputs.target }}
         run: cargo build --bin donut-proxy
 
       - name: Copy donut-proxy binary to Tauri binaries
@@ -139,14 +137,10 @@ jobs:
         working-directory: src-tauri
 
       - name: Run clippy check and deny warnings
-        env:
-          TARGET: ${{ steps.host_target.outputs.target }}
         run: cargo clippy --all-targets --all-features -- -D warnings -D clippy::all
         working-directory: src-tauri
 
       - name: Run Rust tests
-        env:
-          TARGET: ${{ steps.host_target.outputs.target }}
         run: cargo test
         working-directory: src-tauri
 
