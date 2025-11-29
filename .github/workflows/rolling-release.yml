@@ -156,22 +156,6 @@ jobs:
             cp nodecar/nodecar-bin src-tauri/binaries/nodecar-${{ matrix.target }}
           fi
 
-      - name: Build donut-proxy sidecar
-        shell: bash
-        working-directory: ./src-tauri
-        run: cargo build --bin donut-proxy --target ${{ matrix.target }} --release
-
-      - name: Copy donut-proxy binary to Tauri binaries
-        shell: bash
-        run: |
-          mkdir -p src-tauri/binaries
-          if [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
-            cp src-tauri/target/${{ matrix.target }}/release/donut-proxy.exe src-tauri/binaries/donut-proxy-${{ matrix.target }}.exe
-          else
-            cp src-tauri/target/${{ matrix.target }}/release/donut-proxy src-tauri/binaries/donut-proxy-${{ matrix.target }}
-            chmod +x src-tauri/binaries/donut-proxy-${{ matrix.target }}
-          fi
-
       # - name: Download Camoufox for testing
       #   run: npx camoufox-js fetch
       #   continue-on-error: true
@@ -190,6 +174,22 @@ jobs:
           echo "Frontend dist directory verified at $(pwd)/dist"
           echo "Checking from src-tauri perspective:"
           ls -la src-tauri/../dist || echo "Warning: dist not accessible from src-tauri"
+
+      - name: Build donut-proxy sidecar
+        shell: bash
+        working-directory: ./src-tauri
+        run: cargo build --bin donut-proxy --target ${{ matrix.target }} --release
+
+      - name: Copy donut-proxy binary to Tauri binaries
+        shell: bash
+        run: |
+          mkdir -p src-tauri/binaries
+          if [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
+            cp src-tauri/target/${{ matrix.target }}/release/donut-proxy.exe src-tauri/binaries/donut-proxy-${{ matrix.target }}.exe
+          else
+            cp src-tauri/target/${{ matrix.target }}/release/donut-proxy src-tauri/binaries/donut-proxy-${{ matrix.target }}
+            chmod +x src-tauri/binaries/donut-proxy-${{ matrix.target }}
+          fi
 
       - name: Generate nightly timestamp
         id: timestamp
