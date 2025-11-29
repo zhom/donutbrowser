@@ -53,6 +53,11 @@
           "usr/share/applications/donutbrowser.desktop": "donutbrowser.desktop"
         }
       }
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
     }
   },
   "plugins": {
