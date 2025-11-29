@@ -22,6 +22,7 @@ pub struct CamoufoxConfig {
   pub block_webgl: Option<bool>,
   pub executable_path: Option<String>,
   pub fingerprint: Option<String>, // JSON string of the complete fingerprint config
+  pub randomize_fingerprint_on_launch: Option<bool>, // Generate new fingerprint on every launch
 }
 
 impl Default for CamoufoxConfig {
@@ -38,6 +39,7 @@ impl Default for CamoufoxConfig {
       block_webgl: None,
       executable_path: None,
       fingerprint: None,
+      randomize_fingerprint_on_launch: None,
     }
   }
 }
@@ -493,6 +495,7 @@ mod tests {
     assert_eq!(default_config.geoip, Some(serde_json::Value::Bool(true)));
     assert_eq!(default_config.proxy, None);
     assert_eq!(default_config.fingerprint, None);
+    assert_eq!(default_config.randomize_fingerprint_on_launch, None);
   }
 }
 

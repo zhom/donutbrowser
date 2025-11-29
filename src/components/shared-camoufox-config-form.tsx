@@ -25,6 +25,11 @@ interface SharedCamoufoxConfigFormProps {
   forceAdvanced?: boolean; // Force advanced mode (for editing)
 }
 
+// Determine if fingerprint editing should be disabled
+const isFingerprintEditingDisabled = (config: CamoufoxConfig): boolean => {
+  return config.randomize_fingerprint_on_launch === true;
+};
+
 // Component for editing nested objects like webGl:parameters
 interface ObjectEditorProps {
   value: Record<string, unknown> | undefined;
@@ -169,648 +174,684 @@ export function SharedCamoufoxConfigForm({
     }
   };
 
+  const isEditingDisabled = isFingerprintEditingDisabled(config);
+
   const renderAdvancedForm = () => (
     <div className="space-y-6">
-      <Alert>
-        <AlertDescription>
-          ⚠️ Warning: Only edit these parameters if you know what you're doing.
-          Incorrect values may break websites, make them detect you, and lead to
-          hard-to-debug bugs.{" "}
-        </AlertDescription>
-      </Alert>
-
-      {/* Blocking Options */}
-      <div className="space-y-3">
-        <Label>Blocking Options</Label>
-        <div className="space-y-2">
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="block-images"
-              checked={config.block_images || false}
-              onCheckedChange={(checked) =>
-                onConfigChange("block_images", checked)
-              }
-            />
-            <Label htmlFor="block-images">Block Images</Label>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="block-webrtc"
-              checked={config.block_webrtc || false}
-              onCheckedChange={(checked) =>
-                onConfigChange("block_webrtc", checked)
-              }
-            />
-            <Label htmlFor="block-webrtc">Block WebRTC</Label>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="block-webgl"
-              checked={config.block_webgl || false}
-              onCheckedChange={(checked) =>
-                onConfigChange("block_webgl", checked)
-              }
-            />
-            <Label htmlFor="block-webgl">Block WebGL</Label>
-          </div>
+      {/* Randomize Fingerprint Option */}
+      <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id="randomize-fingerprint"
+            checked={config.randomize_fingerprint_on_launch || false}
+            onCheckedChange={(checked) =>
+              onConfigChange("randomize_fingerprint_on_launch", checked)
+            }
+          />
+          <Label htmlFor="randomize-fingerprint" className="font-medium">
+            Generate random fingerprint on every launch
+          </Label>
         </div>
+        <p className="text-sm text-muted-foreground ml-6">
+          When enabled, a new fingerprint will be generated each time the
+          browser is launched.
+        </p>
       </div>
 
-      {/* Navigator Properties */}
-      <div className="space-y-3">
-        <Label>Navigator Properties</Label>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="user-agent">User Agent</Label>
-            <Input
-              id="user-agent"
-              value={fingerprintConfig["navigator.userAgent"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "navigator.userAgent",
-                  e.target.value || undefined,
-                )
-              }
-              placeholder="Mozilla/5.0..."
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="platform">Platform</Label>
-            <Input
-              id="platform"
-              value={fingerprintConfig["navigator.platform"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "navigator.platform",
-                  e.target.value || undefined,
-                )
-              }
-              placeholder="e.g., MacIntel, Win32"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="app-version">App Version</Label>
-            <Input
-              id="app-version"
-              value={fingerprintConfig["navigator.appVersion"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "navigator.appVersion",
-                  e.target.value || undefined,
-                )
-              }
-              placeholder="e.g., 5.0 (Macintosh)"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="oscpu">OS CPU</Label>
-            <Input
-              id="oscpu"
-              value={fingerprintConfig["navigator.oscpu"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "navigator.oscpu",
-                  e.target.value || undefined,
-                )
-              }
-              placeholder="e.g., Intel Mac OS X 10.15"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="hardware-concurrency">Hardware Concurrency</Label>
-            <Input
-              id="hardware-concurrency"
-              type="number"
-              value={fingerprintConfig["navigator.hardwareConcurrency"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "navigator.hardwareConcurrency",
-                  e.target.value ? parseInt(e.target.value, 10) : undefined,
-                )
-              }
-              placeholder="e.g., 8"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="max-touch-points">Max Touch Points</Label>
-            <Input
-              id="max-touch-points"
-              type="number"
-              value={fingerprintConfig["navigator.maxTouchPoints"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "navigator.maxTouchPoints",
-                  e.target.value ? parseInt(e.target.value, 10) : undefined,
-                )
-              }
-              placeholder="e.g., 0"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="do-not-track">Do Not Track</Label>
-            <Select
-              value={fingerprintConfig["navigator.doNotTrack"] || ""}
-              onValueChange={(value) =>
-                updateFingerprintConfig(
-                  "navigator.doNotTrack",
-                  value || undefined,
-                )
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select DNT value" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="0">0 (tracking allowed)</SelectItem>
-                <SelectItem value="1">1 (tracking not allowed)</SelectItem>
-                <SelectItem value="unspecified">unspecified</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="language">Language</Label>
-            <Input
-              id="language"
-              value={fingerprintConfig["navigator.language"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "navigator.language",
-                  e.target.value || undefined,
-                )
-              }
-              placeholder="e.g., en-US"
-            />
-          </div>
-        </div>
-      </div>
+      {isEditingDisabled ? (
+        <Alert>
+          <AlertDescription>
+            Fingerprint editing is disabled because random fingerprint
+            generation is enabled. Disable the option above to manually edit the
+            fingerprint configuration.
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <Alert>
+          <AlertDescription>
+            ⚠️ Warning: Only edit these parameters if you know what you're doing.
+            Incorrect values may break websites, make them detect you, and lead
+            to hard-to-debug bugs.{" "}
+          </AlertDescription>
+        </Alert>
+      )}
 
-      {/* Screen Properties */}
-      <div className="space-y-3">
-        <Label>Screen Properties</Label>
-        <div className="grid grid-cols-3 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="screen-width">Screen Width</Label>
-            <Input
-              id="screen-width"
-              type="number"
-              value={fingerprintConfig["screen.width"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "screen.width",
-                  e.target.value ? parseInt(e.target.value, 10) : undefined,
-                )
-              }
-              placeholder="e.g., 1920"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="screen-height">Screen Height</Label>
-            <Input
-              id="screen-height"
-              type="number"
-              value={fingerprintConfig["screen.height"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "screen.height",
-                  e.target.value ? parseInt(e.target.value, 10) : undefined,
-                )
-              }
-              placeholder="e.g., 1080"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="avail-width">Available Width</Label>
-            <Input
-              id="avail-width"
-              type="number"
-              value={fingerprintConfig["screen.availWidth"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "screen.availWidth",
-                  e.target.value ? parseInt(e.target.value, 10) : undefined,
-                )
-              }
-              placeholder="e.g., 1920"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="avail-height">Available Height</Label>
-            <Input
-              id="avail-height"
-              type="number"
-              value={fingerprintConfig["screen.availHeight"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "screen.availHeight",
-                  e.target.value ? parseInt(e.target.value, 10) : undefined,
-                )
-              }
-              placeholder="e.g., 1055"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="color-depth">Color Depth</Label>
-            <Input
-              id="color-depth"
-              type="number"
-              value={fingerprintConfig["screen.colorDepth"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "screen.colorDepth",
-                  e.target.value ? parseInt(e.target.value, 10) : undefined,
-                )
-              }
-              placeholder="e.g., 30"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="pixel-depth">Pixel Depth</Label>
-            <Input
-              id="pixel-depth"
-              type="number"
-              value={fingerprintConfig["screen.pixelDepth"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "screen.pixelDepth",
-                  e.target.value ? parseInt(e.target.value, 10) : undefined,
-                )
-              }
-              placeholder="e.g., 30"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Window Properties */}
-      <div className="space-y-3">
-        <Label>Window Properties</Label>
-        <div className="grid grid-cols-3 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="outer-width">Outer Width</Label>
-            <Input
-              id="outer-width"
-              type="number"
-              value={fingerprintConfig["window.outerWidth"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "window.outerWidth",
-                  e.target.value ? parseInt(e.target.value, 10) : undefined,
-                )
-              }
-              placeholder="e.g., 1512"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="outer-height">Outer Height</Label>
-            <Input
-              id="outer-height"
-              type="number"
-              value={fingerprintConfig["window.outerHeight"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "window.outerHeight",
-                  e.target.value ? parseInt(e.target.value, 10) : undefined,
-                )
-              }
-              placeholder="e.g., 886"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="inner-width">Inner Width</Label>
-            <Input
-              id="inner-width"
-              type="number"
-              value={fingerprintConfig["window.innerWidth"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "window.innerWidth",
-                  e.target.value ? parseInt(e.target.value, 10) : undefined,
-                )
-              }
-              placeholder="e.g., 1512"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="inner-height">Inner Height</Label>
-            <Input
-              id="inner-height"
-              type="number"
-              value={fingerprintConfig["window.innerHeight"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "window.innerHeight",
-                  e.target.value ? parseInt(e.target.value, 10) : undefined,
-                )
-              }
-              placeholder="e.g., 886"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="screen-x">Screen X</Label>
-            <Input
-              id="screen-x"
-              type="number"
-              value={fingerprintConfig["window.screenX"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "window.screenX",
-                  e.target.value ? parseInt(e.target.value, 10) : undefined,
-                )
-              }
-              placeholder="e.g., 0"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="screen-y">Screen Y</Label>
-            <Input
-              id="screen-y"
-              type="number"
-              value={fingerprintConfig["window.screenY"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "window.screenY",
-                  e.target.value ? parseInt(e.target.value, 10) : undefined,
-                )
-              }
-              placeholder="e.g., 0"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Geolocation */}
-      <div className="space-y-3">
-        <Label>Geolocation</Label>
-        <div className="grid grid-cols-3 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="latitude">Latitude</Label>
-            <Input
-              id="latitude"
-              type="number"
-              step="any"
-              value={fingerprintConfig["geolocation:latitude"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "geolocation:latitude",
-                  e.target.value ? parseFloat(e.target.value) : undefined,
-                )
-              }
-              placeholder="e.g., 41.0019"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="longitude">Longitude</Label>
-            <Input
-              id="longitude"
-              type="number"
-              step="any"
-              value={fingerprintConfig["geolocation:longitude"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "geolocation:longitude",
-                  e.target.value ? parseFloat(e.target.value) : undefined,
-                )
-              }
-              placeholder="e.g., 28.9645"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="timezone">Timezone</Label>
-            <Input
-              id="timezone"
-              type="text"
-              value={fingerprintConfig.timezone || ""}
-              onChange={(e) =>
-                updateFingerprintConfig("timezone", e.target.value || undefined)
-              }
-              placeholder="e.g., America/New_York"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Locale */}
-      <div className="space-y-3">
-        <Label>Locale</Label>
-        <div className="grid grid-cols-3 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="locale-language">Language</Label>
-            <Input
-              id="locale-language"
-              value={fingerprintConfig["locale:language"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "locale:language",
-                  e.target.value || undefined,
-                )
-              }
-              placeholder="e.g., tr"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="locale-region">Region</Label>
-            <Input
-              id="locale-region"
-              value={fingerprintConfig["locale:region"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "locale:region",
-                  e.target.value || undefined,
-                )
-              }
-              placeholder="e.g., TR"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="locale-script">Script</Label>
-            <Input
-              id="locale-script"
-              value={fingerprintConfig["locale:script"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "locale:script",
-                  e.target.value || undefined,
-                )
-              }
-              placeholder="e.g., Latn"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* WebGL Properties */}
-      <div className="space-y-3">
-        <Label>WebGL Properties</Label>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="webgl-vendor">WebGL Vendor</Label>
-            <Input
-              id="webgl-vendor"
-              value={fingerprintConfig["webGl:vendor"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "webGl:vendor",
-                  e.target.value || undefined,
-                )
-              }
-              placeholder="e.g., Mesa"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="webgl-renderer">WebGL Renderer</Label>
-            <Input
-              id="webgl-renderer"
-              value={fingerprintConfig["webGl:renderer"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "webGl:renderer",
-                  e.target.value || undefined,
-                )
-              }
-              placeholder="e.g., llvmpipe, or similar"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* WebGL Parameters */}
-      <div className="space-y-3">
-        <ObjectEditor
-          value={
-            (fingerprintConfig["webGl:parameters"] as Record<
-              string,
-              unknown
-            >) || {}
-          }
-          onChange={(value) =>
-            updateFingerprintConfig("webGl:parameters", value)
-          }
-          title="WebGL Parameters"
-        />
-      </div>
-
-      {/* WebGL2 Parameters */}
-      <div className="space-y-3">
-        <ObjectEditor
-          value={
-            (fingerprintConfig["webGl2:parameters"] as Record<
-              string,
-              unknown
-            >) || {}
-          }
-          onChange={(value) =>
-            updateFingerprintConfig("webGl2:parameters", value)
-          }
-          title="WebGL2 Parameters"
-        />
-      </div>
-
-      {/* WebGL Shader Precision Formats */}
-      <div className="space-y-3">
-        <ObjectEditor
-          value={
-            (fingerprintConfig["webGl:shaderPrecisionFormats"] as Record<
-              string,
-              unknown
-            >) || {}
-          }
-          onChange={(value) =>
-            updateFingerprintConfig("webGl:shaderPrecisionFormats", value)
-          }
-          title="WebGL Shader Precision Formats"
-        />
-      </div>
-
-      {/* WebGL2 Shader Precision Formats */}
-      <div className="space-y-3">
-        <ObjectEditor
-          value={
-            (fingerprintConfig["webGl2:shaderPrecisionFormats"] as Record<
-              string,
-              unknown
-            >) || {}
-          }
-          onChange={(value) =>
-            updateFingerprintConfig("webGl2:shaderPrecisionFormats", value)
-          }
-          title="WebGL2 Shader Precision Formats"
-        />
-      </div>
-
-      {/* Fonts */}
-      <div className="space-y-3">
-        <Label>Fonts</Label>
-        <MultipleSelector
-          value={
-            fingerprintConfig.fonts?.map((font) => ({
-              label: font,
-              value: font,
-            })) || []
-          }
-          onChange={(selected: Option[]) =>
-            updateFingerprintConfig(
-              "fonts",
-              selected.map((s: Option) => s.value),
-            )
-          }
-          placeholder="Add fonts..."
-          creatable
-        />
-      </div>
-
-      {/* Battery */}
-      <div className="space-y-3">
-        <Label>Battery</Label>
-        <div className="grid grid-cols-3 gap-4">
+      <fieldset disabled={isEditingDisabled} className="space-y-6">
+        {/* Blocking Options */}
+        <div className="space-y-3">
+          <Label>Blocking Options</Label>
           <div className="space-y-2">
             <div className="flex items-center space-x-2">
               <Checkbox
-                id="battery-charging"
-                checked={fingerprintConfig["battery:charging"] || false}
+                id="block-images"
+                checked={config.block_images || false}
                 onCheckedChange={(checked) =>
-                  updateFingerprintConfig("battery:charging", checked)
+                  onConfigChange("block_images", checked)
                 }
               />
-              <Label htmlFor="battery-charging">Charging</Label>
+              <Label htmlFor="block-images">Block Images</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="block-webrtc"
+                checked={config.block_webrtc || false}
+                onCheckedChange={(checked) =>
+                  onConfigChange("block_webrtc", checked)
+                }
+              />
+              <Label htmlFor="block-webrtc">Block WebRTC</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="block-webgl"
+                checked={config.block_webgl || false}
+                onCheckedChange={(checked) =>
+                  onConfigChange("block_webgl", checked)
+                }
+              />
+              <Label htmlFor="block-webgl">Block WebGL</Label>
             </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="charging-time">Charging Time</Label>
-            <Input
-              id="charging-time"
-              type="number"
-              step="any"
-              value={fingerprintConfig["battery:chargingTime"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "battery:chargingTime",
-                  e.target.value ? parseFloat(e.target.value) : undefined,
-                )
-              }
-              placeholder="e.g., 0"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="discharging-time">Discharging Time</Label>
-            <Input
-              id="discharging-time"
-              type="number"
-              step="any"
-              value={fingerprintConfig["battery:dischargingTime"] || ""}
-              onChange={(e) =>
-                updateFingerprintConfig(
-                  "battery:dischargingTime",
-                  e.target.value ? parseFloat(e.target.value) : undefined,
-                )
-              }
-              placeholder="e.g., 0"
-            />
+        </div>
+
+        {/* Navigator Properties */}
+        <div className="space-y-3">
+          <Label>Navigator Properties</Label>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="user-agent">User Agent</Label>
+              <Input
+                id="user-agent"
+                value={fingerprintConfig["navigator.userAgent"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "navigator.userAgent",
+                    e.target.value || undefined,
+                  )
+                }
+                placeholder="Mozilla/5.0..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="platform">Platform</Label>
+              <Input
+                id="platform"
+                value={fingerprintConfig["navigator.platform"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "navigator.platform",
+                    e.target.value || undefined,
+                  )
+                }
+                placeholder="e.g., MacIntel, Win32"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="app-version">App Version</Label>
+              <Input
+                id="app-version"
+                value={fingerprintConfig["navigator.appVersion"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "navigator.appVersion",
+                    e.target.value || undefined,
+                  )
+                }
+                placeholder="e.g., 5.0 (Macintosh)"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="oscpu">OS CPU</Label>
+              <Input
+                id="oscpu"
+                value={fingerprintConfig["navigator.oscpu"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "navigator.oscpu",
+                    e.target.value || undefined,
+                  )
+                }
+                placeholder="e.g., Intel Mac OS X 10.15"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="hardware-concurrency">Hardware Concurrency</Label>
+              <Input
+                id="hardware-concurrency"
+                type="number"
+                value={fingerprintConfig["navigator.hardwareConcurrency"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "navigator.hardwareConcurrency",
+                    e.target.value ? parseInt(e.target.value, 10) : undefined,
+                  )
+                }
+                placeholder="e.g., 8"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="max-touch-points">Max Touch Points</Label>
+              <Input
+                id="max-touch-points"
+                type="number"
+                value={fingerprintConfig["navigator.maxTouchPoints"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "navigator.maxTouchPoints",
+                    e.target.value ? parseInt(e.target.value, 10) : undefined,
+                  )
+                }
+                placeholder="e.g., 0"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="do-not-track">Do Not Track</Label>
+              <Select
+                value={fingerprintConfig["navigator.doNotTrack"] || ""}
+                onValueChange={(value) =>
+                  updateFingerprintConfig(
+                    "navigator.doNotTrack",
+                    value || undefined,
+                  )
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select DNT value" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">0 (tracking allowed)</SelectItem>
+                  <SelectItem value="1">1 (tracking not allowed)</SelectItem>
+                  <SelectItem value="unspecified">unspecified</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="language">Language</Label>
+              <Input
+                id="language"
+                value={fingerprintConfig["navigator.language"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "navigator.language",
+                    e.target.value || undefined,
+                  )
+                }
+                placeholder="e.g., en-US"
+              />
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Browser Behavior */}
-      {/* <div className="space-y-3">
+        {/* Screen Properties */}
+        <div className="space-y-3">
+          <Label>Screen Properties</Label>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="screen-width">Screen Width</Label>
+              <Input
+                id="screen-width"
+                type="number"
+                value={fingerprintConfig["screen.width"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "screen.width",
+                    e.target.value ? parseInt(e.target.value, 10) : undefined,
+                  )
+                }
+                placeholder="e.g., 1920"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="screen-height">Screen Height</Label>
+              <Input
+                id="screen-height"
+                type="number"
+                value={fingerprintConfig["screen.height"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "screen.height",
+                    e.target.value ? parseInt(e.target.value, 10) : undefined,
+                  )
+                }
+                placeholder="e.g., 1080"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="avail-width">Available Width</Label>
+              <Input
+                id="avail-width"
+                type="number"
+                value={fingerprintConfig["screen.availWidth"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "screen.availWidth",
+                    e.target.value ? parseInt(e.target.value, 10) : undefined,
+                  )
+                }
+                placeholder="e.g., 1920"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="avail-height">Available Height</Label>
+              <Input
+                id="avail-height"
+                type="number"
+                value={fingerprintConfig["screen.availHeight"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "screen.availHeight",
+                    e.target.value ? parseInt(e.target.value, 10) : undefined,
+                  )
+                }
+                placeholder="e.g., 1055"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="color-depth">Color Depth</Label>
+              <Input
+                id="color-depth"
+                type="number"
+                value={fingerprintConfig["screen.colorDepth"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "screen.colorDepth",
+                    e.target.value ? parseInt(e.target.value, 10) : undefined,
+                  )
+                }
+                placeholder="e.g., 30"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pixel-depth">Pixel Depth</Label>
+              <Input
+                id="pixel-depth"
+                type="number"
+                value={fingerprintConfig["screen.pixelDepth"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "screen.pixelDepth",
+                    e.target.value ? parseInt(e.target.value, 10) : undefined,
+                  )
+                }
+                placeholder="e.g., 30"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Window Properties */}
+        <div className="space-y-3">
+          <Label>Window Properties</Label>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="outer-width">Outer Width</Label>
+              <Input
+                id="outer-width"
+                type="number"
+                value={fingerprintConfig["window.outerWidth"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "window.outerWidth",
+                    e.target.value ? parseInt(e.target.value, 10) : undefined,
+                  )
+                }
+                placeholder="e.g., 1512"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="outer-height">Outer Height</Label>
+              <Input
+                id="outer-height"
+                type="number"
+                value={fingerprintConfig["window.outerHeight"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "window.outerHeight",
+                    e.target.value ? parseInt(e.target.value, 10) : undefined,
+                  )
+                }
+                placeholder="e.g., 886"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="inner-width">Inner Width</Label>
+              <Input
+                id="inner-width"
+                type="number"
+                value={fingerprintConfig["window.innerWidth"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "window.innerWidth",
+                    e.target.value ? parseInt(e.target.value, 10) : undefined,
+                  )
+                }
+                placeholder="e.g., 1512"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="inner-height">Inner Height</Label>
+              <Input
+                id="inner-height"
+                type="number"
+                value={fingerprintConfig["window.innerHeight"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "window.innerHeight",
+                    e.target.value ? parseInt(e.target.value, 10) : undefined,
+                  )
+                }
+                placeholder="e.g., 886"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="screen-x">Screen X</Label>
+              <Input
+                id="screen-x"
+                type="number"
+                value={fingerprintConfig["window.screenX"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "window.screenX",
+                    e.target.value ? parseInt(e.target.value, 10) : undefined,
+                  )
+                }
+                placeholder="e.g., 0"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="screen-y">Screen Y</Label>
+              <Input
+                id="screen-y"
+                type="number"
+                value={fingerprintConfig["window.screenY"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "window.screenY",
+                    e.target.value ? parseInt(e.target.value, 10) : undefined,
+                  )
+                }
+                placeholder="e.g., 0"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Geolocation */}
+        <div className="space-y-3">
+          <Label>Geolocation</Label>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="latitude">Latitude</Label>
+              <Input
+                id="latitude"
+                type="number"
+                step="any"
+                value={fingerprintConfig["geolocation:latitude"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "geolocation:latitude",
+                    e.target.value ? parseFloat(e.target.value) : undefined,
+                  )
+                }
+                placeholder="e.g., 41.0019"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="longitude">Longitude</Label>
+              <Input
+                id="longitude"
+                type="number"
+                step="any"
+                value={fingerprintConfig["geolocation:longitude"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "geolocation:longitude",
+                    e.target.value ? parseFloat(e.target.value) : undefined,
+                  )
+                }
+                placeholder="e.g., 28.9645"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="timezone">Timezone</Label>
+              <Input
+                id="timezone"
+                type="text"
+                value={fingerprintConfig.timezone || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "timezone",
+                    e.target.value || undefined,
+                  )
+                }
+                placeholder="e.g., America/New_York"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Locale */}
+        <div className="space-y-3">
+          <Label>Locale</Label>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="locale-language">Language</Label>
+              <Input
+                id="locale-language"
+                value={fingerprintConfig["locale:language"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "locale:language",
+                    e.target.value || undefined,
+                  )
+                }
+                placeholder="e.g., tr"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="locale-region">Region</Label>
+              <Input
+                id="locale-region"
+                value={fingerprintConfig["locale:region"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "locale:region",
+                    e.target.value || undefined,
+                  )
+                }
+                placeholder="e.g., TR"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="locale-script">Script</Label>
+              <Input
+                id="locale-script"
+                value={fingerprintConfig["locale:script"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "locale:script",
+                    e.target.value || undefined,
+                  )
+                }
+                placeholder="e.g., Latn"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* WebGL Properties */}
+        <div className="space-y-3">
+          <Label>WebGL Properties</Label>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="webgl-vendor">WebGL Vendor</Label>
+              <Input
+                id="webgl-vendor"
+                value={fingerprintConfig["webGl:vendor"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "webGl:vendor",
+                    e.target.value || undefined,
+                  )
+                }
+                placeholder="e.g., Mesa"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="webgl-renderer">WebGL Renderer</Label>
+              <Input
+                id="webgl-renderer"
+                value={fingerprintConfig["webGl:renderer"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "webGl:renderer",
+                    e.target.value || undefined,
+                  )
+                }
+                placeholder="e.g., llvmpipe, or similar"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* WebGL Parameters */}
+        <div className="space-y-3">
+          <ObjectEditor
+            value={
+              (fingerprintConfig["webGl:parameters"] as Record<
+                string,
+                unknown
+              >) || {}
+            }
+            onChange={(value) =>
+              updateFingerprintConfig("webGl:parameters", value)
+            }
+            title="WebGL Parameters"
+          />
+        </div>
+
+        {/* WebGL2 Parameters */}
+        <div className="space-y-3">
+          <ObjectEditor
+            value={
+              (fingerprintConfig["webGl2:parameters"] as Record<
+                string,
+                unknown
+              >) || {}
+            }
+            onChange={(value) =>
+              updateFingerprintConfig("webGl2:parameters", value)
+            }
+            title="WebGL2 Parameters"
+          />
+        </div>
+
+        {/* WebGL Shader Precision Formats */}
+        <div className="space-y-3">
+          <ObjectEditor
+            value={
+              (fingerprintConfig["webGl:shaderPrecisionFormats"] as Record<
+                string,
+                unknown
+              >) || {}
+            }
+            onChange={(value) =>
+              updateFingerprintConfig("webGl:shaderPrecisionFormats", value)
+            }
+            title="WebGL Shader Precision Formats"
+          />
+        </div>
+
+        {/* WebGL2 Shader Precision Formats */}
+        <div className="space-y-3">
+          <ObjectEditor
+            value={
+              (fingerprintConfig["webGl2:shaderPrecisionFormats"] as Record<
+                string,
+                unknown
+              >) || {}
+            }
+            onChange={(value) =>
+              updateFingerprintConfig("webGl2:shaderPrecisionFormats", value)
+            }
+            title="WebGL2 Shader Precision Formats"
+          />
+        </div>
+
+        {/* Fonts */}
+        <div className="space-y-3">
+          <Label>Fonts</Label>
+          <MultipleSelector
+            value={
+              fingerprintConfig.fonts?.map((font) => ({
+                label: font,
+                value: font,
+              })) || []
+            }
+            onChange={(selected: Option[]) =>
+              updateFingerprintConfig(
+                "fonts",
+                selected.map((s: Option) => s.value),
+              )
+            }
+            placeholder="Add fonts..."
+            creatable
+          />
+        </div>
+
+        {/* Battery */}
+        <div className="space-y-3">
+          <Label>Battery</Label>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="battery-charging"
+                  checked={fingerprintConfig["battery:charging"] || false}
+                  onCheckedChange={(checked) =>
+                    updateFingerprintConfig("battery:charging", checked)
+                  }
+                />
+                <Label htmlFor="battery-charging">Charging</Label>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="charging-time">Charging Time</Label>
+              <Input
+                id="charging-time"
+                type="number"
+                step="any"
+                value={fingerprintConfig["battery:chargingTime"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "battery:chargingTime",
+                    e.target.value ? parseFloat(e.target.value) : undefined,
+                  )
+                }
+                placeholder="e.g., 0"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="discharging-time">Discharging Time</Label>
+              <Input
+                id="discharging-time"
+                type="number"
+                step="any"
+                value={fingerprintConfig["battery:dischargingTime"] || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "battery:dischargingTime",
+                    e.target.value ? parseFloat(e.target.value) : undefined,
+                  )
+                }
+                placeholder="e.g., 0"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Browser Behavior */}
+        {/* <div className="space-y-3">
         <Label>Browser Behavior</Label>
         <div className="flex items-center space-x-2">
           <Checkbox
@@ -825,6 +866,7 @@ export function SharedCamoufoxConfigForm({
           </Label>
         </div>
       </div> */}
+      </fieldset>
     </div>
   );
 
@@ -841,13 +883,38 @@ export function SharedCamoufoxConfigForm({
           </TabsList>
 
           <TabsContent value="automatic" className="space-y-6">
+            {/* Randomize Fingerprint Option */}
+            <div className="mt-4 space-y-3 p-4 border rounded-lg bg-muted/30">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="randomize-fingerprint-auto"
+                  checked={config.randomize_fingerprint_on_launch || false}
+                  onCheckedChange={(checked) =>
+                    onConfigChange("randomize_fingerprint_on_launch", checked)
+                  }
+                />
+                <Label
+                  htmlFor="randomize-fingerprint-auto"
+                  className="font-medium"
+                >
+                  Generate random fingerprint on every launch
+                </Label>
+              </div>
+              <p className="text-sm text-muted-foreground ml-6">
+                When enabled, a new fingerprint will be generated each time the
+                browser is launched. The generated fingerprint is saved for
+                reference.
+              </p>
+            </div>
+
             {/* Automatic Location Configuration */}
-            <div className="mt-4 space-y-3">
+            <div className="space-y-3">
               <div className="flex items-center space-x-2">
                 <Checkbox
                   id="auto-location"
                   checked={isAutoLocationEnabled}
                   onCheckedChange={handleAutoLocationToggle}
+                  disabled={isEditingDisabled}
                 />
                 <Label htmlFor="auto-location">
                   Automatically configure location information based on proxy
@@ -857,7 +924,7 @@ export function SharedCamoufoxConfigForm({
             </div>
 
             {/* Screen Resolution */}
-            <div className="space-y-3">
+            <fieldset disabled={isEditingDisabled} className="space-y-3">
               <Label>Screen Resolution</Label>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -929,7 +996,7 @@ export function SharedCamoufoxConfigForm({
                   />
                 </div>
               </div>
-            </div>
+            </fieldset>
           </TabsContent>
 
           <TabsContent value="manual" className="space-y-6">

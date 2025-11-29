@@ -94,6 +94,7 @@ export interface CamoufoxConfig {
   block_webgl?: boolean;
   executable_path?: string;
   fingerprint?: string; // JSON string of the complete fingerprint config
+  randomize_fingerprint_on_launch?: boolean; // Generate new fingerprint on every launch
 }
 
 // Extended interface for the advanced fingerprint configuration

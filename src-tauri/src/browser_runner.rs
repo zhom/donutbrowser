@@ -180,6 +180,49 @@ impl BrowserRunner {
         camoufox_config.geoip
       );
 
+      // Check if we need to generate a new fingerprint on every launch
+      let mut updated_profile = profile.clone();
+      if camoufox_config.randomize_fingerprint_on_launch == Some(true) {
+        log::info!(
+          "Generating random fingerprint for Camoufox profile: {}",
+          profile.name
+        );
+
+        // Create a config copy without the existing fingerprint to force generation of a new one
+        let mut config_for_generation = camoufox_config.clone();
+        config_for_generation.fingerprint = None;
+
+        // Generate a new fingerprint
+        let new_fingerprint = self
+          .camoufox_manager
+          .generate_fingerprint_config(&app_handle, profile, &config_for_generation)
+          .await
+          .map_err(|e| format!("Failed to generate random fingerprint: {e}"))?;
+
+        log::info!(
+          "New fingerprint generated, length: {} chars",
+          new_fingerprint.len()
+        );
+
+        // Update the config with the new fingerprint for launching
+        camoufox_config.fingerprint = Some(new_fingerprint.clone());
+
+        // Save the updated fingerprint to the profile so it persists
+        // We need to preserve all existing config fields and only update the fingerprint
+        let mut updated_camoufox_config =
+          updated_profile.camoufox_config.clone().unwrap_or_default();
+        updated_camoufox_config.fingerprint = Some(new_fingerprint);
+        // Preserve the randomize flag so it persists across launches
+        updated_camoufox_config.randomize_fingerprint_on_launch = Some(true);
+        updated_profile.camoufox_config = Some(updated_camoufox_config.clone());
+
+        log::info!(
+          "Updated profile camoufox_config with new fingerprint for profile: {}, fingerprint length: {}",
+          profile.name,
+          updated_camoufox_config.fingerprint.as_ref().map(|f| f.len()).unwrap_or(0)
+        );
+      }
+
       // Use the nodecar camoufox launcher
       log::info!(
         "Launching Camoufox via nodecar for profile: {}",
@@ -187,7 +230,12 @@ impl BrowserRunner {
       );
       let camoufox_result = self
         .camoufox_manager
-        .launch_camoufox_profile_nodecar(app_handle.clone(), profile.clone(), camoufox_config, url)
+        .launch_camoufox_profile_nodecar(
+          app_handle.clone(),
+          updated_profile.clone(),
+          camoufox_config,
+          url,
+        )
         .await
         .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
           format!("Failed to launch camoufox via nodecar: {e}").into()
@@ -198,7 +246,6 @@ impl BrowserRunner {
       log::info!("Camoufox launched successfully with PID: {process_id}");
 
       // Update profile with the process info from camoufox result
-      let mut updated_profile = profile.clone();
       updated_profile.process_id = Some(process_id);
       updated_profile.last_launch = Some(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs());
 
@@ -209,16 +256,32 @@ impl BrowserRunner {
         log::info!("Updated proxy PID mapping from temp (0) to actual PID: {process_id}");
       }
 
-      // Save the updated profile
+      // Save the updated profile (includes new fingerprint if randomize is enabled)
+      log::info!(
+        "Saving profile {} with camoufox_config fingerprint length: {}",
+        updated_profile.name,
+        updated_profile
+          .camoufox_config
+          .as_ref()
+          .and_then(|c| c.fingerprint.as_ref())
+          .map(|f| f.len())
+          .unwrap_or(0)
+      );
       self.save_process_info(&updated_profile)?;
       // Ensure tag suggestions include any tags from this profile
       let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
         let _ = tm.rebuild_from_profiles(&self.profile_manager.list_profiles().unwrap_or_default());
       });
       log::info!(
-        "Updated profile with process info: {}",
+        "Successfully saved profile with process info: {}",
         updated_profile.name
       );
+
+      // Emit profiles-changed to trigger frontend to reload profiles from disk
+      // This ensures the UI displays the newly generated fingerprint
+      if let Err(e) = app_handle.emit("profiles-changed", ()) {
+        log::warn!("Warning: Failed to emit profiles-changed event: {e}");
+      }
 
       log::info!(
         "Emitting profile events for successful Camoufox launch: {}",
