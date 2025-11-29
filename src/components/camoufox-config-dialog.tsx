@@ -19,6 +19,7 @@ interface CamoufoxConfigDialogProps {
   onClose: () => void;
   profile: BrowserProfile | null;
   onSave: (profile: BrowserProfile, config: CamoufoxConfig) => Promise<void>;
+  isRunning?: boolean;
 }
 
 export function CamoufoxConfigDialog({
@@ -26,6 +27,7 @@ export function CamoufoxConfigDialog({
   onClose,
   profile,
   onSave,
+  isRunning = false,
 }: CamoufoxConfigDialogProps) {
   const [config, setConfig] = useState<CamoufoxConfig>({
     geoip: true,
@@ -101,33 +103,37 @@ export function CamoufoxConfigDialog({
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
+        <DialogHeader className="shrink-0">
           <DialogTitle>
-            Configure Fingerprint Settings - {profile.name}
+            {isRunning ? "View" : "Configure"} Fingerprint Settings -{" "}
+            {profile.name}
           </DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 h-[320px]">
+        <ScrollArea className="flex-1 h-[300px]">
           <div className="py-4">
             <SharedCamoufoxConfigForm
               config={config}
               onConfigChange={updateConfig}
               forceAdvanced={true}
+              readOnly={isRunning}
             />
           </div>
         </ScrollArea>
 
-        <DialogFooter className="flex-shrink-0 pt-4 border-t">
+        <DialogFooter className="shrink-0 pt-4 border-t">
           <RippleButton variant="outline" onClick={handleClose}>
-            Cancel
+            {isRunning ? "Close" : "Cancel"}
           </RippleButton>
-          <LoadingButton
-            isLoading={isSaving}
-            onClick={handleSave}
-            disabled={isSaving}
-          >
-            Save
-          </LoadingButton>
+          {!isRunning && (
+            <LoadingButton
+              isLoading={isSaving}
+              onClick={handleSave}
+              disabled={isSaving}
+            >
+              Save
+            </LoadingButton>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

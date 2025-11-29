@@ -1556,9 +1556,8 @@ export function ProfilesDataTable({
                         onClick={() => {
                           meta.onConfigureCamoufox?.(profile);
                         }}
-                        disabled={isDisabled}
                       >
-                        Configure Fingerprint
+                        Change Fingerprint
                       </DropdownMenuItem>
                     )}
                   <DropdownMenuItem

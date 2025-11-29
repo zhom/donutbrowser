@@ -23,6 +23,7 @@ interface SharedCamoufoxConfigFormProps {
   className?: string;
   isCreating?: boolean; // Flag to indicate if this is for creating a new profile
   forceAdvanced?: boolean; // Force advanced mode (for editing)
+  readOnly?: boolean; // Flag to indicate if the form should be read-only
 }
 
 // Determine if fingerprint editing should be disabled
@@ -35,9 +36,15 @@ interface ObjectEditorProps {
   value: Record<string, unknown> | undefined;
   onChange: (value: Record<string, unknown> | undefined) => void;
   title: string;
+  readOnly?: boolean;
 }
 
-function ObjectEditor({ value, onChange, title }: ObjectEditorProps) {
+function ObjectEditor({
+  value,
+  onChange,
+  title,
+  readOnly = false,
+}: ObjectEditorProps) {
   const [jsonString, setJsonString] = useState("");
 
   useEffect(() => {
@@ -45,6 +52,7 @@ function ObjectEditor({ value, onChange, title }: ObjectEditorProps) {
   }, [value]);
 
   const handleChange = (newValue: string) => {
+    if (readOnly) return;
     setJsonString(newValue);
     try {
       if (newValue.trim() === "" || newValue.trim() === "{}") {
@@ -75,6 +83,7 @@ function ObjectEditor({ value, onChange, title }: ObjectEditorProps) {
         placeholder={`Enter ${title} as JSON`}
         className="font-mono text-sm"
         rows={6}
+        disabled={readOnly}
       />
     </div>
   );
@@ -86,6 +95,7 @@ export function SharedCamoufoxConfigForm({
   className = "",
   isCreating = false,
   forceAdvanced = false,
+  readOnly = false,
 }: SharedCamoufoxConfigFormProps) {
   const [activeTab, setActiveTab] = useState(
     forceAdvanced ? "manual" : "automatic",
@@ -174,7 +184,7 @@ export function SharedCamoufoxConfigForm({
     }
   };
 
-  const isEditingDisabled = isFingerprintEditingDisabled(config);
+  const isEditingDisabled = isFingerprintEditingDisabled(config) || readOnly;
 
   const renderAdvancedForm = () => (
     <div className="space-y-6">
@@ -187,6 +197,7 @@ export function SharedCamoufoxConfigForm({
             onCheckedChange={(checked) =>
               onConfigChange("randomize_fingerprint_on_launch", checked)
             }
+            disabled={readOnly}
           />
           <Label htmlFor="randomize-fingerprint" className="font-medium">
             Generate random fingerprint on every launch
@@ -201,9 +212,9 @@ export function SharedCamoufoxConfigForm({
       {isEditingDisabled ? (
         <Alert>
           <AlertDescription>
-            Fingerprint editing is disabled because random fingerprint
-            generation is enabled. Disable the option above to manually edit the
-            fingerprint configuration.
+            {readOnly
+              ? "Fingerprint editing is disabled because the profile is currently running. Stop the profile to make changes."
+              : "Fingerprint editing is disabled because random fingerprint generation is enabled. Disable the option above to manually edit the fingerprint configuration."}
           </AlertDescription>
         </Alert>
       ) : (
@@ -727,6 +738,7 @@ export function SharedCamoufoxConfigForm({
               updateFingerprintConfig("webGl:parameters", value)
             }
             title="WebGL Parameters"
+            readOnly={readOnly}
           />
         </div>
 
@@ -743,6 +755,7 @@ export function SharedCamoufoxConfigForm({
               updateFingerprintConfig("webGl2:parameters", value)
             }
             title="WebGL2 Parameters"
+            readOnly={readOnly}
           />
         </div>
 
@@ -759,6 +772,7 @@ export function SharedCamoufoxConfigForm({
               updateFingerprintConfig("webGl:shaderPrecisionFormats", value)
             }
             title="WebGL Shader Precision Formats"
+            readOnly={readOnly}
           />
         </div>
 
@@ -775,6 +789,7 @@ export function SharedCamoufoxConfigForm({
               updateFingerprintConfig("webGl2:shaderPrecisionFormats", value)
             }
             title="WebGL2 Shader Precision Formats"
+            readOnly={readOnly}
           />
         </div>
 
@@ -876,10 +891,18 @@ export function SharedCamoufoxConfigForm({
         // Advanced mode only (for editing)
         renderAdvancedForm()
       ) : (
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs
+          value={activeTab}
+          onValueChange={readOnly ? undefined : setActiveTab}
+          className="w-full"
+        >
           <TabsList className="grid grid-cols-2 w-full">
-            <TabsTrigger value="automatic">Automatic</TabsTrigger>
-            <TabsTrigger value="manual">Manual</TabsTrigger>
+            <TabsTrigger value="automatic" disabled={readOnly}>
+              Automatic
+            </TabsTrigger>
+            <TabsTrigger value="manual" disabled={readOnly}>
+              Manual
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="automatic" className="space-y-6">
@@ -892,6 +915,7 @@ export function SharedCamoufoxConfigForm({
                   onCheckedChange={(checked) =>
                     onConfigChange("randomize_fingerprint_on_launch", checked)
                   }
+                  disabled={readOnly}
                 />
                 <Label
                   htmlFor="randomize-fingerprint-auto"

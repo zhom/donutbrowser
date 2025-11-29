@@ -807,6 +807,11 @@ export default function Home() {
         }}
         profile={currentProfileForCamoufoxConfig}
         onSave={handleSaveCamoufoxConfig}
+        isRunning={
+          currentProfileForCamoufoxConfig
+            ? runningProfiles.has(currentProfileForCamoufoxConfig.id)
+            : false
+        }
       />
 
       <GroupManagementDialog
