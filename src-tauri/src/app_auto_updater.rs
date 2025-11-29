@@ -107,6 +107,8 @@ pub struct AppUpdateInfo {
   pub download_url: String,
   pub is_nightly: bool,
   pub published_at: String,
+  pub manual_update_required: bool,
+  pub release_page_url: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -210,25 +212,63 @@ impl AppAutoUpdater {
     if self.should_update(&current_version, &latest_release.tag_name, is_nightly) {
       log::info!("Update available!");
 
+      // Build the release page URL
+      let release_page_url = format!(
+        "https://github.com/zhom/donutbrowser/releases/tag/{}",
+        latest_release.tag_name
+      );
+
       // Find the appropriate asset for current platform
-      if let Some(download_url) = self.get_download_url_for_platform(&latest_release.assets) {
+      let download_url = self.get_download_url_for_platform(&latest_release.assets);
+
+      // On Linux, we show the update notification even if auto-update is disabled
+      // Users can manually download from the release page
+      #[cfg(target_os = "linux")]
+      {
+        let manual_update_required = download_url.is_none();
         let update_info = AppUpdateInfo {
           current_version,
           new_version: latest_release.tag_name.clone(),
           release_notes: latest_release.body.clone(),
-          download_url,
+          download_url: download_url.unwrap_or_else(|| release_page_url.clone()),
           is_nightly,
           published_at: latest_release.published_at.clone(),
+          manual_update_required,
+          release_page_url: Some(release_page_url),
         };
 
         log::info!(
-          "Update info prepared: {} -> {}",
+          "Update info prepared: {} -> {} (manual_update_required: {})",
           update_info.current_version,
-          update_info.new_version
+          update_info.new_version,
+          update_info.manual_update_required
         );
         return Ok(Some(update_info));
-      } else {
-        log::info!("No suitable download asset found for current platform");
+      }
+
+      #[cfg(not(target_os = "linux"))]
+      {
+        if let Some(url) = download_url {
+          let update_info = AppUpdateInfo {
+            current_version,
+            new_version: latest_release.tag_name.clone(),
+            release_notes: latest_release.body.clone(),
+            download_url: url,
+            is_nightly,
+            published_at: latest_release.published_at.clone(),
+            manual_update_required: false,
+            release_page_url: Some(release_page_url),
+          };
+
+          log::info!(
+            "Update info prepared: {} -> {}",
+            update_info.current_version,
+            update_info.new_version
+          );
+          return Ok(Some(update_info));
+        } else {
+          log::info!("No suitable download asset found for current platform");
+        }
       }
     } else {
       log::info!("No update needed");

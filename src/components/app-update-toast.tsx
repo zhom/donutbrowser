@@ -1,6 +1,6 @@
 "use client";
 
-import { FaDownload, FaTimes } from "react-icons/fa";
+import { FaDownload, FaExternalLinkAlt, FaTimes } from "react-icons/fa";
 import { LuCheckCheck, LuCog, LuRefreshCw } from "react-icons/lu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -60,6 +60,16 @@ export function AppUpdateToast({
     await onUpdate(updateInfo);
   };
 
+  const handleViewRelease = () => {
+    if (updateInfo.release_page_url) {
+      // Trigger the same URL handling logic as if the URL came from the system
+      const event = new CustomEvent("url-open-request", {
+        detail: updateInfo.release_page_url,
+      });
+      window.dispatchEvent(event);
+    }
+  };
+
   const showDownloadProgress =
     isUpdating &&
     updateProgress?.stage === "downloading" &&
@@ -101,6 +111,11 @@ export function AppUpdateToast({
                 <>
                   Update from {updateInfo.current_version} to{" "}
                   <span className="font-medium">{updateInfo.new_version}</span>
+                  {updateInfo.manual_update_required && (
+                    <span className="block mt-1 text-muted-foreground/80">
+                      Manual download required on Linux
+                    </span>
+                  )}
                 </>
               )}
             </div>
@@ -155,14 +170,25 @@ export function AppUpdateToast({
 
         {!isUpdating && (
           <div className="flex gap-2 items-center mt-3">
-            <RippleButton
-              onClick={() => void handleUpdateClick()}
-              size="sm"
-              className="flex gap-2 items-center text-xs"
-            >
-              <FaDownload className="w-3 h-3" />
-              Update Now
-            </RippleButton>
+            {updateInfo.manual_update_required ? (
+              <RippleButton
+                onClick={handleViewRelease}
+                size="sm"
+                className="flex gap-2 items-center text-xs"
+              >
+                <FaExternalLinkAlt className="w-3 h-3" />
+                View Release
+              </RippleButton>
+            ) : (
+              <RippleButton
+                onClick={() => void handleUpdateClick()}
+                size="sm"
+                className="flex gap-2 items-center text-xs"
+              >
+                <FaDownload className="w-3 h-3" />
+                Update Now
+              </RippleButton>
+            )}
             <RippleButton
               variant="outline"
               onClick={onDismiss}

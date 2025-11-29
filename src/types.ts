@@ -70,6 +70,8 @@ export interface AppUpdateInfo {
   download_url: string;
   is_nightly: boolean;
   published_at: string;
+  manual_update_required: boolean;
+  release_page_url?: string;
 }
 
 export interface AppUpdateProgress {
