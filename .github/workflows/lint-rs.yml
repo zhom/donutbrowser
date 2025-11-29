@@ -104,6 +104,33 @@ jobs:
             cp nodecar/nodecar-bin.exe src-tauri/binaries/nodecar-x86_64-pc-windows-msvc.exe
           fi
 
+      - name: Get host target
+        id: host_target
+        shell: bash
+        run: |
+          HOST_TARGET=$(rustc -vV | sed -n 's|host: ||p')
+          echo "target=${HOST_TARGET}" >> $GITHUB_OUTPUT
+          echo "Host target: ${HOST_TARGET}"
+
+      - name: Build donut-proxy sidecar
+        shell: bash
+        working-directory: ./src-tauri
+        env:
+          TARGET: ${{ steps.host_target.outputs.target }}
+        run: cargo build --bin donut-proxy
+
+      - name: Copy donut-proxy binary to Tauri binaries
+        shell: bash
+        run: |
+          mkdir -p src-tauri/binaries
+          HOST_TARGET="${{ steps.host_target.outputs.target }}"
+          if [[ "$HOST_TARGET" == *"windows"* ]]; then
+            cp src-tauri/target/debug/donut-proxy.exe src-tauri/binaries/donut-proxy-${HOST_TARGET}.exe
+          else
+            cp src-tauri/target/debug/donut-proxy src-tauri/binaries/donut-proxy-${HOST_TARGET}
+            chmod +x src-tauri/binaries/donut-proxy-${HOST_TARGET}
+          fi
+
       - name: Create empty 'dist' directory
         run: mkdir dist
 
@@ -112,10 +139,14 @@ jobs:
         working-directory: src-tauri
 
       - name: Run clippy check and deny warnings
+        env:
+          TARGET: ${{ steps.host_target.outputs.target }}
         run: cargo clippy --all-targets --all-features -- -D warnings -D clippy::all
         working-directory: src-tauri
 
       - name: Run Rust tests
+        env:
+          TARGET: ${{ steps.host_target.outputs.target }}
         run: cargo test
         working-directory: src-tauri
 
