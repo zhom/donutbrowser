@@ -6,6 +6,55 @@ use donutbrowser_lib::proxy_server::run_proxy_server;
 use donutbrowser_lib::proxy_storage::get_proxy_config;
 use std::process;
 
+fn set_high_priority() {
+  #[cfg(unix)]
+  {
+    unsafe {
+      // Set high priority (negative nice value = higher priority)
+      // -10 is a reasonably high priority without being too aggressive
+      // This may fail without elevated privileges, which is fine
+      let result = libc::setpriority(libc::PRIO_PROCESS, 0, -10);
+      if result == 0 {
+        log::info!("Set process priority to -10 (high priority)");
+      } else {
+        // Try a less aggressive priority if -10 fails
+        let result = libc::setpriority(libc::PRIO_PROCESS, 0, -5);
+        if result == 0 {
+          log::info!("Set process priority to -5 (above normal)");
+        }
+      }
+    }
+  }
+
+  #[cfg(target_os = "linux")]
+  {
+    // Lower OOM score so this process is less likely to be killed under memory pressure
+    // Valid range is -1000 to 1000, lower = less likely to be killed
+    // -500 is a reasonable value that makes us less likely to be killed
+    if let Err(e) = std::fs::write("/proc/self/oom_score_adj", "-500") {
+      log::debug!("Could not set OOM score adjustment: {}", e);
+    } else {
+      log::info!("Set OOM score adjustment to -500");
+    }
+  }
+
+  #[cfg(windows)]
+  {
+    use windows::Win32::System::Threading::{
+      GetCurrentProcess, SetPriorityClass, ABOVE_NORMAL_PRIORITY_CLASS,
+    };
+
+    unsafe {
+      let process = GetCurrentProcess();
+      if SetPriorityClass(process, ABOVE_NORMAL_PRIORITY_CLASS).is_ok() {
+        log::info!("Set process priority to ABOVE_NORMAL_PRIORITY_CLASS");
+      } else {
+        log::debug!("Could not set process priority class");
+      }
+    }
+  }
+}
+
 fn build_proxy_url(
   proxy_type: &str,
   host: &str,
@@ -230,6 +279,9 @@ async fn main() {
       .expect("action is required");
 
     if action == "start" {
+      // Set high priority so this process is killed last under resource pressure
+      set_high_priority();
+
       log::error!("Proxy worker starting, looking for config id: {}", id);
       log::error!("Process PID: {}", std::process::id());
 

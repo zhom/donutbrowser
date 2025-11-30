@@ -79,6 +79,13 @@ pub async fn start_proxy_process_with_profile(
       cmd.pre_exec(|| {
         // Create a new process group so the process survives parent exit
         libc::setsid();
+
+        // Set high priority so the proxy is killed last under resource pressure
+        // Negative nice value = higher priority. Try -10, fall back to -5 if it fails.
+        if libc::setpriority(libc::PRIO_PROCESS, 0, -10) != 0 {
+          let _ = libc::setpriority(libc::PRIO_PROCESS, 0, -5);
+        }
+
         Ok(())
       });
     }
@@ -106,6 +113,10 @@ pub async fn start_proxy_process_with_profile(
   {
     use std::os::windows::process::CommandExt;
     use std::process::Command as StdCommand;
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{
+      OpenProcess, SetPriorityClass, ABOVE_NORMAL_PRIORITY_CLASS, PROCESS_SET_INFORMATION,
+    };
 
     let mut cmd = StdCommand::new(&exe);
     cmd.arg("proxy-worker");
@@ -123,6 +134,14 @@ pub async fn start_proxy_process_with_profile(
 
     let child = cmd.spawn()?;
     let pid = child.id();
+
+    // Set high priority so the proxy is killed last under resource pressure
+    unsafe {
+      if let Ok(handle) = OpenProcess(PROCESS_SET_INFORMATION, false, pid) {
+        let _ = SetPriorityClass(handle, ABOVE_NORMAL_PRIORITY_CLASS);
+        let _ = CloseHandle(handle);
+      }
+    }
 
     // Store PID
     {
