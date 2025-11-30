@@ -268,6 +268,8 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     setIsClearingCache(true);
     try {
       await invoke("clear_all_version_cache_and_refetch");
+      // Also clear traffic stats cache
+      await invoke("clear_all_traffic_stats");
       // Don't show immediate success toast - let the version update progress events handle it
     } catch (error) {
       console.error("Failed to clear cache:", error);

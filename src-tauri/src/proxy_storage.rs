@@ -11,6 +11,8 @@ pub struct ProxyConfig {
   pub ignore_proxy_certificate: Option<bool>,
   pub local_url: Option<String>,
   pub pid: Option<u32>,
+  #[serde(default)]
+  pub profile_id: Option<String>,
 }
 
 impl ProxyConfig {
@@ -22,7 +24,13 @@ impl ProxyConfig {
       ignore_proxy_certificate: None,
       local_url: None,
       pid: None,
+      profile_id: None,
     }
+  }
+
+  pub fn with_profile_id(mut self, profile_id: Option<String>) -> Self {
+    self.profile_id = profile_id;
+    self
   }
 }
 

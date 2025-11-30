@@ -1,6 +1,6 @@
 use clap::{Arg, Command};
 use donutbrowser_lib::proxy_runner::{
-  start_proxy_process, stop_all_proxy_processes, stop_proxy_process,
+  start_proxy_process_with_profile, stop_all_proxy_processes, stop_proxy_process,
 };
 use donutbrowser_lib::proxy_server::run_proxy_server;
 use donutbrowser_lib::proxy_storage::get_proxy_config;
@@ -87,6 +87,11 @@ async fn main() {
                 .short('u')
                 .long("upstream")
                 .help("Upstream proxy URL (protocol://[username:password@]host:port)"),
+            )
+            .arg(
+              Arg::new("profile-id")
+                .long("profile-id")
+                .help("ID of the profile this proxy is associated with"),
             ),
         )
         .subcommand(
@@ -138,8 +143,9 @@ async fn main() {
       }
 
       let port = start_matches.get_one::<u16>("port").copied();
+      let profile_id = start_matches.get_one::<String>("profile-id").cloned();
 
-      match start_proxy_process(upstream_url, port).await {
+      match start_proxy_process_with_profile(upstream_url, port, profile_id).await {
         Ok(config) => {
           // Output the configuration as JSON for the Rust side to parse
           // Use println! here because this needs to go to stdout for parsing

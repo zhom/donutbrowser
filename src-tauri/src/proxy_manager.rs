@@ -20,8 +20,8 @@ pub struct ProxyInfo {
   pub upstream_port: u16,
   pub upstream_type: String,
   pub local_port: u16,
-  // Optional profile name to which this proxy instance is logically tied
-  pub profile_name: Option<String>,
+  // Optional profile ID to which this proxy instance is logically tied
+  pub profile_id: Option<String>,
 }
 
 // Proxy check result cache
@@ -594,14 +594,14 @@ impl ProxyManager {
     app_handle: tauri::AppHandle,
     proxy_settings: Option<&ProxySettings>,
     browser_pid: u32,
-    profile_name: Option<&str>,
+    profile_id: Option<&str>,
   ) -> Result<ProxySettings, String> {
     // First, proactively cleanup any dead proxies so we don't accidentally reuse stale ones
     let _ = self.cleanup_dead_proxies(app_handle.clone()).await;
 
     // If we have a previous proxy tied to this profile, and the upstream settings are changing,
     // stop it before starting a new one so the change takes effect immediately.
-    if let Some(name) = profile_name {
+    if let Some(name) = profile_id {
       // Check if we have an active proxy recorded for this profile
       let maybe_existing_id = {
         let map = self.profile_active_proxy_ids.lock().unwrap();
@@ -711,6 +711,11 @@ impl ProxyManager {
       }
     }
 
+    // Add profile ID if provided for traffic tracking
+    if let Some(id) = profile_id {
+      proxy_cmd = proxy_cmd.arg("--profile-id").arg(id);
+    }
+
     // Execute the command and wait for it to complete
     // The donut-proxy binary should start the worker and then exit
     let output = proxy_cmd
@@ -755,7 +760,7 @@ impl ProxyManager {
         .map(|p| p.proxy_type.clone())
         .unwrap_or_else(|| "DIRECT".to_string()),
       local_port,
-      profile_name: profile_name.map(|s| s.to_string()),
+      profile_id: profile_id.map(|s| s.to_string()),
     };
 
     // Wait for the local proxy port to be ready to accept connections
@@ -789,14 +794,14 @@ impl ProxyManager {
     }
 
     // Store the profile proxy info for persistence
-    if let Some(name) = profile_name {
+    if let Some(id) = profile_id {
       if let Some(proxy_settings) = proxy_settings {
         let mut profile_proxies = self.profile_proxies.lock().unwrap();
-        profile_proxies.insert(name.to_string(), proxy_settings.clone());
+        profile_proxies.insert(id.to_string(), proxy_settings.clone());
       }
       // Also record the active proxy id for this profile for quick cleanup on changes
       let mut map = self.profile_active_proxy_ids.lock().unwrap();
-      map.insert(name.to_string(), proxy_info.id.clone());
+      map.insert(id.to_string(), proxy_info.id.clone());
     }
 
     // Return proxy settings for the browser
@@ -815,10 +820,10 @@ impl ProxyManager {
     app_handle: tauri::AppHandle,
     browser_pid: u32,
   ) -> Result<(), String> {
-    let (proxy_id, profile_name): (String, Option<String>) = {
+    let (proxy_id, profile_id): (String, Option<String>) = {
       let mut proxies = self.active_proxies.lock().unwrap();
       match proxies.remove(&browser_pid) {
-        Some(proxy) => (proxy.id, proxy.profile_name.clone()),
+        Some(proxy) => (proxy.id, proxy.profile_id.clone()),
         None => return Ok(()), // No proxy to stop
       }
     };
@@ -842,11 +847,11 @@ impl ProxyManager {
     }
 
     // Clear profile-to-proxy mapping if it references this proxy
-    if let Some(name) = profile_name {
+    if let Some(id) = profile_id {
       let mut map = self.profile_active_proxy_ids.lock().unwrap();
-      if let Some(current_id) = map.get(&name) {
+      if let Some(current_id) = map.get(&id) {
         if current_id == &proxy_id {
-          map.remove(&name);
+          map.remove(&id);
         }
       }
     }
@@ -1035,7 +1040,7 @@ mod tests {
           upstream_port: 3128,
           upstream_type: "http".to_string(),
           local_port: (8000 + i) as u16,
-          profile_name: None,
+          profile_id: None,
         };
 
         // Add proxy

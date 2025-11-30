@@ -69,7 +69,13 @@ import {
 } from "@/lib/browser-utils";
 import { trimName } from "@/lib/name-utils";
 import { cn } from "@/lib/utils";
-import type { BrowserProfile, ProxyCheckResult, StoredProxy } from "@/types";
+import type {
+  BrowserProfile,
+  ProxyCheckResult,
+  StoredProxy,
+  TrafficSnapshot,
+} from "@/types";
+import { BandwidthMiniChart } from "./bandwidth-mini-chart";
 import {
   DataTableActionBar,
   DataTableActionBarAction,
@@ -77,6 +83,7 @@ import {
 } from "./data-table-action-bar";
 import MultipleSelector, { type Option } from "./multiple-selector";
 import { ProxyCheckButton } from "./proxy-check-button";
+import { TrafficDetailsDialog } from "./traffic-details-dialog";
 import { Input } from "./ui/input";
 import { RippleButton } from "./ui/ripple";
 
@@ -150,6 +157,10 @@ type TableMeta = {
   // Overflow actions
   onAssignProfilesToGroup?: (profileIds: string[]) => void;
   onConfigureCamoufox?: (profile: BrowserProfile) => void;
+
+  // Traffic snapshots (lightweight real-time data)
+  trafficSnapshots: Record<string, TrafficSnapshot>;
+  onOpenTrafficDialog?: (profileId: string) => void;
 };
 
 const TagsCell = React.memo<{
@@ -779,6 +790,13 @@ export function ProfilesDataTable({
   const [openNoteEditorFor, setOpenNoteEditorFor] = React.useState<
     string | null
   >(null);
+  const [trafficSnapshots, setTrafficSnapshots] = React.useState<
+    Record<string, TrafficSnapshot>
+  >({});
+  const [trafficDialogProfile, setTrafficDialogProfile] = React.useState<{
+    id: string;
+    name?: string;
+  } | null>(null);
 
   // Load cached check results for proxies
   React.useEffect(() => {
@@ -846,6 +864,39 @@ export function ProfilesDataTable({
     launchingProfiles,
     stoppingProfiles,
   );
+
+  // Fetch traffic snapshots for running profiles (lightweight, real-time data)
+  // Using runningProfiles.size as dependency to avoid Set reference comparison issues
+  const runningCount = runningProfiles.size;
+  React.useEffect(() => {
+    if (!browserState.isClient) return;
+
+    if (runningCount === 0) {
+      setTrafficSnapshots({});
+      return;
+    }
+
+    const fetchTrafficSnapshots = async () => {
+      try {
+        const allSnapshots = await invoke<TrafficSnapshot[]>(
+          "get_all_traffic_snapshots",
+        );
+        const newSnapshots: Record<string, TrafficSnapshot> = {};
+        for (const snapshot of allSnapshots) {
+          if (snapshot.profile_id) {
+            newSnapshots[snapshot.profile_id] = snapshot;
+          }
+        }
+        setTrafficSnapshots(newSnapshots);
+      } catch (error) {
+        console.error("Failed to fetch traffic snapshots:", error);
+      }
+    };
+
+    void fetchTrafficSnapshots();
+    const interval = setInterval(fetchTrafficSnapshots, 1000);
+    return () => clearInterval(interval);
+  }, [browserState.isClient, runningCount]);
 
   // Clear launching/stopping spinners when backend reports running status changes
   React.useEffect(() => {
@@ -1185,6 +1236,13 @@ export function ProfilesDataTable({
       // Overflow actions
       onAssignProfilesToGroup,
       onConfigureCamoufox,
+
+      // Traffic snapshots (lightweight real-time data)
+      trafficSnapshots,
+      onOpenTrafficDialog: (profileId: string) => {
+        const profile = profiles.find((p) => p.id === profileId);
+        setTrafficDialogProfile({ id: profileId, name: profile?.name });
+      },
     }),
     [
       selectedProfiles,
@@ -1214,6 +1272,8 @@ export function ProfilesDataTable({
       profileToRename,
       newProfileName,
       isRenamingSaving,
+      trafficSnapshots,
+      profiles,
       renameError,
       onKillProfile,
       onLaunchProfile,
@@ -1629,6 +1689,24 @@ export function ProfilesDataTable({
                 : null;
           const isSelectorOpen = meta.openProxySelectorFor === profile.id;
 
+          // When profile is running, show bandwidth chart instead of proxy selector
+          if (isRunning && meta.trafficSnapshots) {
+            // Find the traffic snapshot for this profile by matching profile_id
+            const snapshot = meta.trafficSnapshots[profile.id];
+            const bandwidthData = snapshot?.recent_bandwidth || [];
+            const currentBandwidth =
+              (snapshot?.current_bytes_sent || 0) +
+              (snapshot?.current_bytes_received || 0);
+
+            return (
+              <BandwidthMiniChart
+                data={bandwidthData}
+                currentBandwidth={currentBandwidth}
+                onClick={() => meta.onOpenTrafficDialog?.(profile.id)}
+              />
+            );
+          }
+
           if (profile.browser === "tor-browser") {
             return (
               <Tooltip>
@@ -1793,6 +1871,13 @@ export function ProfilesDataTable({
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem
                     onClick={() => {
+                      meta.onOpenTrafficDialog?.(profile.id);
+                    }}
+                  >
+                    View Network
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
                       meta.onAssignProfilesToGroup?.([profile.id]);
                     }}
                     disabled={isDisabled}
@@ -1952,6 +2037,14 @@ export function ProfilesDataTable({
           </DataTableActionBarAction>
         )}
       </DataTableActionBar>
+      {trafficDialogProfile && (
+        <TrafficDetailsDialog
+          isOpen={trafficDialogProfile !== null}
+          onClose={() => setTrafficDialogProfile(null)}
+          profileId={trafficDialogProfile.id}
+          profileName={trafficDialogProfile.name}
+        />
+      )}
     </>
   );
 }

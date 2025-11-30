@@ -149,12 +149,13 @@ impl BrowserRunner {
 
       // Start the proxy and get local proxy settings
       // If proxy startup fails, DO NOT launch Camoufox - it requires local proxy
+      let profile_id_str = profile.id.to_string();
       let local_proxy = PROXY_MANAGER
         .start_proxy(
           app_handle.clone(),
           upstream_proxy.as_ref(),
           0, // Use 0 as temporary PID, will be updated later
-          Some(&profile.name),
+          Some(&profile_id_str),
         )
         .await
         .map_err(|e| {
@@ -823,6 +824,7 @@ impl BrowserRunner {
 
     // Use a temporary PID (1) to start the proxy, we'll update it after browser launch
     let temp_pid = 1u32;
+    let profile_id_str = profile.id.to_string();
 
     // Start local proxy - if this fails, DO NOT launch browser
     let internal_proxy = PROXY_MANAGER
@@ -830,7 +832,7 @@ impl BrowserRunner {
         app_handle.clone(),
         upstream_proxy.as_ref(),
         temp_pid,
-        Some(&profile.name),
+        Some(&profile_id_str),
       )
       .await
       .map_err(|e| {
@@ -1695,6 +1697,7 @@ pub async fn launch_browser_profile(
 
     // Use a temporary PID (1) to start the proxy, we'll update it after browser launch
     let temp_pid = 1u32;
+    let profile_id_str = profile.id.to_string();
 
     // Always start a local proxy, even if there's no upstream proxy
     // This allows for traffic monitoring and future features
@@ -1703,7 +1706,7 @@ pub async fn launch_browser_profile(
         app_handle.clone(),
         upstream_proxy.as_ref(),
         temp_pid,
-        Some(&profile.name),
+        Some(&profile_id_str),
       )
       .await
     {

@@ -268,3 +268,44 @@ export interface CamoufoxLaunchResult {
   profilePath?: string;
   url?: string;
 }
+
+// Traffic stats types
+export interface BandwidthDataPoint {
+  timestamp: number;
+  bytes_sent: number;
+  bytes_received: number;
+}
+
+export interface DomainAccess {
+  domain: string;
+  request_count: number;
+  bytes_sent: number;
+  bytes_received: number;
+  first_access: number;
+  last_access: number;
+}
+
+export interface TrafficStats {
+  proxy_id: string;
+  profile_id?: string;
+  session_start: number;
+  last_update: number;
+  total_bytes_sent: number;
+  total_bytes_received: number;
+  total_requests: number;
+  bandwidth_history: BandwidthDataPoint[];
+  domains: Record<string, DomainAccess>;
+  unique_ips: string[];
+}
+
+export interface TrafficSnapshot {
+  profile_id?: string;
+  session_start: number;
+  last_update: number;
+  total_bytes_sent: number;
+  total_bytes_received: number;
+  total_requests: number;
+  current_bytes_sent: number;
+  current_bytes_received: number;
+  recent_bandwidth: BandwidthDataPoint[];
+}

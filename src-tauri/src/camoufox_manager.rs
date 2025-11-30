@@ -349,6 +349,8 @@ impl CamoufoxManager {
   }
 
   /// Find Camoufox server by profile path (for integration with browser_runner)
+  /// This method first checks in-memory instances, then scans system processes
+  /// to detect Camoufox instances that may have been started before the app restarted.
   pub async fn find_camoufox_by_profile(
     &self,
     profile_path: &str,
@@ -356,39 +358,125 @@ impl CamoufoxManager {
     // First clean up any dead instances
     self.cleanup_dead_instances().await?;
 
-    let inner = self.inner.lock().await;
-
     // Convert paths to canonical form for comparison
     let target_path = std::path::Path::new(profile_path)
       .canonicalize()
       .unwrap_or_else(|_| std::path::Path::new(profile_path).to_path_buf());
 
-    for (id, instance) in inner.instances.iter() {
-      if let Some(instance_profile_path) = &instance.profile_path {
-        let instance_path = std::path::Path::new(instance_profile_path)
-          .canonicalize()
-          .unwrap_or_else(|_| std::path::Path::new(instance_profile_path).to_path_buf());
+    // Check in-memory instances first
+    {
+      let inner = self.inner.lock().await;
 
-        if instance_path == target_path {
-          // Verify the server is actually running by checking the process
-          if let Some(process_id) = instance.process_id {
-            if self.is_server_running(process_id).await {
-              // Found running Camoufox instance
-              return Ok(Some(CamoufoxLaunchResult {
-                id: id.clone(),
-                processId: instance.process_id,
-                profilePath: instance.profile_path.clone(),
-                url: instance.url.clone(),
-              }));
-            } else {
-              // Camoufox instance found but process is not running
+      for (id, instance) in inner.instances.iter() {
+        if let Some(instance_profile_path) = &instance.profile_path {
+          let instance_path = std::path::Path::new(instance_profile_path)
+            .canonicalize()
+            .unwrap_or_else(|_| std::path::Path::new(instance_profile_path).to_path_buf());
+
+          if instance_path == target_path {
+            // Verify the server is actually running by checking the process
+            if let Some(process_id) = instance.process_id {
+              if self.is_server_running(process_id).await {
+                // Found running Camoufox instance
+                return Ok(Some(CamoufoxLaunchResult {
+                  id: id.clone(),
+                  processId: instance.process_id,
+                  profilePath: instance.profile_path.clone(),
+                  url: instance.url.clone(),
+                }));
+              }
             }
           }
         }
       }
     }
 
+    // If not found in in-memory instances, scan system processes
+    // This handles the case where the app was restarted but Camoufox is still running
+    if let Some((pid, found_profile_path)) = self.find_camoufox_process_by_profile(&target_path) {
+      log::info!(
+        "Found running Camoufox process (PID: {}) for profile path via system scan",
+        pid
+      );
+
+      // Register this instance in our tracking
+      let instance_id = format!("recovered_{}", pid);
+      let mut inner = self.inner.lock().await;
+      inner.instances.insert(
+        instance_id.clone(),
+        CamoufoxInstance {
+          id: instance_id.clone(),
+          process_id: Some(pid),
+          profile_path: Some(found_profile_path.clone()),
+          url: None,
+        },
+      );
+
+      return Ok(Some(CamoufoxLaunchResult {
+        id: instance_id,
+        processId: Some(pid),
+        profilePath: Some(found_profile_path),
+        url: None,
+      }));
+    }
+
     Ok(None)
+  }
+
+  /// Scan system processes to find a Camoufox process using a specific profile path
+  fn find_camoufox_process_by_profile(
+    &self,
+    target_path: &std::path::Path,
+  ) -> Option<(u32, String)> {
+    use sysinfo::{ProcessRefreshKind, RefreshKind, System};
+
+    let system = System::new_with_specifics(
+      RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
+    );
+
+    let target_path_str = target_path.to_string_lossy();
+
+    for (pid, process) in system.processes() {
+      let cmd = process.cmd();
+      if cmd.is_empty() {
+        continue;
+      }
+
+      // Check if this is a Camoufox/Firefox process
+      let exe_name = process.name().to_string_lossy().to_lowercase();
+      let is_firefox_like = exe_name.contains("firefox")
+        || exe_name.contains("camoufox")
+        || exe_name.contains("firefox-bin");
+
+      if !is_firefox_like {
+        continue;
+      }
+
+      // Check if the command line contains our profile path
+      for (i, arg) in cmd.iter().enumerate() {
+        if let Some(arg_str) = arg.to_str() {
+          // Check for -profile argument followed by our path
+          if arg_str == "-profile" && i + 1 < cmd.len() {
+            if let Some(next_arg) = cmd.get(i + 1).and_then(|a| a.to_str()) {
+              let cmd_path = std::path::Path::new(next_arg)
+                .canonicalize()
+                .unwrap_or_else(|_| std::path::Path::new(next_arg).to_path_buf());
+
+              if cmd_path == target_path {
+                return Some((pid.as_u32(), next_arg.to_string()));
+              }
+            }
+          }
+
+          // Also check if the argument contains the profile path directly
+          if arg_str.contains(&*target_path_str) {
+            return Some((pid.as_u32(), target_path_str.to_string()));
+          }
+        }
+      }
+    }
+
+    None
   }
 
   /// Check if servers are still alive and clean up dead instances

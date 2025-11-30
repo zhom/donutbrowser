@@ -30,6 +30,7 @@ pub mod proxy_runner;
 pub mod proxy_server;
 pub mod proxy_storage;
 mod settings_manager;
+pub mod traffic_stats;
 // mod theme_detector; // removed: theme detection handled in webview via CSS prefers-color-scheme
 mod tag_manager;
 mod version_updater;
@@ -244,6 +245,27 @@ fn get_cached_proxy_check(proxy_id: String) -> Option<crate::proxy_manager::Prox
 #[tauri::command]
 async fn is_geoip_database_available() -> Result<bool, String> {
   Ok(GeoIPDownloader::is_geoip_database_available())
+}
+
+#[tauri::command]
+async fn get_all_traffic_stats() -> Result<Vec<crate::traffic_stats::TrafficStats>, String> {
+  Ok(crate::traffic_stats::list_traffic_stats())
+}
+
+#[tauri::command]
+async fn get_all_traffic_snapshots() -> Result<Vec<crate::traffic_stats::TrafficSnapshot>, String> {
+  Ok(
+    crate::traffic_stats::list_traffic_stats()
+      .into_iter()
+      .map(|s| s.to_snapshot())
+      .collect(),
+  )
+}
+
+#[tauri::command]
+async fn clear_all_traffic_stats() -> Result<(), String> {
+  crate::traffic_stats::clear_all_traffic_stats()
+    .map_err(|e| format!("Failed to clear traffic stats: {e}"))
 }
 
 #[tauri::command]
@@ -756,7 +778,10 @@ pub fn run() {
       warm_up_nodecar,
       start_api_server,
       stop_api_server,
-      get_api_server_status
+      get_api_server_status,
+      get_all_traffic_stats,
+      get_all_traffic_snapshots,
+      clear_all_traffic_stats
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
