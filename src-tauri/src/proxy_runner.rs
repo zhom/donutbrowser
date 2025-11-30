@@ -59,18 +59,12 @@ pub async fn start_proxy_process_with_profile(
     cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::null());
 
-    #[cfg(debug_assertions)]
-    {
-      let log_path = std::path::PathBuf::from("/tmp").join(format!("donut-proxy-{}.log", id));
-      if let Ok(file) = std::fs::File::create(&log_path) {
-        log::error!("Proxy worker stderr will be logged to: {:?}", log_path);
-        cmd.stderr(Stdio::from(file));
-      } else {
-        cmd.stderr(Stdio::null());
-      }
-    }
-    #[cfg(not(debug_assertions))]
-    {
+    // Always log to file for diagnostics (both debug and release builds)
+    let log_path = std::path::PathBuf::from("/tmp").join(format!("donut-proxy-{}.log", id));
+    if let Ok(file) = std::fs::File::create(&log_path) {
+      log::info!("Proxy worker stderr will be logged to: {:?}", log_path);
+      cmd.stderr(Stdio::from(file));
+    } else {
       cmd.stderr(Stdio::null());
     }
 

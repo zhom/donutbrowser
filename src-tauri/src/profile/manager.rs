@@ -1159,114 +1159,76 @@ impl ProfileManager {
 
     let mut preferences = Vec::new();
 
-    // Get the UUID directory (parent of profile data directory)
-    let uuid_dir = profile_data_path
-      .parent()
-      .ok_or("Invalid profile path - cannot find UUID directory")?;
-
     // Add common Firefox preferences (like disabling default browser check)
     preferences.extend(self.get_common_firefox_preferences());
 
-    // Use embedded PAC template instead of reading from file
-    const PAC_TEMPLATE: &str = r#"function FindProxyForURL(url, host) {
-  return "{{proxy_url}}";
-}"#;
+    // Determine which proxy settings to use
+    let effective_proxy = internal_proxy.unwrap_or(proxy);
+    let proxy_host = &effective_proxy.host;
+    let proxy_port = effective_proxy.port;
 
-    // Format proxy URL based on type and whether we have an internal proxy
-    let proxy_url = if let Some(internal) = internal_proxy {
-      // Use internal proxy (local proxy) as the primary proxy
-      // This is the local proxy that forwards to the upstream proxy
-      log::info!(
-        "Applying local proxy settings to Firefox profile: {}:{}",
-        internal.host,
-        internal.port
-      );
-      format!("HTTP {}:{}", internal.host, internal.port)
-    } else {
-      // Use user-configured proxy directly (upstream proxy)
-      log::info!(
-        "Applying upstream proxy settings to Firefox profile: {}:{} ({})",
-        proxy.host,
-        proxy.port,
-        proxy.proxy_type
-      );
-      match proxy.proxy_type.as_str() {
-        "http" => format!("HTTP {}:{}", proxy.host, proxy.port),
-        "https" => format!("HTTPS {}:{}", proxy.host, proxy.port),
-        "socks4" => format!("SOCKS4 {}:{}", proxy.host, proxy.port),
-        "socks5" => format!("SOCKS5 {}:{}", proxy.host, proxy.port),
-        _ => return Err(format!("Unsupported proxy type: {}", proxy.proxy_type).into()),
-      }
-    };
+    // Check if this is a SOCKS proxy (only possible when using upstream directly)
+    let is_socks =
+      internal_proxy.is_none() && (proxy.proxy_type == "socks4" || proxy.proxy_type == "socks5");
 
-    // Replace placeholders in PAC file
-    let pac_content = PAC_TEMPLATE
-      .replace("{{proxy_url}}", &proxy_url)
-      .replace("{{proxy_credentials}}", ""); // Credentials are now handled by the PAC file
-
-    // Save PAC file in UUID directory
-    let pac_path = uuid_dir.join("proxy.pac");
     log::info!(
-      "Creating PAC file at: {} with proxy: {}",
-      pac_path.display(),
-      proxy_url
-    );
-    fs::write(&pac_path, &pac_content)?;
-    log::info!(
-      "Created PAC file at: {} with content: {}",
-      pac_path.display(),
-      pac_content
+      "Applying manual proxy settings to Firefox profile: {}:{} (is_internal: {}, is_socks: {})",
+      proxy_host,
+      proxy_port,
+      internal_proxy.is_some(),
+      is_socks
     );
 
-    // Configure Firefox to use the PAC file
-    // Convert path to absolute and properly format for file:// URL
-    let pac_path_absolute = pac_path.canonicalize().unwrap_or_else(|_| pac_path.clone());
-    let pac_url = if cfg!(windows) {
-      // Windows: file:///C:/path/to/file.pac
-      format!(
-        "file:///{}",
-        pac_path_absolute.to_string_lossy().replace('\\', "/")
-      )
+    // Use MANUAL proxy configuration (type 1) instead of PAC file (type 2)
+    // PAC files with file:// URLs are blocked by privacy-focused browsers like Zen and Mullvad
+    // Manual proxy configuration works reliably across all Firefox variants
+    preferences.push("user_pref(\"network.proxy.type\", 1);".to_string());
+
+    if is_socks {
+      // SOCKS proxy configuration
+      preferences.extend([
+        format!("user_pref(\"network.proxy.socks\", \"{}\");", proxy_host),
+        format!("user_pref(\"network.proxy.socks_port\", {});", proxy_port),
+        format!(
+          "user_pref(\"network.proxy.socks_version\", {});",
+          if proxy.proxy_type == "socks5" { 5 } else { 4 }
+        ),
+        "user_pref(\"network.proxy.http\", \"\");".to_string(),
+        "user_pref(\"network.proxy.http_port\", 0);".to_string(),
+        "user_pref(\"network.proxy.ssl\", \"\");".to_string(),
+        "user_pref(\"network.proxy.ssl_port\", 0);".to_string(),
+      ]);
     } else {
-      // Unix/macOS: file:///absolute/path/to/file.pac (three slashes for absolute path)
-      format!("file://{}", pac_path_absolute.to_string_lossy())
-    };
+      // HTTP/HTTPS proxy configuration (including our internal local proxy)
+      preferences.extend([
+        format!("user_pref(\"network.proxy.http\", \"{}\");", proxy_host),
+        format!("user_pref(\"network.proxy.http_port\", {});", proxy_port),
+        format!("user_pref(\"network.proxy.ssl\", \"{}\");", proxy_host),
+        format!("user_pref(\"network.proxy.ssl_port\", {});", proxy_port),
+        format!("user_pref(\"network.proxy.ftp\", \"{}\");", proxy_host),
+        format!("user_pref(\"network.proxy.ftp_port\", {});", proxy_port),
+        "user_pref(\"network.proxy.socks\", \"\");".to_string(),
+        "user_pref(\"network.proxy.socks_port\", 0);".to_string(),
+      ]);
+    }
 
-    log::info!("PAC file path (absolute): {}", pac_path_absolute.display());
-    log::info!("PAC file URL for Firefox: {}", pac_url);
-
+    // Common proxy settings - keep it simple like proxy-chain expected
     preferences.extend([
-      "user_pref(\"network.proxy.type\", 2);".to_string(),
-      format!(
-        "user_pref(\"network.proxy.autoconfig_url\", \"{}\");",
-        pac_url
-      ),
-      "user_pref(\"network.proxy.failover_direct\", false);".to_string(),
-      "user_pref(\"network.proxy.socks_remote_dns\", true);".to_string(),
       "user_pref(\"network.proxy.no_proxies_on\", \"\");".to_string(),
-      "user_pref(\"signon.autologin.proxy\", true);".to_string(),
-      "user_pref(\"network.proxy.share_proxy_settings\", false);".to_string(),
-      "user_pref(\"network.automatic-ntlm-auth.allow-proxies\", false);".to_string(),
-      "user_pref(\"network.auth-use-sspi\", false);".to_string(),
+      "user_pref(\"network.proxy.autoconfig_url\", \"\");".to_string(),
+      // Disable QUIC/HTTP3 - it bypasses HTTP proxy
+      "user_pref(\"network.http.http3.enable\", false);".to_string(),
+      "user_pref(\"network.http.http3.enabled\", false);".to_string(),
     ]);
 
     // Write settings to user.js file
     let user_js_content = preferences.join("\n");
     fs::write(user_js_path, &user_js_content)?;
-    log::info!("Updated user.js with proxy settings. PAC URL: {}", pac_url);
-    if let Some(internal) = internal_proxy {
-      log::info!(
-        "Firefox will use LOCAL proxy: {}:{} (which forwards to upstream)",
-        internal.host,
-        internal.port
-      );
-    } else {
-      log::info!(
-        "Firefox will use UPSTREAM proxy directly: {}:{}",
-        proxy.host,
-        proxy.port
-      );
-    }
+    log::info!(
+      "Updated user.js with manual proxy settings: {}:{}",
+      proxy_host,
+      proxy_port
+    );
 
     Ok(())
   }
@@ -1428,20 +1390,28 @@ mod tests {
     assert!(user_js_path.exists(), "user.js should be created");
 
     let content = fs::read_to_string(&user_js_path).expect("Should read user.js");
+
+    // Check for manual proxy configuration (type 1) instead of PAC (type 2)
+    // Manual proxy is used because PAC file:// URLs are blocked by privacy browsers like Zen
     assert!(
-      content.contains("network.proxy.type"),
-      "Should contain proxy type setting"
+      content.contains("network.proxy.type\", 1"),
+      "Should set proxy type to 1 (manual)"
     );
-    assert!(content.contains("2"), "Should set proxy type to 2 (PAC)");
-
-    // Check that PAC file was created
-    let pac_path = uuid_dir.join("proxy.pac");
-    assert!(pac_path.exists(), "proxy.pac should be created");
-
-    let pac_content = fs::read_to_string(&pac_path).expect("Should read proxy.pac");
     assert!(
-      pac_content.contains("FindProxyForURL"),
-      "PAC file should contain FindProxyForURL function"
+      content.contains("network.proxy.http\", \"proxy.example.com\""),
+      "Should set HTTP proxy host"
+    );
+    assert!(
+      content.contains("network.proxy.http_port\", 8080"),
+      "Should set HTTP proxy port"
+    );
+    assert!(
+      content.contains("network.proxy.ssl\", \"proxy.example.com\""),
+      "Should set SSL proxy host"
+    );
+    assert!(
+      content.contains("network.proxy.ssl_port\", 8080"),
+      "Should set SSL proxy port"
     );
   }
 }

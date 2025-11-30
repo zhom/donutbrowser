@@ -624,22 +624,9 @@ impl Browser for FirefoxBrowser {
       args.push("--headless".to_string());
     }
 
-    // Use -no-remote for browsers that require it for security (Mullvad, Tor) or when remote debugging
-    match self.browser_type {
-      BrowserType::MullvadBrowser | BrowserType::TorBrowser => {
-        args.push("-no-remote".to_string());
-      }
-      BrowserType::Firefox
-      | BrowserType::FirefoxDeveloper
-      | BrowserType::Zen
-      | BrowserType::Camoufox => {
-        // Use -no-remote when remote debugging to avoid conflicts
-        if remote_debugging_port.is_some() {
-          args.push("-no-remote".to_string());
-        }
-        // Don't use -no-remote for normal launches so we can communicate with existing instances
-      }
-      _ => {}
+    // Use -no-remote when remote debugging to avoid conflicts with existing instances
+    if remote_debugging_port.is_some() {
+      args.push("-no-remote".to_string());
     }
 
     // Firefox-based browsers use profile directory and user.js for proxy configuration
@@ -741,6 +728,8 @@ impl Browser for ChromiumBrowser {
       "--disable-session-crashed-bubble".to_string(),
       "--hide-crash-restore-bubble".to_string(),
       "--disable-infobars".to_string(),
+      // Disable QUIC/HTTP3 to ensure traffic goes through HTTP proxy
+      "--disable-quic".to_string(),
     ];
 
     // Add remote debugging if requested
@@ -1100,30 +1089,26 @@ mod tests {
       "Firefox should include debugging port"
     );
 
-    // Test Mullvad Browser (should always use -no-remote)
+    // Test Mullvad Browser (no special flags without remote debugging)
     let browser = FirefoxBrowser::new(BrowserType::MullvadBrowser);
     let args = browser
       .create_launch_args("/path/to/profile", None, None, None, false)
       .expect("Failed to create launch args for Mullvad Browser");
-    assert_eq!(args, vec!["-profile", "/path/to/profile", "-no-remote"]);
+    assert_eq!(args, vec!["-profile", "/path/to/profile"]);
 
-    // Test Tor Browser (should always use -no-remote)
+    // Test Tor Browser (no special flags without remote debugging)
     let browser = FirefoxBrowser::new(BrowserType::TorBrowser);
     let args = browser
       .create_launch_args("/path/to/profile", None, None, None, false)
       .expect("Failed to create launch args for Tor Browser");
-    assert_eq!(args, vec!["-profile", "/path/to/profile", "-no-remote"]);
+    assert_eq!(args, vec!["-profile", "/path/to/profile"]);
 
-    // Test Zen Browser (should not use -no-remote for normal launch)
+    // Test Zen Browser (no special flags without remote debugging)
     let browser = FirefoxBrowser::new(BrowserType::Zen);
     let args = browser
       .create_launch_args("/path/to/profile", None, None, None, false)
       .expect("Failed to create launch args for Zen Browser");
     assert_eq!(args, vec!["-profile", "/path/to/profile"]);
-    assert!(
-      !args.contains(&"-no-remote".to_string()),
-      "Zen Browser should not use -no-remote for normal launch"
-    );
 
     // Test headless mode
     let args = browser

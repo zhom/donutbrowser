@@ -82,6 +82,12 @@ fn build_proxy_url(
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
+  // Initialize logger to write to stderr (which will be redirected to file)
+  env_logger::Builder::from_default_env()
+    .filter_level(log::LevelFilter::Debug)
+    .format_timestamp_millis()
+    .init();
+
   // Set up panic handler to log panics before process exits
   std::panic::set_hook(Box::new(|panic_info| {
     log::error!("PANIC in proxy worker: {:?}", panic_info);

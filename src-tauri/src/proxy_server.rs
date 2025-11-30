@@ -367,6 +367,13 @@ async fn handle_http(
   // This is faster and more reliable than trying to use hyper-proxy with version conflicts
   use reqwest::Client;
 
+  log::error!(
+    "DEBUG: Handling HTTP request: {} {} (host: {:?})",
+    req.method(),
+    req.uri(),
+    req.uri().host()
+  );
+
   // Extract domain for traffic tracking
   let domain = req
     .uri()
@@ -609,7 +616,12 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
   // This ensures the process doesn't exit even if there are no active connections
   loop {
     match listener.accept().await {
-      Ok((mut stream, _)) => {
+      Ok((mut stream, peer_addr)) => {
+        // Enable TCP_NODELAY to ensure small packets are sent immediately
+        // This is critical for CONNECT responses to be sent before tunneling begins
+        let _ = stream.set_nodelay(true);
+        log::error!("DEBUG: Accepted connection from {:?}", peer_addr);
+
         let upstream = upstream_url.clone();
 
         tokio::task::spawn(async move {
@@ -617,9 +629,13 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
           // CONNECT requests need special handling for tunneling
           let mut peek_buffer = [0u8; 8];
           match stream.read(&mut peek_buffer).await {
-            Ok(n) if n >= 7 => {
+            Ok(0) => {
+              log::error!("DEBUG: Connection closed immediately (0 bytes read)");
+            }
+            Ok(n) => {
               let request_start = String::from_utf8_lossy(&peek_buffer[..n.min(7)]);
-              if request_start.starts_with("CONNECT") {
+              log::error!("DEBUG: Read {} bytes, starts with: {:?}", n, request_start);
+              if n >= 7 && request_start.starts_with("CONNECT") {
                 // Handle CONNECT request manually for tunneling
                 let mut full_request = Vec::with_capacity(4096);
                 full_request.extend_from_slice(&peek_buffer[..n]);
@@ -651,7 +667,14 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
                 }
                 return;
               }
-              // Not CONNECT - reconstruct stream with consumed bytes prepended
+
+              // Not CONNECT (or partial read) - reconstruct stream with consumed bytes prepended
+              // This is critical: we MUST prepend any bytes we consumed, even if < 7 bytes
+              log::error!(
+                "DEBUG: Non-CONNECT request, first {} bytes: {:?}",
+                n,
+                String::from_utf8_lossy(&peek_buffer[..n])
+              );
               let prepended_bytes = peek_buffer[..n].to_vec();
               let prepended_reader = PrependReader {
                 prepended: prepended_bytes,
@@ -664,17 +687,10 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
               if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
                 log::error!("Error serving connection: {:?}", err);
               }
-              return;
             }
-            _ => {}
-          }
-
-          // For non-CONNECT requests, use hyper's HTTP handling
-          let io = TokioIo::new(stream);
-          let service = service_fn(move |req| handle_request(req, upstream.clone()));
-
-          if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
-            log::error!("Error serving connection: {:?}", err);
+            Err(e) => {
+              log::error!("Error reading from connection: {:?}", e);
+            }
           }
         });
       }
@@ -806,6 +822,9 @@ async fn handle_connect_from_buffer(
       }
     }
   };
+
+  // Enable TCP_NODELAY on target stream for immediate data transfer
+  let _ = target_stream.set_nodelay(true);
 
   // Send 200 Connection Established response to client
   // CRITICAL: Must flush after writing to ensure response is sent before tunneling
