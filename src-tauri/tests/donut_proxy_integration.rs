@@ -351,7 +351,8 @@ async fn test_multiple_proxies_simultaneously(
 
   let mut proxy_ports = Vec::new();
 
-  // Start 3 proxies with a small delay between each to avoid race conditions
+  // Start 3 proxies, waiting for each to be ready before starting the next
+  // This avoids race conditions on macOS where processes need time to initialize
   for i in 0..3 {
     let output = TestUtils::execute_command(&binary_path, &["proxy", "start"]).await?;
     if !output.status.success() {
@@ -376,14 +377,36 @@ async fn test_multiple_proxies_simultaneously(
 
     println!("Proxy {} started on port {}", i + 1, local_port);
 
-    // Small delay between starting proxies to avoid resource contention
-    sleep(Duration::from_millis(100)).await;
+    // Wait for this proxy to be ready before starting the next one
+    // This prevents race conditions on macOS where processes need time to initialize
+    let mut attempts = 0;
+    let max_attempts = 50; // 5 seconds max (50 * 100ms)
+    loop {
+      sleep(Duration::from_millis(100)).await;
+      match TcpStream::connect(("127.0.0.1", local_port)).await {
+        Ok(_) => {
+          println!("Proxy {} is ready on port {}", i + 1, local_port);
+          break;
+        }
+        Err(_) => {
+          attempts += 1;
+          if attempts >= max_attempts {
+            return Err(
+              format!(
+                "Proxy {} on port {} failed to become ready after {} attempts",
+                i + 1,
+                local_port,
+                max_attempts
+              )
+              .into(),
+            );
+          }
+        }
+      }
+    }
   }
 
-  // Wait for all proxies to be ready
-  sleep(Duration::from_millis(1000)).await;
-
-  // Verify all proxies are listening
+  // Verify all proxies are still listening
   for (i, port) in proxy_ports.iter().enumerate() {
     match TcpStream::connect(("127.0.0.1", *port)).await {
       Ok(_) => {
