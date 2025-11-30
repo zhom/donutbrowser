@@ -17,6 +17,19 @@ pub struct BandwidthDataPoint {
   pub bytes_received: u64,
 }
 
+/// Individual domain access data point for time-series tracking
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DomainAccessPoint {
+  /// Unix timestamp in seconds
+  pub timestamp: u64,
+  /// Domain name
+  pub domain: String,
+  /// Bytes sent in this request
+  pub bytes_sent: u64,
+  /// Bytes received in this request
+  pub bytes_received: u64,
+}
+
 /// Domain access information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DomainAccess {
@@ -78,9 +91,12 @@ pub struct TrafficStats {
   /// Bandwidth data points (time-series, 1 point per second, stored indefinitely)
   #[serde(default)]
   pub bandwidth_history: Vec<BandwidthDataPoint>,
-  /// Domain access statistics
+  /// Domain access statistics (aggregated all-time)
   #[serde(default)]
   pub domains: HashMap<String, DomainAccess>,
+  /// Domain access history (time-series for filtering by period)
+  #[serde(default)]
+  pub domain_access_history: Vec<DomainAccessPoint>,
   /// Unique IPs accessed
   #[serde(default)]
   pub unique_ips: Vec<String>,
@@ -99,6 +115,7 @@ impl TrafficStats {
       total_requests: 0,
       bandwidth_history: Vec::new(),
       domains: HashMap::new(),
+      domain_access_history: Vec::new(),
       unique_ips: Vec::new(),
     }
   }
@@ -163,6 +180,7 @@ impl TrafficStats {
     let now = current_timestamp();
     self.total_requests += 1;
 
+    // Update aggregated domain stats
     let entry = self
       .domains
       .entry(domain.to_string())
@@ -179,6 +197,14 @@ impl TrafficStats {
     entry.bytes_sent += bytes_sent;
     entry.bytes_received += bytes_received;
     entry.last_access = now;
+
+    // Add to domain access history for time-period filtering
+    self.domain_access_history.push(DomainAccessPoint {
+      timestamp: now,
+      domain: domain.to_string(),
+      bytes_sent,
+      bytes_received,
+    });
   }
 
   /// Record an IP address access
@@ -361,6 +387,14 @@ fn merge_traffic_stats(dest: &mut TrafficStats, src: &TrafficStats) {
     entry.first_access = entry.first_access.min(access.first_access);
     entry.last_access = entry.last_access.max(access.last_access);
   }
+
+  // Merge domain access history
+  let mut combined_domain_history: Vec<DomainAccessPoint> = dest.domain_access_history.clone();
+  for point in &src.domain_access_history {
+    combined_domain_history.push(point.clone());
+  }
+  combined_domain_history.sort_by_key(|p| p.timestamp);
+  dest.domain_access_history = combined_domain_history;
 
   // Merge unique IPs
   for ip in &src.unique_ips {
@@ -557,7 +591,9 @@ pub struct FilteredTrafficStats {
   /// Period stats: bytes sent/received within the requested period
   pub period_bytes_sent: u64,
   pub period_bytes_received: u64,
-  /// Domain access statistics (always full, as it's already aggregated)
+  /// Period requests within the requested period
+  pub period_requests: u64,
+  /// Domain access statistics filtered to requested time period
   pub domains: HashMap<String, DomainAccess>,
   /// Unique IPs accessed
   pub unique_ips: Vec<String>,
@@ -586,9 +622,44 @@ pub fn get_traffic_stats_for_period(
     .cloned()
     .collect();
 
-  // Calculate period totals
+  // Calculate period totals for bandwidth
   let period_bytes_sent: u64 = filtered_history.iter().map(|dp| dp.bytes_sent).sum();
   let period_bytes_received: u64 = filtered_history.iter().map(|dp| dp.bytes_received).sum();
+
+  // Filter and aggregate domain stats for the period
+  let mut filtered_domains: HashMap<String, DomainAccess> = HashMap::new();
+  let mut period_requests: u64 = 0;
+
+  for access in stats
+    .domain_access_history
+    .iter()
+    .filter(|a| a.timestamp >= cutoff)
+  {
+    period_requests += 1;
+    let entry = filtered_domains
+      .entry(access.domain.clone())
+      .or_insert(DomainAccess {
+        domain: access.domain.clone(),
+        request_count: 0,
+        bytes_sent: 0,
+        bytes_received: 0,
+        first_access: access.timestamp,
+        last_access: access.timestamp,
+      });
+
+    entry.request_count += 1;
+    entry.bytes_sent += access.bytes_sent;
+    entry.bytes_received += access.bytes_received;
+    entry.first_access = entry.first_access.min(access.timestamp);
+    entry.last_access = entry.last_access.max(access.timestamp);
+  }
+
+  // If no domain_access_history exists (old data), fall back to all-time domains
+  let domains = if stats.domain_access_history.is_empty() {
+    stats.domains
+  } else {
+    filtered_domains
+  };
 
   Some(FilteredTrafficStats {
     profile_id: stats.profile_id,
@@ -600,7 +671,8 @@ pub fn get_traffic_stats_for_period(
     bandwidth_history: filtered_history,
     period_bytes_sent,
     period_bytes_received,
-    domains: stats.domains,
+    period_requests,
+    domains,
     unique_ips: stats.unique_ips,
   })
 }

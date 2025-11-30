@@ -352,9 +352,11 @@ export function TrafficDetailsDialog({
                 </p>
               </div>
               <div className="bg-muted/50 rounded-lg p-3">
-                <p className="text-xs text-muted-foreground">Total Requests</p>
+                <p className="text-xs text-muted-foreground">
+                  Requests ({timePeriod === "all" ? "total" : timePeriod})
+                </p>
                 <p className="text-lg font-semibold">
-                  {(stats?.total_requests || 0).toLocaleString()}
+                  {(stats?.period_requests || 0).toLocaleString()}
                 </p>
               </div>
             </div>
@@ -362,14 +364,14 @@ export function TrafficDetailsDialog({
             {/* Total Stats (smaller, under period stats) */}
             <div className="flex items-center gap-6 text-sm text-muted-foreground border-t pt-4">
               <div>
-                <span className="font-medium">Total:</span>{" "}
+                <span className="font-medium">All-time traffic:</span>{" "}
                 {formatBytes(
                   (stats?.total_bytes_sent || 0) +
                     (stats?.total_bytes_received || 0),
                 )}
               </div>
               <div>
-                <span className="font-medium">Requests:</span>{" "}
+                <span className="font-medium">All-time requests:</span>{" "}
                 {stats?.total_requests?.toLocaleString() || 0}
               </div>
             </div>
@@ -385,7 +387,8 @@ export function TrafficDetailsDialog({
             {topDomainsByTraffic.length > 0 && (
               <div>
                 <h3 className="text-sm font-medium mb-2">
-                  Top Domains by Traffic
+                  Top Domains by Traffic (
+                  {timePeriod === "all" ? "all time" : timePeriod})
                 </h3>
                 <div className="border rounded-md">
                   <div className="grid grid-cols-[1fr_80px_80px_80px] gap-2 px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-muted/30">
@@ -428,7 +431,8 @@ export function TrafficDetailsDialog({
             {topDomainsByRequests.length > 0 && (
               <div>
                 <h3 className="text-sm font-medium mb-2">
-                  Top Domains by Requests
+                  Top Domains by Requests (
+                  {timePeriod === "all" ? "all time" : timePeriod})
                 </h3>
                 <div className="border rounded-md">
                   <div className="grid grid-cols-[1fr_80px_100px] gap-2 px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-muted/30">

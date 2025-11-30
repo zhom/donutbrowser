@@ -320,6 +320,7 @@ export interface FilteredTrafficStats {
   bandwidth_history: BandwidthDataPoint[];
   period_bytes_sent: number;
   period_bytes_received: number;
+  period_requests: number;
   domains: Record<string, DomainAccess>;
   unique_ips: string[];
 }
