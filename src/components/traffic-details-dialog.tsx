@@ -26,6 +26,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  TooltipContent,
+  TooltipTrigger,
+  Tooltip as UITooltip,
+} from "@/components/ui/tooltip";
 import type { FilteredTrafficStats } from "@/types";
 
 type TimePeriod =
@@ -89,6 +94,53 @@ function getSecondsForPeriod(period: TimePeriod): number {
       return 300;
   }
 }
+
+const TruncatedDomain = React.memo<{ domain: string }>(({ domain }) => {
+  const ref = React.useRef<HTMLSpanElement>(null);
+  const [isTruncated, setIsTruncated] = React.useState(false);
+
+  const checkTruncation = React.useCallback(() => {
+    if (ref.current) {
+      setIsTruncated(ref.current.scrollWidth > ref.current.clientWidth);
+    }
+  }, []);
+
+  React.useLayoutEffect(() => {
+    checkTruncation();
+  });
+
+  React.useEffect(() => {
+    const resizeObserver = new ResizeObserver(checkTruncation);
+    if (ref.current) {
+      resizeObserver.observe(ref.current);
+    }
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [checkTruncation]);
+
+  const content = (
+    <span ref={ref} className="truncate max-w-[200px] block">
+      {domain}
+    </span>
+  );
+
+  if (!isTruncated) {
+    return content;
+  }
+
+  return (
+    <UITooltip>
+      <TooltipTrigger asChild>{content}</TooltipTrigger>
+      <TooltipContent>
+        <p>{domain}</p>
+      </TooltipContent>
+    </UITooltip>
+  );
+});
+
+TruncatedDomain.displayName = "TruncatedDomain";
 
 export function TrafficDetailsDialog({
   isOpen,
@@ -407,9 +459,7 @@ export function TrafficDetailsDialog({
                           <span className="text-xs text-muted-foreground w-4 shrink-0">
                             {index + 1}
                           </span>
-                          <span className="truncate" title={domain.domain}>
-                            {domain.domain}
-                          </span>
+                          <TruncatedDomain domain={domain.domain} />
                         </div>
                         <span className="text-right text-muted-foreground">
                           {domain.request_count.toLocaleString()}
@@ -450,9 +500,7 @@ export function TrafficDetailsDialog({
                           <span className="text-xs text-muted-foreground w-4 shrink-0">
                             {index + 1}
                           </span>
-                          <span className="truncate" title={domain.domain}>
-                            {domain.domain}
-                          </span>
+                          <TruncatedDomain domain={domain.domain} />
                         </div>
                         <span className="text-right text-muted-foreground">
                           {domain.request_count.toLocaleString()}
