@@ -1132,6 +1132,12 @@ impl ProfileManager {
       "user_pref(\"datareporting.policy.dataSubmissionPolicyBypassNotification\", true);"
         .to_string(),
       "user_pref(\"toolkit.telemetry.reportingpolicy.firstRun\", false);".to_string(),
+      // Disable quit confirmation dialogs
+      "user_pref(\"browser.warnOnQuit\", false);".to_string(),
+      "user_pref(\"browser.showQuitWarning\", false);".to_string(),
+      "user_pref(\"browser.tabs.warnOnClose\", false);".to_string(),
+      "user_pref(\"browser.tabs.warnOnCloseOtherTabs\", false);".to_string(),
+      "user_pref(\"browser.sessionstore.warnOnQuit\", false);".to_string(),
     ]
   }
 

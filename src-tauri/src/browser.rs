@@ -737,6 +737,10 @@ impl Browser for ChromiumBrowser {
       "--disable-background-timer-throttling".to_string(),
       "--crash-server-url=".to_string(),
       "--disable-updater".to_string(),
+      // Disable quit confirmation and session restore prompts
+      "--disable-session-crashed-bubble".to_string(),
+      "--hide-crash-restore-bubble".to_string(),
+      "--disable-infobars".to_string(),
     ];
 
     // Add remote debugging if requested
