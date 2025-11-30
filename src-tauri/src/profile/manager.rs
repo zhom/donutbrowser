@@ -1107,6 +1107,14 @@ impl ProfileManager {
       "user_pref(\"app.update.background.scheduling.enabled\", false);".to_string(),
       // Suppress upgrade dialogs on startup
       "user_pref(\"browser.startup.upgradeDialog.enabled\", false);".to_string(),
+      // Zen browser specific - disable welcome screen
+      "user_pref(\"zen.welcome-screen.seen\", true);".to_string(),
+      // Additional first-run suppressions
+      "user_pref(\"app.normandy.first_run\", false);".to_string(),
+      "user_pref(\"trailhead.firstrun.didSeeAboutWelcome\", true);".to_string(),
+      "user_pref(\"datareporting.policy.dataSubmissionPolicyBypassNotification\", true);"
+        .to_string(),
+      "user_pref(\"toolkit.telemetry.reportingpolicy.firstRun\", false);".to_string(),
     ]
   }
 
