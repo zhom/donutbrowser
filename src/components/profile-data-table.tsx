@@ -331,7 +331,9 @@ const TagsCell = React.memo<{
           ref={containerRef as unknown as React.RefObject<HTMLButtonElement>}
           className={cn(
             "flex overflow-hidden gap-1 items-center px-2 py-1 h-6 w-full bg-transparent rounded border-none cursor-pointer",
-            isDisabled ? "opacity-60" : "cursor-pointer hover:bg-accent/50",
+            isDisabled
+              ? "opacity-60 cursor-not-allowed"
+              : "cursor-pointer hover:bg-accent/50",
           )}
           onClick={() => {
             if (!isDisabled) setOpenTagsEditorFor(profile.id);
@@ -354,7 +356,7 @@ const TagsCell = React.memo<{
       );
 
       return (
-        <div className="w-48 h-6 cursor-pointer">
+        <div className="w-40 h-6 cursor-pointer">
           <Tooltip>
             <TooltipTrigger asChild>{ButtonContent}</TooltipTrigger>
             {hiddenCount > 0 && (
@@ -380,13 +382,13 @@ const TagsCell = React.memo<{
     return (
       <div
         className={cn(
-          "w-48 h-6 relative",
+          "w-40 h-6 relative",
           isDisabled && "opacity-60 pointer-events-none",
         )}
       >
         <div
           ref={editorRef}
-          className="absolute top-0 left-0 z-50 w-48 min-h-6 bg-popover rounded-md shadow-md"
+          className="absolute top-0 left-0 z-50 w-40 min-h-6 bg-popover rounded-md shadow-md"
         >
           <MultipleSelector
             value={valueOptions}
@@ -1451,8 +1453,9 @@ export function ProfilesDataTable({
                       size="sm"
                       disabled={!canLaunch || isLaunching || isStopping}
                       className={cn(
-                        "cursor-pointer min-w-[70px] h-7",
-                        !canLaunch && "opacity-50",
+                        "min-w-[70px] h-7",
+                        !canLaunch && "opacity-50 cursor-not-allowed",
+                        canLaunch && "cursor-pointer",
                       )}
                       onClick={() =>
                         isRunning

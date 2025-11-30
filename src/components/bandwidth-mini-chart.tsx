@@ -73,7 +73,7 @@ export function BandwidthMiniChart({
         className,
       )}
     >
-      <div className="flex-1 h-3">
+      <div className="flex-1 h-3 pointer-events-none">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart
             data={chartData}
@@ -106,6 +106,8 @@ export function BandwidthMiniChart({
               strokeWidth={1}
               fill="url(#bandwidthGradient)"
               isAnimationActive={false}
+              dot={false}
+              activeDot={false}
             />
           </AreaChart>
         </ResponsiveContainer>
