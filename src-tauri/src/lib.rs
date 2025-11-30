@@ -248,11 +248,6 @@ async fn is_geoip_database_available() -> Result<bool, String> {
 }
 
 #[tauri::command]
-async fn get_all_traffic_stats() -> Result<Vec<crate::traffic_stats::TrafficStats>, String> {
-  Ok(crate::traffic_stats::list_traffic_stats())
-}
-
-#[tauri::command]
 async fn get_all_traffic_snapshots() -> Result<Vec<crate::traffic_stats::TrafficSnapshot>, String> {
   Ok(
     crate::traffic_stats::list_traffic_stats()
@@ -266,6 +261,17 @@ async fn get_all_traffic_snapshots() -> Result<Vec<crate::traffic_stats::Traffic
 async fn clear_all_traffic_stats() -> Result<(), String> {
   crate::traffic_stats::clear_all_traffic_stats()
     .map_err(|e| format!("Failed to clear traffic stats: {e}"))
+}
+
+#[tauri::command]
+async fn get_traffic_stats_for_period(
+  profile_id: String,
+  seconds: u64,
+) -> Result<Option<crate::traffic_stats::FilteredTrafficStats>, String> {
+  Ok(crate::traffic_stats::get_traffic_stats_for_period(
+    &profile_id,
+    seconds,
+  ))
 }
 
 #[tauri::command]
@@ -779,9 +785,9 @@ pub fn run() {
       start_api_server,
       stop_api_server,
       get_api_server_status,
-      get_all_traffic_stats,
       get_all_traffic_snapshots,
-      clear_all_traffic_stats
+      clear_all_traffic_stats,
+      get_traffic_stats_for_period
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

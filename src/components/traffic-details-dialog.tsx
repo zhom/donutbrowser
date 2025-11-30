@@ -30,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { TrafficStats } from "@/types";
+import type { FilteredTrafficStats } from "@/types";
 
 type TimePeriod =
   | "1m"
@@ -67,120 +67,76 @@ const formatBytesPerSecond = (bytes: number): string => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB/s`;
 };
 
+function getSecondsForPeriod(period: TimePeriod): number {
+  switch (period) {
+    case "1m":
+      return 60;
+    case "5m":
+      return 300;
+    case "30m":
+      return 1800;
+    case "1h":
+      return 3600;
+    case "2h":
+      return 7200;
+    case "4h":
+      return 14400;
+    case "1d":
+      return 86400;
+    case "7d":
+      return 604800;
+    case "30d":
+      return 2592000;
+    case "all":
+      return 0; // 0 means all time
+    default:
+      return 300;
+  }
+}
+
 export function TrafficDetailsDialog({
   isOpen,
   onClose,
   profileId,
   profileName,
 }: TrafficDetailsDialogProps) {
-  const [stats, setStats] = React.useState<TrafficStats | null>(null);
+  const [stats, setStats] = React.useState<FilteredTrafficStats | null>(null);
   const [timePeriod, setTimePeriod] = React.useState<TimePeriod>("5m");
 
-  // Fetch stats periodically
+  // Fetch stats periodically - now uses filtered API
   React.useEffect(() => {
     if (!isOpen || !profileId) return;
 
     const fetchStats = async () => {
       try {
-        const allStats = await invoke<TrafficStats[]>("get_all_traffic_stats");
-        const matchingStats = allStats.filter(
-          (s) => s.profile_id === profileId,
+        const seconds = getSecondsForPeriod(timePeriod);
+        const filteredStats = await invoke<FilteredTrafficStats | null>(
+          "get_traffic_stats_for_period",
+          { profileId, seconds },
         );
-        const profileStats =
-          matchingStats.length > 0
-            ? matchingStats.reduce((latest, current) =>
-                current.last_update > latest.last_update ? current : latest,
-              )
-            : null;
-        setStats(profileStats);
+        setStats(filteredStats);
       } catch (error) {
         console.error("Failed to fetch traffic stats:", error);
       }
     };
 
     void fetchStats();
-    // Only poll every 2 seconds for full stats (more expensive)
     const interval = setInterval(fetchStats, 2000);
 
     return () => clearInterval(interval);
-  }, [isOpen, profileId]);
+  }, [isOpen, profileId, timePeriod]);
 
-  // Filter data based on time period
-  const filteredData = React.useMemo(() => {
+  // Transform data for chart (already filtered by backend)
+  const chartData = React.useMemo(() => {
     if (!stats?.bandwidth_history) return [];
 
-    const now = Math.floor(Date.now() / 1000);
-
-    // Get cutoff seconds for time period
-    let cutoffSeconds: number;
-    switch (timePeriod) {
-      case "1m":
-        cutoffSeconds = 60;
-        break;
-      case "5m":
-        cutoffSeconds = 300;
-        break;
-      case "30m":
-        cutoffSeconds = 1800;
-        break;
-      case "1h":
-        cutoffSeconds = 3600;
-        break;
-      case "2h":
-        cutoffSeconds = 7200;
-        break;
-      case "4h":
-        cutoffSeconds = 14400;
-        break;
-      case "1d":
-        cutoffSeconds = 86400;
-        break;
-      case "7d":
-        cutoffSeconds = 604800;
-        break;
-      case "30d":
-        cutoffSeconds = 2592000;
-        break;
-      case "all":
-        cutoffSeconds = Number.POSITIVE_INFINITY;
-        break;
-      default:
-        cutoffSeconds = 300;
-    }
-
-    const cutoff = now - cutoffSeconds;
-
-    return stats.bandwidth_history
-      .filter((d) => d.timestamp >= cutoff)
-      .map((d) => ({
-        time: d.timestamp,
-        sent: d.bytes_sent,
-        received: d.bytes_received,
-        total: d.bytes_sent + d.bytes_received,
-      }));
-  }, [stats, timePeriod]);
-
-  // Calculate stats for the selected period
-  const periodStats = React.useMemo(() => {
-    if (!filteredData.length) {
-      return { sent: 0, received: 0, requests: 0 };
-    }
-
-    const sent = filteredData.reduce((sum, d) => sum + d.sent, 0);
-    const received = filteredData.reduce((sum, d) => sum + d.received, 0);
-
-    // Estimate requests based on filtered data time range
-    // We don't have per-second request data, so use total if "all" or estimate
-    const requests =
-      timePeriod === "all"
-        ? stats?.total_requests || 0
-        : Math.round(
-            ((stats?.total_requests || 0) * filteredData.length) /
-              (stats?.bandwidth_history?.length || 1),
-          );
-
-    return { sent, received, requests };
-  }, [filteredData, stats, timePeriod]);
+    return stats.bandwidth_history.map((d) => ({
+      time: d.timestamp,
+      sent: d.bytes_sent,
+      received: d.bytes_received,
+      total: d.bytes_sent + d.bytes_received,
+    }));
+  }, [stats]);
 
   // Tooltip render function
   const renderTooltip = React.useCallback(
@@ -276,7 +232,7 @@ export function TrafficDetailsDialog({
               <div className="h-[200px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart
-                    data={filteredData}
+                    data={chartData}
                     margin={{ top: 10, right: 10, bottom: 0, left: 0 }}
                   >
                     <defs>
@@ -381,14 +337,14 @@ export function TrafficDetailsDialog({
               </div>
             </div>
 
-            {/* Period Stats */}
+            {/* Period Stats - now uses backend-computed values */}
             <div className="grid grid-cols-3 gap-4">
               <div className="bg-muted/50 rounded-lg p-3">
                 <p className="text-xs text-muted-foreground">
                   Sent ({timePeriod === "all" ? "total" : timePeriod})
                 </p>
                 <p className="text-lg font-semibold text-chart-1">
-                  {formatBytes(periodStats.sent)}
+                  {formatBytes(stats?.period_bytes_sent || 0)}
                 </p>
               </div>
               <div className="bg-muted/50 rounded-lg p-3">
@@ -396,15 +352,13 @@ export function TrafficDetailsDialog({
                   Received ({timePeriod === "all" ? "total" : timePeriod})
                 </p>
                 <p className="text-lg font-semibold text-chart-2">
-                  {formatBytes(periodStats.received)}
+                  {formatBytes(stats?.period_bytes_received || 0)}
                 </p>
               </div>
               <div className="bg-muted/50 rounded-lg p-3">
-                <p className="text-xs text-muted-foreground">
-                  Requests ({timePeriod === "all" ? "total" : `~${timePeriod}`})
-                </p>
+                <p className="text-xs text-muted-foreground">Total Requests</p>
                 <p className="text-lg font-semibold">
-                  {periodStats.requests.toLocaleString()}
+                  {(stats?.total_requests || 0).toLocaleString()}
                 </p>
               </div>
             </div>

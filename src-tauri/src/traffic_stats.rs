@@ -61,9 +61,9 @@ pub struct TrafficSnapshot {
 /// Traffic statistics for a profile/proxy session
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrafficStats {
-  /// Proxy ID this stats belong to
+  /// Proxy ID this stats belong to (for backwards compatibility)
   pub proxy_id: String,
-  /// Profile ID (if associated)
+  /// Profile ID (if associated) - this is now the primary key for storage
   pub profile_id: Option<String>,
   /// Session start timestamp
   pub session_start: u64,
@@ -75,7 +75,7 @@ pub struct TrafficStats {
   pub total_bytes_received: u64,
   /// Total requests made
   pub total_requests: u64,
-  /// Bandwidth data points (time-series, 1 point per second, max 300 = 5 min)
+  /// Bandwidth data points (time-series, 1 point per second, stored indefinitely)
   #[serde(default)]
   pub bandwidth_history: Vec<BandwidthDataPoint>,
   /// Domain access statistics
@@ -134,7 +134,7 @@ impl TrafficStats {
     }
   }
 
-  /// Record bandwidth for current second
+  /// Record bandwidth for current second (data is stored indefinitely)
   pub fn record_bandwidth(&mut self, bytes_sent: u64, bytes_received: u64) {
     let now = current_timestamp();
     self.last_update = now;
@@ -156,12 +156,6 @@ impl TrafficStats {
       bytes_sent,
       bytes_received,
     });
-
-    // Keep only last 5 minutes (300 seconds) of data
-    const MAX_HISTORY_SECONDS: usize = 300;
-    if self.bandwidth_history.len() > MAX_HISTORY_SECONDS {
-      self.bandwidth_history.remove(0);
-    }
   }
 
   /// Record a request to a domain
@@ -228,22 +222,31 @@ pub fn get_traffic_stats_dir() -> PathBuf {
   path
 }
 
-/// Save traffic stats to disk
+/// Get the storage key for traffic stats (profile_id if available, otherwise proxy_id)
+fn get_stats_storage_key(stats: &TrafficStats) -> String {
+  stats
+    .profile_id
+    .clone()
+    .unwrap_or_else(|| stats.proxy_id.clone())
+}
+
+/// Save traffic stats to disk using profile_id as the key
 pub fn save_traffic_stats(stats: &TrafficStats) -> Result<(), Box<dyn std::error::Error>> {
   let storage_dir = get_traffic_stats_dir();
   fs::create_dir_all(&storage_dir)?;
 
-  let file_path = storage_dir.join(format!("{}.json", stats.proxy_id));
+  let key = get_stats_storage_key(stats);
+  let file_path = storage_dir.join(format!("{key}.json"));
   let content = serde_json::to_string(stats)?;
   fs::write(&file_path, content)?;
 
   Ok(())
 }
 
-/// Load traffic stats from disk
-pub fn load_traffic_stats(proxy_id: &str) -> Option<TrafficStats> {
+/// Load traffic stats from disk by profile_id or proxy_id
+pub fn load_traffic_stats(id: &str) -> Option<TrafficStats> {
   let storage_dir = get_traffic_stats_dir();
-  let file_path = storage_dir.join(format!("{proxy_id}.json"));
+  let file_path = storage_dir.join(format!("{id}.json"));
 
   if !file_path.exists() {
     return None;
@@ -253,7 +256,12 @@ pub fn load_traffic_stats(proxy_id: &str) -> Option<TrafficStats> {
   serde_json::from_str(&content).ok()
 }
 
-/// List all traffic stats files
+/// Load traffic stats by profile_id
+pub fn load_traffic_stats_by_profile(profile_id: &str) -> Option<TrafficStats> {
+  load_traffic_stats(profile_id)
+}
+
+/// List all traffic stats files and migrate old proxy-id based files to profile-id based
 pub fn list_traffic_stats() -> Vec<TrafficStats> {
   let storage_dir = get_traffic_stats_dir();
 
@@ -261,27 +269,111 @@ pub fn list_traffic_stats() -> Vec<TrafficStats> {
     return Vec::new();
   }
 
-  let mut stats = Vec::new();
+  let mut stats_map: HashMap<String, TrafficStats> = HashMap::new();
+  let mut files_to_delete: Vec<std::path::PathBuf> = Vec::new();
+
   if let Ok(entries) = fs::read_dir(&storage_dir) {
     for entry in entries.flatten() {
       let path = entry.path();
       if path.extension().is_some_and(|ext| ext == "json") {
         if let Ok(content) = fs::read_to_string(&path) {
           if let Ok(s) = serde_json::from_str::<TrafficStats>(&content) {
-            stats.push(s);
+            // Determine the key for this stats entry
+            let key = s.profile_id.clone().unwrap_or_else(|| s.proxy_id.clone());
+
+            // Check if this is an old proxy-id based file that should be migrated
+            let file_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+            let is_old_proxy_file = file_stem.starts_with("proxy_")
+              && s.profile_id.is_some()
+              && file_stem != s.profile_id.as_ref().unwrap();
+
+            if let Some(existing) = stats_map.get_mut(&key) {
+              // Merge stats from this file into existing
+              merge_traffic_stats(existing, &s);
+              if is_old_proxy_file {
+                files_to_delete.push(path.clone());
+              }
+            } else {
+              stats_map.insert(key.clone(), s);
+              if is_old_proxy_file {
+                files_to_delete.push(path.clone());
+              }
+            }
           }
         }
       }
     }
   }
 
-  stats
+  // Save merged stats and delete old files
+  for stats in stats_map.values() {
+    if let Err(e) = save_traffic_stats(stats) {
+      log::warn!("Failed to save merged traffic stats: {}", e);
+    }
+  }
+
+  for path in files_to_delete {
+    if let Err(e) = fs::remove_file(&path) {
+      log::warn!("Failed to delete old traffic stats file {:?}: {}", path, e);
+    }
+  }
+
+  stats_map.into_values().collect()
 }
 
-/// Delete traffic stats for a proxy
-pub fn delete_traffic_stats(proxy_id: &str) -> bool {
+/// Merge traffic stats from source into destination
+fn merge_traffic_stats(dest: &mut TrafficStats, src: &TrafficStats) {
+  // Update totals
+  dest.total_bytes_sent += src.total_bytes_sent;
+  dest.total_bytes_received += src.total_bytes_received;
+  dest.total_requests += src.total_requests;
+
+  // Update timestamps
+  dest.session_start = dest.session_start.min(src.session_start);
+  dest.last_update = dest.last_update.max(src.last_update);
+
+  // Merge bandwidth history (keep all data, sorted by timestamp)
+  let mut combined_history: Vec<BandwidthDataPoint> = dest.bandwidth_history.clone();
+  for point in &src.bandwidth_history {
+    if !combined_history
+      .iter()
+      .any(|p| p.timestamp == point.timestamp)
+    {
+      combined_history.push(point.clone());
+    }
+  }
+  combined_history.sort_by_key(|p| p.timestamp);
+  dest.bandwidth_history = combined_history;
+
+  // Merge domains
+  for (domain, access) in &src.domains {
+    let entry = dest.domains.entry(domain.clone()).or_insert(DomainAccess {
+      domain: domain.clone(),
+      request_count: 0,
+      bytes_sent: 0,
+      bytes_received: 0,
+      first_access: access.first_access,
+      last_access: access.last_access,
+    });
+    entry.request_count += access.request_count;
+    entry.bytes_sent += access.bytes_sent;
+    entry.bytes_received += access.bytes_received;
+    entry.first_access = entry.first_access.min(access.first_access);
+    entry.last_access = entry.last_access.max(access.last_access);
+  }
+
+  // Merge unique IPs
+  for ip in &src.unique_ips {
+    if !dest.unique_ips.contains(ip) {
+      dest.unique_ips.push(ip.clone());
+    }
+  }
+}
+
+/// Delete traffic stats by id (profile_id or proxy_id)
+pub fn delete_traffic_stats(id: &str) -> bool {
   let storage_dir = get_traffic_stats_dir();
-  let file_path = storage_dir.join(format!("{proxy_id}.json"));
+  let file_path = storage_dir.join(format!("{id}.json"));
 
   if file_path.exists() {
     fs::remove_file(&file_path).is_ok()
@@ -388,14 +480,23 @@ impl LiveTrafficTracker {
     let bytes_sent = self.bytes_sent.swap(0, Ordering::Relaxed);
     let bytes_received = self.bytes_received.swap(0, Ordering::Relaxed);
 
-    // Load or create stats
-    let mut stats = load_traffic_stats(&self.proxy_id)
+    // Use profile_id as storage key if available, otherwise fall back to proxy_id
+    let storage_key = self
+      .profile_id
+      .clone()
+      .unwrap_or_else(|| self.proxy_id.clone());
+
+    // Load or create stats using the storage key
+    let mut stats = load_traffic_stats(&storage_key)
       .unwrap_or_else(|| TrafficStats::new(self.proxy_id.clone(), self.profile_id.clone()));
 
     // Ensure profile_id is set (in case stats were loaded from disk without it)
     if stats.profile_id.is_none() && self.profile_id.is_some() {
       stats.profile_id = self.profile_id.clone();
     }
+
+    // Update the proxy_id to current session (for debugging/tracking)
+    stats.proxy_id = self.proxy_id.clone();
 
     // Update bandwidth history
     stats.record_bandwidth(bytes_sent, bytes_received);
@@ -440,6 +541,74 @@ pub fn init_traffic_tracker(proxy_id: String, profile_id: Option<String>) {
 /// Get the global traffic tracker
 pub fn get_traffic_tracker() -> Option<Arc<LiveTrafficTracker>> {
   TRAFFIC_TRACKER.read().ok().and_then(|guard| guard.clone())
+}
+
+/// Filtered traffic stats for client display (only contains data for requested period)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FilteredTrafficStats {
+  pub profile_id: Option<String>,
+  pub session_start: u64,
+  pub last_update: u64,
+  pub total_bytes_sent: u64,
+  pub total_bytes_received: u64,
+  pub total_requests: u64,
+  /// Bandwidth history filtered to requested time period
+  pub bandwidth_history: Vec<BandwidthDataPoint>,
+  /// Period stats: bytes sent/received within the requested period
+  pub period_bytes_sent: u64,
+  pub period_bytes_received: u64,
+  /// Domain access statistics (always full, as it's already aggregated)
+  pub domains: HashMap<String, DomainAccess>,
+  /// Unique IPs accessed
+  pub unique_ips: Vec<String>,
+}
+
+/// Get traffic stats for a profile, filtered to a specific time period
+/// seconds: number of seconds to include (0 = all time)
+pub fn get_traffic_stats_for_period(
+  profile_id: &str,
+  seconds: u64,
+) -> Option<FilteredTrafficStats> {
+  let stats = load_traffic_stats(profile_id)?;
+
+  let now = current_timestamp();
+  let cutoff = if seconds == 0 {
+    0 // All time
+  } else {
+    now.saturating_sub(seconds)
+  };
+
+  // Filter bandwidth history to requested period
+  let filtered_history: Vec<BandwidthDataPoint> = stats
+    .bandwidth_history
+    .iter()
+    .filter(|dp| dp.timestamp >= cutoff)
+    .cloned()
+    .collect();
+
+  // Calculate period totals
+  let period_bytes_sent: u64 = filtered_history.iter().map(|dp| dp.bytes_sent).sum();
+  let period_bytes_received: u64 = filtered_history.iter().map(|dp| dp.bytes_received).sum();
+
+  Some(FilteredTrafficStats {
+    profile_id: stats.profile_id,
+    session_start: stats.session_start,
+    last_update: stats.last_update,
+    total_bytes_sent: stats.total_bytes_sent,
+    total_bytes_received: stats.total_bytes_received,
+    total_requests: stats.total_requests,
+    bandwidth_history: filtered_history,
+    period_bytes_sent,
+    period_bytes_received,
+    domains: stats.domains,
+    unique_ips: stats.unique_ips,
+  })
+}
+
+/// Get lightweight traffic snapshot for a profile (for mini charts, only recent 60 seconds)
+pub fn get_traffic_snapshot_for_profile(profile_id: &str) -> Option<TrafficSnapshot> {
+  let stats = load_traffic_stats(profile_id)?;
+  Some(stats.to_snapshot())
 }
 
 #[cfg(test)]

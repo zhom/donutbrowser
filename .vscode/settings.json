@@ -150,6 +150,7 @@
     "selectables",
     "serde",
     "setpriority",
+    "setsid",
     "SETTINGCHANGE",
     "setuptools",
     "shadcn",

@@ -309,3 +309,17 @@ export interface TrafficSnapshot {
   current_bytes_received: number;
   recent_bandwidth: BandwidthDataPoint[];
 }
+
+export interface FilteredTrafficStats {
+  profile_id?: string;
+  session_start: number;
+  last_update: number;
+  total_bytes_sent: number;
+  total_bytes_received: number;
+  total_requests: number;
+  bandwidth_history: BandwidthDataPoint[];
+  period_bytes_sent: number;
+  period_bytes_received: number;
+  domains: Record<string, DomainAccess>;
+  unique_ips: string[];
+}
