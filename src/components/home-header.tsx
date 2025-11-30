@@ -142,7 +142,12 @@ const HomeHeader = ({
               </Button>
             </span>
           </TooltipTrigger>
-          <TooltipContent>Create a new profile</TooltipContent>
+          <TooltipContent
+            arrowOffset={-8}
+            style={{ transform: "translateX(-8px)" }}
+          >
+            Create a new profile
+          </TooltipContent>
         </Tooltip>
       </div>
     </div>
