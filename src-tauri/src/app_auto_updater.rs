@@ -999,6 +999,22 @@ impl AppAutoUpdater {
       // Clean up backup after successful installation
       let _ = fs::remove_dir_all(&backup_path);
 
+      // Clean up old "Donut Browser.app" if it exists (from before the project rename)
+      if let Some(parent_dir) = current_app_path.parent() {
+        let old_app_path = parent_dir.join("Donut Browser.app");
+        if old_app_path.exists() && old_app_path != current_app_path {
+          log::info!(
+            "Removing old 'Donut Browser.app' from: {}",
+            old_app_path.display()
+          );
+          if let Err(e) = fs::remove_dir_all(&old_app_path) {
+            log::warn!("Warning: Failed to remove old 'Donut Browser.app': {e}");
+          } else {
+            log::info!("Successfully removed old 'Donut Browser.app'");
+          }
+        }
+      }
+
       Ok(())
     }
 
