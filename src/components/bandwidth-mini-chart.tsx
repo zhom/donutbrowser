@@ -69,7 +69,7 @@ export function BandwidthMiniChart({
       type="button"
       onClick={onClick}
       className={cn(
-        "relative flex items-center gap-1.5 px-2 rounded cursor-pointer hover:bg-accent/50 transition-colors min-w-[130px] border-none bg-transparent",
+        "relative flex items-center gap-1.5 px-2 rounded cursor-pointer hover:bg-accent/50 transition-colors min-w-[120px] border-none bg-transparent",
         className,
       )}
     >
