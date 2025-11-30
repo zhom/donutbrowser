@@ -491,7 +491,6 @@ impl ProxyManager {
       "https://ipinfo.io/ip",
       "https://icanhazip.com",
       "https://ifconfig.co/ip",
-      "https://ipecho.net/plain",
     ];
 
     // Create HTTP client with proxy
