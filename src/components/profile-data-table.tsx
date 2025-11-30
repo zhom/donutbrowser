@@ -74,7 +74,6 @@ import {
   DataTableActionBarAction,
   DataTableActionBarSelection,
 } from "./data-table-action-bar";
-import { LoadingButton } from "./loading-button";
 import MultipleSelector, { type Option } from "./multiple-selector";
 import { ProxyCheckButton } from "./proxy-check-button";
 import { Input } from "./ui/input";
@@ -101,6 +100,14 @@ type TableMeta = {
   setOpenTagsEditorFor: React.Dispatch<React.SetStateAction<string | null>>;
   setTagsOverrides: React.Dispatch<
     React.SetStateAction<Record<string, string[]>>
+  >;
+
+  // Note editor state
+  noteOverrides: Record<string, string | null>;
+  openNoteEditorFor: string | null;
+  setOpenNoteEditorFor: React.Dispatch<React.SetStateAction<string | null>>;
+  setNoteOverrides: React.Dispatch<
+    React.SetStateAction<Record<string, string | null>>
   >;
 
   // Proxy selector state
@@ -402,6 +409,243 @@ const TagsCell = React.memo<{
 
 TagsCell.displayName = "TagsCell";
 
+const NonHoverableTooltip = React.memo<{
+  children: React.ReactNode;
+  content: React.ReactNode;
+  sideOffset?: number;
+  alignOffset?: number;
+  horizontalOffset?: number;
+}>(
+  ({
+    children,
+    content,
+    sideOffset = 4,
+    alignOffset = 0,
+    horizontalOffset = 0,
+  }) => {
+    const [isOpen, setIsOpen] = React.useState(false);
+
+    return (
+      <Tooltip open={isOpen} onOpenChange={setIsOpen}>
+        <TooltipTrigger
+          asChild
+          onMouseEnter={() => setIsOpen(true)}
+          onMouseLeave={() => setIsOpen(false)}
+        >
+          {children}
+        </TooltipTrigger>
+        <TooltipContent
+          sideOffset={sideOffset}
+          alignOffset={alignOffset}
+          arrowOffset={horizontalOffset}
+          onPointerEnter={(e) => e.preventDefault()}
+          onPointerLeave={() => setIsOpen(false)}
+          className="pointer-events-none"
+          style={
+            horizontalOffset !== 0
+              ? { transform: `translateX(${horizontalOffset}px)` }
+              : undefined
+          }
+        >
+          {content}
+        </TooltipContent>
+      </Tooltip>
+    );
+  },
+);
+
+NonHoverableTooltip.displayName = "NonHoverableTooltip";
+
+const NoteCell = React.memo<{
+  profile: BrowserProfile;
+  isDisabled: boolean;
+  noteOverrides: Record<string, string | null>;
+  openNoteEditorFor: string | null;
+  setOpenNoteEditorFor: React.Dispatch<React.SetStateAction<string | null>>;
+  setNoteOverrides: React.Dispatch<
+    React.SetStateAction<Record<string, string | null>>
+  >;
+}>(
+  ({
+    profile,
+    isDisabled,
+    noteOverrides,
+    openNoteEditorFor,
+    setOpenNoteEditorFor,
+    setNoteOverrides,
+  }) => {
+    const effectiveNote: string | null = Object.hasOwn(
+      noteOverrides,
+      profile.id,
+    )
+      ? noteOverrides[profile.id]
+      : (profile.note ?? null);
+
+    const onNoteChange = React.useCallback(
+      async (newNote: string | null) => {
+        const trimmedNote = newNote?.trim() || null;
+        setNoteOverrides((prev) => ({ ...prev, [profile.id]: trimmedNote }));
+        try {
+          await invoke<BrowserProfile>("update_profile_note", {
+            profileId: profile.id,
+            note: trimmedNote,
+          });
+        } catch (error) {
+          console.error("Failed to update note:", error);
+        }
+      },
+      [profile.id, setNoteOverrides],
+    );
+
+    const editorRef = React.useRef<HTMLDivElement | null>(null);
+    const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
+    const [noteValue, setNoteValue] = React.useState(effectiveNote || "");
+
+    // Update local state when effective note changes (from outside)
+    React.useEffect(() => {
+      if (openNoteEditorFor !== profile.id) {
+        setNoteValue(effectiveNote || "");
+      }
+    }, [effectiveNote, openNoteEditorFor, profile.id]);
+
+    // Auto-resize textarea on open
+    React.useEffect(() => {
+      if (openNoteEditorFor === profile.id && textareaRef.current) {
+        const textarea = textareaRef.current;
+        textarea.style.height = "auto";
+        textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+      }
+    }, [openNoteEditorFor, profile.id]);
+
+    const handleTextareaChange = React.useCallback(
+      (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        const newValue = e.target.value;
+        setNoteValue(newValue);
+        // Auto-resize
+        const textarea = e.target;
+        textarea.style.height = "auto";
+        textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+      },
+      [],
+    );
+
+    React.useEffect(() => {
+      if (openNoteEditorFor !== profile.id) return;
+      const handleClick = (e: MouseEvent) => {
+        const target = e.target as Node | null;
+        if (
+          editorRef.current &&
+          target &&
+          !editorRef.current.contains(target)
+        ) {
+          const currentValue = textareaRef.current?.value || "";
+          void onNoteChange(currentValue);
+          setOpenNoteEditorFor(null);
+        }
+      };
+      document.addEventListener("mousedown", handleClick);
+      return () => document.removeEventListener("mousedown", handleClick);
+    }, [openNoteEditorFor, profile.id, setOpenNoteEditorFor, onNoteChange]);
+
+    React.useEffect(() => {
+      if (openNoteEditorFor === profile.id && textareaRef.current) {
+        textareaRef.current.focus();
+        // Move cursor to end
+        const len = textareaRef.current.value.length;
+        textareaRef.current.setSelectionRange(len, len);
+      }
+    }, [openNoteEditorFor, profile.id]);
+
+    const displayNote = effectiveNote || "";
+    const trimmedNote =
+      displayNote.length > 12 ? `${displayNote.slice(0, 12)}...` : displayNote;
+    const showTooltip = displayNote.length > 12 || displayNote.length > 0;
+
+    if (openNoteEditorFor !== profile.id) {
+      return (
+        <div className="w-24 min-h-6">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  "flex items-start px-2 py-1 min-h-6 w-full bg-transparent rounded border-none text-left",
+                  isDisabled
+                    ? "opacity-60 cursor-not-allowed"
+                    : "cursor-pointer hover:bg-accent/50",
+                )}
+                onClick={() => {
+                  if (!isDisabled) {
+                    setNoteValue(effectiveNote || "");
+                    setOpenNoteEditorFor(profile.id);
+                  }
+                }}
+              >
+                <span
+                  className={cn(
+                    "text-sm wrap-break-word",
+                    !effectiveNote && "text-muted-foreground",
+                  )}
+                >
+                  {effectiveNote ? trimmedNote : "No Note"}
+                </span>
+              </button>
+            </TooltipTrigger>
+            {showTooltip && (
+              <TooltipContent className="max-w-[320px]">
+                <p className="whitespace-pre-wrap wrap-break-word">
+                  {effectiveNote || "No Note"}
+                </p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        className={cn(
+          "w-24 relative",
+          isDisabled && "opacity-60 pointer-events-none",
+        )}
+      >
+        <div
+          ref={editorRef}
+          className="absolute -top-[15px] -left-px z-50 w-60 min-h-6 bg-popover rounded-md shadow-md border"
+        >
+          <textarea
+            ref={textareaRef}
+            value={noteValue}
+            onChange={handleTextareaChange}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setNoteValue(effectiveNote || "");
+                setOpenNoteEditorFor(null);
+              } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                void onNoteChange(noteValue);
+                setOpenNoteEditorFor(null);
+              }
+            }}
+            onBlur={() => {
+              void onNoteChange(noteValue);
+              setOpenNoteEditorFor(null);
+            }}
+            placeholder="Add a note..."
+            className="w-full min-h-6 max-h-[200px] px-2 py-1 text-sm bg-transparent border-0 resize-none focus:outline-none focus:ring-0"
+            style={{
+              overflow: "auto",
+            }}
+            rows={1}
+          />
+        </div>
+      </div>
+    );
+  },
+);
+
+NoteCell.displayName = "NoteCell";
+
 interface ProfilesDataTableProps {
   profiles: BrowserProfile[];
   onLaunchProfile: (profile: BrowserProfile) => void | Promise<void>;
@@ -526,6 +770,12 @@ export function ProfilesDataTable({
   const [proxyCheckResults, setProxyCheckResults] = React.useState<
     Record<string, ProxyCheckResult>
   >({});
+  const [noteOverrides, setNoteOverrides] = React.useState<
+    Record<string, string | null>
+  >({});
+  const [openNoteEditorFor, setOpenNoteEditorFor] = React.useState<
+    string | null
+  >(null);
 
   // Load cached check results for proxies
   React.useEffect(() => {
@@ -892,6 +1142,12 @@ export function ProfilesDataTable({
       setOpenTagsEditorFor,
       setTagsOverrides,
 
+      // Note editor state
+      noteOverrides,
+      openNoteEditorFor,
+      setOpenNoteEditorFor,
+      setNoteOverrides,
+
       // Proxy selector state
       openProxySelectorFor,
       setOpenProxySelectorFor,
@@ -940,6 +1196,8 @@ export function ProfilesDataTable({
       tagsOverrides,
       allTags,
       openTagsEditorFor,
+      noteOverrides,
+      openNoteEditorFor,
       openProxySelectorFor,
       proxyOverrides,
       storedProxies,
@@ -1021,37 +1279,51 @@ export function ProfilesDataTable({
             );
           }
 
+          const browserName = getBrowserDisplayName(browser);
+
           if (meta.showCheckboxes || isSelected) {
             return (
-              <span className="flex justify-center items-center w-4 h-4">
-                <Checkbox
-                  checked={isSelected}
-                  onCheckedChange={(value) =>
-                    meta.handleCheckboxChange(profile.id, !!value)
-                  }
-                  aria-label="Select row"
-                  className="w-4 h-4"
-                />
-              </span>
+              <NonHoverableTooltip
+                content={<p>{browserName}</p>}
+                sideOffset={4}
+                horizontalOffset={8}
+              >
+                <span className="flex justify-center items-center w-4 h-4">
+                  <Checkbox
+                    checked={isSelected}
+                    onCheckedChange={(value) =>
+                      meta.handleCheckboxChange(profile.id, !!value)
+                    }
+                    aria-label="Select row"
+                    className="w-4 h-4"
+                  />
+                </span>
+              </NonHoverableTooltip>
             );
           }
 
           return (
-            <span className="flex relative justify-center items-center w-4 h-4">
-              <button
-                type="button"
-                className="flex justify-center items-center p-0 border-none cursor-pointer"
-                onClick={() => meta.handleIconClick(profile.id)}
-                aria-label="Select profile"
-              >
-                <span className="w-4 h-4 group">
-                  {IconComponent && (
-                    <IconComponent className="w-4 h-4 group-hover:hidden" />
-                  )}
-                  <span className="peer border-input dark:bg-input/30 dark:data-[state=checked]:bg-primary size-4 shrink-0 rounded-[4px] border shadow-xs transition-shadow outline-none w-4 h-4 hidden group-hover:block pointer-events-none items-center justify-center duration-200" />
-                </span>
-              </button>
-            </span>
+            <NonHoverableTooltip
+              content={<p>{browserName}</p>}
+              sideOffset={4}
+              horizontalOffset={8}
+            >
+              <span className="flex relative justify-center items-center w-4 h-4">
+                <button
+                  type="button"
+                  className="flex justify-center items-center p-0 border-none cursor-pointer"
+                  onClick={() => meta.handleIconClick(profile.id)}
+                  aria-label="Select profile"
+                >
+                  <span className="w-4 h-4 group">
+                    {IconComponent && (
+                      <IconComponent className="w-4 h-4 group-hover:hidden" />
+                    )}
+                    <span className="peer border-input dark:bg-input/30 dark:data-[state=checked]:bg-primary size-4 shrink-0 rounded-[4px] border shadow-xs transition-shadow outline-none w-4 h-4 hidden group-hover:block pointer-events-none items-center justify-center duration-200" />
+                  </span>
+                </button>
+              </span>
+            </NonHoverableTooltip>
           );
         },
         enableSorting: false,
@@ -1172,11 +1444,6 @@ export function ProfilesDataTable({
           const isEditing = meta.profileToRename?.id === profile.id;
 
           if (isEditing) {
-            const isSaveDisabled =
-              meta.isRenamingSaving ||
-              meta.newProfileName.trim().length === 0 ||
-              meta.newProfileName.trim() === profile.name;
-
             return (
               <div
                 ref={renameContainerRef}
@@ -1190,7 +1457,9 @@ export function ProfilesDataTable({
                     if (meta.renameError) meta.setRenameError(null);
                   }}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") {
+                    if (e.key === "Enter" && !(e.metaKey || e.ctrlKey)) {
+                      void meta.handleRename();
+                    } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                       void meta.handleRename();
                     } else if (e.key === "Escape") {
                       meta.setProfileToRename(null);
@@ -1198,20 +1467,20 @@ export function ProfilesDataTable({
                       meta.setRenameError(null);
                     }
                   }}
+                  onBlur={() => {
+                    if (
+                      meta.newProfileName.trim().length > 0 &&
+                      meta.newProfileName.trim() !== profile.name
+                    ) {
+                      void meta.handleRename();
+                    } else {
+                      meta.setProfileToRename(null);
+                      meta.setNewProfileName("");
+                      meta.setRenameError(null);
+                    }
+                  }}
                   className="w-30 h-6 px-2 py-1 text-sm font-medium leading-none border-0 shadow-none focus-visible:ring-0"
                 />
-                <div className="flex absolute right-0 top-full z-50 gap-1 translate-y-[30%] opacity-100 bg-black rounded-md">
-                  <LoadingButton
-                    isLoading={meta.isRenamingSaving}
-                    size="sm"
-                    variant="default"
-                    disabled={isSaveDisabled}
-                    className="cursor-pointer [[disabled]]:bg-primary/80"
-                    onClick={() => void meta.handleRename()}
-                  >
-                    Save
-                  </LoadingButton>
-                </div>
               </div>
             );
           }
@@ -1295,51 +1564,28 @@ export function ProfilesDataTable({
         },
       },
       {
-        accessorKey: "browser",
-        header: ({ column }) => {
-          return (
-            <Button
-              variant="ghost"
-              onClick={() =>
-                column.toggleSorting(column.getIsSorted() === "asc")
-              }
-              className="justify-start p-0 h-auto font-semibold text-left cursor-pointer"
-            >
-              Browser
-              {column.getIsSorted() === "asc" ? (
-                <LuChevronUp className="ml-2 w-4 h-4" />
-              ) : column.getIsSorted() === "desc" ? (
-                <LuChevronDown className="ml-2 w-4 h-4" />
-              ) : null}
-            </Button>
-          );
-        },
-        cell: ({ row }) => {
-          const browser: string = row.getValue("browser");
-          const name = getBrowserDisplayName(browser);
-          if (name.length < 14) {
-            return (
-              <div className="flex items-center">
-                <span>{name}</span>
-              </div>
-            );
-          }
+        id: "note",
+        header: "Note",
+        cell: ({ row, table }) => {
+          const meta = table.options.meta as TableMeta;
+          const profile = row.original;
+          const isRunning =
+            meta.isClient && meta.runningProfiles.has(profile.id);
+          const isLaunching = meta.launchingProfiles.has(profile.id);
+          const isStopping = meta.stoppingProfiles.has(profile.id);
+          const isBrowserUpdating = meta.isUpdating(profile.browser);
+          const isDisabled =
+            isRunning || isLaunching || isStopping || isBrowserUpdating;
 
           return (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span>{trimName(name, 14)}</span>
-              </TooltipTrigger>
-              <TooltipContent>{name}</TooltipContent>
-            </Tooltip>
-          );
-        },
-        enableSorting: true,
-        sortingFn: (rowA, rowB, columnId) => {
-          const browserA: string = rowA.getValue(columnId);
-          const browserB: string = rowB.getValue(columnId);
-          return getBrowserDisplayName(browserA).localeCompare(
-            getBrowserDisplayName(browserB),
+            <NoteCell
+              profile={profile}
+              isDisabled={isDisabled}
+              noteOverrides={meta.noteOverrides || {}}
+              openNoteEditorFor={meta.openNoteEditorFor || null}
+              setOpenNoteEditorFor={meta.setOpenNoteEditorFor}
+              setNoteOverrides={meta.setNoteOverrides}
+            />
           );
         },
       },

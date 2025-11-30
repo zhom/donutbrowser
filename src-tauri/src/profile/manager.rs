@@ -165,6 +165,7 @@ impl ProfileManager {
           camoufox_config: None,
           group_id: group_id.clone(),
           tags: Vec::new(),
+          note: None,
         };
 
         match self
@@ -207,6 +208,7 @@ impl ProfileManager {
       camoufox_config: final_camoufox_config,
       group_id: group_id.clone(),
       tags: Vec::new(),
+      note: None,
     };
 
     // Save profile info
@@ -515,6 +517,35 @@ impl ProfileManager {
     });
 
     // Emit profile tags update event
+    if let Err(e) = app_handle.emit("profiles-changed", ()) {
+      log::warn!("Warning: Failed to emit profiles-changed event: {e}");
+    }
+
+    Ok(profile)
+  }
+
+  pub fn update_profile_note(
+    &self,
+    app_handle: &tauri::AppHandle,
+    profile_id: &str,
+    note: Option<String>,
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+    // Find the profile by ID
+    let profile_uuid =
+      uuid::Uuid::parse_str(profile_id).map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
+    let profiles = self.list_profiles()?;
+    let mut profile = profiles
+      .into_iter()
+      .find(|p| p.id == profile_uuid)
+      .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
+
+    // Update note (trim whitespace, set to None if empty)
+    profile.note = note.map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
+
+    // Save profile
+    self.save_profile(&profile)?;
+
+    // Emit profile note update event
     if let Err(e) = app_handle.emit("profiles-changed", ()) {
       log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
@@ -1443,6 +1474,18 @@ pub fn update_profile_tags(
   profile_manager
     .update_profile_tags(&app_handle, &profile_id, tags)
     .map_err(|e| format!("Failed to update profile tags: {e}"))
+}
+
+#[tauri::command]
+pub fn update_profile_note(
+  app_handle: tauri::AppHandle,
+  profile_id: String,
+  note: Option<String>,
+) -> Result<BrowserProfile, String> {
+  let profile_manager = ProfileManager::instance();
+  profile_manager
+    .update_profile_note(&app_handle, &profile_id, note)
+    .map_err(|e| format!("Failed to update profile note: {e}"))
 }
 
 #[tauri::command]

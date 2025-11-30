@@ -22,6 +22,8 @@ pub struct BrowserProfile {
   pub group_id: Option<String>, // Reference to profile group
   #[serde(default)]
   pub tags: Vec<String>, // Free-form tags
+  #[serde(default)]
+  pub note: Option<String>, // User note
 }
 
 pub fn default_release_type() -> String {

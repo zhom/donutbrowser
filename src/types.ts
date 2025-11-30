@@ -7,7 +7,7 @@ export interface ProxySettings {
 }
 
 export interface TableSortingSettings {
-  column: string; // "name", "browser", "status"
+  column: string; // "name", "note", "status"
   direction: string; // "asc" or "desc"
 }
 
@@ -23,6 +23,7 @@ export interface BrowserProfile {
   camoufox_config?: CamoufoxConfig; // Camoufox configuration
   group_id?: string; // Reference to profile group
   tags?: string[];
+  note?: string; // User note
 }
 
 export interface ProxyCheckResult {

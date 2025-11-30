@@ -676,8 +676,8 @@ export default function Home() {
         // Search in profile name
         if (profile.name.toLowerCase().includes(query)) return true;
 
-        // Search in browser name
-        if (profile.browser.toLowerCase().includes(query)) return true;
+        // Search in note
+        if (profile.note?.toLowerCase().includes(query)) return true;
 
         // Search in tags
         if (profile.tags?.some((tag) => tag.toLowerCase().includes(query)))

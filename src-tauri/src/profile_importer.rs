@@ -561,6 +561,7 @@ impl ProfileImporter {
       camoufox_config: None,
       group_id: None,
       tags: Vec::new(),
+      note: None,
     };
 
     // Save the profile metadata
