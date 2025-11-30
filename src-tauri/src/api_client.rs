@@ -564,7 +564,6 @@ impl ApiClient {
     let cached_data: CachedGithubData = serde_json::from_str(&content).ok()?;
 
     // Always use cached GitHub releases - cache never expires, only gets updated with new versions
-    log::info!("Using cached GitHub releases for {browser}");
     Some(cached_data.releases)
   }
 
