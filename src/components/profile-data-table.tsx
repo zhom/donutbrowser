@@ -13,6 +13,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import type { Dispatch, SetStateAction } from "react";
 import * as React from "react";
+import { FiWifi } from "react-icons/fi";
 import { IoEllipsisHorizontal } from "react-icons/io5";
 import {
   LuCheck,
@@ -662,6 +663,7 @@ interface ProfilesDataTableProps {
   onSelectedProfilesChange: Dispatch<SetStateAction<string[]>>;
   onBulkDelete?: () => void;
   onBulkGroupAssignment?: () => void;
+  onBulkProxyAssignment?: () => void;
 }
 
 export function ProfilesDataTable({
@@ -678,6 +680,7 @@ export function ProfilesDataTable({
   onSelectedProfilesChange,
   onBulkDelete,
   onBulkGroupAssignment,
+  onBulkProxyAssignment,
 }: ProfilesDataTableProps) {
   const { getTableSorting, updateSorting, isLoaded } = useTableSorting();
   const [sorting, setSorting] = React.useState<SortingState>([]);
@@ -1926,6 +1929,15 @@ export function ProfilesDataTable({
             size="icon"
           >
             <LuUsers />
+          </DataTableActionBarAction>
+        )}
+        {onBulkProxyAssignment && (
+          <DataTableActionBarAction
+            tooltip="Assign Proxy"
+            onClick={onBulkProxyAssignment}
+            size="icon"
+          >
+            <FiWifi />
           </DataTableActionBarAction>
         )}
         {onBulkDelete && (

@@ -15,6 +15,7 @@ import { ImportProfileDialog } from "@/components/import-profile-dialog";
 import { PermissionDialog } from "@/components/permission-dialog";
 import { ProfilesDataTable } from "@/components/profile-data-table";
 import { ProfileSelectorDialog } from "@/components/profile-selector-dialog";
+import { ProxyAssignmentDialog } from "@/components/proxy-assignment-dialog";
 import { ProxyManagementDialog } from "@/components/proxy-management-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { useAppUpdateNotifications } from "@/hooks/use-app-update-notifications";
@@ -62,7 +63,11 @@ export default function Home() {
     error: groupsError,
   } = useGroupEvents();
 
-  const { isLoading: proxiesLoading, error: proxiesError } = useProxyEvents();
+  const {
+    storedProxies,
+    isLoading: proxiesLoading,
+    error: proxiesError,
+  } = useProxyEvents();
 
   const [createProfileDialogOpen, setCreateProfileDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
@@ -75,8 +80,13 @@ export default function Home() {
     useState(false);
   const [groupAssignmentDialogOpen, setGroupAssignmentDialogOpen] =
     useState(false);
+  const [proxyAssignmentDialogOpen, setProxyAssignmentDialogOpen] =
+    useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<string>("default");
   const [selectedProfilesForGroup, setSelectedProfilesForGroup] = useState<
+    string[]
+  >([]);
+  const [selectedProfilesForProxy, setSelectedProfilesForProxy] = useState<
     string[]
   >([]);
   const [selectedProfiles, setSelectedProfiles] = useState<string[]>([]);
@@ -559,10 +569,27 @@ export default function Home() {
     setSelectedProfiles([]);
   }, [selectedProfiles, handleAssignProfilesToGroup]);
 
+  const handleAssignProfilesToProxy = useCallback((profileIds: string[]) => {
+    setSelectedProfilesForProxy(profileIds);
+    setProxyAssignmentDialogOpen(true);
+  }, []);
+
+  const handleBulkProxyAssignment = useCallback(() => {
+    if (selectedProfiles.length === 0) return;
+    handleAssignProfilesToProxy(selectedProfiles);
+    setSelectedProfiles([]);
+  }, [selectedProfiles, handleAssignProfilesToProxy]);
+
   const handleGroupAssignmentComplete = useCallback(async () => {
     // No need to manually reload - useProfileEvents will handle the update
     setGroupAssignmentDialogOpen(false);
     setSelectedProfilesForGroup([]);
+  }, []);
+
+  const handleProxyAssignmentComplete = useCallback(async () => {
+    // No need to manually reload - useProfileEvents will handle the update
+    setProxyAssignmentDialogOpen(false);
+    setSelectedProfilesForProxy([]);
   }, []);
 
   const handleGroupManagementComplete = useCallback(async () => {
@@ -730,6 +757,7 @@ export default function Home() {
             onSelectedProfilesChange={setSelectedProfiles}
             onBulkDelete={handleBulkDelete}
             onBulkGroupAssignment={handleBulkGroupAssignment}
+            onBulkProxyAssignment={handleBulkProxyAssignment}
           />
         </div>
       </main>
@@ -830,6 +858,17 @@ export default function Home() {
         selectedProfiles={selectedProfilesForGroup}
         onAssignmentComplete={handleGroupAssignmentComplete}
         profiles={profiles}
+      />
+
+      <ProxyAssignmentDialog
+        isOpen={proxyAssignmentDialogOpen}
+        onClose={() => {
+          setProxyAssignmentDialogOpen(false);
+        }}
+        selectedProfiles={selectedProfilesForProxy}
+        onAssignmentComplete={handleProxyAssignmentComplete}
+        profiles={profiles}
+        storedProxies={storedProxies}
       />
 
       <DeleteConfirmationDialog
