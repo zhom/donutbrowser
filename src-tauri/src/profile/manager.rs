@@ -1071,7 +1071,7 @@ impl ProfileManager {
 
   fn get_common_firefox_preferences(&self) -> Vec<String> {
     vec![
-      // Disable default browser updates
+      // Disable default browser check
       "user_pref(\"browser.shell.checkDefaultBrowser\", false);".to_string(),
       "user_pref(\"browser.shell.skipDefaultBrowserCheckOnFirstRun\", true);".to_string(),
       "user_pref(\"browser.preferences.moreFromMozilla\", false);".to_string(),
@@ -1086,29 +1086,46 @@ impl ProfileManager {
       // Keep extension updates enabled
       "user_pref(\"extensions.update.enabled\", true);".to_string(),
       "user_pref(\"extensions.update.autoUpdateDefault\", true);".to_string(),
+      // Completely disable browser update checking
       "user_pref(\"app.update.enabled\", false);".to_string(),
-      "user_pref(\"app.update.staging.enabled\", false);".to_string(),
-      "user_pref(\"app.update.timerFirstInterval\", -1);".to_string(),
-      "user_pref(\"app.update.download.maxAttempts\", 0);".to_string(),
-      "user_pref(\"app.update.elevate.maxAttempts\", 0);".to_string(),
-      "user_pref(\"app.update.disabledForTesting\", true);".to_string(),
       "user_pref(\"app.update.auto\", false);".to_string(),
       "user_pref(\"app.update.mode\", 0);".to_string(),
-      "user_pref(\"app.update.promptWaitTime\", -1);".to_string(),
       "user_pref(\"app.update.service.enabled\", false);".to_string(),
+      "user_pref(\"app.update.staging.enabled\", false);".to_string(),
       "user_pref(\"app.update.silent\", true);".to_string(),
+      "user_pref(\"app.update.disabledForTesting\", true);".to_string(),
+      // Prevent update URL access entirely
+      "user_pref(\"app.update.url\", \"\");".to_string(),
+      "user_pref(\"app.update.url.manual\", \"\");".to_string(),
+      "user_pref(\"app.update.url.details\", \"\");".to_string(),
+      // Disable update timing/scheduling
+      "user_pref(\"app.update.timerFirstInterval\", 999999999);".to_string(),
+      "user_pref(\"app.update.interval\", 999999999);".to_string(),
+      "user_pref(\"app.update.background.interval\", 999999999);".to_string(),
+      "user_pref(\"app.update.idletime\", 999999999);".to_string(),
+      "user_pref(\"app.update.promptWaitTime\", 999999999);".to_string(),
+      // Disable update attempts
+      "user_pref(\"app.update.download.maxAttempts\", 0);".to_string(),
+      "user_pref(\"app.update.elevate.maxAttempts\", 0);".to_string(),
       "user_pref(\"app.update.checkInstallTime\", false);".to_string(),
-      "user_pref(\"app.update.interval\", -1);".to_string(),
-      "user_pref(\"app.update.background.interval\", -1);".to_string(),
-      "user_pref(\"app.update.idletime\", -1);".to_string(),
-      // Suppress additional update UI/prompts
+      // Suppress update UI/prompts/notifications
       "user_pref(\"app.update.doorhanger\", false);".to_string(),
       "user_pref(\"app.update.badge\", false);".to_string(),
+      "user_pref(\"app.update.notifyDuringDownload\", false);".to_string(),
       "user_pref(\"app.update.background.scheduling.enabled\", false);".to_string(),
+      "user_pref(\"app.update.background.enabled\", false);".to_string(),
+      // Disable BITS (Windows Background Intelligent Transfer Service) updates
+      "user_pref(\"app.update.BITS.enabled\", false);".to_string(),
+      // Disable language pack updates
+      "user_pref(\"app.update.langpack.enabled\", false);".to_string(),
       // Suppress upgrade dialogs on startup
       "user_pref(\"browser.startup.upgradeDialog.enabled\", false);".to_string(),
-      // Zen browser specific - disable welcome screen
+      // Disable update ping telemetry
+      "user_pref(\"toolkit.telemetry.updatePing.enabled\", false);".to_string(),
+      // Zen browser specific - disable welcome screen and updates
       "user_pref(\"zen.welcome-screen.seen\", true);".to_string(),
+      "user_pref(\"zen.updates.enabled\", false);".to_string(),
+      "user_pref(\"zen.updates.check-for-updates\", false);".to_string(),
       // Additional first-run suppressions
       "user_pref(\"app.normandy.first_run\", false);".to_string(),
       "user_pref(\"trailhead.firstrun.didSeeAboutWelcome\", true);".to_string(),
