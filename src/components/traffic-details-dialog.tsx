@@ -2,7 +2,6 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import * as React from "react";
-import type { TooltipProps } from "recharts";
 import {
   Area,
   AreaChart,
@@ -12,10 +11,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type {
-  NameType,
-  ValueType,
-} from "recharts/types/component/DefaultTooltipContent";
+import type { TooltipContentProps } from "recharts/types/component/Tooltip";
 import {
   Dialog,
   DialogContent,
@@ -140,7 +136,7 @@ export function TrafficDetailsDialog({
 
   // Tooltip render function
   const renderTooltip = React.useCallback(
-    (props: TooltipProps<ValueType, NameType>) => {
+    (props: TooltipContentProps<number, string>) => {
       const { active, payload, label } = props;
       if (!active || !payload?.length) return null;
 
