@@ -11,7 +11,7 @@ permissions:
 jobs:
   generate-release-notes:
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v') && !github.event.release.prerelease
+    if: startsWith(github.event.release.tag_name, 'v') && !github.event.release.prerelease
 
     steps:
       - name: Checkout repository
@@ -23,7 +23,7 @@ jobs:
         id: get-previous-tag
         run: |
           # Get the previous release tag (excluding the current one)
-          CURRENT_TAG="${{ github.ref_name }}"
+          CURRENT_TAG="${{ github.event.release.tag_name }}"
           PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -v "$CURRENT_TAG" | head -n 1)
 
           if [ -z "$PREVIOUS_TAG" ]; then
