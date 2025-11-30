@@ -66,6 +66,7 @@ export function parseProxyString(proxyString: LaunchOptions["proxy"] | string) {
     // Try parsing as URL first (handles protocol://username:password@host:port)
     if (trimmed.includes("://")) {
       const url = new URL(trimmed);
+      // Playwright accepts short form "host:port" for HTTP proxies
       server = `${url.hostname}:${url.port}`;
 
       if (url.username) {

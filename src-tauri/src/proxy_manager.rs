@@ -664,14 +664,32 @@ impl ProxyManager {
           && existing.upstream_port == desired_port;
 
         if is_same_upstream {
-          // Reuse existing local proxy
-          return Ok(ProxySettings {
-            proxy_type: "http".to_string(),
-            host: "127.0.0.1".to_string(),
-            port: existing.local_port,
-            username: None,
-            password: None,
-          });
+          // Check if profile_id matches - if not, we need to restart to update tracking
+          let profile_id_matches = match (profile_id, &existing.profile_id) {
+            (Some(ref new_id), Some(ref old_id)) => new_id == old_id,
+            (None, None) => true,
+            _ => false,
+          };
+
+          if profile_id_matches {
+            // Reuse existing local proxy (profile_id matches)
+            return Ok(ProxySettings {
+              proxy_type: "http".to_string(),
+              host: "127.0.0.1".to_string(),
+              port: existing.local_port,
+              username: None,
+              password: None,
+            });
+          } else {
+            // Profile ID changed - need to restart proxy to update tracking
+            log::info!(
+              "Profile ID changed for proxy {}: {:?} -> {:?}, restarting proxy",
+              existing.id,
+              existing.profile_id,
+              profile_id
+            );
+            needs_restart = true;
+          }
         } else {
           // Upstream changed; we must restart the local proxy so that traffic is routed correctly
           needs_restart = true;
@@ -862,6 +880,69 @@ impl ProxyManager {
     }
 
     Ok(())
+  }
+
+  // Stop the proxy associated with a profile ID
+  pub async fn stop_proxy_by_profile_id(
+    &self,
+    app_handle: tauri::AppHandle,
+    profile_id: &str,
+  ) -> Result<(), String> {
+    // Find the proxy ID for this profile
+    let proxy_id = {
+      let map = self.profile_active_proxy_ids.lock().unwrap();
+      map.get(profile_id).cloned()
+    };
+
+    if let Some(proxy_id) = proxy_id {
+      // Find the PID for this proxy
+      let pid = {
+        let proxies = self.active_proxies.lock().unwrap();
+        proxies.iter().find_map(|(pid, proxy)| {
+          if proxy.id == proxy_id {
+            Some(*pid)
+          } else {
+            None
+          }
+        })
+      };
+
+      if let Some(pid) = pid {
+        // Use the existing stop_proxy method
+        self.stop_proxy(app_handle, pid).await
+      } else {
+        // Proxy not found in active_proxies, try to stop it directly by ID
+        let proxy_cmd = app_handle
+          .shell()
+          .sidecar("donut-proxy")
+          .map_err(|e| format!("Failed to create sidecar: {e}"))?
+          .arg("proxy")
+          .arg("stop")
+          .arg("--id")
+          .arg(&proxy_id);
+
+        let output = proxy_cmd.output().await.unwrap();
+
+        if !output.status.success() {
+          let stderr = String::from_utf8_lossy(&output.stderr);
+          log::warn!("Proxy stop error: {stderr}");
+        }
+
+        // Clear profile-to-proxy mapping
+        let mut map = self.profile_active_proxy_ids.lock().unwrap();
+        map.remove(profile_id);
+
+        // Emit event for reactive UI updates
+        if let Err(e) = app_handle.emit("proxies-changed", ()) {
+          log::error!("Failed to emit proxies-changed event: {e}");
+        }
+
+        Ok(())
+      }
+    } else {
+      // No proxy found for this profile
+      Ok(())
+    }
   }
 
   // Update the PID mapping for an existing proxy

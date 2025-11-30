@@ -884,7 +884,10 @@ export function ProfilesDataTable({
         const newSnapshots: Record<string, TrafficSnapshot> = {};
         for (const snapshot of allSnapshots) {
           if (snapshot.profile_id) {
-            newSnapshots[snapshot.profile_id] = snapshot;
+            const existing = newSnapshots[snapshot.profile_id];
+            if (!existing || snapshot.last_update > existing.last_update) {
+              newSnapshots[snapshot.profile_id] = snapshot;
+            }
           }
         }
         setTrafficSnapshots(newSnapshots);
@@ -1693,13 +1696,17 @@ export function ProfilesDataTable({
           if (isRunning && meta.trafficSnapshots) {
             // Find the traffic snapshot for this profile by matching profile_id
             const snapshot = meta.trafficSnapshots[profile.id];
-            const bandwidthData = snapshot?.recent_bandwidth || [];
+            // Create a new array reference to ensure React detects changes
+            const bandwidthData = snapshot?.recent_bandwidth
+              ? [...snapshot.recent_bandwidth]
+              : [];
             const currentBandwidth =
               (snapshot?.current_bytes_sent || 0) +
               (snapshot?.current_bytes_received || 0);
 
             return (
               <BandwidthMiniChart
+                key={`${profile.id}-${snapshot?.last_update || 0}-${bandwidthData.length}`}
                 data={bandwidthData}
                 currentBandwidth={currentBandwidth}
                 onClick={() => meta.onOpenTrafficDialog?.(profile.id)}

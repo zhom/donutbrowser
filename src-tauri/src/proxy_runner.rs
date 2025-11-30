@@ -30,8 +30,16 @@ pub async fn start_proxy_process_with_profile(
     listener.local_addr().unwrap().port()
   });
 
-  let config = ProxyConfig::new(id.clone(), upstream, Some(local_port)).with_profile_id(profile_id);
+  let config =
+    ProxyConfig::new(id.clone(), upstream, Some(local_port)).with_profile_id(profile_id.clone());
   save_proxy_config(&config)?;
+
+  // Log profile_id for debugging
+  if let Some(ref pid) = profile_id {
+    log::info!("Saved proxy config {} with profile_id: {}", id, pid);
+  } else {
+    log::info!("Saved proxy config {} without profile_id", id);
+  }
 
   // Spawn proxy worker process in the background using std::process::Command
   // This ensures proper process detachment on Unix systems

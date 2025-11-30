@@ -45,12 +45,14 @@ impl<S: AsyncRead + Unpin> AsyncRead for CountingStream<S> {
     let result = Pin::new(&mut self.inner).poll_read(cx, buf);
     if let Poll::Ready(Ok(())) = &result {
       let bytes_read = buf.filled().len() - filled_before;
-      self
-        .bytes_read
-        .fetch_add(bytes_read as u64, Ordering::Relaxed);
-      // Update global tracker
-      if let Some(tracker) = get_traffic_tracker() {
-        tracker.add_bytes_received(bytes_read as u64);
+      if bytes_read > 0 {
+        self
+          .bytes_read
+          .fetch_add(bytes_read as u64, Ordering::Relaxed);
+        // Update global tracker - count as received (data coming into proxy)
+        if let Some(tracker) = get_traffic_tracker() {
+          tracker.add_bytes_received(bytes_read as u64);
+        }
       }
     }
     result
@@ -66,7 +68,7 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for CountingStream<S> {
     let result = Pin::new(&mut self.inner).poll_write(cx, buf);
     if let Poll::Ready(Ok(n)) = &result {
       self.bytes_written.fetch_add(*n as u64, Ordering::Relaxed);
-      // Update global tracker
+      // Update global tracker - count as sent (data going out of proxy)
       if let Some(tracker) = get_traffic_tracker() {
         tracker.add_bytes_sent(*n as u64);
       }
@@ -522,21 +524,34 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
   };
 
   log::error!(
-    "Found config: id={}, port={:?}, upstream={}",
+    "Found config: id={}, port={:?}, upstream={}, profile_id={:?}",
     config.id,
     config.local_port,
-    config.upstream_url
+    config.upstream_url,
+    config.profile_id
   );
 
   log::error!("Starting proxy server for config id: {}", config.id);
 
   // Initialize traffic tracker with profile ID if available
+  // This can now be called multiple times to update the tracker
   init_traffic_tracker(config.id.clone(), config.profile_id.clone());
   log::error!(
     "Traffic tracker initialized for proxy: {} (profile_id: {:?})",
     config.id,
     config.profile_id
   );
+
+  // Verify tracker was initialized correctly
+  if let Some(tracker) = crate::traffic_stats::get_traffic_tracker() {
+    log::error!(
+      "Tracker verified: proxy_id={}, profile_id={:?}",
+      tracker.proxy_id,
+      tracker.profile_id
+    );
+  } else {
+    log::error!("WARNING: Tracker was not initialized!");
+  }
 
   // Determine the bind address
   let bind_addr = SocketAddr::from(([127, 0, 0, 1], config.local_port.unwrap_or(0)));

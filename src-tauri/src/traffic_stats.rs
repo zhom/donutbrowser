@@ -150,7 +150,7 @@ impl TrafficStats {
       }
     }
 
-    // Add new data point
+    // Add new data point (even if bytes are zero, to ensure chart has continuous data)
     self.bandwidth_history.push(BandwidthDataPoint {
       timestamp: now,
       bytes_sent,
@@ -392,6 +392,11 @@ impl LiveTrafficTracker {
     let mut stats = load_traffic_stats(&self.proxy_id)
       .unwrap_or_else(|| TrafficStats::new(self.proxy_id.clone(), self.profile_id.clone()));
 
+    // Ensure profile_id is set (in case stats were loaded from disk without it)
+    if stats.profile_id.is_none() && self.profile_id.is_some() {
+      stats.profile_id = self.profile_id.clone();
+    }
+
     // Update bandwidth history
     stats.record_bandwidth(bytes_sent, bytes_received);
 
@@ -419,17 +424,22 @@ impl LiveTrafficTracker {
 }
 
 /// Global traffic tracker that can be accessed from connection handlers
-pub static TRAFFIC_TRACKER: std::sync::OnceLock<Arc<LiveTrafficTracker>> =
-  std::sync::OnceLock::new();
+/// Using RwLock to allow reinitialization when proxy config changes
+static TRAFFIC_TRACKER: std::sync::RwLock<Option<Arc<LiveTrafficTracker>>> =
+  std::sync::RwLock::new(None);
 
 /// Initialize the global traffic tracker
+/// This can be called multiple times to update the tracker when proxy config changes
 pub fn init_traffic_tracker(proxy_id: String, profile_id: Option<String>) {
-  let _ = TRAFFIC_TRACKER.set(Arc::new(LiveTrafficTracker::new(proxy_id, profile_id)));
+  let tracker = Arc::new(LiveTrafficTracker::new(proxy_id, profile_id));
+  if let Ok(mut guard) = TRAFFIC_TRACKER.write() {
+    *guard = Some(tracker);
+  }
 }
 
 /// Get the global traffic tracker
 pub fn get_traffic_tracker() -> Option<Arc<LiveTrafficTracker>> {
-  TRAFFIC_TRACKER.get().cloned()
+  TRAFFIC_TRACKER.read().ok().and_then(|guard| guard.clone())
 }
 
 #[cfg(test)]

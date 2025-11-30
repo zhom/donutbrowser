@@ -268,6 +268,18 @@ export async function startCamoufoxProcess(
 }
 
 /**
+ * Check if a process is running by PID
+ */
+function isProcessRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Stop a Camoufox process
  * @param id The Camoufox ID to stop
  * @returns Promise resolving to true if stopped, false if not found
@@ -279,45 +291,85 @@ export async function stopCamoufoxProcess(id: string): Promise<boolean> {
     return false;
   }
 
+  const pid = config.processId;
+
   try {
     // Method 1: If we have a process ID, kill by PID with proper signal sequence
-    if (config.processId) {
+    if (pid && isProcessRunning(pid)) {
       try {
         // First try SIGTERM for graceful shutdown
-        process.kill(config.processId, "SIGTERM");
-        // Give it more time to terminate gracefully (increased from 2s to 5s)
-        await new Promise((resolve) => setTimeout(resolve, 5000));
+        process.kill(pid, "SIGTERM");
 
-        // Check if process is still running
-        try {
-          process.kill(config.processId, 0); // Signal 0 checks if process exists
-          process.kill(config.processId, "SIGKILL");
-        } catch {}
-      } catch {}
+        // Wait up to 3 seconds for graceful shutdown
+        for (let i = 0; i < 30; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          if (!isProcessRunning(pid)) {
+            break;
+          }
+        }
+
+        // If still running, force kill
+        if (isProcessRunning(pid)) {
+          process.kill(pid, "SIGKILL");
+          // Wait for SIGKILL to take effect
+          for (let i = 0; i < 20; i++) {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            if (!isProcessRunning(pid)) {
+              break;
+            }
+          }
+        }
+      } catch {
+        // Process might have already exited
+      }
     }
 
-    // Method 2: Pattern-based kill as fallback
-    const killByPattern = spawn(
-      "pkill",
-      ["-TERM", "-f", `camoufox-worker.*${id}`],
-      {
-        stdio: "ignore",
-      },
-    );
-
-    // Wait for pattern-based kill command to complete
+    // Method 2: Pattern-based kill as fallback (kills any child processes)
     await new Promise<void>((resolve) => {
+      const killByPattern = spawn(
+        "pkill",
+        ["-TERM", "-f", `camoufox-worker.*${id}`],
+        { stdio: "ignore" },
+      );
       killByPattern.on("exit", () => resolve());
-      // Timeout after 3 seconds
-      setTimeout(() => resolve(), 3000);
+      setTimeout(() => resolve(), 1000);
     });
 
-    // Final cleanup with SIGKILL if needed
-    setTimeout(() => {
-      spawn("pkill", ["-KILL", "-f", `camoufox-worker.*${id}`], {
-        stdio: "ignore",
+    // Wait a moment then force kill any remaining
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    await new Promise<void>((resolve) => {
+      const killByPatternForce = spawn(
+        "pkill",
+        ["-KILL", "-f", `camoufox-worker.*${id}`],
+        { stdio: "ignore" },
+      );
+      killByPatternForce.on("exit", () => resolve());
+      setTimeout(() => resolve(), 1000);
+    });
+
+    // Also kill any Firefox processes associated with this profile
+    if (config.profilePath) {
+      await new Promise<void>((resolve) => {
+        const killFirefox = spawn(
+          "pkill",
+          ["-KILL", "-f", config.profilePath!],
+          { stdio: "ignore" },
+        );
+        killFirefox.on("exit", () => resolve());
+        setTimeout(() => resolve(), 1000);
       });
-    }, 1000);
+    }
+
+    // Verify process is actually dead
+    if (pid && isProcessRunning(pid)) {
+      // Last resort: SIGKILL again
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {
+        // Ignore
+      }
+    }
 
     // Delete the configuration
     deleteCamoufoxConfig(id);

@@ -83,8 +83,16 @@ export function TrafficDetailsDialog({
     const fetchStats = async () => {
       try {
         const allStats = await invoke<TrafficStats[]>("get_all_traffic_stats");
-        const profileStats = allStats.find((s) => s.profile_id === profileId);
-        setStats(profileStats || null);
+        const matchingStats = allStats.filter(
+          (s) => s.profile_id === profileId,
+        );
+        const profileStats =
+          matchingStats.length > 0
+            ? matchingStats.reduce((latest, current) =>
+                current.last_update > latest.last_update ? current : latest,
+              )
+            : null;
+        setStats(profileStats);
       } catch (error) {
         console.error("Failed to fetch traffic stats:", error);
       }

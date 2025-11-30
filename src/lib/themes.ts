@@ -16,6 +16,11 @@ export interface ThemeColors extends Record<string, string> {
   "--destructive": string;
   "--destructive-foreground": string;
   "--border": string;
+  "--chart-1": string;
+  "--chart-2": string;
+  "--chart-3": string;
+  "--chart-4": string;
+  "--chart-5": string;
 }
 
 export interface Theme {
@@ -46,6 +51,11 @@ export const THEMES: Theme[] = [
       "--destructive": "#f7768e",
       "--destructive-foreground": "#1a1b26",
       "--border": "#3b4261",
+      "--chart-1": "#7aa2f7",
+      "--chart-2": "#9ece6a",
+      "--chart-3": "#bb9af7",
+      "--chart-4": "#2ac3de",
+      "--chart-5": "#ff9e64",
     },
   },
   {
@@ -69,6 +79,11 @@ export const THEMES: Theme[] = [
       "--destructive": "#ff5555",
       "--destructive-foreground": "#f8f8f2",
       "--border": "#6272a4",
+      "--chart-1": "#bd93f9",
+      "--chart-2": "#50fa7b",
+      "--chart-3": "#ff79c6",
+      "--chart-4": "#8be9fd",
+      "--chart-5": "#ffb86c",
     },
   },
   {
@@ -92,6 +107,11 @@ export const THEMES: Theme[] = [
       "--destructive": "#ff819f",
       "--destructive-foreground": "#273136",
       "--border": "#304e37",
+      "--chart-1": "#7eb08a",
+      "--chart-2": "#d2b48c",
+      "--chart-3": "#7ea4b0",
+      "--chart-4": "#a8c97f",
+      "--chart-5": "#e6c07b",
     },
   },
   {
@@ -115,6 +135,11 @@ export const THEMES: Theme[] = [
       "--destructive": "#ef4444",
       "--destructive-foreground": "#f7f7f8",
       "--border": "#2a2e39",
+      "--chart-1": "#5755d9",
+      "--chart-2": "#0ea5e9",
+      "--chart-3": "#f25f4c",
+      "--chart-4": "#22c55e",
+      "--chart-5": "#f59e0b",
     },
   },
   {
@@ -138,6 +163,11 @@ export const THEMES: Theme[] = [
       "--destructive": "#f07178",
       "--destructive-foreground": "#b3b1ad",
       "--border": "#1f2430",
+      "--chart-1": "#39bae6",
+      "--chart-2": "#c2d94c",
+      "--chart-3": "#d2a6ff",
+      "--chart-4": "#ffb454",
+      "--chart-5": "#f07178",
     },
   },
   {
@@ -161,6 +191,11 @@ export const THEMES: Theme[] = [
       "--destructive": "#f07178",
       "--destructive-foreground": "#fafafa",
       "--border": "#e7eaed",
+      "--chart-1": "#399ee6",
+      "--chart-2": "#86b300",
+      "--chart-3": "#a37acc",
+      "--chart-4": "#fa8d3e",
+      "--chart-5": "#f07178",
     },
   },
   {
@@ -184,6 +219,11 @@ export const THEMES: Theme[] = [
       "--destructive": "#d20f39",
       "--destructive-foreground": "#eff1f5",
       "--border": "#9ca0b0",
+      "--chart-1": "#1e66f5",
+      "--chart-2": "#40a02b",
+      "--chart-3": "#8839ef",
+      "--chart-4": "#04a5e5",
+      "--chart-5": "#df8e1d",
     },
   },
   {
@@ -207,6 +247,11 @@ export const THEMES: Theme[] = [
       "--destructive": "#e78284",
       "--destructive-foreground": "#303446",
       "--border": "#737994",
+      "--chart-1": "#8caaee",
+      "--chart-2": "#a6d189",
+      "--chart-3": "#ca9ee6",
+      "--chart-4": "#99d1db",
+      "--chart-5": "#e5c890",
     },
   },
   {
@@ -230,6 +275,11 @@ export const THEMES: Theme[] = [
       "--destructive": "#ed8796",
       "--destructive-foreground": "#24273a",
       "--border": "#6e738d",
+      "--chart-1": "#8aadf4",
+      "--chart-2": "#a6da95",
+      "--chart-3": "#c6a0f6",
+      "--chart-4": "#91d7e3",
+      "--chart-5": "#eed49f",
     },
   },
   {
@@ -253,6 +303,11 @@ export const THEMES: Theme[] = [
       "--destructive": "#f38ba8",
       "--destructive-foreground": "#1e1e2e",
       "--border": "#585b70",
+      "--chart-1": "#89b4fa",
+      "--chart-2": "#a6e3a1",
+      "--chart-3": "#cba6f7",
+      "--chart-4": "#89dceb",
+      "--chart-5": "#f9e2af",
     },
   },
 ];
@@ -276,6 +331,11 @@ export const THEME_VARIABLES: Array<{ key: keyof ThemeColors; label: string }> =
     { key: "--destructive", label: "Destructive" },
     { key: "--destructive-foreground", label: "Destructive FG" },
     { key: "--border", label: "Border" },
+    { key: "--chart-1", label: "Chart 1" },
+    { key: "--chart-2", label: "Chart 2" },
+    { key: "--chart-3", label: "Chart 3" },
+    { key: "--chart-4", label: "Chart 4" },
+    { key: "--chart-5", label: "Chart 5" },
   ];
 
 export function getThemeById(id: string): Theme | undefined {
