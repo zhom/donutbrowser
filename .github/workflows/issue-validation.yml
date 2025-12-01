@@ -115,13 +115,14 @@ jobs:
       - name: Parse validation result and take action
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RESPONSE_FILE: ${{ steps.validate.outputs.response-file }}
+          RESPONSE: ${{ steps.validate.outputs.response }}
         run: |
           # Prefer reading from the response file to avoid output truncation
-          RESPONSE_FILE='${{ steps.validate.outputs.response-file }}'
           if [ -n "$RESPONSE_FILE" ] && [ -f "$RESPONSE_FILE" ]; then
             RAW_OUTPUT=$(cat "$RESPONSE_FILE")
           else
-            RAW_OUTPUT='${{ steps.validate.outputs.response }}'
+            RAW_OUTPUT="$RESPONSE"
           fi
 
           # Extract JSON if wrapped in markdown code fences; otherwise use raw
