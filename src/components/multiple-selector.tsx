@@ -287,7 +287,6 @@ const MultipleSelector = React.forwardRef<
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [debouncedSearchTerm, groupBy, open, triggerSearchOnFocus, onSearch]);
 
-    // biome-ignore lint/correctness/noNestedComponentDefinitions: public code, TODO: fix
     const CreatableItem = () => {
       if (!creatable) return undefined;
       if (

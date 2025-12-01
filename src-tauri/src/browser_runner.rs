@@ -649,7 +649,7 @@ impl BrowserRunner {
       }
       BrowserType::Camoufox => {
         // Camoufox uses nodecar for launching, URL opening is handled differently
-        return Err("URL opening in existing Camoufox instance is not supported".into());
+        Err("URL opening in existing Camoufox instance is not supported".into())
       }
       BrowserType::Chromium | BrowserType::Brave => {
         #[cfg(target_os = "macos")]
@@ -856,25 +856,21 @@ impl BrowserRunner {
             log::info!("Failed to open URL in existing browser: {e}");
 
             // Fall back to launching a new instance
-            match final_profile.browser.as_str() {
-              _ => {
-                log::info!(
-                  "Falling back to new instance for browser: {}",
-                  final_profile.browser
-                );
-                // Fallback to launching a new instance for other browsers
-                self
-                  .launch_browser_internal(
-                    app_handle.clone(),
-                    &final_profile,
-                    url,
-                    internal_proxy_settings,
-                    None,
-                    false,
-                  )
-                  .await
-              }
-            }
+            log::info!(
+              "Falling back to new instance for browser: {}",
+              final_profile.browser
+            );
+            // Fallback to launching a new instance for other browsers
+            self
+              .launch_browser_internal(
+                app_handle.clone(),
+                &final_profile,
+                url,
+                internal_proxy_settings,
+                None,
+                false,
+              )
+              .await
           }
         }
       } else {

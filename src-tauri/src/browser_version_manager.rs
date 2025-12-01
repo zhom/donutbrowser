@@ -850,7 +850,6 @@ mod tests {
       base_url.clone(), // firefox_dev_api_base
       base_url.clone(), // github_api_base
       base_url.clone(), // chromium_api_base
-      base_url.clone(), // tor_archive_base
     )
   }
 

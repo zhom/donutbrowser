@@ -59,7 +59,6 @@ impl ProfileImporter {
     // Detect Zen Browser profiles
     detected_profiles.extend(self.detect_zen_browser_profiles()?);
 
-
     // Remove duplicates based on path
     let mut seen_paths = HashSet::new();
     let unique_profiles: Vec<DetectedProfile> = detected_profiles

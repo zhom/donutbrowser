@@ -443,7 +443,6 @@ impl ApiClient {
       firefox_dev_api_base,
       github_api_base,
       chromium_api_base,
-      tor_archive_base,
     }
   }
 
