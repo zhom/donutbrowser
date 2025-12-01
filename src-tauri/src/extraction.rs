@@ -868,9 +868,6 @@ impl Extractor {
       "chromium.exe",
       "zen.exe",
       "brave.exe",
-      "tor-browser.exe",
-      "tor.exe",
-      "mullvad-browser.exe",
     ];
 
     // First try priority executable names
@@ -937,8 +934,6 @@ impl Extractor {
               || file_name.contains("chromium")
               || file_name.contains("zen")
               || file_name.contains("brave")
-              || file_name.contains("tor")
-              || file_name.contains("mullvad")
               || file_name.contains("browser")
             {
               return Ok(path);
@@ -1012,15 +1007,6 @@ impl Extractor {
       "brave-browser-beta",
       "brave-browser-dev",
       "brave-bin",
-      // Tor Browser variants
-      "tor-browser",
-      "torbrowser-launcher",
-      "tor-browser_en-US",
-      "start-tor-browser",
-      "Browser/start-tor-browser",
-      // Mullvad Browser
-      "mullvad-browser",
-      "mullvad-browser-bin",
       // Camoufox variants
       "camoufox",
       "camoufox-bin",
@@ -1049,19 +1035,14 @@ impl Extractor {
       "chromium",
       "brave",
       "zen",
-      "tor-browser",
-      "mullvad-browser",
       "camoufox",
       ".",
       "./",
       "firefox",
-      "mullvad-browser",
-      "tor-browser_en-US",
       "Browser",
       "browser",
       "opt/google/chrome",
       "opt/brave.com/brave",
-      "opt/mullvad-browser",
       "opt/camoufox",
       "usr/lib/firefox",
       "usr/lib/chromium",
@@ -1159,8 +1140,7 @@ impl Extractor {
               || name_lower.contains("chrome")
               || name_lower.contains("brave")
               || name_lower.contains("zen")
-              || name_lower.contains("tor")
-              || name_lower.contains("mullvad")
+              || name_lower.contains("camoufox")
               || name_lower.ends_with(".appimage")
               || !name_lower.contains('.')
             {
@@ -1215,8 +1195,6 @@ impl Extractor {
               || name_lower.contains("chrome")
               || name_lower.contains("brave")
               || name_lower.contains("zen")
-              || name_lower.contains("tor")
-              || name_lower.contains("mullvad")
               || name_lower.contains("camoufox")
               || file_name.ends_with(".AppImage")
             {

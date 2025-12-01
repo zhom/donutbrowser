@@ -49,10 +49,9 @@ export function ProxyAssignmentDialog({
     setIsAssigning(true);
     setError(null);
     try {
-      // Filter out TOR browser profiles as they don't support proxies
       const validProfiles = selectedProfiles.filter((profileId) => {
         const profile = profiles.find((p) => p.id === profileId);
-        return profile && profile.browser !== "tor-browser";
+        return profile;
       });
 
       if (validProfiles.length === 0) {
@@ -119,15 +118,9 @@ export function ProxyAssignmentDialog({
                     (p: BrowserProfile) => p.id === profileId,
                   );
                   const displayName = profile ? profile.name : profileId;
-                  const isTorBrowser = profile?.browser === "tor-browser";
                   return (
                     <li key={profileId} className="truncate">
                       • {displayName}
-                      {isTorBrowser && (
-                        <span className="ml-2 text-xs text-muted-foreground">
-                          (TOR - no proxy support)
-                        </span>
-                      )}
                     </li>
                   );
                 })}

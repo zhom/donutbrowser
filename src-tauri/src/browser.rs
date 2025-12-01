@@ -13,39 +13,33 @@ pub struct ProxySettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum BrowserType {
-  MullvadBrowser,
   Chromium,
   Firefox,
   FirefoxDeveloper,
   Brave,
   Zen,
-  TorBrowser,
   Camoufox,
 }
 
 impl BrowserType {
   pub fn as_str(&self) -> &'static str {
     match self {
-      BrowserType::MullvadBrowser => "mullvad-browser",
       BrowserType::Chromium => "chromium",
       BrowserType::Firefox => "firefox",
       BrowserType::FirefoxDeveloper => "firefox-developer",
       BrowserType::Brave => "brave",
       BrowserType::Zen => "zen",
-      BrowserType::TorBrowser => "tor-browser",
       BrowserType::Camoufox => "camoufox",
     }
   }
 
   pub fn from_str(s: &str) -> Result<Self, String> {
     match s {
-      "mullvad-browser" => Ok(BrowserType::MullvadBrowser),
       "chromium" => Ok(BrowserType::Chromium),
       "firefox" => Ok(BrowserType::Firefox),
       "firefox-developer" => Ok(BrowserType::FirefoxDeveloper),
       "brave" => Ok(BrowserType::Brave),
       "zen" => Ok(BrowserType::Zen),
-      "tor-browser" => Ok(BrowserType::TorBrowser),
       "camoufox" => Ok(BrowserType::Camoufox),
       _ => Err(format!("Unknown browser type: {s}")),
     }
@@ -92,9 +86,7 @@ mod macos {
         let binding = entry.file_name();
         let name = binding.to_string_lossy();
         name.starts_with("firefox")
-          || name.starts_with("mullvad")
           || name.starts_with("zen")
-          || name.starts_with("tor")
           || name.starts_with("camoufox")
           || name.contains("Browser")
       })
@@ -190,27 +182,8 @@ mod linux {
         browser_subdir.join("firefox"),
         browser_subdir.join("firefox-bin"),
       ],
-      BrowserType::MullvadBrowser => {
-        vec![
-          browser_subdir.join("firefox"),
-          browser_subdir.join("mullvad-browser"),
-          browser_subdir.join("firefox-bin"),
-        ]
-      }
       BrowserType::Zen => {
         vec![browser_subdir.join("zen"), browser_subdir.join("zen-bin")]
-      }
-      BrowserType::TorBrowser => {
-        vec![
-          // Common Tor Browser launchers
-          browser_subdir.join("tor-browser"),
-          // Firefox-based binaries
-          browser_subdir.join("firefox"),
-          browser_subdir.join("firefox-bin"),
-          // Sometimes packaged similarly to Firefox
-          install_dir.join("firefox").join("firefox"),
-          install_dir.join("firefox").join("firefox-bin"),
-        ]
       }
       BrowserType::Camoufox => {
         vec![
@@ -303,22 +276,8 @@ mod linux {
           install_dir.join("firefox").join("firefox"),
         ]
       }
-      BrowserType::MullvadBrowser => {
-        vec![
-          browser_subdir.join("mullvad-browser"),
-          browser_subdir.join("firefox-bin"),
-          browser_subdir.join("firefox"),
-        ]
-      }
       BrowserType::Zen => {
         vec![browser_subdir.join("zen"), browser_subdir.join("zen-bin")]
-      }
-      BrowserType::TorBrowser => {
-        vec![
-          browser_subdir.join("tor-browser"),
-          browser_subdir.join("firefox-bin"),
-          browser_subdir.join("firefox"),
-        ]
       }
       BrowserType::Camoufox => {
         vec![
@@ -424,9 +383,7 @@ mod windows {
         if path.extension().is_some_and(|ext| ext == "exe") {
           let name = path.file_stem().unwrap_or_default().to_string_lossy();
           if name.starts_with("firefox")
-            || name.starts_with("mullvad")
             || name.starts_with("zen")
-            || name.starts_with("tor")
             || name.starts_with("camoufox")
             || name.contains("browser")
           {
@@ -510,9 +467,7 @@ mod windows {
         if path.extension().is_some_and(|ext| ext == "exe") {
           let name = path.file_stem().unwrap_or_default().to_string_lossy();
           if name.starts_with("firefox")
-            || name.starts_with("mullvad")
             || name.starts_with("zen")
-            || name.starts_with("tor")
             || name.starts_with("camoufox")
             || name.contains("browser")
           {
@@ -903,11 +858,9 @@ impl BrowserFactory {
 
   pub fn create_browser(&self, browser_type: BrowserType) -> Box<dyn Browser> {
     match browser_type {
-      BrowserType::MullvadBrowser
-      | BrowserType::Firefox
-      | BrowserType::FirefoxDeveloper
-      | BrowserType::Zen
-      | BrowserType::TorBrowser => Box::new(FirefoxBrowser::new(browser_type)),
+      BrowserType::Firefox | BrowserType::FirefoxDeveloper | BrowserType::Zen => {
+        Box::new(FirefoxBrowser::new(browser_type))
+      }
       BrowserType::Chromium | BrowserType::Brave => Box::new(ChromiumBrowser::new(browser_type)),
       BrowserType::Camoufox => Box::new(CamoufoxBrowser::new()),
     }
@@ -985,20 +938,14 @@ mod tests {
   #[test]
   fn test_browser_type_conversions() {
     // Test as_str
-    assert_eq!(BrowserType::MullvadBrowser.as_str(), "mullvad-browser");
     assert_eq!(BrowserType::Firefox.as_str(), "firefox");
     assert_eq!(BrowserType::FirefoxDeveloper.as_str(), "firefox-developer");
     assert_eq!(BrowserType::Chromium.as_str(), "chromium");
     assert_eq!(BrowserType::Brave.as_str(), "brave");
     assert_eq!(BrowserType::Zen.as_str(), "zen");
-    assert_eq!(BrowserType::TorBrowser.as_str(), "tor-browser");
     assert_eq!(BrowserType::Camoufox.as_str(), "camoufox");
 
     // Test from_str - use expect with descriptive messages instead of unwrap
-    assert_eq!(
-      BrowserType::from_str("mullvad-browser").expect("mullvad-browser should be valid"),
-      BrowserType::MullvadBrowser
-    );
     assert_eq!(
       BrowserType::from_str("firefox").expect("firefox should be valid"),
       BrowserType::Firefox
@@ -1018,10 +965,6 @@ mod tests {
     assert_eq!(
       BrowserType::from_str("zen").expect("zen should be valid"),
       BrowserType::Zen
-    );
-    assert_eq!(
-      BrowserType::from_str("tor-browser").expect("tor-browser should be valid"),
-      BrowserType::TorBrowser
     );
     assert_eq!(
       BrowserType::from_str("camoufox").expect("camoufox should be valid"),
@@ -1088,20 +1031,6 @@ mod tests {
       args.contains(&"9222".to_string()),
       "Firefox should include debugging port"
     );
-
-    // Test Mullvad Browser (no special flags without remote debugging)
-    let browser = FirefoxBrowser::new(BrowserType::MullvadBrowser);
-    let args = browser
-      .create_launch_args("/path/to/profile", None, None, None, false)
-      .expect("Failed to create launch args for Mullvad Browser");
-    assert_eq!(args, vec!["-profile", "/path/to/profile"]);
-
-    // Test Tor Browser (no special flags without remote debugging)
-    let browser = FirefoxBrowser::new(BrowserType::TorBrowser);
-    let args = browser
-      .create_launch_args("/path/to/profile", None, None, None, false)
-      .expect("Failed to create launch args for Tor Browser");
-    assert_eq!(args, vec!["-profile", "/path/to/profile"]);
 
     // Test Zen Browser (no special flags without remote debugging)
     let browser = FirefoxBrowser::new(BrowserType::Zen);

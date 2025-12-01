@@ -4,7 +4,7 @@
  */
 
 import { FaChrome, FaFirefox, FaShieldAlt } from "react-icons/fa";
-import { SiBrave, SiMullvad, SiTorbrowser } from "react-icons/si";
+import { SiBrave } from "react-icons/si";
 import { ZenBrowser } from "@/components/icons/zen-browser";
 
 /**
@@ -14,11 +14,9 @@ export function getBrowserDisplayName(browserType: string): string {
   const browserNames: Record<string, string> = {
     firefox: "Firefox",
     "firefox-developer": "Firefox Developer Edition",
-    "mullvad-browser": "Mullvad Browser",
     zen: "Zen Browser",
     brave: "Brave",
     chromium: "Chromium",
-    "tor-browser": "Tor Browser",
     camoufox: "Anti-Detect",
   };
 
@@ -30,8 +28,6 @@ export function getBrowserDisplayName(browserType: string): string {
  */
 export function getBrowserIcon(browserType: string) {
   switch (browserType) {
-    case "mullvad-browser":
-      return SiMullvad;
     case "chromium":
       return FaChrome;
     case "brave":
@@ -41,8 +37,6 @@ export function getBrowserIcon(browserType: string) {
       return FaFirefox;
     case "zen":
       return ZenBrowser;
-    case "tor-browser":
-      return SiTorbrowser;
     case "camoufox":
       return FaShieldAlt;
     default:

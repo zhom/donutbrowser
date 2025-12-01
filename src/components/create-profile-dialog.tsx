@@ -42,13 +42,11 @@ const getCurrentOS = (): CamoufoxOS => {
 import { RippleButton } from "./ui/ripple";
 
 type BrowserTypeString =
-  | "mullvad-browser"
   | "firefox"
   | "firefox-developer"
   | "chromium"
   | "brave"
   | "zen"
-  | "tor-browser"
   | "camoufox";
 
 interface CreateProfileDialogProps {
@@ -91,14 +89,6 @@ const browserOptions: BrowserOption[] = [
   {
     value: "zen",
     label: "Zen Browser",
-  },
-  {
-    value: "mullvad-browser",
-    label: "Mullvad Browser",
-  },
-  {
-    value: "tor-browser",
-    label: "Tor Browser",
   },
 ];
 
@@ -429,12 +419,9 @@ export function CreateProfileDialog({
     isBrowserVersionAvailable,
   ]);
 
-  // Filter supported browsers for regular browsers (excluding mullvad and tor)
-  const regularBrowsers = browserOptions.filter(
-    (browser) =>
-      supportedBrowsers.includes(browser.value) &&
-      browser.value !== "mullvad-browser" &&
-      browser.value !== "tor-browser",
+  // Filter supported browsers for regular browsers
+  const regularBrowsers = browserOptions.filter((browser) =>
+    supportedBrowsers.includes(browser.value),
   );
 
   return (

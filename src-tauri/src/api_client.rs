@@ -292,7 +292,6 @@ pub fn is_browser_version_nightly(
       // This will be handled in the API parsing, so this fallback is for cached versions
       is_nightly_version(version)
     }
-    "mullvad-browser" | "tor-browser" => is_nightly_version(version),
     "chromium" => {
       // Chromium builds are generally stable snapshots
       false
@@ -349,7 +348,6 @@ pub struct ApiClient {
   firefox_dev_api_base: String,
   github_api_base: String,
   chromium_api_base: String,
-  tor_archive_base: String,
 }
 
 impl ApiClient {
@@ -366,7 +364,6 @@ impl ApiClient {
       github_api_base: "https://api.github.com".to_string(),
       chromium_api_base: "https://commondatastorage.googleapis.com/chromium-browser-snapshots"
         .to_string(),
-      tor_archive_base: "https://archive.torproject.org/tor-package-archive/torbrowser".to_string(),
     }
   }
 
@@ -439,7 +436,6 @@ impl ApiClient {
     firefox_dev_api_base: String,
     github_api_base: String,
     chromium_api_base: String,
-    tor_archive_base: String,
   ) -> Self {
     Self {
       client: Client::new(),
@@ -717,45 +713,6 @@ impl ApiClient {
     if !no_caching {
       if let Err(e) = self.save_cached_versions("firefox-developer", &releases) {
         log::error!("Failed to cache Firefox Developer versions: {e}");
-      }
-    }
-
-    Ok(releases)
-  }
-
-  pub async fn fetch_mullvad_releases_with_caching(
-    &self,
-    no_caching: bool,
-  ) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
-    // Check cache first (unless bypassing)
-    if !no_caching {
-      if let Some(cached_releases) = self.load_cached_github_releases("mullvad") {
-        return Ok(cached_releases);
-      }
-    }
-
-    log::info!("Fetching Mullvad releases from GitHub API");
-    let base_url = format!(
-      "{}/repos/mullvad/mullvad-browser/releases",
-      self.github_api_base
-    );
-    let releases = self.fetch_github_releases_multiple_pages(&base_url).await?;
-
-    let mut releases: Vec<GithubRelease> = releases
-      .into_iter()
-      .map(|mut release| {
-        release.is_nightly = release.prerelease;
-        release
-      })
-      .collect();
-
-    // Sort releases using the new version sorting system
-    sort_github_releases(&mut releases);
-
-    // Cache the results (unless bypassing cache)
-    if !no_caching {
-      if let Err(e) = self.save_cached_github_releases("mullvad", &releases) {
-        log::error!("Failed to cache Mullvad releases: {e}");
       }
     }
 
@@ -1102,107 +1059,6 @@ impl ApiClient {
     Ok(compatible_releases)
   }
 
-  pub async fn fetch_tor_releases_with_caching(
-    &self,
-    no_caching: bool,
-  ) -> Result<Vec<BrowserRelease>, Box<dyn std::error::Error + Send + Sync>> {
-    // Check cache first (unless bypassing)
-    if !no_caching {
-      if let Some(cached_releases) = self.load_cached_versions("tor-browser") {
-        return Ok(cached_releases);
-      }
-    }
-
-    log::info!("Fetching TOR releases from archive...");
-    let url = format!("{}/", self.tor_archive_base);
-    let html = self
-      .client
-      .get(url)
-      .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
-      .send()
-      .await?
-      .text()
-      .await?;
-
-    // Parse HTML to extract version directories
-    let mut version_candidates = Vec::new();
-
-    // Look for directory links in the HTML
-    for line in html.lines() {
-      if line.contains("<a href=\"") && line.contains("/\">") {
-        // Extract the directory name from the href attribute
-        if let Some(start) = line.find("<a href=\"") {
-          let start = start + 9; // Length of "<a href=\""
-          if let Some(end) = line[start..].find("/\">") {
-            let version = &line[start..start + end];
-
-            // Skip parent directory and non-version entries
-            if version != ".."
-              && !version.is_empty()
-              && version.chars().next().unwrap_or('a').is_ascii_digit()
-            {
-              version_candidates.push(version.to_string());
-            }
-          }
-        }
-      }
-    }
-
-    // Sort version candidates using the new version sorting system
-    sort_versions(&mut version_candidates);
-
-    // Only check the first 10 versions to avoid being too slow
-    let mut version_strings = Vec::new();
-    for version in version_candidates.into_iter().take(10) {
-      // Check if this version has a macOS DMG file
-      if let Ok(has_macos) = self.check_tor_version_has_macos(&version).await {
-        if has_macos {
-          version_strings.push(version);
-        }
-      }
-
-      // Add a small delay to avoid overwhelming the server
-      tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    }
-
-    // Convert to BrowserRelease objects
-    let releases: Vec<BrowserRelease> = version_strings
-      .into_iter()
-      .map(|version| BrowserRelease {
-        version: version.clone(),
-        date: "".to_string(), // TOR archive doesn't provide structured dates
-        is_prerelease: false, // Assume all archived versions are stable
-      })
-      .collect();
-
-    // Cache the results (unless bypassing cache)
-    if !no_caching {
-      if let Err(e) = self.save_cached_versions("tor-browser", &releases) {
-        log::error!("Failed to cache TOR versions: {e}");
-      }
-    }
-
-    Ok(releases)
-  }
-
-  async fn check_tor_version_has_macos(
-    &self,
-    version: &str,
-  ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-    let url = format!("{}/{version}/", self.tor_archive_base);
-    let html = self
-      .client
-      .get(&url)
-      .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
-      .send()
-      .await?
-      .text()
-      .await?;
-
-    // Check if there's a macOS DMG file in this version directory
-    Ok(html.contains("tor-browser-macos-") && html.contains(".dmg"))
-  }
-
   /// Check if a Zen twilight release has been updated by comparing file size
   pub async fn check_twilight_update(
     &self,
@@ -1302,7 +1158,6 @@ mod tests {
       base_url.clone(), // firefox_dev_api_base
       base_url.clone(), // github_api_base
       base_url.clone(), // chromium_api_base
-      base_url.clone(), // tor_archive_base
     )
   }
 
@@ -1527,47 +1382,6 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn test_mullvad_api() {
-    let server = setup_mock_server().await;
-    let client = create_test_client(&server);
-
-    let mock_response = r#"[
-      {
-        "tag_name": "14.5a6",
-        "name": "Mullvad Browser 14.5a6",
-        "prerelease": true,
-        "published_at": "2024-01-15T10:00:00Z",
-        "assets": [
-          {
-            "name": "mullvad-browser-macos-14.5a6.dmg",
-            "browser_download_url": "https://example.com/mullvad-14.5a6.dmg",
-            "size": 100000000
-          }
-        ]
-      }
-    ]"#;
-
-    Mock::given(method("GET"))
-      .and(path("/repos/mullvad/mullvad-browser/releases"))
-      .and(query_param("per_page", "100"))
-      .respond_with(
-        ResponseTemplate::new(200)
-          .set_body_string(mock_response)
-          .insert_header("content-type", "application/json"),
-      )
-      .mount(&server)
-      .await;
-
-    let result = client.fetch_mullvad_releases_with_caching(true).await;
-
-    assert!(result.is_ok());
-    let releases = result.unwrap();
-    assert!(!releases.is_empty());
-    assert_eq!(releases[0].tag_name, "14.5a6");
-    assert!(releases[0].is_nightly);
-  }
-
-  #[tokio::test]
   async fn test_zen_api() {
     let server = setup_mock_server().await;
     let client = create_test_client(&server);
@@ -1720,125 +1534,6 @@ mod tests {
     assert!(!releases[0].is_prerelease);
   }
 
-  #[tokio::test]
-  async fn test_tor_api() {
-    let server = setup_mock_server().await;
-    let client = create_test_client(&server);
-
-    let mock_html = r#"
-    <html>
-    <body>
-    <a href="../">../</a>
-    <a href="14.0.4/">14.0.4/</a>
-    <a href="14.0.3/">14.0.3/</a>
-    </body>
-    </html>
-    "#;
-
-    let version_html = r#"
-    <html>
-    <body>
-    <a href="tor-browser-macos-14.0.4.dmg">tor-browser-macos-14.0.4.dmg</a>
-    </body>
-    </html>
-    "#;
-
-    Mock::given(method("GET"))
-      .and(path("/"))
-      .respond_with(
-        ResponseTemplate::new(200)
-          .set_body_string(mock_html)
-          .insert_header("content-type", "text/html"),
-      )
-      .mount(&server)
-      .await;
-
-    Mock::given(method("GET"))
-      .and(path("/14.0.4/"))
-      .respond_with(
-        ResponseTemplate::new(200)
-          .set_body_string(version_html)
-          .insert_header("content-type", "text/html"),
-      )
-      .mount(&server)
-      .await;
-
-    Mock::given(method("GET"))
-      .and(path("/14.0.3/"))
-      .respond_with(
-        ResponseTemplate::new(200)
-          .set_body_string(version_html.replace("14.0.4", "14.0.3"))
-          .insert_header("content-type", "text/html"),
-      )
-      .mount(&server)
-      .await;
-
-    let result = client.fetch_tor_releases_with_caching(true).await;
-
-    assert!(result.is_ok());
-    let releases = result.unwrap();
-    assert!(!releases.is_empty());
-    assert_eq!(releases[0].version, "14.0.4");
-  }
-
-  #[tokio::test]
-  async fn test_tor_version_check() {
-    let server = setup_mock_server().await;
-    let client = create_test_client(&server);
-
-    let version_html = r#"
-    <html>
-    <body>
-    <a href="tor-browser-macos-14.0.4.dmg">tor-browser-macos-14.0.4.dmg</a>
-    </body>
-    </html>
-    "#;
-
-    Mock::given(method("GET"))
-      .and(path("/14.0.4/"))
-      .respond_with(
-        ResponseTemplate::new(200)
-          .set_body_string(version_html)
-          .insert_header("content-type", "text/html"),
-      )
-      .mount(&server)
-      .await;
-
-    let result = client.check_tor_version_has_macos("14.0.4").await;
-
-    assert!(result.is_ok());
-    assert!(result.unwrap());
-  }
-
-  #[tokio::test]
-  async fn test_tor_version_check_no_macos() {
-    let server = setup_mock_server().await;
-    let client = create_test_client(&server);
-
-    let version_html = r#"
-    <html>
-    <body>
-    <a href="tor-browser-linux-14.0.4.tar.xz">tor-browser-linux-14.0.4.tar.xz</a>
-    </body>
-    </html>
-    "#;
-
-    Mock::given(method("GET"))
-      .and(path("/14.0.5/"))
-      .respond_with(
-        ResponseTemplate::new(200)
-          .set_body_string(version_html)
-          .insert_header("content-type", "text/html"),
-      )
-      .mount(&server)
-      .await;
-
-    let result = client.check_tor_version_has_macos("14.0.5").await;
-
-    assert!(result.is_ok());
-    assert!(!result.unwrap());
-  }
-
   #[test]
   fn test_is_nightly_version() {
     assert!(is_nightly_version("1.2.3a1"));
@@ -1908,84 +1603,6 @@ mod tests {
 
     let result = client.fetch_zen_releases_with_caching(true).await;
     assert!(result.is_err());
-  }
-
-  #[tokio::test]
-  async fn test_mullvad_pagination_two_pages() {
-    let server = setup_mock_server().await;
-    let client = create_test_client(&server);
-
-    // Page 1 response with Link: rel="next" header
-    let mock_page1 = r#"[
-      {
-        "tag_name": "100.0",
-        "name": "Mullvad Browser 100.0",
-        "prerelease": false,
-        "published_at": "2024-07-01T00:00:00Z",
-        "assets": [
-          { "name": "mullvad-browser-macos-100.0.dmg", "browser_download_url": "https://example.com/100.0.dmg", "size": 1 }
-        ]
-      }
-    ]"#;
-
-    // Page 2 response
-    let mock_page2 = r#"[
-      {
-        "tag_name": "99.0",
-        "name": "Mullvad Browser 99.0",
-        "prerelease": false,
-        "published_at": "2024-06-01T00:00:00Z",
-        "assets": [
-          { "name": "mullvad-browser-macos-99.0.dmg", "browser_download_url": "https://example.com/99.0.dmg", "size": 1 }
-        ]
-      }
-    ]"#;
-
-    // Mock page 1
-    Mock::given(method("GET"))
-      .and(path("/repos/mullvad/mullvad-browser/releases"))
-      .and(query_param("per_page", "100"))
-      .and(query_param("page", "1"))
-      .respond_with(
-        ResponseTemplate::new(200)
-          .set_body_string(mock_page1)
-          .insert_header("content-type", "application/json")
-          .insert_header(
-            "link",
-            format!(
-              "<{}?per_page=100&page=2>; rel=\"next\", <{}?per_page=100&page=2>; rel=\"last\"",
-              server.uri().to_string() + "/repos/mullvad/mullvad-browser/releases",
-              server.uri().to_string() + "/repos/mullvad/mullvad-browser/releases"
-            ),
-          ),
-      )
-      .mount(&server)
-      .await;
-
-    // Mock page 2
-    Mock::given(method("GET"))
-      .and(path("/repos/mullvad/mullvad-browser/releases"))
-      .and(query_param("per_page", "100"))
-      .and(query_param("page", "2"))
-      .respond_with(
-        ResponseTemplate::new(200)
-          .set_body_string(mock_page2)
-          .insert_header("content-type", "application/json"),
-      )
-      .mount(&server)
-      .await;
-
-    let result = client.fetch_mullvad_releases_with_caching(true).await;
-
-    assert!(result.is_ok());
-    let releases = result.unwrap();
-    // We currently only fetch 1 page intentionally; ensure we at least got page 1
-    assert_eq!(
-      releases.len(),
-      1,
-      "Should fetch only the first page of results"
-    );
-    assert_eq!(releases[0].tag_name, "100.0");
   }
 
   #[test]

@@ -765,10 +765,8 @@ impl ProfileManager {
         let profile_path_match = cmd.iter().any(|s| {
           let arg = s.to_str().unwrap_or("");
           // For Firefox-based browsers, check for exact profile path match
-          if profile.browser == "tor-browser"
-            || profile.browser == "firefox"
+          if profile.browser == "firefox"
             || profile.browser == "firefox-developer"
-            || profile.browser == "mullvad-browser"
             || profile.browser == "zen"
           {
             arg == profile_data_path_str
@@ -803,13 +801,9 @@ impl ProfileManager {
             "firefox" => {
               exe_name.contains("firefox")
                 && !exe_name.contains("developer")
-                && !exe_name.contains("tor")
-                && !exe_name.contains("mullvad")
                 && !exe_name.contains("camoufox")
             }
             "firefox-developer" => exe_name.contains("firefox") && exe_name.contains("developer"),
-            "mullvad-browser" => self.is_tor_or_mullvad_browser(&exe_name, cmd, "mullvad-browser"),
-            "tor-browser" => self.is_tor_or_mullvad_browser(&exe_name, cmd, "tor-browser"),
             "zen" => exe_name.contains("zen"),
             "chromium" => exe_name.contains("chromium"),
             "brave" => exe_name.contains("brave"),
@@ -832,10 +826,8 @@ impl ProfileManager {
               // Camoufox uses user_data_dir like Chromium browsers
               arg.contains(&format!("--user-data-dir={profile_data_path_str}"))
                 || arg == profile_data_path_str
-            } else if profile.browser == "tor-browser"
-              || profile.browser == "firefox"
+            } else if profile.browser == "firefox"
               || profile.browser == "firefox-developer"
-              || profile.browser == "mullvad-browser"
               || profile.browser == "zen"
             {
               arg == profile_data_path_str
@@ -1042,33 +1034,6 @@ impl ProfileManager {
     }
   }
 
-  // Helper function to check if a process matches TOR/Mullvad browser
-  fn is_tor_or_mullvad_browser(
-    &self,
-    exe_name: &str,
-    cmd: &[std::ffi::OsString],
-    browser_type: &str,
-  ) -> bool {
-    #[cfg(target_os = "macos")]
-    return crate::platform_browser::macos::is_tor_or_mullvad_browser(exe_name, cmd, browser_type);
-
-    #[cfg(target_os = "windows")]
-    return crate::platform_browser::windows::is_tor_or_mullvad_browser(
-      exe_name,
-      cmd,
-      browser_type,
-    );
-
-    #[cfg(target_os = "linux")]
-    return crate::platform_browser::linux::is_tor_or_mullvad_browser(exe_name, cmd, browser_type);
-
-    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-    {
-      let _ = (exe_name, cmd, browser_type);
-      false
-    }
-  }
-
   fn get_common_firefox_preferences(&self) -> Vec<String> {
     vec![
       // Disable default browser check
@@ -1180,7 +1145,7 @@ impl ProfileManager {
     );
 
     // Use MANUAL proxy configuration (type 1) instead of PAC file (type 2)
-    // PAC files with file:// URLs are blocked by privacy-focused browsers like Zen and Mullvad
+    // PAC files with file:// URLs are blocked by privacy-focused browsers like Zen
     // Manual proxy configuration works reliably across all Firefox variants
     preferences.push("user_pref(\"network.proxy.type\", 1);".to_string());
 

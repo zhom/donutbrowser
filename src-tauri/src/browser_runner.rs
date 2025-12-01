@@ -33,29 +33,6 @@ impl BrowserRunner {
     &BROWSER_RUNNER
   }
 
-  // Helper function to check if a process matches TOR/Mullvad browser
-  fn is_tor_or_mullvad_browser(
-    &self,
-    exe_name: &str,
-    cmd: &[std::ffi::OsString],
-    browser_type: &str,
-  ) -> bool {
-    #[cfg(target_os = "macos")]
-    return platform_browser::macos::is_tor_or_mullvad_browser(exe_name, cmd, browser_type);
-
-    #[cfg(target_os = "windows")]
-    return platform_browser::windows::is_tor_or_mullvad_browser(exe_name, cmd, browser_type);
-
-    #[cfg(target_os = "linux")]
-    return platform_browser::linux::is_tor_or_mullvad_browser(exe_name, cmd, browser_type);
-
-    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-    {
-      let _ = (exe_name, cmd, browser_type);
-      false
-    }
-  }
-
   pub fn get_binaries_dir(&self) -> PathBuf {
     let mut path = self.base_dirs.data_local_dir().to_path_buf();
     path.push(if cfg!(debug_assertions) {
@@ -395,41 +372,7 @@ impl BrowserRunner {
       profile.id
     );
 
-    // For TOR and Mullvad browsers, we need to find the actual browser process
-    // because they use launcher scripts that spawn the real browser process
     let mut actual_pid = launcher_pid;
-
-    if matches!(
-      browser_type,
-      BrowserType::TorBrowser | BrowserType::MullvadBrowser
-    ) {
-      // Wait a moment for the actual browser process to start
-      tokio::time::sleep(tokio::time::Duration::from_millis(3000)).await;
-
-      // Find the actual browser process
-      let system = System::new_all();
-      for (pid, process) in system.processes() {
-        let process_name = process.name().to_str().unwrap_or("");
-        let process_cmd = process.cmd();
-        let pid_u32 = pid.as_u32();
-
-        // Skip if this is the launcher process itself
-        if pid_u32 == launcher_pid {
-          continue;
-        }
-
-        if self.is_tor_or_mullvad_browser(process_name, process_cmd, &profile.browser) {
-          log::info!(
-            "Found actual {} browser process: PID {} ({})",
-            profile.browser,
-            pid_u32,
-            process_name
-          );
-          actual_pid = pid_u32;
-          break;
-        }
-      }
-    }
 
     // On macOS, when launching via `open -a`, the child PID is the `open` helper.
     // Resolve and store the actual browser PID for all browser types.
@@ -455,8 +398,6 @@ impl BrowserRunner {
           "firefox" => {
             exe_name_lower.contains("firefox")
               && !exe_name_lower.contains("developer")
-              && !exe_name_lower.contains("tor")
-              && !exe_name_lower.contains("mullvad")
               && !exe_name_lower.contains("camoufox")
           }
           "firefox-developer" => {
@@ -472,10 +413,6 @@ impl BrowserRunner {
                 }))
               || exe_name_lower == "firefox" // Firefox Developer might just show as "firefox"
           }
-          "mullvad-browser" => {
-            self.is_tor_or_mullvad_browser(&exe_name_lower, cmd, "mullvad-browser")
-          }
-          "tor-browser" => self.is_tor_or_mullvad_browser(&exe_name_lower, cmd, "tor-browser"),
           "zen" => exe_name_lower.contains("zen"),
           "chromium" => exe_name_lower.contains("chromium") || exe_name_lower.contains("chrome"),
           "brave" => exe_name_lower.contains("brave") || exe_name_lower.contains("Brave"),
@@ -489,7 +426,7 @@ impl BrowserRunner {
         // Check for profile path match
         let profile_path_match = if matches!(
           profile.browser.as_str(),
-          "firefox" | "firefox-developer" | "tor-browser" | "mullvad-browser" | "zen"
+          "firefox" | "firefox-developer" | "zen"
         ) {
           // Firefox-based browsers: look for -profile argument followed by path
           let mut found_profile_arg = false;
@@ -552,11 +489,7 @@ impl BrowserRunner {
     if profile.proxy_id.is_some()
       && matches!(
         browser_type,
-        BrowserType::Firefox
-          | BrowserType::FirefoxDeveloper
-          | BrowserType::Zen
-          | BrowserType::TorBrowser
-          | BrowserType::MullvadBrowser
+        BrowserType::Firefox | BrowserType::FirefoxDeveloper | BrowserType::Zen
       )
     {
       // Proxy settings for Firefox-based browsers are applied via user.js file
@@ -714,48 +647,9 @@ impl BrowserRunner {
         #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
         return Err("Unsupported platform".into());
       }
-      BrowserType::MullvadBrowser | BrowserType::TorBrowser => {
-        #[cfg(target_os = "macos")]
-        {
-          let profiles_dir = self.profile_manager.get_profiles_dir();
-          return platform_browser::macos::open_url_in_existing_browser_tor_mullvad(
-            &updated_profile,
-            url,
-            browser_type,
-            &browser_dir,
-            &profiles_dir,
-          )
-          .await;
-        }
-
-        #[cfg(target_os = "windows")]
-        {
-          let profiles_dir = self.profile_manager.get_profiles_dir();
-          return platform_browser::windows::open_url_in_existing_browser_tor_mullvad(
-            &updated_profile,
-            url,
-            browser_type,
-            &browser_dir,
-            &profiles_dir,
-          )
-          .await;
-        }
-
-        #[cfg(target_os = "linux")]
-        {
-          let profiles_dir = self.profile_manager.get_profiles_dir();
-          return platform_browser::linux::open_url_in_existing_browser_tor_mullvad(
-            &updated_profile,
-            url,
-            browser_type,
-            &browser_dir,
-            &profiles_dir,
-          )
-          .await;
-        }
-
-        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-        return Err("Unsupported platform".into());
+      BrowserType::Camoufox => {
+        // Camoufox uses nodecar for launching, URL opening is handled differently
+        return Err("URL opening in existing Camoufox instance is not supported".into());
       }
       BrowserType::Chromium | BrowserType::Brave => {
         #[cfg(target_os = "macos")]
@@ -799,10 +693,6 @@ impl BrowserRunner {
 
         #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
         return Err("Unsupported platform".into());
-      }
-      BrowserType::Camoufox => {
-        // This should never be reached due to the early return above, but handle it just in case
-        Err("Camoufox URL opening should be handled in the early return above".into())
       }
     }
   }
@@ -848,7 +738,7 @@ impl BrowserRunner {
       // For Firefox-based browsers, apply PAC/user.js to point to the local proxy
       if matches!(
         profile.browser.as_str(),
-        "firefox" | "firefox-developer" | "zen" | "tor-browser" | "mullvad-browser"
+        "firefox" | "firefox-developer" | "zen"
       ) {
         let profiles_dir = self.profile_manager.get_profiles_dir();
         let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
@@ -949,19 +839,6 @@ impl BrowserRunner {
       if let Some(url_ref) = url.as_ref() {
         log::info!("Opening URL in existing browser: {url_ref}");
 
-        // For TOR/Mullvad browsers, add extra verification
-        if matches!(
-          final_profile.browser.as_str(),
-          "tor-browser" | "mullvad-browser"
-        ) {
-          log::info!("TOR/Mullvad browser detected - ensuring we have correct PID");
-          if final_profile.process_id.is_none() {
-            log::info!(
-              "ERROR: No PID found for running TOR/Mullvad browser - this should not happen"
-            );
-            return Err("No PID found for running browser".into());
-          }
-        }
         match self
           .open_url_in_existing_browser(
             app_handle.clone(),
@@ -978,16 +855,24 @@ impl BrowserRunner {
           Err(e) => {
             log::info!("Failed to open URL in existing browser: {e}");
 
-            // For Mullvad and Tor browsers, don't fall back to new instance since they use -no-remote
-            // and can't have multiple instances with the same profile
+            // Fall back to launching a new instance
             match final_profile.browser.as_str() {
-              "mullvad-browser" | "tor-browser" => {
-                Err(format!("Failed to open URL in existing {} browser. Cannot launch new instance due to profile conflict: {}", final_profile.browser, e).into())
-              }
               _ => {
-                log::info!("Falling back to new instance for browser: {}", final_profile.browser);
+                log::info!(
+                  "Falling back to new instance for browser: {}",
+                  final_profile.browser
+                );
                 // Fallback to launching a new instance for other browsers
-                self.launch_browser_internal(app_handle.clone(), &final_profile, url, internal_proxy_settings, None, false).await
+                self
+                  .launch_browser_internal(
+                    app_handle.clone(),
+                    &final_profile,
+                    url,
+                    internal_proxy_settings,
+                    None,
+                    false,
+                  )
+                  .await
               }
             }
           }
@@ -1316,8 +1201,6 @@ impl BrowserRunner {
           "firefox" => {
             exe_name.contains("firefox")
               && !exe_name.contains("developer")
-              && !exe_name.contains("tor")
-              && !exe_name.contains("mullvad")
               && !exe_name.contains("camoufox")
           }
           "firefox-developer" => {
@@ -1333,8 +1216,6 @@ impl BrowserRunner {
                 }))
               || exe_name == "firefox" // Firefox Developer might just show as "firefox"
           }
-          "mullvad-browser" => self.is_tor_or_mullvad_browser(&exe_name, cmd, "mullvad-browser"),
-          "tor-browser" => self.is_tor_or_mullvad_browser(&exe_name, cmd, "tor-browser"),
           "zen" => exe_name.contains("zen"),
           "chromium" => exe_name.contains("chromium") || exe_name.contains("chrome"),
           "brave" => exe_name.contains("brave") || exe_name.contains("Brave"),
@@ -1349,7 +1230,7 @@ impl BrowserRunner {
 
           let profile_path_match = if matches!(
             profile.browser.as_str(),
-            "firefox" | "firefox-developer" | "tor-browser" | "mullvad-browser" | "zen"
+            "firefox" | "firefox-developer" | "zen"
           ) {
             // Firefox-based browsers: look for -profile argument followed by path
             let mut found_profile_arg = false;
@@ -1598,8 +1479,6 @@ impl BrowserRunner {
         "firefox" => {
           exe_name.contains("firefox")
             && !exe_name.contains("developer")
-            && !exe_name.contains("tor")
-            && !exe_name.contains("mullvad")
             && !exe_name.contains("camoufox")
         }
         "firefox-developer" => {
@@ -1615,8 +1494,6 @@ impl BrowserRunner {
               }))
             || exe_name == "firefox" // Firefox Developer might just show as "firefox"
         }
-        "mullvad-browser" => self.is_tor_or_mullvad_browser(&exe_name, cmd, "mullvad-browser"),
-        "tor-browser" => self.is_tor_or_mullvad_browser(&exe_name, cmd, "tor-browser"),
         "zen" => exe_name.contains("zen"),
         "chromium" => exe_name.contains("chromium") || exe_name.contains("chrome"),
         "brave" => exe_name.contains("brave") || exe_name.contains("Brave"),
@@ -1630,7 +1507,7 @@ impl BrowserRunner {
       // Check for profile path match with improved logic
       let profile_path_match = if matches!(
         profile.browser.as_str(),
-        "firefox" | "firefox-developer" | "tor-browser" | "mullvad-browser" | "zen"
+        "firefox" | "firefox-developer" | "zen"
       ) {
         // Firefox-based browsers: look for -profile argument followed by path
         let mut found_profile_arg = false;
@@ -1792,7 +1669,7 @@ pub async fn launch_browser_profile(
         // For Firefox-based browsers, always apply PAC/user.js to point to the local proxy
         if matches!(
           profile_for_launch.browser.as_str(),
-          "firefox" | "firefox-developer" | "zen" | "tor-browser" | "mullvad-browser"
+          "firefox" | "firefox-developer" | "zen"
         ) {
           let profiles_dir = browser_runner.profile_manager.get_profiles_dir();
           let profile_path = profiles_dir

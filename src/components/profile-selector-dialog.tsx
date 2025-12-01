@@ -142,11 +142,7 @@ export function ProfileSelectorDialog({
       const runningAvailableProfile = profiles.find((profile) => {
         const isRunning = runningProfiles.has(profile.id);
         // Simple check without browserState dependency
-        return (
-          isRunning &&
-          profile.browser !== "tor-browser" &&
-          profile.browser !== "mullvad-browser"
-        );
+        return isRunning;
       });
 
       if (runningAvailableProfile) {

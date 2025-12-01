@@ -1680,19 +1680,12 @@ export function ProfilesDataTable({
             ? (meta.storedProxies.find((p) => p.id === effectiveProxyId) ??
               null)
             : null;
-          const displayName =
-            profile.browser === "tor-browser"
-              ? "Not supported"
-              : effectiveProxy
-                ? effectiveProxy.name
-                : "Not Selected";
+          const displayName = effectiveProxy
+            ? effectiveProxy.name
+            : "Not Selected";
           const profileHasProxy = Boolean(effectiveProxy);
           const tooltipText =
-            profile.browser === "tor-browser"
-              ? "Proxies are not supported for TOR browser"
-              : profileHasProxy && effectiveProxy
-                ? effectiveProxy.name
-                : null;
+            profileHasProxy && effectiveProxy ? effectiveProxy.name : null;
           const isSelectorOpen = meta.openProxySelectorFor === profile.id;
 
           // When profile is running, show bandwidth chart instead of proxy selector
@@ -1714,23 +1707,6 @@ export function ProfilesDataTable({
                 currentBandwidth={currentBandwidth}
                 onClick={() => meta.onOpenTrafficDialog?.(profile.id)}
               />
-            );
-          }
-
-          if (profile.browser === "tor-browser") {
-            return (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="flex gap-2 items-center">
-                    <span className="text-sm text-muted-foreground">
-                      Not supported
-                    </span>
-                  </span>
-                </TooltipTrigger>
-                {(tooltipText || displayName.length > 10) && (
-                  <TooltipContent>{tooltipText || displayName}</TooltipContent>
-                )}
-              </Tooltip>
             );
           }
 

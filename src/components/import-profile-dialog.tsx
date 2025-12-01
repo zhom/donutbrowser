@@ -62,10 +62,7 @@ export function ImportProfileDialog({
   const { supportedBrowsers, isLoading: isLoadingSupport } =
     useBrowserSupport();
 
-  // Exclude browsers that are no longer supported for import
-  const importableBrowsers = supportedBrowsers.filter(
-    (b) => b !== "mullvad-browser" && b !== "tor-browser",
-  );
+  const importableBrowsers = supportedBrowsers;
 
   const loadDetectedProfiles = useCallback(async () => {
     setIsLoading(true);

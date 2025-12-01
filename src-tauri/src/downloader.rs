@@ -145,30 +145,6 @@ impl Downloader {
 
         Ok(asset_url)
       }
-      BrowserType::MullvadBrowser => {
-        // For Mullvad, verify the asset exists
-        let releases = self
-          .api_client
-          .fetch_mullvad_releases_with_caching(true)
-          .await?;
-
-        let release = releases
-          .iter()
-          .find(|r| r.tag_name == version)
-          .ok_or(format!("Mullvad version {version} not found"))?;
-
-        // Get platform and architecture info
-        let (os, arch) = Self::get_platform_info();
-
-        // Find the appropriate asset
-        let asset_url = self
-          .find_mullvad_asset(&release.assets, &os, &arch)
-          .ok_or(format!(
-            "No compatible asset found for Mullvad version {version} on {os}/{arch}"
-          ))?;
-
-        Ok(asset_url)
-      }
       BrowserType::Camoufox => {
         // For Camoufox, verify the asset exists and find the correct download URL
         let releases = self
@@ -320,46 +296,6 @@ impl Downloader {
               .iter()
               .find(|asset| asset.name == "zen-aarch64.AppImage")
           })
-      }
-      _ => None,
-    };
-
-    asset.map(|a| a.browser_download_url.clone())
-  }
-
-  /// Find the appropriate Mullvad asset for the current platform and architecture
-  fn find_mullvad_asset(
-    &self,
-    assets: &[crate::browser::GithubAsset],
-    os: &str,
-    arch: &str,
-  ) -> Option<String> {
-    // Mullvad asset naming patterns:
-    // Windows: mullvad-browser-windows-x86_64-VERSION.exe
-    // macOS: mullvad-browser-macos-VERSION.dmg
-    // Linux: mullvad-browser-x86_64-VERSION.tar.xz
-
-    let asset = match (os, arch) {
-      ("windows", "x64") => assets.iter().find(|asset| {
-        asset.name.contains("windows")
-          && asset.name.contains("x86_64")
-          && asset.name.ends_with(".exe")
-      }),
-      ("windows", "arm64") => {
-        // Mullvad doesn't support ARM64 on Windows
-        None
-      }
-      ("macos", _) => assets
-        .iter()
-        .find(|asset| asset.name.contains("macos") && asset.name.ends_with(".dmg")),
-      ("linux", "x64") => assets.iter().find(|asset| {
-        asset.name.contains("x86_64")
-          && asset.name.ends_with(".tar.xz")
-          && !asset.name.contains("windows")
-      }),
-      ("linux", "arm64") => {
-        // Mullvad doesn't support ARM64 on Linux
-        None
       }
       _ => None,
     };
@@ -937,7 +873,6 @@ mod tests {
       base_url.clone(), // firefox_dev_api_base
       base_url.clone(), // github_api_base
       base_url.clone(), // chromium_api_base
-      base_url.clone(), // tor_archive_base
     )
   }
 
@@ -977,27 +912,6 @@ mod tests {
 
     let result = downloader
       .resolve_download_url(BrowserType::Chromium, "1465660", &download_info)
-      .await;
-
-    assert!(result.is_ok());
-    let url = result.unwrap();
-    assert_eq!(url, download_info.url);
-  }
-
-  #[tokio::test]
-  async fn test_resolve_tor_download_url() {
-    let server = setup_mock_server().await;
-    let api_client = create_test_api_client(&server);
-    let downloader = Downloader::new_with_api_client(api_client);
-
-    let download_info = DownloadInfo {
-      url: "https://archive.torproject.org/tor-package-archive/torbrowser/14.0.4/tor-browser-macos-14.0.4.dmg".to_string(),
-      filename: "tor-test.dmg".to_string(),
-      is_archive: true,
-    };
-
-    let result = downloader
-      .resolve_download_url(BrowserType::TorBrowser, "14.0.4", &download_info)
       .await;
 
     assert!(result.is_ok());

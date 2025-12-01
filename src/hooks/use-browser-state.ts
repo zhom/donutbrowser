@@ -3,7 +3,7 @@ import { getBrowserDisplayName } from "@/lib/browser-utils";
 import type { BrowserProfile } from "@/types";
 
 /**
- * Hook for managing browser state and enforcing single-instance rules for Tor and Mullvad browsers
+ * Hook for managing browser state
  */
 export function useBrowserState(
   profiles: BrowserProfile[],
@@ -22,8 +22,8 @@ export function useBrowserState(
    * Check if a browser type allows only one instance to run at a time
    */
   const isSingleInstanceBrowser = useCallback(
-    (browserType: string): boolean => {
-      return browserType === "tor-browser" || browserType === "mullvad-browser";
+    (_browserType: string): boolean => {
+      return false; // No browsers currently require single instance
     },
     [],
   );
@@ -102,7 +102,7 @@ export function useBrowserState(
         return false;
       }
 
-      // For single-instance browsers (Tor and Mullvad)
+      // For single-instance browsers
       if (isSingleInstanceBrowser(profile.browser)) {
         const runningInstancesOfType = profiles.filter(
           (p) => p.browser === profile.browser && runningProfiles.has(p.id),
@@ -195,9 +195,7 @@ export function useBrowserState(
         isSingleInstanceBrowser(profile.browser) &&
         !canLaunchProfile(profile)
       ) {
-        const browserDisplayName =
-          profile.browser === "tor-browser" ? "TOR" : "Mullvad";
-        return `Only one ${browserDisplayName} browser instance can run at a time. Stop the running ${browserDisplayName} browser first.`;
+        return `Only one instance of this browser can run at a time. Stop the running browser first.`;
       }
 
       return "";
@@ -242,8 +240,6 @@ export function useBrowserState(
       }
 
       if (isSingleInstanceBrowser(profile.browser)) {
-        const browserDisplayName =
-          profile.browser === "tor-browser" ? "TOR" : "Mullvad";
         const runningInstancesOfType = profiles.filter(
           (p) => p.browser === profile.browser && runningProfiles.has(p.id),
         );
@@ -252,7 +248,7 @@ export function useBrowserState(
           const runningProfileNames = runningInstancesOfType
             .map((p) => p.name)
             .join(", ");
-          return `${browserDisplayName} browser is already running (${runningProfileNames}). Only one instance can run at a time.`;
+          return `${getBrowserDisplayName(profile.browser)} browser is already running (${runningProfileNames}). Only one instance can run at a time.`;
         }
       }
 

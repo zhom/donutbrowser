@@ -54,14 +54,6 @@ impl BrowserVersionManager {
 
     match browser {
       "firefox" | "firefox-developer" => Ok(true),
-      "mullvad-browser" => {
-        // Mullvad doesn't support ARM64 on Windows and Linux
-        if arch == "arm64" && (os == "windows" || os == "linux") {
-          Ok(false)
-        } else {
-          Ok(true)
-        }
-      }
       "zen" => {
         // Zen supports all platforms and architectures
         Ok(true)
@@ -73,14 +65,6 @@ impl BrowserVersionManager {
       "chromium" => {
         // Chromium doesn't support ARM64 on Linux
         if arch == "arm64" && os == "linux" {
-          Ok(false)
-        } else {
-          Ok(true)
-        }
-      }
-      "tor-browser" => {
-        // TOR Browser doesn't support ARM64 on Windows and Linux
-        if arch == "arm64" && (os == "windows" || os == "linux") {
           Ok(false)
         } else {
           Ok(true)
@@ -99,11 +83,9 @@ impl BrowserVersionManager {
     let all_browsers = vec![
       "firefox",
       "firefox-developer",
-      "mullvad-browser",
       "zen",
       "brave",
       "chromium",
-      "tor-browser",
       "camoufox",
     ];
 
@@ -238,11 +220,9 @@ impl BrowserVersionManager {
     let fresh_versions = match browser {
       "firefox" => self.fetch_firefox_versions(true).await?, // Always fetch fresh for merging
       "firefox-developer" => self.fetch_firefox_developer_versions(true).await?,
-      "mullvad-browser" => self.fetch_mullvad_versions(true).await?,
       "zen" => self.fetch_zen_versions(true).await?,
       "brave" => self.fetch_brave_versions(true).await?,
       "chromium" => self.fetch_chromium_versions(true).await?,
-      "tor-browser" => self.fetch_tor_versions(true).await?,
       "camoufox" => self.fetch_camoufox_versions(true).await?,
       _ => return Err(format!("Unsupported browser: {browser}").into()),
     };
@@ -356,27 +336,6 @@ impl BrowserVersionManager {
           })
           .collect()
       }
-      "mullvad-browser" => {
-        let releases = self.fetch_mullvad_releases_detailed(true).await?;
-        merged_versions
-          .into_iter()
-          .map(|version| {
-            if let Some(release) = releases.iter().find(|r| r.tag_name == version) {
-              BrowserVersionInfo {
-                version: release.tag_name.clone(),
-                is_prerelease: release.is_nightly,
-                date: release.published_at.clone(),
-              }
-            } else {
-              BrowserVersionInfo {
-                version: version.clone(),
-                is_prerelease: false, // Mullvad usually stable releases
-                date: "".to_string(),
-              }
-            }
-          })
-          .collect()
-      }
       "zen" => {
         let releases = self.fetch_zen_releases_detailed(true).await?;
         merged_versions
@@ -438,31 +397,6 @@ impl BrowserVersionManager {
               BrowserVersionInfo {
                 version: version.clone(),
                 is_prerelease: false, // Chromium usually stable releases
-                date: "".to_string(),
-              }
-            }
-          })
-          .collect()
-      }
-      "tor-browser" => {
-        let releases = self.fetch_tor_releases_detailed(true).await?;
-        merged_versions
-          .into_iter()
-          .map(|version| {
-            if let Some(release) = releases.iter().find(|r| r.version == version) {
-              BrowserVersionInfo {
-                version: release.version.clone(),
-                is_prerelease: crate::api_client::is_browser_version_nightly(
-                  "tor-browser",
-                  &release.version,
-                  None,
-                ),
-                date: release.date.clone(),
-              }
-            } else {
-              BrowserVersionInfo {
-                version: version.clone(),
-                is_prerelease: false, // TOR Browser usually stable releases
                 date: "".to_string(),
               }
             }
@@ -602,50 +536,6 @@ impl BrowserVersionManager {
           is_archive,
         })
       }
-      "mullvad-browser" => {
-        // Mullvad Browser doesn't support ARM64 on Windows and Linux
-        if arch == "arm64" && (os == "windows" || os == "linux") {
-          return Err(format!("Mullvad Browser doesn't support ARM64 on {os}").into());
-        }
-
-        let (platform_str, filename, is_archive) = match os.as_str() {
-          "windows" => {
-            if arch == "arm64" {
-              return Err("Mullvad Browser doesn't support ARM64 on Windows".into());
-            }
-            (
-              "windows-x86_64",
-              format!("mullvad-browser-windows-x86_64-{version}.exe"),
-              false,
-            )
-          }
-          "linux" => {
-            if arch == "arm64" {
-              return Err("Mullvad Browser doesn't support ARM64 on Linux".into());
-            }
-            (
-              "x86_64",
-              format!("mullvad-browser-x86_64-{version}.tar.xz"),
-              true,
-            )
-          }
-          "macos" => (
-            "macos",
-            format!("mullvad-browser-macos-{version}.dmg"),
-            true,
-          ),
-          _ => return Err(format!("Unsupported platform for Mullvad Browser: {os}").into()),
-        };
-
-        Ok(DownloadInfo {
-          url: format!(
-            "https://github.com/mullvad/mullvad-browser/releases/download/{version}/mullvad-browser-{platform_str}-{version}{}", 
-            if os == "windows" { ".exe" } else if os == "linux" { ".tar.xz" } else { ".dmg" }
-          ),
-          filename,
-          is_archive,
-        })
-      }
       "zen" => {
         let (asset_name, filename, is_archive) = match (&os[..], &arch[..]) {
           ("windows", "x64") => ("zen.installer.exe", format!("zen-{version}.exe"), false),
@@ -729,46 +619,6 @@ impl BrowserVersionManager {
           ),
           filename,
           is_archive: true,
-        })
-      }
-      "tor-browser" => {
-        // TOR Browser doesn't support ARM64 on Windows and Linux
-        if arch == "arm64" && (os == "windows" || os == "linux") {
-          return Err(format!("TOR Browser doesn't support ARM64 on {os}").into());
-        }
-
-        let (platform_str, filename, is_archive) = match os.as_str() {
-          "windows" => {
-            if arch == "arm64" {
-              return Err("TOR Browser doesn't support ARM64 on Windows".into());
-            }
-            (
-              "windows-x86_64-portable",
-              format!("tor-browser-windows-x86_64-portable-{version}.exe"),
-              false,
-            )
-          }
-          "linux" => {
-            if arch == "arm64" {
-              return Err("TOR Browser doesn't support ARM64 on Linux".into());
-            }
-            (
-              "linux-x86_64",
-              format!("tor-browser-linux-x86_64-{version}.tar.xz"),
-              true,
-            )
-          }
-          "macos" => ("macos", format!("tor-browser-macos-{version}.dmg"), true),
-          _ => return Err(format!("Unsupported platform for TOR Browser: {os}").into()),
-        };
-
-        Ok(DownloadInfo {
-          url: format!(
-            "https://archive.torproject.org/tor-package-archive/torbrowser/{version}/tor-browser-{platform_str}-{version}{}", 
-            if os == "windows" { ".exe" } else if os == "linux" { ".tar.xz" } else { ".dmg" }
-          ),
-          filename,
-          is_archive,
         })
       }
       "camoufox" => {
@@ -864,24 +714,6 @@ impl BrowserVersionManager {
       .await
   }
 
-  async fn fetch_mullvad_versions(
-    &self,
-    no_caching: bool,
-  ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
-    let releases = self.fetch_mullvad_releases_detailed(no_caching).await?;
-    Ok(releases.into_iter().map(|r| r.tag_name).collect())
-  }
-
-  async fn fetch_mullvad_releases_detailed(
-    &self,
-    no_caching: bool,
-  ) -> Result<Vec<GithubRelease>, Box<dyn std::error::Error + Send + Sync>> {
-    self
-      .api_client
-      .fetch_mullvad_releases_with_caching(no_caching)
-      .await
-  }
-
   async fn fetch_zen_versions(
     &self,
     no_caching: bool,
@@ -968,24 +800,6 @@ impl BrowserVersionManager {
     self
       .api_client
       .fetch_chromium_releases_with_caching(no_caching)
-      .await
-  }
-
-  async fn fetch_tor_versions(
-    &self,
-    no_caching: bool,
-  ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
-    let releases = self.fetch_tor_releases_detailed(no_caching).await?;
-    Ok(releases.into_iter().map(|r| r.version).collect())
-  }
-
-  async fn fetch_tor_releases_detailed(
-    &self,
-    no_caching: bool,
-  ) -> Result<Vec<BrowserRelease>, Box<dyn std::error::Error + Send + Sync>> {
-    self
-      .api_client
-      .fetch_tor_releases_with_caching(no_caching)
       .await
   }
 
@@ -1130,40 +944,6 @@ mod tests {
       .url
       .contains("/pub/devedition/releases/139.0b1/"));
 
-    // Test Mullvad Browser
-    let mullvad_info = service
-      .get_download_info("mullvad-browser", "14.5a6")
-      .unwrap();
-
-    #[cfg(target_os = "macos")]
-    {
-      assert_eq!(mullvad_info.filename, "mullvad-browser-macos-14.5a6.dmg");
-      assert!(mullvad_info.url.contains("mullvad-browser-macos-14.5a6"));
-      assert!(mullvad_info.is_archive);
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-      assert_eq!(
-        mullvad_info.filename,
-        "mullvad-browser-x86_64-14.5a6.tar.xz"
-      );
-      assert!(mullvad_info.url.contains("mullvad-browser-x86_64-14.5a6"));
-      assert!(mullvad_info.is_archive);
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-      assert_eq!(
-        mullvad_info.filename,
-        "mullvad-browser-windows-x86_64-14.5a6.exe"
-      );
-      assert!(mullvad_info
-        .url
-        .contains("mullvad-browser-windows-x86_64-14.5a6"));
-      assert!(!mullvad_info.is_archive);
-    }
-
     // Test Zen Browser
     let zen_info = service.get_download_info("zen", "1.11b").unwrap();
 
@@ -1186,35 +966,6 @@ mod tests {
       assert_eq!(zen_info.filename, "zen-1.11b.exe");
       assert!(zen_info.url.contains("zen.installer.exe"));
       assert!(!zen_info.is_archive);
-    }
-
-    // Test Tor Browser
-    let tor_info = service.get_download_info("tor-browser", "14.0.4").unwrap();
-
-    #[cfg(target_os = "macos")]
-    {
-      assert_eq!(tor_info.filename, "tor-browser-macos-14.0.4.dmg");
-      assert!(tor_info.url.contains("tor-browser-macos-14.0.4"));
-      assert!(tor_info.is_archive);
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-      assert_eq!(tor_info.filename, "tor-browser-linux-x86_64-14.0.4.tar.xz");
-      assert!(tor_info.url.contains("tor-browser-linux-x86_64-14.0.4"));
-      assert!(tor_info.is_archive);
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-      assert_eq!(
-        tor_info.filename,
-        "tor-browser-windows-x86_64-portable-14.0.4.exe"
-      );
-      assert!(tor_info
-        .url
-        .contains("tor-browser-windows-x86_64-portable-14.0.4"));
-      assert!(!tor_info.is_archive);
     }
 
     // Test Chromium

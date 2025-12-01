@@ -30,13 +30,11 @@ import { showErrorToast, showToast } from "@/lib/toast-utils";
 import type { BrowserProfile, CamoufoxConfig } from "@/types";
 
 type BrowserTypeString =
-  | "mullvad-browser"
   | "firefox"
   | "firefox-developer"
   | "chromium"
   | "brave"
   | "zen"
-  | "tor-browser"
   | "camoufox";
 
 interface PendingUrl {
@@ -648,9 +646,7 @@ export default function Home() {
     if (profiles.length === 0) return;
 
     const deprecatedProfiles = profiles.filter(
-      (p) =>
-        ["tor-browser", "mullvad-browser"].includes(p.browser) ||
-        (p.release_type === "nightly" && p.browser !== "firefox-developer"),
+      (p) => p.release_type === "nightly" && p.browser !== "firefox-developer",
     );
 
     if (deprecatedProfiles.length > 0) {
@@ -661,7 +657,7 @@ export default function Home() {
         id: "deprecated-profiles-warning",
         type: "error",
         title: "Some profiles will be deprecated soon",
-        description: `The following profiles will be deprecated soon: ${deprecatedNames}. Tor Browser, Mullvad Browser, and nightly profiles (except Firefox Developers Edition) will be removed in upcoming versions. Please check GitHub for migration instructions.`,
+        description: `The following profiles will be deprecated soon: ${deprecatedNames}. Nightly profiles (except Firefox Developers Edition) will be removed in upcoming versions. Please check GitHub for migration instructions.`,
         duration: 15000,
         action: {
           label: "Learn more",

@@ -1,6 +1,5 @@
 use crate::browser::{create_browser, BrowserType};
 use crate::profile::BrowserProfile;
-use std::ffi::OsString;
 use std::path::Path;
 use std::process::Command;
 
@@ -9,40 +8,6 @@ use std::process::Command;
 pub mod macos {
   use super::*;
   use sysinfo::{Pid, System};
-
-  pub fn is_tor_or_mullvad_browser(exe_name: &str, cmd: &[OsString], browser_type: &str) -> bool {
-    match browser_type {
-      "mullvad-browser" => {
-        let has_mullvad_in_exe = exe_name.contains("mullvad");
-        let has_firefox_exe = exe_name == "firefox" || exe_name.contains("firefox-bin");
-        let has_mullvad_in_cmd = cmd.iter().any(|arg| {
-          let arg_str = arg.to_str().unwrap_or("");
-          arg_str.contains("Mullvad Browser.app")
-            || arg_str.contains("mullvad")
-            || arg_str.contains("Mullvad")
-            || arg_str.contains("/Applications/Mullvad Browser.app/")
-            || arg_str.contains("MullvadBrowser")
-        });
-
-        has_mullvad_in_exe || (has_firefox_exe && has_mullvad_in_cmd)
-      }
-      "tor-browser" => {
-        let has_tor_in_exe = exe_name.contains("tor");
-        let has_firefox_exe = exe_name == "firefox" || exe_name.contains("firefox-bin");
-        let has_tor_in_cmd = cmd.iter().any(|arg| {
-          let arg_str = arg.to_str().unwrap_or("");
-          arg_str.contains("Tor Browser.app")
-            || arg_str.contains("tor-browser")
-            || arg_str.contains("TorBrowser")
-            || arg_str.contains("/Applications/Tor Browser.app/")
-            || arg_str.contains("TorBrowser-Data")
-        });
-
-        has_tor_in_exe || (has_firefox_exe && has_tor_in_cmd)
-      }
-      _ => false,
-    }
-  }
 
   pub async fn launch_browser_process(
     executable_path: &std::path::Path,
@@ -375,122 +340,6 @@ end try
     descendants
   }
 
-  pub async fn open_url_in_existing_browser_tor_mullvad(
-    profile: &BrowserProfile,
-    url: &str,
-    browser_type: BrowserType,
-    browser_dir: &Path,
-    _profiles_dir: &Path,
-  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let pid = profile.process_id.unwrap();
-
-    log::info!("Opening URL in TOR/Mullvad browser using file-based approach (PID: {pid})");
-
-    // Method 1: Try using a temporary HTML file approach
-    log::info!("Attempting file-based URL opening for TOR/Mullvad browser");
-
-    let temp_dir = std::env::temp_dir();
-    let temp_file_name = format!("donut_browser_url_{}.html", std::process::id());
-    let temp_file_path = temp_dir.join(&temp_file_name);
-
-    let html_content = format!(
-      r#"<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta http-equiv="refresh" content="0; url={url}">
-    <title>Redirecting...</title>
-    <script>
-        window.location.href = "{url}";
-    </script>
-</head>
-<body>
-    <p>Redirecting to <a href="{url}">{url}</a>...</p>
-</body>
-</html>"#
-    );
-
-    match std::fs::write(&temp_file_path, html_content) {
-      Ok(()) => {
-        log::info!("Created temporary HTML file: {temp_file_path:?}");
-
-        let browser = create_browser(browser_type.clone());
-        if let Ok(executable_path) = browser.get_executable_path(browser_dir) {
-          let open_result = Command::new("open")
-            .args([
-              "-a",
-              executable_path.to_str().unwrap(),
-              temp_file_path.to_str().unwrap(),
-            ])
-            .output();
-
-          // Clean up the temporary file after a short delay
-          let temp_file_path_clone = temp_file_path.clone();
-          tokio::spawn(async move {
-            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-            let _ = std::fs::remove_file(temp_file_path_clone);
-          });
-
-          match open_result {
-            Ok(output) if output.status.success() => {
-              log::info!("Successfully opened URL using file-based approach");
-              return Ok(());
-            }
-            Ok(output) => {
-              let stderr = String::from_utf8_lossy(&output.stderr);
-              log::info!("File-based approach failed: {stderr}");
-            }
-            Err(e) => {
-              log::info!("File-based approach error: {e}");
-            }
-          }
-        }
-
-        let _ = std::fs::remove_file(&temp_file_path);
-      }
-      Err(e) => {
-        log::info!("Failed to create temporary HTML file: {e}");
-      }
-    }
-
-    // Method 2: Try using the 'open' command directly with the URL
-    log::info!("Attempting direct URL opening with 'open' command");
-
-    let browser = create_browser(browser_type.clone());
-    if let Ok(executable_path) = browser.get_executable_path(browser_dir) {
-      let direct_open_result = Command::new("open")
-        .args(["-a", executable_path.to_str().unwrap(), url])
-        .output();
-
-      match direct_open_result {
-        Ok(output) if output.status.success() => {
-          log::info!("Successfully opened URL using direct 'open' command");
-          return Ok(());
-        }
-        Ok(output) => {
-          let stderr = String::from_utf8_lossy(&output.stderr);
-          log::info!("Direct 'open' command failed: {stderr}");
-        }
-        Err(e) => {
-          log::info!("Direct 'open' command error: {e}");
-        }
-      }
-    }
-
-    // If all methods fail, return a helpful error message
-    Err(
-      format!(
-        "Failed to open URL in existing TOR/Mullvad browser (PID: {pid}). All methods failed:\n\
-      1. File-based approach failed\n\
-      2. Direct 'open' command failed\n\
-      \n\
-      This may be due to browser security restrictions or the browser process may have changed.\n\
-      Try closing and reopening the browser, or manually paste the URL: {url}"
-      )
-      .into(),
-    )
-  }
-
   pub async fn open_url_in_existing_browser_chromium(
     profile: &BrowserProfile,
     url: &str,
@@ -622,42 +471,6 @@ end try
 pub mod windows {
   use super::*;
 
-  pub fn is_tor_or_mullvad_browser(exe_name: &str, cmd: &[OsString], browser_type: &str) -> bool {
-    let exe_lower = exe_name.to_lowercase();
-
-    // Check for Firefox-based browsers first by executable name
-    let is_firefox_family = exe_lower.contains("firefox") || exe_lower.contains(".exe");
-
-    if !is_firefox_family {
-      return false;
-    }
-
-    // Check command arguments for profile paths and browser-specific indicators
-    let cmd_line = cmd
-      .iter()
-      .map(|s| s.to_string_lossy().to_lowercase())
-      .collect::<Vec<_>>()
-      .join(" ");
-
-    match browser_type {
-      "tor-browser" => {
-        // Check for TOR browser specific paths and arguments
-        cmd_line.contains("tor")
-          || cmd_line.contains("browser\\torbrowser")
-          || cmd_line.contains("tor-browser")
-          || cmd_line.contains("profile") && (cmd_line.contains("tor") || cmd_line.contains("tbb"))
-      }
-      "mullvad-browser" => {
-        // Check for Mullvad browser specific paths and arguments
-        cmd_line.contains("mullvad")
-          || cmd_line.contains("browser\\mullvadbrowser")
-          || cmd_line.contains("mullvad-browser")
-          || cmd_line.contains("profile") && cmd_line.contains("mullvad")
-      }
-      _ => false,
-    }
-  }
-
   pub async fn launch_browser_process(
     executable_path: &std::path::Path,
     args: &[String],
@@ -782,48 +595,6 @@ pub mod windows {
     Ok(())
   }
 
-  pub async fn open_url_in_existing_browser_tor_mullvad(
-    profile: &BrowserProfile,
-    url: &str,
-    browser_type: BrowserType,
-    browser_dir: &Path,
-    profiles_dir: &Path,
-  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // On Windows, TOR and Mullvad browsers can sometimes accept URLs via command line
-    // even with -no-remote, by launching a new instance that hands off to existing one
-    let browser = create_browser(browser_type.clone());
-    let executable_path = browser
-      .get_executable_path(browser_dir)
-      .map_err(|e| format!("Failed to get executable path: {}", e))?;
-
-    let mut cmd = Command::new(&executable_path);
-    let profile_data_path = profile.get_profile_data_path(profiles_dir);
-    cmd.args(["-profile", &profile_data_path.to_string_lossy(), url]);
-
-    // Set working directory
-    if let Some(parent_dir) = browser_dir
-      .parent()
-      .or_else(|| browser_dir.ancestors().nth(1))
-    {
-      cmd.current_dir(parent_dir);
-    }
-
-    let output = cmd.output()?;
-
-    if !output.status.success() {
-      return Err(
-        format!(
-          "Failed to open URL in existing {}: {}. Note: TOR and Mullvad browsers may require manual URL opening for security reasons.",
-          browser_type.as_str(),
-          String::from_utf8_lossy(&output.stderr)
-        )
-        .into(),
-      );
-    }
-
-    Ok(())
-  }
-
   pub async fn open_url_in_existing_browser_chromium(
     profile: &BrowserProfile,
     url: &str,
@@ -908,15 +679,6 @@ pub mod windows {
 #[cfg(target_os = "linux")]
 pub mod linux {
   use super::*;
-
-  pub fn is_tor_or_mullvad_browser(
-    _exe_name: &str,
-    _cmd: &[OsString],
-    _browser_type: &str,
-  ) -> bool {
-    // Linux implementation would go here
-    false
-  }
 
   pub async fn launch_browser_process(
     executable_path: &std::path::Path,
@@ -1072,16 +834,6 @@ pub mod linux {
     }
 
     Ok(())
-  }
-
-  pub async fn open_url_in_existing_browser_tor_mullvad(
-    _profile: &BrowserProfile,
-    _url: &str,
-    _browser_type: BrowserType,
-    _browser_dir: &Path,
-    _profiles_dir: &Path,
-  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    Err("Opening URLs in existing Firefox-based browsers is not supported on Linux when using -no-remote".into())
   }
 
   pub async fn open_url_in_existing_browser_chromium(

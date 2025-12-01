@@ -59,8 +59,6 @@ impl ProfileImporter {
     // Detect Zen Browser profiles
     detected_profiles.extend(self.detect_zen_browser_profiles()?);
 
-    // NOTE: Mullvad and Tor Browser profile imports are no longer supported.
-    // We intentionally do not detect these profiles to avoid offering them in the UI.
 
     // Remove duplicates based on path
     let mut seen_paths = HashSet::new();
@@ -495,9 +493,7 @@ impl ProfileImporter {
       "firefox-developer" => "Firefox Developer",
       "chromium" => "Chrome/Chromium",
       "brave" => "Brave",
-      "mullvad-browser" => "Mullvad Browser",
       "zen" => "Zen Browser",
-      "tor-browser" => "Tor Browser",
       _ => "Unknown Browser",
     }
   }
@@ -509,11 +505,6 @@ impl ProfileImporter {
     browser_type: &str,
     new_profile_name: &str,
   ) -> Result<(), Box<dyn std::error::Error>> {
-    // Disable imports for Mullvad and Tor browsers
-    if browser_type == "mullvad-browser" || browser_type == "tor-browser" {
-      return Err("Importing Mullvad Browser or Tor Browser profiles is not supported".into());
-    }
-
     // Validate that source path exists
     let source_path = Path::new(source_path);
     if !source_path.exists() {
@@ -685,15 +676,7 @@ mod tests {
       "Chrome/Chromium"
     );
     assert_eq!(importer.get_browser_display_name("brave"), "Brave");
-    assert_eq!(
-      importer.get_browser_display_name("mullvad-browser"),
-      "Mullvad Browser"
-    );
     assert_eq!(importer.get_browser_display_name("zen"), "Zen Browser");
-    assert_eq!(
-      importer.get_browser_display_name("tor-browser"),
-      "Tor Browser"
-    );
     assert_eq!(
       importer.get_browser_display_name("unknown"),
       "Unknown Browser"
