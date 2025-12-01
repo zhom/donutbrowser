@@ -1,8 +1,10 @@
 name: Generate Release Notes
 
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: ["Release"]
+    types:
+      - completed
 
 permissions:
   contents: write
@@ -11,19 +13,39 @@ permissions:
 jobs:
   generate-release-notes:
     runs-on: ubuntu-latest
-    if: startsWith(github.event.release.tag_name, 'v') && !github.event.release.prerelease
+    if: github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v')
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 #v6.0.0
         with:
-          fetch-depth: 0 # Fetch full history to compare with previous release
+          fetch-depth: 0
+
+      - name: Get release info
+        id: get-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME="${{ github.event.workflow_run.head_branch }}"
+          echo "tag-name=$TAG_NAME" >> $GITHUB_OUTPUT
+
+          # Get release info by tag
+          RELEASE_INFO=$(gh api /repos/${{ github.repository }}/releases/tags/$TAG_NAME)
+          RELEASE_ID=$(echo "$RELEASE_INFO" | jq -r '.id')
+          IS_PRERELEASE=$(echo "$RELEASE_INFO" | jq -r '.prerelease')
+
+          echo "release-id=$RELEASE_ID" >> $GITHUB_OUTPUT
+          echo "is-prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
+
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            echo "Skipping release notes generation for prerelease"
+          fi
 
       - name: Get previous release tag
         id: get-previous-tag
+        if: steps.get-release.outputs.is-prerelease == 'false'
         run: |
-          # Get the previous release tag (excluding the current one)
-          CURRENT_TAG="${{ github.event.release.tag_name }}"
+          CURRENT_TAG="${{ steps.get-release.outputs.tag-name }}"
           PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -v "$CURRENT_TAG" | head -n 1)
 
           if [ -z "$PREVIOUS_TAG" ]; then
@@ -38,8 +60,8 @@ jobs:
 
       - name: Get commit messages between releases
         id: get-commits
+        if: steps.get-release.outputs.is-prerelease == 'false'
         run: |
-          # Get commit messages between previous and current release
           PREVIOUS_TAG="${{ steps.get-previous-tag.outputs.previous-tag }}"
           CURRENT_TAG="${{ steps.get-previous-tag.outputs.current-tag }}"
 
@@ -58,6 +80,7 @@ jobs:
 
       - name: Generate release notes with AI
         id: generate-notes
+        if: steps.get-release.outputs.is-prerelease == 'false'
         uses: actions/ai-inference@a1c11829223a786afe3b5663db904a3aa1eac3a2 # v2.0.1
         with:
           prompt-file: commits.txt
@@ -101,6 +124,7 @@ jobs:
           model: gpt-4o
 
       - name: Update release with generated notes
+        if: steps.get-release.outputs.is-prerelease == 'false'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -113,11 +137,12 @@ jobs:
           fi
 
           # Update the release with the generated notes
-          gh api --method PATCH /repos/${{ github.repository }}/releases/${{ github.event.release.id }} \
+          gh api --method PATCH /repos/${{ github.repository }}/releases/${{ steps.get-release.outputs.release-id }} \
             --field body="$RELEASE_NOTES"
 
           echo "✅ Release notes updated successfully!"
 
       - name: Cleanup
+        if: always()
         run: |
           rm -f commits.txt changes.txt
