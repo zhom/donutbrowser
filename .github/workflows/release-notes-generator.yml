@@ -25,8 +25,8 @@ jobs:
         id: get-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.event.workflow_run.head_branch }}
         run: |
-          TAG_NAME="${{ github.event.workflow_run.head_branch }}"
           echo "tag-name=$TAG_NAME" >> $GITHUB_OUTPUT
 
           # Get release info by tag
