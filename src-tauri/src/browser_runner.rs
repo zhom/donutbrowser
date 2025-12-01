@@ -372,108 +372,117 @@ impl BrowserRunner {
       profile.id
     );
 
-    let mut actual_pid = launcher_pid;
-
     // On macOS, when launching via `open -a`, the child PID is the `open` helper.
     // Resolve and store the actual browser PID for all browser types.
-    #[cfg(target_os = "macos")]
-    {
-      // Give the browser a moment to start
-      tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
+    let actual_pid = {
+      #[cfg(target_os = "macos")]
+      {
+        // Give the browser a moment to start
+        tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
 
-      let system = System::new_all();
-      let profiles_dir = self.profile_manager.get_profiles_dir();
-      let profile_data_path = profile.get_profile_data_path(&profiles_dir);
-      let profile_data_path_str = profile_data_path.to_string_lossy();
+        let system = System::new_all();
+        let profiles_dir = self.profile_manager.get_profiles_dir();
+        let profile_data_path = profile.get_profile_data_path(&profiles_dir);
+        let profile_data_path_str = profile_data_path.to_string_lossy();
 
-      for (pid, process) in system.processes() {
-        let cmd = process.cmd();
-        if cmd.is_empty() {
-          continue;
-        }
+        let mut resolved_pid = launcher_pid;
 
-        // Determine if this process matches the intended browser type
-        let exe_name_lower = process.name().to_string_lossy().to_lowercase();
-        let is_correct_browser = match profile.browser.as_str() {
-          "firefox" => {
-            exe_name_lower.contains("firefox")
-              && !exe_name_lower.contains("developer")
-              && !exe_name_lower.contains("camoufox")
+        for (pid, process) in system.processes() {
+          let cmd = process.cmd();
+          if cmd.is_empty() {
+            continue;
           }
-          "firefox-developer" => {
-            // More flexible detection for Firefox Developer Edition
-            (exe_name_lower.contains("firefox") && exe_name_lower.contains("developer"))
-              || (exe_name_lower.contains("firefox")
-                && cmd.iter().any(|arg| {
-                  let arg_str = arg.to_str().unwrap_or("");
-                  arg_str.contains("Developer")
-                    || arg_str.contains("developer")
-                    || arg_str.contains("FirefoxDeveloperEdition")
-                    || arg_str.contains("firefox-developer")
-                }))
-              || exe_name_lower == "firefox" // Firefox Developer might just show as "firefox"
+
+          // Determine if this process matches the intended browser type
+          let exe_name_lower = process.name().to_string_lossy().to_lowercase();
+          let is_correct_browser = match profile.browser.as_str() {
+            "firefox" => {
+              exe_name_lower.contains("firefox")
+                && !exe_name_lower.contains("developer")
+                && !exe_name_lower.contains("camoufox")
+            }
+            "firefox-developer" => {
+              // More flexible detection for Firefox Developer Edition
+              (exe_name_lower.contains("firefox") && exe_name_lower.contains("developer"))
+                || (exe_name_lower.contains("firefox")
+                  && cmd.iter().any(|arg| {
+                    let arg_str = arg.to_str().unwrap_or("");
+                    arg_str.contains("Developer")
+                      || arg_str.contains("developer")
+                      || arg_str.contains("FirefoxDeveloperEdition")
+                      || arg_str.contains("firefox-developer")
+                  }))
+                || exe_name_lower == "firefox" // Firefox Developer might just show as "firefox"
+            }
+            "zen" => exe_name_lower.contains("zen"),
+            "chromium" => exe_name_lower.contains("chromium") || exe_name_lower.contains("chrome"),
+            "brave" => exe_name_lower.contains("brave") || exe_name_lower.contains("Brave"),
+            _ => false,
+          };
+
+          if !is_correct_browser {
+            continue;
           }
-          "zen" => exe_name_lower.contains("zen"),
-          "chromium" => exe_name_lower.contains("chromium") || exe_name_lower.contains("chrome"),
-          "brave" => exe_name_lower.contains("brave") || exe_name_lower.contains("Brave"),
-          _ => false,
-        };
 
-        if !is_correct_browser {
-          continue;
-        }
-
-        // Check for profile path match
-        let profile_path_match = if matches!(
-          profile.browser.as_str(),
-          "firefox" | "firefox-developer" | "zen"
-        ) {
-          // Firefox-based browsers: look for -profile argument followed by path
-          let mut found_profile_arg = false;
-          for (i, arg) in cmd.iter().enumerate() {
-            if let Some(arg_str) = arg.to_str() {
-              if arg_str == "-profile" && i + 1 < cmd.len() {
-                if let Some(next_arg) = cmd.get(i + 1).and_then(|a| a.to_str()) {
-                  if next_arg == profile_data_path_str {
-                    found_profile_arg = true;
-                    break;
+          // Check for profile path match
+          let profile_path_match = if matches!(
+            profile.browser.as_str(),
+            "firefox" | "firefox-developer" | "zen"
+          ) {
+            // Firefox-based browsers: look for -profile argument followed by path
+            let mut found_profile_arg = false;
+            for (i, arg) in cmd.iter().enumerate() {
+              if let Some(arg_str) = arg.to_str() {
+                if arg_str == "-profile" && i + 1 < cmd.len() {
+                  if let Some(next_arg) = cmd.get(i + 1).and_then(|a| a.to_str()) {
+                    if next_arg == profile_data_path_str {
+                      found_profile_arg = true;
+                      break;
+                    }
                   }
                 }
-              }
-              // Also check for combined -profile=path format
-              if arg_str == format!("-profile={profile_data_path_str}") {
-                found_profile_arg = true;
-                break;
-              }
-              // Check if the argument is the profile path directly
-              if arg_str == profile_data_path_str {
-                found_profile_arg = true;
-                break;
+                // Also check for combined -profile=path format
+                if arg_str == format!("-profile={profile_data_path_str}") {
+                  found_profile_arg = true;
+                  break;
+                }
+                // Check if the argument is the profile path directly
+                if arg_str == profile_data_path_str {
+                  found_profile_arg = true;
+                  break;
+                }
               }
             }
-          }
-          found_profile_arg
-        } else {
-          // Chromium-based browsers: look for --user-data-dir argument
-          cmd.iter().any(|s| {
-            if let Some(arg) = s.to_str() {
-              arg == format!("--user-data-dir={profile_data_path_str}")
-                || arg == profile_data_path_str
-            } else {
-              false
-            }
-          })
-        };
+            found_profile_arg
+          } else {
+            // Chromium-based browsers: look for --user-data-dir argument
+            cmd.iter().any(|s| {
+              if let Some(arg) = s.to_str() {
+                arg == format!("--user-data-dir={profile_data_path_str}")
+                  || arg == profile_data_path_str
+              } else {
+                false
+              }
+            })
+          };
 
-        if profile_path_match {
-          let pid_u32 = pid.as_u32();
-          if pid_u32 != launcher_pid {
-            actual_pid = pid_u32;
-            break;
+          if profile_path_match {
+            let pid_u32 = pid.as_u32();
+            if pid_u32 != launcher_pid {
+              resolved_pid = pid_u32;
+              break;
+            }
           }
         }
+
+        resolved_pid
       }
-    }
+
+      #[cfg(not(target_os = "macos"))]
+      {
+        launcher_pid
+      }
+    };
 
     // Update profile with process info and save
     let mut updated_profile = profile.clone();
