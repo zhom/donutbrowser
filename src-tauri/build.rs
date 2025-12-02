@@ -42,6 +42,10 @@ fn main() {
   println!("cargo:rerun-if-changed=src/proxy_runner.rs");
   println!("cargo:rerun-if-changed=src/proxy_storage.rs");
 
+  // Tell Cargo to rebuild when binaries directory contents change
+  // This ensures tauri_build is re-run after sidecar binaries are copied
+  println!("cargo:rerun-if-changed=binaries");
+
   // Only run tauri_build if all external binaries exist
   // This allows building donut-proxy sidecar without the other binaries present
   if external_binaries_exist() {
