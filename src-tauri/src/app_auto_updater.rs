@@ -784,6 +784,20 @@ impl AppAutoUpdater {
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     let file_path = dest_dir.join(filename);
 
+    // First, try to get the file size via HEAD request
+    // This is more reliable than GET content-length for some CDN configurations
+    // especially when dealing with redirects (like GitHub releases)
+    let head_size = self
+      .client
+      .head(download_url)
+      .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
+      .send()
+      .await
+      .ok()
+      .and_then(|r| r.content_length());
+
+    log::info!("HEAD request for download size: {:?} bytes", head_size);
+
     let response = self
       .client
       .get(download_url)
@@ -795,7 +809,9 @@ impl AppAutoUpdater {
       return Err(format!("Download failed with status: {}", response.status()).into());
     }
 
-    let total_size = response.content_length().unwrap_or(0);
+    // Use HEAD size if available, otherwise fall back to GET content-length
+    let total_size = head_size.or(response.content_length()).unwrap_or(0);
+    log::info!("Final download size: {} bytes", total_size);
     let mut file = fs::File::create(&file_path)?;
     let mut stream = response.bytes_stream();
     let mut downloaded = 0u64;
