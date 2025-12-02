@@ -601,12 +601,27 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
 
   // Start a background task to periodically flush traffic stats to disk
   tokio::spawn(async move {
-    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(1));
+    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut last_activity_time = std::time::Instant::now();
+    let mut last_byte_count = 0u64;
+
     loop {
       interval.tick().await;
       if let Some(tracker) = get_traffic_tracker() {
-        if let Err(e) = tracker.flush_to_disk() {
-          log::error!("Failed to flush traffic stats: {}", e);
+        // Only flush if there's been recent activity
+        let (sent, recv, _) = tracker.get_snapshot();
+        let current_bytes = sent + recv;
+        let has_recent_activity = current_bytes != last_byte_count
+          || last_activity_time.elapsed() < std::time::Duration::from_secs(30);
+
+        if has_recent_activity {
+          if let Err(e) = tracker.flush_to_disk() {
+            log::error!("Failed to flush traffic stats: {}", e);
+          } else {
+            last_activity_time = std::time::Instant::now();
+            last_byte_count = current_bytes;
+          }
         }
       }
     }

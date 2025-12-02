@@ -595,11 +595,6 @@ impl ProxyManager {
     browser_pid: u32,
     profile_id: Option<&str>,
   ) -> Result<ProxySettings, String> {
-    // First, proactively cleanup any dead proxies so we don't accidentally reuse stale ones
-    let _ = self.cleanup_dead_proxies(app_handle.clone()).await;
-
-    // If we have a previous proxy tied to this profile, and the upstream settings are changing,
-    // stop it before starting a new one so the change takes effect immediately.
     if let Some(name) = profile_id {
       // Check if we have an active proxy recorded for this profile
       let maybe_existing_id = {
@@ -625,30 +620,29 @@ impl ProxyManager {
             && existing.upstream_host == desired_host
             && existing.upstream_port == desired_port;
 
-          if !is_same_upstream {
-            // Stop the previous proxy tied to this profile (best effort)
-            // We don't know the original PID mapping that created it; iterate to find its key
-            let pid_to_stop = {
-              let proxies = self.active_proxies.lock().unwrap();
-              proxies.iter().find_map(|(pid, info)| {
-                if info.id == existing_id {
-                  Some(*pid)
-                } else {
-                  None
-                }
-              })
-            };
-            if let Some(pid) = pid_to_stop {
-              let _ = self.stop_proxy(app_handle.clone(), pid).await;
+          if is_same_upstream {
+            // Settings match - can reuse existing proxy
+            // Just update the PID mapping if needed
+            let proxies = self.active_proxies.lock().unwrap();
+            if proxies.contains_key(&browser_pid) {
+              // Already mapped, reuse it
+              return Ok(ProxySettings {
+                proxy_type: "http".to_string(),
+                host: "127.0.0.1".to_string(),
+                port: existing.local_port,
+                username: None,
+                password: None,
+              });
             }
+            // Need to add this PID to the mapping - we'll do that after starting
           }
+          // Settings differ - we'll create a new proxy, but don't stop the old one
+          // It will be cleaned up by periodic cleanup if it becomes dead
         }
       }
     }
-    // Check if we already have a proxy for this browser PID. If it exists but the upstream
-    // settings don't match the newly requested ones, stop it and create a new proxy so that
-    // changes take effect immediately.
-    let mut needs_restart = false;
+    // Check if we already have a proxy for this browser PID
+    // If settings match, reuse it; otherwise create a new one (don't stop the old one)
     {
       let proxies = self.active_proxies.lock().unwrap();
       if let Some(existing) = proxies.get(&browser_pid) {
@@ -663,7 +657,7 @@ impl ProxyManager {
           && existing.upstream_port == desired_port;
 
         if is_same_upstream {
-          // Check if profile_id matches - if not, we need to restart to update tracking
+          // Check if profile_id matches
           let profile_id_matches = match (profile_id, &existing.profile_id) {
             (Some(ref new_id), Some(ref old_id)) => new_id == old_id,
             (None, None) => true,
@@ -671,7 +665,7 @@ impl ProxyManager {
           };
 
           if profile_id_matches {
-            // Reuse existing local proxy (profile_id matches)
+            // Reuse existing local proxy (settings and profile_id match)
             return Ok(ProxySettings {
               proxy_type: "http".to_string(),
               host: "127.0.0.1".to_string(),
@@ -679,26 +673,13 @@ impl ProxyManager {
               username: None,
               password: None,
             });
-          } else {
-            // Profile ID changed - need to restart proxy to update tracking
-            log::info!(
-              "Profile ID changed for proxy {}: {:?} -> {:?}, restarting proxy",
-              existing.id,
-              existing.profile_id,
-              profile_id
-            );
-            needs_restart = true;
           }
-        } else {
-          // Upstream changed; we must restart the local proxy so that traffic is routed correctly
-          needs_restart = true;
+          // Profile ID changed - we'll create a new proxy but don't stop the old one
+          // It will be cleaned up by periodic cleanup if it becomes dead
         }
+        // Upstream changed - we'll create a new proxy but don't stop the old one
+        // It will be cleaned up by periodic cleanup if it becomes dead
       }
-    }
-
-    if needs_restart {
-      // Best-effort stop of the old proxy for this PID before starting a new one
-      let _ = self.stop_proxy(app_handle.clone(), browser_pid).await;
     }
 
     // Start a new proxy using the donut-proxy binary with the correct CLI interface
@@ -955,30 +936,108 @@ impl ProxyManager {
     }
   }
 
-  // Check if a process is still running
-  fn is_process_running(&self, pid: u32) -> bool {
-    use sysinfo::{Pid, System};
-    let system = System::new_all();
-    system.process(Pid::from(pid as usize)).is_some()
-  }
-
   // Clean up proxies for dead browser processes
+  // Only clean up orphaned config files where the proxy process itself is dead
   pub async fn cleanup_dead_proxies(
     &self,
     app_handle: tauri::AppHandle,
   ) -> Result<Vec<u32>, String> {
-    let dead_pids = {
-      let proxies = self.active_proxies.lock().unwrap();
-      proxies
-        .keys()
-        .filter(|&&pid| pid != 0 && !self.is_process_running(pid)) // Skip temporary PID 0
-        .copied()
-        .collect::<Vec<u32>>()
+    // Don't stop proxies for dead browser processes - let them run indefinitely
+    // The proxy processes are idle and don't consume CPU when not in use
+    // Only clean up config files where the proxy process itself is dead (see below)
+    let dead_pids: Vec<u32> = Vec::new();
+
+    // Clean up orphaned proxy configs (only where proxy process is definitely dead)
+    // IMPORTANT: Only clean up configs where the proxy process itself is dead
+    // If the proxy process is running (even if idle), leave it alone
+    // The user doesn't care if proxy processes run indefinitely as long as they're not consuming CPU
+    let orphaned_configs = {
+      use crate::proxy_storage::{is_process_running, list_proxy_configs};
+      use std::time::{SystemTime, UNIX_EPOCH};
+
+      let all_configs = list_proxy_configs();
+      let tracked_proxy_ids: std::collections::HashSet<String> = {
+        let proxies = self.active_proxies.lock().unwrap();
+        proxies.values().map(|p| p.id.clone()).collect()
+      };
+
+      // Get current time for grace period check
+      let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+      all_configs
+        .into_iter()
+        .filter(|config| {
+          // If proxy is tracked in active_proxies, it's definitely not orphaned
+          if tracked_proxy_ids.contains(&config.id) {
+            return false;
+          }
+
+          // Extract creation time from proxy ID (format: proxy_{timestamp}_{random})
+          // This gives us a grace period for newly created proxies
+          let proxy_age = config
+            .id
+            .strip_prefix("proxy_")
+            .and_then(|s| s.split('_').next())
+            .and_then(|s| s.parse::<u64>().ok())
+            .map(|created_at| now.saturating_sub(created_at))
+            .unwrap_or(0);
+
+          // Grace period: don't clean up proxies created in the last 120 seconds
+          // This prevents race conditions during startup (increased from 60 to 120 for safety)
+          if proxy_age < 120 {
+            log::debug!(
+              "Skipping cleanup of proxy {} - too new (age: {}s)",
+              config.id,
+              proxy_age
+            );
+            return false;
+          }
+
+          // ONLY clean up if we can verify the proxy process is dead
+          // If proxy process is running, leave it alone (even if idle)
+          if let Some(proxy_pid) = config.pid {
+            // Check if proxy process is actually dead
+            if !is_process_running(proxy_pid) {
+              // Proxy process is dead, clean up the config file
+              log::info!(
+                "Proxy {} process (PID {}) is dead, will clean up config",
+                config.id,
+                proxy_pid
+              );
+              return true;
+            }
+            // Proxy process is running - leave it alone
+            log::debug!(
+              "Skipping cleanup of proxy {} - process (PID {}) is still running",
+              config.id,
+              proxy_pid
+            );
+            return false;
+          }
+
+          // No PID in config - can't verify if process is dead
+          // Be conservative: don't clean up (might be starting up or PID not set yet)
+          log::debug!(
+            "Skipping cleanup of proxy {} - no PID in config (might be starting up)",
+            config.id
+          );
+          false
+        })
+        .collect::<Vec<_>>()
     };
 
-    for dead_pid in &dead_pids {
-      log::info!("Cleaning up proxy for dead browser process PID: {dead_pid}");
-      let _ = self.stop_proxy(app_handle.clone(), *dead_pid).await;
+    // Clean up orphaned config files (proxy process is dead)
+    for config in orphaned_configs {
+      log::info!(
+        "Cleaning up orphaned proxy config: {} (proxy process is dead)",
+        config.id
+      );
+      // Just delete the config file - the process is already dead
+      use crate::proxy_storage::delete_proxy_config;
+      delete_proxy_config(&config.id);
     }
 
     // Emit event for reactive UI updates

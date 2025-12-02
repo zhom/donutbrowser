@@ -750,7 +750,7 @@ impl ProfileManager {
 
     // For non-camoufox browsers, use the existing PID-based logic
     let inner_profile = profile.clone();
-    let system = System::new_all();
+    let mut system = System::new();
     let mut is_running = false;
     let mut found_pid: Option<u32> = None;
 
@@ -792,6 +792,8 @@ impl ProfileManager {
 
     // If we didn't find the browser with the stored PID, search all processes
     if !is_running {
+      // Refresh all processes only when we need to search (expensive but necessary)
+      system.refresh_all();
       for (pid, process) in system.processes() {
         let cmd = process.cmd();
         if cmd.len() >= 2 {
@@ -874,7 +876,6 @@ impl ProfileManager {
         None => inner_profile.clone(),
       };
 
-      let previous_pid = latest_profile.process_id;
       let mut merged = latest_profile.clone();
 
       if let Some(pid) = found_pid {
@@ -889,13 +890,6 @@ impl ProfileManager {
         merged.process_id = None;
         if let Err(e) = self.save_profile(&merged) {
           log::warn!("Warning: Failed to clear profile PID: {e}");
-        }
-
-        // Stop any associated proxy immediately when the browser stops
-        if let Some(old_pid) = previous_pid {
-          let _ = crate::proxy_manager::PROXY_MANAGER
-            .stop_proxy(app_handle.clone(), old_pid)
-            .await;
         }
       }
 
@@ -974,18 +968,12 @@ impl ProfileManager {
             None => profile.clone(),
           };
 
-          if let Some(old_pid) = latest.process_id {
+          if latest.process_id.is_some() {
             latest.process_id = None;
             if let Err(e) = self.save_profile(&latest) {
               log::warn!("Warning: Failed to clear Camoufox profile process info: {e}");
             }
 
-            // Stop any proxy tied to this old PID immediately
-            let _ = crate::proxy_manager::PROXY_MANAGER
-              .stop_proxy(app_handle.clone(), old_pid)
-              .await;
-
-            // Emit profile update event to frontend
             if let Err(e) = app_handle.emit("profile-updated", &latest) {
               log::warn!("Warning: Failed to emit profile update event: {e}");
             }
@@ -1010,18 +998,13 @@ impl ProfileManager {
             None => profile.clone(),
           };
 
-          if let Some(old_pid) = latest.process_id {
+          if latest.process_id.is_some() {
             latest.process_id = None;
             if let Err(e2) = self.save_profile(&latest) {
               log::warn!(
                 "Warning: Failed to clear Camoufox profile process info after error: {e2}"
               );
             }
-
-            // Best-effort stop of proxy tied to old PID
-            let _ = crate::proxy_manager::PROXY_MANAGER
-              .stop_proxy(app_handle.clone(), old_pid)
-              .await;
 
             // Emit profile update event to frontend
             if let Err(e3) = app_handle.emit("profile-updated", &latest) {
@@ -1241,7 +1224,9 @@ mod tests {
     let temp_dir = TempDir::new().unwrap();
 
     // Mock the base directories by setting environment variables
-    std::env::set_var("HOME", temp_dir.path());
+    unsafe {
+      std::env::set_var("HOME", temp_dir.path());
+    }
 
     let profile_manager = ProfileManager::instance();
     (profile_manager, temp_dir)
