@@ -601,7 +601,7 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
 
   // Start a background task to periodically flush traffic stats to disk
   tokio::spawn(async move {
-    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
+    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(1));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut last_activity_time = std::time::Instant::now();
     let mut last_byte_count = 0u64;
@@ -609,18 +609,27 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
     loop {
       interval.tick().await;
       if let Some(tracker) = get_traffic_tracker() {
-        // Only flush if there's been recent activity
-        let (sent, recv, _) = tracker.get_snapshot();
+        let (sent, recv, requests) = tracker.get_snapshot();
         let current_bytes = sent + recv;
-        let has_recent_activity = current_bytes != last_byte_count
-          || last_activity_time.elapsed() < std::time::Duration::from_secs(30);
+        let bytes_changed = current_bytes != last_byte_count;
+        let time_since_activity = last_activity_time.elapsed();
+        let has_traffic = current_bytes > 0 || requests > 0;
 
-        if has_recent_activity {
+        // Always flush if we have traffic, or if bytes changed, or if it's been less than 30s since activity
+        // This ensures traffic is always persisted, even during active periods
+        let should_flush =
+          has_traffic || bytes_changed || time_since_activity < std::time::Duration::from_secs(30);
+
+        if should_flush {
           if let Err(e) = tracker.flush_to_disk() {
             log::error!("Failed to flush traffic stats: {}", e);
           } else {
-            last_activity_time = std::time::Instant::now();
-            last_byte_count = current_bytes;
+            // Update tracking state after successful flush
+            if has_traffic || bytes_changed {
+              last_activity_time = std::time::Instant::now();
+            }
+            // After flush, bytes are reset to 0, so update last_byte_count
+            last_byte_count = 0;
           }
         }
       }
