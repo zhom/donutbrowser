@@ -12,6 +12,16 @@ Do keep in mind before you start working on an issue / posting a PR:
 - Confirm if other contributors are working on the same issue
 - Check if the feature aligns with our roadmap and project goals
 
+## Contributor License Agreement
+
+By contributing to Donut Browser, you agree that your contributions will be licensed under the same terms as the project. You must agree to our [Contributor License Agreement](CONTRIBUTOR_LICENSE_AGREEMENT.md) before your contributions can be accepted. This agreement ensures that:
+
+- Your contributions can be used in the open source version of Donut Browser (licensed under AGPL-3.0)
+- Donut Browser can offer commercial licenses for the software, including your contributions
+- You retain all rights to use your contributions for any other purpose
+
+When you submit your first pull request, you acknowledge that you agree to the terms of the Contributor License Agreement.
+
 ## Tips & Things to Consider
 
 - PRs with tests are highly appreciated
