@@ -44,8 +44,9 @@ jobs:
       - name: Get previous release tag
         id: get-previous-tag
         if: steps.get-release.outputs.is-prerelease == 'false'
+        env:
+          CURRENT_TAG: ${{ steps.get-release.outputs.tag-name }}
         run: |
-          CURRENT_TAG="${{ steps.get-release.outputs.tag-name }}"
           PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -v "$CURRENT_TAG" | head -n 1)
 
           if [ -z "$PREVIOUS_TAG" ]; then
@@ -61,15 +62,15 @@ jobs:
       - name: Get commit messages between releases
         id: get-commits
         if: steps.get-release.outputs.is-prerelease == 'false'
+        env:
+          PREVIOUS_TAG: ${{ steps.get-previous-tag.outputs.previous-tag }}
+          CURRENT_TAG: ${{ steps.get-previous-tag.outputs.current-tag }}
         run: |
-          PREVIOUS_TAG="${{ steps.get-previous-tag.outputs.previous-tag }}"
-          CURRENT_TAG="${{ steps.get-previous-tag.outputs.current-tag }}"
-
           # Get commit log with detailed format
-          COMMIT_LOG=$(git log --pretty=format:"- %s (%h by %an)" $PREVIOUS_TAG..$CURRENT_TAG --no-merges)
+          COMMIT_LOG=$(git log --pretty=format:"- %s (%h by %an)" "$PREVIOUS_TAG".."$CURRENT_TAG" --no-merges)
 
           # Get changed files summary
-          CHANGED_FILES=$(git diff --name-status $PREVIOUS_TAG..$CURRENT_TAG | head -20)
+          CHANGED_FILES=$(git diff --name-status "$PREVIOUS_TAG".."$CURRENT_TAG" | head -20)
 
           # Save to files for AI processing
           echo "$COMMIT_LOG" > commits.txt
@@ -127,17 +128,19 @@ jobs:
         if: steps.get-release.outputs.is-prerelease == 'false'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RESPONSE_FILE: ${{ steps.generate-notes.outputs.response-file }}
+          RESPONSE_OUTPUT: ${{ steps.generate-notes.outputs.response }}
+          RELEASE_ID: ${{ steps.get-release.outputs.release-id }}
         run: |
           # Prefer reading from the response file to avoid output truncation
-          RESPONSE_FILE='${{ steps.generate-notes.outputs.response-file }}'
           if [ -n "$RESPONSE_FILE" ] && [ -f "$RESPONSE_FILE" ]; then
             RELEASE_NOTES=$(cat "$RESPONSE_FILE")
           else
-            RELEASE_NOTES='${{ steps.generate-notes.outputs.response }}'
+            RELEASE_NOTES="$RESPONSE_OUTPUT"
           fi
 
           # Update the release with the generated notes
-          gh api --method PATCH /repos/${{ github.repository }}/releases/${{ steps.get-release.outputs.release-id }} \
+          gh api --method PATCH /repos/${{ github.repository }}/releases/"$RELEASE_ID" \
             --field body="$RELEASE_NOTES"
 
           echo "✅ Release notes updated successfully!"
