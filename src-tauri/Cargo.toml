@@ -57,7 +57,7 @@ flate2 = "1"
 lzma-rs = "0"
 msi-extract = "0"
 
-uuid = { version = "1.18", features = ["v4", "serde"] }
+uuid = { version = "1.19", features = ["v4", "serde"] }
 url = "2.5"
 urlencoding = "2.1"
 chrono = { version = "0.4", features = ["serde"] }
