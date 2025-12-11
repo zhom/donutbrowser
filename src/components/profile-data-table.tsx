@@ -868,8 +868,12 @@ export function ProfilesDataTable({
   );
 
   // Fetch traffic snapshots for running profiles (lightweight, real-time data)
-  // Using runningProfiles.size as dependency to avoid Set reference comparison issues
-  const runningCount = runningProfiles.size;
+  // Convert Set to sorted array to avoid Set reference comparison issues in dependencies
+  const runningProfileIds = React.useMemo(
+    () => Array.from(runningProfiles).sort(),
+    [runningProfiles],
+  );
+  const runningCount = runningProfileIds.length;
   React.useEffect(() => {
     if (!browserState.isClient) return;
 
@@ -887,7 +891,7 @@ export function ProfilesDataTable({
         for (const snapshot of allSnapshots) {
           if (snapshot.profile_id) {
             // Only keep snapshots for profiles that are currently running
-            if (runningProfiles.has(snapshot.profile_id)) {
+            if (runningProfileIds.includes(snapshot.profile_id)) {
               const existing = newSnapshots[snapshot.profile_id];
               if (!existing || snapshot.last_update > existing.last_update) {
                 newSnapshots[snapshot.profile_id] = snapshot;
@@ -904,7 +908,7 @@ export function ProfilesDataTable({
     void fetchTrafficSnapshots();
     const interval = setInterval(fetchTrafficSnapshots, 1000);
     return () => clearInterval(interval);
-  }, [browserState.isClient, runningCount, runningProfiles]);
+  }, [browserState.isClient, runningCount, runningProfileIds]);
 
   // Clean up snapshots for profiles that are no longer running
   React.useEffect(() => {
@@ -914,7 +918,7 @@ export function ProfilesDataTable({
       const cleaned: Record<string, TrafficSnapshot> = {};
       for (const [profileId, snapshot] of Object.entries(prev)) {
         // Only keep snapshots for profiles that are currently running
-        if (runningProfiles.has(profileId)) {
+        if (runningProfileIds.includes(profileId)) {
           cleaned[profileId] = snapshot;
         }
       }
@@ -924,7 +928,7 @@ export function ProfilesDataTable({
       }
       return prev;
     });
-  }, [browserState.isClient, runningProfiles]);
+  }, [browserState.isClient, runningProfileIds]);
 
   // Clear launching/stopping spinners when backend reports running status changes
   React.useEffect(() => {
