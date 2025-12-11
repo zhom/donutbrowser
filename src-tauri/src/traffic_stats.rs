@@ -797,15 +797,18 @@ impl LiveTrafficTracker {
     // Prune old data before adding new data to keep file size manageable
     stats.prune_old_data();
 
-    // Reset counters after reading (lock is held, so flush will proceed)
-    let sent = self.bytes_sent.swap(0, Ordering::Relaxed);
-    let received = self.bytes_received.swap(0, Ordering::Relaxed);
-
-    // Update flush timestamp to track when data was last flushed
-    // This prevents double-counting session snapshots written before this flush
+    // Update flush timestamp BEFORE reading/resetting counters
+    // This prevents double-counting session snapshots written after this timestamp
+    // If we set it after reading counters, a session snapshot written just before
+    // the flush completes could have a timestamp newer than last_flush_timestamp,
+    // causing its data to be added even though it was already included in the flush
     let now = current_timestamp();
     stats.last_flush_timestamp = now;
     stats.last_update = now;
+
+    // Reset counters after reading (lock is held, so flush will proceed)
+    let sent = self.bytes_sent.swap(0, Ordering::Relaxed);
+    let received = self.bytes_received.swap(0, Ordering::Relaxed);
 
     // Update bandwidth history
     stats.record_bandwidth(sent, received);
