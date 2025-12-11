@@ -82,6 +82,9 @@ pub struct TrafficStats {
   pub session_start: u64,
   /// Last update timestamp
   pub last_update: u64,
+  /// Timestamp of the last flush to disk (used to avoid double-counting session snapshots)
+  #[serde(default)]
+  pub last_flush_timestamp: u64,
   /// Total bytes sent across all time
   pub total_bytes_sent: u64,
   /// Total bytes received across all time
@@ -110,6 +113,7 @@ impl TrafficStats {
       profile_id,
       session_start: now,
       last_update: now,
+      last_flush_timestamp: 0,
       total_bytes_sent: 0,
       total_bytes_received: 0,
       total_requests: 0,
@@ -788,6 +792,12 @@ impl LiveTrafficTracker {
     let sent = self.bytes_sent.swap(0, Ordering::Relaxed);
     let received = self.bytes_received.swap(0, Ordering::Relaxed);
 
+    // Update flush timestamp to track when data was last flushed
+    // This prevents double-counting session snapshots written before this flush
+    let now = current_timestamp();
+    stats.last_flush_timestamp = now;
+    stats.last_update = now;
+
     // Update bandwidth history
     stats.record_bandwidth(sent, received);
 
@@ -1045,18 +1055,36 @@ pub fn get_all_traffic_snapshots_realtime() -> Vec<TrafficSnapshot> {
             if let Some(session) = load_session_snapshot(profile_id) {
               // Merge session data with disk snapshot
               if let Some(snapshot) = snapshots.get_mut(profile_id) {
-                // Session data contains in-memory counters not yet flushed to disk
-                // Disk snapshot contains cumulative totals already flushed
-                // We need to ADD them, not take the max, to get the true total
-                snapshot.total_bytes_sent =
-                  snapshot.total_bytes_sent.saturating_add(session.bytes_sent);
-                snapshot.total_bytes_received = snapshot
-                  .total_bytes_received
-                  .saturating_add(session.bytes_received);
-                snapshot.total_requests = snapshot.total_requests.saturating_add(session.requests);
-                snapshot.current_bytes_sent = session.bytes_sent;
-                snapshot.current_bytes_received = session.bytes_received;
-                snapshot.last_update = session.timestamp;
+                // Only merge session data if it's newer than the last flush
+                // Session snapshots written before the last flush contain bytes already
+                // included in disk totals, so merging them would cause double-counting
+                let disk_stats = load_traffic_stats(profile_id);
+                let last_flush = disk_stats
+                  .as_ref()
+                  .map(|s| s.last_flush_timestamp)
+                  .unwrap_or(0);
+
+                if session.timestamp > last_flush {
+                  // Session data contains in-memory counters not yet flushed to disk
+                  // Disk snapshot contains cumulative totals already flushed
+                  // We need to ADD them, not take the max, to get the true total
+                  snapshot.total_bytes_sent =
+                    snapshot.total_bytes_sent.saturating_add(session.bytes_sent);
+                  snapshot.total_bytes_received = snapshot
+                    .total_bytes_received
+                    .saturating_add(session.bytes_received);
+                  snapshot.total_requests =
+                    snapshot.total_requests.saturating_add(session.requests);
+                  snapshot.current_bytes_sent = session.bytes_sent;
+                  snapshot.current_bytes_received = session.bytes_received;
+                  snapshot.last_update = session.timestamp;
+                } else {
+                  // Session snapshot is stale (written before last flush)
+                  // Use current values from disk snapshot, but update timestamp if session is newer
+                  if session.timestamp > snapshot.last_update {
+                    snapshot.last_update = session.timestamp;
+                  }
+                }
               } else {
                 // Create new snapshot from session data
                 snapshots.insert(

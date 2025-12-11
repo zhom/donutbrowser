@@ -886,9 +886,12 @@ export function ProfilesDataTable({
         const newSnapshots: Record<string, TrafficSnapshot> = {};
         for (const snapshot of allSnapshots) {
           if (snapshot.profile_id) {
-            const existing = newSnapshots[snapshot.profile_id];
-            if (!existing || snapshot.last_update > existing.last_update) {
-              newSnapshots[snapshot.profile_id] = snapshot;
+            // Only keep snapshots for profiles that are currently running
+            if (runningProfiles.has(snapshot.profile_id)) {
+              const existing = newSnapshots[snapshot.profile_id];
+              if (!existing || snapshot.last_update > existing.last_update) {
+                newSnapshots[snapshot.profile_id] = snapshot;
+              }
             }
           }
         }
@@ -901,7 +904,27 @@ export function ProfilesDataTable({
     void fetchTrafficSnapshots();
     const interval = setInterval(fetchTrafficSnapshots, 1000);
     return () => clearInterval(interval);
-  }, [browserState.isClient, runningCount]);
+  }, [browserState.isClient, runningCount, runningProfiles]);
+
+  // Clean up snapshots for profiles that are no longer running
+  React.useEffect(() => {
+    if (!browserState.isClient) return;
+
+    setTrafficSnapshots((prev) => {
+      const cleaned: Record<string, TrafficSnapshot> = {};
+      for (const [profileId, snapshot] of Object.entries(prev)) {
+        // Only keep snapshots for profiles that are currently running
+        if (runningProfiles.has(profileId)) {
+          cleaned[profileId] = snapshot;
+        }
+      }
+      // Only update if something was removed
+      if (Object.keys(cleaned).length !== Object.keys(prev).length) {
+        return cleaned;
+      }
+      return prev;
+    });
+  }, [browserState.isClient, runningProfiles]);
 
   // Clear launching/stopping spinners when backend reports running status changes
   React.useEffect(() => {
@@ -1692,6 +1715,7 @@ export function ProfilesDataTable({
           if (isRunning && meta.trafficSnapshots) {
             // Find the traffic snapshot for this profile by matching profile_id
             const snapshot = meta.trafficSnapshots[profile.id];
+            // Only use recent_bandwidth (last 60 seconds) - minimal data needed for mini chart
             // Create a new array reference to ensure React detects changes
             const bandwidthData = snapshot?.recent_bandwidth
               ? [...snapshot.recent_bandwidth]

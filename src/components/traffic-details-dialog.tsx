@@ -171,7 +171,11 @@ export function TrafficDetailsDialog({
     void fetchStats();
     const interval = setInterval(fetchStats, 2000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      // Clear stats from memory when dialog closes to free up memory
+      setStats(null);
+    };
   }, [isOpen, profileId, timePeriod]);
 
   // Transform data for chart (already filtered by backend)
