@@ -985,9 +985,9 @@ impl BrowserRunner {
             .await
           {
             Ok(stopped) => {
-              if stopped {
-                // Verify the process actually died by checking after a short delay
-                if let Some(pid) = camoufox_process.processId {
+              if let Some(pid) = camoufox_process.processId {
+                if stopped {
+                  // Verify the process actually died by checking after a short delay
                   use tokio::time::{sleep, Duration};
                   sleep(Duration::from_millis(500)).await;
 
@@ -1045,14 +1045,91 @@ impl BrowserRunner {
                     }
                   }
                 } else {
-                  process_actually_stopped = true; // No PID to verify, assume stopped
+                  // stop_camoufox returned false, try to force kill the process
+                  log::warn!(
+                    "Camoufox stop command returned false for process {} (PID: {:?}) - attempting force kill",
+                    camoufox_process.id,
+                    pid
+                  );
+                  #[cfg(target_os = "macos")]
+                  {
+                    use crate::platform_browser;
+                    if let Err(e) = platform_browser::macos::kill_browser_process_impl(
+                      pid,
+                      Some(&profile_path_str),
+                    )
+                    .await
+                    {
+                      log::error!("Failed to force kill Camoufox process {}: {}", pid, e);
+                    } else {
+                      // Verify the process is actually dead after force kill
+                      use tokio::time::{sleep, Duration};
+                      sleep(Duration::from_millis(500)).await;
+                      use sysinfo::{Pid, System};
+                      let system = System::new_all();
+                      process_actually_stopped = system.process(Pid::from(pid as usize)).is_none();
+                      if process_actually_stopped {
+                        log::info!(
+                          "Successfully force killed Camoufox process {} (PID: {:?})",
+                          camoufox_process.id,
+                          pid
+                        );
+                      }
+                    }
+                  }
+                  #[cfg(target_os = "linux")]
+                  {
+                    use crate::platform_browser;
+                    if let Err(e) = platform_browser::linux::kill_browser_process_impl(pid).await {
+                      log::error!("Failed to force kill Camoufox process {}: {}", pid, e);
+                    } else {
+                      // Verify the process is actually dead after force kill
+                      use tokio::time::{sleep, Duration};
+                      sleep(Duration::from_millis(500)).await;
+                      use sysinfo::{Pid, System};
+                      let system = System::new_all();
+                      process_actually_stopped = system.process(Pid::from(pid as usize)).is_none();
+                      if process_actually_stopped {
+                        log::info!(
+                          "Successfully force killed Camoufox process {} (PID: {:?})",
+                          camoufox_process.id,
+                          pid
+                        );
+                      }
+                    }
+                  }
+                  #[cfg(target_os = "windows")]
+                  {
+                    use crate::platform_browser;
+                    if let Err(e) = platform_browser::windows::kill_browser_process_impl(pid).await
+                    {
+                      log::error!("Failed to force kill Camoufox process {}: {}", pid, e);
+                    } else {
+                      // Verify the process is actually dead after force kill
+                      use tokio::time::{sleep, Duration};
+                      sleep(Duration::from_millis(500)).await;
+                      use sysinfo::{Pid, System};
+                      let system = System::new_all();
+                      process_actually_stopped = system.process(Pid::from(pid as usize)).is_none();
+                      if process_actually_stopped {
+                        log::info!(
+                          "Successfully force killed Camoufox process {} (PID: {:?})",
+                          camoufox_process.id,
+                          pid
+                        );
+                      }
+                    }
+                  }
                 }
               } else {
-                log::warn!(
-                  "Failed to stop Camoufox process: {} (PID: {:?})",
-                  camoufox_process.id,
-                  camoufox_process.processId
-                );
+                // No PID available, assume stopped if stop_camoufox returned true
+                process_actually_stopped = stopped;
+                if !stopped {
+                  log::warn!(
+                    "Failed to stop Camoufox process {} but no PID available for force kill",
+                    camoufox_process.id
+                  );
+                }
               }
             }
             Err(e) => {
@@ -1061,6 +1138,71 @@ impl BrowserRunner {
                 camoufox_process.id,
                 e
               );
+              // Try to force kill if we have a PID
+              if let Some(pid) = camoufox_process.processId {
+                log::info!(
+                  "Attempting force kill after stop_camoufox error for PID: {}",
+                  pid
+                );
+                #[cfg(target_os = "macos")]
+                {
+                  use crate::platform_browser;
+                  if let Err(kill_err) =
+                    platform_browser::macos::kill_browser_process_impl(pid, Some(&profile_path_str))
+                      .await
+                  {
+                    log::error!(
+                      "Failed to force kill Camoufox process {}: {}",
+                      pid,
+                      kill_err
+                    );
+                  } else {
+                    use tokio::time::{sleep, Duration};
+                    sleep(Duration::from_millis(500)).await;
+                    use sysinfo::{Pid, System};
+                    let system = System::new_all();
+                    process_actually_stopped = system.process(Pid::from(pid as usize)).is_none();
+                  }
+                }
+                #[cfg(target_os = "linux")]
+                {
+                  use crate::platform_browser;
+                  if let Err(kill_err) =
+                    platform_browser::linux::kill_browser_process_impl(pid).await
+                  {
+                    log::error!(
+                      "Failed to force kill Camoufox process {}: {}",
+                      pid,
+                      kill_err
+                    );
+                  } else {
+                    use tokio::time::{sleep, Duration};
+                    sleep(Duration::from_millis(500)).await;
+                    use sysinfo::{Pid, System};
+                    let system = System::new_all();
+                    process_actually_stopped = system.process(Pid::from(pid as usize)).is_none();
+                  }
+                }
+                #[cfg(target_os = "windows")]
+                {
+                  use crate::platform_browser;
+                  if let Err(kill_err) =
+                    platform_browser::windows::kill_browser_process_impl(pid).await
+                  {
+                    log::error!(
+                      "Failed to force kill Camoufox process {}: {}",
+                      pid,
+                      kill_err
+                    );
+                  } else {
+                    use tokio::time::{sleep, Duration};
+                    sleep(Duration::from_millis(500)).await;
+                    use sysinfo::{Pid, System};
+                    let system = System::new_all();
+                    process_actually_stopped = system.process(Pid::from(pid as usize)).is_none();
+                  }
+                }
+              }
             }
           }
         }
@@ -1081,9 +1223,20 @@ impl BrowserRunner {
         }
       }
 
-      // Log warning if process wasn't confirmed stopped, but continue with cleanup
+      // If process wasn't confirmed stopped, return an error
       if !process_actually_stopped {
-        log::warn!("Camoufox process may still be running, but proceeding with cleanup");
+        log::error!(
+          "Failed to stop Camoufox process for profile: {} (ID: {}) - process may still be running",
+          profile.name,
+          profile.id
+        );
+        return Err(
+          format!(
+            "Failed to stop Camoufox process for profile {} - process may still be running",
+            profile.name
+          )
+          .into(),
+        );
       }
 
       // Clear the process ID from the profile
