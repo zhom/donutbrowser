@@ -771,7 +771,16 @@ impl LiveTrafficTracker {
 
     // Use file locking to prevent concurrent writes from multiple proxy processes
     let lock_path = get_traffic_stats_dir().join(format!("{}.lock", storage_key));
-    let _lock = acquire_file_lock(&lock_path)?;
+    let _lock = match acquire_file_lock(&lock_path) {
+      Ok(lock) => lock,
+      Err(e) => {
+        // If lock acquisition fails, reset counters to prevent indefinite accumulation
+        // The data will be lost, but this prevents memory growth
+        let _ = self.bytes_sent.swap(0, Ordering::Relaxed);
+        let _ = self.bytes_received.swap(0, Ordering::Relaxed);
+        return Err(e);
+      }
+    };
 
     // Load or create stats using the storage key
     let mut stats = load_traffic_stats(&storage_key)
@@ -788,7 +797,7 @@ impl LiveTrafficTracker {
     // Prune old data before adding new data to keep file size manageable
     stats.prune_old_data();
 
-    // Reset counters after reading
+    // Reset counters after reading (lock is held, so flush will proceed)
     let sent = self.bytes_sent.swap(0, Ordering::Relaxed);
     let received = self.bytes_received.swap(0, Ordering::Relaxed);
 
