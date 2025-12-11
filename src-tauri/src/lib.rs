@@ -249,12 +249,8 @@ async fn is_geoip_database_available() -> Result<bool, String> {
 
 #[tauri::command]
 async fn get_all_traffic_snapshots() -> Result<Vec<crate::traffic_stats::TrafficSnapshot>, String> {
-  Ok(
-    crate::traffic_stats::list_traffic_stats()
-      .into_iter()
-      .map(|s| s.to_snapshot())
-      .collect(),
-  )
+  // Use real-time snapshots that merge in-memory data with disk data
+  Ok(crate::traffic_stats::get_all_traffic_snapshots_realtime())
 }
 
 #[tauri::command]

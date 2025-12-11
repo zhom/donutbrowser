@@ -599,37 +599,79 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
   );
   log::error!("Proxy server entering accept loop - process should stay alive");
 
+  // Start a background task to write lightweight session snapshots for real-time updates
+  // These are much smaller than full stats and can be written frequently (~100 bytes every 2 seconds)
+  if let Some(tracker) = get_traffic_tracker() {
+    let tracker_clone = tracker.clone();
+    tokio::spawn(async move {
+      let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(2));
+      interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+      loop {
+        interval.tick().await;
+        // Write lightweight session snapshot (only current counters, ~100 bytes)
+        if let Err(e) = tracker_clone.write_session_snapshot() {
+          log::debug!("Failed to write session snapshot: {}", e);
+        }
+      }
+    });
+  }
+
   // Start a background task to periodically flush traffic stats to disk
+  // Use adaptive flush frequency: every 5 seconds when active, every 30 seconds when idle
   tokio::spawn(async move {
-    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(1));
+    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut last_activity_time = std::time::Instant::now();
-    let mut last_byte_count = 0u64;
+    let mut last_flush_time = std::time::Instant::now();
+    let mut current_interval_secs = 5u64;
 
     loop {
       interval.tick().await;
       if let Some(tracker) = get_traffic_tracker() {
         let (sent, recv, requests) = tracker.get_snapshot();
         let current_bytes = sent + recv;
-        let bytes_changed = current_bytes != last_byte_count;
         let time_since_activity = last_activity_time.elapsed();
+        let time_since_flush = last_flush_time.elapsed();
         let has_traffic = current_bytes > 0 || requests > 0;
 
-        // Always flush if we have traffic, or if bytes changed, or if it's been less than 30s since activity
-        // This ensures traffic is always persisted, even during active periods
-        let should_flush =
-          has_traffic || bytes_changed || time_since_activity < std::time::Duration::from_secs(30);
+        // Determine flush frequency based on activity
+        // When active: flush every 5 seconds
+        // When idle: flush every 30 seconds
+        let desired_interval_secs =
+          if has_traffic || time_since_activity < std::time::Duration::from_secs(30) {
+            5u64
+          } else {
+            30u64
+          };
+
+        // Update interval if needed
+        if desired_interval_secs != current_interval_secs {
+          current_interval_secs = desired_interval_secs;
+          interval = tokio::time::interval(tokio::time::Duration::from_secs(desired_interval_secs));
+        }
+
+        // Only flush if enough time has passed since last flush
+        let flush_interval = std::time::Duration::from_secs(desired_interval_secs);
+        let should_flush = time_since_flush >= flush_interval;
 
         if should_flush {
-          if let Err(e) = tracker.flush_to_disk() {
-            log::error!("Failed to flush traffic stats: {}", e);
-          } else {
-            // Update tracking state after successful flush
-            if has_traffic || bytes_changed {
-              last_activity_time = std::time::Instant::now();
+          match tracker.flush_to_disk() {
+            Ok(Some((sent, recv))) => {
+              // Successful flush with data
+              last_flush_time = std::time::Instant::now();
+              if sent > 0 || recv > 0 {
+                last_activity_time = std::time::Instant::now();
+              }
             }
-            // After flush, bytes are reset to 0, so update last_byte_count
-            last_byte_count = 0;
+            Ok(None) => {
+              // No data to flush - this is normal
+              last_flush_time = std::time::Instant::now();
+            }
+            Err(e) => {
+              log::error!("Failed to flush traffic stats: {}", e);
+              // Don't update flush time on error - retry sooner
+            }
           }
         }
       }
