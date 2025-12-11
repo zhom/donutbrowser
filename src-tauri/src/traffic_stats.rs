@@ -800,10 +800,10 @@ impl LiveTrafficTracker {
       }
     }
 
-    // Update IPs
-    if let Ok(ips) = self.ips.read() {
-      for ip in ips.iter() {
-        stats.record_ip(ip);
+    // Update IPs and clear them after flushing (like domain_stats)
+    if let Ok(mut ips) = self.ips.write() {
+      for ip in ips.drain(..) {
+        stats.record_ip(&ip);
       }
     }
 
@@ -1045,11 +1045,15 @@ pub fn get_all_traffic_snapshots_realtime() -> Vec<TrafficSnapshot> {
             if let Some(session) = load_session_snapshot(profile_id) {
               // Merge session data with disk snapshot
               if let Some(snapshot) = snapshots.get_mut(profile_id) {
-                // Update totals with session data
-                snapshot.total_bytes_sent = snapshot.total_bytes_sent.max(session.bytes_sent);
-                snapshot.total_bytes_received =
-                  snapshot.total_bytes_received.max(session.bytes_received);
-                snapshot.total_requests = snapshot.total_requests.max(session.requests);
+                // Session data contains in-memory counters not yet flushed to disk
+                // Disk snapshot contains cumulative totals already flushed
+                // We need to ADD them, not take the max, to get the true total
+                snapshot.total_bytes_sent =
+                  snapshot.total_bytes_sent.saturating_add(session.bytes_sent);
+                snapshot.total_bytes_received = snapshot
+                  .total_bytes_received
+                  .saturating_add(session.bytes_received);
+                snapshot.total_requests = snapshot.total_requests.saturating_add(session.requests);
                 snapshot.current_bytes_sent = session.bytes_sent;
                 snapshot.current_bytes_received = session.bytes_received;
                 snapshot.last_update = session.timestamp;
