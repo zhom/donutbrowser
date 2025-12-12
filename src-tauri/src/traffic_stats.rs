@@ -809,6 +809,7 @@ impl LiveTrafficTracker {
     // Reset counters after reading (lock is held, so flush will proceed)
     let sent = self.bytes_sent.swap(0, Ordering::Relaxed);
     let received = self.bytes_received.swap(0, Ordering::Relaxed);
+    let _requests = self.requests.swap(0, Ordering::Relaxed);
 
     // Update bandwidth history
     stats.record_bandwidth(sent, received);
