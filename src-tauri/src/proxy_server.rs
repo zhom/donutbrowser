@@ -508,6 +508,13 @@ async fn handle_http_via_socks4(
     {
       continue;
     }
+    // Skip Content-Length and Transfer-Encoding - we'll add our own Content-Length
+    // based on the collected body size. Having both violates HTTP/1.1 (RFC 7230).
+    if name.as_str().eq_ignore_ascii_case("content-length")
+      || name.as_str().eq_ignore_ascii_case("transfer-encoding")
+    {
+      continue;
+    }
     if let Ok(val) = value.to_str() {
       http_request.push_str(&format!("{}: {}\r\n", name.as_str(), val));
     }
