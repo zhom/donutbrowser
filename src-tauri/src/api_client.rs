@@ -900,13 +900,20 @@ impl ApiClient {
   pub async fn fetch_chromium_latest_version(
     &self,
   ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    // Use architecture-aware URL for Chromium
-    let arch = if cfg!(target_arch = "aarch64") {
-      "Mac_Arm"
-    } else {
-      "Mac"
+    // Use platform-aware URL for Chromium to match download URL generation
+    let (os, arch) = Self::get_platform_info();
+    let platform_str = match (&os[..], &arch[..]) {
+      ("windows", "x64") => "Win_x64",
+      ("windows", "arm64") => "Win_Arm64",
+      ("linux", "x64") => "Linux_x64",
+      ("linux", "arm64") => return Err("Chromium doesn't support ARM64 on Linux".into()),
+      ("macos", "x64") => "Mac",
+      ("macos", "arm64") => "Mac_Arm",
+      _ => {
+        return Err(format!("Unsupported platform/architecture for Chromium: {os}/{arch}").into())
+      }
     };
-    let url = format!("{}/{arch}/LAST_CHANGE", self.chromium_api_base);
+    let url = format!("{}/{platform_str}/LAST_CHANGE", self.chromium_api_base);
     let version = self
       .client
       .get(&url)
@@ -1480,14 +1487,19 @@ mod tests {
     let server = setup_mock_server().await;
     let client = create_test_client(&server);
 
-    let arch = if cfg!(target_arch = "aarch64") {
-      "Mac_Arm"
-    } else {
-      "Mac"
+    let (os, arch) = ApiClient::get_platform_info();
+    let platform_str = match (&os[..], &arch[..]) {
+      ("windows", "x64") => "Win_x64",
+      ("windows", "arm64") => "Win_Arm64",
+      ("linux", "x64") => "Linux_x64",
+      ("linux", "arm64") => return,
+      ("macos", "x64") => "Mac",
+      ("macos", "arm64") => "Mac_Arm",
+      _ => return,
     };
 
     Mock::given(method("GET"))
-      .and(path(format!("/{arch}/LAST_CHANGE")))
+      .and(path(format!("/{platform_str}/LAST_CHANGE")))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string("1465660")
@@ -1508,14 +1520,19 @@ mod tests {
     let server = setup_mock_server().await;
     let client = create_test_client(&server);
 
-    let arch = if cfg!(target_arch = "aarch64") {
-      "Mac_Arm"
-    } else {
-      "Mac"
+    let (os, arch) = ApiClient::get_platform_info();
+    let platform_str = match (&os[..], &arch[..]) {
+      ("windows", "x64") => "Win_x64",
+      ("windows", "arm64") => "Win_Arm64",
+      ("linux", "x64") => "Linux_x64",
+      ("linux", "arm64") => return,
+      ("macos", "x64") => "Mac",
+      ("macos", "arm64") => "Mac_Arm",
+      _ => return,
     };
 
     Mock::given(method("GET"))
-      .and(path(format!("/{arch}/LAST_CHANGE")))
+      .and(path(format!("/{platform_str}/LAST_CHANGE")))
       .respond_with(
         ResponseTemplate::new(200)
           .set_body_string("1465660")
