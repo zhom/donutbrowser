@@ -1193,83 +1193,85 @@ async fn handle_connect_from_buffer(
   }
 
   // Connect to target (directly or via upstream proxy)
-  let target_stream = if upstream_url.is_none()
-    || upstream_url
-      .as_ref()
-      .map(|s| s == "DIRECT")
-      .unwrap_or(false)
-  {
-    // Direct connection
-    TcpStream::connect((target_host, target_port)).await?
-  } else {
-    // Connect via upstream proxy
-    let upstream = Url::parse(upstream_url.as_ref().unwrap())?;
-    let scheme = upstream.scheme();
+  let target_stream = match upstream_url.as_ref() {
+    None => {
+      // Direct connection
+      TcpStream::connect((target_host, target_port)).await?
+    }
+    Some(url) if url == "DIRECT" => {
+      // Direct connection
+      TcpStream::connect((target_host, target_port)).await?
+    }
+    Some(upstream_url_str) => {
+      // Connect via upstream proxy
+      let upstream = Url::parse(upstream_url_str)?;
+      let scheme = upstream.scheme();
 
-    match scheme {
-      "http" | "https" => {
-        // Connect via HTTP/HTTPS proxy CONNECT
-        // Note: HTTPS proxy URLs still use HTTP CONNECT method (CONNECT is always HTTP-based)
-        // For HTTPS proxies, reqwest handles TLS automatically in handle_http
-        // For manual CONNECT here, we use plain TCP - HTTPS proxy CONNECT typically works over plain TCP
-        let proxy_host = upstream.host_str().unwrap_or("127.0.0.1");
-        let proxy_port = upstream.port().unwrap_or(8080);
-        let mut proxy_stream = TcpStream::connect((proxy_host, proxy_port)).await?;
+      match scheme {
+        "http" | "https" => {
+          // Connect via HTTP/HTTPS proxy CONNECT
+          // Note: HTTPS proxy URLs still use HTTP CONNECT method (CONNECT is always HTTP-based)
+          // For HTTPS proxies, reqwest handles TLS automatically in handle_http
+          // For manual CONNECT here, we use plain TCP - HTTPS proxy CONNECT typically works over plain TCP
+          let proxy_host = upstream.host_str().unwrap_or("127.0.0.1");
+          let proxy_port = upstream.port().unwrap_or(8080);
+          let mut proxy_stream = TcpStream::connect((proxy_host, proxy_port)).await?;
 
-        // Add authentication if provided
-        let mut connect_req = format!(
-          "CONNECT {}:{} HTTP/1.1\r\nHost: {}:{}\r\n",
-          target_host, target_port, target_host, target_port
-        );
+          // Add authentication if provided
+          let mut connect_req = format!(
+            "CONNECT {}:{} HTTP/1.1\r\nHost: {}:{}\r\n",
+            target_host, target_port, target_host, target_port
+          );
 
-        if !upstream.username().is_empty() {
-          use base64::{engine::general_purpose, Engine as _};
+          if !upstream.username().is_empty() {
+            use base64::{engine::general_purpose, Engine as _};
+            let username = upstream.username();
+            let password = upstream.password().unwrap_or("");
+            let auth = general_purpose::STANDARD.encode(format!("{}:{}", username, password));
+            connect_req.push_str(&format!("Proxy-Authorization: Basic {}\r\n", auth));
+          }
+
+          connect_req.push_str("\r\n");
+
+          // Send CONNECT request to upstream proxy
+          proxy_stream.write_all(connect_req.as_bytes()).await?;
+
+          // Read response
+          let mut buffer = [0u8; 4096];
+          let n = proxy_stream.read(&mut buffer).await?;
+          let response = String::from_utf8_lossy(&buffer[..n]);
+
+          if !response.starts_with("HTTP/1.1 200") && !response.starts_with("HTTP/1.0 200") {
+            return Err(format!("Upstream proxy CONNECT failed: {}", response).into());
+          }
+
+          proxy_stream
+        }
+        "socks4" | "socks5" => {
+          // Connect via SOCKS proxy
+          let socks_host = upstream.host_str().unwrap_or("127.0.0.1");
+          let socks_port = upstream.port().unwrap_or(1080);
+          let socks_addr = format!("{}:{}", socks_host, socks_port);
+
           let username = upstream.username();
           let password = upstream.password().unwrap_or("");
-          let auth = general_purpose::STANDARD.encode(format!("{}:{}", username, password));
-          connect_req.push_str(&format!("Proxy-Authorization: Basic {}\r\n", auth));
+
+          connect_via_socks(
+            &socks_addr,
+            target_host,
+            target_port,
+            scheme == "socks5",
+            if !username.is_empty() {
+              Some((username, password))
+            } else {
+              None
+            },
+          )
+          .await?
         }
-
-        connect_req.push_str("\r\n");
-
-        // Send CONNECT request to upstream proxy
-        proxy_stream.write_all(connect_req.as_bytes()).await?;
-
-        // Read response
-        let mut buffer = [0u8; 4096];
-        let n = proxy_stream.read(&mut buffer).await?;
-        let response = String::from_utf8_lossy(&buffer[..n]);
-
-        if !response.starts_with("HTTP/1.1 200") && !response.starts_with("HTTP/1.0 200") {
-          return Err(format!("Upstream proxy CONNECT failed: {}", response).into());
+        _ => {
+          return Err(format!("Unsupported upstream proxy scheme: {}", scheme).into());
         }
-
-        proxy_stream
-      }
-      "socks4" | "socks5" => {
-        // Connect via SOCKS proxy
-        let socks_host = upstream.host_str().unwrap_or("127.0.0.1");
-        let socks_port = upstream.port().unwrap_or(1080);
-        let socks_addr = format!("{}:{}", socks_host, socks_port);
-
-        let username = upstream.username();
-        let password = upstream.password().unwrap_or("");
-
-        connect_via_socks(
-          &socks_addr,
-          target_host,
-          target_port,
-          scheme == "socks5",
-          if !username.is_empty() {
-            Some((username, password))
-          } else {
-            None
-          },
-        )
-        .await?
-      }
-      _ => {
-        return Err(format!("Unsupported upstream proxy scheme: {}", scheme).into());
       }
     }
   };
