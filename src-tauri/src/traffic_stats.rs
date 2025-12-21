@@ -300,17 +300,19 @@ fn acquire_file_lock(lock_path: &PathBuf) -> Result<FileLockGuard, Box<dyn std::
   #[cfg(windows)]
   {
     use std::os::windows::io::AsRawHandle;
+    use windows::Win32::Foundation::HANDLE;
     use windows::Win32::Storage::FileSystem::LockFileEx;
     use windows::Win32::Storage::FileSystem::LOCKFILE_EXCLUSIVE_LOCK;
     use windows::Win32::Storage::FileSystem::LOCKFILE_FAIL_IMMEDIATELY;
+    use windows::Win32::System::IO::OVERLAPPED;
 
-    let handle = file.as_raw_handle();
+    let handle = HANDLE(file.as_raw_handle() as isize);
     unsafe {
-      let mut overlapped = std::mem::zeroed();
+      let mut overlapped: OVERLAPPED = std::mem::zeroed();
       if LockFileEx(
         handle,
         LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY,
-        0,
+        Some(0),
         u32::MAX,
         u32::MAX,
         &mut overlapped,
