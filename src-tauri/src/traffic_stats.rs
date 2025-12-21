@@ -306,7 +306,8 @@ fn acquire_file_lock(lock_path: &PathBuf) -> Result<FileLockGuard, Box<dyn std::
     use windows::Win32::Storage::FileSystem::LOCKFILE_FAIL_IMMEDIATELY;
     use windows::Win32::System::IO::OVERLAPPED;
 
-    let handle = HANDLE(file.as_raw_handle() as *mut core::ffi::c_void);
+    let raw_handle = file.as_raw_handle();
+    let handle = HANDLE(raw_handle);
     unsafe {
       let mut overlapped: OVERLAPPED = std::mem::zeroed();
       if LockFileEx(
