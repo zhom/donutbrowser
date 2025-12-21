@@ -1284,7 +1284,7 @@ dependencies = [
 
 [[package]]
 name = "donutbrowser"
-version = "0.13.7"
+version = "0.13.8"
 dependencies = [
  "aes-gcm",
  "argon2",
