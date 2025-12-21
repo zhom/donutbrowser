@@ -32,7 +32,7 @@ pub struct BackgroundUpdateResult {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct BackgroundUpdateState {
+pub(crate) struct BackgroundUpdateState {
   last_update_time: u64,
   update_interval_hours: u64,
 }
@@ -78,12 +78,12 @@ impl VersionUpdater {
     Ok(cache_dir)
   }
 
-  fn get_background_update_state_file() -> Result<PathBuf, Box<dyn std::error::Error>> {
+  pub(crate) fn get_background_update_state_file() -> Result<PathBuf, Box<dyn std::error::Error>> {
     let cache_dir = Self::get_cache_dir()?;
     Ok(cache_dir.join("background_update_state.json"))
   }
 
-  fn load_background_update_state() -> BackgroundUpdateState {
+  pub(crate) fn load_background_update_state() -> BackgroundUpdateState {
     let state_file = match Self::get_background_update_state_file() {
       Ok(file) => file,
       Err(_) => return BackgroundUpdateState::default(),
@@ -101,7 +101,7 @@ impl VersionUpdater {
     serde_json::from_str(&content).unwrap_or_default()
   }
 
-  fn save_background_update_state(
+  pub(crate) fn save_background_update_state(
     state: &BackgroundUpdateState,
   ) -> Result<(), Box<dyn std::error::Error>> {
     let state_file = Self::get_background_update_state_file()?;
@@ -516,50 +516,31 @@ pub async fn clear_all_version_cache_and_refetch(
 #[cfg(test)]
 mod tests {
   use super::*;
+  use serial_test::serial;
+  use std::env;
+  use tempfile::TempDir;
 
-  // Helper function to create a unique test state file
-  fn get_test_state_file(test_name: &str) -> PathBuf {
-    let cache_dir = VersionUpdater::get_cache_dir().unwrap();
-    cache_dir.join(format!("test_{test_name}_state.json"))
+  fn setup_test_env() -> TempDir {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    env::set_var("HOME", temp_dir.path());
+    temp_dir
   }
 
-  fn save_test_state(
-    test_name: &str,
-    state: &BackgroundUpdateState,
-  ) -> Result<(), Box<dyn std::error::Error>> {
-    let state_file = get_test_state_file(test_name);
-    let content = serde_json::to_string_pretty(state)?;
-    fs::write(&state_file, content)?;
-    Ok(())
-  }
-
-  fn load_test_state(test_name: &str) -> BackgroundUpdateState {
-    let state_file = get_test_state_file(test_name);
-
-    if !state_file.exists() {
-      return BackgroundUpdateState::default();
-    }
-
-    let content = match fs::read_to_string(&state_file) {
-      Ok(content) => content,
-      Err(_) => return BackgroundUpdateState::default(),
-    };
-
-    match serde_json::from_str(&content) {
-      Ok(state) => state,
-      Err(e) => {
-        eprintln!("Failed to parse test state file {:?}: {}", state_file, e);
-        BackgroundUpdateState::default()
-      }
+  fn cleanup_state_file() {
+    if let Ok(state_file) = VersionUpdater::get_background_update_state_file() {
+      let _ = fs::remove_file(&state_file);
     }
   }
 
   #[test]
+  #[serial]
   fn test_background_update_state_persistence() {
-    let test_name = "persistence";
+    let _temp_dir = setup_test_env();
 
-    // Clean up any existing test file first
-    let _ = fs::remove_file(get_test_state_file(test_name));
+    // Clean up any existing state file first
+    if let Ok(state_file) = VersionUpdater::get_background_update_state_file() {
+      let _ = fs::remove_file(&state_file);
+    }
 
     // Create a test state
     let test_state = BackgroundUpdateState {
@@ -568,33 +549,55 @@ mod tests {
     };
 
     // Save the state
-    save_test_state(test_name, &test_state).unwrap();
+    let save_result = VersionUpdater::save_background_update_state(&test_state);
+    assert!(save_result.is_ok(), "Should save state successfully");
 
     // Verify file was created
-    let state_file = get_test_state_file(test_name);
+    let state_file = VersionUpdater::get_background_update_state_file().unwrap();
     assert!(state_file.exists(), "State file should exist after saving");
 
-    // Load the state back
-    let loaded_state = load_test_state(test_name);
+    // Read the file directly to verify contents
+    let file_content = fs::read_to_string(&state_file).expect("Should read state file");
+    let file_state: BackgroundUpdateState =
+      serde_json::from_str(&file_content).expect("Should parse state file");
+
+    // Verify the file contents match what we saved
+    assert_eq!(
+      file_state.last_update_time, test_state.last_update_time,
+      "File last_update_time should match. Expected: {}, Got: {}",
+      test_state.last_update_time, file_state.last_update_time
+    );
+    assert_eq!(
+      file_state.update_interval_hours, test_state.update_interval_hours,
+      "File update_interval_hours should match"
+    );
+
+    // Load the state back using the method
+    let loaded_state = VersionUpdater::load_background_update_state();
 
     // Verify the values match
     assert_eq!(
       loaded_state.last_update_time, test_state.last_update_time,
-      "last_update_time should match. Expected: {}, Got: {}",
+      "Loaded last_update_time should match. Expected: {}, Got: {}",
       test_state.last_update_time, loaded_state.last_update_time
     );
     assert_eq!(
       loaded_state.update_interval_hours, test_state.update_interval_hours,
-      "update_interval_hours should match"
+      "Loaded update_interval_hours should match"
     );
 
     // Clean up
-    let _ = fs::remove_file(get_test_state_file(test_name));
+    cleanup_state_file();
   }
 
   #[test]
+  #[serial]
   fn test_should_run_background_update_logic() {
-    // Create isolated test states to avoid interference
+    let _temp_dir = setup_test_env();
+
+    // Clean up any existing state file first
+    cleanup_state_file();
+
     let current_time = VersionUpdater::get_current_timestamp();
 
     // Test with recent update (should not update)
@@ -643,6 +646,9 @@ mod tests {
       should_update_never,
       "Should update when never updated before"
     );
+
+    // Clean up
+    cleanup_state_file();
   }
 
   #[test]
