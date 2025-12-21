@@ -79,10 +79,10 @@ mod macos {
     executable_dir.push("Contents");
     executable_dir.push("MacOS");
 
-    // Find the first executable in the MacOS directory
-    let executable_path = std::fs::read_dir(&executable_dir)?
+    // Find executables matching the browser name pattern
+    let candidates: Vec<_> = std::fs::read_dir(&executable_dir)?
       .filter_map(Result::ok)
-      .find(|entry| {
+      .filter(|entry| {
         let binding = entry.file_name();
         let name = binding.to_string_lossy();
         name.starts_with("firefox")
@@ -91,7 +91,108 @@ mod macos {
           || name.contains("Browser")
       })
       .map(|entry| entry.path())
-      .ok_or("No executable found in MacOS directory")?;
+      .collect();
+
+    if candidates.is_empty() {
+      return Err("No executable found in MacOS directory".into());
+    }
+
+    // For Camoufox, validate architecture compatibility
+    let executable_path = if candidates.iter().any(|p| {
+      p.file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| n.starts_with("camoufox"))
+        .unwrap_or(false)
+    }) {
+      // Find the executable that matches the current architecture
+      let current_arch = if cfg!(target_arch = "x86_64") {
+        "x86_64"
+      } else if cfg!(target_arch = "aarch64") {
+        "arm64"
+      } else {
+        return Err("Unsupported architecture".into());
+      };
+
+      // Try to find an executable that matches the current architecture
+      // Use file command to check architecture
+      let mut found_executable = None;
+      let mut file_command_available = true;
+
+      for candidate in &candidates {
+        match std::process::Command::new("file").arg(candidate).output() {
+          Ok(output) => {
+            if output.status.success() {
+              if let Ok(output_str) = String::from_utf8(output.stdout) {
+                let is_compatible = if current_arch == "x86_64" {
+                  output_str.contains("x86_64") || output_str.contains("i386")
+                } else {
+                  output_str.contains("arm64") || output_str.contains("aarch64")
+                };
+
+                if is_compatible {
+                  found_executable = Some(candidate.clone());
+                  log::info!(
+                    "Found compatible Camoufox executable for {}: {}",
+                    current_arch,
+                    candidate.display()
+                  );
+                  break;
+                } else {
+                  log::warn!(
+                    "Skipping incompatible Camoufox executable: {} (architecture: {})",
+                    candidate.display(),
+                    output_str.trim()
+                  );
+                }
+              }
+            } else {
+              log::warn!(
+                "Failed to check architecture for {}: file command returned non-zero exit code",
+                candidate.display()
+              );
+            }
+          }
+          Err(e) => {
+            log::warn!(
+              "Failed to check architecture for {} using file command: {}",
+              candidate.display(),
+              e
+            );
+            file_command_available = false;
+            // Continue checking other candidates
+          }
+        }
+      }
+
+      // If no compatible executable found but we have candidates, use the first one
+      // (fallback for cases where file command isn't available or failed)
+      if found_executable.is_none() && !candidates.is_empty() {
+        if !file_command_available {
+          log::warn!(
+            "file command not available, using first candidate: {}",
+            candidates[0].display()
+          );
+        } else {
+          log::warn!(
+            "No compatible executable found for architecture {}, using first candidate: {}",
+            current_arch,
+            candidates[0].display()
+          );
+        }
+        found_executable = Some(candidates[0].clone());
+      }
+
+      found_executable.ok_or_else(|| {
+        format!(
+          "No compatible Camoufox executable found for architecture {}. Available executables: {:?}",
+          current_arch,
+          candidates
+        )
+      })?
+    } else {
+      // For other browsers, use the first matching executable
+      candidates[0].clone()
+    };
 
     Ok(executable_path)
   }

@@ -321,15 +321,31 @@ impl Downloader {
       _ => return None,
     };
 
-    // Look for assets matching the pattern
+    // Use ends_with for precise matching to avoid false positives
+    let pattern = format!(".{os_name}.{arch_name}.zip");
     let asset = assets.iter().find(|asset| {
       let name = asset.name.to_lowercase();
-      name.starts_with("camoufox-")
-        && name.contains(&format!("-{os_name}.{arch_name}.zip"))
-        && name.ends_with(".zip")
+      name.starts_with("camoufox-") && name.ends_with(&pattern)
     });
 
-    asset.map(|a| a.browser_download_url.clone())
+    if let Some(asset) = asset {
+      log::info!(
+        "Selected Camoufox asset for {}/{}: {}",
+        os,
+        arch,
+        asset.name
+      );
+      Some(asset.browser_download_url.clone())
+    } else {
+      log::warn!(
+        "No matching Camoufox asset found for {}/{} with pattern '{}'. Available assets: {:?}",
+        os,
+        arch,
+        pattern,
+        assets.iter().map(|a| &a.name).collect::<Vec<_>>()
+      );
+      None
+    }
   }
 
   pub async fn download_browser<R: tauri::Runtime>(

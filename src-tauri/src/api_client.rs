@@ -836,11 +836,11 @@ impl ApiClient {
     };
 
     // Look for assets matching the pattern: camoufox-{version}-{release}-{os}.{arch}.zip
+    // Use ends_with for precise matching to avoid false positives
+    let pattern = format!(".{os_name}.{arch_name}.zip");
     assets.iter().any(|asset| {
       let name = asset.name.to_lowercase();
-      name.starts_with("camoufox-")
-        && name.contains(&format!("-{os_name}.{arch_name}.zip"))
-        && name.ends_with(".zip")
+      name.starts_with("camoufox-") && name.ends_with(&pattern)
     })
   }
 
