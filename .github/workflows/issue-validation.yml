@@ -116,19 +116,28 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RESPONSE_FILE: ${{ steps.validate.outputs.response-file }}
-          RESPONSE: ${{ steps.validate.outputs.response }}
         run: |
-          # Prefer reading from the response file to avoid output truncation
+          # Read from the response file (RESPONSE env var gets truncated for large outputs)
           if [ -n "$RESPONSE_FILE" ] && [ -f "$RESPONSE_FILE" ]; then
+            echo "Reading response from file: $RESPONSE_FILE"
             RAW_OUTPUT=$(cat "$RESPONSE_FILE")
           else
-            RAW_OUTPUT="$RESPONSE"
+            echo "::error::Response file not found: $RESPONSE_FILE"
+            exit 1
           fi
 
           # Extract JSON if wrapped in markdown code fences; otherwise use raw
           JSON_RESULT=$(printf "%s" "$RAW_OUTPUT" | sed -n '/```json/,/```/p' | sed '1d;$d')
           if [ -z "$JSON_RESULT" ]; then
             JSON_RESULT="$RAW_OUTPUT"
+          fi
+
+          # Validate JSON before parsing
+          if ! echo "$JSON_RESULT" | jq empty 2>/dev/null; then
+            echo "::error::Invalid JSON in AI response"
+            echo "Raw output:"
+            echo "$RAW_OUTPUT"
+            exit 1
           fi
 
           # Parse JSON fields
