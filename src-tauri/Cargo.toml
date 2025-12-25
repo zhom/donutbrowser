@@ -1,6 +1,6 @@
 [package]
 name = "donutbrowser"
-version = "0.13.8"
+version = "0.13.9"
 description = "Simple Yet Powerful Anti-Detect Browser"
 authors = ["zhom@github"]
 edition = "2021"
