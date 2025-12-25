@@ -818,7 +818,7 @@ impl ApiClient {
     Ok(filtered_releases)
   }
 
-  /// Check if a Brave release has compatible assets for the given platform and architecture
+  /// Check if a Camoufox release has compatible assets for the given platform and architecture
   fn has_compatible_camoufox_asset(
     &self,
     assets: &[crate::browser::GithubAsset],
@@ -835,9 +835,9 @@ impl ApiClient {
       _ => return false,
     };
 
-    // Look for assets matching the pattern: camoufox-{version}-{release}-{os}.{arch}.zip
-    // Use ends_with for precise matching to avoid false positives
-    let pattern = format!(".{os_name}.{arch_name}.zip");
+    // Look for assets matching the pattern: camoufox-{version}-beta.{number}-{os}.{arch}.zip
+    // The separator before OS is a dash, e.g., camoufox-135.0.1-beta.24-lin.x86_64.zip
+    let pattern = format!("-{os_name}.{arch_name}.zip");
     assets.iter().any(|asset| {
       let name = asset.name.to_lowercase();
       name.starts_with("camoufox-") && name.ends_with(&pattern)

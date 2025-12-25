@@ -142,6 +142,10 @@ export function CreateProfileDialog({
   const [showProxyForm, setShowProxyForm] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [releaseTypes, setReleaseTypes] = useState<BrowserReleaseTypes>();
+  const [isLoadingReleaseTypes, setIsLoadingReleaseTypes] = useState(false);
+  const [releaseTypesError, setReleaseTypesError] = useState<string | null>(
+    null,
+  );
   const loadingBrowserRef = useRef<string | null>(null);
 
   // Use the browser download hook
@@ -179,6 +183,8 @@ export function CreateProfileDialog({
     async (browser: string) => {
       // Set loading state
       loadingBrowserRef.current = browser;
+      setIsLoadingReleaseTypes(true);
+      setReleaseTypesError(null);
 
       try {
         const rawReleaseTypes = await invoke<BrowserReleaseTypes>(
@@ -207,6 +213,7 @@ export function CreateProfileDialog({
               filtered.stable = rawReleaseTypes.stable;
             setReleaseTypes(filtered);
           }
+          setReleaseTypesError(null);
         }
       } catch (error) {
         console.error(`Failed to load release types for ${browser}:`, error);
@@ -223,17 +230,29 @@ export function CreateProfileDialog({
               fallback.stable = latest;
             }
             setReleaseTypes(fallback);
+            setReleaseTypesError(null);
+          } else if (loadingBrowserRef.current === browser) {
+            // No downloaded versions and API failed - show error
+            setReleaseTypesError(
+              "Failed to fetch browser versions. Please check your internet connection and try again.",
+            );
           }
         } catch (e) {
           console.error(
             `Failed to load downloaded versions for ${browser}:`,
             e,
           );
+          if (loadingBrowserRef.current === browser) {
+            setReleaseTypesError(
+              "Failed to fetch browser versions. Please check your internet connection and try again.",
+            );
+          }
         }
       } finally {
         // Clear loading state only if we're still loading this browser
         if (loadingBrowserRef.current === browser) {
           loadingBrowserRef.current = null;
+          setIsLoadingReleaseTypes(false);
         }
       }
     },
@@ -377,6 +396,8 @@ export function CreateProfileDialog({
     setSelectedBrowser(null);
     setSelectedProxyId(undefined);
     setReleaseTypes({});
+    setIsLoadingReleaseTypes(false);
+    setReleaseTypesError(null);
     setCamoufoxConfig({
       geoip: true, // Reset to automatic geoip
       os: getCurrentOS(), // Reset to current OS
@@ -553,7 +574,34 @@ export function CreateProfileDialog({
                           // Camoufox Configuration
                           <div className="space-y-6">
                             {/* Camoufox Download Status */}
-                            {!isBrowserCurrentlyDownloading("camoufox") &&
+                            {isLoadingReleaseTypes && (
+                              <div className="flex gap-3 items-center p-3 rounded-md border">
+                                <div className="w-4 h-4 rounded-full border-2 animate-spin border-muted/40 border-t-primary" />
+                                <p className="text-sm text-muted-foreground">
+                                  Fetching available versions...
+                                </p>
+                              </div>
+                            )}
+                            {!isLoadingReleaseTypes && releaseTypesError && (
+                              <div className="flex gap-3 items-center p-3 rounded-md border border-destructive/50 bg-destructive/10">
+                                <p className="flex-1 text-sm text-destructive">
+                                  {releaseTypesError}
+                                </p>
+                                <RippleButton
+                                  onClick={() =>
+                                    selectedBrowser &&
+                                    loadReleaseTypes(selectedBrowser)
+                                  }
+                                  size="sm"
+                                  variant="outline"
+                                >
+                                  Retry
+                                </RippleButton>
+                              </div>
+                            )}
+                            {!isLoadingReleaseTypes &&
+                              !releaseTypesError &&
+                              !isBrowserCurrentlyDownloading("camoufox") &&
                               !isBrowserVersionAvailable("camoufox") &&
                               getBestAvailableVersion("camoufox") && (
                                 <div className="flex gap-3 items-center p-3 rounded-md border">
@@ -580,7 +628,9 @@ export function CreateProfileDialog({
                                   </LoadingButton>
                                 </div>
                               )}
-                            {!isBrowserCurrentlyDownloading("camoufox") &&
+                            {!isLoadingReleaseTypes &&
+                              !releaseTypesError &&
+                              !isBrowserCurrentlyDownloading("camoufox") &&
                               isBrowserVersionAvailable("camoufox") && (
                                 <div className="p-3 text-sm rounded-md border text-muted-foreground">
                                   {(() => {
@@ -607,13 +657,41 @@ export function CreateProfileDialog({
                             />
                           </div>
                         ) : (
-                          // Regular Browser Configuration
+                          // Regular Browser Configuration (should not happen in anti-detect tab)
                           <div className="space-y-4">
                             {selectedBrowser && (
                               <div className="space-y-3">
-                                {!isBrowserCurrentlyDownloading(
-                                  selectedBrowser,
-                                ) &&
+                                {isLoadingReleaseTypes && (
+                                  <div className="flex gap-3 items-center">
+                                    <div className="w-4 h-4 rounded-full border-2 animate-spin border-muted/40 border-t-primary" />
+                                    <p className="text-sm text-muted-foreground">
+                                      Fetching available versions...
+                                    </p>
+                                  </div>
+                                )}
+                                {!isLoadingReleaseTypes &&
+                                  releaseTypesError && (
+                                    <div className="flex gap-3 items-center p-3 rounded-md border border-destructive/50 bg-destructive/10">
+                                      <p className="flex-1 text-sm text-destructive">
+                                        {releaseTypesError}
+                                      </p>
+                                      <RippleButton
+                                        onClick={() =>
+                                          selectedBrowser &&
+                                          loadReleaseTypes(selectedBrowser)
+                                        }
+                                        size="sm"
+                                        variant="outline"
+                                      >
+                                        Retry
+                                      </RippleButton>
+                                    </div>
+                                  )}
+                                {!isLoadingReleaseTypes &&
+                                  !releaseTypesError &&
+                                  !isBrowserCurrentlyDownloading(
+                                    selectedBrowser,
+                                  ) &&
                                   !isBrowserVersionAvailable(selectedBrowser) &&
                                   getBestAvailableVersion(selectedBrowser) && (
                                     <div className="flex gap-3 items-center">
@@ -643,9 +721,11 @@ export function CreateProfileDialog({
                                       </LoadingButton>
                                     </div>
                                   )}
-                                {!isBrowserCurrentlyDownloading(
-                                  selectedBrowser,
-                                ) &&
+                                {!isLoadingReleaseTypes &&
+                                  !releaseTypesError &&
+                                  !isBrowserCurrentlyDownloading(
+                                    selectedBrowser,
+                                  ) &&
                                   isBrowserVersionAvailable(
                                     selectedBrowser,
                                   ) && (
@@ -739,9 +819,36 @@ export function CreateProfileDialog({
                         <div className="space-y-4">
                           {selectedBrowser && (
                             <div className="space-y-3">
-                              {!isBrowserCurrentlyDownloading(
-                                selectedBrowser,
-                              ) &&
+                              {isLoadingReleaseTypes && (
+                                <div className="flex gap-3 items-center">
+                                  <div className="w-4 h-4 rounded-full border-2 animate-spin border-muted/40 border-t-primary" />
+                                  <p className="text-sm text-muted-foreground">
+                                    Fetching available versions...
+                                  </p>
+                                </div>
+                              )}
+                              {!isLoadingReleaseTypes && releaseTypesError && (
+                                <div className="flex gap-3 items-center p-3 rounded-md border border-destructive/50 bg-destructive/10">
+                                  <p className="flex-1 text-sm text-destructive">
+                                    {releaseTypesError}
+                                  </p>
+                                  <RippleButton
+                                    onClick={() =>
+                                      selectedBrowser &&
+                                      loadReleaseTypes(selectedBrowser)
+                                    }
+                                    size="sm"
+                                    variant="outline"
+                                  >
+                                    Retry
+                                  </RippleButton>
+                                </div>
+                              )}
+                              {!isLoadingReleaseTypes &&
+                                !releaseTypesError &&
+                                !isBrowserCurrentlyDownloading(
+                                  selectedBrowser,
+                                ) &&
                                 !isBrowserVersionAvailable(selectedBrowser) &&
                                 getBestAvailableVersion(selectedBrowser) && (
                                   <div className="flex gap-3 items-center">
@@ -771,9 +878,11 @@ export function CreateProfileDialog({
                                     </LoadingButton>
                                   </div>
                                 )}
-                              {!isBrowserCurrentlyDownloading(
-                                selectedBrowser,
-                              ) &&
+                              {!isLoadingReleaseTypes &&
+                                !releaseTypesError &&
+                                !isBrowserCurrentlyDownloading(
+                                  selectedBrowser,
+                                ) &&
                                 isBrowserVersionAvailable(selectedBrowser) && (
                                   <div className="text-sm text-muted-foreground">
                                     {(() => {

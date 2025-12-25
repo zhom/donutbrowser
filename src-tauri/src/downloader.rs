@@ -310,7 +310,8 @@ impl Downloader {
     os: &str,
     arch: &str,
   ) -> Option<String> {
-    // Camoufox asset naming pattern: camoufox-{version}-{release}-{os}.{arch}.zip
+    // Camoufox asset naming pattern: camoufox-{version}-beta.{number}-{os}.{arch}.zip
+    // Example: camoufox-135.0.1-beta.24-lin.x86_64.zip
     let (os_name, arch_name) = match (os, arch) {
       ("windows", "x64") => ("win", "x86_64"),
       ("windows", "arm64") => ("win", "arm64"),
@@ -322,7 +323,8 @@ impl Downloader {
     };
 
     // Use ends_with for precise matching to avoid false positives
-    let pattern = format!(".{os_name}.{arch_name}.zip");
+    // The separator before OS is a dash: -lin.x86_64.zip, -mac.arm64.zip, etc.
+    let pattern = format!("-{os_name}.{arch_name}.zip");
     let asset = assets.iter().find(|asset| {
       let name = asset.name.to_lowercase();
       name.starts_with("camoufox-") && name.ends_with(&pattern)
