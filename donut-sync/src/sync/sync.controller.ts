@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   type MessageEvent,
   Post,
   Sse,
@@ -35,11 +36,13 @@ export class SyncController {
   constructor(private readonly syncService: SyncService) {}
 
   @Post("stat")
+  @HttpCode(200)
   async stat(@Body() dto: StatRequestDto): Promise<StatResponseDto> {
     return this.syncService.stat(dto);
   }
 
   @Post("presign-upload")
+  @HttpCode(200)
   async presignUpload(
     @Body() dto: PresignUploadRequestDto,
   ): Promise<PresignUploadResponseDto> {
@@ -47,6 +50,7 @@ export class SyncController {
   }
 
   @Post("presign-download")
+  @HttpCode(200)
   async presignDownload(
     @Body() dto: PresignDownloadRequestDto,
   ): Promise<PresignDownloadResponseDto> {
@@ -54,16 +58,19 @@ export class SyncController {
   }
 
   @Post("delete")
+  @HttpCode(200)
   async delete(@Body() dto: DeleteRequestDto): Promise<DeleteResponseDto> {
     return this.syncService.delete(dto);
   }
 
   @Post("list")
+  @HttpCode(200)
   async list(@Body() dto: ListRequestDto): Promise<ListResponseDto> {
     return this.syncService.list(dto);
   }
 
   @Post("presign-upload-batch")
+  @HttpCode(200)
   async presignUploadBatch(
     @Body() dto: PresignUploadBatchRequestDto,
   ): Promise<PresignUploadBatchResponseDto> {
@@ -71,6 +78,7 @@ export class SyncController {
   }
 
   @Post("presign-download-batch")
+  @HttpCode(200)
   async presignDownloadBatch(
     @Body() dto: PresignDownloadBatchRequestDto,
   ): Promise<PresignDownloadBatchResponseDto> {
@@ -78,6 +86,7 @@ export class SyncController {
   }
 
   @Post("delete-prefix")
+  @HttpCode(200)
   async deletePrefix(
     @Body() dto: DeletePrefixRequestDto,
   ): Promise<DeletePrefixResponseDto> {
