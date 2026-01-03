@@ -38,6 +38,14 @@ pub struct AppSettings {
   pub api_port: u16,
   #[serde(default)]
   pub api_token: Option<String>, // Displayed token for user to copy
+  #[serde(default)]
+  pub sync_server_url: Option<String>, // URL of the sync server
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct SyncSettings {
+  pub sync_server_url: Option<String>,
+  pub sync_token: Option<String>, // Only populated when reading, not stored in JSON
 }
 
 fn default_theme() -> String {
@@ -57,18 +65,31 @@ impl Default for AppSettings {
       api_enabled: false,
       api_port: 10108,
       api_token: None,
+      sync_server_url: None,
     }
   }
 }
 
 pub struct SettingsManager {
   base_dirs: BaseDirs,
+  data_dir_override: Option<PathBuf>,
 }
 
 impl SettingsManager {
   fn new() -> Self {
     Self {
       base_dirs: BaseDirs::new().expect("Failed to get base directories"),
+      data_dir_override: std::env::var("DONUTBROWSER_DATA_DIR")
+        .ok()
+        .map(PathBuf::from),
+    }
+  }
+
+  #[cfg(test)]
+  fn with_data_dir_override(dir: &std::path::Path) -> Self {
+    Self {
+      base_dirs: BaseDirs::new().expect("Failed to get base directories"),
+      data_dir_override: Some(dir.to_path_buf()),
     }
   }
 
@@ -77,6 +98,10 @@ impl SettingsManager {
   }
 
   pub fn get_settings_dir(&self) -> PathBuf {
+    if let Some(dir) = &self.data_dir_override {
+      return dir.join("settings");
+    }
+
     let mut path = self.base_dirs.data_local_dir().to_path_buf();
     path.push(if cfg!(debug_assertions) {
       "DonutBrowserDev"
@@ -365,6 +390,162 @@ impl SettingsManager {
 
     Ok(())
   }
+
+  pub async fn store_sync_token(
+    &self,
+    _app_handle: &tauri::AppHandle,
+    token: &str,
+  ) -> Result<(), Box<dyn std::error::Error>> {
+    let token_file = self.get_settings_dir().join("sync_token.dat");
+
+    if let Some(parent) = token_file.parent() {
+      std::fs::create_dir_all(parent)?;
+    }
+
+    let vault_password = Self::get_vault_password();
+    let salt = SaltString::generate(&mut OsRng);
+    let argon2 = Argon2::default();
+    let password_hash = argon2
+      .hash_password(vault_password.as_bytes(), &salt)
+      .map_err(|e| format!("Argon2 key derivation failed: {e}"))?;
+    let hash_value = password_hash.hash.unwrap();
+    let hash_bytes = hash_value.as_bytes();
+    let key_bytes: [u8; 32] = hash_bytes[..32]
+      .try_into()
+      .map_err(|_| "Invalid key length")?;
+    let key = Key::<Aes256Gcm>::from(key_bytes);
+    let cipher = Aes256Gcm::new(&key);
+    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+    let ciphertext = cipher
+      .encrypt(&nonce, token.as_bytes())
+      .map_err(|e| format!("Encryption failed: {e}"))?;
+
+    let mut file_data = Vec::new();
+    file_data.extend_from_slice(b"DBSYN"); // 5-byte header for sync
+    file_data.push(2u8); // Version 2 (Argon2 + AES-GCM)
+    let salt_str = salt.as_str();
+    file_data.push(salt_str.len() as u8);
+    file_data.extend_from_slice(salt_str.as_bytes());
+    file_data.extend_from_slice(&nonce);
+    file_data.extend_from_slice(&(ciphertext.len() as u32).to_le_bytes());
+    file_data.extend_from_slice(&ciphertext);
+
+    std::fs::write(token_file, file_data)?;
+    Ok(())
+  }
+
+  pub async fn get_sync_token(
+    &self,
+    _app_handle: &tauri::AppHandle,
+  ) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    let token_file = self.get_settings_dir().join("sync_token.dat");
+
+    if !token_file.exists() {
+      return Ok(None);
+    }
+
+    let file_data = std::fs::read(token_file)?;
+
+    if file_data.len() < 6 || &file_data[0..5] != b"DBSYN" {
+      return Ok(None);
+    }
+
+    let version = file_data[5];
+    if version != 2 {
+      return Ok(None);
+    }
+
+    let mut offset = 6;
+    if offset >= file_data.len() {
+      return Ok(None);
+    }
+    let salt_len = file_data[offset] as usize;
+    offset += 1;
+
+    if offset + salt_len > file_data.len() {
+      return Ok(None);
+    }
+    let salt_bytes = &file_data[offset..offset + salt_len];
+    let salt_str = std::str::from_utf8(salt_bytes).map_err(|_| "Invalid salt encoding")?;
+    let salt = SaltString::from_b64(salt_str).map_err(|_| "Invalid salt format")?;
+    offset += salt_len;
+
+    if offset + 12 > file_data.len() {
+      return Ok(None);
+    }
+    let nonce_bytes: [u8; 12] = file_data[offset..offset + 12]
+      .try_into()
+      .map_err(|_| "Invalid nonce length")?;
+    let nonce = Nonce::from(nonce_bytes);
+    offset += 12;
+
+    if offset + 4 > file_data.len() {
+      return Ok(None);
+    }
+    let ciphertext_len = u32::from_le_bytes([
+      file_data[offset],
+      file_data[offset + 1],
+      file_data[offset + 2],
+      file_data[offset + 3],
+    ]) as usize;
+    offset += 4;
+
+    if offset + ciphertext_len > file_data.len() {
+      return Ok(None);
+    }
+    let ciphertext = &file_data[offset..offset + ciphertext_len];
+
+    let vault_password = Self::get_vault_password();
+    let argon2 = Argon2::default();
+    let password_hash = argon2
+      .hash_password(vault_password.as_bytes(), &salt)
+      .map_err(|e| format!("Argon2 key derivation failed: {e}"))?;
+    let hash_value = password_hash.hash.unwrap();
+    let hash_bytes = hash_value.as_bytes();
+    let key_bytes: [u8; 32] = hash_bytes[..32]
+      .try_into()
+      .map_err(|_| "Invalid key length")?;
+    let key = Key::<Aes256Gcm>::from(key_bytes);
+    let cipher = Aes256Gcm::new(&key);
+    let plaintext = cipher
+      .decrypt(&nonce, ciphertext)
+      .map_err(|_| "Decryption failed")?;
+
+    match String::from_utf8(plaintext) {
+      Ok(token) => Ok(Some(token)),
+      Err(_) => Ok(None),
+    }
+  }
+
+  pub async fn remove_sync_token(
+    &self,
+    _app_handle: &tauri::AppHandle,
+  ) -> Result<(), Box<dyn std::error::Error>> {
+    let token_file = self.get_settings_dir().join("sync_token.dat");
+
+    if token_file.exists() {
+      std::fs::remove_file(token_file)?;
+    }
+
+    Ok(())
+  }
+
+  pub fn get_sync_settings(&self) -> Result<SyncSettings, Box<dyn std::error::Error>> {
+    let settings = self.load_settings()?;
+    Ok(SyncSettings {
+      sync_server_url: settings.sync_server_url,
+      sync_token: None, // Token needs to be loaded separately via async method
+    })
+  }
+
+  pub fn save_sync_server_url(
+    &self,
+    url: Option<String>,
+  ) -> Result<(), Box<dyn std::error::Error>> {
+    let mut settings = self.load_settings()?;
+    settings.sync_server_url = url;
+    self.save_settings(&settings)
+  }
 }
 
 #[tauri::command]
@@ -447,6 +628,51 @@ pub async fn save_table_sorting_settings(sorting: TableSortingSettings) -> Resul
     .map_err(|e| format!("Failed to save table sorting settings: {e}"))
 }
 
+#[tauri::command]
+pub async fn get_sync_settings(app_handle: tauri::AppHandle) -> Result<SyncSettings, String> {
+  let manager = SettingsManager::instance();
+  let mut sync_settings = manager
+    .get_sync_settings()
+    .map_err(|e| format!("Failed to load sync settings: {e}"))?;
+
+  sync_settings.sync_token = manager
+    .get_sync_token(&app_handle)
+    .await
+    .map_err(|e| format!("Failed to load sync token: {e}"))?;
+
+  Ok(sync_settings)
+}
+
+#[tauri::command]
+pub async fn save_sync_settings(
+  app_handle: tauri::AppHandle,
+  sync_server_url: Option<String>,
+  sync_token: Option<String>,
+) -> Result<SyncSettings, String> {
+  let manager = SettingsManager::instance();
+
+  manager
+    .save_sync_server_url(sync_server_url.clone())
+    .map_err(|e| format!("Failed to save sync server URL: {e}"))?;
+
+  if let Some(ref token) = sync_token {
+    manager
+      .store_sync_token(&app_handle, token)
+      .await
+      .map_err(|e| format!("Failed to store sync token: {e}"))?;
+  } else {
+    manager
+      .remove_sync_token(&app_handle)
+      .await
+      .map_err(|e| format!("Failed to remove sync token: {e}"))?;
+  }
+
+  Ok(SyncSettings {
+    sync_server_url,
+    sync_token,
+  })
+}
+
 // Global singleton instance
 lazy_static::lazy_static! {
   static ref SETTINGS_MANAGER: SettingsManager = SettingsManager::new();
@@ -455,16 +681,11 @@ lazy_static::lazy_static! {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use std::env;
   use tempfile::TempDir;
 
   fn create_test_settings_manager() -> (SettingsManager, TempDir) {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
-
-    // Set up a temporary home directory for testing
-    env::set_var("HOME", temp_dir.path());
-
-    let manager = SettingsManager::new();
+    let manager = SettingsManager::with_data_dir_override(temp_dir.path());
     (manager, temp_dir)
   }
 
@@ -531,6 +752,7 @@ mod tests {
       api_enabled: false,
       api_port: 10108,
       api_token: None,
+      sync_server_url: None,
     };
 
     // Save settings

@@ -41,6 +41,10 @@ pub struct StoredProxy {
   pub id: String,
   pub name: String,
   pub proxy_settings: ProxySettings,
+  #[serde(default)]
+  pub sync_enabled: bool,
+  #[serde(default)]
+  pub last_sync: Option<u64>,
 }
 
 impl StoredProxy {
@@ -49,6 +53,8 @@ impl StoredProxy {
       id: uuid::Uuid::new_v4().to_string(),
       name,
       proxy_settings,
+      sync_enabled: false,
+      last_sync: None,
     }
   }
 
@@ -212,8 +218,7 @@ impl ProxyManager {
     }
   }
 
-  // Get the path to a specific proxy file
-  fn get_proxy_file_path(&self, proxy_id: &str) -> PathBuf {
+  pub fn get_proxy_file_path(&self, proxy_id: &str) -> PathBuf {
     self.get_proxies_dir().join(format!("{proxy_id}.json"))
   }
 
@@ -407,6 +412,15 @@ impl ProxyManager {
     app_handle: &tauri::AppHandle,
     proxy_id: &str,
   ) -> Result<(), String> {
+    // Remember if sync was enabled before deleting
+    let was_sync_enabled = {
+      let stored_proxies = self.stored_proxies.lock().unwrap();
+      stored_proxies
+        .get(proxy_id)
+        .map(|p| p.sync_enabled)
+        .unwrap_or(false)
+    };
+
     {
       let mut stored_proxies = self.stored_proxies.lock().unwrap();
       if stored_proxies.remove(proxy_id).is_none() {
@@ -416,6 +430,26 @@ impl ProxyManager {
 
     if let Err(e) = self.delete_proxy_file(proxy_id) {
       log::warn!("Failed to delete proxy file: {e}");
+    }
+
+    // If sync was enabled, also delete from S3
+    if was_sync_enabled {
+      let proxy_id_owned = proxy_id.to_string();
+      let app_handle_clone = app_handle.clone();
+      tauri::async_runtime::spawn(async move {
+        match crate::sync::SyncEngine::create_from_settings(&app_handle_clone).await {
+          Ok(engine) => {
+            if let Err(e) = engine.delete_proxy(&proxy_id_owned).await {
+              log::warn!("Failed to delete proxy {} from sync: {}", proxy_id_owned, e);
+            } else {
+              log::info!("Proxy {} deleted from S3 sync storage", proxy_id_owned);
+            }
+          }
+          Err(e) => {
+            log::debug!("Sync not configured, skipping remote deletion: {}", e);
+          }
+        }
+      });
     }
 
     // Emit event for reactive UI updates
@@ -1059,8 +1093,8 @@ mod tests {
   use super::*;
   use std::env;
   use std::path::PathBuf;
-  use std::process::Command;
   use std::time::Duration;
+  use tokio::process::Command;
   use tokio::time::sleep;
 
   // Mock HTTP server for testing
@@ -1097,7 +1131,8 @@ mod tests {
     let build_status = Command::new("cargo")
       .args(["build", "--bin", "donut-proxy"])
       .current_dir(project_root.join("src-tauri"))
-      .status()?;
+      .status()
+      .await?;
 
     if !build_status.success() {
       return Err("Failed to build donut-proxy binary".into());
@@ -1369,7 +1404,7 @@ mod tests {
       .arg("http");
 
     let start_time = std::time::Instant::now();
-    let output = tokio::time::timeout(Duration::from_secs(3), async { cmd.output() }).await;
+    let output = tokio::time::timeout(Duration::from_secs(10), cmd.output()).await;
 
     match output {
       Ok(Ok(cmd_output)) => {
@@ -1383,7 +1418,7 @@ mod tests {
           if let Some(proxy_id) = config["id"].as_str() {
             let mut stop_cmd = Command::new(&proxy_path);
             stop_cmd.arg("proxy").arg("stop").arg("--id").arg(proxy_id);
-            let _ = stop_cmd.output();
+            let _ = stop_cmd.output().await;
           }
         }
 
@@ -1411,13 +1446,13 @@ mod tests {
       .arg("proxy")
       .arg("start")
       .arg("--host")
-      .arg("httpbin.org") // Use a known good endpoint
+      .arg("httpbin.org")
       .arg("--proxy-port")
       .arg("80")
       .arg("--type")
       .arg("http");
 
-    let output = tokio::time::timeout(Duration::from_secs(60), async { cmd.output() }).await??;
+    let output = tokio::time::timeout(Duration::from_secs(10), cmd.output()).await??;
 
     if output.status.success() {
       let stdout = String::from_utf8(output.stdout)?;
@@ -1427,7 +1462,7 @@ mod tests {
       // Clean up
       let mut stop_cmd = Command::new(&proxy_path);
       stop_cmd.arg("proxy").arg("stop").arg("--id").arg(proxy_id);
-      let _ = stop_cmd.output();
+      let _ = stop_cmd.output().await;
 
       println!("CLI detachment test passed");
     } else {
@@ -1455,11 +1490,11 @@ mod tests {
       .arg("--type")
       .arg("http")
       .arg("--username")
-      .arg("user@domain.com") // Contains @ symbol
+      .arg("user@domain.com")
       .arg("--password")
-      .arg("pass word!"); // Contains space and special character
+      .arg("pass word!");
 
-    let output = tokio::time::timeout(Duration::from_secs(60), async { cmd.output() }).await??;
+    let output = tokio::time::timeout(Duration::from_secs(10), cmd.output()).await??;
 
     if output.status.success() {
       let stdout = String::from_utf8(output.stdout)?;
@@ -1471,7 +1506,6 @@ mod tests {
 
       // Verify that special characters are properly encoded
       assert!(upstream_url.contains("user%40domain.com"));
-      // The password may be encoded as "pass%20word!" or "pass%20word%21" depending on implementation
       assert!(upstream_url.contains("pass%20word"));
 
       println!("URL encoding test passed - special characters handled correctly");
@@ -1480,16 +1514,14 @@ mod tests {
       let proxy_id = config["id"].as_str().unwrap();
       let mut stop_cmd = Command::new(&proxy_path);
       stop_cmd.arg("proxy").arg("stop").arg("--id").arg(proxy_id);
-      let _ = stop_cmd.output();
+      let _ = stop_cmd.output().await;
     } else {
-      // This test might fail if the upstream doesn't exist, but we mainly care about URL construction
       let stdout = String::from_utf8(output.stdout)?;
       let stderr = String::from_utf8(output.stderr)?;
       println!("Command failed (expected for non-existent upstream):");
       println!("Stdout: {stdout}");
       println!("Stderr: {stderr}");
 
-      // The important thing is that the command completed quickly
       println!("URL encoding test completed - credentials should be properly encoded");
     }
 

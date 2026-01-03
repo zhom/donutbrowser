@@ -15,9 +15,11 @@ import { ImportProfileDialog } from "@/components/import-profile-dialog";
 import { PermissionDialog } from "@/components/permission-dialog";
 import { ProfilesDataTable } from "@/components/profile-data-table";
 import { ProfileSelectorDialog } from "@/components/profile-selector-dialog";
+import { ProfileSyncDialog } from "@/components/profile-sync-dialog";
 import { ProxyAssignmentDialog } from "@/components/proxy-assignment-dialog";
 import { ProxyManagementDialog } from "@/components/proxy-management-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
+import { SyncConfigDialog } from "@/components/sync-config-dialog";
 import { useAppUpdateNotifications } from "@/hooks/use-app-update-notifications";
 import { useGroupEvents } from "@/hooks/use-group-events";
 import type { PermissionType } from "@/hooks/use-permissions";
@@ -26,7 +28,7 @@ import { useProfileEvents } from "@/hooks/use-profile-events";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { useUpdateNotifications } from "@/hooks/use-update-notifications";
 import { useVersionUpdater } from "@/hooks/use-version-updater";
-import { showErrorToast, showToast } from "@/lib/toast-utils";
+import { showErrorToast, showSuccessToast, showToast } from "@/lib/toast-utils";
 import type { BrowserProfile, CamoufoxConfig } from "@/types";
 
 type BrowserTypeString =
@@ -99,6 +101,10 @@ export default function Home() {
   const [showBulkDeleteConfirmation, setShowBulkDeleteConfirmation] =
     useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [syncConfigDialogOpen, setSyncConfigDialogOpen] = useState(false);
+  const [profileSyncDialogOpen, setProfileSyncDialogOpen] = useState(false);
+  const [currentProfileForSync, setCurrentProfileForSync] =
+    useState<BrowserProfile | null>(null);
   const { isMicrophoneAccessGranted, isCameraAccessGranted, isInitialized } =
     usePermissions();
 
@@ -594,6 +600,34 @@ export default function Home() {
     // No need to manually reload - useProfileEvents will handle the update
   }, []);
 
+  const handleOpenProfileSyncDialog = useCallback((profile: BrowserProfile) => {
+    setCurrentProfileForSync(profile);
+    setProfileSyncDialogOpen(true);
+  }, []);
+
+  const handleToggleProfileSync = useCallback(
+    async (profile: BrowserProfile) => {
+      try {
+        await invoke("set_profile_sync_enabled", {
+          profileId: profile.id,
+          enabled: !profile.sync_enabled,
+        });
+        showSuccessToast(
+          profile.sync_enabled ? "Sync disabled" : "Sync enabled",
+          {
+            description: profile.sync_enabled
+              ? "Profile sync has been disabled"
+              : "Profile sync has been enabled",
+          },
+        );
+      } catch (error) {
+        console.error("Failed to toggle sync:", error);
+        showErrorToast("Failed to update sync settings");
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
     // Check for startup default browser prompt
     void checkStartupPrompt();
@@ -726,6 +760,7 @@ export default function Home() {
             onImportProfileDialogOpen={setImportProfileDialogOpen}
             onProxyManagementDialogOpen={setProxyManagementDialogOpen}
             onSettingsDialogOpen={setSettingsDialogOpen}
+            onSyncConfigDialogOpen={setSyncConfigDialogOpen}
             searchQuery={searchQuery}
             onSearchQueryChange={setSearchQuery}
           />
@@ -754,6 +789,8 @@ export default function Home() {
             onBulkDelete={handleBulkDelete}
             onBulkGroupAssignment={handleBulkGroupAssignment}
             onBulkProxyAssignment={handleBulkProxyAssignment}
+            onOpenProfileSyncDialog={handleOpenProfileSyncDialog}
+            onToggleProfileSync={handleToggleProfileSync}
           />
         </div>
       </main>
@@ -877,6 +914,21 @@ export default function Home() {
         isLoading={isBulkDeleting}
         profileIds={selectedProfiles}
         profiles={profiles.map((p) => ({ id: p.id, name: p.name }))}
+      />
+
+      <SyncConfigDialog
+        isOpen={syncConfigDialogOpen}
+        onClose={() => setSyncConfigDialogOpen(false)}
+      />
+
+      <ProfileSyncDialog
+        isOpen={profileSyncDialogOpen}
+        onClose={() => {
+          setProfileSyncDialogOpen(false);
+          setCurrentProfileForSync(null);
+        }}
+        profile={currentProfileForSync}
+        onSyncConfigOpen={() => setSyncConfigDialogOpen(true)}
       />
     </div>
   );

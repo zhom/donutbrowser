@@ -25,6 +25,9 @@
       "suspicious": "off",
       "a11y": {
         "useSemanticElements": "off"
+      },
+      "style": {
+        "useImportType": "off"
       }
     }
   },
@@ -37,6 +40,9 @@
     }
   },
   "javascript": {
+    "parser": {
+      "unsafeParameterDecoratorsEnabled": true
+    },
     "formatter": {
       "quoteStyle": "double"
     },

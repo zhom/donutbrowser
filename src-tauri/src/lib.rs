@@ -30,6 +30,7 @@ pub mod proxy_runner;
 pub mod proxy_server;
 pub mod proxy_storage;
 mod settings_manager;
+pub mod sync;
 pub mod traffic_stats;
 // mod theme_detector; // removed: theme detection handled in webview via CSS prefers-color-scheme
 mod tag_manager;
@@ -58,8 +59,13 @@ use downloaded_browsers_registry::{
 use downloader::download_browser;
 
 use settings_manager::{
-  get_app_settings, get_table_sorting_settings, save_app_settings, save_table_sorting_settings,
-  should_show_settings_on_startup,
+  get_app_settings, get_sync_settings, get_table_sorting_settings, save_app_settings,
+  save_sync_settings, save_table_sorting_settings, should_show_settings_on_startup,
+};
+
+use sync::{
+  is_group_in_use_by_synced_profile, is_proxy_in_use_by_synced_profile, request_profile_sync,
+  set_group_sync_enabled, set_profile_sync_enabled, set_proxy_sync_enabled,
 };
 
 use tag_manager::get_all_tags;
@@ -466,11 +472,21 @@ pub fn run() {
       });
 
       // Start periodic cleanup task for unused binaries
+      // Only runs when sync is not in progress to avoid deleting browsers
+      // that might be needed for profiles being synced from the cloud
       tauri::async_runtime::spawn(async move {
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(43200)); // Every 12 hours
 
         loop {
           interval.tick().await;
+
+          // Check if sync is in progress before running cleanup
+          if let Some(scheduler) = sync::get_global_scheduler() {
+            if scheduler.is_sync_in_progress().await {
+              log::debug!("Skipping cleanup: sync is in progress");
+              continue;
+            }
+          }
 
           let registry =
             crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
@@ -717,6 +733,50 @@ pub fn run() {
         }
       });
 
+      // Start sync subscription and scheduler if configured
+      let app_handle_sync = app.handle().clone();
+      tauri::async_runtime::spawn(async move {
+        use std::sync::Arc;
+
+        let mut subscription_manager = sync::SubscriptionManager::new();
+        let work_rx = subscription_manager.take_work_receiver();
+
+        if let Err(e) = subscription_manager.start(app_handle_sync.clone()).await {
+          log::warn!("Failed to start sync subscription: {e}");
+        }
+
+        if let Some(work_rx) = work_rx {
+          let scheduler = Arc::new(sync::SyncScheduler::new());
+
+          // Set the global scheduler so commands can access it
+          sync::set_global_scheduler(scheduler.clone());
+
+          // Start initial sync for all enabled profiles
+          scheduler.sync_all_enabled_profiles(&app_handle_sync).await;
+
+          // Check for missing synced profiles (deleted locally but exist remotely)
+          match sync::SyncEngine::create_from_settings(&app_handle_sync).await {
+            Ok(engine) => {
+              if let Err(e) = engine
+                .check_for_missing_synced_profiles(&app_handle_sync)
+                .await
+              {
+                log::warn!("Failed to check for missing profiles: {}", e);
+              }
+            }
+            Err(e) => {
+              log::debug!("Sync not configured, skipping missing profile check: {}", e);
+            }
+          }
+
+          scheduler
+            .clone()
+            .start(app_handle_sync.clone(), work_rx)
+            .await;
+          log::info!("Sync scheduler started");
+        }
+      });
+
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
@@ -784,7 +844,15 @@ pub fn run() {
       get_api_server_status,
       get_all_traffic_snapshots,
       clear_all_traffic_stats,
-      get_traffic_stats_for_period
+      get_traffic_stats_for_period,
+      get_sync_settings,
+      save_sync_settings,
+      set_profile_sync_enabled,
+      request_profile_sync,
+      set_proxy_sync_enabled,
+      set_group_sync_enabled,
+      is_proxy_in_use_by_synced_profile,
+      is_group_in_use_by_synced_profile
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

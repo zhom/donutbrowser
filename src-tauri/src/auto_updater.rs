@@ -518,6 +518,8 @@ mod tests {
       group_id: None,
       tags: Vec::new(),
       note: None,
+      sync_enabled: false,
+      last_sync: None,
     }
   }
 

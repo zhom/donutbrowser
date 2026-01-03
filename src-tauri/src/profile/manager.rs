@@ -166,6 +166,8 @@ impl ProfileManager {
           group_id: group_id.clone(),
           tags: Vec::new(),
           note: None,
+          sync_enabled: false,
+          last_sync: None,
         };
 
         match self
@@ -209,6 +211,8 @@ impl ProfileManager {
       group_id: group_id.clone(),
       tags: Vec::new(),
       note: None,
+      sync_enabled: false,
+      last_sync: None,
     };
 
     // Save profile info
@@ -351,6 +355,9 @@ impl ProfileManager {
       );
     }
 
+    // Remember sync_enabled before deleting local files
+    let was_sync_enabled = profile.sync_enabled;
+
     let profiles_dir = self.get_profiles_dir();
     let profile_uuid_dir = profiles_dir.join(profile.id.to_string());
 
@@ -371,6 +378,30 @@ impl ProfileManager {
       profile.name,
       profile_id
     );
+
+    // If sync was enabled, also delete from S3
+    if was_sync_enabled {
+      let profile_id_owned = profile_id.to_string();
+      let app_handle_clone = app_handle.clone();
+      tauri::async_runtime::spawn(async move {
+        match crate::sync::SyncEngine::create_from_settings(&app_handle_clone).await {
+          Ok(engine) => {
+            if let Err(e) = engine.delete_profile(&profile_id_owned).await {
+              log::warn!(
+                "Failed to delete profile {} from sync: {}",
+                profile_id_owned,
+                e
+              );
+            } else {
+              log::info!("Profile {} deleted from S3 sync storage", profile_id_owned);
+            }
+          }
+          Err(e) => {
+            log::debug!("Sync not configured, skipping remote deletion: {}", e);
+          }
+        }
+      });
+    }
 
     // Rebuild tag suggestions after deletion
     let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
@@ -469,6 +500,21 @@ impl ProfileManager {
 
       profile.group_id = group_id.clone();
       self.save_profile(&profile)?;
+
+      // Auto-enable sync for new group if profile has sync enabled
+      if profile.sync_enabled {
+        if let Some(ref new_group_id) = group_id {
+          let group_id_clone = new_group_id.clone();
+          let app_handle_clone = app_handle.clone();
+          tauri::async_runtime::spawn(async move {
+            let _ =
+              crate::sync::enable_group_sync_if_needed(&group_id_clone, &app_handle_clone).await;
+            if let Some(scheduler) = crate::sync::get_global_scheduler() {
+              scheduler.queue_group_sync(group_id_clone).await;
+            }
+          });
+        }
+      }
     }
 
     // Rebuild tag suggestions after group changes just in case
@@ -559,6 +605,7 @@ impl ProfileManager {
     profile_ids: Vec<String>,
   ) -> Result<(), Box<dyn std::error::Error>> {
     let profiles = self.list_profiles()?;
+    let mut sync_enabled_ids: Vec<String> = Vec::new();
 
     for profile_id in profile_ids {
       let profile_uuid = uuid::Uuid::parse_str(&profile_id)
@@ -579,6 +626,11 @@ impl ProfileManager {
         );
       }
 
+      // Track sync-enabled profiles for remote deletion
+      if profile.sync_enabled {
+        sync_enabled_ids.push(profile_id.clone());
+      }
+
       // Delete the profile
       let profiles_dir = self.get_profiles_dir();
       let profile_uuid_dir = profiles_dir.join(profile.id.to_string());
@@ -586,6 +638,20 @@ impl ProfileManager {
       if profile_uuid_dir.exists() {
         std::fs::remove_dir_all(&profile_uuid_dir)?;
       }
+    }
+
+    // Delete sync-enabled profiles from S3
+    if !sync_enabled_ids.is_empty() {
+      let app_handle_clone = app_handle.clone();
+      tauri::async_runtime::spawn(async move {
+        if let Ok(engine) = crate::sync::SyncEngine::create_from_settings(&app_handle_clone).await {
+          for profile_id in sync_enabled_ids {
+            if let Err(e) = engine.delete_profile(&profile_id).await {
+              log::warn!("Failed to delete profile {} from sync: {}", profile_id, e);
+            }
+          }
+        }
+      });
     }
 
     // Emit profile deletion event
@@ -682,6 +748,9 @@ impl ProfileManager {
         format!("Profile with ID '{profile_id}' not found").into()
       })?;
 
+    // Remember old proxy_id for cleanup (not used yet, but may be needed for cleanup)
+    let _old_proxy_id = profile.proxy_id.clone();
+
     // Update proxy settings
     profile.proxy_id = proxy_id.clone();
 
@@ -691,6 +760,16 @@ impl ProfileManager {
       .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
         format!("Failed to save profile: {e}").into()
       })?;
+
+    // Auto-enable sync for new proxy if profile has sync enabled
+    if profile.sync_enabled {
+      if let Some(ref new_proxy_id) = proxy_id {
+        let _ = crate::sync::enable_proxy_sync_if_needed(new_proxy_id, &app_handle).await;
+        if let Some(scheduler) = crate::sync::get_global_scheduler() {
+          scheduler.queue_proxy_sync(new_proxy_id.clone()).await;
+        }
+      }
+    }
 
     // Update on-disk browser profile config immediately
     if let Some(proxy_id_ref) = &proxy_id {

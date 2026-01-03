@@ -2,6 +2,16 @@ use crate::camoufox_manager::CamoufoxConfig;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+#[allow(dead_code)]
+pub enum SyncStatus {
+  #[default]
+  Disabled,
+  Syncing,
+  Synced,
+  Error,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BrowserProfile {
   pub id: uuid::Uuid,
@@ -24,6 +34,10 @@ pub struct BrowserProfile {
   pub tags: Vec<String>, // Free-form tags
   #[serde(default)]
   pub note: Option<String>, // User note
+  #[serde(default)]
+  pub sync_enabled: bool, // Whether sync is enabled for this profile
+  #[serde(default)]
+  pub last_sync: Option<u64>, // Timestamp of last successful sync (epoch seconds)
 }
 
 pub fn default_release_type() -> String {

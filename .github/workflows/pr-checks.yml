@@ -39,16 +39,28 @@ jobs:
         --lockfile=src-tauri/Cargo.lock
         ./
 
+  sync-e2e:
+    name: Sync E2E Tests
+    uses: ./.github/workflows/sync-e2e.yml
+    secrets: inherit
+    permissions:
+      contents: read
+
   pr-status:
     name: PR Status Check
     runs-on: ubuntu-latest
-    needs: [lint-js, lint-rust, security-scan]
+    needs: [lint-js, lint-rust, security-scan, sync-e2e]
     if: always()
     steps:
       - name: Check all jobs succeeded
         run: |
           if [[ "${{ needs.lint-js.result }}" != "success" || "${{ needs.lint-rust.result }}" != "success" || "${{ needs.security-scan.result }}" != "success" ]]; then
             echo "One or more checks failed"
+            exit 1
+          fi
+          # sync-e2e is optional (only runs when sync-related files change)
+          if [[ "${{ needs.sync-e2e.result }}" == "failure" ]]; then
+            echo "Sync E2E tests failed"
             exit 1
           fi
           echo "All checks passed!"

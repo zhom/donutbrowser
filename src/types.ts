@@ -24,6 +24,20 @@ export interface BrowserProfile {
   group_id?: string; // Reference to profile group
   tags?: string[];
   note?: string; // User note
+  sync_enabled?: boolean; // Whether sync is enabled for this profile
+  last_sync?: number; // Timestamp of last successful sync (epoch seconds)
+}
+
+export type SyncStatus = "Disabled" | "Syncing" | "Synced" | "Error";
+
+export interface SyncSettings {
+  sync_server_url?: string;
+  sync_token?: string;
+}
+
+export interface ProfileSyncStatusEvent {
+  profile_id: string;
+  status: "disabled" | "syncing" | "synced" | "error" | "pending";
 }
 
 export interface ProxyCheckResult {
@@ -39,17 +53,23 @@ export interface StoredProxy {
   id: string;
   name: string;
   proxy_settings: ProxySettings;
+  sync_enabled?: boolean;
+  last_sync?: number;
 }
 
 export interface ProfileGroup {
   id: string;
   name: string;
+  sync_enabled?: boolean;
+  last_sync?: number;
 }
 
 export interface GroupWithCount {
   id: string;
   name: string;
   count: number;
+  sync_enabled?: boolean;
+  last_sync?: number;
 }
 
 export interface DetectedProfile {

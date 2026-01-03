@@ -1,9 +1,8 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
-import { emit } from "@tauri-apps/api/event";
-import * as React from "react";
-import { useCallback, useState } from "react";
+import { emit, listen } from "@tauri-apps/api/event";
+import { useCallback, useEffect, useState } from "react";
 import { GoPlus } from "react-icons/go";
 import { LuPencil, LuTrash2 } from "react-icons/lu";
 import { toast } from "sonner";
@@ -11,6 +10,7 @@ import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialo
 import { ProxyFormDialog } from "@/components/proxy-form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -35,9 +35,42 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
+import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import type { ProxyCheckResult, StoredProxy } from "@/types";
 import { ProxyCheckButton } from "./proxy-check-button";
 import { RippleButton } from "./ui/ripple";
+
+type SyncStatus = "disabled" | "syncing" | "synced" | "error" | "waiting";
+
+function getSyncStatusDot(
+  proxy: StoredProxy,
+  liveStatus: SyncStatus | undefined,
+): { color: string; tooltip: string; animate: boolean } {
+  const status = liveStatus ?? (proxy.sync_enabled ? "synced" : "disabled");
+
+  switch (status) {
+    case "syncing":
+      return { color: "bg-yellow-500", tooltip: "Syncing...", animate: true };
+    case "synced":
+      return {
+        color: "bg-green-500",
+        tooltip: proxy.last_sync
+          ? `Synced ${new Date(proxy.last_sync * 1000).toLocaleString()}`
+          : "Synced",
+        animate: false,
+      };
+    case "waiting":
+      return {
+        color: "bg-yellow-500",
+        tooltip: "Waiting to sync",
+        animate: false,
+      };
+    case "error":
+      return { color: "bg-red-500", tooltip: "Sync error", animate: false };
+    default:
+      return { color: "bg-gray-400", tooltip: "Not synced", animate: false };
+  }
+}
 
 interface ProxyManagementDialogProps {
   isOpen: boolean;
@@ -56,13 +89,44 @@ export function ProxyManagementDialog({
   const [proxyCheckResults, setProxyCheckResults] = useState<
     Record<string, ProxyCheckResult>
   >({});
+  const [proxySyncStatus, setProxySyncStatus] = useState<
+    Record<string, SyncStatus>
+  >({});
+  const [proxyInUse, setProxyInUse] = useState<Record<string, boolean>>({});
+  const [isTogglingSync, setIsTogglingSync] = useState<Record<string, boolean>>(
+    {},
+  );
 
   const { storedProxies, proxyUsage, isLoading } = useProxyEvents();
 
+  // Listen for proxy sync status events
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+
+    const setupListener = async () => {
+      unlisten = await listen<{ id: string; status: string }>(
+        "proxy-sync-status",
+        (event) => {
+          const { id, status } = event.payload;
+          setProxySyncStatus((prev) => ({
+            ...prev,
+            [id]: status as SyncStatus,
+          }));
+        },
+      );
+    };
+
+    void setupListener();
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
   // Load cached check results on mount and when proxies change
-  React.useEffect(() => {
+  useEffect(() => {
     const loadCachedResults = async () => {
       const results: Record<string, ProxyCheckResult> = {};
+      const inUse: Record<string, boolean> = {};
       for (const proxy of storedProxies) {
         try {
           const cached = await invoke<ProxyCheckResult | null>(
@@ -72,11 +136,18 @@ export function ProxyManagementDialog({
           if (cached) {
             results[proxy.id] = cached;
           }
+
+          const inUseBySynced = await invoke<boolean>(
+            "is_proxy_in_use_by_synced_profile",
+            { proxyId: proxy.id },
+          );
+          inUse[proxy.id] = inUseBySynced;
         } catch (_error) {
           // Ignore errors
         }
       }
       setProxyCheckResults(results);
+      setProxyInUse(inUse);
     };
     if (storedProxies.length > 0) {
       void loadCachedResults();
@@ -117,6 +188,25 @@ export function ProxyManagementDialog({
   const handleProxyFormClose = useCallback(() => {
     setShowProxyForm(false);
     setEditingProxy(null);
+  }, []);
+
+  const handleToggleSync = useCallback(async (proxy: StoredProxy) => {
+    setIsTogglingSync((prev) => ({ ...prev, [proxy.id]: true }));
+    try {
+      await invoke("set_proxy_sync_enabled", {
+        proxyId: proxy.id,
+        enabled: !proxy.sync_enabled,
+      });
+      showSuccessToast(proxy.sync_enabled ? "Sync disabled" : "Sync enabled");
+      await emit("stored-proxies-changed");
+    } catch (error) {
+      console.error("Failed to toggle sync:", error);
+      showErrorToast(
+        error instanceof Error ? error.message : "Failed to update sync",
+      );
+    } finally {
+      setIsTogglingSync((prev) => ({ ...prev, [proxy.id]: false }));
+    }
   }, []);
 
   return (
@@ -162,84 +252,139 @@ export function ProxyManagementDialog({
                       <TableRow>
                         <TableHead>Name</TableHead>
                         <TableHead className="w-20">Usage</TableHead>
+                        <TableHead className="w-24">Sync</TableHead>
                         <TableHead className="w-24">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {storedProxies.map((proxy) => (
-                        <TableRow key={proxy.id}>
-                          <TableCell className="font-medium">
-                            {proxy.name}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="secondary">
-                              {proxyUsage[proxy.id] ?? 0}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-1">
-                              <ProxyCheckButton
-                                proxy={proxy}
-                                profileId={proxy.id}
-                                checkingProfileId={checkingProxyId}
-                                cachedResult={proxyCheckResults[proxy.id]}
-                                setCheckingProfileId={setCheckingProxyId}
-                                onCheckComplete={(result) => {
-                                  setProxyCheckResults((prev) => ({
-                                    ...prev,
-                                    [proxy.id]: result,
-                                  }));
-                                }}
-                                onCheckFailed={(result) => {
-                                  setProxyCheckResults((prev) => ({
-                                    ...prev,
-                                    [proxy.id]: result,
-                                  }));
-                                }}
-                              />
+                      {storedProxies.map((proxy) => {
+                        const syncDot = getSyncStatusDot(
+                          proxy,
+                          proxySyncStatus[proxy.id],
+                        );
+                        return (
+                          <TableRow key={proxy.id}>
+                            <TableCell className="font-medium">
+                              <div className="flex items-center gap-2">
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div
+                                      className={`w-2 h-2 rounded-full shrink-0 ${syncDot.color} ${
+                                        syncDot.animate ? "animate-pulse" : ""
+                                      }`}
+                                    />
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{syncDot.tooltip}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                                {proxy.name}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="secondary">
+                                {proxyUsage[proxy.id] ?? 0}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleEditProxy(proxy)}
-                                  >
-                                    <LuPencil className="w-4 h-4" />
-                                  </Button>
+                                  <div className="flex items-center">
+                                    <Checkbox
+                                      checked={proxy.sync_enabled}
+                                      onCheckedChange={() =>
+                                        handleToggleSync(proxy)
+                                      }
+                                      disabled={
+                                        isTogglingSync[proxy.id] ||
+                                        proxyInUse[proxy.id]
+                                      }
+                                    />
+                                  </div>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p>Edit proxy</p>
-                                </TooltipContent>
-                              </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => handleDeleteProxy(proxy)}
-                                      disabled={(proxyUsage[proxy.id] ?? 0) > 0}
-                                    >
-                                      <LuTrash2 className="w-4 h-4" />
-                                    </Button>
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  {(proxyUsage[proxy.id] ?? 0) > 0 ? (
+                                  {proxyInUse[proxy.id] ? (
                                     <p>
-                                      Cannot delete: in use by{" "}
-                                      {proxyUsage[proxy.id]} profile
-                                      {proxyUsage[proxy.id] > 1 ? "s" : ""}
+                                      Sync cannot be disabled while this proxy
+                                      is used by synced profiles
                                     </p>
                                   ) : (
-                                    <p>Delete proxy</p>
+                                    <p>
+                                      {proxy.sync_enabled
+                                        ? "Disable sync"
+                                        : "Enable sync"}
+                                    </p>
                                   )}
                                 </TooltipContent>
                               </Tooltip>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-1">
+                                <ProxyCheckButton
+                                  proxy={proxy}
+                                  profileId={proxy.id}
+                                  checkingProfileId={checkingProxyId}
+                                  cachedResult={proxyCheckResults[proxy.id]}
+                                  setCheckingProfileId={setCheckingProxyId}
+                                  onCheckComplete={(result) => {
+                                    setProxyCheckResults((prev) => ({
+                                      ...prev,
+                                      [proxy.id]: result,
+                                    }));
+                                  }}
+                                  onCheckFailed={(result) => {
+                                    setProxyCheckResults((prev) => ({
+                                      ...prev,
+                                      [proxy.id]: result,
+                                    }));
+                                  }}
+                                />
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleEditProxy(proxy)}
+                                    >
+                                      <LuPencil className="w-4 h-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Edit proxy</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleDeleteProxy(proxy)}
+                                        disabled={
+                                          (proxyUsage[proxy.id] ?? 0) > 0
+                                        }
+                                      >
+                                        <LuTrash2 className="w-4 h-4" />
+                                      </Button>
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {(proxyUsage[proxy.id] ?? 0) > 0 ? (
+                                      <p>
+                                        Cannot delete: in use by{" "}
+                                        {proxyUsage[proxy.id]} profile
+                                        {proxyUsage[proxy.id] > 1 ? "s" : ""}
+                                      </p>
+                                    ) : (
+                                      <p>Delete proxy</p>
+                                    )}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </ScrollArea>

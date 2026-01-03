@@ -1,8 +1,10 @@
 packages:
   - nodecar
+  - donut-sync
 
 onlyBuiltDependencies:
   - '@biomejs/biome'
+  - '@nestjs/core'
   - '@tailwindcss/oxide'
   - better-sqlite3
   - esbuild

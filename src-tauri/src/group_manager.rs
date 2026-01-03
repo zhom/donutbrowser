@@ -10,6 +10,10 @@ use tauri::Emitter;
 pub struct ProfileGroup {
   pub id: String,
   pub name: String,
+  #[serde(default)]
+  pub sync_enabled: bool,
+  #[serde(default)]
+  pub last_sync: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -17,6 +21,10 @@ pub struct GroupWithCount {
   pub id: String,
   pub name: String,
   pub count: usize,
+  #[serde(default)]
+  pub sync_enabled: bool,
+  #[serde(default)]
+  pub last_sync: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -113,6 +121,8 @@ impl GroupManager {
     let group = ProfileGroup {
       id: uuid::Uuid::new_v4().to_string(),
       name,
+      sync_enabled: false,
+      last_sync: None,
     };
 
     groups_data.groups.push(group.clone());
@@ -162,12 +172,54 @@ impl GroupManager {
     Ok(updated_group)
   }
 
+  pub fn update_group_internal(
+    &self,
+    group: &ProfileGroup,
+  ) -> Result<(), Box<dyn std::error::Error>> {
+    let mut groups_data = self.load_groups_data()?;
+
+    if let Some(existing) = groups_data.groups.iter_mut().find(|g| g.id == group.id) {
+      existing.name = group.name.clone();
+      existing.sync_enabled = group.sync_enabled;
+      existing.last_sync = group.last_sync;
+      self.save_groups_data(&groups_data)?;
+    }
+
+    Ok(())
+  }
+
+  pub fn upsert_group_internal(
+    &self,
+    group: &ProfileGroup,
+  ) -> Result<(), Box<dyn std::error::Error>> {
+    let mut groups_data = self.load_groups_data()?;
+
+    if let Some(existing) = groups_data.groups.iter_mut().find(|g| g.id == group.id) {
+      existing.name = group.name.clone();
+      existing.sync_enabled = group.sync_enabled;
+      existing.last_sync = group.last_sync;
+    } else {
+      groups_data.groups.push(group.clone());
+    }
+
+    self.save_groups_data(&groups_data)?;
+    Ok(())
+  }
+
   pub fn delete_group(
     &self,
     app_handle: &tauri::AppHandle,
     id: String,
   ) -> Result<(), Box<dyn std::error::Error>> {
     let mut groups_data = self.load_groups_data()?;
+
+    // Remember if sync was enabled before deleting
+    let was_sync_enabled = groups_data
+      .groups
+      .iter()
+      .find(|g| g.id == id)
+      .map(|g| g.sync_enabled)
+      .unwrap_or(false);
 
     let initial_len = groups_data.groups.len();
     groups_data.groups.retain(|g| g.id != id);
@@ -177,6 +229,26 @@ impl GroupManager {
     }
 
     self.save_groups_data(&groups_data)?;
+
+    // If sync was enabled, also delete from S3
+    if was_sync_enabled {
+      let group_id_owned = id.clone();
+      let app_handle_clone = app_handle.clone();
+      tauri::async_runtime::spawn(async move {
+        match crate::sync::SyncEngine::create_from_settings(&app_handle_clone).await {
+          Ok(engine) => {
+            if let Err(e) = engine.delete_group(&group_id_owned).await {
+              log::warn!("Failed to delete group {} from sync: {}", group_id_owned, e);
+            } else {
+              log::info!("Group {} deleted from S3 sync storage", group_id_owned);
+            }
+          }
+          Err(e) => {
+            log::debug!("Sync not configured, skipping remote deletion: {}", e);
+          }
+        }
+      });
+    }
 
     // Emit event for reactive UI updates
     if let Err(e) = app_handle.emit("groups-changed", ()) {
@@ -208,6 +280,8 @@ impl GroupManager {
         id: group.id,
         name: group.name,
         count,
+        sync_enabled: group.sync_enabled,
+        last_sync: group.last_sync,
       });
     }
 
@@ -217,6 +291,8 @@ impl GroupManager {
       id: "default".to_string(),
       name: "Default".to_string(),
       count: default_count,
+      sync_enabled: false,
+      last_sync: None,
     };
     // Insert at the beginning for consistent ordering with UI expectations
     result.insert(0, default_group);

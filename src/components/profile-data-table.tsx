@@ -161,6 +161,11 @@ type TableMeta = {
   // Traffic snapshots (lightweight real-time data)
   trafficSnapshots: Record<string, TrafficSnapshot>;
   onOpenTrafficDialog?: (profileId: string) => void;
+
+  // Sync
+  syncStatuses: Record<string, string>;
+  onOpenProfileSyncDialog?: (profile: BrowserProfile) => void;
+  onToggleProfileSync?: (profile: BrowserProfile) => void;
 };
 
 const TagsCell = React.memo<{
@@ -677,6 +682,8 @@ interface ProfilesDataTableProps {
   onBulkDelete?: () => void;
   onBulkGroupAssignment?: () => void;
   onBulkProxyAssignment?: () => void;
+  onOpenProfileSyncDialog?: (profile: BrowserProfile) => void;
+  onToggleProfileSync?: (profile: BrowserProfile) => void;
 }
 
 export function ProfilesDataTable({
@@ -694,6 +701,8 @@ export function ProfilesDataTable({
   onBulkDelete,
   onBulkGroupAssignment,
   onBulkProxyAssignment,
+  onOpenProfileSyncDialog,
+  onToggleProfileSync,
 }: ProfilesDataTableProps) {
   const { getTableSorting, updateSorting, isLoaded } = useTableSorting();
   const [sorting, setSorting] = React.useState<SortingState>([]);
@@ -799,6 +808,9 @@ export function ProfilesDataTable({
     id: string;
     name?: string;
   } | null>(null);
+  const [syncStatuses, setSyncStatuses] = React.useState<
+    Record<string, string>
+  >({});
 
   // Load cached check results for proxies
   React.useEffect(() => {
@@ -866,6 +878,28 @@ export function ProfilesDataTable({
     launchingProfiles,
     stoppingProfiles,
   );
+
+  // Listen for sync status events
+  React.useEffect(() => {
+    if (!browserState.isClient) return;
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      try {
+        unlisten = await listen<{ profile_id: string; status: string }>(
+          "profile-sync-status",
+          (event) => {
+            const { profile_id, status } = event.payload;
+            setSyncStatuses((prev) => ({ ...prev, [profile_id]: status }));
+          },
+        );
+      } catch (error) {
+        console.error("Failed to listen for sync status events:", error);
+      }
+    })();
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [browserState.isClient]);
 
   // Fetch traffic snapshots for running profiles (lightweight, real-time data)
   // Convert Set to sorted array to avoid Set reference comparison issues in dependencies
@@ -1275,6 +1309,11 @@ export function ProfilesDataTable({
         const profile = profiles.find((p) => p.id === profileId);
         setTrafficDialogProfile({ id: profileId, name: profile?.name });
       },
+
+      // Sync
+      syncStatuses,
+      onOpenProfileSyncDialog,
+      onToggleProfileSync,
     }),
     [
       selectedProfiles,
@@ -1311,6 +1350,9 @@ export function ProfilesDataTable({
       onLaunchProfile,
       onAssignProfilesToGroup,
       onConfigureCamoufox,
+      syncStatuses,
+      onOpenProfileSyncDialog,
+      onToggleProfileSync,
     ],
   );
 
@@ -1856,6 +1898,65 @@ export function ProfilesDataTable({
         },
       },
       {
+        id: "sync",
+        header: "",
+        size: 24,
+        cell: ({ row, table }) => {
+          const meta = table.options.meta as TableMeta;
+          const profile = row.original;
+
+          if (!profile.sync_enabled) {
+            return (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="flex justify-center items-center w-3 h-3">
+                    <span className="w-2 h-2 rounded-full bg-muted-foreground/30" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>Sync disabled</TooltipContent>
+              </Tooltip>
+            );
+          }
+
+          const syncStatus = meta.syncStatuses[profile.id];
+          const isSyncing = syncStatus === "syncing";
+          const isWaiting = syncStatus === "waiting";
+          const isSynced =
+            syncStatus === "synced" || (!syncStatus && profile.last_sync);
+          const isError = syncStatus === "error";
+
+          let dotClass = "bg-yellow-500";
+          let tooltipText = "Sync pending";
+
+          if (isSyncing) {
+            dotClass = "bg-yellow-500 animate-pulse";
+            tooltipText = "Syncing...";
+          } else if (isWaiting) {
+            dotClass = "bg-yellow-500";
+            tooltipText = "Waiting for profile to stop";
+          } else if (isError) {
+            dotClass = "bg-red-500";
+            tooltipText = "Sync error";
+          } else if (isSynced) {
+            dotClass = "bg-green-500";
+            tooltipText = profile.last_sync
+              ? `Last synced: ${new Date(profile.last_sync * 1000).toLocaleString()}`
+              : "Synced";
+          }
+
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="flex justify-center items-center w-3 h-3">
+                  <span className={`w-2 h-2 rounded-full ${dotClass}`} />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{tooltipText}</TooltipContent>
+            </Tooltip>
+          );
+        },
+      },
+      {
         id: "settings",
         cell: ({ row, table }) => {
           const meta = table.options.meta as TableMeta;
@@ -1908,6 +2009,25 @@ export function ProfilesDataTable({
                         Change Fingerprint
                       </DropdownMenuItem>
                     )}
+                  {meta.onOpenProfileSyncDialog && (
+                    <DropdownMenuItem
+                      onClick={() => {
+                        meta.onOpenProfileSyncDialog?.(profile);
+                      }}
+                    >
+                      Sync Settings
+                    </DropdownMenuItem>
+                  )}
+                  {meta.onToggleProfileSync && (
+                    <DropdownMenuItem
+                      onClick={() => {
+                        meta.onToggleProfileSync?.(profile);
+                      }}
+                      disabled={isDisabled}
+                    >
+                      {profile.sync_enabled ? "Disable Sync" : "Enable Sync"}
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem
                     onClick={() => {
                       setProfileToDelete(profile);

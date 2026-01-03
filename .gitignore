@@ -50,3 +50,6 @@ yarn-error.log*
 
 # nodecar
 nodecar/nodecar-bin
+
+# sync test harness cache
+.cache/
