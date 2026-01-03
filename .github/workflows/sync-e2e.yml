@@ -45,10 +45,10 @@ jobs:
           cache: "pnpm"
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 #master
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 #v2.8.2
         with:
           workspaces: "src-tauri"
 
