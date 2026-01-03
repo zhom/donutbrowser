@@ -1,6 +1,10 @@
 fn main() {
   println!("cargo::rustc-check-cfg=cfg(mobile)");
 
+  // Ensure dist folder exists for tauri::generate_context!() macro
+  // This allows running cargo test without building the frontend first
+  ensure_dist_folder_exists();
+
   #[cfg(target_os = "macos")]
   {
     println!("cargo:rustc-link-lib=framework=CoreFoundation");
@@ -88,4 +92,27 @@ fn external_binaries_exist() -> bool {
   let donut_proxy_exists = binaries_dir.join(&donut_proxy_name).exists();
 
   nodecar_exists && donut_proxy_exists
+}
+
+fn ensure_dist_folder_exists() {
+  use std::fs;
+  use std::path::PathBuf;
+
+  let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+  let dist_dir = PathBuf::from(&manifest_dir).join("..").join("dist");
+
+  if !dist_dir.exists() {
+    fs::create_dir_all(&dist_dir).expect("Failed to create dist directory");
+    let index_path = dist_dir.join("index.html");
+    fs::write(
+      &index_path,
+      "<!DOCTYPE html><html><head></head><body></body></html>",
+    )
+    .expect("Failed to create stub index.html");
+    println!(
+      "cargo:warning=Created stub dist folder for compilation. Run 'pnpm build' for full frontend."
+    );
+  }
+
+  println!("cargo:rerun-if-changed=../dist");
 }
