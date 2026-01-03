@@ -90,9 +90,19 @@ export class SyncService implements OnModuleInit {
             new CreateBucketCommand({ Bucket: this.bucket }),
           );
           this.s3Ready = true;
-        } catch (createError) {
-          console.error("Failed to create S3 bucket:", createError);
-          throw createError;
+        } catch (createError: unknown) {
+          // BucketAlreadyOwnedByYou means the bucket exists and we own it - this is fine
+          const isAlreadyOwned =
+            createError &&
+            typeof createError === "object" &&
+            "name" in createError &&
+            createError.name === "BucketAlreadyOwnedByYou";
+          if (isAlreadyOwned) {
+            this.s3Ready = true;
+          } else {
+            console.error("Failed to create S3 bucket:", createError);
+            throw createError;
+          }
         }
       } else {
         console.error("S3 connection failed:", error);
