@@ -25,7 +25,7 @@
     "commander": "^14.0.2",
     "donutbrowser-camoufox-js": "^0.7.0",
     "dotenv": "^17.2.3",
-    "fingerprint-generator": "^2.1.78",
+    "fingerprint-generator": "^2.1.79",
     "get-port": "^7.1.0",
     "nodemon": "^3.1.11",
     "playwright-core": "^1.57.0",
