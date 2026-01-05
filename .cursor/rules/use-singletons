@@ -1,6 +1,0 @@
----
-description: 
-globs: 
-alwaysApply: true
----
-If there is a global singleton of a struct, only use it inside a method while properly initializing it, unless I have explicitly specified in the request otherwise.
