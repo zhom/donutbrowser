@@ -47,7 +47,6 @@ interface PendingUrl {
 export default function Home() {
   // Mount global version update listener/toasts
   useVersionUpdater();
-  const [isInitializing, setIsInitializing] = useState(true);
 
   // Use the new profile events hook for centralized profile management
   const {
@@ -256,27 +255,6 @@ export default function Home() {
       setHasCheckedStartupPrompt(true);
     }
   }, [hasCheckedStartupPrompt]);
-
-  // Warm up nodecar at startup and block UI until complete
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        await invoke("warm_up_nodecar");
-      } catch (err) {
-        if (!cancelled) {
-          // Don't set error here since useProfileEvents handles profile errors
-          console.error("Initialization failed:", err);
-        }
-      } finally {
-        if (!cancelled) setIsInitializing(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // Handle profile errors from useProfileEvents hook
   useEffect(() => {
@@ -794,18 +772,6 @@ export default function Home() {
           />
         </div>
       </main>
-
-      {isInitializing && (
-        <div className="fixed inset-0 z-1000 backdrop-blur-sm bg-background/30 flex items-center justify-center">
-          <div className="bg-background rounded-xl p-6 shadow-xl border border-border/10 w-[320px] text-center">
-            <div className="text-lg font-medium">Initializing</div>
-            <div className="mt-1 mb-2 text-sm text-gray-600 dark:text-gray-300">
-              Please don't close the app
-            </div>
-            <div className="mx-auto mb-4 w-8 h-8 rounded-full border-2 animate-spin border-muted/40 border-t-primary" />
-          </div>
-        </div>
-      )}
 
       <CreateProfileDialog
         isOpen={createProfileDialogOpen}

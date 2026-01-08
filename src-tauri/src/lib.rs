@@ -15,6 +15,7 @@ mod auto_updater;
 mod browser;
 mod browser_runner;
 mod browser_version_manager;
+pub mod camoufox;
 mod camoufox_manager;
 mod default_browser;
 mod downloaded_browsers_registry;
@@ -140,35 +141,6 @@ impl<R: Runtime> WindowExt for WebviewWindow<R> {
     }
 
     Ok(())
-  }
-}
-
-#[tauri::command]
-async fn warm_up_nodecar(app: tauri::AppHandle) -> Result<(), String> {
-  use tauri_plugin_shell::ShellExt;
-  use tokio::time::{timeout, Duration};
-
-  let start_time = std::time::Instant::now();
-
-  // Use sidecar to execute a fast, harmless command that ensures the binary is loaded
-  let cmd = app
-    .shell()
-    .sidecar("nodecar")
-    .map_err(|e| format!("Failed to create nodecar sidecar: {e}"))?
-    .arg("help");
-
-  let exec_future = async { cmd.output().await };
-  match timeout(Duration::from_secs(120), exec_future).await {
-    Ok(Ok(_output)) => {
-      let duration = start_time.elapsed();
-      log::info!(
-        "Nodecar warm-up (frontend-triggered) completed in {:.2}s",
-        duration.as_secs_f64()
-      );
-      Ok(())
-    }
-    Ok(Err(e)) => Err(format!("Failed to execute nodecar for warm-up: {e}")),
-    Err(_) => Err("Nodecar warm-up timed out after 120s".to_string()),
   }
 }
 
@@ -838,7 +810,6 @@ pub fn run() {
       delete_selected_profiles,
       is_geoip_database_available,
       download_geoip_database,
-      warm_up_nodecar,
       start_api_server,
       stop_api_server,
       get_api_server_status,

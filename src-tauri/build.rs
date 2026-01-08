@@ -75,23 +75,14 @@ fn external_binaries_exist() -> bool {
 
   let binaries_dir = PathBuf::from(&manifest_dir).join("binaries");
 
-  // Check for both required external binaries
-  let nodecar_name = if target.contains("windows") {
-    format!("nodecar-{}.exe", target)
-  } else {
-    format!("nodecar-{}", target)
-  };
-
+  // Check for required external binaries
   let donut_proxy_name = if target.contains("windows") {
     format!("donut-proxy-{}.exe", target)
   } else {
     format!("donut-proxy-{}", target)
   };
 
-  let nodecar_exists = binaries_dir.join(&nodecar_name).exists();
-  let donut_proxy_exists = binaries_dir.join(&donut_proxy_name).exists();
-
-  nodecar_exists && donut_proxy_exists
+  binaries_dir.join(&donut_proxy_name).exists()
 }
 
 fn ensure_dist_folder_exists() {

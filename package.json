@@ -5,7 +5,7 @@
   "version": "0.13.9",
   "type": "module",
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev --turbopack -p 12341",
     "build": "next build",
     "start": "next start",
     "test": "pnpm test:rust:unit && pnpm test:sync-e2e",

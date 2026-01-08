@@ -350,6 +350,50 @@ impl Downloader {
     }
   }
 
+  /// Ensure version.json exists in the Camoufox installation directory.
+  /// Creates the file if it doesn't exist, using the version from the tag name.
+  async fn ensure_camoufox_version_json(
+    &self,
+    browser_dir: &Path,
+    version: &str,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // The browser_dir is typically: binaries/camoufox/<version>/
+    // Find the executable directory within it
+    let version_json_locations = vec![
+      browser_dir.join("version.json"),
+      browser_dir.join("camoufox").join("version.json"),
+    ];
+
+    // Check if version.json already exists in any expected location
+    for location in &version_json_locations {
+      if location.exists() {
+        log::info!("version.json already exists at: {}", location.display());
+        return Ok(());
+      }
+    }
+
+    // Parse the Firefox version from the Camoufox version tag
+    // Format: "135.0.1-beta.24" -> Firefox version is "135.0.1" (or just "135.0")
+    let firefox_version = version.split('-').next().unwrap_or(version);
+
+    // Create version.json in the browser directory
+    let version_json_path = browser_dir.join("version.json");
+    let version_data = serde_json::json!({
+      "version": firefox_version
+    });
+
+    let version_json_str = serde_json::to_string_pretty(&version_data)?;
+    tokio::fs::write(&version_json_path, version_json_str).await?;
+
+    log::info!(
+      "Created version.json at {} with Firefox version: {}",
+      version_json_path.display(),
+      firefox_version
+    );
+
+    Ok(())
+  }
+
   pub async fn download_browser<R: tauri::Runtime>(
     &self,
     app_handle: &tauri::AppHandle<R>,
@@ -809,7 +853,7 @@ impl Downloader {
       }
     }
 
-    // If this is Camoufox, automatically download GeoIP database
+    // If this is Camoufox, automatically download GeoIP database and create version.json
     if browser_str == "camoufox" {
       // Check if GeoIP database is already available
       if !crate::geoip_downloader::GeoIPDownloader::is_geoip_database_available() {
@@ -830,6 +874,15 @@ impl Downloader {
         }
       } else {
         log::info!("GeoIP database already available");
+      }
+
+      // Create version.json if it doesn't exist
+      if let Err(e) = self
+        .ensure_camoufox_version_json(&browser_dir, &version)
+        .await
+      {
+        log::warn!("Failed to create version.json for Camoufox: {e}");
+        // Don't fail the download if version.json creation fails
       }
     }
 

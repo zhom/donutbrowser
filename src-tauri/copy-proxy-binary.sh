@@ -32,7 +32,7 @@ fi
 
 SOURCE="$SRC_DIR/$BIN_NAME"
 DEST_DIR="$MANIFEST_DIR/binaries"
-# Tauri expects the format: donut-proxy-{target} with hyphens (same as nodecar)
+# Tauri expects the format: donut-proxy-{target} with hyphens
 DEST_NAME="donut-proxy-$TARGET"
 if [[ "$TARGET" == *"windows"* ]]; then
   DEST_NAME="$DEST_NAME.exe"

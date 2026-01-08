@@ -35,7 +35,6 @@ jobs:
         -r
         --skip-git
         --lockfile=pnpm-lock.yaml
-        --lockfile=nodecar/pnpm-lock.yaml
         --lockfile=src-tauri/Cargo.lock
         ./
 

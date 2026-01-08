@@ -23,8 +23,6 @@ on:
       - "pnpm-lock.yaml"
       - "src-tauri/Cargo.toml"
       - "src-tauri/Cargo.lock"
-      - "nodecar/package.json"
-      - "nodecar/pnpm-lock.yaml"
       - ".github/workflows/osv.yml"
   merge_group:
     branches: ["main"]
@@ -38,8 +36,6 @@ on:
       - "pnpm-lock.yaml"
       - "src-tauri/Cargo.toml"
       - "src-tauri/Cargo.lock"
-      - "nodecar/package.json"
-      - "nodecar/pnpm-lock.yaml"
 
 permissions:
   security-events: write
@@ -57,7 +53,6 @@ jobs:
         --skip-git
         --lockfile=pnpm-lock.yaml
         --lockfile=src-tauri/Cargo.lock
-        --lockfile=nodecar/pnpm-lock.yaml
         ./
 
   scan-pr:
@@ -70,5 +65,4 @@ jobs:
         --skip-git
         --lockfile=pnpm-lock.yaml
         --lockfile=src-tauri/Cargo.lock
-        --lockfile=nodecar/pnpm-lock.yaml
         ./

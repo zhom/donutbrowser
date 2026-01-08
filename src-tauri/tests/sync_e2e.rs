@@ -9,7 +9,7 @@ use tempfile::TempDir;
 const TEST_TOKEN: &str = "test-sync-token";
 
 fn get_sync_server_url() -> String {
-  env::var("SYNC_SERVER_URL").unwrap_or_else(|_| "http://localhost:3000".to_string())
+  env::var("SYNC_SERVER_URL").unwrap_or_else(|_| "http://localhost:12342".to_string())
 }
 
 /// Check if sync server is available and fail with a clear error message if not.

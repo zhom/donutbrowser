@@ -20,7 +20,6 @@ jobs:
         --skip-git
         --lockfile=pnpm-lock.yaml
         --lockfile=src-tauri/Cargo.lock
-        --lockfile=nodecar/pnpm-lock.yaml
         ./
     permissions:
       security-events: write

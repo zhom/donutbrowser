@@ -72,20 +72,6 @@ jobs:
         working-directory: ./src-tauri
         run: |
           cargo build
-        
-      - name: Build nodecar sidecar
-        if: matrix.language == 'rust'
-        shell: bash
-        working-directory: ./nodecar
-        run: |
-          pnpm run build:linux-x64
-
-      - name: Copy nodecar binary to Tauri binaries
-        if: matrix.language == 'rust'
-        shell: bash
-        run: |
-          mkdir -p src-tauri/binaries
-          cp nodecar/nodecar-bin src-tauri/binaries/nodecar-x86_64-unknown-linux-gnu
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@b1e4dc3db58c9601794e22a9f6d28d45461b9dbf #v3.29.0

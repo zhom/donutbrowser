@@ -1,0 +1,9 @@
+pub const FINGERPRINT_NETWORK_ZIP: &[u8] = include_bytes!("fingerprint-network-definition.zip");
+pub const INPUT_NETWORK_ZIP: &[u8] = include_bytes!("input-network-definition.zip");
+pub const HEADER_NETWORK_ZIP: &[u8] = include_bytes!("header-network-definition.zip");
+pub const BROWSER_HELPER_JSON: &str = include_str!("browser-helper-file.json");
+pub const HEADERS_ORDER_JSON: &str = include_str!("headers-order.json");
+pub const FONTS_JSON: &str = include_str!("fonts.json");
+pub const BROWSERFORGE_YML: &str = include_str!("browserforge.yml");
+pub const WEBGL_DATA_DB: &[u8] = include_bytes!("webgl_data.db");
+pub const TERRITORY_INFO_XML: &str = include_str!("territoryInfo.xml");

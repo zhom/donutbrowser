@@ -98,7 +98,7 @@ impl BrowserRunner {
       );
     }
 
-    // Handle camoufox profiles using nodecar launcher
+    // Handle Camoufox profiles using CamoufoxManager
     if profile.browser == "camoufox" {
       // Get or create camoufox config
       let mut camoufox_config = profile.camoufox_config.clone().unwrap_or_else(|| {
@@ -205,14 +205,11 @@ impl BrowserRunner {
         );
       }
 
-      // Use the nodecar camoufox launcher
-      log::info!(
-        "Launching Camoufox via nodecar for profile: {}",
-        profile.name
-      );
+      // Launch Camoufox browser
+      log::info!("Launching Camoufox for profile: {}", profile.name);
       let camoufox_result = self
         .camoufox_manager
-        .launch_camoufox_profile_nodecar(
+        .launch_camoufox_profile(
           app_handle.clone(),
           updated_profile.clone(),
           camoufox_config,
@@ -220,7 +217,7 @@ impl BrowserRunner {
         )
         .await
         .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
-          format!("Failed to launch camoufox via nodecar: {e}").into()
+          format!("Failed to launch Camoufox: {e}").into()
         })?;
 
       // For server-based Camoufox, we use the process_id
@@ -547,7 +544,7 @@ impl BrowserRunner {
     url: &str,
     _internal_proxy_settings: Option<&ProxySettings>,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Handle camoufox profiles using nodecar launcher
+    // Handle Camoufox profiles using CamoufoxManager
     if profile.browser == "camoufox" {
       // Get the profile path based on the UUID
       let profiles_dir = self.profile_manager.get_profiles_dir();
@@ -657,7 +654,7 @@ impl BrowserRunner {
         return Err("Unsupported platform".into());
       }
       BrowserType::Camoufox => {
-        // Camoufox uses nodecar for launching, URL opening is handled differently
+        // Camoufox URL opening is handled differently
         Err("URL opening in existing Camoufox instance is not supported".into())
       }
       BrowserType::Chromium | BrowserType::Brave => {
@@ -941,7 +938,7 @@ impl BrowserRunner {
     app_handle: tauri::AppHandle,
     profile: &BrowserProfile,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Handle camoufox profiles using nodecar launcher
+    // Handle Camoufox profiles using CamoufoxManager
     if profile.browser == "camoufox" {
       // Search by profile path to find the running Camoufox instance
       let profiles_dir = self.profile_manager.get_profiles_dir();

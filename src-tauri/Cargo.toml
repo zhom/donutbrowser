@@ -79,6 +79,16 @@ http-body-util = "0.1"
 clap = { version = "4", features = ["derive"] }
 async-socks5 = "0.6"
 
+# Camoufox/Playwright integration
+playwright = { git = "https://github.com/sctg-development/playwright-rust", branch = "master" }
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde_yaml = "0.9"
+thiserror = "1.0"
+regex-lite = "0.1"
+tempfile = "3"
+maxminddb = "0.24"
+quick-xml = { version = "0.37", features = ["serialize"] }
+
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 

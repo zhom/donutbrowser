@@ -820,11 +820,9 @@ impl ProfileManager {
     app_handle: tauri::AppHandle,
     profile: &BrowserProfile,
   ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-    // Handle Camoufox profiles using nodecar-based status checking
+    // Handle Camoufox profiles using CamoufoxManager-based status checking
     if profile.browser == "camoufox" {
-      return self
-        .check_camoufox_status_via_nodecar(&app_handle, profile)
-        .await;
+      return self.check_camoufox_status(&app_handle, profile).await;
     }
 
     // For non-camoufox browsers, use the existing PID-based logic
@@ -888,7 +886,7 @@ impl ProfileManager {
             "zen" => exe_name.contains("zen"),
             "chromium" => exe_name.contains("chromium"),
             "brave" => exe_name.contains("brave"),
-            // Camoufox is handled via nodecar, not PID-based checking
+            // Camoufox is handled via CamoufoxManager, not PID-based checking
             _ => false,
           };
 
@@ -981,8 +979,8 @@ impl ProfileManager {
     Ok(is_running)
   }
 
-  // Check Camoufox status using nodecar-based approach
-  async fn check_camoufox_status_via_nodecar(
+  // Check Camoufox status using CamoufoxManager
+  async fn check_camoufox_status(
     &self,
     app_handle: &tauri::AppHandle,
     profile: &BrowserProfile,
@@ -1062,7 +1060,7 @@ impl ProfileManager {
       }
       Err(e) => {
         // Error checking status, assume not running and clear process ID
-        log::warn!("Warning: Failed to check Camoufox status via nodecar: {e}");
+        log::warn!("Warning: Failed to check Camoufox status: {e}");
         let profiles_dir = self.get_profiles_dir();
         let profile_uuid_dir = profiles_dir.join(profile.id.to_string());
         let metadata_file = profile_uuid_dir.join("metadata.json");
