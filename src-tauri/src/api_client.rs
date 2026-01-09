@@ -300,6 +300,10 @@ pub fn is_browser_version_nightly(
       // For Camoufox, beta versions are actually the stable releases
       false
     }
+    "wayfern" => {
+      // For Wayfern, all releases from version.json are stable
+      false
+    }
     _ => {
       // Default fallback
       is_nightly_version(version)
@@ -330,6 +334,13 @@ pub struct BrowserRelease {
   pub is_prerelease: bool,
 }
 
+/// Wayfern version info from https://download.wayfern.com/version.json
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WayfernVersionInfo {
+  pub version: String,
+  pub downloads: HashMap<String, Option<String>>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct CachedVersionData {
   releases: Vec<BrowserRelease>,
@@ -339,6 +350,12 @@ struct CachedVersionData {
 #[derive(Debug, Serialize, Deserialize)]
 struct CachedGithubData {
   releases: Vec<GithubRelease>,
+  timestamp: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct CachedWayfernData {
+  version_info: WayfernVersionInfo,
   timestamp: u64,
 }
 
@@ -1063,6 +1080,95 @@ impl ApiClient {
     }
 
     Ok(compatible_releases)
+  }
+
+  fn load_cached_wayfern_version(&self) -> Option<WayfernVersionInfo> {
+    let cache_dir = Self::get_cache_dir().ok()?;
+    let cache_file = cache_dir.join("wayfern_version.json");
+
+    if !cache_file.exists() {
+      return None;
+    }
+
+    let content = fs::read_to_string(&cache_file).ok()?;
+    let cached_data: CachedWayfernData = serde_json::from_str(&content).ok()?;
+
+    // Always use cached Wayfern version - cache never expires, only gets updated
+    Some(cached_data.version_info)
+  }
+
+  fn save_cached_wayfern_version(
+    &self,
+    version_info: &WayfernVersionInfo,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let cache_dir = Self::get_cache_dir()?;
+    let cache_file = cache_dir.join("wayfern_version.json");
+
+    let cached_data = CachedWayfernData {
+      version_info: version_info.clone(),
+      timestamp: Self::get_current_timestamp(),
+    };
+
+    let content = serde_json::to_string_pretty(&cached_data)?;
+    fs::write(&cache_file, content)?;
+    log::info!("Cached Wayfern version: {}", version_info.version);
+    Ok(())
+  }
+
+  /// Fetch Wayfern version info from https://download.wayfern.com/version.json
+  pub async fn fetch_wayfern_version_with_caching(
+    &self,
+    no_caching: bool,
+  ) -> Result<WayfernVersionInfo, Box<dyn std::error::Error + Send + Sync>> {
+    // Check cache first (unless bypassing)
+    if !no_caching {
+      if let Some(cached_version) = self.load_cached_wayfern_version() {
+        log::info!("Using cached Wayfern version: {}", cached_version.version);
+        return Ok(cached_version);
+      }
+    }
+
+    log::info!("Fetching Wayfern version from https://download.wayfern.com/version.json");
+    let url = "https://download.wayfern.com/version.json";
+
+    let response = self
+      .client
+      .get(url)
+      .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
+      .send()
+      .await?;
+
+    if !response.status().is_success() {
+      return Err(format!("Failed to fetch Wayfern version: {}", response.status()).into());
+    }
+
+    let version_info: WayfernVersionInfo = response.json().await?;
+    log::info!("Fetched Wayfern version: {}", version_info.version);
+
+    // Cache the results (unless bypassing cache)
+    if !no_caching {
+      if let Err(e) = self.save_cached_wayfern_version(&version_info) {
+        log::error!("Failed to cache Wayfern version: {e}");
+      }
+    }
+
+    Ok(version_info)
+  }
+
+  /// Get the download URL for Wayfern based on current platform
+  pub fn get_wayfern_download_url(&self, version_info: &WayfernVersionInfo) -> Option<String> {
+    let (os, arch) = Self::get_platform_info();
+    let platform_key = format!("{os}-{arch}");
+
+    version_info
+      .downloads
+      .get(&platform_key)
+      .and_then(|url| url.clone())
+  }
+
+  /// Check if Wayfern has a compatible download for current platform
+  pub fn has_wayfern_compatible_download(&self, version_info: &WayfernVersionInfo) -> bool {
+    self.get_wayfern_download_url(version_info).is_some()
   }
 
   /// Check if a Zen twilight release has been updated by comparing file size

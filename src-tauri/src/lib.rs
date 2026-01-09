@@ -33,6 +33,7 @@ pub mod proxy_storage;
 mod settings_manager;
 pub mod sync;
 pub mod traffic_stats;
+mod wayfern_manager;
 // mod theme_detector; // removed: theme detection handled in webview via CSS prefers-color-scheme
 mod tag_manager;
 mod version_updater;
@@ -44,7 +45,7 @@ use browser_runner::{
 use profile::manager::{
   check_browser_status, create_browser_profile_new, delete_profile, list_browser_profiles,
   rename_profile, update_camoufox_config, update_profile_note, update_profile_proxy,
-  update_profile_tags,
+  update_profile_tags, update_wayfern_config,
 };
 
 use browser_version_manager::{
@@ -801,6 +802,7 @@ pub fn run() {
       check_proxy_validity,
       get_cached_proxy_check,
       update_camoufox_config,
+      update_wayfern_config,
       get_profile_groups,
       get_groups_with_profile_counts,
       create_profile_group,

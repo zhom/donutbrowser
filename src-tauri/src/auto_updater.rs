@@ -515,6 +515,7 @@ mod tests {
       last_launch: None,
       release_type: "stable".to_string(),
       camoufox_config: None,
+      wayfern_config: None,
       group_id: None,
       tags: Vec::new(),
       note: None,

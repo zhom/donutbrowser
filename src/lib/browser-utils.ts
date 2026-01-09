@@ -3,9 +3,7 @@
  * Centralized helpers for browser name mapping, icons, etc.
  */
 
-import { FaChrome, FaFirefox, FaShieldAlt } from "react-icons/fa";
-import { SiBrave } from "react-icons/si";
-import { ZenBrowser } from "@/components/icons/zen-browser";
+import { FaChrome, FaExclamationTriangle, FaFirefox } from "react-icons/fa";
 
 /**
  * Map internal browser names to display names
@@ -17,7 +15,8 @@ export function getBrowserDisplayName(browserType: string): string {
     zen: "Zen Browser",
     brave: "Brave",
     chromium: "Chromium",
-    camoufox: "Anti-Detect",
+    camoufox: "Firefox (Camoufox)",
+    wayfern: "Chromium (Wayfern)",
   };
 
   return browserNames[browserType] || browserType;
@@ -25,22 +24,18 @@ export function getBrowserDisplayName(browserType: string): string {
 
 /**
  * Get the appropriate icon component for a browser type
+ * Anti-detect browsers get their base browser icons
+ * Other browsers get a warning icon to indicate they're not anti-detect
  */
 export function getBrowserIcon(browserType: string) {
   switch (browserType) {
-    case "chromium":
-      return FaChrome;
-    case "brave":
-      return SiBrave;
-    case "firefox":
-    case "firefox-developer":
-      return FaFirefox;
-    case "zen":
-      return ZenBrowser;
     case "camoufox":
-      return FaShieldAlt;
+      return FaFirefox; // Firefox-based anti-detect browser
+    case "wayfern":
+      return FaChrome; // Chromium-based anti-detect browser
     default:
-      return null;
+      // All other browsers get a warning icon
+      return FaExclamationTriangle;
   }
 }
 

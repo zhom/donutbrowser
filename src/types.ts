@@ -21,6 +21,7 @@ export interface BrowserProfile {
   last_launch?: number;
   release_type: string; // "stable" or "nightly"
   camoufox_config?: CamoufoxConfig; // Camoufox configuration
+  wayfern_config?: WayfernConfig; // Wayfern configuration
   group_id?: string; // Reference to profile group
   tags?: string[];
   note?: string; // User note
@@ -287,6 +288,32 @@ export interface CamoufoxLaunchResult {
   processId?: number;
   profilePath?: string;
   url?: string;
+}
+
+export type WayfernOS = "windows" | "macos" | "linux";
+
+export interface WayfernConfig {
+  proxy?: string;
+  screen_max_width?: number;
+  screen_max_height?: number;
+  screen_min_width?: number;
+  screen_min_height?: number;
+  geoip?: string | boolean; // For compatibility with shared config form
+  block_images?: boolean; // For compatibility with shared config form
+  block_webrtc?: boolean;
+  block_webgl?: boolean;
+  executable_path?: string;
+  fingerprint?: string; // JSON string of the complete fingerprint config
+  randomize_fingerprint_on_launch?: boolean; // Generate new fingerprint on every launch
+  os?: WayfernOS; // Operating system for fingerprint generation
+}
+
+export interface WayfernLaunchResult {
+  id: string;
+  processId?: number;
+  profilePath?: string;
+  url?: string;
+  cdp_port?: number;
 }
 
 // Traffic stats types

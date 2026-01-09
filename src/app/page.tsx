@@ -29,7 +29,7 @@ import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { useUpdateNotifications } from "@/hooks/use-update-notifications";
 import { useVersionUpdater } from "@/hooks/use-version-updater";
 import { showErrorToast, showSuccessToast, showToast } from "@/lib/toast-utils";
-import type { BrowserProfile, CamoufoxConfig } from "@/types";
+import type { BrowserProfile, CamoufoxConfig, WayfernConfig } from "@/types";
 
 type BrowserTypeString =
   | "firefox"
@@ -37,7 +37,8 @@ type BrowserTypeString =
   | "chromium"
   | "brave"
   | "zen"
-  | "camoufox";
+  | "camoufox"
+  | "wayfern";
 
 interface PendingUrl {
   id: string;
@@ -387,6 +388,26 @@ export default function Home() {
     [],
   );
 
+  const handleSaveWayfernConfig = useCallback(
+    async (profile: BrowserProfile, config: WayfernConfig) => {
+      try {
+        await invoke("update_wayfern_config", {
+          profileId: profile.id,
+          config,
+        });
+        // No need to manually reload - useProfileEvents will handle the update
+        setCamoufoxConfigDialogOpen(false);
+      } catch (err: unknown) {
+        console.error("Failed to update wayfern config:", err);
+        showErrorToast(
+          `Failed to update wayfern config: ${JSON.stringify(err)}`,
+        );
+        throw err;
+      }
+    },
+    [],
+  );
+
   const handleCreateProfile = useCallback(
     async (profileData: {
       name: string;
@@ -395,6 +416,7 @@ export default function Home() {
       releaseType: string;
       proxyId?: string;
       camoufoxConfig?: CamoufoxConfig;
+      wayfernConfig?: WayfernConfig;
       groupId?: string;
     }) => {
       try {
@@ -405,6 +427,7 @@ export default function Home() {
           releaseType: profileData.releaseType,
           proxyId: profileData.proxyId,
           camoufoxConfig: profileData.camoufoxConfig,
+          wayfernConfig: profileData.wayfernConfig,
           groupId:
             profileData.groupId ||
             (selectedGroupId !== "default" ? selectedGroupId : undefined),
@@ -834,6 +857,7 @@ export default function Home() {
         }}
         profile={currentProfileForCamoufoxConfig}
         onSave={handleSaveCamoufoxConfig}
+        onSaveWayfern={handleSaveWayfernConfig}
         isRunning={
           currentProfileForCamoufoxConfig
             ? runningProfiles.has(currentProfileForCamoufoxConfig.id)

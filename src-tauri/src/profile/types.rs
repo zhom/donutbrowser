@@ -1,4 +1,5 @@
 use crate::camoufox_manager::CamoufoxConfig;
+use crate::wayfern_manager::WayfernConfig;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -28,6 +29,8 @@ pub struct BrowserProfile {
   pub release_type: String, // "stable" or "nightly"
   #[serde(default)]
   pub camoufox_config: Option<CamoufoxConfig>, // Camoufox configuration
+  #[serde(default)]
+  pub wayfern_config: Option<WayfernConfig>, // Wayfern configuration
   #[serde(default)]
   pub group_id: Option<String>, // Reference to profile group
   #[serde(default)]

@@ -60,6 +60,8 @@ pub struct CreateProfileRequest {
   pub release_type: Option<String>,
   #[schema(value_type = Object)]
   pub camoufox_config: Option<serde_json::Value>,
+  #[schema(value_type = Object)]
+  pub wayfern_config: Option<serde_json::Value>,
   pub group_id: Option<String>,
   pub tags: Option<Vec<String>>,
 }
@@ -560,6 +562,13 @@ async fn create_profile(
     None
   };
 
+  // Parse wayfern config if provided
+  let wayfern_config = if let Some(config) = &request.wayfern_config {
+    serde_json::from_value(config.clone()).ok()
+  } else {
+    None
+  };
+
   // Create profile using the async create_profile_with_group method
   match profile_manager
     .create_profile_with_group(
@@ -570,6 +579,7 @@ async fn create_profile(
       request.release_type.as_deref().unwrap_or("stable"),
       request.proxy_id.clone(),
       camoufox_config,
+      wayfern_config,
       request.group_id.clone(),
     )
     .await

@@ -28,6 +28,7 @@ interface SharedCamoufoxConfigFormProps {
   isCreating?: boolean; // Flag to indicate if this is for creating a new profile
   forceAdvanced?: boolean; // Force advanced mode (for editing)
   readOnly?: boolean; // Flag to indicate if the form should be read-only
+  browserType?: "camoufox" | "wayfern"; // Browser type to customize form options
 }
 
 // Determine if fingerprint editing should be disabled
@@ -116,6 +117,7 @@ export function SharedCamoufoxConfigForm({
   isCreating = false,
   forceAdvanced = false,
   readOnly = false,
+  browserType = "camoufox",
 }: SharedCamoufoxConfigFormProps) {
   const [activeTab, setActiveTab] = useState(
     forceAdvanced ? "manual" : "automatic",
@@ -282,42 +284,44 @@ export function SharedCamoufoxConfigForm({
       )}
 
       <fieldset disabled={isEditingDisabled} className="space-y-6">
-        {/* Blocking Options */}
-        <div className="space-y-3">
-          <Label>Blocking Options</Label>
-          <div className="space-y-2">
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="block-images"
-                checked={config.block_images || false}
-                onCheckedChange={(checked) =>
-                  onConfigChange("block_images", checked)
-                }
-              />
-              <Label htmlFor="block-images">Block Images</Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="block-webrtc"
-                checked={config.block_webrtc || false}
-                onCheckedChange={(checked) =>
-                  onConfigChange("block_webrtc", checked)
-                }
-              />
-              <Label htmlFor="block-webrtc">Block WebRTC</Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="block-webgl"
-                checked={config.block_webgl || false}
-                onCheckedChange={(checked) =>
-                  onConfigChange("block_webgl", checked)
-                }
-              />
-              <Label htmlFor="block-webgl">Block WebGL</Label>
+        {/* Blocking Options - Only available for Camoufox */}
+        {browserType === "camoufox" && (
+          <div className="space-y-3">
+            <Label>Blocking Options</Label>
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="block-images"
+                  checked={config.block_images || false}
+                  onCheckedChange={(checked) =>
+                    onConfigChange("block_images", checked)
+                  }
+                />
+                <Label htmlFor="block-images">Block Images</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="block-webrtc"
+                  checked={config.block_webrtc || false}
+                  onCheckedChange={(checked) =>
+                    onConfigChange("block_webrtc", checked)
+                  }
+                />
+                <Label htmlFor="block-webrtc">Block WebRTC</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="block-webgl"
+                  checked={config.block_webgl || false}
+                  onCheckedChange={(checked) =>
+                    onConfigChange("block_webgl", checked)
+                  }
+                />
+                <Label htmlFor="block-webgl">Block WebGL</Label>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Navigator Properties */}
         <div className="space-y-3">

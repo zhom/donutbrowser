@@ -169,6 +169,43 @@ impl Downloader {
 
         Ok(asset_url)
       }
+      BrowserType::Wayfern => {
+        // For Wayfern, get the download URL from version.json
+        let version_info = self
+          .api_client
+          .fetch_wayfern_version_with_caching(true)
+          .await?;
+
+        // Verify requested version matches available version
+        if version_info.version != version {
+          return Err(
+            format!(
+              "Wayfern version {version} not found. Available version: {}",
+              version_info.version
+            )
+            .into(),
+          );
+        }
+
+        // Get the download URL for current platform
+        let download_url = self
+          .api_client
+          .get_wayfern_download_url(&version_info)
+          .ok_or_else(|| {
+            let (os, arch) = Self::get_platform_info();
+            format!(
+              "No compatible download found for Wayfern on {os}/{arch}. Available platforms: {}",
+              version_info
+                .downloads
+                .iter()
+                .filter_map(|(k, v)| if v.is_some() { Some(k.as_str()) } else { None })
+                .collect::<Vec<_>>()
+                .join(", ")
+            )
+          })?;
+
+        Ok(download_url)
+      }
       _ => {
         // For other browsers, use the provided URL
         Ok(download_info.url.clone())

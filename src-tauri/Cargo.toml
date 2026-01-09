@@ -81,6 +81,9 @@ async-socks5 = "0.6"
 
 # Camoufox/Playwright integration
 playwright = { git = "https://github.com/sctg-development/playwright-rust", branch = "master" }
+
+# Wayfern CDP integration
+tokio-tungstenite = { version = "0.27", features = ["native-tls"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde_yaml = "0.9"
 thiserror = "1.0"
@@ -91,6 +94,9 @@ quick-xml = { version = "0.37", features = ["serialize"] }
 
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.29", features = ["signal", "process"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"

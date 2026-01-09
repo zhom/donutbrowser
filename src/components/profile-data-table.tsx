@@ -1999,7 +1999,8 @@ export function ProfilesDataTable({
                   >
                     Assign to Group
                   </DropdownMenuItem>
-                  {profile.browser === "camoufox" &&
+                  {(profile.browser === "camoufox" ||
+                    profile.browser === "wayfern") &&
                     meta.onConfigureCamoufox && (
                       <DropdownMenuItem
                         onClick={() => {
