@@ -31,17 +31,17 @@
           gdk-pixbuf
           glib
           dbus
-          openssl_3
           librsvg
           libsoup_3
         ];
 
         packages = with pkgs; [
           rustToolchain
-          nodejs_23
+          nodejs_22
           pnpm
           pkg-config
           cargo-tauri
+          openssl
           # App specific tools
           biome
         ] ++ libraries;
