@@ -31,6 +31,18 @@ When you submit your first pull request, you acknowledge that you agree to the t
 
 ## Development Setup
 
+### Using Nix (Recommended for Linux)
+
+If you have [Nix](https://nixos.org/) installed, you can skip the manual setup below and simply run:
+
+```bash
+nix develop
+```
+
+This will provide Node.js, Rust, and all necessary system libraries.
+
+### Manual Setup
+
 Ensure you have the following dependencies installed:
 
 - Node.js (see `.node-version` for exact version)
