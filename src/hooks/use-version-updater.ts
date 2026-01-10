@@ -92,6 +92,7 @@ export function useVersionUpdater() {
                   found: progress.new_versions_found,
                   current_browser: currentBrowserName,
                 },
+                onCancel: () => dismissToast("unified-version-update"),
               });
             } else if (progress.status === "completed") {
               setIsUpdating(false);

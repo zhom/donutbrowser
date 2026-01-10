@@ -500,6 +500,45 @@ impl WayfernManager {
     Ok(())
   }
 
+  /// Opens a URL in a new tab for an existing Wayfern instance using CDP.
+  /// Returns Ok(()) if successful, or an error if the instance is not found or CDP fails.
+  pub async fn open_url_in_tab(
+    &self,
+    profile_path: &str,
+    url: &str,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let instance = self
+      .find_wayfern_by_profile(profile_path)
+      .await
+      .ok_or("Wayfern instance not found for profile")?;
+
+    let cdp_port = instance
+      .cdp_port
+      .ok_or("No CDP port available for Wayfern instance")?;
+
+    // Get the browser target to create a new tab
+    let targets = self.get_cdp_targets(cdp_port).await?;
+
+    // Find a page target to get the WebSocket URL (we need any target to send commands)
+    let page_target = targets
+      .iter()
+      .find(|t| t.target_type == "page" && t.websocket_debugger_url.is_some())
+      .ok_or("No page target found for CDP")?;
+
+    let ws_url = page_target
+      .websocket_debugger_url
+      .as_ref()
+      .ok_or("No WebSocket URL available")?;
+
+    // Use Target.createTarget to open a new tab with the URL
+    self
+      .send_cdp_command(ws_url, "Target.createTarget", json!({ "url": url }))
+      .await?;
+
+    log::info!("Opened URL in new tab via CDP: {}", url);
+    Ok(())
+  }
+
   pub async fn find_wayfern_by_profile(&self, profile_path: &str) -> Option<WayfernLaunchResult> {
     use sysinfo::{ProcessRefreshKind, RefreshKind, System};
 

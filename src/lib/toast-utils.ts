@@ -8,6 +8,7 @@ interface BaseToastProps {
   description?: string;
   duration?: number;
   action?: ExternalToast["action"];
+  onCancel?: () => void;
 }
 
 interface LoadingToastProps extends BaseToastProps {
@@ -143,7 +144,7 @@ export function showDownloadToast(
     | "completed"
     | "downloading (twilight rolling release)",
   progress?: { percentage: number; speed?: string; eta?: string },
-  options?: { suppressCompletionToast?: boolean },
+  options?: { suppressCompletionToast?: boolean; onCancel?: () => void },
 ) {
   const title =
     stage === "completed"
@@ -162,12 +163,18 @@ export function showDownloadToast(
     return;
   }
 
+  // Only show cancel button during active downloading, not for completed/extracting/verifying
+  const showCancel =
+    stage === "downloading" ||
+    stage === "downloading (twilight rolling release)";
+
   return showToast({
     type: "download",
     title,
     stage,
     progress,
     id: `download-${browserName.toLowerCase()}-${version}`,
+    onCancel: showCancel ? options?.onCancel : undefined,
   });
 }
 
@@ -237,6 +244,7 @@ export function showUnifiedVersionUpdateToast(
       current_browser?: string;
     };
     duration?: number;
+    onCancel?: () => void;
   },
 ) {
   return showToast({

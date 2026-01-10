@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrent } from "@tauri-apps/plugin-deep-link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CamoufoxConfigDialog } from "@/components/camoufox-config-dialog";
+import { CookieCopyDialog } from "@/components/cookie-copy-dialog";
 import { CreateProfileDialog } from "@/components/create-profile-dialog";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
 import { GroupAssignmentDialog } from "@/components/group-assignment-dialog";
@@ -82,6 +83,10 @@ export default function Home() {
     useState(false);
   const [proxyAssignmentDialogOpen, setProxyAssignmentDialogOpen] =
     useState(false);
+  const [cookieCopyDialogOpen, setCookieCopyDialogOpen] = useState(false);
+  const [selectedProfilesForCookies, setSelectedProfilesForCookies] = useState<
+    string[]
+  >([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string>("default");
   const [selectedProfilesForGroup, setSelectedProfilesForGroup] = useState<
     string[]
@@ -585,6 +590,28 @@ export default function Home() {
     setSelectedProfiles([]);
   }, [selectedProfiles, handleAssignProfilesToProxy]);
 
+  const handleBulkCopyCookies = useCallback(() => {
+    if (selectedProfiles.length === 0) return;
+    const eligibleProfiles = profiles.filter(
+      (p) =>
+        selectedProfiles.includes(p.id) &&
+        (p.browser === "wayfern" || p.browser === "camoufox"),
+    );
+    if (eligibleProfiles.length === 0) {
+      showErrorToast(
+        "Cookie copy only works with Wayfern and Camoufox profiles",
+      );
+      return;
+    }
+    setSelectedProfilesForCookies(eligibleProfiles.map((p) => p.id));
+    setCookieCopyDialogOpen(true);
+  }, [selectedProfiles, profiles]);
+
+  const handleCopyCookiesToProfile = useCallback((profile: BrowserProfile) => {
+    setSelectedProfilesForCookies([profile.id]);
+    setCookieCopyDialogOpen(true);
+  }, []);
+
   const handleGroupAssignmentComplete = useCallback(async () => {
     // No need to manually reload - useProfileEvents will handle the update
     setGroupAssignmentDialogOpen(false);
@@ -780,6 +807,7 @@ export default function Home() {
             onDeleteProfile={handleDeleteProfile}
             onRenameProfile={handleRenameProfile}
             onConfigureCamoufox={handleConfigureCamoufox}
+            onCopyCookiesToProfile={handleCopyCookiesToProfile}
             runningProfiles={runningProfiles}
             isUpdating={isUpdating}
             onDeleteSelectedProfiles={handleDeleteSelectedProfiles}
@@ -790,6 +818,7 @@ export default function Home() {
             onBulkDelete={handleBulkDelete}
             onBulkGroupAssignment={handleBulkGroupAssignment}
             onBulkProxyAssignment={handleBulkProxyAssignment}
+            onBulkCopyCookies={handleBulkCopyCookies}
             onOpenProfileSyncDialog={handleOpenProfileSyncDialog}
             onToggleProfileSync={handleToggleProfileSync}
           />
@@ -892,6 +921,18 @@ export default function Home() {
         onAssignmentComplete={handleProxyAssignmentComplete}
         profiles={profiles}
         storedProxies={storedProxies}
+      />
+
+      <CookieCopyDialog
+        isOpen={cookieCopyDialogOpen}
+        onClose={() => {
+          setCookieCopyDialogOpen(false);
+          setSelectedProfilesForCookies([]);
+        }}
+        selectedProfiles={selectedProfilesForCookies}
+        profiles={profiles}
+        runningProfiles={runningProfiles}
+        onCopyComplete={() => setSelectedProfilesForCookies([])}
       />
 
       <DeleteConfirmationDialog

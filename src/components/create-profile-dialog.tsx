@@ -634,6 +634,15 @@ export function CreateProfileDialog({
                             id="profile-name"
                             value={profileName}
                             onChange={(e) => setProfileName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (
+                                e.key === "Enter" &&
+                                !isCreateDisabled &&
+                                !isCreating
+                              ) {
+                                handleCreate();
+                              }
+                            }}
                             placeholder="Enter profile name"
                           />
                         </div>
@@ -967,6 +976,15 @@ export function CreateProfileDialog({
                             id="profile-name"
                             value={profileName}
                             onChange={(e) => setProfileName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (
+                                e.key === "Enter" &&
+                                !isCreateDisabled &&
+                                !isCreating
+                              ) {
+                                handleCreate();
+                              }
+                            }}
                             placeholder="Enter profile name"
                           />
                         </div>

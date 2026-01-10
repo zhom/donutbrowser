@@ -284,11 +284,20 @@ export function useBrowserDownload() {
                 ? formatTime(progress.eta_seconds)
                 : "calculating...";
 
-              showDownloadToast(browserName, progress.version, "downloading", {
-                percentage: progress.percentage,
-                speed: speedMBps,
-                eta: etaText,
-              });
+              const toastId = `download-${browserName.toLowerCase()}-${progress.version}`;
+              showDownloadToast(
+                browserName,
+                progress.version,
+                "downloading",
+                {
+                  percentage: progress.percentage,
+                  speed: speedMBps,
+                  eta: etaText,
+                },
+                {
+                  onCancel: () => dismissToast(toastId),
+                },
+              );
             } else if (progress.stage === "extracting") {
               showDownloadToast(browserName, progress.version, "extracting");
             } else if (progress.stage === "verifying") {

@@ -35,6 +35,7 @@ pub mod sync;
 pub mod traffic_stats;
 mod wayfern_manager;
 // mod theme_detector; // removed: theme detection handled in webview via CSS prefers-color-scheme
+mod cookie_manager;
 mod tag_manager;
 mod version_updater;
 
@@ -219,6 +220,19 @@ async fn check_proxy_validity(
 #[tauri::command]
 fn get_cached_proxy_check(proxy_id: String) -> Option<crate::proxy_manager::ProxyCheckResult> {
   crate::proxy_manager::PROXY_MANAGER.get_cached_proxy_check(&proxy_id)
+}
+
+#[tauri::command]
+fn read_profile_cookies(profile_id: String) -> Result<cookie_manager::CookieReadResult, String> {
+  cookie_manager::CookieManager::read_cookies(&profile_id)
+}
+
+#[tauri::command]
+async fn copy_profile_cookies(
+  app_handle: tauri::AppHandle,
+  request: cookie_manager::CookieCopyRequest,
+) -> Result<Vec<cookie_manager::CookieCopyResult>, String> {
+  cookie_manager::CookieManager::copy_cookies(&app_handle, request).await
 }
 
 #[tauri::command]
@@ -825,7 +839,9 @@ pub fn run() {
       set_proxy_sync_enabled,
       set_group_sync_enabled,
       is_proxy_in_use_by_synced_profile,
-      is_group_in_use_by_synced_profile
+      is_group_in_use_by_synced_profile,
+      read_profile_cookies,
+      copy_profile_cookies
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

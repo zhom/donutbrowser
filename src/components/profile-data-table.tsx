@@ -19,6 +19,7 @@ import {
   LuCheck,
   LuChevronDown,
   LuChevronUp,
+  LuCookie,
   LuTrash2,
   LuUsers,
 } from "react-icons/lu";
@@ -157,6 +158,7 @@ type TableMeta = {
   // Overflow actions
   onAssignProfilesToGroup?: (profileIds: string[]) => void;
   onConfigureCamoufox?: (profile: BrowserProfile) => void;
+  onCopyCookiesToProfile?: (profile: BrowserProfile) => void;
 
   // Traffic snapshots (lightweight real-time data)
   trafficSnapshots: Record<string, TrafficSnapshot>;
@@ -672,6 +674,7 @@ interface ProfilesDataTableProps {
   onDeleteProfile: (profile: BrowserProfile) => void | Promise<void>;
   onRenameProfile: (profileId: string, newName: string) => Promise<void>;
   onConfigureCamoufox: (profile: BrowserProfile) => void;
+  onCopyCookiesToProfile?: (profile: BrowserProfile) => void;
   runningProfiles: Set<string>;
   isUpdating: (browser: string) => boolean;
   onDeleteSelectedProfiles: (profileIds: string[]) => Promise<void>;
@@ -682,6 +685,7 @@ interface ProfilesDataTableProps {
   onBulkDelete?: () => void;
   onBulkGroupAssignment?: () => void;
   onBulkProxyAssignment?: () => void;
+  onBulkCopyCookies?: () => void;
   onOpenProfileSyncDialog?: (profile: BrowserProfile) => void;
   onToggleProfileSync?: (profile: BrowserProfile) => void;
 }
@@ -693,6 +697,7 @@ export function ProfilesDataTable({
   onDeleteProfile,
   onRenameProfile,
   onConfigureCamoufox,
+  onCopyCookiesToProfile,
   runningProfiles,
   isUpdating,
   onAssignProfilesToGroup,
@@ -701,6 +706,7 @@ export function ProfilesDataTable({
   onBulkDelete,
   onBulkGroupAssignment,
   onBulkProxyAssignment,
+  onBulkCopyCookies,
   onOpenProfileSyncDialog,
   onToggleProfileSync,
 }: ProfilesDataTableProps) {
@@ -1115,8 +1121,10 @@ export function ProfilesDataTable({
     if (!profileToDelete) return;
 
     setIsDeleting(true);
+    // Minimum loading time for visual feedback
+    const minLoadingTime = new Promise((r) => setTimeout(r, 300));
     try {
-      await onDeleteProfile(profileToDelete);
+      await Promise.all([onDeleteProfile(profileToDelete), minLoadingTime]);
       setProfileToDelete(null);
     } catch (error) {
       console.error("Failed to delete profile:", error);
@@ -1302,6 +1310,7 @@ export function ProfilesDataTable({
       // Overflow actions
       onAssignProfilesToGroup,
       onConfigureCamoufox,
+      onCopyCookiesToProfile,
 
       // Traffic snapshots (lightweight real-time data)
       trafficSnapshots,
@@ -1350,6 +1359,7 @@ export function ProfilesDataTable({
       onLaunchProfile,
       onAssignProfilesToGroup,
       onConfigureCamoufox,
+      onCopyCookiesToProfile,
       syncStatuses,
       onOpenProfileSyncDialog,
       onToggleProfileSync,
@@ -2010,6 +2020,17 @@ export function ProfilesDataTable({
                         Change Fingerprint
                       </DropdownMenuItem>
                     )}
+                  {(profile.browser === "camoufox" ||
+                    profile.browser === "wayfern") &&
+                    meta.onCopyCookiesToProfile && (
+                      <DropdownMenuItem
+                        onClick={() => {
+                          meta.onCopyCookiesToProfile?.(profile);
+                        }}
+                      >
+                        Copy Cookies to Profile
+                      </DropdownMenuItem>
+                    )}
                   {meta.onOpenProfileSyncDialog && (
                     <DropdownMenuItem
                       onClick={() => {
@@ -2158,6 +2179,15 @@ export function ProfilesDataTable({
             size="icon"
           >
             <FiWifi />
+          </DataTableActionBarAction>
+        )}
+        {onBulkCopyCookies && (
+          <DataTableActionBarAction
+            tooltip="Copy Cookies"
+            onClick={onBulkCopyCookies}
+            size="icon"
+          >
+            <LuCookie />
           </DataTableActionBarAction>
         )}
         {onBulkDelete && (

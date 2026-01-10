@@ -54,6 +54,7 @@ import {
   LuDownload,
   LuRefreshCw,
   LuTriangleAlert,
+  LuX,
 } from "react-icons/lu";
 import type { ExternalToast } from "sonner";
 import { RippleButton } from "./ui/ripple";
@@ -64,6 +65,7 @@ interface BaseToastProps {
   description?: string;
   duration?: number;
   action?: ExternalToast["action"];
+  onCancel?: () => void;
 }
 
 interface LoadingToastProps extends BaseToastProps {
@@ -163,7 +165,7 @@ function getToastIcon(type: ToastProps["type"], stage?: string) {
 }
 
 export function UnifiedToast(props: ToastProps) {
-  const { title, description, type, action } = props;
+  const { title, description, type, action, onCancel } = props;
   const stage = "stage" in props ? props.stage : undefined;
   const progress = "progress" in props ? props.progress : undefined;
 
@@ -171,9 +173,21 @@ export function UnifiedToast(props: ToastProps) {
     <div className="flex items-start p-3 w-96 rounded-lg border shadow-lg bg-card border-border text-card-foreground">
       <div className="mr-3 mt-0.5">{getToastIcon(type, stage)}</div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold leading-tight text-foreground">
-          {title}
-        </p>
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold leading-tight text-foreground">
+            {title}
+          </p>
+          {onCancel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="ml-2 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+              aria-label="Cancel"
+            >
+              <LuX className="w-3 h-3" />
+            </button>
+          )}
+        </div>
 
         {/* Download progress */}
         {type === "download" &&

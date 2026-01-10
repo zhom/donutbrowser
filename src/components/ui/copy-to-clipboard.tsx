@@ -56,7 +56,7 @@ export function CopyToClipboard({
         }`}
       />
       <LuCheck
-        className={`absolute inset-0 m-auto h-4 w-4 transition-all duration-300 ${
+        className={`absolute inset-0 m-auto h-4 w-4 text-foreground transition-all duration-300 ${
           copied ? "scale-100" : "scale-0"
         }`}
       />

@@ -371,3 +371,48 @@ export interface FilteredTrafficStats {
   domains: Record<string, DomainAccess>;
   unique_ips: string[];
 }
+
+// Cookie copy types
+export interface UnifiedCookie {
+  name: string;
+  value: string;
+  domain: string;
+  path: string;
+  expires: number;
+  is_secure: boolean;
+  is_http_only: boolean;
+  same_site: number;
+  creation_time: number;
+  last_accessed: number;
+}
+
+export interface DomainCookies {
+  domain: string;
+  cookies: UnifiedCookie[];
+  cookie_count: number;
+}
+
+export interface CookieReadResult {
+  profile_id: string;
+  browser_type: string;
+  domains: DomainCookies[];
+  total_count: number;
+}
+
+export interface SelectedCookie {
+  domain: string;
+  name: string;
+}
+
+export interface CookieCopyRequest {
+  source_profile_id: string;
+  target_profile_ids: string[];
+  selected_cookies: SelectedCookie[];
+}
+
+export interface CookieCopyResult {
+  target_profile_id: string;
+  cookies_copied: number;
+  cookies_replaced: number;
+  errors: string[];
+}

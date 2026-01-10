@@ -765,9 +765,31 @@ impl BrowserRunner {
             profile.id
           );
 
-          // For Camoufox, we need to launch a new instance with the URL since it doesn't support remote commands
-          // This is a limitation of Camoufox's architecture
-          return Err("Camoufox doesn't support opening URLs in existing instances. Please close the browser and launch again with the URL.".into());
+          // Get Camoufox executable path and use Firefox-like remote mechanism
+          let executable_path = self
+            .get_browser_executable_path(profile)
+            .map_err(|e| format!("Failed to get Camoufox executable path: {e}"))?;
+
+          // Launch Camoufox with -profile and -new-tab to open URL in existing instance
+          // This works because we no longer use -no-remote flag
+          let output = std::process::Command::new(&executable_path)
+            .arg("-profile")
+            .arg(&*profile_path_str)
+            .arg("-new-tab")
+            .arg(url)
+            .output()
+            .map_err(|e| format!("Failed to execute Camoufox: {e}"))?;
+
+          if output.status.success() {
+            log::info!("Successfully opened URL in existing Camoufox instance");
+            return Ok(());
+          } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            log::warn!("Camoufox -new-tab command failed: {stderr}");
+            return Err(
+              format!("Failed to open URL in existing Camoufox instance: {stderr}").into(),
+            );
+          }
         }
         Ok(None) => {
           return Err("Camoufox browser is not running".into());
@@ -797,8 +819,12 @@ impl BrowserRunner {
             profile.id
           );
 
-          // For Wayfern, we can use CDP to navigate to the URL
-          return Err("Wayfern doesn't currently support opening URLs in existing instances. Please close the browser and launch again with the URL.".into());
+          // Use CDP to open URL in a new tab
+          self
+            .wayfern_manager
+            .open_url_in_tab(&profile_path_str, url)
+            .await?;
+          return Ok(());
         }
         None => {
           return Err("Wayfern browser is not running".into());
