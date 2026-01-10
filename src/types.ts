@@ -290,7 +290,7 @@ export interface CamoufoxLaunchResult {
   url?: string;
 }
 
-export type WayfernOS = "windows" | "macos" | "linux";
+export type WayfernOS = "windows" | "macos" | "linux" | "android" | "ios";
 
 export interface WayfernConfig {
   proxy?: string;
@@ -306,6 +306,116 @@ export interface WayfernConfig {
   fingerprint?: string; // JSON string of the complete fingerprint config
   randomize_fingerprint_on_launch?: boolean; // Generate new fingerprint on every launch
   os?: WayfernOS; // Operating system for fingerprint generation
+}
+
+// Wayfern fingerprint config - matches the C++ FingerprintData structure
+export interface WayfernFingerprintConfig {
+  // User agent and platform
+  userAgent?: string;
+  platform?: string;
+  platformVersion?: string;
+  brand?: string;
+  brandVersion?: string;
+
+  // Hardware
+  hardwareConcurrency?: number;
+  maxTouchPoints?: number;
+  deviceMemory?: number;
+
+  // Screen
+  screenWidth?: number;
+  screenHeight?: number;
+  screenAvailWidth?: number;
+  screenAvailHeight?: number;
+  screenColorDepth?: number;
+  screenPixelDepth?: number;
+  devicePixelRatio?: number;
+
+  // Window
+  windowOuterWidth?: number;
+  windowOuterHeight?: number;
+  windowInnerWidth?: number;
+  windowInnerHeight?: number;
+  screenX?: number;
+  screenY?: number;
+
+  // Language
+  language?: string;
+  languages?: string[];
+
+  // Browser features
+  doNotTrack?: string;
+  cookieEnabled?: boolean;
+  webdriver?: boolean;
+  pdfViewerEnabled?: boolean;
+
+  // WebGL
+  webglVendor?: string;
+  webglRenderer?: string;
+  webglVersion?: string;
+  webglShadingLanguageVersion?: string;
+  webglParameters?: string; // JSON string
+  webgl2Parameters?: string; // JSON string
+  webglShaderPrecisionFormats?: string; // JSON string
+  webgl2ShaderPrecisionFormats?: string; // JSON string
+
+  // Timezone and geolocation
+  timezone?: string;
+  timezoneOffset?: number;
+  latitude?: number;
+  longitude?: number;
+  accuracy?: number;
+
+  // Media queries / preferences
+  prefersReducedMotion?: boolean;
+  prefersDarkMode?: boolean;
+  prefersContrast?: string;
+  prefersReducedData?: boolean;
+
+  // Color/HDR
+  colorGamutSrgb?: boolean;
+  colorGamutP3?: boolean;
+  colorGamutRec2020?: boolean;
+  hdrSupport?: boolean;
+
+  // Audio
+  audioSampleRate?: number;
+  audioMaxChannelCount?: number;
+
+  // Storage
+  localStorage?: boolean;
+  sessionStorage?: boolean;
+  indexedDb?: boolean;
+
+  // Canvas
+  canvasNoiseSeed?: string;
+
+  // Fonts, plugins, mime types (JSON strings)
+  fonts?: string; // JSON array string
+  plugins?: string; // JSON array string
+  mimeTypes?: string; // JSON array string
+
+  // Battery (optional)
+  batteryCharging?: boolean;
+  batteryChargingTime?: number;
+  batteryDischargingTime?: number;
+  batteryLevel?: number;
+
+  // Voices
+  voices?: string; // JSON array string
+
+  // Vendor info
+  vendor?: string;
+  vendorSub?: string;
+  productSub?: string;
+
+  // Network (optional)
+  connectionEffectiveType?: string;
+  connectionDownlink?: number;
+  connectionRtt?: number;
+
+  // Performance
+  performanceMemory?: number;
 }
 
 export interface WayfernLaunchResult {

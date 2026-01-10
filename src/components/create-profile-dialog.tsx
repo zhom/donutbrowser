@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { WayfernConfigForm } from "@/components/wayfern-config-form";
 
 import { useBrowserDownload } from "@/hooks/use-browser-download";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
@@ -727,11 +728,10 @@ export function CreateProfileDialog({
                               </div>
                             )}
 
-                            <SharedCamoufoxConfigForm
+                            <WayfernConfigForm
                               config={wayfernConfig}
                               onConfigChange={updateWayfernConfig}
                               isCreating
-                              browserType="wayfern"
                             />
                           </div>
                         ) : selectedBrowser === "camoufox" ? (

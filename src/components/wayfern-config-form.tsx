@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import MultipleSelector, { type Option } from "@/components/multiple-selector";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -16,28 +15,25 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import type {
-  CamoufoxConfig,
-  CamoufoxFingerprintConfig,
-  CamoufoxOS,
+  WayfernConfig,
+  WayfernFingerprintConfig,
+  WayfernOS,
 } from "@/types";
 
-interface SharedCamoufoxConfigFormProps {
-  config: CamoufoxConfig;
-  onConfigChange: (key: keyof CamoufoxConfig, value: unknown) => void;
+interface WayfernConfigFormProps {
+  config: WayfernConfig;
+  onConfigChange: (key: keyof WayfernConfig, value: unknown) => void;
   className?: string;
-  isCreating?: boolean; // Flag to indicate if this is for creating a new profile
-  forceAdvanced?: boolean; // Force advanced mode (for editing)
-  readOnly?: boolean; // Flag to indicate if the form should be read-only
-  browserType?: "camoufox" | "wayfern"; // Browser type to customize form options
+  isCreating?: boolean;
+  forceAdvanced?: boolean;
+  readOnly?: boolean;
 }
 
-// Determine if fingerprint editing should be disabled
-const isFingerprintEditingDisabled = (config: CamoufoxConfig): boolean => {
+const isFingerprintEditingDisabled = (config: WayfernConfig): boolean => {
   return config.randomize_fingerprint_on_launch === true;
 };
 
-// Detect the current operating system
-const getCurrentOS = (): CamoufoxOS => {
+const getCurrentOS = (): WayfernOS => {
   if (typeof navigator === "undefined") return "linux";
   const platform = navigator.platform.toLowerCase();
   if (platform.includes("win")) return "windows";
@@ -45,98 +41,38 @@ const getCurrentOS = (): CamoufoxOS => {
   return "linux";
 };
 
-// OS display labels
-const osLabels: Record<CamoufoxOS, string> = {
+const osLabels: Record<WayfernOS, string> = {
   windows: "Windows",
   macos: "macOS",
   linux: "Linux",
+  android: "Android",
+  ios: "iOS",
 };
 
-// Component for editing nested objects like webGl:parameters
-interface ObjectEditorProps {
-  value: Record<string, unknown> | undefined;
-  onChange: (value: Record<string, unknown> | undefined) => void;
-  title: string;
-  readOnly?: boolean;
-}
-
-function ObjectEditor({
-  value,
-  onChange,
-  title,
-  readOnly = false,
-}: ObjectEditorProps) {
-  const [jsonString, setJsonString] = useState("");
-
-  useEffect(() => {
-    setJsonString(JSON.stringify(value || {}, null, 2));
-  }, [value]);
-
-  const handleChange = (newValue: string) => {
-    if (readOnly) return;
-    setJsonString(newValue);
-    try {
-      if (newValue.trim() === "" || newValue.trim() === "{}") {
-        onChange(undefined); // Treat empty objects as undefined
-        return;
-      }
-      const parsed = JSON.parse(newValue);
-      if (
-        typeof parsed === "object" &&
-        parsed !== null &&
-        Object.keys(parsed).length === 0
-      ) {
-        onChange(undefined);
-        return;
-      }
-      onChange(parsed as Record<string, unknown>);
-    } catch (err) {
-      console.warn("Invalid JSON:", err);
-    }
-  };
-
-  return (
-    <div className="space-y-2">
-      <Label>{title}</Label>
-      <Textarea
-        value={jsonString}
-        onChange={(e) => handleChange(e.target.value)}
-        placeholder={`Enter ${title} as JSON`}
-        className="font-mono text-sm"
-        rows={6}
-        disabled={readOnly}
-      />
-    </div>
-  );
-}
-
-export function SharedCamoufoxConfigForm({
+export function WayfernConfigForm({
   config,
   onConfigChange,
   className = "",
   isCreating = false,
   forceAdvanced = false,
   readOnly = false,
-  browserType = "camoufox",
-}: SharedCamoufoxConfigFormProps) {
+}: WayfernConfigFormProps) {
   const [activeTab, setActiveTab] = useState(
     forceAdvanced ? "manual" : "automatic",
   );
   const [fingerprintConfig, setFingerprintConfig] =
-    useState<CamoufoxFingerprintConfig>({});
-  const [currentOS] = useState<CamoufoxOS>(getCurrentOS);
+    useState<WayfernFingerprintConfig>({});
+  const [currentOS] = useState<WayfernOS>(getCurrentOS);
 
-  // Get selected OS (defaults to current OS)
   const selectedOS = config.os || currentOS;
   const isOSDifferent = selectedOS !== currentOS;
+  const isMobileOS = selectedOS === "android" || selectedOS === "ios";
 
-  // Set screen resolution to user's screen size when creating a new profile
   useEffect(() => {
     if (isCreating && typeof window !== "undefined") {
       const screenWidth = window.screen.width;
       const screenHeight = window.screen.height;
 
-      // Only set if not already configured
       if (!config.screen_max_width) {
         onConfigChange("screen_max_width", screenWidth);
       }
@@ -151,32 +87,28 @@ export function SharedCamoufoxConfigForm({
     onConfigChange,
   ]);
 
-  // Parse fingerprint config when component mounts or config changes
   useEffect(() => {
     if (config.fingerprint) {
       try {
         const parsed = JSON.parse(
           config.fingerprint,
-        ) as CamoufoxFingerprintConfig;
+        ) as WayfernFingerprintConfig;
         setFingerprintConfig(parsed);
       } catch (error) {
         console.error("Failed to parse fingerprint config:", error);
         setFingerprintConfig({});
       }
     } else {
-      // Initialize with empty config if no fingerprint is set
       setFingerprintConfig({});
     }
   }, [config.fingerprint]);
 
-  // Update fingerprint config and serialize it
   const updateFingerprintConfig = (
-    key: keyof CamoufoxFingerprintConfig,
+    key: keyof WayfernFingerprintConfig,
     value: unknown,
   ) => {
     const newConfig = { ...fingerprintConfig };
 
-    // Remove undefined values to keep the config clean
     if (
       value === undefined ||
       value === "" ||
@@ -189,20 +121,16 @@ export function SharedCamoufoxConfigForm({
 
     setFingerprintConfig(newConfig);
 
-    // Validate that the config can be serialized to JSON
     try {
       const jsonString = JSON.stringify(newConfig);
       onConfigChange("fingerprint", jsonString);
     } catch (error) {
       console.error("Failed to serialize fingerprint config:", error);
-      // Don't update if serialization fails
     }
   };
 
-  // Determine if automatic location configuration is enabled
   const isAutoLocationEnabled = config.geoip !== false;
 
-  // Handle automatic location configuration toggle
   const handleAutoLocationToggle = (enabled: boolean) => {
     if (enabled) {
       onConfigChange("geoip", true);
@@ -220,7 +148,7 @@ export function SharedCamoufoxConfigForm({
         <Label>Operating System Fingerprint</Label>
         <Select
           value={selectedOS}
-          onValueChange={(value: CamoufoxOS) => onConfigChange("os", value)}
+          onValueChange={(value: WayfernOS) => onConfigChange("os", value)}
           disabled={readOnly}
         >
           <SelectTrigger>
@@ -230,15 +158,23 @@ export function SharedCamoufoxConfigForm({
             <SelectItem value="windows">{osLabels.windows}</SelectItem>
             <SelectItem value="macos">{osLabels.macos}</SelectItem>
             <SelectItem value="linux">{osLabels.linux}</SelectItem>
+            <SelectItem value="android">{osLabels.android}</SelectItem>
+            <SelectItem value="ios">{osLabels.ios}</SelectItem>
           </SelectContent>
         </Select>
-        {isOSDifferent && (
+        {isOSDifferent && !isMobileOS && (
           <Alert className="border-yellow-500/50 bg-yellow-500/10">
             <AlertDescription className="text-yellow-600 dark:text-yellow-400">
-              ⚠️ Warning: Selecting an OS different from your current system (
-              {osLabels[currentOS]}) increases the risk of detection. Websites
-              can detect mismatches between your fingerprint and actual system
-              behavior.
+              Warning: Selecting an OS different from your current system (
+              {osLabels[currentOS]}) increases the risk of detection.
+            </AlertDescription>
+          </Alert>
+        )}
+        {isMobileOS && (
+          <Alert className="border-yellow-500/50 bg-yellow-500/10">
+            <AlertDescription className="text-yellow-600 dark:text-yellow-400">
+              Warning: Mobile OS spoofing on desktop has high detection risk.
+              Websites can detect the mismatch between fingerprint and behavior.
             </AlertDescription>
           </Alert>
         )}
@@ -269,72 +205,31 @@ export function SharedCamoufoxConfigForm({
         <Alert>
           <AlertDescription>
             {readOnly
-              ? "Fingerprint editing is disabled because the profile is currently running. Stop the profile to make changes."
-              : "Fingerprint editing is disabled because random fingerprint generation is enabled. Disable the option above to manually edit the fingerprint configuration."}
+              ? "Fingerprint editing is disabled because the profile is currently running."
+              : "Fingerprint editing is disabled because random fingerprint generation is enabled."}
           </AlertDescription>
         </Alert>
       ) : (
         <Alert>
           <AlertDescription>
-            ⚠️ Warning: Only edit these parameters if you know what you're doing.
-            Incorrect values may break websites, make them detect you, and lead
-            to hard-to-debug bugs.{" "}
+            Warning: Only edit these parameters if you know what you're doing.
           </AlertDescription>
         </Alert>
       )}
 
       <fieldset disabled={isEditingDisabled} className="space-y-6">
-        {/* Blocking Options - Only available for Camoufox */}
-        {browserType === "camoufox" && (
-          <div className="space-y-3">
-            <Label>Blocking Options</Label>
-            <div className="space-y-2">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="block-images"
-                  checked={config.block_images || false}
-                  onCheckedChange={(checked) =>
-                    onConfigChange("block_images", checked)
-                  }
-                />
-                <Label htmlFor="block-images">Block Images</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="block-webrtc"
-                  checked={config.block_webrtc || false}
-                  onCheckedChange={(checked) =>
-                    onConfigChange("block_webrtc", checked)
-                  }
-                />
-                <Label htmlFor="block-webrtc">Block WebRTC</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="block-webgl"
-                  checked={config.block_webgl || false}
-                  onCheckedChange={(checked) =>
-                    onConfigChange("block_webgl", checked)
-                  }
-                />
-                <Label htmlFor="block-webgl">Block WebGL</Label>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Navigator Properties */}
+        {/* User Agent and Platform */}
         <div className="space-y-3">
-          <Label>Navigator Properties</Label>
+          <Label>User Agent & Platform</Label>
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
+            <div className="space-y-2 col-span-2">
               <Label htmlFor="user-agent">User Agent</Label>
               <Input
                 id="user-agent"
-                value={fingerprintConfig["navigator.userAgent"] || ""}
+                value={fingerprintConfig.userAgent || ""}
                 onChange={(e) =>
                   updateFingerprintConfig(
-                    "navigator.userAgent",
+                    "userAgent",
                     e.target.value || undefined,
                   )
                 }
@@ -345,53 +240,71 @@ export function SharedCamoufoxConfigForm({
               <Label htmlFor="platform">Platform</Label>
               <Input
                 id="platform"
-                value={fingerprintConfig["navigator.platform"] || ""}
+                value={fingerprintConfig.platform || ""}
                 onChange={(e) =>
                   updateFingerprintConfig(
-                    "navigator.platform",
+                    "platform",
                     e.target.value || undefined,
                   )
                 }
-                placeholder="e.g., MacIntel, Win32"
+                placeholder="e.g., Win32, MacIntel, Linux x86_64"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="app-version">App Version</Label>
+              <Label htmlFor="platform-version">Platform Version</Label>
               <Input
-                id="app-version"
-                value={fingerprintConfig["navigator.appVersion"] || ""}
+                id="platform-version"
+                value={fingerprintConfig.platformVersion || ""}
                 onChange={(e) =>
                   updateFingerprintConfig(
-                    "navigator.appVersion",
+                    "platformVersion",
                     e.target.value || undefined,
                   )
                 }
-                placeholder="e.g., 5.0 (Macintosh)"
+                placeholder="e.g., 10.0.0"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="oscpu">OS CPU</Label>
+              <Label htmlFor="brand">Brand</Label>
               <Input
-                id="oscpu"
-                value={fingerprintConfig["navigator.oscpu"] || ""}
+                id="brand"
+                value={fingerprintConfig.brand || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig("brand", e.target.value || undefined)
+                }
+                placeholder="e.g., Google Chrome"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="brand-version">Brand Version</Label>
+              <Input
+                id="brand-version"
+                value={fingerprintConfig.brandVersion || ""}
                 onChange={(e) =>
                   updateFingerprintConfig(
-                    "navigator.oscpu",
+                    "brandVersion",
                     e.target.value || undefined,
                   )
                 }
-                placeholder="e.g., Intel Mac OS X 10.15"
+                placeholder="e.g., 143"
               />
             </div>
+          </div>
+        </div>
+
+        {/* Hardware Properties */}
+        <div className="space-y-3">
+          <Label>Hardware Properties</Label>
+          <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="hardware-concurrency">Hardware Concurrency</Label>
               <Input
                 id="hardware-concurrency"
                 type="number"
-                value={fingerprintConfig["navigator.hardwareConcurrency"] || ""}
+                value={fingerprintConfig.hardwareConcurrency || ""}
                 onChange={(e) =>
                   updateFingerprintConfig(
-                    "navigator.hardwareConcurrency",
+                    "hardwareConcurrency",
                     e.target.value ? parseInt(e.target.value, 10) : undefined,
                   )
                 }
@@ -403,10 +316,10 @@ export function SharedCamoufoxConfigForm({
               <Input
                 id="max-touch-points"
                 type="number"
-                value={fingerprintConfig["navigator.maxTouchPoints"] || ""}
+                value={fingerprintConfig.maxTouchPoints || ""}
                 onChange={(e) =>
                   updateFingerprintConfig(
-                    "navigator.maxTouchPoints",
+                    "maxTouchPoints",
                     e.target.value ? parseInt(e.target.value, 10) : undefined,
                   )
                 }
@@ -414,38 +327,18 @@ export function SharedCamoufoxConfigForm({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="do-not-track">Do Not Track</Label>
-              <Select
-                value={fingerprintConfig["navigator.doNotTrack"] || ""}
-                onValueChange={(value) =>
-                  updateFingerprintConfig(
-                    "navigator.doNotTrack",
-                    value || undefined,
-                  )
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select DNT value" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="0">0 (tracking allowed)</SelectItem>
-                  <SelectItem value="1">1 (tracking not allowed)</SelectItem>
-                  <SelectItem value="unspecified">unspecified</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="language">Language</Label>
+              <Label htmlFor="device-memory">Device Memory (GB)</Label>
               <Input
-                id="language"
-                value={fingerprintConfig["navigator.language"] || ""}
+                id="device-memory"
+                type="number"
+                value={fingerprintConfig.deviceMemory || ""}
                 onChange={(e) =>
                   updateFingerprintConfig(
-                    "navigator.language",
-                    e.target.value || undefined,
+                    "deviceMemory",
+                    e.target.value ? parseInt(e.target.value, 10) : undefined,
                   )
                 }
-                placeholder="e.g., en-US"
+                placeholder="e.g., 8"
               />
             </div>
           </div>
@@ -460,10 +353,10 @@ export function SharedCamoufoxConfigForm({
               <Input
                 id="screen-width"
                 type="number"
-                value={fingerprintConfig["screen.width"] || ""}
+                value={fingerprintConfig.screenWidth || ""}
                 onChange={(e) =>
                   updateFingerprintConfig(
-                    "screen.width",
+                    "screenWidth",
                     e.target.value ? parseInt(e.target.value, 10) : undefined,
                   )
                 }
@@ -475,10 +368,10 @@ export function SharedCamoufoxConfigForm({
               <Input
                 id="screen-height"
                 type="number"
-                value={fingerprintConfig["screen.height"] || ""}
+                value={fingerprintConfig.screenHeight || ""}
                 onChange={(e) =>
                   updateFingerprintConfig(
-                    "screen.height",
+                    "screenHeight",
                     e.target.value ? parseInt(e.target.value, 10) : undefined,
                   )
                 }
@@ -486,14 +379,30 @@ export function SharedCamoufoxConfigForm({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="avail-width">Available Width</Label>
+              <Label htmlFor="device-pixel-ratio">Device Pixel Ratio</Label>
               <Input
-                id="avail-width"
+                id="device-pixel-ratio"
                 type="number"
-                value={fingerprintConfig["screen.availWidth"] || ""}
+                step="0.1"
+                value={fingerprintConfig.devicePixelRatio || ""}
                 onChange={(e) =>
                   updateFingerprintConfig(
-                    "screen.availWidth",
+                    "devicePixelRatio",
+                    e.target.value ? parseFloat(e.target.value) : undefined,
+                  )
+                }
+                placeholder="e.g., 1.0"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="screen-avail-width">Available Width</Label>
+              <Input
+                id="screen-avail-width"
+                type="number"
+                value={fingerprintConfig.screenAvailWidth || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "screenAvailWidth",
                     e.target.value ? parseInt(e.target.value, 10) : undefined,
                   )
                 }
@@ -501,48 +410,33 @@ export function SharedCamoufoxConfigForm({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="avail-height">Available Height</Label>
+              <Label htmlFor="screen-avail-height">Available Height</Label>
               <Input
-                id="avail-height"
+                id="screen-avail-height"
                 type="number"
-                value={fingerprintConfig["screen.availHeight"] || ""}
+                value={fingerprintConfig.screenAvailHeight || ""}
                 onChange={(e) =>
                   updateFingerprintConfig(
-                    "screen.availHeight",
+                    "screenAvailHeight",
                     e.target.value ? parseInt(e.target.value, 10) : undefined,
                   )
                 }
-                placeholder="e.g., 1055"
+                placeholder="e.g., 1040"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="color-depth">Color Depth</Label>
+              <Label htmlFor="screen-color-depth">Color Depth</Label>
               <Input
-                id="color-depth"
+                id="screen-color-depth"
                 type="number"
-                value={fingerprintConfig["screen.colorDepth"] || ""}
+                value={fingerprintConfig.screenColorDepth || ""}
                 onChange={(e) =>
                   updateFingerprintConfig(
-                    "screen.colorDepth",
+                    "screenColorDepth",
                     e.target.value ? parseInt(e.target.value, 10) : undefined,
                   )
                 }
-                placeholder="e.g., 30"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="pixel-depth">Pixel Depth</Label>
-              <Input
-                id="pixel-depth"
-                type="number"
-                value={fingerprintConfig["screen.pixelDepth"] || ""}
-                onChange={(e) =>
-                  updateFingerprintConfig(
-                    "screen.pixelDepth",
-                    e.target.value ? parseInt(e.target.value, 10) : undefined,
-                  )
-                }
-                placeholder="e.g., 30"
+                placeholder="e.g., 24"
               />
             </div>
           </div>
@@ -553,63 +447,63 @@ export function SharedCamoufoxConfigForm({
           <Label>Window Properties</Label>
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="outer-width">Outer Width</Label>
+              <Label htmlFor="window-outer-width">Outer Width</Label>
               <Input
-                id="outer-width"
+                id="window-outer-width"
                 type="number"
-                value={fingerprintConfig["window.outerWidth"] || ""}
+                value={fingerprintConfig.windowOuterWidth || ""}
                 onChange={(e) =>
                   updateFingerprintConfig(
-                    "window.outerWidth",
+                    "windowOuterWidth",
                     e.target.value ? parseInt(e.target.value, 10) : undefined,
                   )
                 }
-                placeholder="e.g., 1512"
+                placeholder="e.g., 1920"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="outer-height">Outer Height</Label>
+              <Label htmlFor="window-outer-height">Outer Height</Label>
               <Input
-                id="outer-height"
+                id="window-outer-height"
                 type="number"
-                value={fingerprintConfig["window.outerHeight"] || ""}
+                value={fingerprintConfig.windowOuterHeight || ""}
                 onChange={(e) =>
                   updateFingerprintConfig(
-                    "window.outerHeight",
+                    "windowOuterHeight",
                     e.target.value ? parseInt(e.target.value, 10) : undefined,
                   )
                 }
-                placeholder="e.g., 886"
+                placeholder="e.g., 1040"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="inner-width">Inner Width</Label>
+              <Label htmlFor="window-inner-width">Inner Width</Label>
               <Input
-                id="inner-width"
+                id="window-inner-width"
                 type="number"
-                value={fingerprintConfig["window.innerWidth"] || ""}
+                value={fingerprintConfig.windowInnerWidth || ""}
                 onChange={(e) =>
                   updateFingerprintConfig(
-                    "window.innerWidth",
+                    "windowInnerWidth",
                     e.target.value ? parseInt(e.target.value, 10) : undefined,
                   )
                 }
-                placeholder="e.g., 1512"
+                placeholder="e.g., 1920"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="inner-height">Inner Height</Label>
+              <Label htmlFor="window-inner-height">Inner Height</Label>
               <Input
-                id="inner-height"
+                id="window-inner-height"
                 type="number"
-                value={fingerprintConfig["window.innerHeight"] || ""}
+                value={fingerprintConfig.windowInnerHeight || ""}
                 onChange={(e) =>
                   updateFingerprintConfig(
-                    "window.innerHeight",
+                    "windowInnerHeight",
                     e.target.value ? parseInt(e.target.value, 10) : undefined,
                   )
                 }
-                placeholder="e.g., 886"
+                placeholder="e.g., 940"
               />
             </div>
             <div className="space-y-2">
@@ -617,10 +511,10 @@ export function SharedCamoufoxConfigForm({
               <Input
                 id="screen-x"
                 type="number"
-                value={fingerprintConfig["window.screenX"] || ""}
+                value={fingerprintConfig.screenX || ""}
                 onChange={(e) =>
                   updateFingerprintConfig(
-                    "window.screenX",
+                    "screenX",
                     e.target.value ? parseInt(e.target.value, 10) : undefined,
                   )
                 }
@@ -632,10 +526,10 @@ export function SharedCamoufoxConfigForm({
               <Input
                 id="screen-y"
                 type="number"
-                value={fingerprintConfig["window.screenY"] || ""}
+                value={fingerprintConfig.screenY || ""}
                 onChange={(e) =>
                   updateFingerprintConfig(
-                    "window.screenY",
+                    "screenY",
                     e.target.value ? parseInt(e.target.value, 10) : undefined,
                   )
                 }
@@ -645,47 +539,84 @@ export function SharedCamoufoxConfigForm({
           </div>
         </div>
 
-        {/* Geolocation */}
+        {/* Language & Locale */}
         <div className="space-y-3">
-          <Label>Geolocation</Label>
+          <Label>Language & Locale</Label>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="language">
+                Primary Language (navigator.language)
+              </Label>
+              <Input
+                id="language"
+                value={fingerprintConfig.language || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "language",
+                    e.target.value || undefined,
+                  )
+                }
+                placeholder="e.g., en-US"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="languages">Languages (JSON array)</Label>
+              <Input
+                id="languages"
+                value={
+                  Array.isArray(fingerprintConfig.languages)
+                    ? JSON.stringify(fingerprintConfig.languages)
+                    : ""
+                }
+                onChange={(e) => {
+                  if (!e.target.value) {
+                    updateFingerprintConfig("languages", undefined);
+                    return;
+                  }
+                  try {
+                    const parsed = JSON.parse(e.target.value);
+                    if (Array.isArray(parsed)) {
+                      updateFingerprintConfig("languages", parsed);
+                    }
+                  } catch {
+                    // Invalid JSON, keep current value
+                  }
+                }}
+                placeholder='["en-US", "en"]'
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="do-not-track">Do Not Track</Label>
+              <Select
+                value={fingerprintConfig.doNotTrack || ""}
+                onValueChange={(value) =>
+                  updateFingerprintConfig("doNotTrack", value || undefined)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select DNT value" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">0 (tracking allowed)</SelectItem>
+                  <SelectItem value="1">1 (tracking not allowed)</SelectItem>
+                  <SelectItem value="unspecified">unspecified</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+
+        {/* Timezone and Geolocation */}
+        <div className="space-y-3">
+          <Label>Timezone & Geolocation</Label>
+          <p className="text-sm text-muted-foreground">
+            These values override the browser's timezone and geolocation APIs.
+          </p>
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="latitude">Latitude</Label>
-              <Input
-                id="latitude"
-                type="number"
-                step="any"
-                value={fingerprintConfig["geolocation:latitude"] || ""}
-                onChange={(e) =>
-                  updateFingerprintConfig(
-                    "geolocation:latitude",
-                    e.target.value ? parseFloat(e.target.value) : undefined,
-                  )
-                }
-                placeholder="e.g., 41.0019"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="longitude">Longitude</Label>
-              <Input
-                id="longitude"
-                type="number"
-                step="any"
-                value={fingerprintConfig["geolocation:longitude"] || ""}
-                onChange={(e) =>
-                  updateFingerprintConfig(
-                    "geolocation:longitude",
-                    e.target.value ? parseFloat(e.target.value) : undefined,
-                  )
-                }
-                placeholder="e.g., 28.9645"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="timezone">Timezone</Label>
+              <Label htmlFor="timezone">Timezone (IANA)</Label>
               <Input
                 id="timezone"
-                type="text"
                 value={fingerprintConfig.timezone || ""}
                 onChange={(e) =>
                   updateFingerprintConfig(
@@ -696,53 +627,66 @@ export function SharedCamoufoxConfigForm({
                 placeholder="e.g., America/New_York"
               />
             </div>
-          </div>
-        </div>
-
-        {/* Locale */}
-        <div className="space-y-3">
-          <Label>Locale</Label>
-          <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="locale-language">Language</Label>
+              <Label htmlFor="timezone-offset">Offset (minutes from UTC)</Label>
               <Input
-                id="locale-language"
-                value={fingerprintConfig["locale:language"] || ""}
+                id="timezone-offset"
+                type="number"
+                value={fingerprintConfig.timezoneOffset ?? ""}
                 onChange={(e) =>
                   updateFingerprintConfig(
-                    "locale:language",
-                    e.target.value || undefined,
+                    "timezoneOffset",
+                    e.target.value ? parseInt(e.target.value, 10) : undefined,
                   )
                 }
-                placeholder="e.g., tr"
+                placeholder="e.g., 300 for EST (UTC-5)"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="locale-region">Region</Label>
+              <Label htmlFor="latitude">Latitude</Label>
               <Input
-                id="locale-region"
-                value={fingerprintConfig["locale:region"] || ""}
+                id="latitude"
+                type="number"
+                step="any"
+                value={fingerprintConfig.latitude || ""}
                 onChange={(e) =>
                   updateFingerprintConfig(
-                    "locale:region",
-                    e.target.value || undefined,
+                    "latitude",
+                    e.target.value ? parseFloat(e.target.value) : undefined,
                   )
                 }
-                placeholder="e.g., TR"
+                placeholder="e.g., 40.7128"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="locale-script">Script</Label>
+              <Label htmlFor="longitude">Longitude</Label>
               <Input
-                id="locale-script"
-                value={fingerprintConfig["locale:script"] || ""}
+                id="longitude"
+                type="number"
+                step="any"
+                value={fingerprintConfig.longitude || ""}
                 onChange={(e) =>
                   updateFingerprintConfig(
-                    "locale:script",
-                    e.target.value || undefined,
+                    "longitude",
+                    e.target.value ? parseFloat(e.target.value) : undefined,
                   )
                 }
-                placeholder="e.g., Latn"
+                placeholder="e.g., -74.0060"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="accuracy">Accuracy (meters)</Label>
+              <Input
+                id="accuracy"
+                type="number"
+                value={fingerprintConfig.accuracy || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "accuracy",
+                    e.target.value ? parseFloat(e.target.value) : undefined,
+                  )
+                }
+                placeholder="e.g., 100"
               />
             </div>
           </div>
@@ -756,136 +700,122 @@ export function SharedCamoufoxConfigForm({
               <Label htmlFor="webgl-vendor">WebGL Vendor</Label>
               <Input
                 id="webgl-vendor"
-                value={fingerprintConfig["webGl:vendor"] || ""}
+                value={fingerprintConfig.webglVendor || ""}
                 onChange={(e) =>
                   updateFingerprintConfig(
-                    "webGl:vendor",
+                    "webglVendor",
                     e.target.value || undefined,
                   )
                 }
-                placeholder="e.g., Mesa"
+                placeholder="e.g., Intel"
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="webgl-renderer">WebGL Renderer</Label>
               <Input
                 id="webgl-renderer"
-                value={fingerprintConfig["webGl:renderer"] || ""}
+                value={fingerprintConfig.webglRenderer || ""}
                 onChange={(e) =>
                   updateFingerprintConfig(
-                    "webGl:renderer",
+                    "webglRenderer",
                     e.target.value || undefined,
                   )
                 }
-                placeholder="e.g., llvmpipe, or similar"
+                placeholder="e.g., Intel(R) HD Graphics"
               />
             </div>
           </div>
         </div>
 
-        {/* WebGL Parameters */}
+        {/* WebGL Parameters (JSON) */}
         <div className="space-y-3">
-          <ObjectEditor
-            value={
-              (fingerprintConfig["webGl:parameters"] as Record<
-                string,
-                unknown
-              >) || {}
-            }
-            onChange={(value) =>
-              updateFingerprintConfig("webGl:parameters", value)
-            }
-            title="WebGL Parameters"
-            readOnly={readOnly}
-          />
-        </div>
-
-        {/* WebGL2 Parameters */}
-        <div className="space-y-3">
-          <ObjectEditor
-            value={
-              (fingerprintConfig["webGl2:parameters"] as Record<
-                string,
-                unknown
-              >) || {}
-            }
-            onChange={(value) =>
-              updateFingerprintConfig("webGl2:parameters", value)
-            }
-            title="WebGL2 Parameters"
-            readOnly={readOnly}
-          />
-        </div>
-
-        {/* WebGL Shader Precision Formats */}
-        <div className="space-y-3">
-          <ObjectEditor
-            value={
-              (fingerprintConfig["webGl:shaderPrecisionFormats"] as Record<
-                string,
-                unknown
-              >) || {}
-            }
-            onChange={(value) =>
-              updateFingerprintConfig("webGl:shaderPrecisionFormats", value)
-            }
-            title="WebGL Shader Precision Formats"
-            readOnly={readOnly}
-          />
-        </div>
-
-        {/* WebGL2 Shader Precision Formats */}
-        <div className="space-y-3">
-          <ObjectEditor
-            value={
-              (fingerprintConfig["webGl2:shaderPrecisionFormats"] as Record<
-                string,
-                unknown
-              >) || {}
-            }
-            onChange={(value) =>
-              updateFingerprintConfig("webGl2:shaderPrecisionFormats", value)
-            }
-            title="WebGL2 Shader Precision Formats"
-            readOnly={readOnly}
-          />
-        </div>
-
-        {/* Fonts */}
-        <div className="space-y-3">
-          <Label>Fonts</Label>
-          <MultipleSelector
-            value={(() => {
-              // Handle fonts being either an array or a JSON string (Wayfern format)
-              let fontsArray: string[] = [];
-              if (fingerprintConfig.fonts) {
-                if (Array.isArray(fingerprintConfig.fonts)) {
-                  fontsArray = fingerprintConfig.fonts;
-                } else if (typeof fingerprintConfig.fonts === "string") {
-                  try {
-                    const parsed = JSON.parse(fingerprintConfig.fonts);
-                    if (Array.isArray(parsed)) {
-                      fontsArray = parsed;
-                    }
-                  } catch {
-                    // Invalid JSON, ignore
-                  }
-                }
-              }
-              return fontsArray.map((font) => ({
-                label: font,
-                value: font,
-              }));
-            })()}
-            onChange={(selected: Option[]) =>
+          <Label>WebGL Parameters (JSON)</Label>
+          <Textarea
+            value={fingerprintConfig.webglParameters || ""}
+            onChange={(e) =>
               updateFingerprintConfig(
-                "fonts",
-                selected.map((s: Option) => s.value),
+                "webglParameters",
+                e.target.value || undefined,
               )
             }
-            placeholder="Add fonts..."
-            creatable
+            placeholder='{"7936": "Intel", "7937": "Intel(R) HD Graphics"}'
+            className="font-mono text-sm"
+            rows={4}
           />
+        </div>
+
+        {/* Canvas Noise Seed */}
+        <div className="space-y-3">
+          <Label>Canvas Fingerprint</Label>
+          <div className="space-y-2">
+            <Label htmlFor="canvas-noise-seed">Canvas Noise Seed</Label>
+            <Input
+              id="canvas-noise-seed"
+              value={fingerprintConfig.canvasNoiseSeed || ""}
+              onChange={(e) =>
+                updateFingerprintConfig(
+                  "canvasNoiseSeed",
+                  e.target.value || undefined,
+                )
+              }
+              placeholder="Enter a seed string for canvas fingerprint"
+            />
+            <p className="text-sm text-muted-foreground">
+              This seed is used to generate a consistent but unique canvas
+              fingerprint. Each profile should have a different seed.
+            </p>
+          </div>
+        </div>
+
+        {/* Fonts (JSON) */}
+        <div className="space-y-3">
+          <Label>Fonts (JSON array)</Label>
+          <Textarea
+            value={fingerprintConfig.fonts || ""}
+            onChange={(e) =>
+              updateFingerprintConfig("fonts", e.target.value || undefined)
+            }
+            placeholder='["Arial", "Verdana", "Times New Roman"]'
+            className="font-mono text-sm"
+            rows={3}
+          />
+        </div>
+
+        {/* Audio */}
+        <div className="space-y-3">
+          <Label>Audio Properties</Label>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="audio-sample-rate">Sample Rate</Label>
+              <Input
+                id="audio-sample-rate"
+                type="number"
+                value={fingerprintConfig.audioSampleRate || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "audioSampleRate",
+                    e.target.value ? parseInt(e.target.value, 10) : undefined,
+                  )
+                }
+                placeholder="e.g., 48000"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="audio-max-channel-count">Max Channel Count</Label>
+              <Input
+                id="audio-max-channel-count"
+                type="number"
+                value={fingerprintConfig.audioMaxChannelCount || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "audioMaxChannelCount",
+                    e.target.value ? parseInt(e.target.value, 10) : undefined,
+                  )
+                }
+                placeholder="e.g., 2"
+              />
+            </div>
+          </div>
         </div>
 
         {/* Battery */}
@@ -896,65 +826,83 @@ export function SharedCamoufoxConfigForm({
               <div className="flex items-center space-x-2">
                 <Checkbox
                   id="battery-charging"
-                  checked={fingerprintConfig["battery:charging"] || false}
+                  checked={fingerprintConfig.batteryCharging || false}
                   onCheckedChange={(checked) =>
-                    updateFingerprintConfig("battery:charging", checked)
+                    updateFingerprintConfig(
+                      "batteryCharging",
+                      checked || undefined,
+                    )
                   }
                 />
                 <Label htmlFor="battery-charging">Charging</Label>
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="charging-time">Charging Time</Label>
+              <Label htmlFor="battery-level">Level (0-1)</Label>
               <Input
-                id="charging-time"
+                id="battery-level"
                 type="number"
-                step="any"
-                value={fingerprintConfig["battery:chargingTime"] || ""}
+                step="0.01"
+                min="0"
+                max="1"
+                value={fingerprintConfig.batteryLevel || ""}
                 onChange={(e) =>
                   updateFingerprintConfig(
-                    "battery:chargingTime",
+                    "batteryLevel",
                     e.target.value ? parseFloat(e.target.value) : undefined,
                   )
                 }
-                placeholder="e.g., 0"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="discharging-time">Discharging Time</Label>
-              <Input
-                id="discharging-time"
-                type="number"
-                step="any"
-                value={fingerprintConfig["battery:dischargingTime"] || ""}
-                onChange={(e) =>
-                  updateFingerprintConfig(
-                    "battery:dischargingTime",
-                    e.target.value ? parseFloat(e.target.value) : undefined,
-                  )
-                }
-                placeholder="e.g., 0"
+                placeholder="e.g., 0.85"
               />
             </div>
           </div>
         </div>
 
-        {/* Browser Behavior */}
-        {/* <div className="space-y-3">
-        <Label>Browser Behavior</Label>
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="allow-addon-new-tab"
-            checked={fingerprintConfig.allowAddonNewTab}
-            onCheckedChange={(checked) =>
-              updateFingerprintConfig("allowAddonNewTab", checked)
-            }
-          />
-          <Label htmlFor="allow-addon-new-tab">
-            Allow browser addons to open new tabs automatically
-          </Label>
+        {/* Vendor Info */}
+        <div className="space-y-3">
+          <Label>Vendor Info</Label>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="vendor">Vendor</Label>
+              <Input
+                id="vendor"
+                value={fingerprintConfig.vendor || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig("vendor", e.target.value || undefined)
+                }
+                placeholder="e.g., Google Inc."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="vendor-sub">Vendor Sub</Label>
+              <Input
+                id="vendor-sub"
+                value={fingerprintConfig.vendorSub || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "vendorSub",
+                    e.target.value || undefined,
+                  )
+                }
+                placeholder=""
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="product-sub">Product Sub</Label>
+              <Input
+                id="product-sub"
+                value={fingerprintConfig.productSub || ""}
+                onChange={(e) =>
+                  updateFingerprintConfig(
+                    "productSub",
+                    e.target.value || undefined,
+                  )
+                }
+                placeholder="e.g., 20030107"
+              />
+            </div>
+          </div>
         </div>
-      </div> */}
       </fieldset>
     </div>
   );
@@ -962,7 +910,6 @@ export function SharedCamoufoxConfigForm({
   return (
     <div className={`space-y-6 ${className}`}>
       {forceAdvanced ? (
-        // Advanced mode only (for editing)
         renderAdvancedForm()
       ) : (
         <Tabs
@@ -985,7 +932,7 @@ export function SharedCamoufoxConfigForm({
               <Label>Operating System Fingerprint</Label>
               <Select
                 value={selectedOS}
-                onValueChange={(value: CamoufoxOS) =>
+                onValueChange={(value: WayfernOS) =>
                   onConfigChange("os", value)
                 }
                 disabled={readOnly}
@@ -997,16 +944,23 @@ export function SharedCamoufoxConfigForm({
                   <SelectItem value="windows">{osLabels.windows}</SelectItem>
                   <SelectItem value="macos">{osLabels.macos}</SelectItem>
                   <SelectItem value="linux">{osLabels.linux}</SelectItem>
+                  <SelectItem value="android">{osLabels.android}</SelectItem>
+                  <SelectItem value="ios">{osLabels.ios}</SelectItem>
                 </SelectContent>
               </Select>
-              {isOSDifferent && (
+              {isOSDifferent && !isMobileOS && (
                 <Alert className="border-yellow-500/50 bg-yellow-500/10">
                   <AlertDescription className="text-yellow-600 dark:text-yellow-400">
-                    ⚠️ Warning: Selecting an OS different from your current
-                    system ({osLabels[currentOS]}) increases the risk of
-                    detection. Websites with advanced protections can detect
-                    mismatches between your fingerprint and actual system
-                    behavior.
+                    Warning: Selecting an OS different from your current system
+                    ({osLabels[currentOS]}) increases the risk of detection.
+                  </AlertDescription>
+                </Alert>
+              )}
+              {isMobileOS && (
+                <Alert className="border-yellow-500/50 bg-yellow-500/10">
+                  <AlertDescription className="text-yellow-600 dark:text-yellow-400">
+                    Warning: Mobile OS spoofing on desktop has high detection
+                    risk.
                   </AlertDescription>
                 </Alert>
               )}
@@ -1032,8 +986,7 @@ export function SharedCamoufoxConfigForm({
               </div>
               <p className="text-sm text-muted-foreground ml-6">
                 When enabled, a new fingerprint will be generated each time the
-                browser is launched. The generated fingerprint is saved for
-                reference.
+                browser is launched.
               </p>
             </div>
 
@@ -1047,8 +1000,7 @@ export function SharedCamoufoxConfigForm({
                   disabled={isEditingDisabled}
                 />
                 <Label htmlFor="auto-location">
-                  Automatically configure location information based on proxy
-                  configuration or your connection if no proxy provided
+                  Automatically configure location based on proxy or connection
                 </Label>
               </div>
             </div>

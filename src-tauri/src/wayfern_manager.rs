@@ -131,6 +131,26 @@ impl WayfernManager {
     Ok(port)
   }
 
+  /// Normalize fingerprint data from Wayfern CDP format to our storage format.
+  /// Wayfern returns fields like fonts, webglParameters as JSON strings which we keep as-is.
+  fn normalize_fingerprint(fingerprint: serde_json::Value) -> serde_json::Value {
+    // Our storage format matches what Wayfern returns:
+    // - fonts, plugins, mimeTypes, voices are JSON strings
+    // - webglParameters, webgl2Parameters, etc. are JSON strings
+    // The form displays them as JSON text areas, so no conversion needed.
+    fingerprint
+  }
+
+  /// Denormalize fingerprint data from our storage format to Wayfern CDP format.
+  /// Wayfern expects certain fields as JSON strings.
+  fn denormalize_fingerprint(fingerprint: serde_json::Value) -> serde_json::Value {
+    // Our storage format matches what Wayfern expects:
+    // - fonts, plugins, mimeTypes, voices are JSON strings
+    // - webglParameters, webgl2Parameters, etc. are JSON strings
+    // So no conversion is needed
+    fingerprint
+  }
+
   async fn wait_for_cdp_ready(
     &self,
     port: u16,
@@ -316,7 +336,25 @@ impl WayfernManager {
       Ok(result) => {
         // Wayfern.getFingerprint returns { fingerprint: {...} }
         // We need to extract just the fingerprint object
-        result.get("fingerprint").cloned().unwrap_or(result)
+        let fp = result.get("fingerprint").cloned().unwrap_or(result);
+        // Normalize the fingerprint: convert JSON string fields to proper types
+        let mut normalized = Self::normalize_fingerprint(fp);
+
+        // Add default timezone/geolocation if not present
+        // Wayfern's Bayesian network generator doesn't include these fields,
+        // so we need to add sensible defaults
+        if let Some(obj) = normalized.as_object_mut() {
+          if !obj.contains_key("timezone") {
+            obj.insert("timezone".to_string(), json!("America/New_York"));
+          }
+          if !obj.contains_key("timezoneOffset") {
+            obj.insert("timezoneOffset".to_string(), json!(300)); // EST = UTC-5 = 300 minutes
+          }
+          // Note: latitude/longitude are intentionally not set by default
+          // as they reveal precise location. Users should set these manually if needed.
+        }
+
+        normalized
       }
       Err(e) => {
         cleanup().await;
@@ -336,6 +374,19 @@ impl WayfernManager {
         .as_object()
         .map(|o| o.keys().collect::<Vec<_>>())
     );
+
+    // Log timezone/geolocation fields specifically for debugging
+    if let Some(obj) = fingerprint.as_object() {
+      log::info!(
+        "Generated fingerprint - timezone: {:?}, timezoneOffset: {:?}, latitude: {:?}, longitude: {:?}, language: {:?}",
+        obj.get("timezone"),
+        obj.get("timezoneOffset"),
+        obj.get("latitude"),
+        obj.get("longitude"),
+        obj.get("language")
+      );
+    }
+
     Ok(fingerprint_json)
   }
 
@@ -383,9 +434,8 @@ impl WayfernManager {
       args.push(format!("--proxy-server={proxy}"));
     }
 
-    if let Some(url) = url {
-      args.push(url.to_string());
-    }
+    // Don't add URL to args - we'll navigate via CDP after setting fingerprint
+    // This ensures fingerprint is applied at navigation commit time
 
     let mut cmd = TokioCommand::new(&executable_path);
     cmd.args(&args);
@@ -397,6 +447,14 @@ impl WayfernManager {
 
     self.wait_for_cdp_ready(port).await?;
 
+    // Get CDP targets first - needed for both fingerprint and navigation
+    let targets = self.get_cdp_targets(port).await?;
+    log::info!("Found {} CDP targets", targets.len());
+
+    let page_targets: Vec<_> = targets.iter().filter(|t| t.target_type == "page").collect();
+    log::info!("Found {} page targets", page_targets.len());
+
+    // Apply fingerprint if configured
     if let Some(fingerprint_json) = &config.fingerprint {
       log::info!(
         "Applying fingerprint to Wayfern browser, fingerprint length: {} chars",
@@ -408,7 +466,7 @@ impl WayfernManager {
 
       // The stored fingerprint should be the fingerprint object directly (after our fix in generate_fingerprint_config)
       // But for backwards compatibility, also handle the wrapped format
-      let fingerprint = if stored_value.get("fingerprint").is_some() {
+      let mut fingerprint = if stored_value.get("fingerprint").is_some() {
         // Old format: {"fingerprint": {...}} - extract the inner fingerprint
         stored_value.get("fingerprint").cloned().unwrap()
       } else {
@@ -416,28 +474,51 @@ impl WayfernManager {
         stored_value.clone()
       };
 
+      // Add default timezone if not present (for profiles created before timezone was added)
+      if let Some(obj) = fingerprint.as_object_mut() {
+        if !obj.contains_key("timezone") {
+          obj.insert("timezone".to_string(), json!("America/New_York"));
+          log::info!("Added default timezone to fingerprint");
+        }
+        if !obj.contains_key("timezoneOffset") {
+          obj.insert("timezoneOffset".to_string(), json!(300));
+          log::info!("Added default timezoneOffset to fingerprint");
+        }
+      }
+
+      // Denormalize fingerprint for Wayfern CDP (convert arrays/objects to JSON strings)
+      let fingerprint_for_cdp = Self::denormalize_fingerprint(fingerprint);
+
       log::info!(
         "Fingerprint prepared for CDP command, fields: {:?}",
-        fingerprint
+        fingerprint_for_cdp
           .as_object()
-          .map(|o| o.keys().take(5).collect::<Vec<_>>())
+          .map(|o| o.keys().collect::<Vec<_>>())
       );
 
-      let targets = self.get_cdp_targets(port).await?;
-      log::info!("Found {} CDP targets", targets.len());
+      // Log timezone and geolocation fields specifically for debugging
+      if let Some(obj) = fingerprint_for_cdp.as_object() {
+        log::info!(
+          "Timezone/Geolocation fields - timezone: {:?}, timezoneOffset: {:?}, latitude: {:?}, longitude: {:?}, language: {:?}, languages: {:?}",
+          obj.get("timezone"),
+          obj.get("timezoneOffset"),
+          obj.get("latitude"),
+          obj.get("longitude"),
+          obj.get("language"),
+          obj.get("languages")
+        );
+      }
 
-      let page_targets: Vec<_> = targets.iter().filter(|t| t.target_type == "page").collect();
-      log::info!(
-        "Found {} page targets for fingerprint application",
-        page_targets.len()
-      );
-
-      for target in page_targets {
+      for target in &page_targets {
         if let Some(ws_url) = &target.websocket_debugger_url {
           log::info!("Applying fingerprint to target via WebSocket: {}", ws_url);
           // Wayfern.setFingerprint expects the fingerprint object directly, NOT wrapped
           match self
-            .send_cdp_command(ws_url, "Wayfern.setFingerprint", fingerprint.clone())
+            .send_cdp_command(
+              ws_url,
+              "Wayfern.setFingerprint",
+              fingerprint_for_cdp.clone(),
+            )
             .await
           {
             Ok(result) => log::info!(
@@ -450,6 +531,22 @@ impl WayfernManager {
       }
     } else {
       log::warn!("No fingerprint found in config, browser will use default fingerprint");
+    }
+
+    // Navigate to URL via CDP - fingerprint will be applied at navigation commit time
+    if let Some(url) = url {
+      log::info!("Navigating to URL via CDP: {}", url);
+      if let Some(target) = page_targets.first() {
+        if let Some(ws_url) = &target.websocket_debugger_url {
+          match self
+            .send_cdp_command(ws_url, "Page.navigate", json!({ "url": url }))
+            .await
+          {
+            Ok(_) => log::info!("Successfully navigated to URL: {}", url),
+            Err(e) => log::error!("Failed to navigate to URL: {e}"),
+          }
+        }
+      }
     }
 
     let id = uuid::Uuid::new_v4().to_string();

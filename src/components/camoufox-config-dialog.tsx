@@ -10,7 +10,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { BrowserProfile, CamoufoxConfig, CamoufoxOS } from "@/types";
+import { WayfernConfigForm } from "@/components/wayfern-config-form";
+import type {
+  BrowserProfile,
+  CamoufoxConfig,
+  CamoufoxOS,
+  WayfernConfig,
+} from "@/types";
 
 const getCurrentOS = (): CamoufoxOS => {
   if (typeof navigator === "undefined") return "linux";
@@ -43,7 +49,8 @@ export function CamoufoxConfigDialog({
   onSaveWayfern,
   isRunning = false,
 }: CamoufoxConfigDialogProps) {
-  const [config, setConfig] = useState<CamoufoxConfig>(() => ({
+  // Use union type to support both Camoufox and Wayfern configs
+  const [config, setConfig] = useState<CamoufoxConfig | WayfernConfig>(() => ({
     geoip: true,
     os: getCurrentOS(),
   }));
@@ -68,7 +75,10 @@ export function CamoufoxConfigDialog({
     }
   }, [profile, isAntiDetectBrowser]);
 
-  const updateConfig = (key: keyof CamoufoxConfig, value: unknown) => {
+  const updateConfig = (
+    key: keyof CamoufoxConfig | keyof WayfernConfig,
+    value: unknown,
+  ) => {
     setConfig((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -92,9 +102,9 @@ export function CamoufoxConfigDialog({
     setIsSaving(true);
     try {
       if (profile.browser === "wayfern" && onSaveWayfern) {
-        await onSaveWayfern(profile, config);
+        await onSaveWayfern(profile, config as CamoufoxConfig);
       } else {
-        await onSave(profile, config);
+        await onSave(profile, config as CamoufoxConfig);
       }
       onClose();
     } catch (error) {
@@ -144,15 +154,22 @@ export function CamoufoxConfigDialog({
 
         <ScrollArea className="flex-1 h-[300px]">
           <div className="py-4">
-            <SharedCamoufoxConfigForm
-              config={config}
-              onConfigChange={updateConfig}
-              forceAdvanced={true}
-              readOnly={isRunning}
-              browserType={
-                profile.browser === "wayfern" ? "wayfern" : "camoufox"
-              }
-            />
+            {profile.browser === "wayfern" ? (
+              <WayfernConfigForm
+                config={config as WayfernConfig}
+                onConfigChange={updateConfig}
+                forceAdvanced={true}
+                readOnly={isRunning}
+              />
+            ) : (
+              <SharedCamoufoxConfigForm
+                config={config as CamoufoxConfig}
+                onConfigChange={updateConfig}
+                forceAdvanced={true}
+                readOnly={isRunning}
+                browserType="camoufox"
+              />
+            )}
           </div>
         </ScrollArea>
 
