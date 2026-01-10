@@ -40,6 +40,12 @@ pub struct AppSettings {
   pub api_token: Option<String>, // Displayed token for user to copy
   #[serde(default)]
   pub sync_server_url: Option<String>, // URL of the sync server
+  #[serde(default)]
+  pub first_launch_timestamp: Option<u64>, // Unix epoch seconds when app was first launched
+  #[serde(default)]
+  pub commercial_trial_acknowledged: bool, // Has user dismissed the trial expiration modal
+  #[serde(default)]
+  pub mcp_enabled: bool, // Enable MCP (Model Context Protocol) server
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -66,6 +72,9 @@ impl Default for AppSettings {
       api_port: 10108,
       api_token: None,
       sync_server_url: None,
+      first_launch_timestamp: None,
+      commercial_trial_acknowledged: false,
+      mcp_enabled: false,
     }
   }
 }
@@ -753,6 +762,9 @@ mod tests {
       api_port: 10108,
       api_token: None,
       sync_server_url: None,
+      first_launch_timestamp: None,
+      commercial_trial_acknowledged: false,
+      mcp_enabled: false,
     };
 
     // Save settings

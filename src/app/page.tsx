@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrent } from "@tauri-apps/plugin-deep-link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CamoufoxConfigDialog } from "@/components/camoufox-config-dialog";
+import { CommercialTrialModal } from "@/components/commercial-trial-modal";
 import { CookieCopyDialog } from "@/components/cookie-copy-dialog";
 import { CreateProfileDialog } from "@/components/create-profile-dialog";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
@@ -21,7 +22,9 @@ import { ProxyAssignmentDialog } from "@/components/proxy-assignment-dialog";
 import { ProxyManagementDialog } from "@/components/proxy-management-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { SyncConfigDialog } from "@/components/sync-config-dialog";
+import { WayfernTermsDialog } from "@/components/wayfern-terms-dialog";
 import { useAppUpdateNotifications } from "@/hooks/use-app-update-notifications";
+import { useCommercialTrial } from "@/hooks/use-commercial-trial";
 import { useGroupEvents } from "@/hooks/use-group-events";
 import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -29,6 +32,7 @@ import { useProfileEvents } from "@/hooks/use-profile-events";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { useUpdateNotifications } from "@/hooks/use-update-notifications";
 import { useVersionUpdater } from "@/hooks/use-version-updater";
+import { useWayfernTerms } from "@/hooks/use-wayfern-terms";
 import { showErrorToast, showSuccessToast, showToast } from "@/lib/toast-utils";
 import type { BrowserProfile, CamoufoxConfig, WayfernConfig } from "@/types";
 
@@ -69,6 +73,18 @@ export default function Home() {
     isLoading: proxiesLoading,
     error: proxiesError,
   } = useProxyEvents();
+
+  // Wayfern terms and commercial trial hooks
+  const {
+    termsAccepted,
+    isLoading: termsLoading,
+    checkTerms,
+  } = useWayfernTerms();
+  const {
+    trialStatus,
+    hasAcknowledged: trialAcknowledged,
+    checkTrialStatus,
+  } = useCommercialTrial();
 
   const [createProfileDialogOpen, setCreateProfileDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
@@ -960,6 +976,23 @@ export default function Home() {
         }}
         profile={currentProfileForSync}
         onSyncConfigOpen={() => setSyncConfigDialogOpen(true)}
+      />
+
+      {/* Wayfern Terms and Conditions Dialog - shown if terms not accepted */}
+      <WayfernTermsDialog
+        isOpen={!termsLoading && termsAccepted === false}
+        onAccepted={checkTerms}
+      />
+
+      {/* Commercial Trial Modal - shown once when trial expires */}
+      <CommercialTrialModal
+        isOpen={
+          !termsLoading &&
+          termsAccepted === true &&
+          trialStatus?.type === "Expired" &&
+          !trialAcknowledged
+        }
+        onClose={checkTrialStatus}
       />
     </div>
   );

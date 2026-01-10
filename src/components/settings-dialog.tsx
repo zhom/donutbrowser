@@ -37,8 +37,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useCommercialTrial } from "@/hooks/use-commercial-trial";
 import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useWayfernTerms } from "@/hooks/use-wayfern-terms";
 import {
   getThemeByColors,
   getThemeById,
@@ -115,6 +117,10 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     isMicrophoneAccessGranted,
     isCameraAccessGranted,
   } = usePermissions();
+  const { termsAccepted } = useWayfernTerms();
+  const { trialStatus } = useCommercialTrial();
+  const [mcpEnabled, setMcpEnabled] = useState(false);
+  const [isMcpStarting, setIsMcpStarting] = useState(false);
 
   const getPermissionIcon = useCallback((type: PermissionType) => {
     switch (type) {
@@ -417,6 +423,16 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     }
   }, []);
 
+  const loadMcpServerStatus = useCallback(async () => {
+    try {
+      const isRunning = await invoke<boolean>("get_mcp_server_status");
+      setMcpEnabled(isRunning);
+    } catch (error) {
+      console.error("Failed to load MCP server status:", error);
+      setMcpEnabled(false);
+    }
+  }, []);
+
   const handleClose = useCallback(() => {
     // Restore original theme when closing without saving
     if (originalSettings.theme === "custom" && originalSettings.custom_theme) {
@@ -455,6 +471,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
       loadSettings().catch(console.error);
       checkDefaultBrowserStatus().catch(console.error);
       loadApiServerStatus().catch(console.error);
+      loadMcpServerStatus().catch(console.error);
 
       // Check if we're on macOS
       const userAgent = navigator.userAgent;
@@ -481,6 +498,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     checkDefaultBrowserStatus,
     loadSettings,
     loadApiServerStatus,
+    loadMcpServerStatus,
   ]);
 
   // Update permissions when the permission states change
@@ -1043,6 +1061,100 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                     documentation later.
                   </div>
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* Commercial License Section */}
+          <div className="space-y-4">
+            <Label className="text-base font-medium">Commercial License</Label>
+
+            <div className="flex items-center justify-between p-3 rounded-md border bg-muted/40">
+              {trialStatus?.type === "Active" ? (
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">
+                    Trial: {trialStatus.days_remaining} days,{" "}
+                    {trialStatus.hours_remaining} hours remaining
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Commercial use is free during the trial period
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-orange-600">
+                    Trial expired
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Personal use remains free. Commercial use requires a
+                    license.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* MCP Server Section */}
+          <div className="space-y-4">
+            <Label className="text-base font-medium">MCP Server</Label>
+
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="mcp-enabled"
+                checked={mcpEnabled}
+                disabled={!termsAccepted || isMcpStarting}
+                onCheckedChange={async (checked: boolean) => {
+                  setIsMcpStarting(true);
+                  try {
+                    if (checked) {
+                      await invoke("start_mcp_server");
+                      setMcpEnabled(true);
+                      showSuccessToast("MCP server started");
+                    } else {
+                      await invoke("stop_mcp_server");
+                      setMcpEnabled(false);
+                      showSuccessToast("MCP server stopped");
+                    }
+                  } catch (e) {
+                    console.error("Failed to toggle MCP server:", e);
+                    showErrorToast("Failed to toggle MCP server", {
+                      description:
+                        e instanceof Error ? e.message : "Unknown error",
+                    });
+                  } finally {
+                    setIsMcpStarting(false);
+                  }
+                }}
+              />
+              <div className="grid gap-1.5 leading-none">
+                <Label
+                  htmlFor="mcp-enabled"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  Enable MCP Server (Model Context Protocol)
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Allow AI assistants to control Wayfern and Camoufox browsers
+                  via MCP.
+                  {!termsAccepted && (
+                    <span className="ml-1 text-orange-600">
+                      (Accept terms first)
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            {mcpEnabled && (
+              <div className="p-3 space-y-2 text-xs rounded-md border bg-muted/40">
+                <div className="font-medium">Available MCP Tools</div>
+                <ul className="list-disc ml-5 space-y-0.5 text-muted-foreground">
+                  <li>list_profiles - List Wayfern/Camoufox profiles</li>
+                  <li>run_profile - Launch a browser profile</li>
+                  <li>kill_profile - Stop a running browser</li>
+                  <li>get_profile - Get profile details</li>
+                  <li>list_proxies - List configured proxies</li>
+                </ul>
               </div>
             )}
           </div>
