@@ -322,10 +322,12 @@ impl ApiServer {
 
     let api = ApiDoc::openapi();
 
-    let v1_routes = v1_routes.layer(middleware::from_fn_with_state(
-      state.clone(),
-      auth_middleware,
-    ));
+    let v1_routes = v1_routes
+      .layer(middleware::from_fn_with_state(
+        state.clone(),
+        auth_middleware,
+      ))
+      .layer(middleware::from_fn(terms_check_middleware));
 
     let app = Router::new()
       .nest("/v1", v1_routes)
@@ -361,6 +363,19 @@ impl ApiServer {
     self.port = None;
     Ok(())
   }
+}
+
+// Terms and Conditions check middleware
+async fn terms_check_middleware(
+  request: axum::extract::Request,
+  next: Next,
+) -> Result<Response, StatusCode> {
+  // Check if Wayfern terms have been accepted
+  if !crate::wayfern_terms::WayfernTermsManager::instance().is_terms_accepted() {
+    return Err(StatusCode::FORBIDDEN);
+  }
+
+  Ok(next.run(request).await)
 }
 
 // Authentication middleware

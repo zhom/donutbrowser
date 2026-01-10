@@ -34,8 +34,11 @@ mod settings_manager;
 pub mod sync;
 pub mod traffic_stats;
 mod wayfern_manager;
+mod wayfern_terms;
 // mod theme_detector; // removed: theme detection handled in webview via CSS prefers-color-scheme
+mod commercial_license;
 mod cookie_manager;
+mod mcp_server;
 mod tag_manager;
 mod version_updater;
 
@@ -233,6 +236,54 @@ async fn copy_profile_cookies(
   request: cookie_manager::CookieCopyRequest,
 ) -> Result<Vec<cookie_manager::CookieCopyResult>, String> {
   cookie_manager::CookieManager::copy_cookies(&app_handle, request).await
+}
+
+#[tauri::command]
+fn check_wayfern_terms_accepted() -> bool {
+  wayfern_terms::WayfernTermsManager::instance().is_terms_accepted()
+}
+
+#[tauri::command]
+async fn accept_wayfern_terms() -> Result<(), String> {
+  wayfern_terms::WayfernTermsManager::instance()
+    .accept_terms()
+    .await
+}
+
+#[tauri::command]
+async fn get_commercial_trial_status(
+  app_handle: tauri::AppHandle,
+) -> Result<commercial_license::TrialStatus, String> {
+  commercial_license::CommercialLicenseManager::instance()
+    .get_trial_status(&app_handle)
+    .await
+}
+
+#[tauri::command]
+async fn acknowledge_trial_expiration(app_handle: tauri::AppHandle) -> Result<(), String> {
+  commercial_license::CommercialLicenseManager::instance()
+    .acknowledge_expiration(&app_handle)
+    .await
+}
+
+#[tauri::command]
+fn has_acknowledged_trial_expiration(app_handle: tauri::AppHandle) -> Result<bool, String> {
+  commercial_license::CommercialLicenseManager::instance().has_acknowledged(&app_handle)
+}
+
+#[tauri::command]
+async fn start_mcp_server(app_handle: tauri::AppHandle) -> Result<(), String> {
+  mcp_server::McpServer::instance().start(app_handle).await
+}
+
+#[tauri::command]
+async fn stop_mcp_server() -> Result<(), String> {
+  mcp_server::McpServer::instance().stop().await
+}
+
+#[tauri::command]
+fn get_mcp_server_status() -> bool {
+  mcp_server::McpServer::instance().is_running()
 }
 
 #[tauri::command]
@@ -841,7 +892,15 @@ pub fn run() {
       is_proxy_in_use_by_synced_profile,
       is_group_in_use_by_synced_profile,
       read_profile_cookies,
-      copy_profile_cookies
+      copy_profile_cookies,
+      check_wayfern_terms_accepted,
+      accept_wayfern_terms,
+      get_commercial_trial_status,
+      acknowledge_trial_expiration,
+      has_acknowledged_trial_expiration,
+      start_mcp_server,
+      stop_mcp_server,
+      get_mcp_server_status
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

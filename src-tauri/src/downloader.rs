@@ -635,6 +635,11 @@ impl Downloader {
     browser_str: String,
     version: String,
   ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    // Check if Wayfern terms have been accepted before allowing any browser downloads
+    if !crate::wayfern_terms::WayfernTermsManager::instance().is_terms_accepted() {
+      return Err("Please accept Wayfern Terms and Conditions before downloading browsers".into());
+    }
+
     // Check if this browser-version pair is already being downloaded
     let download_key = format!("{browser_str}-{version}");
     {
