@@ -4,22 +4,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrent } from "@tauri-apps/plugin-deep-link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CamoufoxConfigDialog } from "@/components/camoufox-config-dialog";
-import { CreateProfileDialog } from "@/components/create-profile-dialog";
-import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
-import { GroupAssignmentDialog } from "@/components/group-assignment-dialog";
 import { GroupBadges } from "@/components/group-badges";
-import { GroupManagementDialog } from "@/components/group-management-dialog";
 import HomeHeader from "@/components/home-header";
-import { ImportProfileDialog } from "@/components/import-profile-dialog";
-import { PermissionDialog } from "@/components/permission-dialog";
+import { PageDialogs } from "@/components/page-dialogs";
 import { ProfilesDataTable } from "@/components/profile-data-table";
 import { ProfileSelectorDialog } from "@/components/profile-selector-dialog";
-import { ProfileSyncDialog } from "@/components/profile-sync-dialog";
-import { ProxyAssignmentDialog } from "@/components/proxy-assignment-dialog";
-import { ProxyManagementDialog } from "@/components/proxy-management-dialog";
-import { SettingsDialog } from "@/components/settings-dialog";
-import { SyncConfigDialog } from "@/components/sync-config-dialog";
+
 import { useAppUpdateNotifications } from "@/hooks/use-app-update-notifications";
 import { useGroupEvents } from "@/hooks/use-group-events";
 import type { PermissionType } from "@/hooks/use-permissions";
@@ -83,10 +73,10 @@ export default function Home() {
   const [proxyAssignmentDialogOpen, setProxyAssignmentDialogOpen] =
     useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<string>("default");
-  const [selectedProfilesForGroup, setSelectedProfilesForGroup] = useState<
+  const [_selectedProfilesForGroup, setSelectedProfilesForGroup] = useState<
     string[]
   >([]);
-  const [selectedProfilesForProxy, setSelectedProfilesForProxy] = useState<
+  const [_selectedProfilesForProxy, setSelectedProfilesForProxy] = useState<
     string[]
   >([]);
   const [selectedProfiles, setSelectedProfiles] = useState<string[]>([]);
@@ -807,34 +797,55 @@ export default function Home() {
         </div>
       )}
 
-      <CreateProfileDialog
-        isOpen={createProfileDialogOpen}
-        onClose={() => {
-          setCreateProfileDialogOpen(false);
-        }}
-        onCreateProfile={handleCreateProfile}
+      <PageDialogs
+        createProfileDialogOpen={createProfileDialogOpen}
+        setCreateProfileDialogOpen={setCreateProfileDialogOpen}
+        importProfileDialogOpen={importProfileDialogOpen}
+        setImportProfileDialogOpen={setImportProfileDialogOpen}
+        settingsDialogOpen={settingsDialogOpen}
+        setSettingsDialogOpen={setSettingsDialogOpen}
+        proxyManagementDialogOpen={proxyManagementDialogOpen}
+        setProxyManagementDialogOpen={setProxyManagementDialogOpen}
+        groupManagementDialogOpen={groupManagementDialogOpen}
+        setGroupManagementDialogOpen={setGroupManagementDialogOpen}
+        syncConfigDialogOpen={syncConfigDialogOpen}
+        setSyncConfigDialogOpen={setSyncConfigDialogOpen}
+        camoufoxConfigDialogOpen={camoufoxConfigDialogOpen}
+        setCamoufoxConfigDialogOpen={setCamoufoxConfigDialogOpen}
+        permissionDialogOpen={permissionDialogOpen}
+        setPermissionDialogOpen={setPermissionDialogOpen}
+        profileSyncDialogOpen={profileSyncDialogOpen}
+        setProfileSyncDialogOpen={setProfileSyncDialogOpen}
+        profileSelectorDialogOpen={false}
+        setProfileSelectorDialogOpen={() => {}}
+        proxyAssignmentDialogOpen={proxyAssignmentDialogOpen}
+        setProxyAssignmentDialogOpen={setProxyAssignmentDialogOpen}
+        groupAssignmentDialogOpen={groupAssignmentDialogOpen}
+        setGroupAssignmentDialogOpen={setGroupAssignmentDialogOpen}
+        deleteConfirmationDialogOpen={showBulkDeleteConfirmation}
+        setDeleteConfirmationDialogOpen={setShowBulkDeleteConfirmation}
         selectedGroupId={selectedGroupId}
-      />
-
-      <SettingsDialog
-        isOpen={settingsDialogOpen}
-        onClose={() => {
-          setSettingsDialogOpen(false);
-        }}
-      />
-
-      <ImportProfileDialog
-        isOpen={importProfileDialogOpen}
-        onClose={() => {
-          setImportProfileDialogOpen(false);
-        }}
-      />
-
-      <ProxyManagementDialog
-        isOpen={proxyManagementDialogOpen}
-        onClose={() => {
-          setProxyManagementDialogOpen(false);
-        }}
+        permissionType={currentPermissionType}
+        onPermissionGranted={checkNextPermission}
+        profiles={profiles}
+        selectedProfiles={selectedProfiles}
+        storedProxies={storedProxies}
+        isUpdating={isUpdating}
+        runningProfiles={runningProfiles}
+        onCreateProfile={handleCreateProfile}
+        onGroupManagementComplete={handleGroupManagementComplete}
+        onGroupAssignmentComplete={handleGroupAssignmentComplete}
+        onProxyAssignmentComplete={handleProxyAssignmentComplete}
+        onConfirmDelete={confirmBulkDelete}
+        deleteTitle="Delete Selected Profiles"
+        deleteDescription={`This action cannot be undone. This will permanently delete ${selectedProfiles.length} profile${selectedProfiles.length !== 1 ? "s" : ""} and all associated data.`}
+        deleteConfirmButtonText={`Delete ${selectedProfiles.length} Profile${selectedProfiles.length !== 1 ? "s" : ""}`}
+        isDeleting={isBulkDeleting}
+        profileIdsToDelete={selectedProfiles}
+        camoufoxProfile={currentProfileForCamoufoxConfig}
+        onCamoufoxSave={handleSaveCamoufoxConfig}
+        profileSyncProfile={currentProfileForSync}
+        onSyncConfigOpen={() => setSyncConfigDialogOpen(true)}
       />
 
       {pendingUrls.map((pendingUrl) => (
@@ -851,85 +862,6 @@ export default function Home() {
           runningProfiles={runningProfiles}
         />
       ))}
-
-      <PermissionDialog
-        isOpen={permissionDialogOpen}
-        onClose={() => {
-          setPermissionDialogOpen(false);
-        }}
-        permissionType={currentPermissionType}
-        onPermissionGranted={checkNextPermission}
-      />
-
-      <CamoufoxConfigDialog
-        isOpen={camoufoxConfigDialogOpen}
-        onClose={() => {
-          setCamoufoxConfigDialogOpen(false);
-        }}
-        profile={currentProfileForCamoufoxConfig}
-        onSave={handleSaveCamoufoxConfig}
-        isRunning={
-          currentProfileForCamoufoxConfig
-            ? runningProfiles.has(currentProfileForCamoufoxConfig.id)
-            : false
-        }
-      />
-
-      <GroupManagementDialog
-        isOpen={groupManagementDialogOpen}
-        onClose={() => {
-          setGroupManagementDialogOpen(false);
-        }}
-        onGroupManagementComplete={handleGroupManagementComplete}
-      />
-
-      <GroupAssignmentDialog
-        isOpen={groupAssignmentDialogOpen}
-        onClose={() => {
-          setGroupAssignmentDialogOpen(false);
-        }}
-        selectedProfiles={selectedProfilesForGroup}
-        onAssignmentComplete={handleGroupAssignmentComplete}
-        profiles={profiles}
-      />
-
-      <ProxyAssignmentDialog
-        isOpen={proxyAssignmentDialogOpen}
-        onClose={() => {
-          setProxyAssignmentDialogOpen(false);
-        }}
-        selectedProfiles={selectedProfilesForProxy}
-        onAssignmentComplete={handleProxyAssignmentComplete}
-        profiles={profiles}
-        storedProxies={storedProxies}
-      />
-
-      <DeleteConfirmationDialog
-        isOpen={showBulkDeleteConfirmation}
-        onClose={() => setShowBulkDeleteConfirmation(false)}
-        onConfirm={confirmBulkDelete}
-        title="Delete Selected Profiles"
-        description={`This action cannot be undone. This will permanently delete ${selectedProfiles.length} profile${selectedProfiles.length !== 1 ? "s" : ""} and all associated data.`}
-        confirmButtonText={`Delete ${selectedProfiles.length} Profile${selectedProfiles.length !== 1 ? "s" : ""}`}
-        isLoading={isBulkDeleting}
-        profileIds={selectedProfiles}
-        profiles={profiles.map((p) => ({ id: p.id, name: p.name }))}
-      />
-
-      <SyncConfigDialog
-        isOpen={syncConfigDialogOpen}
-        onClose={() => setSyncConfigDialogOpen(false)}
-      />
-
-      <ProfileSyncDialog
-        isOpen={profileSyncDialogOpen}
-        onClose={() => {
-          setProfileSyncDialogOpen(false);
-          setCurrentProfileForSync(null);
-        }}
-        profile={currentProfileForSync}
-        onSyncConfigOpen={() => setSyncConfigDialogOpen(true)}
-      />
     </div>
   );
 }
