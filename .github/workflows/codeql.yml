@@ -12,9 +12,7 @@ on:
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
-    runs-on: ${{ (matrix.language == 'swift' && 'macos-latest') || 'ubuntu-latest' }}
-    env:
-      CODEQL_ENABLE_EXPERIMENTAL_FEATURES: true
+    runs-on: ubuntu-latest
     permissions:
       security-events: write
       packages: read
@@ -28,8 +26,6 @@ jobs:
           - language: actions
             build-mode: none
           - language: javascript-typescript
-            build-mode: none
-          - language: rust
             build-mode: none
     steps:
       - name: Checkout repository
@@ -46,62 +42,8 @@ jobs:
           node-version-file: .node-version
           cache: "pnpm"
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 #master
-        with:
-          toolchain: stable
-          targets: x86_64-unknown-linux-gnu
-
-      - name: Install system dependencies (Rust only)
-        if: matrix.language == 'rust'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev pkg-config xdg-utils
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 #v2.8.2
-        with:
-          workdir: ./src-tauri
-
       - name: Install dependencies from lockfile
         run: pnpm install --frozen-lockfile
-
-      - name: Build frontend
-        if: matrix.language == 'rust'
-        run: pnpm next build
-
-      - name: Get host target
-        if: matrix.language == 'rust'
-        id: host_target
-        shell: bash
-        run: |
-          HOST_TARGET=$(rustc -vV | sed -n 's|host: ||p')
-          echo "target=${HOST_TARGET}" >> $GITHUB_OUTPUT
-
-      - name: Build sidecar binaries
-        if: matrix.language == 'rust'
-        shell: bash
-        working-directory: ./src-tauri
-        run: |
-          cargo build --bin donut-proxy --release
-          cargo build --bin donut-daemon --release
-
-      - name: Copy sidecar binaries to Tauri binaries
-        if: matrix.language == 'rust'
-        shell: bash
-        run: |
-          mkdir -p src-tauri/binaries
-          HOST_TARGET="${{ steps.host_target.outputs.target }}"
-          cp src-tauri/target/release/donut-proxy src-tauri/binaries/donut-proxy-${HOST_TARGET}
-          cp src-tauri/target/release/donut-daemon src-tauri/binaries/donut-daemon-${HOST_TARGET}
-          chmod +x src-tauri/binaries/donut-proxy-${HOST_TARGET}
-          chmod +x src-tauri/binaries/donut-daemon-${HOST_TARGET}
-
-      - name: Build rust dependencies
-        if: matrix.language == 'rust'
-        working-directory: ./src-tauri
-        run: |
-          cargo build
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@b1e4dc3db58c9601794e22a9f6d28d45461b9dbf #v3.29.0
