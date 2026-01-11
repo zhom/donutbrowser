@@ -92,7 +92,7 @@ jobs:
             - Each array item must be under 80 characters
             - overall_assessment must be under 100 characters
             - Output ONLY the JSON object, nothing else
-          model: openai/gpt-5
+          model: gpt-5
 
       - name: Check if first-time contributor
         id: check-first-time
