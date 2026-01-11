@@ -1,12 +1,12 @@
 use super::engine::SyncEngine;
 use super::subscription::SyncWorkItem;
+use crate::events;
 use crate::profile::ProfileManager;
 use once_cell::sync::OnceCell;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tauri::Emitter;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
@@ -204,7 +204,7 @@ impl SyncScheduler {
     }
   }
 
-  pub async fn sync_all_enabled_profiles(&self, app_handle: &tauri::AppHandle) {
+  pub async fn sync_all_enabled_profiles(&self, _app_handle: &tauri::AppHandle) {
     log::info!("Starting initial sync for all enabled profiles...");
 
     let profiles = {
@@ -235,7 +235,7 @@ impl SyncScheduler {
       let is_running = profile.process_id.is_some();
 
       // Emit initial status
-      let _ = app_handle.emit(
+      let _ = events::emit(
         "profile-sync-status",
         serde_json::json!({
           "profile_id": profile_id,
@@ -324,7 +324,7 @@ impl SyncScheduler {
       }
 
       log::info!("Executing queued sync for profile {}", profile_id);
-      let _ = app_handle.emit(
+      let _ = events::emit(
         "profile-sync-status",
         serde_json::json!({
           "profile_id": profile_id,
@@ -370,7 +370,7 @@ impl SyncScheduler {
       match result {
         Ok(()) => {
           log::info!("Profile {} synced successfully", profile_id);
-          let _ = app_handle.emit(
+          let _ = events::emit(
             "profile-sync-status",
             serde_json::json!({
               "profile_id": profile_id,
@@ -380,7 +380,7 @@ impl SyncScheduler {
         }
         Err(e) => {
           log::error!("Failed to sync profile {}: {}", profile_id, e);
-          let _ = app_handle.emit(
+          let _ = events::emit(
             "profile-sync-status",
             serde_json::json!({
               "profile_id": profile_id,
@@ -419,7 +419,7 @@ impl SyncScheduler {
       Ok(engine) => {
         for proxy_id in proxies_to_sync {
           log::info!("Syncing proxy {}", proxy_id);
-          let _ = app_handle.emit(
+          let _ = events::emit(
             "proxy-sync-status",
             serde_json::json!({
               "id": proxy_id,
@@ -431,7 +431,7 @@ impl SyncScheduler {
             .await
           {
             Ok(()) => {
-              let _ = app_handle.emit(
+              let _ = events::emit(
                 "proxy-sync-status",
                 serde_json::json!({
                   "id": proxy_id,
@@ -441,7 +441,7 @@ impl SyncScheduler {
             }
             Err(e) => {
               log::error!("Failed to sync proxy {}: {}", proxy_id, e);
-              let _ = app_handle.emit(
+              let _ = events::emit(
                 "proxy-sync-status",
                 serde_json::json!({
                   "id": proxy_id,
@@ -485,7 +485,7 @@ impl SyncScheduler {
       Ok(engine) => {
         for group_id in groups_to_sync {
           log::info!("Syncing group {}", group_id);
-          let _ = app_handle.emit(
+          let _ = events::emit(
             "group-sync-status",
             serde_json::json!({
               "id": group_id,
@@ -497,7 +497,7 @@ impl SyncScheduler {
             .await
           {
             Ok(()) => {
-              let _ = app_handle.emit(
+              let _ = events::emit(
                 "group-sync-status",
                 serde_json::json!({
                   "id": group_id,
@@ -507,7 +507,7 @@ impl SyncScheduler {
             }
             Err(e) => {
               log::error!("Failed to sync group {}: {}", group_id, e);
-              let _ = app_handle.emit(
+              let _ = events::emit(
                 "group-sync-status",
                 serde_json::json!({
                   "id": group_id,

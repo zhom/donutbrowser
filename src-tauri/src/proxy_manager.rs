@@ -6,10 +6,11 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::Emitter;
 use tauri_plugin_shell::ShellExt;
 
 use crate::browser::ProxySettings;
+use crate::events;
+use crate::ip_utils;
 
 // Store active proxy information
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -308,7 +309,7 @@ impl ProxyManager {
   // Create a new stored proxy
   pub fn create_stored_proxy(
     &self,
-    app_handle: &tauri::AppHandle,
+    _app_handle: &tauri::AppHandle,
     name: String,
     proxy_settings: ProxySettings,
   ) -> Result<StoredProxy, String> {
@@ -332,7 +333,7 @@ impl ProxyManager {
     }
 
     // Emit event for reactive UI updates
-    if let Err(e) = app_handle.emit("proxies-changed", ()) {
+    if let Err(e) = events::emit_empty("proxies-changed") {
       log::error!("Failed to emit proxies-changed event: {e}");
     }
 
@@ -353,7 +354,7 @@ impl ProxyManager {
   // Update a stored proxy
   pub fn update_stored_proxy(
     &self,
-    app_handle: &tauri::AppHandle,
+    _app_handle: &tauri::AppHandle,
     proxy_id: &str,
     name: Option<String>,
     proxy_settings: Option<ProxySettings>,
@@ -399,7 +400,7 @@ impl ProxyManager {
     }
 
     // Emit event for reactive UI updates
-    if let Err(e) = app_handle.emit("proxies-changed", ()) {
+    if let Err(e) = events::emit_empty("proxies-changed") {
       log::error!("Failed to emit proxies-changed event: {e}");
     }
 
@@ -453,7 +454,7 @@ impl ProxyManager {
     }
 
     // Emit event for reactive UI updates
-    if let Err(e) = app_handle.emit("proxies-changed", ()) {
+    if let Err(e) = events::emit_empty("proxies-changed") {
       log::error!("Failed to emit proxies-changed event: {e}");
     }
 
@@ -489,27 +490,6 @@ impl ProxyManager {
     url
   }
 
-  // Validate IP address (IPv4 or IPv6)
-  fn validate_ip(ip: &str) -> bool {
-    // IPv4 validation
-    if ip.matches('.').count() == 3 {
-      let parts: Vec<&str> = ip.split('.').collect();
-      if parts.len() == 4 {
-        return parts.iter().all(|part| part.parse::<u8>().is_ok());
-      }
-    }
-
-    // IPv6 validation (simplified - checks for colons and hex digits)
-    if ip.matches(':').count() >= 2 {
-      let parts: Vec<&str> = ip.split(':').collect();
-      return parts
-        .iter()
-        .all(|part| part.is_empty() || part.chars().all(|c| c.is_ascii_hexdigit()));
-    }
-
-    false
-  }
-
   // Check if a proxy is valid by making HTTP requests through it
   pub async fn check_proxy_validity(
     &self,
@@ -518,67 +498,10 @@ impl ProxyManager {
   ) -> Result<ProxyCheckResult, String> {
     let proxy_url = Self::build_proxy_url(proxy_settings);
 
-    // List of IP check endpoints to try
-    let ip_check_urls = vec![
-      "https://api.ipify.org",
-      "https://checkip.amazonaws.com",
-      "https://ipinfo.io/ip",
-      "https://icanhazip.com",
-      "https://ifconfig.co/ip",
-    ];
-
-    // Create HTTP client with proxy
-    // reqwest::Proxy::all expects http/https URLs, but we need to handle socks proxies differently
-    let proxy = match proxy_settings.proxy_type.as_str() {
-      "socks4" | "socks5" => {
-        // For SOCKS proxies, reqwest doesn't support them directly via Proxy::all
-        // We'll need to use a different approach or return an error
-        return Err("SOCKS proxy validation not yet supported".to_string());
-      }
-      _ => reqwest::Proxy::all(&proxy_url).map_err(|e| format!("Failed to create proxy: {e}"))?,
-    };
-
-    let client = reqwest::Client::builder()
-      .proxy(proxy)
-      .timeout(std::time::Duration::from_secs(5))
-      .build()
-      .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
-
-    // Try each endpoint until one succeeds
-    let mut last_error = None;
-    let mut ip: Option<String> = None;
-
-    for url_str in ip_check_urls {
-      match client.get(url_str).send().await {
-        Ok(response) => {
-          if response.status().is_success() {
-            match response.text().await {
-              Ok(ip_text) => {
-                let ip_str = ip_text.trim();
-                if Self::validate_ip(ip_str) {
-                  ip = Some(ip_str.to_string());
-                  break;
-                } else {
-                  last_error = Some(format!("Invalid IP address returned: {ip_str}"));
-                }
-              }
-              Err(e) => {
-                last_error = Some(format!("Failed to read response from {url_str}: {e}"));
-              }
-            }
-          } else {
-            last_error = Some(format!("HTTP error from {url_str}: {}", response.status()));
-          }
-        }
-        Err(e) => {
-          last_error = Some(format!("Request to {url_str} failed: {e}"));
-        }
-      }
-    }
-
-    let ip = match ip {
-      Some(ip) => ip,
-      None => {
+    // Fetch public IP through the proxy using shared IP utilities
+    let ip = match ip_utils::fetch_public_ip(Some(&proxy_url)).await {
+      Ok(ip) => ip,
+      Err(e) => {
         // Save failed check result
         let failed_result = ProxyCheckResult {
           ip: String::new(),
@@ -589,9 +512,7 @@ impl ProxyManager {
           is_valid: false,
         };
         let _ = self.save_proxy_check_cache(proxy_id, &failed_result);
-        return Err(
-          last_error.unwrap_or_else(|| "Failed to get public IP from any endpoint".to_string()),
-        );
+        return Err(format!("Failed to fetch public IP: {e}"));
       }
     };
 
@@ -889,7 +810,7 @@ impl ProxyManager {
     }
 
     // Emit event for reactive UI updates
-    if let Err(e) = app_handle.emit("proxies-changed", ()) {
+    if let Err(e) = events::emit_empty("proxies-changed") {
       log::error!("Failed to emit proxies-changed event: {e}");
     }
 
@@ -947,7 +868,7 @@ impl ProxyManager {
         map.remove(profile_id);
 
         // Emit event for reactive UI updates
-        if let Err(e) = app_handle.emit("proxies-changed", ()) {
+        if let Err(e) = events::emit_empty("proxies-changed") {
           log::error!("Failed to emit proxies-changed event: {e}");
         }
 
@@ -974,7 +895,7 @@ impl ProxyManager {
   // Only clean up orphaned config files where the proxy process itself is dead
   pub async fn cleanup_dead_proxies(
     &self,
-    app_handle: tauri::AppHandle,
+    _app_handle: tauri::AppHandle,
   ) -> Result<Vec<u32>, String> {
     // Don't stop proxies for dead browser processes - let them run indefinitely
     // The proxy processes are idle and don't consume CPU when not in use
@@ -1075,7 +996,7 @@ impl ProxyManager {
     }
 
     // Emit event for reactive UI updates
-    if let Err(e) = app_handle.emit("proxies-changed", ()) {
+    if let Err(e) = events::emit_empty("proxies-changed") {
       log::error!("Failed to emit proxies-changed event: {e}");
     }
 

@@ -2,6 +2,7 @@ use crate::api_client::is_browser_version_nightly;
 use crate::browser::{create_browser, BrowserType, ProxySettings};
 use crate::camoufox_manager::CamoufoxConfig;
 use crate::downloaded_browsers_registry::DownloadedBrowsersRegistry;
+use crate::events;
 use crate::profile::types::BrowserProfile;
 use crate::proxy_manager::PROXY_MANAGER;
 use crate::wayfern_manager::WayfernConfig;
@@ -9,7 +10,6 @@ use directories::BaseDirs;
 use std::fs::{self, create_dir_all};
 use std::path::{Path, PathBuf};
 use sysinfo::{Pid, System};
-use tauri::Emitter;
 
 pub struct ProfileManager {
   base_dirs: BaseDirs,
@@ -357,7 +357,7 @@ impl ProfileManager {
     }
 
     // Emit profile creation event
-    if let Err(e) = app_handle.emit("profiles-changed", ()) {
+    if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
 
@@ -410,7 +410,7 @@ impl ProfileManager {
 
   pub fn rename_profile(
     &self,
-    app_handle: &tauri::AppHandle,
+    _app_handle: &tauri::AppHandle,
     profile_id: &str,
     new_name: &str,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
@@ -443,7 +443,7 @@ impl ProfileManager {
     });
 
     // Emit profile rename event
-    if let Err(e) = app_handle.emit("profiles-changed", ()) {
+    if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
 
@@ -532,7 +532,7 @@ impl ProfileManager {
     }
 
     // Emit profile deletion event
-    if let Err(e) = app_handle.emit("profiles-changed", ()) {
+    if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
 
@@ -541,7 +541,7 @@ impl ProfileManager {
 
   pub fn update_profile_version(
     &self,
-    app_handle: &tauri::AppHandle,
+    _app_handle: &tauri::AppHandle,
     profile_id: &str,
     version: &str,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
@@ -585,7 +585,7 @@ impl ProfileManager {
     self.save_profile(&profile)?;
 
     // Emit profile update event
-    if let Err(e) = app_handle.emit("profiles-changed", ()) {
+    if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
 
@@ -641,7 +641,7 @@ impl ProfileManager {
     });
 
     // Emit profile group assignment event
-    if let Err(e) = app_handle.emit("profiles-changed", ()) {
+    if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
 
@@ -650,7 +650,7 @@ impl ProfileManager {
 
   pub fn update_profile_tags(
     &self,
-    app_handle: &tauri::AppHandle,
+    _app_handle: &tauri::AppHandle,
     profile_id: &str,
     tags: Vec<String>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
@@ -681,7 +681,7 @@ impl ProfileManager {
     });
 
     // Emit profile tags update event
-    if let Err(e) = app_handle.emit("profiles-changed", ()) {
+    if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
 
@@ -690,7 +690,7 @@ impl ProfileManager {
 
   pub fn update_profile_note(
     &self,
-    app_handle: &tauri::AppHandle,
+    _app_handle: &tauri::AppHandle,
     profile_id: &str,
     note: Option<String>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
@@ -710,7 +710,7 @@ impl ProfileManager {
     self.save_profile(&profile)?;
 
     // Emit profile note update event
-    if let Err(e) = app_handle.emit("profiles-changed", ()) {
+    if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
 
@@ -773,7 +773,7 @@ impl ProfileManager {
     }
 
     // Emit profile deletion event
-    if let Err(e) = app_handle.emit("profiles-changed", ()) {
+    if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
 
@@ -833,7 +833,7 @@ impl ProfileManager {
     );
 
     // Emit profile config update event
-    if let Err(e) = app_handle.emit("profiles-changed", ()) {
+    if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
 
@@ -893,7 +893,7 @@ impl ProfileManager {
     );
 
     // Emit profile config update event
-    if let Err(e) = app_handle.emit("profiles-changed", ()) {
+    if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
 
@@ -981,12 +981,12 @@ impl ProfileManager {
     }
 
     // Emit profile update event so frontend UIs can refresh immediately (e.g. proxy manager)
-    if let Err(e) = app_handle.emit("profile-updated", &profile) {
+    if let Err(e) = events::emit("profile-updated", &profile) {
       log::warn!("Warning: Failed to emit profile update event: {e}");
     }
 
     // Emit general profiles changed event for profile list updates
-    if let Err(e) = app_handle.emit("profiles-changed", ()) {
+    if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
 
@@ -1154,7 +1154,7 @@ impl ProfileManager {
       }
 
       // Emit profile update event to frontend
-      if let Err(e) = app_handle.emit("profile-updated", &merged) {
+      if let Err(e) = events::emit("profile-updated", &merged) {
         log::warn!("Warning: Failed to emit profile update event: {e}");
       }
     }
@@ -1165,7 +1165,7 @@ impl ProfileManager {
   // Check Camoufox status using CamoufoxManager
   async fn check_camoufox_status(
     &self,
-    app_handle: &tauri::AppHandle,
+    _app_handle: &tauri::AppHandle,
     profile: &BrowserProfile,
   ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
     let launcher = self.camoufox_manager;
@@ -1199,7 +1199,7 @@ impl ProfileManager {
             }
 
             // Emit profile update event to frontend
-            if let Err(e) = app_handle.emit("profile-updated", &latest) {
+            if let Err(e) = events::emit("profile-updated", &latest) {
               log::warn!("Warning: Failed to emit profile update event: {e}");
             }
 
@@ -1234,7 +1234,7 @@ impl ProfileManager {
               log::warn!("Warning: Failed to clear Camoufox profile process info: {e}");
             }
 
-            if let Err(e) = app_handle.emit("profile-updated", &latest) {
+            if let Err(e) = events::emit("profile-updated", &latest) {
               log::warn!("Warning: Failed to emit profile update event: {e}");
             }
           }
@@ -1267,7 +1267,7 @@ impl ProfileManager {
             }
 
             // Emit profile update event to frontend
-            if let Err(e3) = app_handle.emit("profile-updated", &latest) {
+            if let Err(e3) = events::emit("profile-updated", &latest) {
               log::warn!("Warning: Failed to emit profile update event: {e3}");
             }
           }
@@ -1280,7 +1280,7 @@ impl ProfileManager {
   // Check Wayfern status using WayfernManager
   async fn check_wayfern_status(
     &self,
-    app_handle: &tauri::AppHandle,
+    _app_handle: &tauri::AppHandle,
     profile: &BrowserProfile,
   ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
     let manager = self.wayfern_manager;
@@ -1314,7 +1314,7 @@ impl ProfileManager {
             }
 
             // Emit profile update event to frontend
-            if let Err(e) = app_handle.emit("profile-updated", &latest) {
+            if let Err(e) = events::emit("profile-updated", &latest) {
               log::warn!("Warning: Failed to emit profile update event: {e}");
             }
 
@@ -1349,7 +1349,7 @@ impl ProfileManager {
               log::warn!("Warning: Failed to clear Wayfern profile process info: {e}");
             }
 
-            if let Err(e) = app_handle.emit("profile-updated", &latest) {
+            if let Err(e) = events::emit("profile-updated", &latest) {
               log::warn!("Warning: Failed to emit profile update event: {e}");
             }
           }

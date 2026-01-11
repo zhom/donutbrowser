@@ -1,11 +1,11 @@
 use crate::browser_version_manager::{BrowserVersionInfo, BrowserVersionManager};
+use crate::events;
 use crate::profile::{BrowserProfile, ProfileManager};
 use crate::settings_manager::SettingsManager;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
-use tauri::Emitter;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UpdateNotification {
@@ -199,8 +199,7 @@ impl AutoUpdater {
                     "affected_profiles": affected_profiles
                   });
 
-                  if let Err(e) =
-                    app_handle_clone.emit("browser-auto-update-available", &auto_update_event)
+                  if let Err(e) = events::emit("browser-auto-update-available", &auto_update_event)
                   {
                     log::error!("Failed to emit auto-update event for {browser}: {e}");
                   } else {

@@ -68,6 +68,7 @@ import {
   getBrowserIcon,
   getCurrentOS,
 } from "@/lib/browser-utils";
+import { formatRelativeTime } from "@/lib/flag-utils";
 import { trimName } from "@/lib/name-utils";
 import { cn } from "@/lib/utils";
 import type {
@@ -1911,59 +1912,26 @@ export function ProfilesDataTable({
         id: "sync",
         header: "",
         size: 24,
-        cell: ({ row, table }) => {
-          const meta = table.options.meta as TableMeta;
+        cell: ({ row }) => {
           const profile = row.original;
 
-          if (!profile.sync_enabled) {
+          if (!profile.sync_enabled && profile.last_sync) {
             return (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="flex justify-center items-center w-3 h-3">
-                    <span className="w-2 h-2 rounded-full bg-muted-foreground/30" />
+                    <span className="w-2 h-2 rounded-full bg-orange-500" />
                   </span>
                 </TooltipTrigger>
-                <TooltipContent>Sync disabled</TooltipContent>
+                <TooltipContent>
+                  Sync is disabled, last sync{" "}
+                  {formatRelativeTime(profile.last_sync)}
+                </TooltipContent>
               </Tooltip>
             );
           }
 
-          const syncStatus = meta.syncStatuses[profile.id];
-          const isSyncing = syncStatus === "syncing";
-          const isWaiting = syncStatus === "waiting";
-          const isSynced =
-            syncStatus === "synced" || (!syncStatus && profile.last_sync);
-          const isError = syncStatus === "error";
-
-          let dotClass = "bg-yellow-500";
-          let tooltipText = "Sync pending";
-
-          if (isSyncing) {
-            dotClass = "bg-yellow-500 animate-pulse";
-            tooltipText = "Syncing...";
-          } else if (isWaiting) {
-            dotClass = "bg-yellow-500";
-            tooltipText = "Waiting for profile to stop";
-          } else if (isError) {
-            dotClass = "bg-red-500";
-            tooltipText = "Sync error";
-          } else if (isSynced) {
-            dotClass = "bg-green-500";
-            tooltipText = profile.last_sync
-              ? `Last synced: ${new Date(profile.last_sync * 1000).toLocaleString()}`
-              : "Synced";
-          }
-
-          return (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="flex justify-center items-center w-3 h-3">
-                  <span className={`w-2 h-2 rounded-full ${dotClass}`} />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>{tooltipText}</TooltipContent>
-            </Tooltip>
-          );
+          return null;
         },
       },
       {
@@ -2031,25 +1999,6 @@ export function ProfilesDataTable({
                         Copy Cookies to Profile
                       </DropdownMenuItem>
                     )}
-                  {meta.onOpenProfileSyncDialog && (
-                    <DropdownMenuItem
-                      onClick={() => {
-                        meta.onOpenProfileSyncDialog?.(profile);
-                      }}
-                    >
-                      Sync Settings
-                    </DropdownMenuItem>
-                  )}
-                  {meta.onToggleProfileSync && (
-                    <DropdownMenuItem
-                      onClick={() => {
-                        meta.onToggleProfileSync?.(profile);
-                      }}
-                      disabled={isDisabled}
-                    >
-                      {profile.sync_enabled ? "Disable Sync" : "Enable Sync"}
-                    </DropdownMenuItem>
-                  )}
                   <DropdownMenuItem
                     onClick={() => {
                       setProfileToDelete(profile);

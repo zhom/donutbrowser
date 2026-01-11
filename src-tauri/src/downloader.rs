@@ -3,11 +3,11 @@ use serde::{Deserialize, Serialize};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use tauri::Emitter;
 
 use crate::api_client::ApiClient;
 use crate::browser::{create_browser, BrowserType};
 use crate::browser_version_manager::DownloadInfo;
+use crate::events;
 
 // Global state to track currently downloading browser-version pairs
 lazy_static::lazy_static! {
@@ -433,7 +433,7 @@ impl Downloader {
 
   pub async fn download_browser<R: tauri::Runtime>(
     &self,
-    app_handle: &tauri::AppHandle<R>,
+    _app_handle: &tauri::AppHandle<R>,
     browser_type: BrowserType,
     version: &str,
     download_info: &DownloadInfo,
@@ -561,7 +561,7 @@ impl Downloader {
       stage: initial_stage,
     };
 
-    let _ = app_handle.emit("download-progress", &progress);
+    let _ = events::emit("download-progress", &progress);
 
     // Open file in append mode (resuming) or create new
     use std::fs::OpenOptions;
@@ -620,7 +620,7 @@ impl Downloader {
           stage: stage_description,
         };
 
-        let _ = app_handle.emit("download-progress", &progress);
+        let _ = events::emit("download-progress", &progress);
         last_update = now;
       }
     }
@@ -801,7 +801,7 @@ impl Downloader {
       eta_seconds: None,
       stage: "verifying".to_string(),
     };
-    let _ = app_handle.emit("download-progress", &progress);
+    let _ = events::emit("download-progress", &progress);
 
     // Verify the browser was downloaded correctly
     log::info!("Verifying download for browser: {browser_str}, version: {version}");
@@ -939,7 +939,7 @@ impl Downloader {
       eta_seconds: Some(0.0),
       stage: "completed".to_string(),
     };
-    let _ = app_handle.emit("download-progress", &progress);
+    let _ = events::emit("download-progress", &progress);
 
     // Remove browser-version pair from downloading set
     {

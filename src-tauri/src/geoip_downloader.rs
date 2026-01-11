@@ -1,10 +1,10 @@
 use crate::browser::GithubRelease;
+use crate::events;
 use crate::profile::manager::ProfileManager;
 use directories::BaseDirs;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tauri::Emitter;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 
@@ -107,10 +107,10 @@ impl GeoIPDownloader {
 
   pub async fn download_geoip_database(
     &self,
-    app_handle: &tauri::AppHandle,
+    _app_handle: &tauri::AppHandle,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Emit initial progress
-    let _ = app_handle.emit(
+    let _ = events::emit(
       "geoip-download-progress",
       GeoIPDownloadProgress {
         stage: "downloading".to_string(),
@@ -183,7 +183,7 @@ impl GeoIPDownloader {
           None
         };
 
-        let _ = app_handle.emit(
+        let _ = events::emit(
           "geoip-download-progress",
           GeoIPDownloadProgress {
             stage: "downloading".to_string(),
@@ -202,7 +202,7 @@ impl GeoIPDownloader {
     file.flush().await?;
 
     // Emit completion
-    let _ = app_handle.emit(
+    let _ = events::emit(
       "geoip-download-progress",
       GeoIPDownloadProgress {
         stage: "completed".to_string(),

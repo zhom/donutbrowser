@@ -64,13 +64,13 @@ Includes comprehensive unit tests for:
 - File format support
 */
 
+use crate::events;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tauri::Emitter;
 
 #[cfg(target_os = "linux")]
 #[derive(Debug, Clone)]
@@ -707,7 +707,7 @@ impl AppAutoUpdater {
       .to_string();
 
     // Emit download start event
-    let _ = app_handle.emit(
+    let _ = events::emit(
       "app-update-progress",
       AppUpdateProgress {
         stage: "downloading".to_string(),
@@ -724,7 +724,7 @@ impl AppAutoUpdater {
       .await?;
 
     // Emit extraction start event
-    let _ = app_handle.emit(
+    let _ = events::emit(
       "app-update-progress",
       AppUpdateProgress {
         stage: "extracting".to_string(),
@@ -739,7 +739,7 @@ impl AppAutoUpdater {
     let extracted_app_path = self.extract_update(&download_path, &temp_dir).await?;
 
     // Emit installation start event
-    let _ = app_handle.emit(
+    let _ = events::emit(
       "app-update-progress",
       AppUpdateProgress {
         stage: "installing".to_string(),
@@ -757,7 +757,7 @@ impl AppAutoUpdater {
     let _ = fs::remove_dir_all(&temp_dir);
 
     // Emit completion event
-    let _ = app_handle.emit(
+    let _ = events::emit(
       "app-update-progress",
       AppUpdateProgress {
         stage: "completed".to_string(),
@@ -780,7 +780,7 @@ impl AppAutoUpdater {
     download_url: &str,
     dest_dir: &Path,
     filename: &str,
-    app_handle: &tauri::AppHandle,
+    _app_handle: &tauri::AppHandle,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     let file_path = dest_dir.join(filename);
 
@@ -853,7 +853,7 @@ impl AppAutoUpdater {
           "Unknown".to_string()
         };
 
-        let _ = app_handle.emit(
+        let _ = events::emit(
           "app-update-progress",
           AppUpdateProgress {
             stage: "downloading".to_string(),
@@ -869,7 +869,7 @@ impl AppAutoUpdater {
     }
 
     // Emit final download completion
-    let _ = app_handle.emit(
+    let _ = events::emit(
       "app-update-progress",
       AppUpdateProgress {
         stage: "downloading".to_string(),

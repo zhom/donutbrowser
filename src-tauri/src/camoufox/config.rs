@@ -438,7 +438,9 @@ impl CamoufoxConfigBuilder {
       let ip = match geoip {
         GeoIPOption::Auto => {
           // Fetch public IP, optionally through proxy
-          geolocation::fetch_public_ip(proxy_url.as_deref()).await?
+          geolocation::fetch_public_ip(proxy_url.as_deref())
+            .await
+            .map_err(geolocation::GeolocationError::from)?
         }
         GeoIPOption::IP(ip_str) => {
           if !geolocation::validate_ip(&ip_str) {

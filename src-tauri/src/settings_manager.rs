@@ -46,6 +46,10 @@ pub struct AppSettings {
   pub commercial_trial_acknowledged: bool, // Has user dismissed the trial expiration modal
   #[serde(default)]
   pub mcp_enabled: bool, // Enable MCP (Model Context Protocol) server
+  #[serde(default)]
+  pub mcp_port: Option<u16>, // Port for MCP server (default 51080)
+  #[serde(default)]
+  pub mcp_token: Option<String>, // Displayed token for user to copy (not persisted, loaded from encrypted file)
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -75,6 +79,8 @@ impl Default for AppSettings {
       first_launch_timestamp: None,
       commercial_trial_acknowledged: false,
       mcp_enabled: false,
+      mcp_port: None,
+      mcp_token: None,
     }
   }
 }
@@ -400,6 +406,162 @@ impl SettingsManager {
     Ok(())
   }
 
+  pub async fn generate_mcp_token(
+    &self,
+    app_handle: &tauri::AppHandle,
+  ) -> Result<String, Box<dyn std::error::Error>> {
+    let token_bytes: [u8; 32] = {
+      use rand::RngCore;
+      let mut rng = rand::rng();
+      let mut bytes = [0u8; 32];
+      rng.fill_bytes(&mut bytes);
+      bytes
+    };
+    use base64::{engine::general_purpose, Engine as _};
+    let token = general_purpose::URL_SAFE_NO_PAD.encode(token_bytes);
+    self.store_mcp_token(app_handle, &token).await?;
+    Ok(token)
+  }
+
+  pub async fn store_mcp_token(
+    &self,
+    _app_handle: &tauri::AppHandle,
+    token: &str,
+  ) -> Result<(), Box<dyn std::error::Error>> {
+    let token_file = self.get_settings_dir().join("mcp_token.dat");
+
+    if let Some(parent) = token_file.parent() {
+      std::fs::create_dir_all(parent)?;
+    }
+
+    let vault_password = Self::get_vault_password();
+    let salt = SaltString::generate(&mut OsRng);
+    let argon2 = Argon2::default();
+    let password_hash = argon2
+      .hash_password(vault_password.as_bytes(), &salt)
+      .map_err(|e| format!("Argon2 key derivation failed: {e}"))?;
+    let hash_value = password_hash.hash.unwrap();
+    let hash_bytes = hash_value.as_bytes();
+    let key_bytes: [u8; 32] = hash_bytes[..32]
+      .try_into()
+      .map_err(|_| "Invalid key length")?;
+    let key = Key::<Aes256Gcm>::from(key_bytes);
+    let cipher = Aes256Gcm::new(&key);
+    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+    let ciphertext = cipher
+      .encrypt(&nonce, token.as_bytes())
+      .map_err(|e| format!("Encryption failed: {e}"))?;
+
+    let mut file_data = Vec::new();
+    file_data.extend_from_slice(b"DBMCP"); // 5-byte header for MCP token
+    file_data.push(2u8); // Version 2 (Argon2 + AES-GCM)
+    let salt_str = salt.as_str();
+    file_data.push(salt_str.len() as u8);
+    file_data.extend_from_slice(salt_str.as_bytes());
+    file_data.extend_from_slice(&nonce);
+    file_data.extend_from_slice(&(ciphertext.len() as u32).to_le_bytes());
+    file_data.extend_from_slice(&ciphertext);
+
+    std::fs::write(token_file, file_data)?;
+    Ok(())
+  }
+
+  pub async fn get_mcp_token(
+    &self,
+    _app_handle: &tauri::AppHandle,
+  ) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    let token_file = self.get_settings_dir().join("mcp_token.dat");
+
+    if !token_file.exists() {
+      return Ok(None);
+    }
+
+    let file_data = std::fs::read(token_file)?;
+
+    if file_data.len() < 6 || &file_data[0..5] != b"DBMCP" {
+      return Ok(None);
+    }
+
+    let version = file_data[5];
+    if version != 2 {
+      return Ok(None);
+    }
+
+    let mut offset = 6;
+    if offset >= file_data.len() {
+      return Ok(None);
+    }
+    let salt_len = file_data[offset] as usize;
+    offset += 1;
+
+    if offset + salt_len > file_data.len() {
+      return Ok(None);
+    }
+    let salt_bytes = &file_data[offset..offset + salt_len];
+    let salt_str = std::str::from_utf8(salt_bytes).map_err(|_| "Invalid salt encoding")?;
+    let salt = SaltString::from_b64(salt_str).map_err(|_| "Invalid salt format")?;
+    offset += salt_len;
+
+    if offset + 12 > file_data.len() {
+      return Ok(None);
+    }
+    let nonce_bytes: [u8; 12] = file_data[offset..offset + 12]
+      .try_into()
+      .map_err(|_| "Invalid nonce length")?;
+    let nonce = Nonce::from(nonce_bytes);
+    offset += 12;
+
+    if offset + 4 > file_data.len() {
+      return Ok(None);
+    }
+    let ciphertext_len = u32::from_le_bytes([
+      file_data[offset],
+      file_data[offset + 1],
+      file_data[offset + 2],
+      file_data[offset + 3],
+    ]) as usize;
+    offset += 4;
+
+    if offset + ciphertext_len > file_data.len() {
+      return Ok(None);
+    }
+    let ciphertext = &file_data[offset..offset + ciphertext_len];
+
+    let vault_password = Self::get_vault_password();
+    let argon2 = Argon2::default();
+    let password_hash = argon2
+      .hash_password(vault_password.as_bytes(), &salt)
+      .map_err(|e| format!("Argon2 key derivation failed: {e}"))?;
+    let hash_value = password_hash.hash.unwrap();
+    let hash_bytes = hash_value.as_bytes();
+    let key_bytes: [u8; 32] = hash_bytes[..32]
+      .try_into()
+      .map_err(|_| "Invalid key length")?;
+    let key = Key::<Aes256Gcm>::from(key_bytes);
+    let cipher = Aes256Gcm::new(&key);
+    let plaintext = cipher
+      .decrypt(&nonce, ciphertext)
+      .map_err(|_| "Decryption failed")?;
+
+    match String::from_utf8(plaintext) {
+      Ok(token) => Ok(Some(token)),
+      Err(_) => Ok(None),
+    }
+  }
+
+  pub async fn remove_mcp_token(
+    &self,
+    _app_handle: &tauri::AppHandle,
+  ) -> Result<(), Box<dyn std::error::Error>> {
+    let token_file = self.get_settings_dir().join("mcp_token.dat");
+
+    if token_file.exists() {
+      std::fs::remove_file(token_file)?;
+    }
+
+    Ok(())
+  }
+
   pub async fn store_sync_token(
     &self,
     _app_handle: &tauri::AppHandle,
@@ -564,11 +726,16 @@ pub async fn get_app_settings(app_handle: tauri::AppHandle) -> Result<AppSetting
     .load_settings()
     .map_err(|e| format!("Failed to load settings: {e}"))?;
 
-  // Always load token for display purposes if it exists
+  // Always load tokens for display purposes if they exist
   settings.api_token = manager
     .get_api_token(&app_handle)
     .await
     .map_err(|e| format!("Failed to load API token: {e}"))?;
+
+  settings.mcp_token = manager
+    .get_mcp_token(&app_handle)
+    .await
+    .map_err(|e| format!("Failed to load MCP token: {e}"))?;
 
   Ok(settings)
 }
@@ -580,6 +747,7 @@ pub async fn save_app_settings(
 ) -> Result<AppSettings, String> {
   let manager = SettingsManager::instance();
 
+  // Handle API token
   if settings.api_enabled {
     if let Some(ref token) = settings.api_token {
       manager
@@ -595,7 +763,6 @@ pub async fn save_app_settings(
     }
   }
 
-  // If API is being disabled, remove the token
   if !settings.api_enabled {
     manager
       .remove_api_token(&app_handle)
@@ -604,8 +771,33 @@ pub async fn save_app_settings(
     settings.api_token = None;
   }
 
+  // Handle MCP token
+  if settings.mcp_enabled {
+    if let Some(ref token) = settings.mcp_token {
+      manager
+        .store_mcp_token(&app_handle, token)
+        .await
+        .map_err(|e| format!("Failed to store MCP token: {e}"))?;
+    } else {
+      let token = manager
+        .generate_mcp_token(&app_handle)
+        .await
+        .map_err(|e| format!("Failed to generate MCP token: {e}"))?;
+      settings.mcp_token = Some(token);
+    }
+  }
+
+  if !settings.mcp_enabled {
+    manager
+      .remove_mcp_token(&app_handle)
+      .await
+      .map_err(|e| format!("Failed to remove MCP token: {e}"))?;
+    settings.mcp_token = None;
+  }
+
   let mut persist_settings = settings.clone();
   persist_settings.api_token = None;
+  persist_settings.mcp_token = None;
   manager
     .save_settings(&persist_settings)
     .map_err(|e| format!("Failed to save settings: {e}"))?;
@@ -765,6 +957,8 @@ mod tests {
       first_launch_timestamp: None,
       commercial_trial_acknowledged: false,
       mcp_enabled: false,
+      mcp_port: None,
+      mcp_token: None,
     };
 
     // Save settings

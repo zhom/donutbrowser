@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 
+use crate::events;
 use crate::settings_manager::SettingsManager;
 
 const TRIAL_DURATION_SECONDS: u64 = 14 * 24 * 60 * 60; // 2 weeks
@@ -60,7 +61,7 @@ impl CommercialLicenseManager {
     }
   }
 
-  async fn get_or_set_first_launch(&self, app_handle: &AppHandle) -> Result<u64, String> {
+  async fn get_or_set_first_launch(&self, _app_handle: &AppHandle) -> Result<u64, String> {
     let settings_manager = SettingsManager::instance();
     let mut settings = settings_manager
       .load_settings()
@@ -80,7 +81,7 @@ impl CommercialLicenseManager {
     log::info!("First launch timestamp recorded: {now}");
 
     // Emit event to notify frontend
-    if let Err(e) = app_handle.emit("first-launch-recorded", now) {
+    if let Err(e) = events::emit("first-launch-recorded", now) {
       log::warn!("Failed to emit first-launch-recorded event: {e}");
     }
 

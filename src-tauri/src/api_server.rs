@@ -1,5 +1,7 @@
 use crate::browser::ProxySettings;
 use crate::camoufox_manager::CamoufoxConfig;
+use crate::daemon_ws::{ws_handler, WsState};
+use crate::events;
 use crate::group_manager::GROUP_MANAGER;
 use crate::profile::manager::ProfileManager;
 use crate::proxy_manager::PROXY_MANAGER;
@@ -15,7 +17,6 @@ use axum::{
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tauri::Emitter;
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, Mutex};
 use tower_http::cors::CorsLayer;
@@ -276,7 +277,7 @@ impl ApiServer {
         let random_port = rand::random::<u16>().saturating_add(10000);
         match TcpListener::bind(format!("127.0.0.1:{random_port}")).await {
           Ok(listener) => {
-            let _ = app_handle.emit(
+            let _ = events::emit(
               "api-port-conflict",
               format!("API server using fallback port {random_port}"),
             );
@@ -329,8 +330,15 @@ impl ApiServer {
       ))
       .layer(middleware::from_fn(terms_check_middleware));
 
+    // Create WebSocket route with its own state (no auth required for daemon IPC)
+    let ws_state = WsState::new();
+    let ws_routes = Router::new()
+      .route("/events", get(ws_handler))
+      .with_state(ws_state);
+
     let app = Router::new()
       .nest("/v1", v1_routes)
+      .nest("/ws", ws_routes)
       .route("/openapi.json", get(move || async move { Json(api) }))
       .layer(CorsLayer::permissive())
       .with_state(state);

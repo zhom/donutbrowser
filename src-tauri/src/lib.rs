@@ -1,7 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 use std::env;
 use std::sync::Mutex;
-use tauri::{Emitter, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_log::{Target, TargetKind};
 
@@ -23,6 +23,7 @@ mod downloader;
 mod extraction;
 mod geoip_downloader;
 mod group_manager;
+mod ip_utils;
 mod platform_browser;
 mod profile;
 mod profile_importer;
@@ -38,6 +39,10 @@ mod wayfern_terms;
 // mod theme_detector; // removed: theme detection handled in webview via CSS prefers-color-scheme
 mod commercial_license;
 mod cookie_manager;
+pub mod daemon;
+pub mod daemon_client;
+pub mod daemon_ws;
+pub mod events;
 mod mcp_server;
 mod tag_manager;
 mod version_updater;
@@ -162,8 +167,7 @@ async fn handle_url_open(app: tauri::AppHandle, url: String) -> Result<(), Strin
     let _ = window.set_focus();
     let _ = window.unminimize();
 
-    app
-      .emit("show-profile-selector", url.clone())
+    events::emit("show-profile-selector", url.clone())
       .map_err(|e| format!("Failed to emit URL open event: {e}"))?;
   } else {
     // Window doesn't exist yet - add to pending URLs
@@ -272,7 +276,7 @@ fn has_acknowledged_trial_expiration(app_handle: tauri::AppHandle) -> Result<boo
 }
 
 #[tauri::command]
-async fn start_mcp_server(app_handle: tauri::AppHandle) -> Result<(), String> {
+async fn start_mcp_server(app_handle: tauri::AppHandle) -> Result<u16, String> {
   mcp_server::McpServer::instance().start(app_handle).await
 }
 
@@ -284,6 +288,50 @@ async fn stop_mcp_server() -> Result<(), String> {
 #[tauri::command]
 fn get_mcp_server_status() -> bool {
   mcp_server::McpServer::instance().is_running()
+}
+
+#[derive(serde::Serialize)]
+struct McpConfig {
+  port: u16,
+  token: String,
+  config_json: String,
+}
+
+#[tauri::command]
+async fn get_mcp_config(app_handle: tauri::AppHandle) -> Result<Option<McpConfig>, String> {
+  let mcp_server = mcp_server::McpServer::instance();
+  if !mcp_server.is_running() {
+    return Ok(None);
+  }
+
+  let port = mcp_server
+    .get_port()
+    .ok_or("MCP server port not available")?;
+
+  let settings_manager = settings_manager::SettingsManager::instance();
+  let token = settings_manager
+    .get_mcp_token(&app_handle)
+    .await
+    .map_err(|e| format!("Failed to get MCP token: {e}"))?
+    .ok_or("MCP token not found")?;
+
+  let config_json = serde_json::json!({
+    "mcpServers": {
+      "donut-browser": {
+        "url": format!("http://127.0.0.1:{}/mcp", port),
+        "headers": {
+          "Authorization": format!("Bearer {}", token)
+        }
+      }
+    }
+  })
+  .to_string();
+
+  Ok(Some(McpConfig {
+    port,
+    token,
+    config_json,
+  }))
 }
 
 #[tauri::command]
@@ -404,6 +452,12 @@ pub fn run() {
 
       // Set up deep link handler
       let handle = app.handle().clone();
+
+      // Initialize the global event emitter for the events module
+      let emitter = std::sync::Arc::new(events::TauriEmitter::new(handle.clone()));
+      if let Err(e) = events::set_global_emitter(emitter) {
+        log::warn!("Failed to set global event emitter: {e}");
+      }
 
       #[cfg(windows)]
       {
@@ -536,7 +590,7 @@ pub fn run() {
         }
       });
 
-      let app_handle_update = app.handle().clone();
+      let _app_handle_update = app.handle().clone();
       tauri::async_runtime::spawn(async move {
         log::info!("Starting app update check at startup...");
         let updater = app_auto_updater::AppAutoUpdater::instance();
@@ -548,7 +602,7 @@ pub fn run() {
               update_info.new_version
             );
             // Emit update available event to the frontend
-            if let Err(e) = app_handle_update.emit("app-update-available", &update_info) {
+            if let Err(e) = events::emit("app-update-available", &update_info) {
               log::error!("Failed to emit app update event: {e}");
             } else {
               log::debug!("App update event emitted successfully");
@@ -695,7 +749,7 @@ pub fn run() {
                     is_running,
                   };
 
-                  if let Err(e) = app_handle_status.emit("profile-running-changed", &payload) {
+                  if let Err(e) = events::emit("profile-running-changed", &payload) {
                     log::warn!("Failed to emit profile running changed event: {e}");
                   } else {
                     log::debug!(
@@ -735,7 +789,7 @@ pub fn run() {
                 Ok(port) => {
                   log::info!("API server started successfully on port {port}");
                   // Emit success toast to frontend
-                  if let Err(e) = app_handle_api.emit(
+                  if let Err(e) = events::emit(
                     "show-toast",
                     crate::api_server::ToastPayload {
                       message: "API server started successfully".to_string(),
@@ -750,7 +804,7 @@ pub fn run() {
                 Err(e) => {
                   log::error!("Failed to start API server at startup: {e}");
                   // Emit error toast to frontend
-                  if let Err(toast_err) = app_handle_api.emit(
+                  if let Err(toast_err) = events::emit(
                     "show-toast",
                     crate::api_server::ToastPayload {
                       message: "Failed to start API server".to_string(),
@@ -900,7 +954,8 @@ pub fn run() {
       has_acknowledged_trial_expiration,
       start_mcp_server,
       stop_mcp_server,
-      get_mcp_server_status
+      get_mcp_server_status,
+      get_mcp_config
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

@@ -14,6 +14,7 @@ import { GroupBadges } from "@/components/group-badges";
 import { GroupManagementDialog } from "@/components/group-management-dialog";
 import HomeHeader from "@/components/home-header";
 import { ImportProfileDialog } from "@/components/import-profile-dialog";
+import { IntegrationsDialog } from "@/components/integrations-dialog";
 import { PermissionDialog } from "@/components/permission-dialog";
 import { ProfilesDataTable } from "@/components/profile-data-table";
 import { ProfileSelectorDialog } from "@/components/profile-selector-dialog";
@@ -88,6 +89,7 @@ export default function Home() {
 
   const [createProfileDialogOpen, setCreateProfileDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [integrationsDialogOpen, setIntegrationsDialogOpen] = useState(false);
   const [importProfileDialogOpen, setImportProfileDialogOpen] = useState(false);
   const [proxyManagementDialogOpen, setProxyManagementDialogOpen] =
     useState(false);
@@ -805,6 +807,7 @@ export default function Home() {
             onProxyManagementDialogOpen={setProxyManagementDialogOpen}
             onSettingsDialogOpen={setSettingsDialogOpen}
             onSyncConfigDialogOpen={setSyncConfigDialogOpen}
+            onIntegrationsDialogOpen={setIntegrationsDialogOpen}
             searchQuery={searchQuery}
             onSearchQueryChange={setSearchQuery}
           />
@@ -854,6 +857,17 @@ export default function Home() {
         isOpen={settingsDialogOpen}
         onClose={() => {
           setSettingsDialogOpen(false);
+        }}
+        onIntegrationsOpen={() => {
+          setSettingsDialogOpen(false);
+          setIntegrationsDialogOpen(true);
+        }}
+      />
+
+      <IntegrationsDialog
+        isOpen={integrationsDialogOpen}
+        onClose={() => {
+          setIntegrationsDialogOpen(false);
         }}
       />
 

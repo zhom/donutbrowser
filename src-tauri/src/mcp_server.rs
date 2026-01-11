@@ -1,15 +1,27 @@
 #![allow(dead_code)]
 
+use axum::{
+  body::Body,
+  extract::State,
+  http::{header, Request, StatusCode},
+  middleware::{self, Next},
+  response::{IntoResponse, Response},
+  routing::post,
+  Json, Router,
+};
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::net::SocketAddr;
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::Arc;
 use tauri::AppHandle;
+use tokio::net::TcpListener;
 use tokio::sync::Mutex as AsyncMutex;
 
 use crate::browser::ProxySettings;
 use crate::group_manager::GROUP_MANAGER;
 use crate::profile::{BrowserProfile, ProfileManager};
 use crate::proxy_manager::PROXY_MANAGER;
+use crate::settings_manager::SettingsManager;
 use crate::wayfern_terms::WayfernTermsManager;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,20 +56,36 @@ pub struct McpError {
   message: String,
 }
 
+const DEFAULT_MCP_PORT: u16 = 51080;
+
 struct McpServerInner {
   app_handle: Option<AppHandle>,
+  token: Option<String>,
+  shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
+}
+
+#[derive(Clone)]
+struct McpHttpState {
+  server: &'static McpServer,
+  token: String,
 }
 
 pub struct McpServer {
   inner: Arc<AsyncMutex<McpServerInner>>,
   is_running: AtomicBool,
+  port: AtomicU16,
 }
 
 impl McpServer {
   fn new() -> Self {
     Self {
-      inner: Arc::new(AsyncMutex::new(McpServerInner { app_handle: None })),
+      inner: Arc::new(AsyncMutex::new(McpServerInner {
+        app_handle: None,
+        token: None,
+        shutdown_tx: None,
+      })),
       is_running: AtomicBool::new(false),
+      port: AtomicU16::new(0),
     }
   }
 
@@ -69,8 +97,16 @@ impl McpServer {
     self.is_running.load(Ordering::SeqCst)
   }
 
-  pub async fn start(&self, app_handle: AppHandle) -> Result<(), String> {
-    // Check terms acceptance first
+  pub fn get_port(&self) -> Option<u16> {
+    let port = self.port.load(Ordering::SeqCst);
+    if port > 0 {
+      Some(port)
+    } else {
+      None
+    }
+  }
+
+  pub async fn start(&self, app_handle: AppHandle) -> Result<u16, String> {
     if !WayfernTermsManager::instance().is_terms_accepted() {
       return Err(
         "Wayfern Terms and Conditions must be accepted before starting MCP server".to_string(),
@@ -81,12 +117,143 @@ impl McpServer {
       return Err("MCP server is already running".to_string());
     }
 
+    let settings_manager = SettingsManager::instance();
+    let settings = settings_manager
+      .load_settings()
+      .map_err(|e| format!("Failed to load settings: {e}"))?;
+
+    // Get or generate token
+    let existing_token = settings_manager
+      .get_mcp_token(&app_handle)
+      .await
+      .ok()
+      .flatten();
+
+    let token = if let Some(t) = existing_token {
+      t
+    } else {
+      settings_manager
+        .generate_mcp_token(&app_handle)
+        .await
+        .map_err(|e| format!("Failed to generate MCP token: {e}"))?
+    };
+
+    // Determine port (use saved port, or try default, or random)
+    let preferred_port = settings.mcp_port.unwrap_or(DEFAULT_MCP_PORT);
+    let actual_port = self.bind_to_available_port(preferred_port).await?;
+
+    // Save port if it changed
+    if settings.mcp_port != Some(actual_port) {
+      let mut new_settings = settings;
+      new_settings.mcp_port = Some(actual_port);
+      settings_manager
+        .save_settings(&new_settings)
+        .map_err(|e| format!("Failed to save settings: {e}"))?;
+    }
+
+    // Store state
     let mut inner = self.inner.lock().await;
     inner.app_handle = Some(app_handle);
+    inner.token = Some(token.clone());
+
+    // Create shutdown channel
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+    inner.shutdown_tx = Some(shutdown_tx);
+
+    self.port.store(actual_port, Ordering::SeqCst);
     self.is_running.store(true, Ordering::SeqCst);
 
-    log::info!("MCP server started");
-    Ok(())
+    // Start HTTP server in background
+    let http_state = McpHttpState {
+      server: McpServer::instance(),
+      token,
+    };
+    tokio::spawn(Self::run_http_server(actual_port, http_state, shutdown_rx));
+
+    log::info!("[mcp] Server started on port {}", actual_port);
+    Ok(actual_port)
+  }
+
+  async fn bind_to_available_port(&self, preferred: u16) -> Result<u16, String> {
+    let addr = SocketAddr::from(([127, 0, 0, 1], preferred));
+    if TcpListener::bind(addr).await.is_ok() {
+      return Ok(preferred);
+    }
+
+    // Try random ports in 51000-51999 range
+    for _ in 0..10 {
+      let port = 51000 + (rand::random::<u16>() % 1000);
+      let addr = SocketAddr::from(([127, 0, 0, 1], port));
+      if TcpListener::bind(addr).await.is_ok() {
+        return Ok(port);
+      }
+    }
+
+    Err("Could not find available port for MCP server".to_string())
+  }
+
+  async fn run_http_server(
+    port: u16,
+    state: McpHttpState,
+    shutdown_rx: tokio::sync::oneshot::Receiver<()>,
+  ) {
+    let app = Router::new()
+      .route("/mcp", post(Self::handle_mcp_post))
+      .layer(middleware::from_fn_with_state(
+        state.clone(),
+        Self::auth_middleware,
+      ))
+      .with_state(state);
+
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    let listener = match TcpListener::bind(addr).await {
+      Ok(l) => l,
+      Err(e) => {
+        log::error!("[mcp] Failed to bind to port {}: {}", port, e);
+        return;
+      }
+    };
+
+    log::info!(
+      "[mcp] HTTP server listening on http://127.0.0.1:{}/mcp",
+      port
+    );
+
+    let server = axum::serve(listener, app).with_graceful_shutdown(async {
+      let _ = shutdown_rx.await;
+      log::info!("[mcp] HTTP server shutting down");
+    });
+
+    if let Err(e) = server.await {
+      log::error!("[mcp] HTTP server error: {}", e);
+    }
+  }
+
+  async fn auth_middleware(
+    State(state): State<McpHttpState>,
+    req: Request<Body>,
+    next: Next,
+  ) -> Result<Response, StatusCode> {
+    let auth_header = req
+      .headers()
+      .get(header::AUTHORIZATION)
+      .and_then(|h| h.to_str().ok());
+
+    let token = auth_header.and_then(|h| h.strip_prefix("Bearer "));
+
+    if token != Some(&state.token) {
+      return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    Ok(next.run(req).await)
+  }
+
+  async fn handle_mcp_post(
+    State(state): State<McpHttpState>,
+    Json(request): Json<McpRequest>,
+  ) -> impl IntoResponse {
+    let response = state.server.handle_request(request).await;
+    Json(response)
   }
 
   pub async fn stop(&self) -> Result<(), String> {
@@ -96,9 +263,17 @@ impl McpServer {
 
     let mut inner = self.inner.lock().await;
     inner.app_handle = None;
+    inner.token = None;
+
+    // Send shutdown signal
+    if let Some(tx) = inner.shutdown_tx.take() {
+      let _ = tx.send(());
+    }
+
+    self.port.store(0, Ordering::SeqCst);
     self.is_running.store(false, Ordering::SeqCst);
 
-    log::info!("MCP server stopped");
+    log::info!("[mcp] Server stopped");
     Ok(())
   }
 

@@ -4,7 +4,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use tauri::Emitter;
+
+use crate::events;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProfileGroup {
@@ -108,7 +109,7 @@ impl GroupManager {
 
   pub fn create_group(
     &self,
-    app_handle: &tauri::AppHandle,
+    _app_handle: &tauri::AppHandle,
     name: String,
   ) -> Result<ProfileGroup, Box<dyn std::error::Error>> {
     let mut groups_data = self.load_groups_data()?;
@@ -129,7 +130,7 @@ impl GroupManager {
     self.save_groups_data(&groups_data)?;
 
     // Emit event for reactive UI updates
-    if let Err(e) = app_handle.emit("groups-changed", ()) {
+    if let Err(e) = events::emit_empty("groups-changed") {
       log::error!("Failed to emit groups-changed event: {e}");
     }
 
@@ -138,7 +139,7 @@ impl GroupManager {
 
   pub fn update_group(
     &self,
-    app_handle: &tauri::AppHandle,
+    _app_handle: &tauri::AppHandle,
     id: String,
     name: String,
   ) -> Result<ProfileGroup, Box<dyn std::error::Error>> {
@@ -165,7 +166,7 @@ impl GroupManager {
     self.save_groups_data(&groups_data)?;
 
     // Emit event for reactive UI updates
-    if let Err(e) = app_handle.emit("groups-changed", ()) {
+    if let Err(e) = events::emit_empty("groups-changed") {
       log::error!("Failed to emit groups-changed event: {e}");
     }
 
@@ -251,7 +252,7 @@ impl GroupManager {
     }
 
     // Emit event for reactive UI updates
-    if let Err(e) = app_handle.emit("groups-changed", ()) {
+    if let Err(e) = events::emit_empty("groups-changed") {
       log::error!("Failed to emit groups-changed event: {e}");
     }
 

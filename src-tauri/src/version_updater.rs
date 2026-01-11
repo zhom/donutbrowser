@@ -5,12 +5,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tauri::Emitter;
 use tokio::sync::Mutex;
 use tokio::time::interval;
 
 use crate::auto_updater::AutoUpdater;
 use crate::browser_version_manager::BrowserVersionManager;
+use crate::events;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct VersionUpdateProgress {
@@ -244,7 +244,7 @@ impl VersionUpdater {
 
           // Try to emit error event if we have an app handle
           let updater_guard = updater.lock().await;
-          if let Some(ref app_handle) = updater_guard.app_handle {
+          if let Some(ref _app_handle) = updater_guard.app_handle {
             let progress = VersionUpdateProgress {
               current_browser: "".to_string(),
               total_browsers: 0,
@@ -253,7 +253,7 @@ impl VersionUpdater {
               browser_new_versions: 0,
               status: "error".to_string(),
             };
-            let _ = app_handle.emit("version-update-progress", &progress);
+            let _ = events::emit("version-update-progress", &progress);
           }
         }
       }
@@ -279,7 +279,7 @@ impl VersionUpdater {
       status: "updating".to_string(),
     };
 
-    if let Err(e) = app_handle.emit("version-update-progress", &initial_progress) {
+    if let Err(e) = events::emit("version-update-progress", &initial_progress) {
       log::error!("Failed to emit initial progress: {e}");
     }
 
@@ -296,7 +296,7 @@ impl VersionUpdater {
         status: "updating".to_string(),
       };
 
-      if let Err(e) = app_handle.emit("version-update-progress", &progress) {
+      if let Err(e) = events::emit("version-update-progress", &progress) {
         log::error!("Failed to emit progress for {browser}: {e}");
       }
 
@@ -322,7 +322,7 @@ impl VersionUpdater {
             status: "updating".to_string(),
           };
 
-          if let Err(e) = app_handle.emit("version-update-progress", &progress) {
+          if let Err(e) = events::emit("version-update-progress", &progress) {
             log::error!("Failed to emit progress with versions for {browser}: {e}");
           }
         }
@@ -348,7 +348,7 @@ impl VersionUpdater {
       status: "completed".to_string(),
     };
 
-    if let Err(e) = app_handle.emit("version-update-progress", &final_progress) {
+    if let Err(e) = events::emit("version-update-progress", &final_progress) {
       eprintln!("Failed to emit completion progress: {e}");
     }
 

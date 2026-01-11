@@ -1,10 +1,10 @@
+use crate::events;
 use crate::settings_manager::SettingsManager;
 use reqwest::Client;
 use serde::Deserialize;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::Emitter;
 use tokio::sync::mpsc;
 use tokio::time::sleep;
 
@@ -122,7 +122,7 @@ impl SyncSubscription {
     token: &str,
     work_tx: &mpsc::UnboundedSender<SyncWorkItem>,
     running: &Arc<AtomicBool>,
-    app_handle: &tauri::AppHandle,
+    _app_handle: &tauri::AppHandle,
   ) -> Result<(), String> {
     let url = format!("{base_url}/v1/objects/subscribe");
 
@@ -142,7 +142,7 @@ impl SyncSubscription {
     }
 
     log::info!("Connected to sync subscription at {url}");
-    let _ = app_handle.emit("sync-subscription-status", "connected");
+    let _ = events::emit("sync-subscription-status", "connected");
 
     let mut buffer = String::new();
     let mut bytes_stream = response.bytes_stream();

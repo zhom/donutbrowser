@@ -1,6 +1,7 @@
 use super::client::SyncClient;
 use super::manifest::{compute_diff, generate_manifest, get_cache_path, HashCache, SyncManifest};
 use super::types::*;
+use crate::events;
 use crate::profile::types::BrowserProfile;
 use crate::profile::ProfileManager;
 use crate::settings_manager::SettingsManager;
@@ -9,7 +10,6 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
-use tauri::Emitter;
 use tokio::sync::Semaphore;
 
 pub struct SyncEngine {
@@ -58,7 +58,7 @@ impl SyncEngine {
       profile_id
     );
 
-    let _ = app_handle.emit(
+    let _ = events::emit(
       "profile-sync-status",
       serde_json::json!({
         "profile_id": profile_id,
@@ -93,7 +93,7 @@ impl SyncEngine {
 
     if diff.is_empty() {
       log::info!("Profile {} is already in sync", profile_id);
-      let _ = app_handle.emit(
+      let _ = events::emit(
         "profile-sync-status",
         serde_json::json!({
           "profile_id": profile_id,
@@ -170,9 +170,9 @@ impl SyncEngine {
         .as_secs(),
     );
     let _ = profile_manager.save_profile(&updated_profile);
-    let _ = app_handle.emit("profiles-changed", ());
+    let _ = events::emit("profiles-changed", ());
 
-    let _ = app_handle.emit(
+    let _ = events::emit(
       "profile-sync-status",
       serde_json::json!({
         "profile_id": profile_id,
@@ -245,7 +245,7 @@ impl SyncEngine {
 
   async fn upload_profile_files(
     &self,
-    app_handle: &tauri::AppHandle,
+    _app_handle: &tauri::AppHandle,
     profile_id: &str,
     profile_dir: &Path,
     files: &[super::manifest::ManifestFileEntry],
@@ -326,7 +326,7 @@ impl SyncEngine {
       let _ = handle.await;
     }
 
-    let _ = app_handle.emit(
+    let _ = events::emit(
       "profile-sync-progress",
       serde_json::json!({
         "profile_id": profile_id,
@@ -341,7 +341,7 @@ impl SyncEngine {
 
   async fn download_profile_files(
     &self,
-    app_handle: &tauri::AppHandle,
+    _app_handle: &tauri::AppHandle,
     profile_id: &str,
     profile_dir: &Path,
     files: &[super::manifest::ManifestFileEntry],
@@ -416,7 +416,7 @@ impl SyncEngine {
       let _ = handle.await;
     }
 
-    let _ = app_handle.emit(
+    let _ = events::emit(
       "profile-sync-progress",
       serde_json::json!({
         "profile_id": profile_id,
@@ -554,9 +554,9 @@ impl SyncEngine {
     })?;
 
     // Emit event for UI update
-    if let Some(handle) = app_handle {
-      let _ = handle.emit("stored-proxies-changed", ());
-      let _ = handle.emit(
+    if let Some(_handle) = app_handle {
+      let _ = events::emit("stored-proxies-changed", ());
+      let _ = events::emit(
         "proxy-sync-status",
         serde_json::json!({
           "id": proxy_id,
@@ -682,9 +682,9 @@ impl SyncEngine {
     }
 
     // Emit event for UI update
-    if let Some(handle) = app_handle {
-      let _ = handle.emit("groups-changed", ());
-      let _ = handle.emit(
+    if let Some(_handle) = app_handle {
+      let _ = events::emit("groups-changed", ());
+      let _ = events::emit(
         "group-sync-status",
         serde_json::json!({
           "id": group_id,
@@ -856,8 +856,8 @@ impl SyncEngine {
       .save_profile(&profile)
       .map_err(|e| SyncError::IoError(format!("Failed to save downloaded profile: {e}")))?;
 
-    let _ = app_handle.emit("profiles-changed", ());
-    let _ = app_handle.emit(
+    let _ = events::emit("profiles-changed", ());
+    let _ = events::emit(
       "profile-sync-status",
       serde_json::json!({
         "profile_id": profile_id,
@@ -959,7 +959,7 @@ pub fn is_group_used_by_synced_profile(group_id: &str) -> bool {
 /// Enable sync for proxy if not already enabled
 pub async fn enable_proxy_sync_if_needed(
   proxy_id: &str,
-  app_handle: &tauri::AppHandle,
+  _app_handle: &tauri::AppHandle,
 ) -> Result<(), String> {
   let proxy_manager = &crate::proxy_manager::PROXY_MANAGER;
   let proxies = proxy_manager.get_stored_proxies();
@@ -978,7 +978,7 @@ pub async fn enable_proxy_sync_if_needed(
     std::fs::write(&proxy_file, &json)
       .map_err(|e| format!("Failed to update proxy file {}: {e}", proxy_file.display()))?;
 
-    let _ = app_handle.emit("stored-proxies-changed", ());
+    let _ = events::emit("stored-proxies-changed", ());
     log::info!("Auto-enabled sync for proxy {}", proxy_id);
   }
 
@@ -988,7 +988,7 @@ pub async fn enable_proxy_sync_if_needed(
 /// Enable sync for group if not already enabled
 pub async fn enable_group_sync_if_needed(
   group_id: &str,
-  app_handle: &tauri::AppHandle,
+  _app_handle: &tauri::AppHandle,
 ) -> Result<(), String> {
   let group = {
     let group_manager = crate::group_manager::GROUP_MANAGER.lock().unwrap();
@@ -1011,7 +1011,7 @@ pub async fn enable_group_sync_if_needed(
       }
     }
 
-    let _ = app_handle.emit("groups-changed", ());
+    let _ = events::emit("groups-changed", ());
     log::info!("Auto-enabled sync for group {}", group_id);
   }
 
@@ -1044,7 +1044,7 @@ pub async fn set_profile_sync_enabled(
       .map_err(|e| format!("Failed to load settings: {e}"))?;
 
     if settings.sync_server_url.is_none() {
-      let _ = app_handle.emit(
+      let _ = events::emit(
         "profile-sync-status",
         serde_json::json!({
           "profile_id": profile_id,
@@ -1057,7 +1057,7 @@ pub async fn set_profile_sync_enabled(
 
     let token = manager.get_sync_token(&app_handle).await.ok().flatten();
     if token.is_none() {
-      let _ = app_handle.emit(
+      let _ = events::emit(
         "profile-sync-status",
         serde_json::json!({
           "profile_id": profile_id,
@@ -1079,13 +1079,13 @@ pub async fn set_profile_sync_enabled(
     .save_profile(&profile)
     .map_err(|e| format!("Failed to save profile: {e}"))?;
 
-  let _ = app_handle.emit("profiles-changed", ());
+  let _ = events::emit("profiles-changed", ());
 
   if enabled {
     // Check if profile is running to determine status
     let is_running = profile.process_id.is_some();
 
-    let _ = app_handle.emit(
+    let _ = events::emit(
       "profile-sync-status",
       serde_json::json!({
         "profile_id": profile_id,
@@ -1118,7 +1118,7 @@ pub async fn set_profile_sync_enabled(
       log::warn!("Scheduler not initialized, sync will not start");
     }
   } else {
-    let _ = app_handle.emit(
+    let _ = events::emit(
       "profile-sync-status",
       serde_json::json!({
         "profile_id": profile_id,
@@ -1132,7 +1132,7 @@ pub async fn set_profile_sync_enabled(
 
 #[tauri::command]
 pub async fn request_profile_sync(
-  app_handle: tauri::AppHandle,
+  _app_handle: tauri::AppHandle,
   profile_id: String,
 ) -> Result<(), String> {
   // Validate profile exists and sync is enabled
@@ -1155,7 +1155,7 @@ pub async fn request_profile_sync(
   // Queue sync via scheduler
   if let Some(scheduler) = super::get_global_scheduler() {
     let is_running = profile.process_id.is_some();
-    let _ = app_handle.emit(
+    let _ = events::emit(
       "profile-sync-status",
       serde_json::json!({
         "profile_id": profile_id,
@@ -1251,10 +1251,10 @@ pub async fn set_proxy_sync_enabled(
   std::fs::write(&proxy_file, &json)
     .map_err(|e| format!("Failed to update proxy file {}: {e}", proxy_file.display()))?;
 
-  let _ = app_handle.emit("stored-proxies-changed", ());
+  let _ = events::emit("stored-proxies-changed", ());
 
   if enabled {
-    let _ = app_handle.emit(
+    let _ = events::emit(
       "proxy-sync-status",
       serde_json::json!({
         "id": proxy_id,
@@ -1266,7 +1266,7 @@ pub async fn set_proxy_sync_enabled(
       scheduler.queue_proxy_sync(proxy_id).await;
     }
   } else {
-    let _ = app_handle.emit(
+    let _ = events::emit(
       "proxy-sync-status",
       serde_json::json!({
         "id": proxy_id,
@@ -1330,10 +1330,10 @@ pub async fn set_group_sync_enabled(
     }
   }
 
-  let _ = app_handle.emit("groups-changed", ());
+  let _ = events::emit("groups-changed", ());
 
   if enabled {
-    let _ = app_handle.emit(
+    let _ = events::emit(
       "group-sync-status",
       serde_json::json!({
         "id": group_id,
@@ -1345,7 +1345,7 @@ pub async fn set_group_sync_enabled(
       scheduler.queue_group_sync(group_id).await;
     }
   } else {
-    let _ = app_handle.emit(
+    let _ = events::emit(
       "group-sync-status",
       serde_json::json!({
         "id": group_id,

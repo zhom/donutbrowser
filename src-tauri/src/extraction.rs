@@ -1,10 +1,10 @@
 use std::fs::{self, File};
 use std::io::{self, BufReader, Read};
 use std::path::{Path, PathBuf};
-use tauri::Emitter;
 
 use crate::browser::BrowserType;
 use crate::downloader::DownloadProgress;
+use crate::events;
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use std::process::Command;
@@ -100,7 +100,7 @@ impl Extractor {
 
   pub async fn extract_browser(
     &self,
-    app_handle: &tauri::AppHandle,
+    _app_handle: &tauri::AppHandle,
     browser_type: BrowserType,
     version: &str,
     archive_path: &Path,
@@ -117,7 +117,7 @@ impl Extractor {
       eta_seconds: None,
       stage: "extracting".to_string(),
     };
-    let _ = app_handle.emit("download-progress", &progress);
+    let _ = events::emit("download-progress", &progress);
 
     log::info!(
       "Starting extraction of {} for browser {} version {}",

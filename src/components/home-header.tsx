@@ -1,7 +1,7 @@
 import { FaDownload } from "react-icons/fa";
 import { FiWifi } from "react-icons/fi";
 import { GoGear, GoKebabHorizontal, GoPlus } from "react-icons/go";
-import { LuCloud, LuSearch, LuUsers, LuX } from "react-icons/lu";
+import { LuCloud, LuPlug, LuSearch, LuUsers, LuX } from "react-icons/lu";
 import { Logo } from "./icons/logo";
 import { Button } from "./ui/button";
 import { CardTitle } from "./ui/card";
@@ -21,6 +21,7 @@ type Props = {
   onImportProfileDialogOpen: (open: boolean) => void;
   onCreateProfileDialogOpen: (open: boolean) => void;
   onSyncConfigDialogOpen: (open: boolean) => void;
+  onIntegrationsDialogOpen: (open: boolean) => void;
   searchQuery: string;
   onSearchQueryChange: (query: string) => void;
 };
@@ -32,6 +33,7 @@ const HomeHeader = ({
   onImportProfileDialogOpen,
   onCreateProfileDialogOpen,
   onSyncConfigDialogOpen,
+  onIntegrationsDialogOpen,
   searchQuery,
   onSearchQueryChange,
 }: Props) => {
@@ -127,6 +129,14 @@ const HomeHeader = ({
             >
               <LuCloud className="mr-2 w-4 h-4" />
               Sync Service
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                onIntegrationsDialogOpen(true);
+              }}
+            >
+              <LuPlug className="mr-2 w-4 h-4" />
+              Integrations
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => {

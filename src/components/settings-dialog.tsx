@@ -7,7 +7,6 @@ import { useCallback, useEffect, useState } from "react";
 import { BsCamera, BsMic } from "react-icons/bs";
 import { LoadingButton } from "@/components/loading-button";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   ColorPicker,
   ColorPickerAlpha,
@@ -40,7 +39,6 @@ import {
 import { useCommercialTrial } from "@/hooks/use-commercial-trial";
 import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
-import { useWayfernTerms } from "@/hooks/use-wayfern-terms";
 import {
   getThemeByColors,
   getThemeById,
@@ -48,7 +46,6 @@ import {
   THEMES,
 } from "@/lib/themes";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
-import { CopyToClipboard } from "./ui/copy-to-clipboard";
 import { RippleButton } from "./ui/ripple";
 
 interface AppSettings {
@@ -76,9 +73,14 @@ interface PermissionInfo {
 interface SettingsDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  onIntegrationsOpen?: () => void;
 }
 
-export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
+export function SettingsDialog({
+  isOpen,
+  onClose,
+  onIntegrationsOpen,
+}: SettingsDialogProps) {
   const [settings, setSettings] = useState<AppSettings>({
     set_as_default_browser: false,
     theme: "system",
@@ -109,7 +111,6 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   const [requestingPermission, setRequestingPermission] =
     useState<PermissionType | null>(null);
   const [isMacOS, setIsMacOS] = useState(false);
-  const [apiServerPort, setApiServerPort] = useState<number | null>(null);
 
   const { setTheme } = useTheme();
   const {
@@ -117,10 +118,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     isMicrophoneAccessGranted,
     isCameraAccessGranted,
   } = usePermissions();
-  const { termsAccepted } = useWayfernTerms();
   const { trialStatus } = useCommercialTrial();
-  const [mcpEnabled, setMcpEnabled] = useState(false);
-  const [isMcpStarting, setIsMcpStarting] = useState(false);
 
   const getPermissionIcon = useCallback((type: PermissionType) => {
     switch (type) {
@@ -352,48 +350,6 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
         } catch {}
       }
 
-      // Handle API server start/stop based on settings
-      const wasApiEnabled = originalSettings.api_enabled;
-      const isApiEnabled = settingsToSave.api_enabled;
-
-      if (isApiEnabled && !wasApiEnabled) {
-        // Start API server
-        try {
-          const port = await invoke<number>("start_api_server", {
-            port: settingsToSave.api_port,
-          });
-          setApiServerPort(port);
-          showSuccessToast(`Local API started on port ${port}`);
-        } catch (error) {
-          console.error("Failed to start API server:", error);
-          showErrorToast("Failed to start API server", {
-            description:
-              error instanceof Error ? error.message : "Unknown error occurred",
-          });
-          // Revert the API enabled setting if start failed
-          settingsToSave.api_enabled = false;
-          const revertedSettings = await invoke<AppSettings>(
-            "save_app_settings",
-            { settings: settingsToSave },
-          );
-          setSettings(revertedSettings);
-          settingsToSave = revertedSettings;
-        }
-      } else if (!isApiEnabled && wasApiEnabled) {
-        // Stop API server
-        try {
-          await invoke("stop_api_server");
-          setApiServerPort(null);
-          showSuccessToast("Local API stopped");
-        } catch (error) {
-          console.error("Failed to stop API server:", error);
-          showErrorToast("Failed to stop API server", {
-            description:
-              error instanceof Error ? error.message : "Unknown error occurred",
-          });
-        }
-      }
-
       setOriginalSettings(settingsToSave);
       onClose();
     } catch (error) {
@@ -401,7 +357,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     } finally {
       setIsSaving(false);
     }
-  }, [onClose, setTheme, settings, customThemeState, originalSettings]);
+  }, [onClose, setTheme, settings, customThemeState]);
 
   const updateSetting = useCallback(
     (
@@ -412,26 +368,6 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     },
     [],
   );
-
-  const loadApiServerStatus = useCallback(async () => {
-    try {
-      const port = await invoke<number | null>("get_api_server_status");
-      setApiServerPort(port);
-    } catch (error) {
-      console.error("Failed to load API server status:", error);
-      setApiServerPort(null);
-    }
-  }, []);
-
-  const loadMcpServerStatus = useCallback(async () => {
-    try {
-      const isRunning = await invoke<boolean>("get_mcp_server_status");
-      setMcpEnabled(isRunning);
-    } catch (error) {
-      console.error("Failed to load MCP server status:", error);
-      setMcpEnabled(false);
-    }
-  }, []);
 
   const handleClose = useCallback(() => {
     // Restore original theme when closing without saving
@@ -470,8 +406,6 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
     if (isOpen) {
       loadSettings().catch(console.error);
       checkDefaultBrowserStatus().catch(console.error);
-      loadApiServerStatus().catch(console.error);
-      loadMcpServerStatus().catch(console.error);
 
       // Check if we're on macOS
       const userAgent = navigator.userAgent;
@@ -492,14 +426,7 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
         clearInterval(intervalId);
       };
     }
-  }, [
-    isOpen,
-    loadPermissions,
-    checkDefaultBrowserStatus,
-    loadSettings,
-    loadApiServerStatus,
-    loadMcpServerStatus,
-  ]);
+  }, [isOpen, loadPermissions, checkDefaultBrowserStatus, loadSettings]);
 
   // Update permissions when the permission states change
   useEffect(() => {
@@ -790,279 +717,20 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
             </div>
           )}
 
-          {/* Local API Section */}
+          {/* Integrations Section */}
           <div className="space-y-4">
-            <Label className="text-base font-medium">Local API</Label>
-
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="api-enabled"
-                checked={settings.api_enabled}
-                onCheckedChange={async (checked: boolean) => {
-                  updateSetting("api_enabled", checked);
-                  try {
-                    if (checked) {
-                      // Ask backend to enable API and return settings with token
-                      const next = await invoke<AppSettings>(
-                        "save_app_settings",
-                        {
-                          settings: { ...settings, api_enabled: true },
-                        },
-                      );
-                      setSettings(next);
-                    } else {
-                      const next = await invoke<AppSettings>(
-                        "save_app_settings",
-                        {
-                          settings: {
-                            ...settings,
-                            api_enabled: false,
-                            api_token: null,
-                          },
-                        },
-                      );
-                      setSettings(next);
-                    }
-                  } catch (e) {
-                    console.error("Failed to toggle API:", e);
-                  }
-                }}
-              />
-              <div className="grid gap-1.5 leading-none">
-                <Label
-                  htmlFor="api-enabled"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                >
-                  (ALPHA) Enable Local API Server
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Allow managing the application data externally via REST API.
-                  Server will start on port 10108 or a random port if
-                  unavailable.
-                  {apiServerPort && (
-                    <span className="ml-1 font-medium text-green-600">
-                      (Currently running on port {apiServerPort})
-                    </span>
-                  )}
-                </p>
-              </div>
-            </div>
-
-            {settings.api_enabled && settings.api_token && (
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">
-                  API Authentication Token
-                </Label>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="text"
-                    value={settings.api_token}
-                    readOnly
-                    className="flex-1 px-3 py-2 font-mono text-sm rounded-md border bg-muted"
-                  />
-                  <CopyToClipboard
-                    text={settings.api_token || ""}
-                    successMessage="API token copied to clipboard"
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Include this token in the Authorization header as "Bearer{" "}
-                  {settings.api_token}" for all API requests.
-                </p>
-                {/* Temporary in-app API docs */}
-                <div className="p-3 mt-3 space-y-2 text-xs leading-relaxed rounded-md border bg-muted/40">
-                  <div className="font-medium">
-                    Temporary in-app API docs (alpha)
-                  </div>
-                  <div>
-                    <div>
-                      Base URL:{" "}
-                      <code className="font-mono">{`http://127.0.0.1:${apiServerPort ?? settings.api_port ?? 10108}/v1`}</code>
-                    </div>
-                    <div>
-                      Auth:{" "}
-                      <code className="font-mono">
-                        Authorization: Bearer {settings.api_token}
-                      </code>
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="font-medium">Profiles</div>
-                    <ul className="list-disc ml-5 space-y-0.5">
-                      <li>
-                        <code className="font-mono">GET /profiles</code> — list
-                        profiles
-                      </li>
-                      <li>
-                        <code className="font-mono">
-                          GET /profiles/{"{"}id{"}"}
-                        </code>{" "}
-                        — get one
-                      </li>
-                      <li>
-                        <code className="font-mono">POST /profiles</code> —
-                        create
-                        <span className="ml-1 text-muted-foreground">
-                          (required: name, browser, version; optional:
-                          release_type, proxy_id, camoufox_config, group_id,
-                          tags)
-                        </span>
-                      </li>
-                      <li>
-                        <code className="font-mono">
-                          PUT /profiles/{"{"}id{"}"}
-                        </code>{" "}
-                        — update
-                        <span className="ml-1 text-muted-foreground">
-                          (any of: name, version, proxy_id, camoufox_config,
-                          group_id, tags)
-                        </span>
-                      </li>
-                      <li>
-                        <code className="font-mono">
-                          DELETE /profiles/{"{"}id{"}"}
-                        </code>{" "}
-                        — delete
-                      </li>
-                      <li>
-                        <code className="font-mono">
-                          POST /profiles/{"{"}id{"}"}/run
-                        </code>{" "}
-                        — launch with remote debugging
-                        <span className="ml-1 text-muted-foreground">
-                          (body: {"{"}url?, headless?{"}"})
-                        </span>
-                      </li>
-                      <li>
-                        <code className="font-mono">
-                          POST /profiles/{"{"}id{"}"}/open-url
-                        </code>{" "}
-                        — open URL in running profile
-                        <span className="ml-1 text-muted-foreground">
-                          (body: {"{"}url{"}"})
-                        </span>
-                      </li>
-                      <li>
-                        <code className="font-mono">
-                          POST /profiles/{"{"}id{"}"}/kill
-                        </code>{" "}
-                        — stop browser process
-                      </li>
-                    </ul>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="font-medium">Groups</div>
-                    <ul className="list-disc ml-5 space-y-0.5">
-                      <li>
-                        <code className="font-mono">GET /groups</code> — list
-                      </li>
-                      <li>
-                        <code className="font-mono">
-                          GET /groups/{"{"}id{"}"}
-                        </code>{" "}
-                        — get one
-                      </li>
-                      <li>
-                        <code className="font-mono">POST /groups</code> — create
-                        <span className="ml-1 text-muted-foreground">
-                          (required: name)
-                        </span>
-                      </li>
-                      <li>
-                        <code className="font-mono">
-                          PUT /groups/{"{"}id{"}"}
-                        </code>{" "}
-                        — rename
-                        <span className="ml-1 text-muted-foreground">
-                          (required: name)
-                        </span>
-                      </li>
-                      <li>
-                        <code className="font-mono">
-                          DELETE /groups/{"{"}id{"}"}
-                        </code>{" "}
-                        — delete
-                      </li>
-                    </ul>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="font-medium">Tags</div>
-                    <ul className="list-disc ml-5 space-y-0.5">
-                      <li>
-                        <code className="font-mono">GET /tags</code> — list
-                      </li>
-                    </ul>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="font-medium">Proxies</div>
-                    <ul className="list-disc ml-5 space-y-0.5">
-                      <li>
-                        <code className="font-mono">GET /proxies</code> — list
-                      </li>
-                      <li>
-                        <code className="font-mono">
-                          GET /proxies/{"{"}id{"}"}
-                        </code>{" "}
-                        — get one
-                      </li>
-                      <li>
-                        <code className="font-mono">POST /proxies</code> —
-                        create
-                        <span className="ml-1 text-muted-foreground">
-                          (required: name, proxy_settings object)
-                        </span>
-                      </li>
-                      <li>
-                        <code className="font-mono">
-                          PUT /proxies/{"{"}id{"}"}
-                        </code>{" "}
-                        — update
-                        <span className="ml-1 text-muted-foreground">
-                          (optional: name, proxy_settings)
-                        </span>
-                      </li>
-                      <li>
-                        <code className="font-mono">
-                          DELETE /proxies/{"{"}id{"}"}
-                        </code>{" "}
-                        — delete
-                      </li>
-                    </ul>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="font-medium">Browsers</div>
-                    <ul className="list-disc ml-5 space-y-0.5">
-                      <li>
-                        <code className="font-mono">
-                          POST /browsers/download
-                        </code>{" "}
-                        — download
-                        <span className="ml-1 text-muted-foreground">
-                          (required: browser, version)
-                        </span>
-                      </li>
-                      <li>
-                        <code className="font-mono">
-                          GET /browsers/{"{"}browser{"}"}/versions
-                        </code>{" "}
-                        — list versions
-                      </li>
-                      <li>
-                        <code className="font-mono">
-                          GET /browsers/{"{"}browser{"}"}/versions/{"{"}version
-                          {"}"}/downloaded
-                        </code>{" "}
-                        — is downloaded
-                      </li>
-                    </ul>
-                  </div>
-                  <div className="text-muted-foreground">
-                    These docs are temporary and will be replaced with full
-                    documentation later.
-                  </div>
-                </div>
-              </div>
-            )}
+            <Label className="text-base font-medium">Integrations</Label>
+            <p className="text-xs text-muted-foreground">
+              Configure Local API and MCP (Model Context Protocol) for
+              integrating with external tools and AI assistants.
+            </p>
+            <RippleButton
+              variant="outline"
+              className="w-full"
+              onClick={onIntegrationsOpen}
+            >
+              Open Integrations Settings
+            </RippleButton>
           </div>
 
           {/* Commercial License Section */}
@@ -1092,71 +760,6 @@ export function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
                 </div>
               )}
             </div>
-          </div>
-
-          {/* MCP Server Section */}
-          <div className="space-y-4">
-            <Label className="text-base font-medium">MCP Server</Label>
-
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="mcp-enabled"
-                checked={mcpEnabled}
-                disabled={!termsAccepted || isMcpStarting}
-                onCheckedChange={async (checked: boolean) => {
-                  setIsMcpStarting(true);
-                  try {
-                    if (checked) {
-                      await invoke("start_mcp_server");
-                      setMcpEnabled(true);
-                      showSuccessToast("MCP server started");
-                    } else {
-                      await invoke("stop_mcp_server");
-                      setMcpEnabled(false);
-                      showSuccessToast("MCP server stopped");
-                    }
-                  } catch (e) {
-                    console.error("Failed to toggle MCP server:", e);
-                    showErrorToast("Failed to toggle MCP server", {
-                      description:
-                        e instanceof Error ? e.message : "Unknown error",
-                    });
-                  } finally {
-                    setIsMcpStarting(false);
-                  }
-                }}
-              />
-              <div className="grid gap-1.5 leading-none">
-                <Label
-                  htmlFor="mcp-enabled"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                >
-                  Enable MCP Server (Model Context Protocol)
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Allow AI assistants to control Wayfern and Camoufox browsers
-                  via MCP.
-                  {!termsAccepted && (
-                    <span className="ml-1 text-orange-600">
-                      (Accept terms first)
-                    </span>
-                  )}
-                </p>
-              </div>
-            </div>
-
-            {mcpEnabled && (
-              <div className="p-3 space-y-2 text-xs rounded-md border bg-muted/40">
-                <div className="font-medium">Available MCP Tools</div>
-                <ul className="list-disc ml-5 space-y-0.5 text-muted-foreground">
-                  <li>list_profiles - List Wayfern/Camoufox profiles</li>
-                  <li>run_profile - Launch a browser profile</li>
-                  <li>kill_profile - Stop a running browser</li>
-                  <li>get_profile - Get profile details</li>
-                  <li>list_proxies - List configured proxies</li>
-                </ul>
-              </div>
-            )}
           </div>
 
           {/* Advanced Section */}

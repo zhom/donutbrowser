@@ -1,6 +1,7 @@
 use crate::browser::{create_browser, BrowserType, ProxySettings};
 use crate::camoufox_manager::{CamoufoxConfig, CamoufoxManager};
 use crate::downloaded_browsers_registry::DownloadedBrowsersRegistry;
+use crate::events;
 use crate::platform_browser;
 use crate::profile::{BrowserProfile, ProfileManager};
 use crate::proxy_manager::PROXY_MANAGER;
@@ -10,7 +11,6 @@ use serde::Serialize;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use sysinfo::System;
-use tauri::Emitter;
 pub struct BrowserRunner {
   base_dirs: BaseDirs,
   pub profile_manager: &'static ProfileManager,
@@ -261,7 +261,7 @@ impl BrowserRunner {
 
       // Emit profiles-changed to trigger frontend to reload profiles from disk
       // This ensures the UI displays the newly generated fingerprint
-      if let Err(e) = app_handle.emit("profiles-changed", ()) {
+      if let Err(e) = events::emit_empty("profiles-changed") {
         log::warn!("Warning: Failed to emit profiles-changed event: {e}");
       }
 
@@ -271,7 +271,7 @@ impl BrowserRunner {
       );
 
       // Emit profile update event to frontend
-      if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
+      if let Err(e) = events::emit("profile-updated", &updated_profile) {
         log::warn!("Warning: Failed to emit profile update event: {e}");
       }
 
@@ -287,7 +287,7 @@ impl BrowserRunner {
         is_running: updated_profile.process_id.is_some(),
       };
 
-      if let Err(e) = app_handle.emit("profile-running-changed", &payload) {
+      if let Err(e) = events::emit("profile-running-changed", &payload) {
         log::warn!("Warning: Failed to emit profile running changed event: {e}");
       } else {
         log::info!(
@@ -459,7 +459,7 @@ impl BrowserRunner {
       );
 
       // Emit profiles-changed to trigger frontend to reload profiles from disk
-      if let Err(e) = app_handle.emit("profiles-changed", ()) {
+      if let Err(e) = events::emit_empty("profiles-changed") {
         log::warn!("Warning: Failed to emit profiles-changed event: {e}");
       }
 
@@ -469,7 +469,7 @@ impl BrowserRunner {
       );
 
       // Emit profile update event to frontend
-      if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
+      if let Err(e) = events::emit("profile-updated", &updated_profile) {
         log::warn!("Warning: Failed to emit profile update event: {e}");
       }
 
@@ -485,7 +485,7 @@ impl BrowserRunner {
         is_running: updated_profile.process_id.is_some(),
       };
 
-      if let Err(e) = app_handle.emit("profile-running-changed", &payload) {
+      if let Err(e) = events::emit("profile-running-changed", &payload) {
         log::warn!("Warning: Failed to emit profile running changed event: {e}");
       } else {
         log::info!(
@@ -710,7 +710,7 @@ impl BrowserRunner {
     );
 
     // Emit profile update event to frontend
-    if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
+    if let Err(e) = events::emit("profile-updated", &updated_profile) {
       log::warn!("Warning: Failed to emit profile update event: {e}");
     }
 
@@ -725,7 +725,7 @@ impl BrowserRunner {
       is_running: updated_profile.process_id.is_some(),
     };
 
-    if let Err(e) = app_handle.emit("profile-running-changed", &payload) {
+    if let Err(e) = events::emit("profile-running-changed", &payload) {
       log::warn!("Warning: Failed to emit profile running changed event: {e}");
     } else {
       log::info!(
@@ -1594,7 +1594,7 @@ impl BrowserRunner {
       );
 
       // Emit profile update event to frontend
-      if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
+      if let Err(e) = events::emit("profile-updated", &updated_profile) {
         log::warn!("Warning: Failed to emit profile update event: {e}");
       }
 
@@ -1609,7 +1609,7 @@ impl BrowserRunner {
         is_running: false, // Explicitly set to false since we just killed it
       };
 
-      if let Err(e) = app_handle.emit("profile-running-changed", &payload) {
+      if let Err(e) = events::emit("profile-running-changed", &payload) {
         log::warn!("Warning: Failed to emit profile running changed event: {e}");
       } else {
         log::info!(
@@ -1912,7 +1912,7 @@ impl BrowserRunner {
       );
 
       // Emit profile update event to frontend
-      if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
+      if let Err(e) = events::emit("profile-updated", &updated_profile) {
         log::warn!("Warning: Failed to emit profile update event: {e}");
       }
 
@@ -1927,7 +1927,7 @@ impl BrowserRunner {
         is_running: false,
       };
 
-      if let Err(e) = app_handle.emit("profile-running-changed", &payload) {
+      if let Err(e) = events::emit("profile-running-changed", &payload) {
         log::warn!("Warning: Failed to emit profile running changed event: {e}");
       } else {
         log::info!(
@@ -2181,7 +2181,7 @@ impl BrowserRunner {
     );
 
     // Emit profile update event to frontend
-    if let Err(e) = app_handle.emit("profile-updated", &updated_profile) {
+    if let Err(e) = events::emit("profile-updated", &updated_profile) {
       log::warn!("Warning: Failed to emit profile update event: {e}");
     }
 
@@ -2196,7 +2196,7 @@ impl BrowserRunner {
       is_running: false, // Explicitly set to false since we just killed it
     };
 
-    if let Err(e) = app_handle.emit("profile-running-changed", &payload) {
+    if let Err(e) = events::emit("profile-running-changed", &payload) {
       log::warn!("Warning: Failed to emit profile running changed event: {e}");
     } else {
       log::info!(
@@ -2502,7 +2502,7 @@ pub async fn launch_browser_profile(
       is_running: false,
     };
 
-    if let Err(e) = app_handle.emit("profile-running-changed", &payload) {
+    if let Err(e) = events::emit("profile-running-changed", &payload) {
       log::warn!("Warning: Failed to emit profile running changed event: {e}");
     }
 
@@ -2579,7 +2579,7 @@ pub async fn kill_browser_profile(
         is_running: true,
       };
 
-      if let Err(e) = app_handle.emit("profile-running-changed", &payload) {
+      if let Err(e) = events::emit("profile-running-changed", &payload) {
         log::warn!("Warning: Failed to emit profile running changed event: {e}");
       }
 
