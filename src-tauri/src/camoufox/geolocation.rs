@@ -343,14 +343,16 @@ pub fn get_geolocation(ip: &str) -> Result<Geolocation, GeolocationError> {
   let ip_addr: IpAddr =
     IpAddr::from_str(ip).map_err(|_| GeolocationError::InvalidIP(ip.to_string()))?;
 
-  let city: geoip2::City = reader
+  let lookup_result = reader
     .lookup(ip_addr)
     .map_err(|e| GeolocationError::LocationNotFound(e.to_string()))?;
+  let city: geoip2::City = lookup_result
+    .decode()
+    .map_err(|e| GeolocationError::LocationNotFound(e.to_string()))?
+    .ok_or_else(|| GeolocationError::LocationNotFound(ip.to_string()))?;
 
   // Extract location data
-  let location = city
-    .location
-    .ok_or_else(|| GeolocationError::LocationNotFound(ip.to_string()))?;
+  let location = &city.location;
 
   let longitude = location
     .longitude
@@ -364,9 +366,7 @@ pub fn get_geolocation(ip: &str) -> Result<Geolocation, GeolocationError> {
     .to_string();
 
   // Get country code
-  let country = city
-    .country
-    .ok_or_else(|| GeolocationError::LocationNotFound("No country".to_string()))?;
+  let country = &city.country;
   let iso_code = country
     .iso_code
     .ok_or_else(|| GeolocationError::LocationNotFound("No country code".to_string()))?
