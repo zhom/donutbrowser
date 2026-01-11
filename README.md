@@ -59,16 +59,6 @@ The app can be downloaded from the [releases page](https://github.com/zhom/donut
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-### Nix Support
-
-For a reproducible development environment (especially on Linux), you can use [Nix](https://nixos.org/):
-
-```bash
-nix develop
-# or if you use direnv
-direnv allow
-```
-
 ## Issues
 
 If you face any problems while using the application, please [open an issue](https://github.com/zhom/donutbrowser/issues).
