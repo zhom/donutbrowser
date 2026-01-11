@@ -1863,7 +1863,7 @@ pub async fn launch_browser_profile(
         // Use internal proxy for subsequent launch
         internal_proxy_settings = Some(internal_proxy.clone());
 
-        // For Firefox-based browsers, always apply PAC/user.js to point to the local proxy
+        // For Firefox-based browsers, configure proxy settings appropriately
         if matches!(
           profile_for_launch.browser.as_str(),
           "firefox" | "firefox-developer" | "zen"
@@ -1873,19 +1873,31 @@ pub async fn launch_browser_profile(
             .join(profile_for_launch.id.to_string())
             .join("profile");
 
-          // Provide a dummy upstream (ignored when internal proxy is provided)
-          let dummy_upstream = ProxySettings {
-            proxy_type: "http".to_string(),
-            host: "127.0.0.1".to_string(),
-            port: internal_proxy.port,
-            username: None,
-            password: None,
-          };
+          if upstream_proxy.is_some() {
+            // Apply proxy settings pointing to the local proxy
+            let dummy_upstream = ProxySettings {
+              proxy_type: "http".to_string(),
+              host: "127.0.0.1".to_string(),
+              port: internal_proxy.port,
+              username: None,
+              password: None,
+            };
 
-          browser_runner
-            .profile_manager
-            .apply_proxy_settings_to_profile(&profile_path, &dummy_upstream, Some(&internal_proxy))
-            .map_err(|e| format!("Failed to update profile proxy: {e}"))?;
+            browser_runner
+              .profile_manager
+              .apply_proxy_settings_to_profile(
+                &profile_path,
+                &dummy_upstream,
+                Some(&internal_proxy),
+              )
+              .map_err(|e| format!("Failed to update profile proxy: {e}"))?;
+          } else {
+            // No upstream proxy - ensure proxy is disabled
+            browser_runner
+              .profile_manager
+              .disable_proxy_settings_in_profile(&profile_path)
+              .map_err(|e| format!("Failed to disable profile proxy: {e}"))?;
+          }
         }
 
         log::info!(

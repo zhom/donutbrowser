@@ -45,6 +45,8 @@ type TimePeriod =
   | "30d"
   | "all";
 
+type DomainSortMetric = "total" | "sent" | "received" | "requests";
+
 interface TrafficDetailsDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -150,6 +152,8 @@ export function TrafficDetailsDialog({
 }: TrafficDetailsDialogProps) {
   const [stats, setStats] = React.useState<FilteredTrafficStats | null>(null);
   const [timePeriod, setTimePeriod] = React.useState<TimePeriod>("5m");
+  const [domainSortMetric, setDomainSortMetric] =
+    React.useState<DomainSortMetric>("total");
 
   // Fetch stats periodically - now uses filtered API
   React.useEffect(() => {
@@ -171,11 +175,7 @@ export function TrafficDetailsDialog({
     void fetchStats();
     const interval = setInterval(fetchStats, 2000);
 
-    return () => {
-      clearInterval(interval);
-      // Clear stats from memory when dialog closes to free up memory
-      setStats(null);
-    };
+    return () => clearInterval(interval);
   }, [isOpen, profileId, timePeriod]);
 
   // Transform data for chart (already filtered by backend)
@@ -220,24 +220,30 @@ export function TrafficDetailsDialog({
     [],
   );
 
-  // Top domains sorted by total traffic
-  const topDomainsByTraffic = React.useMemo(() => {
+  // Top domains sorted by selected metric
+  const topDomains = React.useMemo(() => {
     if (!stats?.domains) return [];
     return Object.values(stats.domains)
-      .sort(
-        (a, b) =>
-          b.bytes_sent + b.bytes_received - (a.bytes_sent + a.bytes_received),
-      )
+      .sort((a, b) => {
+        switch (domainSortMetric) {
+          case "sent":
+            return b.bytes_sent - a.bytes_sent;
+          case "received":
+            return b.bytes_received - a.bytes_received;
+          case "total":
+            return (
+              b.bytes_sent +
+              b.bytes_received -
+              (a.bytes_sent + a.bytes_received)
+            );
+          case "requests":
+            return b.request_count - a.request_count;
+          default:
+            return 0;
+        }
+      })
       .slice(0, 10);
-  }, [stats]);
-
-  // Top domains sorted by request count
-  const topDomainsByRequests = React.useMemo(() => {
-    if (!stats?.domains) return [];
-    return Object.values(stats.domains)
-      .sort((a, b) => b.request_count - a.request_count)
-      .slice(0, 10);
-  }, [stats]);
+  }, [stats, domainSortMetric]);
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -439,13 +445,35 @@ export function TrafficDetailsDialog({
               overhead and protocol differences.
             </p>
 
-            {/* Top Domains by Traffic */}
-            {topDomainsByTraffic.length > 0 && (
+            {/* Top Domains */}
+            {topDomains.length > 0 && (
               <div>
-                <h3 className="text-sm font-medium mb-2">
-                  Top Domains by Traffic (
-                  {timePeriod === "all" ? "all time" : timePeriod})
-                </h3>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium">
+                    Top Domains by{" "}
+                    {domainSortMetric === "total" && "Total Traffic"}
+                    {domainSortMetric === "sent" && "Sent Traffic"}
+                    {domainSortMetric === "received" && "Received Traffic"}
+                    {domainSortMetric === "requests" && "Requests"} (
+                    {timePeriod === "all" ? "all time" : timePeriod})
+                  </h3>
+                  <Select
+                    value={domainSortMetric}
+                    onValueChange={(v) =>
+                      setDomainSortMetric(v as DomainSortMetric)
+                    }
+                  >
+                    <SelectTrigger className="w-[140px] h-8">
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="total">Total Traffic</SelectItem>
+                      <SelectItem value="sent">Sent</SelectItem>
+                      <SelectItem value="received">Received</SelectItem>
+                      <SelectItem value="requests">Requests</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="border rounded-md">
                   <div className="grid grid-cols-[1fr_80px_80px_80px] gap-2 px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-muted/30">
                     <span>Domain</span>
@@ -454,7 +482,7 @@ export function TrafficDetailsDialog({
                     <span className="text-right">Received</span>
                   </div>
                   <div className="max-h-[180px] overflow-y-auto">
-                    {topDomainsByTraffic.map((domain, index) => (
+                    {topDomains.map((domain, index) => (
                       <div
                         key={domain.domain}
                         className="grid grid-cols-[1fr_80px_80px_80px] gap-2 px-3 py-2 text-sm border-b last:border-b-0 hover:bg-muted/30"
@@ -473,46 +501,6 @@ export function TrafficDetailsDialog({
                         </span>
                         <span className="text-right text-chart-2">
                           {formatBytes(domain.bytes_received)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Top Domains by Requests */}
-            {topDomainsByRequests.length > 0 && (
-              <div>
-                <h3 className="text-sm font-medium mb-2">
-                  Top Domains by Requests (
-                  {timePeriod === "all" ? "all time" : timePeriod})
-                </h3>
-                <div className="border rounded-md">
-                  <div className="grid grid-cols-[1fr_80px_100px] gap-2 px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-muted/30">
-                    <span>Domain</span>
-                    <span className="text-right">Requests</span>
-                    <span className="text-right">Total Traffic</span>
-                  </div>
-                  <div className="max-h-[180px] overflow-y-auto">
-                    {topDomainsByRequests.map((domain, index) => (
-                      <div
-                        key={domain.domain}
-                        className="grid grid-cols-[1fr_80px_100px] gap-2 px-3 py-2 text-sm border-b last:border-b-0 hover:bg-muted/30"
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-xs text-muted-foreground w-4 shrink-0">
-                            {index + 1}
-                          </span>
-                          <TruncatedDomain domain={domain.domain} />
-                        </div>
-                        <span className="text-right text-muted-foreground">
-                          {domain.request_count.toLocaleString()}
-                        </span>
-                        <span className="text-right">
-                          {formatBytes(
-                            domain.bytes_sent + domain.bytes_received,
-                          )}
                         </span>
                       </div>
                     ))}

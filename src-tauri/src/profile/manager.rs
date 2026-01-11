@@ -1278,6 +1278,19 @@ impl ProfileManager {
     preferences.push("user_pref(\"network.proxy.type\", 0);".to_string());
     preferences.push("user_pref(\"network.proxy.failover_direct\", true);".to_string());
 
+    // Clear all proxy settings to ensure clean state
+    preferences.push("user_pref(\"network.proxy.http\", \"\");".to_string());
+    preferences.push("user_pref(\"network.proxy.http_port\", 0);".to_string());
+    preferences.push("user_pref(\"network.proxy.ssl\", \"\");".to_string());
+    preferences.push("user_pref(\"network.proxy.ssl_port\", 0);".to_string());
+    preferences.push("user_pref(\"network.proxy.ftp\", \"\");".to_string());
+    preferences.push("user_pref(\"network.proxy.ftp_port\", 0);".to_string());
+    preferences.push("user_pref(\"network.proxy.socks\", \"\");".to_string());
+    preferences.push("user_pref(\"network.proxy.socks_port\", 0);".to_string());
+    preferences.push("user_pref(\"network.proxy.socks_version\", 5);".to_string());
+    preferences.push("user_pref(\"network.proxy.no_proxies_on\", \"\");".to_string());
+    preferences.push("user_pref(\"network.proxy.autoconfig_url\", \"\");".to_string());
+
     // Create a direct proxy PAC file in UUID directory
     let pac_content = "function FindProxyForURL(url, host) { return 'DIRECT'; }";
     let pac_path = uuid_dir.join("proxy.pac");
