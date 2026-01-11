@@ -752,6 +752,38 @@ export default function Home() {
     }
   }, [profiles]);
 
+  // Show warning for non-wayfern/camoufox profiles (support ending March 1, 2026)
+  useEffect(() => {
+    if (profiles.length === 0) return;
+
+    const unsupportedProfiles = profiles.filter(
+      (p) => p.browser !== "wayfern" && p.browser !== "camoufox",
+    );
+
+    if (unsupportedProfiles.length > 0) {
+      const unsupportedNames = unsupportedProfiles
+        .map((p) => p.name)
+        .join(", ");
+
+      showToast({
+        id: "browser-support-ending-warning",
+        type: "error",
+        title: "Browser support ending soon",
+        description: `Support for the following profiles will be removed on March 1, 2026: ${unsupportedNames}. Please migrate to Wayfern or Camoufox profiles.`,
+        duration: 15000,
+        action: {
+          label: "Learn more",
+          onClick: () => {
+            const event = new CustomEvent("url-open-request", {
+              detail: "https://github.com/zhom/donutbrowser/discussions",
+            });
+            window.dispatchEvent(event);
+          },
+        },
+      });
+    }
+  }, [profiles]);
+
   // Check permissions when they are initialized
   useEffect(() => {
     if (isInitialized) {
