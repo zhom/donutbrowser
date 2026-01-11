@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { LuLock } from "react-icons/lu";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -65,8 +66,6 @@ export function WayfernConfigForm({
   const [currentOS] = useState<WayfernOS>(getCurrentOS);
 
   const selectedOS = config.os || currentOS;
-  const isOSDifferent = selectedOS !== currentOS;
-  const isMobileOS = selectedOS === "android" || selectedOS === "ios";
 
   useEffect(() => {
     if (isCreating && typeof window !== "undefined") {
@@ -155,29 +154,23 @@ export function WayfernConfigForm({
             <SelectValue placeholder="Select operating system" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="windows">{osLabels.windows}</SelectItem>
-            <SelectItem value="macos">{osLabels.macos}</SelectItem>
-            <SelectItem value="linux">{osLabels.linux}</SelectItem>
-            <SelectItem value="android">{osLabels.android}</SelectItem>
-            <SelectItem value="ios">{osLabels.ios}</SelectItem>
+            {(
+              ["windows", "macos", "linux", "android", "ios"] as WayfernOS[]
+            ).map((os) => {
+              const isDisabled = os !== currentOS;
+              return (
+                <SelectItem key={os} value={os} disabled={isDisabled}>
+                  <span className="flex items-center gap-2">
+                    {osLabels[os]}
+                    {isDisabled && (
+                      <LuLock className="w-3 h-3 text-muted-foreground" />
+                    )}
+                  </span>
+                </SelectItem>
+              );
+            })}
           </SelectContent>
         </Select>
-        {isOSDifferent && !isMobileOS && (
-          <Alert className="border-yellow-500/50 bg-yellow-500/10">
-            <AlertDescription className="text-yellow-600 dark:text-yellow-400">
-              Warning: Selecting an OS different from your current system (
-              {osLabels[currentOS]}) increases the risk of detection.
-            </AlertDescription>
-          </Alert>
-        )}
-        {isMobileOS && (
-          <Alert className="border-yellow-500/50 bg-yellow-500/10">
-            <AlertDescription className="text-yellow-600 dark:text-yellow-400">
-              Warning: Mobile OS spoofing on desktop has high detection risk.
-              Websites can detect the mismatch between fingerprint and behavior.
-            </AlertDescription>
-          </Alert>
-        )}
       </div>
 
       {/* Randomize Fingerprint Option */}
@@ -941,29 +934,29 @@ export function WayfernConfigForm({
                   <SelectValue placeholder="Select operating system" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="windows">{osLabels.windows}</SelectItem>
-                  <SelectItem value="macos">{osLabels.macos}</SelectItem>
-                  <SelectItem value="linux">{osLabels.linux}</SelectItem>
-                  <SelectItem value="android">{osLabels.android}</SelectItem>
-                  <SelectItem value="ios">{osLabels.ios}</SelectItem>
+                  {(
+                    [
+                      "windows",
+                      "macos",
+                      "linux",
+                      "android",
+                      "ios",
+                    ] as WayfernOS[]
+                  ).map((os) => {
+                    const isDisabled = os !== currentOS;
+                    return (
+                      <SelectItem key={os} value={os} disabled={isDisabled}>
+                        <span className="flex items-center gap-2">
+                          {osLabels[os]}
+                          {isDisabled && (
+                            <LuLock className="w-3 h-3 text-muted-foreground" />
+                          )}
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
-              {isOSDifferent && !isMobileOS && (
-                <Alert className="border-yellow-500/50 bg-yellow-500/10">
-                  <AlertDescription className="text-yellow-600 dark:text-yellow-400">
-                    Warning: Selecting an OS different from your current system
-                    ({osLabels[currentOS]}) increases the risk of detection.
-                  </AlertDescription>
-                </Alert>
-              )}
-              {isMobileOS && (
-                <Alert className="border-yellow-500/50 bg-yellow-500/10">
-                  <AlertDescription className="text-yellow-600 dark:text-yellow-400">
-                    Warning: Mobile OS spoofing on desktop has high detection
-                    risk.
-                  </AlertDescription>
-                </Alert>
-              )}
             </div>
 
             {/* Randomize Fingerprint Option */}
