@@ -75,23 +75,24 @@ jobs:
             2. Sufficient detail to understand and act upon
             3. Professional tone and clear communication
 
-            Respond in JSON format with the following structure:
-            ```json
+            Respond ONLY with valid JSON (no markdown fences). Keep responses concise.
+
+            JSON structure:
             {
               "is_valid": true|false,
               "issue_type": "bug_report"|"feature_request"|"other",
-              "missing_info": [
-                "List of missing required information"
-              ],
-              "suggestions": [
-                "Specific suggestions for improvement"
-              ],
-              "overall_assessment": "Brief assessment of the issue quality"
+              "missing_info": ["item1", "item2"],
+              "suggestions": ["suggestion1", "suggestion2"],
+              "overall_assessment": "One sentence assessment"
             }
-            ```
 
-            Be constructive and helpful in your feedback. If the issue is incomplete, provide specific guidance on what's needed.
-            model: openai/gpt-4o
+            IMPORTANT CONSTRAINTS:
+            - Maximum 3 items in missing_info array
+            - Maximum 3 items in suggestions array
+            - Each array item must be under 80 characters
+            - overall_assessment must be under 100 characters
+            - Output ONLY the JSON object, nothing else
+          model: openai/gpt-5
 
       - name: Check if first-time contributor
         id: check-first-time
@@ -134,10 +135,11 @@ jobs:
 
           # Validate JSON before parsing
           if ! echo "$JSON_RESULT" | jq empty 2>/dev/null; then
-            echo "::error::Invalid JSON in AI response"
+            echo "::warning::Invalid JSON in AI response, using fallback"
             echo "Raw output:"
             echo "$RAW_OUTPUT"
-            exit 1
+            # Use fallback values when AI response is malformed
+            JSON_RESULT='{"is_valid":true,"issue_type":"other","missing_info":[],"suggestions":[],"overall_assessment":"Unable to validate automatically"}'
           fi
 
           # Parse JSON fields
