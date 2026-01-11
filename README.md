@@ -104,6 +104,13 @@ Have questions or want to contribute? We'd love to hear from you!
                 </a>
             </td>
             <td align="center">
+                <a href="https://github.com/HassiyYT">
+                    <img src="https://avatars.githubusercontent.com/u/81773493?v=4" width="100;" alt="HassiyYT"/>
+                    <br />
+                    <sub><b>Hassiy</b></sub>
+                </a>
+            </td>
+            <td align="center">
                 <a href="https://github.com/JorySeverijnse">
                     <img src="https://avatars.githubusercontent.com/u/117462355?v=4" width="100;" alt="JorySeverijnse"/>
                     <br />
