@@ -13,6 +13,8 @@ jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
     runs-on: ${{ (matrix.language == 'swift' && 'macos-latest') || 'ubuntu-latest' }}
+    env:
+      CODEQL_ENABLE_EXPERIMENTAL_FEATURES: true
     permissions:
       security-events: write
       packages: read
