@@ -75,14 +75,20 @@ fn external_binaries_exist() -> bool {
 
   let binaries_dir = PathBuf::from(&manifest_dir).join("binaries");
 
-  // Check for required external binaries
-  let donut_proxy_name = if target.contains("windows") {
-    format!("donut-proxy-{}.exe", target)
+  // Check for all required external binaries (must match tauri.conf.json externalBin)
+  let (donut_proxy_name, donut_daemon_name) = if target.contains("windows") {
+    (
+      format!("donut-proxy-{}.exe", target),
+      format!("donut-daemon-{}.exe", target),
+    )
   } else {
-    format!("donut-proxy-{}", target)
+    (
+      format!("donut-proxy-{}", target),
+      format!("donut-daemon-{}", target),
+    )
   };
 
-  binaries_dir.join(&donut_proxy_name).exists()
+  binaries_dir.join(&donut_proxy_name).exists() && binaries_dir.join(&donut_daemon_name).exists()
 }
 
 fn ensure_dist_folder_exists() {

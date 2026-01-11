@@ -63,8 +63,39 @@ jobs:
 
       - name: Install dependencies from lockfile
         run: pnpm install --frozen-lockfile
-        
-      - name: Install rust dependencies
+
+      - name: Build frontend
+        if: matrix.language == 'rust'
+        run: pnpm next build
+
+      - name: Get host target
+        if: matrix.language == 'rust'
+        id: host_target
+        shell: bash
+        run: |
+          HOST_TARGET=$(rustc -vV | sed -n 's|host: ||p')
+          echo "target=${HOST_TARGET}" >> $GITHUB_OUTPUT
+
+      - name: Build sidecar binaries
+        if: matrix.language == 'rust'
+        shell: bash
+        working-directory: ./src-tauri
+        run: |
+          cargo build --bin donut-proxy --release
+          cargo build --bin donut-daemon --release
+
+      - name: Copy sidecar binaries to Tauri binaries
+        if: matrix.language == 'rust'
+        shell: bash
+        run: |
+          mkdir -p src-tauri/binaries
+          HOST_TARGET="${{ steps.host_target.outputs.target }}"
+          cp src-tauri/target/release/donut-proxy src-tauri/binaries/donut-proxy-${HOST_TARGET}
+          cp src-tauri/target/release/donut-daemon src-tauri/binaries/donut-daemon-${HOST_TARGET}
+          chmod +x src-tauri/binaries/donut-proxy-${HOST_TARGET}
+          chmod +x src-tauri/binaries/donut-daemon-${HOST_TARGET}
+
+      - name: Build rust dependencies
         if: matrix.language == 'rust'
         working-directory: ./src-tauri
         run: |
