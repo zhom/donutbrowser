@@ -1,0 +1,5 @@
+[files]
+extend-exclude = [
+    "src-tauri/src/camoufox/data/*.json",
+    "src-tauri/src/camoufox/data/*.xml",
+]
