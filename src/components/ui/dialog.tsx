@@ -38,12 +38,6 @@ function Dialog(props: DialogProps) {
   );
 }
 
-type DialogTriggerProps = React.ComponentProps<typeof DialogPrimitive.Trigger>;
-
-function DialogTrigger(props: DialogTriggerProps) {
-  return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />;
-}
-
 type DialogPortalProps = Omit<
   React.ComponentProps<typeof DialogPrimitive.Portal>,
   "forceMount"
@@ -174,12 +168,6 @@ function DialogContent({
   );
 }
 
-type DialogCloseProps = React.ComponentProps<typeof DialogPrimitive.Close>;
-
-function DialogClose(props: DialogCloseProps) {
-  return <DialogPrimitive.Close data-slot="dialog-close" {...props} />;
-}
-
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -231,13 +219,9 @@ function DialogDescription({
 
 export {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogOverlay,
-  DialogPortal,
   DialogTitle,
-  DialogTrigger,
 };
