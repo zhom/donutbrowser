@@ -44,6 +44,7 @@ jobs:
 
   codeql:
     name: CodeQL
+    if: ${{ github.actor == 'dependabot[bot]' }}
     uses: ./.github/workflows/codeql.yml
     secrets: inherit
     permissions:
@@ -54,6 +55,7 @@ jobs:
 
   spellcheck:
     name: Spell Check
+    if: ${{ github.actor == 'dependabot[bot]' }}
     uses: ./.github/workflows/spellcheck.yml
     secrets: inherit
     permissions:
