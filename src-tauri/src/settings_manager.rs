@@ -50,6 +50,8 @@ pub struct AppSettings {
   pub mcp_port: Option<u16>, // Port for MCP server (default 51080)
   #[serde(default)]
   pub mcp_token: Option<String>, // Displayed token for user to copy (not persisted, loaded from encrypted file)
+  #[serde(default)]
+  pub launch_on_login_declined: bool, // User permanently declined the launch-on-login prompt
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -81,6 +83,7 @@ impl Default for AppSettings {
       mcp_enabled: false,
       mcp_port: None,
       mcp_token: None,
+      launch_on_login_declined: false,
     }
   }
 }
@@ -206,9 +209,17 @@ impl SettingsManager {
     Ok(())
   }
 
-  pub fn should_show_settings_on_startup(&self) -> Result<bool, Box<dyn std::error::Error>> {
-    // Always return false - we don't show settings on startup anymore
-    Ok(false)
+  pub fn should_show_launch_on_login_prompt(&self) -> Result<bool, Box<dyn std::error::Error>> {
+    let settings = self.load_settings()?;
+    // Show if: user has NOT declined AND autostart is NOT enabled
+    let autostart_enabled = crate::daemon::autostart::is_autostart_enabled();
+    Ok(!settings.launch_on_login_declined && !autostart_enabled)
+  }
+
+  pub fn decline_launch_on_login(&self) -> Result<(), Box<dyn std::error::Error>> {
+    let mut settings = self.load_settings()?;
+    settings.launch_on_login_declined = true;
+    self.save_settings(&settings)
   }
 
   fn get_vault_password() -> String {
@@ -806,11 +817,25 @@ pub async fn save_app_settings(
 }
 
 #[tauri::command]
-pub async fn should_show_settings_on_startup() -> Result<bool, String> {
+pub async fn should_show_launch_on_login_prompt() -> Result<bool, String> {
   let manager = SettingsManager::instance();
   manager
-    .should_show_settings_on_startup()
-    .map_err(|e| format!("Failed to check prompt setting: {e}"))
+    .should_show_launch_on_login_prompt()
+    .map_err(|e| format!("Failed to check launch on login prompt setting: {e}"))
+}
+
+#[tauri::command]
+pub async fn enable_launch_on_login() -> Result<(), String> {
+  crate::daemon::autostart::enable_autostart()
+    .map_err(|e| format!("Failed to enable autostart: {e}"))
+}
+
+#[tauri::command]
+pub async fn decline_launch_on_login() -> Result<(), String> {
+  let manager = SettingsManager::instance();
+  manager
+    .decline_launch_on_login()
+    .map_err(|e| format!("Failed to decline launch on login: {e}"))
 }
 
 #[tauri::command]
@@ -959,6 +984,7 @@ mod tests {
       mcp_enabled: false,
       mcp_port: None,
       mcp_token: None,
+      launch_on_login_declined: false,
     };
 
     // Save settings
@@ -1024,17 +1050,31 @@ mod tests {
   }
 
   #[test]
-  fn test_should_show_settings_on_startup() {
+  fn test_should_show_launch_on_login_prompt() {
     let (manager, _temp_dir) = create_test_settings_manager();
 
-    let result = manager.should_show_settings_on_startup();
+    let result = manager.should_show_launch_on_login_prompt();
     assert!(result.is_ok(), "Should not fail");
 
-    let should_show = result.unwrap();
-    assert!(
-      !should_show,
-      "Should always return false as per implementation"
-    );
+    // By default, should show prompt (not declined, autostart not enabled)
+    let _should_show = result.unwrap();
+    // Note: The actual value depends on system autostart state, so we just test it doesn't fail
+  }
+
+  #[test]
+  fn test_decline_launch_on_login() {
+    let (manager, _temp_dir) = create_test_settings_manager();
+
+    // Initially not declined
+    let settings = manager.load_settings().unwrap();
+    assert!(!settings.launch_on_login_declined);
+
+    // Decline
+    manager.decline_launch_on_login().unwrap();
+
+    // Should be declined now
+    let settings = manager.load_settings().unwrap();
+    assert!(settings.launch_on_login_declined);
   }
 
   #[test]

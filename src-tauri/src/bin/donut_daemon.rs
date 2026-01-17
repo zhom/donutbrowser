@@ -8,6 +8,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::process;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
 
 use muda::MenuEvent;
 use serde::{Deserialize, Serialize};
@@ -20,6 +21,14 @@ use tray_icon::TrayIcon;
 use donutbrowser_lib::daemon::{autostart, services, tray};
 
 static SHOULD_QUIT: AtomicBool = AtomicBool::new(false);
+
+enum ServiceStatus {
+  Ready {
+    api_port: Option<u16>,
+    mcp_running: bool,
+  },
+  Failed(String),
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct DaemonState {
@@ -140,10 +149,24 @@ fn run_daemon() {
   // Set high priority so the daemon is less likely to be killed under resource pressure
   set_high_priority();
 
-  // Initialize logging
+  // Initialize logging to file for debugging (since stdout/stderr may be redirected)
+  let log_path = autostart::get_data_dir()
+    .unwrap_or_else(|| std::path::PathBuf::from("."))
+    .join("daemon.log");
+
+  let log_file = std::fs::OpenOptions::new()
+    .create(true)
+    .append(true)
+    .open(&log_path);
+
   env_logger::Builder::from_default_env()
     .filter_level(log::LevelFilter::Info)
     .format_timestamp_millis()
+    .target(if let Ok(file) = log_file {
+      env_logger::Target::Pipe(Box::new(file))
+    } else {
+      env_logger::Target::Stderr
+    })
     .init();
 
   if let Err(e) = ensure_data_dir() {
@@ -163,22 +186,28 @@ fn run_daemon() {
   // Create tokio runtime for async operations
   let rt = Runtime::new().expect("Failed to create tokio runtime");
 
-  // Start services in the background
-  let services_result = rt.block_on(async { services::DaemonServices::start().await });
+  // Create channel for service status updates
+  let (tx, rx) = mpsc::channel::<ServiceStatus>();
 
-  let daemon_services = match services_result {
-    Ok(s) => s,
-    Err(e) => {
-      log::error!("Failed to start services: {}", e);
-      process::exit(1);
-    }
-  };
+  // Spawn services in a background thread so we don't block the event loop
+  let rt_handle = rt.handle().clone();
+  std::thread::spawn(move || {
+    let result = rt_handle.block_on(async { services::DaemonServices::start().await });
+    let status = match result {
+      Ok(s) => ServiceStatus::Ready {
+        api_port: s.api_port,
+        mcp_running: s.mcp_running,
+      },
+      Err(e) => ServiceStatus::Failed(e),
+    };
+    let _ = tx.send(status);
+  });
 
-  // Write initial state
+  // Write initial state (services still starting)
   let state = DaemonState {
     daemon_pid: Some(process::id()),
-    api_port: daemon_services.api_port,
-    mcp_running: daemon_services.mcp_running,
+    api_port: None,
+    mcp_running: false,
     version: env!("CARGO_PKG_VERSION").to_string(),
   };
   if let Err(e) = write_state(&state) {
@@ -186,14 +215,15 @@ fn run_daemon() {
   }
 
   // Prepare tray menu and icon (but don't create the tray icon yet)
+  // Show "Starting..." state initially
   let tray_menu = tray::TrayMenu::new();
-  tray_menu.update_api_status(daemon_services.api_port);
-  tray_menu.update_mcp_status(daemon_services.mcp_running);
+  tray_menu.update_api_status(None);
+  tray_menu.update_mcp_status(false);
 
   let icon = tray::load_icon();
   let menu_channel = MenuEvent::receiver();
 
-  // Create the event loop
+  // Create the event loop IMMEDIATELY (critical for macOS tray icon)
   let event_loop = EventLoopBuilder::new().build();
 
   // Store tray icon in Option - created after event loop starts
@@ -222,6 +252,34 @@ fn run_daemon() {
         log::info!("[daemon] Tray icon created");
       }
       Event::MainEventsCleared => {
+        // Check for service status updates from background thread
+        if let Ok(status) = rx.try_recv() {
+          match status {
+            ServiceStatus::Ready {
+              api_port,
+              mcp_running,
+            } => {
+              log::info!("[daemon] Services started successfully");
+              tray_menu.update_api_status(api_port);
+              tray_menu.update_mcp_status(mcp_running);
+
+              // Update state file
+              let mut state = read_state();
+              state.api_port = api_port;
+              state.mcp_running = mcp_running;
+              if let Err(e) = write_state(&state) {
+                log::error!("Failed to write state: {}", e);
+              }
+            }
+            ServiceStatus::Failed(e) => {
+              log::error!("Failed to start services: {}", e);
+              // Keep tray icon running, show error state
+              tray_menu.update_api_status(None);
+              tray_menu.update_mcp_status(false);
+            }
+          }
+        }
+
         // Process menu events
         while let Ok(event) = menu_channel.try_recv() {
           if event.id == tray_menu.open_item.id() || event.id == tray_menu.preferences_item.id() {
@@ -246,6 +304,9 @@ fn run_daemon() {
 
     // Keep tray_icon alive
     let _ = &tray_icon;
+
+    // Keep runtime alive
+    let _ = &rt;
   });
 }
 

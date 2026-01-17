@@ -13,6 +13,7 @@ export function useAppUpdateNotifications() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [updateProgress, setUpdateProgress] =
     useState<AppUpdateProgress | null>(null);
+  const [updateReady, setUpdateReady] = useState(false);
   const [isClient, setIsClient] = useState(false);
   const [dismissedVersion, setDismissedVersion] = useState<string | null>(null);
 
@@ -68,7 +69,7 @@ export function useAppUpdateNotifications() {
         message: "Starting update...",
       });
 
-      await invoke("download_and_install_app_update", {
+      await invoke("download_and_prepare_app_update", {
         updateInfo: appUpdateInfo,
       });
     } catch (error) {
@@ -81,6 +82,20 @@ export function useAppUpdateNotifications() {
       });
       setIsUpdating(false);
       setUpdateProgress(null);
+    }
+  }, []);
+
+  const handleRestart = useCallback(async () => {
+    try {
+      await invoke("restart_application");
+    } catch (error) {
+      console.error("Failed to restart app:", error);
+      showToast({
+        type: "error",
+        title: "Failed to restart",
+        description: String(error),
+        duration: 6000,
+      });
     }
   }, []);
 
@@ -125,11 +140,21 @@ export function useAppUpdateNotifications() {
       },
     );
 
+    const unlistenReady = listen<string>("app-update-ready", (event) => {
+      console.log("App update ready:", event.payload);
+      setUpdateReady(true);
+      setIsUpdating(false);
+      setUpdateProgress(null);
+    });
+
     return () => {
       void unlistenUpdate.then((unlisten) => {
         unlisten();
       });
       void unlistenProgress.then((unlisten) => {
+        unlisten();
+      });
+      void unlistenReady.then((unlisten) => {
         unlisten();
       });
     };
@@ -144,9 +169,11 @@ export function useAppUpdateNotifications() {
         <AppUpdateToast
           updateInfo={updateInfo}
           onUpdate={handleAppUpdate}
+          onRestart={handleRestart}
           onDismiss={dismissAppUpdate}
           isUpdating={isUpdating}
           updateProgress={updateProgress}
+          updateReady={updateReady}
         />
       ),
       {
@@ -163,9 +190,11 @@ export function useAppUpdateNotifications() {
   }, [
     updateInfo,
     handleAppUpdate,
+    handleRestart,
     dismissAppUpdate,
     isUpdating,
     updateProgress,
+    updateReady,
     isClient,
   ]);
 
@@ -181,6 +210,7 @@ export function useAppUpdateNotifications() {
     updateInfo,
     isUpdating,
     updateProgress,
+    updateReady,
     checkForAppUpdates,
     checkForAppUpdatesManual,
     dismissAppUpdate,

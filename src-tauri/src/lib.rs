@@ -41,6 +41,7 @@ mod commercial_license;
 mod cookie_manager;
 pub mod daemon;
 pub mod daemon_client;
+mod daemon_spawn;
 pub mod daemon_ws;
 pub mod events;
 mod mcp_server;
@@ -70,8 +71,9 @@ use downloaded_browsers_registry::{
 use downloader::download_browser;
 
 use settings_manager::{
-  get_app_settings, get_sync_settings, get_table_sorting_settings, save_app_settings,
-  save_sync_settings, save_table_sorting_settings, should_show_settings_on_startup,
+  decline_launch_on_login, enable_launch_on_login, get_app_settings, get_sync_settings,
+  get_table_sorting_settings, save_app_settings, save_sync_settings, save_table_sorting_settings,
+  should_show_launch_on_login_prompt,
 };
 
 use sync::{
@@ -93,7 +95,8 @@ use auto_updater::{
 };
 
 use app_auto_updater::{
-  check_for_app_updates, check_for_app_updates_manual, download_and_install_app_update,
+  check_for_app_updates, check_for_app_updates_manual, download_and_prepare_app_update,
+  restart_application,
 };
 
 use profile_importer::{detect_existing_profiles, import_browser_profile};
@@ -428,6 +431,11 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_macos_permissions::init())
     .setup(|app| {
+      // Start the daemon for tray icon
+      if let Err(e) = daemon_spawn::ensure_daemon_running() {
+        log::warn!("Failed to start daemon: {e}");
+      }
+
       // Create the main window programmatically
       #[allow(unused_variables)]
       let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
@@ -894,7 +902,9 @@ pub fn run() {
       rename_profile,
       get_app_settings,
       save_app_settings,
-      should_show_settings_on_startup,
+      should_show_launch_on_login_prompt,
+      enable_launch_on_login,
+      decline_launch_on_login,
       get_table_sorting_settings,
       save_table_sorting_settings,
       clear_all_version_cache_and_refetch,
@@ -908,7 +918,8 @@ pub fn run() {
       complete_browser_update_with_auto_update,
       check_for_app_updates,
       check_for_app_updates_manual,
-      download_and_install_app_update,
+      download_and_prepare_app_update,
+      restart_application,
       detect_existing_profiles,
       import_browser_profile,
       check_missing_binaries,

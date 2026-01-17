@@ -15,6 +15,7 @@ import { GroupManagementDialog } from "@/components/group-management-dialog";
 import HomeHeader from "@/components/home-header";
 import { ImportProfileDialog } from "@/components/import-profile-dialog";
 import { IntegrationsDialog } from "@/components/integrations-dialog";
+import { LaunchOnLoginDialog } from "@/components/launch-on-login-dialog";
 import { PermissionDialog } from "@/components/permission-dialog";
 import { ProfilesDataTable } from "@/components/profile-data-table";
 import { ProfileSelectorDialog } from "@/components/profile-selector-dialog";
@@ -118,6 +119,7 @@ export default function Home() {
   const [currentProfileForCamoufoxConfig, setCurrentProfileForCamoufoxConfig] =
     useState<BrowserProfile | null>(null);
   const [hasCheckedStartupPrompt, setHasCheckedStartupPrompt] = useState(false);
+  const [launchOnLoginDialogOpen, setLaunchOnLoginDialogOpen] = useState(false);
   const [permissionDialogOpen, setPermissionDialogOpen] = useState(false);
   const [currentPermissionType, setCurrentPermissionType] =
     useState<PermissionType>("microphone");
@@ -268,10 +270,10 @@ export default function Home() {
 
     try {
       const shouldShow = await invoke<boolean>(
-        "should_show_settings_on_startup",
+        "should_show_launch_on_login_prompt",
       );
       if (shouldShow) {
-        setSettingsDialogOpen(true);
+        setLaunchOnLoginDialogOpen(true);
       }
     } catch (error) {
       console.error("Failed to check startup prompt:", error);
@@ -1039,6 +1041,12 @@ export default function Home() {
           !trialAcknowledged
         }
         onClose={checkTrialStatus}
+      />
+
+      {/* Launch on Login Dialog - shown on every startup until enabled or declined */}
+      <LaunchOnLoginDialog
+        isOpen={launchOnLoginDialogOpen}
+        onClose={() => setLaunchOnLoginDialogOpen(false)}
       />
     </div>
   );

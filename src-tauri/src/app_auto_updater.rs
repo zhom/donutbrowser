@@ -111,15 +111,6 @@ pub struct AppUpdateInfo {
   pub release_page_url: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct AppUpdateProgress {
-  pub stage: String, // "downloading", "extracting", "installing", "completed"
-  pub percentage: Option<f64>,
-  pub speed: Option<String>, // MB/s
-  pub eta: Option<String>,   // estimated time remaining
-  pub message: String,
-}
-
 pub struct AppAutoUpdater {
   client: Client,
   extractor: &'static crate::extraction::Extractor,
@@ -688,115 +679,14 @@ impl AppAutoUpdater {
     None
   }
 
-  /// Download and install app update
-  pub async fn download_and_install_update(
-    &self,
-    app_handle: &tauri::AppHandle,
-    update_info: &AppUpdateInfo,
-  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Create temporary directory for download
-    let temp_dir = std::env::temp_dir().join("donut_app_update");
-    fs::create_dir_all(&temp_dir)?;
-
-    // Extract filename from URL
-    let filename = update_info
-      .download_url
-      .split('/')
-      .next_back()
-      .unwrap_or("update.dmg")
-      .to_string();
-
-    // Emit download start event
-    let _ = events::emit(
-      "app-update-progress",
-      AppUpdateProgress {
-        stage: "downloading".to_string(),
-        percentage: Some(0.0),
-        speed: None,
-        eta: None,
-        message: "Starting download...".to_string(),
-      },
-    );
-
-    // Download the update with progress tracking
-    let download_path = self
-      .download_update_with_progress(&update_info.download_url, &temp_dir, &filename, app_handle)
-      .await?;
-
-    // Emit extraction start event
-    let _ = events::emit(
-      "app-update-progress",
-      AppUpdateProgress {
-        stage: "extracting".to_string(),
-        percentage: None,
-        speed: None,
-        eta: None,
-        message: "Preparing update...".to_string(),
-      },
-    );
-
-    // Extract the update
-    let extracted_app_path = self.extract_update(&download_path, &temp_dir).await?;
-
-    // Emit installation start event
-    let _ = events::emit(
-      "app-update-progress",
-      AppUpdateProgress {
-        stage: "installing".to_string(),
-        percentage: None,
-        speed: None,
-        eta: None,
-        message: "Installing update...".to_string(),
-      },
-    );
-
-    // Install the update (overwrite current app)
-    self.install_update(&extracted_app_path).await?;
-
-    // Clean up temporary files
-    let _ = fs::remove_dir_all(&temp_dir);
-
-    // Emit completion event
-    let _ = events::emit(
-      "app-update-progress",
-      AppUpdateProgress {
-        stage: "completed".to_string(),
-        percentage: Some(100.0),
-        speed: None,
-        eta: None,
-        message: "Update completed. Restarting...".to_string(),
-      },
-    );
-
-    // Restart the application
-    self.restart_application().await?;
-
-    Ok(())
-  }
-
-  /// Download the update file with progress tracking
-  async fn download_update_with_progress(
+  /// Download the update file without progress tracking (silent download)
+  async fn download_update_silent(
     &self,
     download_url: &str,
     dest_dir: &Path,
     filename: &str,
-    _app_handle: &tauri::AppHandle,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     let file_path = dest_dir.join(filename);
-
-    // First, try to get the file size via HEAD request
-    // This is more reliable than GET content-length for some CDN configurations
-    // especially when dealing with redirects (like GitHub releases)
-    let head_size = self
-      .client
-      .head(download_url)
-      .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
-      .send()
-      .await
-      .ok()
-      .and_then(|r| r.content_length());
-
-    log::info!("HEAD request for download size: {:?} bytes", head_size);
 
     let response = self
       .client
@@ -809,78 +699,59 @@ impl AppAutoUpdater {
       return Err(format!("Download failed with status: {}", response.status()).into());
     }
 
-    // Use HEAD size if available, otherwise fall back to GET content-length
-    let total_size = head_size.or(response.content_length()).unwrap_or(0);
-    log::info!("Final download size: {} bytes", total_size);
+    let total_size = response.content_length().unwrap_or(0);
+    log::info!("Silent download size: {} bytes", total_size);
     let mut file = fs::File::create(&file_path)?;
     let mut stream = response.bytes_stream();
-    let mut downloaded = 0u64;
-    let start_time = std::time::Instant::now();
-    let mut last_update = std::time::Instant::now();
 
     use futures_util::StreamExt;
     while let Some(chunk) = stream.next().await {
       let chunk = chunk?;
       file.write_all(&chunk)?;
-      downloaded += chunk.len() as u64;
-
-      // Update progress every 100ms to avoid overwhelming the UI
-      if last_update.elapsed().as_millis() > 100 {
-        let elapsed = start_time.elapsed().as_secs_f64();
-        let percentage = if total_size > 0 {
-          (downloaded as f64 / total_size as f64) * 100.0
-        } else {
-          0.0
-        };
-
-        let speed = if elapsed > 0.0 {
-          downloaded as f64 / elapsed / 1024.0 / 1024.0 // MB/s
-        } else {
-          0.0
-        };
-
-        let eta = if total_size > 0 && speed > 0.0 {
-          let remaining_bytes = total_size - downloaded;
-          let remaining_seconds = (remaining_bytes as f64 / 1024.0 / 1024.0) / speed;
-          if remaining_seconds < 60.0 {
-            format!("{}s", remaining_seconds as u32)
-          } else {
-            let minutes = remaining_seconds as u32 / 60;
-            let seconds = remaining_seconds as u32 % 60;
-            format!("{minutes}m {seconds}s")
-          }
-        } else {
-          "Unknown".to_string()
-        };
-
-        let _ = events::emit(
-          "app-update-progress",
-          AppUpdateProgress {
-            stage: "downloading".to_string(),
-            percentage: Some(percentage),
-            speed: Some(format!("{speed:.1}")),
-            eta: Some(eta),
-            message: "Downloading update...".to_string(),
-          },
-        );
-
-        last_update = std::time::Instant::now();
-      }
     }
 
-    // Emit final download completion
-    let _ = events::emit(
-      "app-update-progress",
-      AppUpdateProgress {
-        stage: "downloading".to_string(),
-        percentage: Some(100.0),
-        speed: None,
-        eta: None,
-        message: "Download completed".to_string(),
-      },
-    );
-
+    log::info!("Silent download completed: {}", file_path.display());
     Ok(file_path)
+  }
+
+  /// Download and prepare app update (silent download + install + notify)
+  pub async fn download_and_prepare_update(
+    &self,
+    _app_handle: &tauri::AppHandle,
+    update_info: &AppUpdateInfo,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    log::info!("Starting background update download and install");
+
+    let temp_dir = std::env::temp_dir().join("donut_app_update");
+    fs::create_dir_all(&temp_dir)?;
+
+    let filename = update_info
+      .download_url
+      .split('/')
+      .next_back()
+      .unwrap_or("update.dmg")
+      .to_string();
+
+    log::info!("Downloading update from: {}", update_info.download_url);
+
+    let download_path = self
+      .download_update_silent(&update_info.download_url, &temp_dir, &filename)
+      .await?;
+
+    log::info!("Extracting update...");
+    let extracted_app_path = self.extract_update(&download_path, &temp_dir).await?;
+
+    log::info!("Installing update (overwriting binary)...");
+    self.install_update(&extracted_app_path).await?;
+
+    log::info!("Cleaning up temporary files...");
+    let _ = fs::remove_dir_all(&temp_dir);
+
+    log::info!("Update installed successfully, emitting app-update-ready event");
+
+    let _ = events::emit("app-update-ready", update_info.new_version.clone());
+
+    Ok(())
   }
 
   /// Extract the update using the extraction module
@@ -1668,15 +1539,24 @@ pub async fn check_for_app_updates() -> Result<Option<AppUpdateInfo>, String> {
 }
 
 #[tauri::command]
-pub async fn download_and_install_app_update(
+pub async fn download_and_prepare_app_update(
   app_handle: tauri::AppHandle,
   update_info: AppUpdateInfo,
 ) -> Result<(), String> {
   let updater = AppAutoUpdater::instance();
   updater
-    .download_and_install_update(&app_handle, &update_info)
+    .download_and_prepare_update(&app_handle, &update_info)
     .await
-    .map_err(|e| format!("Failed to install app update: {e}"))
+    .map_err(|e| format!("Failed to download and prepare app update: {e}"))
+}
+
+#[tauri::command]
+pub async fn restart_application() -> Result<(), String> {
+  let updater = AppAutoUpdater::instance();
+  updater
+    .restart_application()
+    .await
+    .map_err(|e| format!("Failed to restart application: {e}"))
 }
 
 #[tauri::command]
