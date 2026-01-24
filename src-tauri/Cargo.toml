@@ -94,7 +94,7 @@ thiserror = "2.0"
 regex-lite = "0.1"
 tempfile = "3"
 maxminddb = "0.27"
-quick-xml = { version = "0.38", features = ["serialize"] }
+quick-xml = { version = "0.39", features = ["serialize"] }
 
 # Daemon dependencies (tray icon)
 tray-icon = "0.21"
@@ -109,7 +109,7 @@ crossbeam-channel = "0.5"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.30", features = ["signal", "process"] }
+nix = { version = "0.31", features = ["signal", "process"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"
