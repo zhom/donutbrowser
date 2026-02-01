@@ -47,6 +47,7 @@ pub mod events;
 mod mcp_server;
 mod tag_manager;
 mod version_updater;
+pub mod vpn;
 
 use browser_runner::{
   check_browser_exists, kill_browser_profile, launch_browser_profile, open_url_with_profile,
@@ -68,12 +69,12 @@ use downloaded_browsers_registry::{
   check_missing_binaries, ensure_all_binaries_exist, get_downloaded_browser_versions,
 };
 
-use downloader::download_browser;
+use downloader::{cancel_download, download_browser};
 
 use settings_manager::{
   decline_launch_on_login, enable_launch_on_login, get_app_settings, get_sync_settings,
-  get_table_sorting_settings, save_app_settings, save_sync_settings, save_table_sorting_settings,
-  should_show_launch_on_login_prompt,
+  get_system_language, get_table_sorting_settings, save_app_settings, save_sync_settings,
+  save_table_sorting_settings, should_show_launch_on_login_prompt,
 };
 
 use sync::{
@@ -233,6 +234,41 @@ fn get_cached_proxy_check(proxy_id: String) -> Option<crate::proxy_manager::Prox
 }
 
 #[tauri::command]
+fn export_proxies(format: String) -> Result<String, String> {
+  match format.as_str() {
+    "json" => crate::proxy_manager::PROXY_MANAGER.export_proxies_json(),
+    "txt" => Ok(crate::proxy_manager::PROXY_MANAGER.export_proxies_txt()),
+    _ => Err(format!("Unsupported export format: {format}")),
+  }
+}
+
+#[tauri::command]
+async fn import_proxies_json(
+  app_handle: tauri::AppHandle,
+  content: String,
+) -> Result<crate::proxy_manager::ProxyImportResult, String> {
+  crate::proxy_manager::PROXY_MANAGER
+    .import_proxies_json(&app_handle, &content)
+    .map_err(|e| format!("Failed to import proxies: {e}"))
+}
+
+#[tauri::command]
+fn parse_txt_proxies(content: String) -> Vec<crate::proxy_manager::ProxyParseResult> {
+  crate::proxy_manager::ProxyManager::parse_txt_proxies(&content)
+}
+
+#[tauri::command]
+async fn import_proxies_from_parsed(
+  app_handle: tauri::AppHandle,
+  parsed_proxies: Vec<crate::proxy_manager::ParsedProxyLine>,
+  name_prefix: Option<String>,
+) -> Result<crate::proxy_manager::ProxyImportResult, String> {
+  crate::proxy_manager::PROXY_MANAGER
+    .import_proxies_from_parsed(&app_handle, parsed_proxies, name_prefix)
+    .map_err(|e| format!("Failed to import proxies: {e}"))
+}
+
+#[tauri::command]
 fn read_profile_cookies(profile_id: String) -> Result<cookie_manager::CookieReadResult, String> {
   cookie_manager::CookieManager::read_cookies(&profile_id)
 }
@@ -248,6 +284,11 @@ async fn copy_profile_cookies(
 #[tauri::command]
 fn check_wayfern_terms_accepted() -> bool {
   wayfern_terms::WayfernTermsManager::instance().is_terms_accepted()
+}
+
+#[tauri::command]
+fn check_wayfern_downloaded() -> bool {
+  wayfern_terms::WayfernTermsManager::instance().is_wayfern_downloaded()
 }
 
 #[tauri::command]
@@ -372,6 +413,172 @@ async fn download_geoip_database(app_handle: tauri::AppHandle) -> Result<(), Str
     .download_geoip_database(&app_handle)
     .await
     .map_err(|e| format!("Failed to download GeoIP database: {e}"))
+}
+
+// VPN commands
+#[tauri::command]
+async fn import_vpn_config(
+  content: String,
+  filename: String,
+  name: Option<String>,
+) -> Result<vpn::VpnImportResult, String> {
+  let storage = vpn::VPN_STORAGE
+    .lock()
+    .map_err(|e| format!("Failed to lock VPN storage: {e}"))?;
+
+  match storage.import_config(&content, &filename, name.clone()) {
+    Ok(config) => Ok(vpn::VpnImportResult {
+      success: true,
+      vpn_id: Some(config.id),
+      vpn_type: Some(config.vpn_type),
+      name: config.name,
+      error: None,
+    }),
+    Err(e) => Ok(vpn::VpnImportResult {
+      success: false,
+      vpn_id: None,
+      vpn_type: None,
+      name: name.unwrap_or_else(|| filename.clone()),
+      error: Some(e.to_string()),
+    }),
+  }
+}
+
+#[tauri::command]
+async fn list_vpn_configs() -> Result<Vec<vpn::VpnConfig>, String> {
+  let storage = vpn::VPN_STORAGE
+    .lock()
+    .map_err(|e| format!("Failed to lock VPN storage: {e}"))?;
+
+  storage
+    .list_configs()
+    .map_err(|e| format!("Failed to list VPN configs: {e}"))
+}
+
+#[tauri::command]
+async fn get_vpn_config(vpn_id: String) -> Result<vpn::VpnConfig, String> {
+  let storage = vpn::VPN_STORAGE
+    .lock()
+    .map_err(|e| format!("Failed to lock VPN storage: {e}"))?;
+
+  storage
+    .load_config(&vpn_id)
+    .map_err(|e| format!("Failed to load VPN config: {e}"))
+}
+
+#[tauri::command]
+async fn delete_vpn_config(vpn_id: String) -> Result<(), String> {
+  // First disconnect if connected
+  {
+    let mut manager = vpn::TUNNEL_MANAGER.lock().await;
+    if manager.is_tunnel_active(&vpn_id) {
+      if let Some(tunnel) = manager.get_tunnel_mut(&vpn_id) {
+        let _ = tunnel.disconnect().await;
+      }
+      manager.remove_tunnel(&vpn_id);
+    }
+  }
+
+  // Then delete from storage
+  let storage = vpn::VPN_STORAGE
+    .lock()
+    .map_err(|e| format!("Failed to lock VPN storage: {e}"))?;
+
+  storage
+    .delete_config(&vpn_id)
+    .map_err(|e| format!("Failed to delete VPN config: {e}"))
+}
+
+#[tauri::command]
+async fn connect_vpn(vpn_id: String) -> Result<(), String> {
+  // Load config from storage
+  let config = {
+    let storage = vpn::VPN_STORAGE
+      .lock()
+      .map_err(|e| format!("Failed to lock VPN storage: {e}"))?;
+
+    storage
+      .load_config(&vpn_id)
+      .map_err(|e| format!("Failed to load VPN config: {e}"))?
+  };
+
+  // Create and connect the appropriate tunnel
+  let mut manager = vpn::TUNNEL_MANAGER.lock().await;
+
+  // Check if already connected
+  if manager.is_tunnel_active(&vpn_id) {
+    return Ok(());
+  }
+
+  let mut tunnel: Box<dyn vpn::VpnTunnel> = match config.vpn_type {
+    vpn::VpnType::WireGuard => {
+      let wg_config = vpn::parse_wireguard_config(&config.config_data)
+        .map_err(|e| format!("Invalid WireGuard config: {e}"))?;
+      Box::new(vpn::WireGuardTunnel::new(vpn_id.clone(), wg_config))
+    }
+    vpn::VpnType::OpenVPN => {
+      let ovpn_config = vpn::parse_openvpn_config(&config.config_data)
+        .map_err(|e| format!("Invalid OpenVPN config: {e}"))?;
+      Box::new(vpn::OpenVpnTunnel::new(vpn_id.clone(), ovpn_config))
+    }
+  };
+
+  tunnel
+    .connect()
+    .await
+    .map_err(|e| format!("Failed to connect VPN: {e}"))?;
+
+  manager.register_tunnel(vpn_id.clone(), tunnel);
+
+  // Update last_used timestamp
+  {
+    let storage = vpn::VPN_STORAGE
+      .lock()
+      .map_err(|e| format!("Failed to lock VPN storage: {e}"))?;
+    let _ = storage.update_last_used(&vpn_id);
+  }
+
+  Ok(())
+}
+
+#[tauri::command]
+async fn disconnect_vpn(vpn_id: String) -> Result<(), String> {
+  let mut manager = vpn::TUNNEL_MANAGER.lock().await;
+
+  if let Some(tunnel) = manager.get_tunnel_mut(&vpn_id) {
+    tunnel
+      .disconnect()
+      .await
+      .map_err(|e| format!("Failed to disconnect VPN: {e}"))?;
+  }
+
+  manager.remove_tunnel(&vpn_id);
+  Ok(())
+}
+
+#[tauri::command]
+async fn get_vpn_status(vpn_id: String) -> Result<vpn::VpnStatus, String> {
+  let manager = vpn::TUNNEL_MANAGER.lock().await;
+
+  if let Some(tunnel) = manager.get_tunnel(&vpn_id) {
+    Ok(tunnel.get_status())
+  } else {
+    // Not connected
+    Ok(vpn::VpnStatus {
+      connected: false,
+      vpn_id,
+      connected_at: None,
+      bytes_sent: None,
+      bytes_received: None,
+      last_handshake: None,
+    })
+  }
+}
+
+#[tauri::command]
+async fn list_active_vpn_connections() -> Result<Vec<vpn::VpnStatus>, String> {
+  let manager = vpn::TUNNEL_MANAGER.lock().await;
+  Ok(manager.get_all_statuses())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -883,6 +1090,7 @@ pub fn run() {
       get_supported_browsers,
       is_browser_supported_on_platform,
       download_browser,
+      cancel_download,
       delete_profile,
       check_browser_exists,
       create_browser_profile_new,
@@ -907,6 +1115,7 @@ pub fn run() {
       decline_launch_on_login,
       get_table_sorting_settings,
       save_table_sorting_settings,
+      get_system_language,
       clear_all_version_cache_and_refetch,
       is_default_browser,
       open_url_with_profile,
@@ -931,6 +1140,10 @@ pub fn run() {
       delete_stored_proxy,
       check_proxy_validity,
       get_cached_proxy_check,
+      export_proxies,
+      import_proxies_json,
+      parse_txt_proxies,
+      import_proxies_from_parsed,
       update_camoufox_config,
       update_wayfern_config,
       get_profile_groups,
@@ -959,6 +1172,7 @@ pub fn run() {
       read_profile_cookies,
       copy_profile_cookies,
       check_wayfern_terms_accepted,
+      check_wayfern_downloaded,
       accept_wayfern_terms,
       get_commercial_trial_status,
       acknowledge_trial_expiration,
@@ -966,7 +1180,16 @@ pub fn run() {
       start_mcp_server,
       stop_mcp_server,
       get_mcp_server_status,
-      get_mcp_config
+      get_mcp_config,
+      // VPN commands
+      import_vpn_config,
+      list_vpn_configs,
+      get_vpn_config,
+      delete_vpn_config,
+      connect_vpn,
+      disconnect_vpn,
+      get_vpn_status,
+      list_active_vpn_connections
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
@@ -987,6 +1210,18 @@ mod tests {
   }
 
   fn check_unused_commands(verbose: bool) {
+    // Commands that are intentionally not used in the frontend
+    // but are used via MCP server or other programmatic APIs
+    let mcp_only_commands = [
+      "list_vpn_configs",
+      "get_vpn_config",
+      "delete_vpn_config",
+      "connect_vpn",
+      "disconnect_vpn",
+      "get_vpn_status",
+      "list_active_vpn_connections",
+    ];
+
     // Extract command names from the generate_handler! macro in this file
     let lib_rs_content = fs::read_to_string("src/lib.rs").expect("Failed to read lib.rs");
     let commands = extract_tauri_commands(&lib_rs_content);
@@ -999,6 +1234,15 @@ mod tests {
     let mut used_commands = Vec::new();
 
     for command in &commands {
+      // Skip commands that are intentionally MCP-only
+      if mcp_only_commands.contains(&command.as_str()) {
+        used_commands.push(command.clone());
+        if verbose {
+          println!("✅ {command} (MCP-only)");
+        }
+        continue;
+      }
+
       let mut is_used = false;
 
       for file_content in &frontend_files {

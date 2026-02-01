@@ -31,6 +31,14 @@ export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
         const settings = await invoke<AppSettings>("get_app_settings");
         const themeValue = settings?.theme ?? "system";
 
+        console.log("[theme-provider] Loaded settings:", {
+          theme: themeValue,
+          hasCustomTheme: !!settings?.custom_theme,
+          customThemeKeys: settings?.custom_theme
+            ? Object.keys(settings.custom_theme).length
+            : 0,
+        });
+
         if (
           themeValue === "light" ||
           themeValue === "dark" ||

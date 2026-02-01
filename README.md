@@ -63,6 +63,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 If you face any problems while using the application, please [open an issue](https://github.com/zhom/donutbrowser/issues).
 
+## Self-Hosting Sync
+
+Donut Browser supports syncing profiles, proxies, and groups across devices via a self-hosted sync server. See the [Self-Hosting Guide](docs/self-hosting-donut-sync.md) for Docker-based setup instructions.
+
 ## Community
 
 Have questions or want to contribute? We'd love to hear from you!

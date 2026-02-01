@@ -4,10 +4,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
 import { GoPlus } from "react-icons/go";
-import { LuPencil, LuTrash2 } from "react-icons/lu";
+import { LuDownload, LuPencil, LuTrash2, LuUpload } from "react-icons/lu";
 import { toast } from "sonner";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
+import { ProxyExportDialog } from "@/components/proxy-export-dialog";
 import { ProxyFormDialog } from "@/components/proxy-form-dialog";
+import { ProxyImportDialog } from "@/components/proxy-import-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -19,7 +21,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Table,
@@ -82,6 +83,8 @@ export function ProxyManagementDialog({
   onClose,
 }: ProxyManagementDialogProps) {
   const [showProxyForm, setShowProxyForm] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
   const [editingProxy, setEditingProxy] = useState<StoredProxy | null>(null);
   const [proxyToDelete, setProxyToDelete] = useState<StoredProxy | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -221,9 +224,29 @@ export function ProxyManagementDialog({
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Create new proxy button */}
+            {/* Proxy actions */}
             <div className="flex justify-between items-center">
-              <Label>Proxies</Label>
+              <div className="flex gap-2">
+                <RippleButton
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowImportDialog(true)}
+                  className="flex gap-2 items-center"
+                >
+                  <LuUpload className="w-4 h-4" />
+                  Import
+                </RippleButton>
+                <RippleButton
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowExportDialog(true)}
+                  className="flex gap-2 items-center"
+                  disabled={storedProxies.length === 0}
+                >
+                  <LuDownload className="w-4 h-4" />
+                  Export
+                </RippleButton>
+              </div>
               <RippleButton
                 size="sm"
                 onClick={handleCreateProxy}
@@ -413,6 +436,14 @@ export function ProxyManagementDialog({
         description={`This action cannot be undone. This will permanently delete the proxy "${proxyToDelete?.name ?? ""}".`}
         confirmButtonText="Delete"
         isLoading={isDeleting}
+      />
+      <ProxyImportDialog
+        isOpen={showImportDialog}
+        onClose={() => setShowImportDialog(false)}
+      />
+      <ProxyExportDialog
+        isOpen={showExportDialog}
+        onClose={() => setShowExportDialog(false)}
       />
     </>
   );

@@ -60,6 +60,38 @@ fn is_daemon_running() -> bool {
   }
 }
 
+fn is_dev_mode() -> bool {
+  if let Ok(current_exe) = std::env::current_exe() {
+    let path_str = current_exe.to_string_lossy();
+    path_str.contains("target/debug") || path_str.contains("target/release")
+  } else {
+    false
+  }
+}
+
+#[cfg(target_os = "macos")]
+fn get_daemon_path() -> Option<PathBuf> {
+  // First try to find the daemon binary next to the current executable
+  if let Ok(current_exe) = std::env::current_exe() {
+    if let Some(exe_dir) = current_exe.parent() {
+      let daemon_path = exe_dir.join("donut-daemon");
+      if daemon_path.exists() {
+        return Some(daemon_path);
+      }
+    }
+  }
+
+  // Try common installation paths
+  let paths = [
+    PathBuf::from("/Applications/Donut Browser.app/Contents/MacOS/donut-daemon"),
+    dirs::home_dir()
+      .map(|h| h.join("Applications/Donut Browser.app/Contents/MacOS/donut-daemon"))
+      .unwrap_or_default(),
+  ];
+  paths.into_iter().find(|path| path.exists())
+}
+
+#[cfg(any(target_os = "linux", windows))]
 fn get_daemon_path() -> Option<PathBuf> {
   // First, try to find it next to the current executable
   if let Ok(current_exe) = std::env::current_exe() {
@@ -68,24 +100,12 @@ fn get_daemon_path() -> Option<PathBuf> {
     // Check for daemon binary in same directory
     #[cfg(target_os = "windows")]
     let daemon_name = "donut-daemon.exe";
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "linux")]
     let daemon_name = "donut-daemon";
 
     let daemon_path = exe_dir.join(daemon_name);
     if daemon_path.exists() {
       return Some(daemon_path);
-    }
-
-    // On macOS, check inside the app bundle
-    #[cfg(target_os = "macos")]
-    {
-      // If we're in Contents/MacOS, daemon should be there too
-      if exe_dir.ends_with("Contents/MacOS") {
-        let daemon_path = exe_dir.join(daemon_name);
-        if daemon_path.exists() {
-          return Some(daemon_path);
-        }
-      }
     }
   }
 
@@ -101,7 +121,7 @@ fn get_daemon_path() -> Option<PathBuf> {
     }
   }
 
-  #[cfg(unix)]
+  #[cfg(target_os = "linux")]
   {
     if let Ok(output) = Command::new("which").arg("donut-daemon").output() {
       if output.status.success() {
@@ -118,60 +138,39 @@ fn get_daemon_path() -> Option<PathBuf> {
 }
 
 pub fn spawn_daemon() -> Result<(), String> {
+  // Log the daemon state for debugging
+  let state = read_state();
+  log::info!("Daemon state before spawn: pid={:?}", state.daemon_pid);
+
   // Check if already running
   if is_daemon_running() {
-    log::info!("Daemon is already running");
+    log::info!("Daemon is already running (verified by PID check)");
     return Ok(());
   }
+
+  log::info!("Daemon is not running, attempting to start...");
 
   // Log current exe location for debugging
   let current_exe = std::env::current_exe().ok();
   log::info!("Current exe: {:?}", current_exe);
 
-  let daemon_path = get_daemon_path().ok_or_else(|| {
-    format!(
-      "Could not find daemon binary. Current exe: {:?}",
-      current_exe
-    )
-  })?;
-
-  log::info!("Spawning daemon from: {:?}", daemon_path);
-
-  // Use "run" instead of "start" - we handle detachment here
-  #[cfg(unix)]
+  // On macOS, use launchctl to start the daemon via launchd
+  // This ensures the daemon runs in the user's Aqua session with WindowServer access
+  // and survives app termination since it's managed by launchd, not as a child process
+  #[cfg(target_os = "macos")]
   {
-    use std::os::unix::process::CommandExt;
+    spawn_daemon_macos()?;
+  }
 
-    // Create a new process group so daemon survives parent exit
-    // Note: We don't call setsid() because on macOS that disconnects from the WindowServer
-    // which prevents the tray icon from appearing. Instead, we just set a new process group.
-    let mut cmd = Command::new(&daemon_path);
-    cmd
-      .arg("run")
-      .stdin(Stdio::null())
-      .stdout(Stdio::null())
-      .stderr(Stdio::null())
-      .process_group(0); // Create new process group without new session
-
-    cmd
-      .spawn()
-      .map_err(|e| format!("Failed to spawn daemon: {}", e))?;
+  // On Linux, use direct spawn
+  #[cfg(target_os = "linux")]
+  {
+    spawn_daemon_unix()?;
   }
 
   #[cfg(windows)]
   {
-    use std::os::windows::process::CommandExt;
-    const DETACHED_PROCESS: u32 = 0x00000008;
-    const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
-
-    Command::new(&daemon_path)
-      .arg("run")
-      .stdin(Stdio::null())
-      .stdout(Stdio::null())
-      .stderr(Stdio::null())
-      .creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
-      .spawn()
-      .map_err(|e| format!("Failed to spawn daemon: {}", e))?;
+    spawn_daemon_windows()?;
   }
 
   // Wait for daemon to start (max 3 seconds)
@@ -194,6 +193,115 @@ pub fn spawn_daemon() -> Result<(), String> {
   }
 
   Err("Daemon did not start within timeout".to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn spawn_daemon_macos() -> Result<(), String> {
+  use std::os::unix::process::CommandExt;
+
+  // In dev mode, use direct spawn instead of launchctl
+  // This avoids issues with plist paths pointing to wrong binaries
+  if is_dev_mode() {
+    log::info!("Dev mode detected, using direct spawn instead of launchctl");
+
+    let daemon_path = get_daemon_path().ok_or_else(|| {
+      format!(
+        "Could not find daemon binary. Current exe: {:?}",
+        std::env::current_exe().ok()
+      )
+    })?;
+
+    log::info!("Spawning daemon from: {:?}", daemon_path);
+
+    // Create a new process group so daemon survives parent exit
+    let mut cmd = Command::new(&daemon_path);
+    cmd
+      .arg("run")
+      .stdin(Stdio::null())
+      .stdout(Stdio::null())
+      .stderr(Stdio::null())
+      .process_group(0);
+
+    cmd
+      .spawn()
+      .map_err(|e| format!("Failed to spawn daemon: {}", e))?;
+
+    return Ok(());
+  }
+
+  // Production mode: use launchctl for proper daemon management
+  // First, ensure the LaunchAgent plist is installed
+  let autostart_enabled = autostart::is_autostart_enabled();
+  log::info!("LaunchAgent plist exists: {}", autostart_enabled);
+
+  if !autostart_enabled {
+    log::info!("Installing LaunchAgent plist for daemon management");
+    autostart::enable_autostart().map_err(|e| format!("Failed to install LaunchAgent: {}", e))?;
+    log::info!("LaunchAgent plist installed successfully");
+  }
+
+  // Load the launch agent via launchctl
+  log::info!("Loading daemon via launchctl...");
+  autostart::load_launch_agent().map_err(|e| format!("Failed to load LaunchAgent: {}", e))?;
+  log::info!("launchctl load completed");
+
+  Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn spawn_daemon_unix() -> Result<(), String> {
+  use std::os::unix::process::CommandExt;
+
+  let daemon_path = get_daemon_path().ok_or_else(|| {
+    format!(
+      "Could not find daemon binary. Current exe: {:?}",
+      std::env::current_exe().ok()
+    )
+  })?;
+
+  log::info!("Spawning daemon from: {:?}", daemon_path);
+
+  // Create a new process group so daemon survives parent exit
+  let mut cmd = Command::new(&daemon_path);
+  cmd
+    .arg("run")
+    .stdin(Stdio::null())
+    .stdout(Stdio::null())
+    .stderr(Stdio::null())
+    .process_group(0);
+
+  cmd
+    .spawn()
+    .map_err(|e| format!("Failed to spawn daemon: {}", e))?;
+
+  Ok(())
+}
+
+#[cfg(windows)]
+fn spawn_daemon_windows() -> Result<(), String> {
+  use std::os::windows::process::CommandExt;
+  const DETACHED_PROCESS: u32 = 0x00000008;
+  const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
+
+  let daemon_path = get_daemon_path().ok_or_else(|| {
+    format!(
+      "Could not find daemon binary. Current exe: {:?}",
+      std::env::current_exe().ok()
+    )
+  })?;
+
+  log::info!("Spawning daemon from: {:?}", daemon_path);
+
+  Command::new(&daemon_path)
+    .arg("run")
+    .stdin(Stdio::null())
+    .stdout(Stdio::null())
+    .stderr(Stdio::null())
+    .creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+    .spawn()
+    .map_err(|e| format!("Failed to spawn daemon: {}", e))?;
+
+  Ok(())
 }
 
 pub fn ensure_daemon_running() -> Result<(), String> {

@@ -1,0 +1,460 @@
+{
+  "common": {
+    "buttons": {
+      "save": "保存",
+      "cancel": "キャンセル",
+      "close": "閉じる",
+      "delete": "削除",
+      "create": "作成",
+      "back": "戻る",
+      "retry": "再試行",
+      "download": "ダウンロード",
+      "confirm": "確認",
+      "apply": "適用",
+      "reset": "リセット",
+      "add": "追加",
+      "edit": "編集",
+      "copy": "コピー",
+      "clear": "クリア",
+      "search": "検索",
+      "select": "選択",
+      "grant": "許可",
+      "start": "開始",
+      "stop": "停止",
+      "enable": "有効",
+      "disable": "無効",
+      "import": "インポート",
+      "export": "エクスポート",
+      "refresh": "更新",
+      "loading": "読み込み中...",
+      "saveSettings": "設定を保存"
+    },
+    "status": {
+      "active": "アクティブ",
+      "inactive": "非アクティブ",
+      "running": "実行中",
+      "stopped": "停止",
+      "enabled": "有効",
+      "disabled": "無効",
+      "granted": "許可済み",
+      "notGranted": "未許可",
+      "connected": "接続済み",
+      "disconnected": "切断",
+      "synced": "同期済み",
+      "syncing": "同期中",
+      "pending": "保留中",
+      "error": "エラー"
+    },
+    "labels": {
+      "name": "名前",
+      "type": "タイプ",
+      "status": "ステータス",
+      "actions": "アクション",
+      "description": "説明",
+      "none": "なし",
+      "default": "デフォルト",
+      "custom": "カスタム",
+      "optional": "任意",
+      "required": "必須"
+    },
+    "time": {
+      "days": "日",
+      "hours": "時間",
+      "minutes": "分",
+      "seconds": "秒",
+      "remaining": "残り"
+    }
+  },
+  "settings": {
+    "title": "設定",
+    "appearance": {
+      "title": "外観",
+      "theme": "テーマ",
+      "themeDescription": "お好みのテーマを選択するか、システム設定に従います。カスタムテーマの変更は保存時のみ適用されます。",
+      "themePreset": "テーマプリセット",
+      "customColors": "カスタムカラー",
+      "selectTheme": "テーマを選択",
+      "selectThemePreset": "テーマプリセットを選択",
+      "yourOwn": "カスタム",
+      "light": "ライト",
+      "dark": "ダーク",
+      "system": "システム"
+    },
+    "language": {
+      "title": "言語",
+      "description": "アプリケーションインターフェースの言語を選択します。",
+      "systemDefault": "システムデフォルト",
+      "selectLanguage": "言語を選択"
+    },
+    "defaultBrowser": {
+      "title": "デフォルトブラウザ",
+      "setAsDefault": "デフォルトブラウザに設定",
+      "alreadyDefault": "既にデフォルトブラウザです",
+      "description": "デフォルトに設定すると、Donut Browser がウェブリンクを処理し、使用するプロファイルを選択できます。"
+    },
+    "permissions": {
+      "title": "システム権限",
+      "loading": "権限を読み込み中...",
+      "description": "これらの権限により、Donut Browser から起動したブラウザがシステムリソースにアクセスできます。各ウェブサイトは個別に許可を求めます。",
+      "microphone": "マイク",
+      "microphoneDescription": "ブラウザアプリケーションのマイクアクセス",
+      "camera": "カメラ",
+      "cameraDescription": "ブラウザアプリケーションのカメラアクセス"
+    },
+    "integrations": {
+      "title": "統合",
+      "description": "外部ツールやAIアシスタントと統合するためのローカルAPIとMCP（モデルコンテキストプロトコル）を設定します。",
+      "openSettings": "統合設定を開く"
+    },
+    "commercial": {
+      "title": "商用ライセンス",
+      "trialActive": "トライアル: 残り {{days}} 日 {{hours}} 時間",
+      "trialActiveDescription": "トライアル期間中は商用利用が無料です",
+      "trialExpired": "トライアル期限切れ",
+      "trialExpiredDescription": "個人利用は引き続き無料です。商用利用にはライセンスが必要です。"
+    },
+    "advanced": {
+      "title": "詳細設定",
+      "clearCache": "すべてのバージョンキャッシュをクリア",
+      "clearCacheDescription": "キャッシュされたすべてのブラウザバージョンデータをクリアし、すべてのブラウザバージョンをソースから更新します。これにより、すべてのブラウザのバージョン情報が強制的に再ダウンロードされます。"
+    }
+  },
+  "header": {
+    "searchPlaceholder": "プロファイルを検索...",
+    "clearSearch": "検索をクリア",
+    "moreActions": "その他のアクション",
+    "createProfile": "新しいプロファイルを作成",
+    "menu": {
+      "settings": "設定",
+      "proxies": "プロキシ",
+      "groups": "グループ",
+      "syncService": "同期サービス",
+      "integrations": "統合",
+      "importProfile": "プロファイルをインポート"
+    }
+  },
+  "profiles": {
+    "title": "プロファイル",
+    "empty": "プロファイルがありません",
+    "emptyDescription": "最初のブラウザプロファイルを作成して始めましょう。",
+    "createFirst": "プロファイルを作成",
+    "noResults": "プロファイルが見つかりません",
+    "noResultsDescription": "検索条件に一致するプロファイルがありません。",
+    "table": {
+      "name": "名前",
+      "browser": "ブラウザ",
+      "status": "ステータス",
+      "actions": "アクション",
+      "note": "メモ",
+      "group": "グループ",
+      "proxy": "プロキシ",
+      "lastLaunch": "最終起動"
+    },
+    "actions": {
+      "launch": "起動",
+      "stop": "停止",
+      "edit": "編集",
+      "delete": "削除",
+      "copyCookies": "Cookieをコピー",
+      "configure": "設定"
+    }
+  },
+  "createProfile": {
+    "title": "新しいプロファイルを作成",
+    "configureTitle": "プロファイルを設定",
+    "antiDetect": {
+      "title": "アンチ検出ブラウザ",
+      "description": "アンチ検出機能を持つブラウザを選択",
+      "chromium": "Chromium (Wayfern)",
+      "firefox": "Firefox (Camoufox)",
+      "badge": "アンチ検出ブラウザ"
+    },
+    "regular": {
+      "title": "通常ブラウザ",
+      "description": "サポートされている通常ブラウザから選択",
+      "badge": "通常ブラウザ"
+    },
+    "profileName": "プロファイル名",
+    "profileNamePlaceholder": "プロファイル名を入力",
+    "proxy": {
+      "title": "プロキシ",
+      "addProxy": "プロキシを追加",
+      "noProxy": "プロキシなし",
+      "noProxiesAvailable": "利用可能なプロキシがありません。このプロファイルのトラフィックをルーティングするためにプロキシを追加してください。"
+    },
+    "version": {
+      "fetching": "利用可能なバージョンを取得中...",
+      "fetchError": "ブラウザバージョンの取得に失敗しました。インターネット接続を確認して再試行してください。",
+      "needsDownload": "{{browser}} バージョン ({{version}}) をダウンロードする必要があります",
+      "available": "{{browser}} バージョン ({{version}}) は利用可能です",
+      "downloading": "{{browser}} バージョン ({{version}}) をダウンロード中...",
+      "latestNeedsDownload": "最新バージョン ({{version}}) をダウンロードする必要があります",
+      "latestAvailable": "最新バージョン ({{version}}) は利用可能です",
+      "latestDownloading": "バージョン ({{version}}) をダウンロード中..."
+    }
+  },
+  "deleteDialog": {
+    "title": "プロファイルを削除",
+    "description": "このプロファイルを削除してもよろしいですか？この操作は取り消せません。",
+    "profilesTitle": "プロファイルを削除",
+    "profilesDescription": "選択したプロファイルを削除してもよろしいですか？この操作は取り消せません。",
+    "profilesToDelete": "削除されるプロファイル:"
+  },
+  "proxies": {
+    "title": "プロキシ",
+    "management": "プロキシ管理",
+    "add": "プロキシを追加",
+    "edit": "プロキシを編集",
+    "delete": "プロキシを削除",
+    "import": "インポート",
+    "export": "エクスポート",
+    "noProxies": "プロキシが設定されていません",
+    "noProxiesDescription": "ブラウザトラフィックをルーティングするためのプロキシを追加してください。",
+    "form": {
+      "name": "名前",
+      "namePlaceholder": "プロキシ名を入力",
+      "type": "タイプ",
+      "host": "ホスト",
+      "hostPlaceholder": "proxy.example.com",
+      "port": "ポート",
+      "portPlaceholder": "8080",
+      "username": "ユーザー名",
+      "usernamePlaceholder": "任意",
+      "password": "パスワード",
+      "passwordPlaceholder": "任意"
+    },
+    "types": {
+      "http": "HTTP",
+      "https": "HTTPS",
+      "socks4": "SOCKS4",
+      "socks5": "SOCKS5"
+    },
+    "check": {
+      "checking": "プロキシを確認中...",
+      "valid": "プロキシは有効です",
+      "invalid": "プロキシは無効です",
+      "lastChecked": "最終確認: {{time}}"
+    },
+    "sync": {
+      "enabled": "同期有効",
+      "disabled": "同期無効"
+    }
+  },
+  "groups": {
+    "title": "グループ",
+    "management": "グループ管理",
+    "add": "グループを追加",
+    "edit": "グループを編集",
+    "delete": "グループを削除",
+    "noGroups": "グループがありません",
+    "noGroupsDescription": "プロファイルを整理するためのグループを作成してください。",
+    "form": {
+      "name": "名前",
+      "namePlaceholder": "グループ名を入力"
+    },
+    "profileCount": "{{count}} プロファイル",
+    "profileCount_plural": "{{count}} プロファイル",
+    "assignProfiles": "プロファイルを割り当て",
+    "sync": {
+      "enabled": "同期有効",
+      "disabled": "同期無効"
+    }
+  },
+  "sync": {
+    "title": "同期サービス",
+    "config": "同期設定",
+    "serverUrl": "サーバーURL",
+    "serverUrlPlaceholder": "https://sync.example.com",
+    "token": "同期トークン",
+    "tokenPlaceholder": "同期トークンを入力",
+    "status": {
+      "connected": "接続済み",
+      "disconnected": "切断",
+      "syncing": "同期中...",
+      "error": "同期エラー"
+    },
+    "description": "同期サーバーに接続して、デバイス間でプロファイル、プロキシ、グループを同期します。"
+  },
+  "integrations": {
+    "title": "統合",
+    "api": {
+      "title": "ローカルAPI",
+      "description": "外部統合用のローカルAPIサーバーを有効にします。",
+      "enabled": "API有効",
+      "disabled": "API無効",
+      "port": "ポート",
+      "token": "APIトークン",
+      "copyToken": "トークンをコピー",
+      "regenerateToken": "トークンを再生成"
+    },
+    "mcp": {
+      "title": "MCPサーバー",
+      "description": "AIアシスタント統合用のMCP（モデルコンテキストプロトコル）サーバーを有効にします。",
+      "enabled": "MCP有効",
+      "disabled": "MCP無効",
+      "port": "ポート",
+      "token": "MCPトークン",
+      "config": "MCP設定",
+      "copyConfig": "設定をコピー"
+    }
+  },
+  "import": {
+    "title": "プロファイルをインポート",
+    "description": "システムから既存のブラウザプロファイルをインポートします。",
+    "selectProfile": "インポートするプロファイルを選択",
+    "noProfiles": "プロファイルが検出されませんでした",
+    "noProfilesDescription": "システム上にブラウザプロファイルが検出されませんでした。",
+    "importing": "プロファイルをインポート中...",
+    "success": "プロファイルが正常にインポートされました",
+    "error": "プロファイルのインポートに失敗しました"
+  },
+  "config": {
+    "camoufox": {
+      "title": "Camoufox設定",
+      "fingerprint": {
+        "title": "フィンガープリント",
+        "randomize": "起動時にランダム化",
+        "randomizeDescription": "ブラウザ起動時に新しいフィンガープリントを生成します。"
+      },
+      "os": {
+        "title": "オペレーティングシステム",
+        "description": "フィンガープリント生成用にエミュレートするOS。",
+        "windows": "Windows",
+        "macos": "macOS",
+        "linux": "Linux"
+      },
+      "screen": {
+        "title": "画面サイズ",
+        "minWidth": "最小幅",
+        "maxWidth": "最大幅",
+        "minHeight": "最小高さ",
+        "maxHeight": "最大高さ"
+      },
+      "geoip": {
+        "title": "GeoIP",
+        "auto": "自動（プロキシに基づく）",
+        "manual": "手動",
+        "disabled": "無効"
+      },
+      "blocking": {
+        "title": "ブロック",
+        "images": "画像をブロック",
+        "webrtc": "WebRTCをブロック",
+        "webgl": "WebGLをブロック"
+      }
+    },
+    "wayfern": {
+      "title": "Wayfern設定",
+      "fingerprint": {
+        "title": "フィンガープリント",
+        "randomize": "起動時にランダム化",
+        "randomizeDescription": "ブラウザ起動時に新しいフィンガープリントを生成します。"
+      },
+      "os": {
+        "title": "オペレーティングシステム",
+        "description": "フィンガープリント生成用にエミュレートするOS。",
+        "windows": "Windows",
+        "macos": "macOS",
+        "linux": "Linux",
+        "android": "Android",
+        "ios": "iOS"
+      },
+      "screen": {
+        "title": "画面サイズ",
+        "minWidth": "最小幅",
+        "maxWidth": "最大幅",
+        "minHeight": "最小高さ",
+        "maxHeight": "最大高さ"
+      },
+      "blocking": {
+        "title": "ブロック",
+        "webrtc": "WebRTCをブロック",
+        "webgl": "WebGLをブロック"
+      }
+    }
+  },
+  "cookies": {
+    "title": "Cookie",
+    "copy": {
+      "title": "Cookieをコピー",
+      "description": "他のプロファイルにコピーするCookieを選択します。",
+      "selectSource": "ソースプロファイルを選択",
+      "selectTarget": "ターゲットプロファイルを選択",
+      "selectCookies": "Cookieを選択",
+      "allDomains": "すべてのドメイン",
+      "selectedCount": "{{count}} 個のCookieを選択",
+      "selectedCount_plural": "{{count}} 個のCookieを選択"
+    },
+    "success": "Cookieが正常にコピーされました",
+    "error": "Cookieのコピーに失敗しました"
+  },
+  "toasts": {
+    "success": {
+      "profileCreated": "プロファイルが正常に作成されました",
+      "profileDeleted": "プロファイルが正常に削除されました",
+      "profileUpdated": "プロファイルが正常に更新されました",
+      "profileLaunched": "プロファイルが正常に起動しました",
+      "proxyCreated": "プロキシが正常に作成されました",
+      "proxyDeleted": "プロキシが正常に削除されました",
+      "proxyUpdated": "プロキシが正常に更新されました",
+      "groupCreated": "グループが正常に作成されました",
+      "groupDeleted": "グループが正常に削除されました",
+      "groupUpdated": "グループが正常に更新されました",
+      "settingsSaved": "設定が正常に保存されました",
+      "copied": "クリップボードにコピーしました",
+      "permissionRequested": "{{permission}}へのアクセスをリクエストしました",
+      "downloadComplete": "{{browser}} {{version}} が正常にダウンロードされました！",
+      "importSuccess": "{{count}} 個のアイテムが正常にインポートされました",
+      "exportSuccess": "{{count}} 個のアイテムが正常にエクスポートされました",
+      "syncSuccess": "同期が正常に完了しました",
+      "cacheCleared": "キャッシュが正常にクリアされました"
+    },
+    "error": {
+      "profileCreateFailed": "プロファイルの作成に失敗しました",
+      "profileDeleteFailed": "プロファイルの削除に失敗しました",
+      "profileUpdateFailed": "プロファイルの更新に失敗しました",
+      "profileLaunchFailed": "プロファイルの起動に失敗しました",
+      "proxyCreateFailed": "プロキシの作成に失敗しました",
+      "proxyDeleteFailed": "プロキシの削除に失敗しました",
+      "proxyUpdateFailed": "プロキシの更新に失敗しました",
+      "groupCreateFailed": "グループの作成に失敗しました",
+      "groupDeleteFailed": "グループの削除に失敗しました",
+      "groupUpdateFailed": "グループの更新に失敗しました",
+      "settingsSaveFailed": "設定の保存に失敗しました",
+      "copyFailed": "クリップボードへのコピーに失敗しました",
+      "downloadFailed": "{{browser}} のダウンロードに失敗しました",
+      "importFailed": "インポートに失敗しました",
+      "exportFailed": "エクスポートに失敗しました",
+      "syncFailed": "同期に失敗しました",
+      "cacheClearFailed": "キャッシュのクリアに失敗しました",
+      "unknown": "不明なエラーが発生しました"
+    },
+    "loading": {
+      "downloading": "{{browser}} {{version}} をダウンロード中",
+      "extracting": "{{browser}} {{version}} を展開中",
+      "verifying": "{{browser}} {{version}} を確認中",
+      "syncing": "同期中...",
+      "updatingVersions": "ブラウザバージョンを更新中..."
+    }
+  },
+  "errors": {
+    "required": "この項目は必須です",
+    "invalidUrl": "有効なURLを入力してください",
+    "invalidPort": "有効なポート番号を入力してください（1-65535）",
+    "invalidEmail": "有効なメールアドレスを入力してください",
+    "minLength": "{{min}} 文字以上で入力してください",
+    "maxLength": "{{max}} 文字以内で入力してください",
+    "networkError": "ネットワークエラー。接続を確認してください。",
+    "serverError": "サーバーエラー。後でもう一度お試しください。",
+    "unknownError": "不明なエラーが発生しました。もう一度お試しください。"
+  },
+  "browser": {
+    "firefox": "Firefox",
+    "firefoxDeveloper": "Firefox Developer Edition",
+    "chromium": "Chromium",
+    "brave": "Brave",
+    "zen": "Zen Browser",
+    "camoufox": "Camoufox",
+    "wayfern": "Wayfern"
+  }
+}

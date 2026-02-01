@@ -1,0 +1,460 @@
+{
+  "common": {
+    "buttons": {
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "close": "Cerrar",
+      "delete": "Eliminar",
+      "create": "Crear",
+      "back": "Atrás",
+      "retry": "Reintentar",
+      "download": "Descargar",
+      "confirm": "Confirmar",
+      "apply": "Aplicar",
+      "reset": "Restablecer",
+      "add": "Agregar",
+      "edit": "Editar",
+      "copy": "Copiar",
+      "clear": "Limpiar",
+      "search": "Buscar",
+      "select": "Seleccionar",
+      "grant": "Otorgar",
+      "start": "Iniciar",
+      "stop": "Detener",
+      "enable": "Habilitar",
+      "disable": "Deshabilitar",
+      "import": "Importar",
+      "export": "Exportar",
+      "refresh": "Actualizar",
+      "loading": "Cargando...",
+      "saveSettings": "Guardar Configuración"
+    },
+    "status": {
+      "active": "Activo",
+      "inactive": "Inactivo",
+      "running": "Ejecutando",
+      "stopped": "Detenido",
+      "enabled": "Habilitado",
+      "disabled": "Deshabilitado",
+      "granted": "Otorgado",
+      "notGranted": "No Otorgado",
+      "connected": "Conectado",
+      "disconnected": "Desconectado",
+      "synced": "Sincronizado",
+      "syncing": "Sincronizando",
+      "pending": "Pendiente",
+      "error": "Error"
+    },
+    "labels": {
+      "name": "Nombre",
+      "type": "Tipo",
+      "status": "Estado",
+      "actions": "Acciones",
+      "description": "Descripción",
+      "none": "Ninguno",
+      "default": "Predeterminado",
+      "custom": "Personalizado",
+      "optional": "Opcional",
+      "required": "Requerido"
+    },
+    "time": {
+      "days": "días",
+      "hours": "horas",
+      "minutes": "minutos",
+      "seconds": "segundos",
+      "remaining": "restantes"
+    }
+  },
+  "settings": {
+    "title": "Configuración",
+    "appearance": {
+      "title": "Apariencia",
+      "theme": "Tema",
+      "themeDescription": "Elige tu tema preferido o sigue la configuración del sistema. Los cambios de tema personalizado se aplican solo al guardar.",
+      "themePreset": "Tema Predefinido",
+      "customColors": "Colores Personalizados",
+      "selectTheme": "Seleccionar tema",
+      "selectThemePreset": "Seleccionar tema predefinido",
+      "yourOwn": "Tu Propio",
+      "light": "Claro",
+      "dark": "Oscuro",
+      "system": "Sistema"
+    },
+    "language": {
+      "title": "Idioma",
+      "description": "Elige tu idioma preferido para la interfaz de la aplicación.",
+      "systemDefault": "Predeterminado del Sistema",
+      "selectLanguage": "Seleccionar idioma"
+    },
+    "defaultBrowser": {
+      "title": "Navegador Predeterminado",
+      "setAsDefault": "Establecer como Navegador Predeterminado",
+      "alreadyDefault": "Ya es el Navegador Predeterminado",
+      "description": "Cuando se establece como predeterminado, Donut Browser manejará los enlaces web y te permitirá elegir qué perfil usar."
+    },
+    "permissions": {
+      "title": "Permisos del Sistema",
+      "loading": "Cargando permisos...",
+      "description": "Estos permisos permiten que los navegadores iniciados desde Donut Browser accedan a los recursos del sistema. Cada sitio web seguirá pidiendo tu permiso individualmente.",
+      "microphone": "Micrófono",
+      "microphoneDescription": "Acceso al micrófono para aplicaciones del navegador",
+      "camera": "Cámara",
+      "cameraDescription": "Acceso a la cámara para aplicaciones del navegador"
+    },
+    "integrations": {
+      "title": "Integraciones",
+      "description": "Configura la API Local y MCP (Protocolo de Contexto de Modelo) para integración con herramientas externas y asistentes de IA.",
+      "openSettings": "Abrir Configuración de Integraciones"
+    },
+    "commercial": {
+      "title": "Licencia Comercial",
+      "trialActive": "Prueba: {{days}} días, {{hours}} horas restantes",
+      "trialActiveDescription": "El uso comercial es gratuito durante el período de prueba",
+      "trialExpired": "Prueba expirada",
+      "trialExpiredDescription": "El uso personal sigue siendo gratuito. El uso comercial requiere una licencia."
+    },
+    "advanced": {
+      "title": "Avanzado",
+      "clearCache": "Limpiar Toda la Caché de Versiones",
+      "clearCacheDescription": "Limpia todos los datos de versiones de navegadores en caché y actualiza todas las versiones desde sus fuentes. Esto forzará una descarga nueva de información de versiones para todos los navegadores."
+    }
+  },
+  "header": {
+    "searchPlaceholder": "Buscar perfiles...",
+    "clearSearch": "Limpiar búsqueda",
+    "moreActions": "Más acciones",
+    "createProfile": "Crear un nuevo perfil",
+    "menu": {
+      "settings": "Configuración",
+      "proxies": "Proxies",
+      "groups": "Grupos",
+      "syncService": "Servicio de Sincronización",
+      "integrations": "Integraciones",
+      "importProfile": "Importar Perfil"
+    }
+  },
+  "profiles": {
+    "title": "Perfiles",
+    "empty": "Sin perfiles aún",
+    "emptyDescription": "Crea tu primer perfil de navegador para comenzar.",
+    "createFirst": "Crear Perfil",
+    "noResults": "No se encontraron perfiles",
+    "noResultsDescription": "Ningún perfil coincide con tus criterios de búsqueda.",
+    "table": {
+      "name": "Nombre",
+      "browser": "Navegador",
+      "status": "Estado",
+      "actions": "Acciones",
+      "note": "Nota",
+      "group": "Grupo",
+      "proxy": "Proxy",
+      "lastLaunch": "Último Inicio"
+    },
+    "actions": {
+      "launch": "Iniciar",
+      "stop": "Detener",
+      "edit": "Editar",
+      "delete": "Eliminar",
+      "copyCookies": "Copiar Cookies",
+      "configure": "Configurar"
+    }
+  },
+  "createProfile": {
+    "title": "Crear Nuevo Perfil",
+    "configureTitle": "Configurar Perfil",
+    "antiDetect": {
+      "title": "Navegador Anti-Detección",
+      "description": "Elige un navegador con capacidades anti-detección",
+      "chromium": "Chromium (Wayfern)",
+      "firefox": "Firefox (Camoufox)",
+      "badge": "Navegador Anti-Detección"
+    },
+    "regular": {
+      "title": "Navegadores Regulares",
+      "description": "Elige entre navegadores regulares soportados",
+      "badge": "Navegador Regular"
+    },
+    "profileName": "Nombre del Perfil",
+    "profileNamePlaceholder": "Ingresa el nombre del perfil",
+    "proxy": {
+      "title": "Proxy",
+      "addProxy": "Agregar Proxy",
+      "noProxy": "Sin proxy",
+      "noProxiesAvailable": "No hay proxies disponibles. Agrega uno para enrutar el tráfico de este perfil."
+    },
+    "version": {
+      "fetching": "Obteniendo versiones disponibles...",
+      "fetchError": "Error al obtener versiones del navegador. Por favor verifica tu conexión a internet e intenta de nuevo.",
+      "needsDownload": "La versión de {{browser}} ({{version}}) necesita ser descargada",
+      "available": "La versión de {{browser}} ({{version}}) está disponible",
+      "downloading": "Descargando versión de {{browser}} ({{version}})...",
+      "latestNeedsDownload": "La última versión ({{version}}) necesita ser descargada",
+      "latestAvailable": "La última versión ({{version}}) está disponible",
+      "latestDownloading": "Descargando versión ({{version}})..."
+    }
+  },
+  "deleteDialog": {
+    "title": "Eliminar Perfil",
+    "description": "¿Estás seguro de que deseas eliminar este perfil? Esta acción no se puede deshacer.",
+    "profilesTitle": "Eliminar Perfiles",
+    "profilesDescription": "¿Estás seguro de que deseas eliminar los perfiles seleccionados? Esta acción no se puede deshacer.",
+    "profilesToDelete": "Perfiles a eliminar:"
+  },
+  "proxies": {
+    "title": "Proxies",
+    "management": "Gestión de Proxies",
+    "add": "Agregar Proxy",
+    "edit": "Editar Proxy",
+    "delete": "Eliminar Proxy",
+    "import": "Importar",
+    "export": "Exportar",
+    "noProxies": "No hay proxies configurados",
+    "noProxiesDescription": "Agrega un proxy para enrutar el tráfico del navegador a través de él.",
+    "form": {
+      "name": "Nombre",
+      "namePlaceholder": "Ingresa el nombre del proxy",
+      "type": "Tipo",
+      "host": "Host",
+      "hostPlaceholder": "proxy.ejemplo.com",
+      "port": "Puerto",
+      "portPlaceholder": "8080",
+      "username": "Usuario",
+      "usernamePlaceholder": "Opcional",
+      "password": "Contraseña",
+      "passwordPlaceholder": "Opcional"
+    },
+    "types": {
+      "http": "HTTP",
+      "https": "HTTPS",
+      "socks4": "SOCKS4",
+      "socks5": "SOCKS5"
+    },
+    "check": {
+      "checking": "Verificando proxy...",
+      "valid": "El proxy es válido",
+      "invalid": "El proxy es inválido",
+      "lastChecked": "Última verificación: {{time}}"
+    },
+    "sync": {
+      "enabled": "Sincronización Habilitada",
+      "disabled": "Sincronización Deshabilitada"
+    }
+  },
+  "groups": {
+    "title": "Grupos",
+    "management": "Gestión de Grupos",
+    "add": "Agregar Grupo",
+    "edit": "Editar Grupo",
+    "delete": "Eliminar Grupo",
+    "noGroups": "No hay grupos creados",
+    "noGroupsDescription": "Crea un grupo para organizar tus perfiles.",
+    "form": {
+      "name": "Nombre",
+      "namePlaceholder": "Ingresa el nombre del grupo"
+    },
+    "profileCount": "{{count}} perfil",
+    "profileCount_plural": "{{count}} perfiles",
+    "assignProfiles": "Asignar Perfiles",
+    "sync": {
+      "enabled": "Sincronización Habilitada",
+      "disabled": "Sincronización Deshabilitada"
+    }
+  },
+  "sync": {
+    "title": "Servicio de Sincronización",
+    "config": "Configuración de Sincronización",
+    "serverUrl": "URL del Servidor",
+    "serverUrlPlaceholder": "https://sync.ejemplo.com",
+    "token": "Token de Sincronización",
+    "tokenPlaceholder": "Ingresa tu token de sincronización",
+    "status": {
+      "connected": "Conectado",
+      "disconnected": "Desconectado",
+      "syncing": "Sincronizando...",
+      "error": "Error de Sincronización"
+    },
+    "description": "Conéctate a un servidor de sincronización para sincronizar tus perfiles, proxies y grupos entre dispositivos."
+  },
+  "integrations": {
+    "title": "Integraciones",
+    "api": {
+      "title": "API Local",
+      "description": "Habilita el servidor de API local para integraciones externas.",
+      "enabled": "API Habilitada",
+      "disabled": "API Deshabilitada",
+      "port": "Puerto",
+      "token": "Token de API",
+      "copyToken": "Copiar Token",
+      "regenerateToken": "Regenerar Token"
+    },
+    "mcp": {
+      "title": "Servidor MCP",
+      "description": "Habilita el servidor MCP (Protocolo de Contexto de Modelo) para integraciones con asistentes de IA.",
+      "enabled": "MCP Habilitado",
+      "disabled": "MCP Deshabilitado",
+      "port": "Puerto",
+      "token": "Token MCP",
+      "config": "Configuración MCP",
+      "copyConfig": "Copiar Configuración"
+    }
+  },
+  "import": {
+    "title": "Importar Perfil",
+    "description": "Importa un perfil de navegador existente de tu sistema.",
+    "selectProfile": "Selecciona un perfil para importar",
+    "noProfiles": "No se detectaron perfiles",
+    "noProfilesDescription": "No se detectaron perfiles de navegador en tu sistema.",
+    "importing": "Importando perfil...",
+    "success": "Perfil importado exitosamente",
+    "error": "Error al importar perfil"
+  },
+  "config": {
+    "camoufox": {
+      "title": "Configuración de Camoufox",
+      "fingerprint": {
+        "title": "Huella Digital",
+        "randomize": "Aleatorizar al Iniciar",
+        "randomizeDescription": "Genera una nueva huella digital cada vez que se inicia el navegador."
+      },
+      "os": {
+        "title": "Sistema Operativo",
+        "description": "El sistema operativo a emular para la generación de huellas digitales.",
+        "windows": "Windows",
+        "macos": "macOS",
+        "linux": "Linux"
+      },
+      "screen": {
+        "title": "Tamaño de Pantalla",
+        "minWidth": "Ancho Mín",
+        "maxWidth": "Ancho Máx",
+        "minHeight": "Alto Mín",
+        "maxHeight": "Alto Máx"
+      },
+      "geoip": {
+        "title": "GeoIP",
+        "auto": "Automático (basado en proxy)",
+        "manual": "Manual",
+        "disabled": "Deshabilitado"
+      },
+      "blocking": {
+        "title": "Bloqueo",
+        "images": "Bloquear Imágenes",
+        "webrtc": "Bloquear WebRTC",
+        "webgl": "Bloquear WebGL"
+      }
+    },
+    "wayfern": {
+      "title": "Configuración de Wayfern",
+      "fingerprint": {
+        "title": "Huella Digital",
+        "randomize": "Aleatorizar al Iniciar",
+        "randomizeDescription": "Genera una nueva huella digital cada vez que se inicia el navegador."
+      },
+      "os": {
+        "title": "Sistema Operativo",
+        "description": "El sistema operativo a emular para la generación de huellas digitales.",
+        "windows": "Windows",
+        "macos": "macOS",
+        "linux": "Linux",
+        "android": "Android",
+        "ios": "iOS"
+      },
+      "screen": {
+        "title": "Tamaño de Pantalla",
+        "minWidth": "Ancho Mín",
+        "maxWidth": "Ancho Máx",
+        "minHeight": "Alto Mín",
+        "maxHeight": "Alto Máx"
+      },
+      "blocking": {
+        "title": "Bloqueo",
+        "webrtc": "Bloquear WebRTC",
+        "webgl": "Bloquear WebGL"
+      }
+    }
+  },
+  "cookies": {
+    "title": "Cookies",
+    "copy": {
+      "title": "Copiar Cookies",
+      "description": "Selecciona cookies para copiar a otros perfiles.",
+      "selectSource": "Seleccionar Perfil de Origen",
+      "selectTarget": "Seleccionar Perfiles de Destino",
+      "selectCookies": "Seleccionar Cookies",
+      "allDomains": "Todos los Dominios",
+      "selectedCount": "{{count}} cookie seleccionada",
+      "selectedCount_plural": "{{count}} cookies seleccionadas"
+    },
+    "success": "Cookies copiadas exitosamente",
+    "error": "Error al copiar cookies"
+  },
+  "toasts": {
+    "success": {
+      "profileCreated": "Perfil creado exitosamente",
+      "profileDeleted": "Perfil eliminado exitosamente",
+      "profileUpdated": "Perfil actualizado exitosamente",
+      "profileLaunched": "Perfil iniciado exitosamente",
+      "proxyCreated": "Proxy creado exitosamente",
+      "proxyDeleted": "Proxy eliminado exitosamente",
+      "proxyUpdated": "Proxy actualizado exitosamente",
+      "groupCreated": "Grupo creado exitosamente",
+      "groupDeleted": "Grupo eliminado exitosamente",
+      "groupUpdated": "Grupo actualizado exitosamente",
+      "settingsSaved": "Configuración guardada exitosamente",
+      "copied": "Copiado al portapapeles",
+      "permissionRequested": "Acceso a {{permission}} solicitado",
+      "downloadComplete": "¡{{browser}} {{version}} descargado exitosamente!",
+      "importSuccess": "{{count}} elementos importados exitosamente",
+      "exportSuccess": "{{count}} elementos exportados exitosamente",
+      "syncSuccess": "Sincronización completada exitosamente",
+      "cacheCleared": "Caché limpiada exitosamente"
+    },
+    "error": {
+      "profileCreateFailed": "Error al crear perfil",
+      "profileDeleteFailed": "Error al eliminar perfil",
+      "profileUpdateFailed": "Error al actualizar perfil",
+      "profileLaunchFailed": "Error al iniciar perfil",
+      "proxyCreateFailed": "Error al crear proxy",
+      "proxyDeleteFailed": "Error al eliminar proxy",
+      "proxyUpdateFailed": "Error al actualizar proxy",
+      "groupCreateFailed": "Error al crear grupo",
+      "groupDeleteFailed": "Error al eliminar grupo",
+      "groupUpdateFailed": "Error al actualizar grupo",
+      "settingsSaveFailed": "Error al guardar configuración",
+      "copyFailed": "Error al copiar al portapapeles",
+      "downloadFailed": "Error al descargar {{browser}}",
+      "importFailed": "Error al importar",
+      "exportFailed": "Error al exportar",
+      "syncFailed": "Error de sincronización",
+      "cacheClearFailed": "Error al limpiar caché",
+      "unknown": "Ocurrió un error desconocido"
+    },
+    "loading": {
+      "downloading": "Descargando {{browser}} {{version}}",
+      "extracting": "Extrayendo {{browser}} {{version}}",
+      "verifying": "Verificando {{browser}} {{version}}",
+      "syncing": "Sincronizando...",
+      "updatingVersions": "Actualizando versiones de navegadores..."
+    }
+  },
+  "errors": {
+    "required": "Este campo es requerido",
+    "invalidUrl": "Por favor ingresa una URL válida",
+    "invalidPort": "Por favor ingresa un número de puerto válido (1-65535)",
+    "invalidEmail": "Por favor ingresa un correo electrónico válido",
+    "minLength": "Debe tener al menos {{min}} caracteres",
+    "maxLength": "Debe tener como máximo {{max}} caracteres",
+    "networkError": "Error de red. Por favor verifica tu conexión.",
+    "serverError": "Error del servidor. Por favor intenta de nuevo más tarde.",
+    "unknownError": "Ocurrió un error desconocido. Por favor intenta de nuevo."
+  },
+  "browser": {
+    "firefox": "Firefox",
+    "firefoxDeveloper": "Firefox Developer Edition",
+    "chromium": "Chromium",
+    "brave": "Brave",
+    "zen": "Zen Browser",
+    "camoufox": "Camoufox",
+    "wayfern": "Wayfern"
+  }
+}

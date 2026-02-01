@@ -5,6 +5,9 @@ fn main() {
   // This allows running cargo test without building the frontend first
   ensure_dist_folder_exists();
 
+  // Generate tray icon PNGs from SVG (macOS template icon format)
+  generate_tray_icons();
+
   #[cfg(target_os = "macos")]
   {
     println!("cargo:rustc-link-lib=framework=CoreFoundation");
@@ -112,4 +115,57 @@ fn ensure_dist_folder_exists() {
   }
 
   println!("cargo:rerun-if-changed=../dist");
+}
+
+fn generate_tray_icons() {
+  use resvg::tiny_skia::{Pixmap, Transform};
+  use resvg::usvg::{Options, Tree};
+  use std::fs;
+  use std::path::PathBuf;
+
+  let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+  let icons_dir = PathBuf::from(&manifest_dir).join("icons");
+  let svg_path = icons_dir.join("tray-icon.svg");
+
+  println!("cargo:rerun-if-changed=icons/tray-icon.svg");
+
+  if !svg_path.exists() {
+    println!("cargo:warning=tray-icon.svg not found, skipping tray icon generation");
+    return;
+  }
+
+  let svg_data = fs::read(&svg_path).expect("Failed to read tray-icon.svg");
+  let tree = Tree::from_data(&svg_data, &Options::default()).expect("Failed to parse SVG");
+
+  // Generate template icons at different sizes for macOS menu bar
+  // 22x22 is standard, 44x44 is retina (@2x)
+  let sizes = [(22, "tray-icon-22.png"), (44, "tray-icon-44.png")];
+
+  for (size, filename) in sizes {
+    let mut pixmap = Pixmap::new(size, size).expect("Failed to create pixmap");
+
+    let svg_size = tree.size();
+    let scale = size as f32 / svg_size.width().max(svg_size.height());
+    let transform = Transform::from_scale(scale, scale);
+
+    resvg::render(&tree, transform, &mut pixmap.as_mut());
+
+    // Convert to template icon format: black silhouette with alpha channel
+    // macOS will automatically handle light/dark mode by inverting the icon
+    // For template icons: RGB should be 0,0,0 (black) and alpha controls visibility
+    let data = pixmap.data_mut();
+    for pixel in data.chunks_exact_mut(4) {
+      // Keep the original alpha (shows where icon content is)
+      // but make the color black for template icon format
+      pixel[0] = 0; // R
+      pixel[1] = 0; // G
+      pixel[2] = 0; // B
+                    // pixel[3] (alpha) stays as-is
+    }
+
+    let output_path = icons_dir.join(filename);
+    pixmap
+      .save_png(&output_path)
+      .expect("Failed to save tray icon PNG");
+  }
 }

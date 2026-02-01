@@ -13,8 +13,16 @@ export function useWayfernTerms(): UseWayfernTermsReturn {
 
   const checkTerms = useCallback(async () => {
     try {
-      const accepted = await invoke<boolean>("check_wayfern_terms_accepted");
-      setTermsAccepted(accepted);
+      const [accepted, downloaded] = await Promise.all([
+        invoke<boolean>("check_wayfern_terms_accepted"),
+        invoke<boolean>("check_wayfern_downloaded"),
+      ]);
+      // Only require terms when Wayfern is downloaded and terms not accepted
+      if (!downloaded) {
+        setTermsAccepted(true);
+      } else {
+        setTermsAccepted(accepted);
+      }
     } catch (error) {
       console.error("Failed to check terms acceptance:", error);
       setTermsAccepted(false);

@@ -52,6 +52,8 @@ pub struct AppSettings {
   pub mcp_token: Option<String>, // Displayed token for user to copy (not persisted, loaded from encrypted file)
   #[serde(default)]
   pub launch_on_login_declined: bool, // User permanently declined the launch-on-login prompt
+  #[serde(default)]
+  pub language: Option<String>, // ISO 639-1: "en", "es", "pt", "fr", "zh", "ja", "ru", or None for system default
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -84,6 +86,7 @@ impl Default for AppSettings {
       mcp_port: None,
       mcp_token: None,
       launch_on_login_declined: false,
+      language: None,
     }
   }
 }
@@ -809,6 +812,17 @@ pub async fn save_app_settings(
   let mut persist_settings = settings.clone();
   persist_settings.api_token = None;
   persist_settings.mcp_token = None;
+
+  log::info!(
+    "[settings] Saving settings: theme={}, custom_theme_keys={}",
+    persist_settings.theme,
+    persist_settings
+      .custom_theme
+      .as_ref()
+      .map(|t| t.len())
+      .unwrap_or(0)
+  );
+
   manager
     .save_settings(&persist_settings)
     .map_err(|e| format!("Failed to save settings: {e}"))?;
@@ -899,6 +913,20 @@ pub async fn save_sync_settings(
   })
 }
 
+#[tauri::command]
+pub fn get_system_language() -> String {
+  sys_locale::get_locale()
+    .map(|locale| {
+      // Extract just the language code (e.g., "en" from "en-US")
+      locale
+        .split(['-', '_'])
+        .next()
+        .unwrap_or("en")
+        .to_lowercase()
+    })
+    .unwrap_or_else(|| "en".to_string())
+}
+
 // Global singleton instance
 lazy_static::lazy_static! {
   static ref SETTINGS_MANAGER: SettingsManager = SettingsManager::new();
@@ -985,6 +1013,7 @@ mod tests {
       mcp_port: None,
       mcp_token: None,
       launch_on_login_declined: false,
+      language: None,
     };
 
     // Save settings

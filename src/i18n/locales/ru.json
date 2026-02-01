@@ -1,0 +1,460 @@
+{
+  "common": {
+    "buttons": {
+      "save": "Сохранить",
+      "cancel": "Отмена",
+      "close": "Закрыть",
+      "delete": "Удалить",
+      "create": "Создать",
+      "back": "Назад",
+      "retry": "Повторить",
+      "download": "Скачать",
+      "confirm": "Подтвердить",
+      "apply": "Применить",
+      "reset": "Сбросить",
+      "add": "Добавить",
+      "edit": "Редактировать",
+      "copy": "Копировать",
+      "clear": "Очистить",
+      "search": "Поиск",
+      "select": "Выбрать",
+      "grant": "Разрешить",
+      "start": "Запустить",
+      "stop": "Остановить",
+      "enable": "Включить",
+      "disable": "Выключить",
+      "import": "Импорт",
+      "export": "Экспорт",
+      "refresh": "Обновить",
+      "loading": "Загрузка...",
+      "saveSettings": "Сохранить настройки"
+    },
+    "status": {
+      "active": "Активен",
+      "inactive": "Неактивен",
+      "running": "Запущен",
+      "stopped": "Остановлен",
+      "enabled": "Включено",
+      "disabled": "Выключено",
+      "granted": "Разрешено",
+      "notGranted": "Не разрешено",
+      "connected": "Подключено",
+      "disconnected": "Отключено",
+      "synced": "Синхронизировано",
+      "syncing": "Синхронизация",
+      "pending": "Ожидание",
+      "error": "Ошибка"
+    },
+    "labels": {
+      "name": "Название",
+      "type": "Тип",
+      "status": "Статус",
+      "actions": "Действия",
+      "description": "Описание",
+      "none": "Нет",
+      "default": "По умолчанию",
+      "custom": "Пользовательский",
+      "optional": "Необязательно",
+      "required": "Обязательно"
+    },
+    "time": {
+      "days": "дней",
+      "hours": "часов",
+      "minutes": "минут",
+      "seconds": "секунд",
+      "remaining": "осталось"
+    }
+  },
+  "settings": {
+    "title": "Настройки",
+    "appearance": {
+      "title": "Внешний вид",
+      "theme": "Тема",
+      "themeDescription": "Выберите предпочитаемую тему или следуйте системным настройкам. Изменения пользовательской темы применяются только при сохранении.",
+      "themePreset": "Предустановка темы",
+      "customColors": "Пользовательские цвета",
+      "selectTheme": "Выберите тему",
+      "selectThemePreset": "Выберите предустановку темы",
+      "yourOwn": "Собственная",
+      "light": "Светлая",
+      "dark": "Тёмная",
+      "system": "Системная"
+    },
+    "language": {
+      "title": "Язык",
+      "description": "Выберите предпочитаемый язык интерфейса приложения.",
+      "systemDefault": "Системный по умолчанию",
+      "selectLanguage": "Выберите язык"
+    },
+    "defaultBrowser": {
+      "title": "Браузер по умолчанию",
+      "setAsDefault": "Установить браузером по умолчанию",
+      "alreadyDefault": "Уже браузер по умолчанию",
+      "description": "При установке по умолчанию Donut Browser будет обрабатывать веб-ссылки и позволит выбрать профиль для использования."
+    },
+    "permissions": {
+      "title": "Системные разрешения",
+      "loading": "Загрузка разрешений...",
+      "description": "Эти разрешения позволяют браузерам, запущенным из Donut Browser, получать доступ к системным ресурсам. Каждый сайт всё равно будет запрашивать разрешение отдельно.",
+      "microphone": "Микрофон",
+      "microphoneDescription": "Доступ к микрофону для браузерных приложений",
+      "camera": "Камера",
+      "cameraDescription": "Доступ к камере для браузерных приложений"
+    },
+    "integrations": {
+      "title": "Интеграции",
+      "description": "Настройте локальный API и MCP (Model Context Protocol) для интеграции с внешними инструментами и AI-ассистентами.",
+      "openSettings": "Открыть настройки интеграций"
+    },
+    "commercial": {
+      "title": "Коммерческая лицензия",
+      "trialActive": "Пробный период: осталось {{days}} дней, {{hours}} часов",
+      "trialActiveDescription": "Коммерческое использование бесплатно в течение пробного периода",
+      "trialExpired": "Пробный период истёк",
+      "trialExpiredDescription": "Личное использование остаётся бесплатным. Для коммерческого использования требуется лицензия."
+    },
+    "advanced": {
+      "title": "Дополнительно",
+      "clearCache": "Очистить весь кэш версий",
+      "clearCacheDescription": "Очищает все кэшированные данные версий браузеров и обновляет все версии из источников. Это принудительно загрузит информацию о версиях для всех браузеров."
+    }
+  },
+  "header": {
+    "searchPlaceholder": "Поиск профилей...",
+    "clearSearch": "Очистить поиск",
+    "moreActions": "Дополнительные действия",
+    "createProfile": "Создать новый профиль",
+    "menu": {
+      "settings": "Настройки",
+      "proxies": "Прокси",
+      "groups": "Группы",
+      "syncService": "Служба синхронизации",
+      "integrations": "Интеграции",
+      "importProfile": "Импорт профиля"
+    }
+  },
+  "profiles": {
+    "title": "Профили",
+    "empty": "Профилей пока нет",
+    "emptyDescription": "Создайте свой первый профиль браузера для начала работы.",
+    "createFirst": "Создать профиль",
+    "noResults": "Профили не найдены",
+    "noResultsDescription": "Нет профилей, соответствующих критериям поиска.",
+    "table": {
+      "name": "Название",
+      "browser": "Браузер",
+      "status": "Статус",
+      "actions": "Действия",
+      "note": "Заметка",
+      "group": "Группа",
+      "proxy": "Прокси",
+      "lastLaunch": "Последний запуск"
+    },
+    "actions": {
+      "launch": "Запустить",
+      "stop": "Остановить",
+      "edit": "Редактировать",
+      "delete": "Удалить",
+      "copyCookies": "Копировать Cookie",
+      "configure": "Настроить"
+    }
+  },
+  "createProfile": {
+    "title": "Создать новый профиль",
+    "configureTitle": "Настроить профиль",
+    "antiDetect": {
+      "title": "Антидетект браузер",
+      "description": "Выберите браузер с возможностями защиты от обнаружения",
+      "chromium": "Chromium (Wayfern)",
+      "firefox": "Firefox (Camoufox)",
+      "badge": "Антидетект браузер"
+    },
+    "regular": {
+      "title": "Обычные браузеры",
+      "description": "Выберите из поддерживаемых обычных браузеров",
+      "badge": "Обычный браузер"
+    },
+    "profileName": "Название профиля",
+    "profileNamePlaceholder": "Введите название профиля",
+    "proxy": {
+      "title": "Прокси",
+      "addProxy": "Добавить прокси",
+      "noProxy": "Без прокси",
+      "noProxiesAvailable": "Нет доступных прокси. Добавьте один для маршрутизации трафика этого профиля."
+    },
+    "version": {
+      "fetching": "Получение доступных версий...",
+      "fetchError": "Не удалось получить версии браузера. Проверьте интернет-соединение и попробуйте снова.",
+      "needsDownload": "Версию {{browser}} ({{version}}) необходимо скачать",
+      "available": "Версия {{browser}} ({{version}}) доступна",
+      "downloading": "Загрузка версии {{browser}} ({{version}})...",
+      "latestNeedsDownload": "Последнюю версию ({{version}}) необходимо скачать",
+      "latestAvailable": "Последняя версия ({{version}}) доступна",
+      "latestDownloading": "Загрузка версии ({{version}})..."
+    }
+  },
+  "deleteDialog": {
+    "title": "Удалить профиль",
+    "description": "Вы уверены, что хотите удалить этот профиль? Это действие нельзя отменить.",
+    "profilesTitle": "Удалить профили",
+    "profilesDescription": "Вы уверены, что хотите удалить выбранные профили? Это действие нельзя отменить.",
+    "profilesToDelete": "Профили для удаления:"
+  },
+  "proxies": {
+    "title": "Прокси",
+    "management": "Управление прокси",
+    "add": "Добавить прокси",
+    "edit": "Редактировать прокси",
+    "delete": "Удалить прокси",
+    "import": "Импорт",
+    "export": "Экспорт",
+    "noProxies": "Прокси не настроены",
+    "noProxiesDescription": "Добавьте прокси для маршрутизации трафика браузера через него.",
+    "form": {
+      "name": "Название",
+      "namePlaceholder": "Введите название прокси",
+      "type": "Тип",
+      "host": "Хост",
+      "hostPlaceholder": "proxy.example.com",
+      "port": "Порт",
+      "portPlaceholder": "8080",
+      "username": "Имя пользователя",
+      "usernamePlaceholder": "Необязательно",
+      "password": "Пароль",
+      "passwordPlaceholder": "Необязательно"
+    },
+    "types": {
+      "http": "HTTP",
+      "https": "HTTPS",
+      "socks4": "SOCKS4",
+      "socks5": "SOCKS5"
+    },
+    "check": {
+      "checking": "Проверка прокси...",
+      "valid": "Прокси действителен",
+      "invalid": "Прокси недействителен",
+      "lastChecked": "Последняя проверка: {{time}}"
+    },
+    "sync": {
+      "enabled": "Синхронизация включена",
+      "disabled": "Синхронизация выключена"
+    }
+  },
+  "groups": {
+    "title": "Группы",
+    "management": "Управление группами",
+    "add": "Добавить группу",
+    "edit": "Редактировать группу",
+    "delete": "Удалить группу",
+    "noGroups": "Группы не созданы",
+    "noGroupsDescription": "Создайте группу для организации профилей.",
+    "form": {
+      "name": "Название",
+      "namePlaceholder": "Введите название группы"
+    },
+    "profileCount": "{{count}} профиль",
+    "profileCount_plural": "{{count}} профилей",
+    "assignProfiles": "Назначить профили",
+    "sync": {
+      "enabled": "Синхронизация включена",
+      "disabled": "Синхронизация выключена"
+    }
+  },
+  "sync": {
+    "title": "Служба синхронизации",
+    "config": "Настройка синхронизации",
+    "serverUrl": "URL сервера",
+    "serverUrlPlaceholder": "https://sync.example.com",
+    "token": "Токен синхронизации",
+    "tokenPlaceholder": "Введите токен синхронизации",
+    "status": {
+      "connected": "Подключено",
+      "disconnected": "Отключено",
+      "syncing": "Синхронизация...",
+      "error": "Ошибка синхронизации"
+    },
+    "description": "Подключитесь к серверу синхронизации для синхронизации профилей, прокси и групп между устройствами."
+  },
+  "integrations": {
+    "title": "Интеграции",
+    "api": {
+      "title": "Локальный API",
+      "description": "Включите локальный API-сервер для внешних интеграций.",
+      "enabled": "API включён",
+      "disabled": "API выключен",
+      "port": "Порт",
+      "token": "API токен",
+      "copyToken": "Копировать токен",
+      "regenerateToken": "Перегенерировать токен"
+    },
+    "mcp": {
+      "title": "MCP сервер",
+      "description": "Включите MCP (Model Context Protocol) сервер для интеграции с AI-ассистентами.",
+      "enabled": "MCP включён",
+      "disabled": "MCP выключен",
+      "port": "Порт",
+      "token": "MCP токен",
+      "config": "Конфигурация MCP",
+      "copyConfig": "Копировать конфигурацию"
+    }
+  },
+  "import": {
+    "title": "Импорт профиля",
+    "description": "Импортируйте существующий профиль браузера из вашей системы.",
+    "selectProfile": "Выберите профиль для импорта",
+    "noProfiles": "Профили не обнаружены",
+    "noProfilesDescription": "В вашей системе не обнаружены профили браузеров.",
+    "importing": "Импорт профиля...",
+    "success": "Профиль успешно импортирован",
+    "error": "Ошибка импорта профиля"
+  },
+  "config": {
+    "camoufox": {
+      "title": "Настройки Camoufox",
+      "fingerprint": {
+        "title": "Отпечаток",
+        "randomize": "Случайный при запуске",
+        "randomizeDescription": "Генерировать новый отпечаток при каждом запуске браузера."
+      },
+      "os": {
+        "title": "Операционная система",
+        "description": "Операционная система для эмуляции при генерации отпечатка.",
+        "windows": "Windows",
+        "macos": "macOS",
+        "linux": "Linux"
+      },
+      "screen": {
+        "title": "Размер экрана",
+        "minWidth": "Мин. ширина",
+        "maxWidth": "Макс. ширина",
+        "minHeight": "Мин. высота",
+        "maxHeight": "Макс. высота"
+      },
+      "geoip": {
+        "title": "GeoIP",
+        "auto": "Автоматически (на основе прокси)",
+        "manual": "Вручную",
+        "disabled": "Выключено"
+      },
+      "blocking": {
+        "title": "Блокировка",
+        "images": "Блокировать изображения",
+        "webrtc": "Блокировать WebRTC",
+        "webgl": "Блокировать WebGL"
+      }
+    },
+    "wayfern": {
+      "title": "Настройки Wayfern",
+      "fingerprint": {
+        "title": "Отпечаток",
+        "randomize": "Случайный при запуске",
+        "randomizeDescription": "Генерировать новый отпечаток при каждом запуске браузера."
+      },
+      "os": {
+        "title": "Операционная система",
+        "description": "Операционная система для эмуляции при генерации отпечатка.",
+        "windows": "Windows",
+        "macos": "macOS",
+        "linux": "Linux",
+        "android": "Android",
+        "ios": "iOS"
+      },
+      "screen": {
+        "title": "Размер экрана",
+        "minWidth": "Мин. ширина",
+        "maxWidth": "Макс. ширина",
+        "minHeight": "Мин. высота",
+        "maxHeight": "Макс. высота"
+      },
+      "blocking": {
+        "title": "Блокировка",
+        "webrtc": "Блокировать WebRTC",
+        "webgl": "Блокировать WebGL"
+      }
+    }
+  },
+  "cookies": {
+    "title": "Cookie",
+    "copy": {
+      "title": "Копировать Cookie",
+      "description": "Выберите cookie для копирования в другие профили.",
+      "selectSource": "Выберите исходный профиль",
+      "selectTarget": "Выберите целевые профили",
+      "selectCookies": "Выберите Cookie",
+      "allDomains": "Все домены",
+      "selectedCount": "Выбрано {{count}} cookie",
+      "selectedCount_plural": "Выбрано {{count}} cookie"
+    },
+    "success": "Cookie успешно скопированы",
+    "error": "Ошибка копирования cookie"
+  },
+  "toasts": {
+    "success": {
+      "profileCreated": "Профиль успешно создан",
+      "profileDeleted": "Профиль успешно удалён",
+      "profileUpdated": "Профиль успешно обновлён",
+      "profileLaunched": "Профиль успешно запущен",
+      "proxyCreated": "Прокси успешно создан",
+      "proxyDeleted": "Прокси успешно удалён",
+      "proxyUpdated": "Прокси успешно обновлён",
+      "groupCreated": "Группа успешно создана",
+      "groupDeleted": "Группа успешно удалена",
+      "groupUpdated": "Группа успешно обновлена",
+      "settingsSaved": "Настройки успешно сохранены",
+      "copied": "Скопировано в буфер обмена",
+      "permissionRequested": "Запрошен доступ к {{permission}}",
+      "downloadComplete": "{{browser}} {{version}} успешно загружен!",
+      "importSuccess": "Успешно импортировано {{count}} элементов",
+      "exportSuccess": "Успешно экспортировано {{count}} элементов",
+      "syncSuccess": "Синхронизация успешно завершена",
+      "cacheCleared": "Кэш успешно очищен"
+    },
+    "error": {
+      "profileCreateFailed": "Ошибка создания профиля",
+      "profileDeleteFailed": "Ошибка удаления профиля",
+      "profileUpdateFailed": "Ошибка обновления профиля",
+      "profileLaunchFailed": "Ошибка запуска профиля",
+      "proxyCreateFailed": "Ошибка создания прокси",
+      "proxyDeleteFailed": "Ошибка удаления прокси",
+      "proxyUpdateFailed": "Ошибка обновления прокси",
+      "groupCreateFailed": "Ошибка создания группы",
+      "groupDeleteFailed": "Ошибка удаления группы",
+      "groupUpdateFailed": "Ошибка обновления группы",
+      "settingsSaveFailed": "Ошибка сохранения настроек",
+      "copyFailed": "Ошибка копирования в буфер обмена",
+      "downloadFailed": "Ошибка загрузки {{browser}}",
+      "importFailed": "Ошибка импорта",
+      "exportFailed": "Ошибка экспорта",
+      "syncFailed": "Ошибка синхронизации",
+      "cacheClearFailed": "Ошибка очистки кэша",
+      "unknown": "Произошла неизвестная ошибка"
+    },
+    "loading": {
+      "downloading": "Загрузка {{browser}} {{version}}",
+      "extracting": "Распаковка {{browser}} {{version}}",
+      "verifying": "Проверка {{browser}} {{version}}",
+      "syncing": "Синхронизация...",
+      "updatingVersions": "Обновление версий браузеров..."
+    }
+  },
+  "errors": {
+    "required": "Это поле обязательно",
+    "invalidUrl": "Введите корректный URL",
+    "invalidPort": "Введите корректный номер порта (1-65535)",
+    "invalidEmail": "Введите корректный адрес электронной почты",
+    "minLength": "Минимум {{min}} символов",
+    "maxLength": "Максимум {{max}} символов",
+    "networkError": "Сетевая ошибка. Проверьте подключение.",
+    "serverError": "Ошибка сервера. Попробуйте позже.",
+    "unknownError": "Произошла неизвестная ошибка. Попробуйте снова."
+  },
+  "browser": {
+    "firefox": "Firefox",
+    "firefoxDeveloper": "Firefox Developer Edition",
+    "chromium": "Chromium",
+    "brave": "Brave",
+    "zen": "Zen Browser",
+    "camoufox": "Camoufox",
+    "wayfern": "Wayfern"
+  }
+}

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { FaDownload } from "react-icons/fa";
 import { FiWifi } from "react-icons/fi";
 import { GoGear, GoKebabHorizontal, GoPlus } from "react-icons/go";
@@ -37,6 +38,7 @@ const HomeHeader = ({
   searchQuery,
   onSearchQueryChange,
 }: Props) => {
+  const { t } = useTranslation();
   const handleLogoClick = () => {
     // Trigger the same URL handling logic as if the URL came from the system
     const event = new CustomEvent("url-open-request", {
@@ -61,7 +63,7 @@ const HomeHeader = ({
         <div className="relative">
           <Input
             type="text"
-            placeholder="Search profiles..."
+            placeholder={t("header.searchPlaceholder")}
             value={searchQuery}
             onChange={(e) => onSearchQueryChange(e.target.value)}
             className="pr-8 pl-10 w-48"
@@ -72,7 +74,7 @@ const HomeHeader = ({
               type="button"
               onClick={() => onSearchQueryChange("")}
               className="absolute right-2 top-1/2 p-1 rounded-sm transition-colors transform -translate-y-1/2 hover:bg-accent"
-              aria-label="Clear search"
+              aria-label={t("header.clearSearch")}
             >
               <LuX className="w-4 h-4 text-muted-foreground hover:text-foreground" />
             </button>
@@ -93,7 +95,7 @@ const HomeHeader = ({
                     </Button>
                   </span>
                 </TooltipTrigger>
-                <TooltipContent>More actions</TooltipContent>
+                <TooltipContent>{t("header.moreActions")}</TooltipContent>
               </Tooltip>
             </span>
           </DropdownMenuTrigger>
@@ -104,7 +106,7 @@ const HomeHeader = ({
               }}
             >
               <GoGear className="mr-2 w-4 h-4" />
-              Settings
+              {t("header.menu.settings")}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => {
@@ -112,7 +114,7 @@ const HomeHeader = ({
               }}
             >
               <FiWifi className="mr-2 w-4 h-4" />
-              Proxies
+              {t("header.menu.proxies")}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => {
@@ -120,7 +122,7 @@ const HomeHeader = ({
               }}
             >
               <LuUsers className="mr-2 w-4 h-4" />
-              Groups
+              {t("header.menu.groups")}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => {
@@ -128,7 +130,7 @@ const HomeHeader = ({
               }}
             >
               <LuCloud className="mr-2 w-4 h-4" />
-              Sync Service
+              {t("header.menu.syncService")}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => {
@@ -136,7 +138,7 @@ const HomeHeader = ({
               }}
             >
               <LuPlug className="mr-2 w-4 h-4" />
-              Integrations
+              {t("header.menu.integrations")}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => {
@@ -144,7 +146,7 @@ const HomeHeader = ({
               }}
             >
               <FaDownload className="mr-2 w-4 h-4" />
-              Import Profile
+              {t("header.menu.importProfile")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -166,7 +168,7 @@ const HomeHeader = ({
             arrowOffset={-8}
             style={{ transform: "translateX(-8px)" }}
           >
-            Create a new profile
+            {t("header.createProfile")}
           </TooltipContent>
         </Tooltip>
       </div>

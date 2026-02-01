@@ -526,3 +526,70 @@ export interface CookieCopyResult {
   cookies_replaced: number;
   errors: string[];
 }
+
+// Proxy import/export types
+export interface ProxyExportData {
+  version: string;
+  proxies: ExportedProxy[];
+  exported_at: string;
+  source: string;
+}
+
+export interface ExportedProxy {
+  name: string;
+  type: string;
+  host: string;
+  port: number;
+  username?: string;
+  password?: string;
+}
+
+export interface ProxyImportResult {
+  imported_count: number;
+  skipped_count: number;
+  errors: string[];
+  proxies: StoredProxy[];
+}
+
+export interface ParsedProxyLine {
+  proxy_type: string;
+  host: string;
+  port: number;
+  username?: string;
+  password?: string;
+  original_line: string;
+}
+
+export type ProxyParseResult =
+  | ({ status: "parsed" } & ParsedProxyLine)
+  | { status: "ambiguous"; line: string; possible_formats: string[] }
+  | { status: "invalid"; line: string; reason: string };
+
+// VPN types
+export type VpnType = "WireGuard" | "OpenVPN";
+
+export interface VpnConfig {
+  id: string;
+  name: string;
+  vpn_type: VpnType;
+  config_data: string; // Raw config content (may be empty in list view)
+  created_at: number;
+  last_used?: number;
+}
+
+export interface VpnImportResult {
+  success: boolean;
+  vpn_id?: string;
+  vpn_type?: VpnType;
+  name: string;
+  error?: string;
+}
+
+export interface VpnStatus {
+  connected: boolean;
+  vpn_id: string;
+  connected_at?: number;
+  bytes_sent?: number;
+  bytes_received?: number;
+  last_handshake?: number;
+}

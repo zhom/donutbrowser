@@ -100,7 +100,7 @@ jobs:
             - Each array item must be under 80 characters
             - overall_assessment must be under 100 characters
             - Output ONLY the JSON object, nothing else
-          model: gpt-5
+          model: gpt-5-mini
 
       - name: Check if first-time contributor
         id: check-first-time
@@ -292,7 +292,7 @@ jobs:
             - summary must be under 200 characters
             - Be constructive and helpful, not harsh
             - Output ONLY the JSON object, nothing else
-          model: gpt-5
+          model: gpt-5-mini
 
       - name: Post PR feedback comment
         env:

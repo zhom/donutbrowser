@@ -553,6 +553,132 @@ impl McpServer {
           "required": ["proxy_id"]
         }),
       },
+      McpTool {
+        name: "export_proxies".to_string(),
+        description: "Export all proxy configurations".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "format": {
+              "type": "string",
+              "enum": ["json", "txt"],
+              "description": "Export format (json for structured data, txt for URL format)"
+            }
+          },
+          "required": ["format"]
+        }),
+      },
+      McpTool {
+        name: "import_proxies".to_string(),
+        description: "Import proxy configurations from JSON or TXT content".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "content": {
+              "type": "string",
+              "description": "The proxy configuration content to import"
+            },
+            "format": {
+              "type": "string",
+              "enum": ["json", "txt"],
+              "description": "Import format (json or txt)"
+            },
+            "name_prefix": {
+              "type": "string",
+              "description": "Optional prefix for imported proxy names (default: 'Imported')"
+            }
+          },
+          "required": ["content", "format"]
+        }),
+      },
+      // VPN management tools
+      McpTool {
+        name: "import_vpn".to_string(),
+        description: "Import a WireGuard (.conf) or OpenVPN (.ovpn) configuration".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "content": {
+              "type": "string",
+              "description": "Raw VPN config file content"
+            },
+            "filename": {
+              "type": "string",
+              "description": "Original filename (.conf or .ovpn) for type detection"
+            },
+            "name": {
+              "type": "string",
+              "description": "Optional display name for the VPN config"
+            }
+          },
+          "required": ["content", "filename"]
+        }),
+      },
+      McpTool {
+        name: "list_vpn_configs".to_string(),
+        description: "List all stored VPN configurations".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {},
+          "required": []
+        }),
+      },
+      McpTool {
+        name: "delete_vpn".to_string(),
+        description: "Delete a VPN configuration".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "vpn_id": {
+              "type": "string",
+              "description": "The UUID of the VPN config to delete"
+            }
+          },
+          "required": ["vpn_id"]
+        }),
+      },
+      McpTool {
+        name: "connect_vpn".to_string(),
+        description: "Connect to a VPN configuration".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "vpn_id": {
+              "type": "string",
+              "description": "The UUID of the VPN config to connect"
+            }
+          },
+          "required": ["vpn_id"]
+        }),
+      },
+      McpTool {
+        name: "disconnect_vpn".to_string(),
+        description: "Disconnect from a VPN".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "vpn_id": {
+              "type": "string",
+              "description": "The UUID of the VPN to disconnect"
+            }
+          },
+          "required": ["vpn_id"]
+        }),
+      },
+      McpTool {
+        name: "get_vpn_status".to_string(),
+        description: "Get the connection status of a VPN".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "vpn_id": {
+              "type": "string",
+              "description": "The UUID of the VPN to check"
+            }
+          },
+          "required": ["vpn_id"]
+        }),
+      },
     ]
   }
 
@@ -641,6 +767,16 @@ impl McpServer {
       "create_proxy" => self.handle_create_proxy(&arguments).await,
       "update_proxy" => self.handle_update_proxy(&arguments).await,
       "delete_proxy" => self.handle_delete_proxy(&arguments).await,
+      // Proxy import/export
+      "export_proxies" => self.handle_export_proxies(&arguments).await,
+      "import_proxies" => self.handle_import_proxies(&arguments).await,
+      // VPN management
+      "import_vpn" => self.handle_import_vpn(&arguments).await,
+      "list_vpn_configs" => self.handle_list_vpn_configs().await,
+      "delete_vpn" => self.handle_delete_vpn(&arguments).await,
+      "connect_vpn" => self.handle_connect_vpn(&arguments).await,
+      "disconnect_vpn" => self.handle_disconnect_vpn(&arguments).await,
+      "get_vpn_status" => self.handle_get_vpn_status(&arguments).await,
       _ => Err(McpError {
         code: -32602,
         message: format!("Unknown tool: {tool_name}"),
@@ -1361,6 +1497,391 @@ impl McpServer {
       }]
     }))
   }
+
+  async fn handle_export_proxies(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let format = arguments
+      .get("format")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing format".to_string(),
+      })?;
+
+    let content = match format {
+      "json" => PROXY_MANAGER.export_proxies_json().map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to export proxies: {e}"),
+      })?,
+      "txt" => PROXY_MANAGER.export_proxies_txt(),
+      _ => {
+        return Err(McpError {
+          code: -32602,
+          message: format!("Invalid format '{}', must be 'json' or 'txt'", format),
+        })
+      }
+    };
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": content
+      }]
+    }))
+  }
+
+  async fn handle_import_proxies(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let content = arguments
+      .get("content")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing content".to_string(),
+      })?;
+
+    let format = arguments
+      .get("format")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing format".to_string(),
+      })?;
+
+    let name_prefix = arguments
+      .get("name_prefix")
+      .and_then(|v| v.as_str())
+      .map(|s| s.to_string());
+
+    let inner = self.inner.lock().await;
+    let app_handle = inner.app_handle.as_ref().ok_or_else(|| McpError {
+      code: -32000,
+      message: "MCP server not properly initialized".to_string(),
+    })?;
+
+    let result = match format {
+      "json" => PROXY_MANAGER
+        .import_proxies_json(app_handle, content)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to import proxies: {e}"),
+        })?,
+      "txt" => {
+        use crate::proxy_manager::{ProxyManager, ProxyParseResult};
+
+        let parse_results = ProxyManager::parse_txt_proxies(content);
+        let parsed: Vec<_> = parse_results
+          .into_iter()
+          .filter_map(|r| {
+            if let ProxyParseResult::Parsed(p) = r {
+              Some(p)
+            } else {
+              None
+            }
+          })
+          .collect();
+
+        if parsed.is_empty() {
+          return Err(McpError {
+            code: -32000,
+            message: "No valid proxies found in content".to_string(),
+          });
+        }
+
+        PROXY_MANAGER
+          .import_proxies_from_parsed(app_handle, parsed, name_prefix)
+          .map_err(|e| McpError {
+            code: -32000,
+            message: format!("Failed to import proxies: {e}"),
+          })?
+      }
+      _ => {
+        return Err(McpError {
+          code: -32602,
+          message: format!("Invalid format '{}', must be 'json' or 'txt'", format),
+        })
+      }
+    };
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!(
+          "Import complete: {} imported, {} skipped, {} errors",
+          result.imported_count,
+          result.skipped_count,
+          result.errors.len()
+        )
+      }]
+    }))
+  }
+
+  // VPN management handlers
+  async fn handle_import_vpn(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let content = arguments
+      .get("content")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing content".to_string(),
+      })?;
+
+    let filename = arguments
+      .get("filename")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing filename".to_string(),
+      })?;
+
+    let name = arguments
+      .get("name")
+      .and_then(|v| v.as_str())
+      .map(|s| s.to_string());
+
+    let storage = crate::vpn::VPN_STORAGE.lock().map_err(|e| McpError {
+      code: -32000,
+      message: format!("Failed to lock VPN storage: {e}"),
+    })?;
+
+    let config = storage
+      .import_config(content, filename, name)
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to import VPN config: {e}"),
+      })?;
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!(
+          "VPN '{}' ({}) imported successfully with ID: {}",
+          config.name,
+          config.vpn_type,
+          config.id
+        )
+      }]
+    }))
+  }
+
+  async fn handle_list_vpn_configs(&self) -> Result<serde_json::Value, McpError> {
+    let storage = crate::vpn::VPN_STORAGE.lock().map_err(|e| McpError {
+      code: -32000,
+      message: format!("Failed to lock VPN storage: {e}"),
+    })?;
+
+    let configs = storage.list_configs().map_err(|e| McpError {
+      code: -32000,
+      message: format!("Failed to list VPN configs: {e}"),
+    })?;
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": serde_json::to_string_pretty(&configs).unwrap_or_default()
+      }]
+    }))
+  }
+
+  async fn handle_delete_vpn(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let vpn_id = arguments
+      .get("vpn_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing vpn_id".to_string(),
+      })?;
+
+    // First disconnect if connected
+    {
+      let mut manager = crate::vpn::TUNNEL_MANAGER.lock().await;
+      if manager.is_tunnel_active(vpn_id) {
+        if let Some(tunnel) = manager.get_tunnel_mut(vpn_id) {
+          let _ = tunnel.disconnect().await;
+        }
+        manager.remove_tunnel(vpn_id);
+      }
+    }
+
+    let storage = crate::vpn::VPN_STORAGE.lock().map_err(|e| McpError {
+      code: -32000,
+      message: format!("Failed to lock VPN storage: {e}"),
+    })?;
+
+    storage.delete_config(vpn_id).map_err(|e| McpError {
+      code: -32000,
+      message: format!("Failed to delete VPN config: {e}"),
+    })?;
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!("VPN '{}' deleted successfully", vpn_id)
+      }]
+    }))
+  }
+
+  async fn handle_connect_vpn(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let vpn_id = arguments
+      .get("vpn_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing vpn_id".to_string(),
+      })?;
+
+    // Load config from storage
+    let config = {
+      let storage = crate::vpn::VPN_STORAGE.lock().map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to lock VPN storage: {e}"),
+      })?;
+
+      storage.load_config(vpn_id).map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to load VPN config: {e}"),
+      })?
+    };
+
+    let mut manager = crate::vpn::TUNNEL_MANAGER.lock().await;
+
+    // Check if already connected
+    if manager.is_tunnel_active(vpn_id) {
+      return Ok(serde_json::json!({
+        "content": [{
+          "type": "text",
+          "text": format!("VPN '{}' is already connected", config.name)
+        }]
+      }));
+    }
+
+    let mut tunnel: Box<dyn crate::vpn::VpnTunnel> = match config.vpn_type {
+      crate::vpn::VpnType::WireGuard => {
+        let wg_config =
+          crate::vpn::parse_wireguard_config(&config.config_data).map_err(|e| McpError {
+            code: -32000,
+            message: format!("Invalid WireGuard config: {e}"),
+          })?;
+        Box::new(crate::vpn::WireGuardTunnel::new(
+          vpn_id.to_string(),
+          wg_config,
+        ))
+      }
+      crate::vpn::VpnType::OpenVPN => {
+        let ovpn_config =
+          crate::vpn::parse_openvpn_config(&config.config_data).map_err(|e| McpError {
+            code: -32000,
+            message: format!("Invalid OpenVPN config: {e}"),
+          })?;
+        Box::new(crate::vpn::OpenVpnTunnel::new(
+          vpn_id.to_string(),
+          ovpn_config,
+        ))
+      }
+    };
+
+    tunnel.connect().await.map_err(|e| McpError {
+      code: -32000,
+      message: format!("Failed to connect VPN: {e}"),
+    })?;
+
+    manager.register_tunnel(vpn_id.to_string(), tunnel);
+
+    // Update last_used timestamp
+    {
+      let storage = crate::vpn::VPN_STORAGE.lock().map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to lock VPN storage: {e}"),
+      })?;
+      let _ = storage.update_last_used(vpn_id);
+    }
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!("VPN '{}' connected successfully", config.name)
+      }]
+    }))
+  }
+
+  async fn handle_disconnect_vpn(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let vpn_id = arguments
+      .get("vpn_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing vpn_id".to_string(),
+      })?;
+
+    let mut manager = crate::vpn::TUNNEL_MANAGER.lock().await;
+
+    if let Some(tunnel) = manager.get_tunnel_mut(vpn_id) {
+      tunnel.disconnect().await.map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to disconnect VPN: {e}"),
+      })?;
+    }
+
+    manager.remove_tunnel(vpn_id);
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!("VPN '{}' disconnected successfully", vpn_id)
+      }]
+    }))
+  }
+
+  async fn handle_get_vpn_status(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let vpn_id = arguments
+      .get("vpn_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing vpn_id".to_string(),
+      })?;
+
+    let manager = crate::vpn::TUNNEL_MANAGER.lock().await;
+
+    let status = if let Some(tunnel) = manager.get_tunnel(vpn_id) {
+      tunnel.get_status()
+    } else {
+      crate::vpn::VpnStatus {
+        connected: false,
+        vpn_id: vpn_id.to_string(),
+        connected_at: None,
+        bytes_sent: None,
+        bytes_received: None,
+        last_handshake: None,
+      }
+    };
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": serde_json::to_string_pretty(&status).unwrap_or_default()
+      }]
+    }))
+  }
 }
 
 lazy_static::lazy_static! {
@@ -1376,8 +1897,8 @@ mod tests {
     let server = McpServer::new();
     let tools = server.get_tools();
 
-    // Should have all 16 tools
-    assert!(tools.len() >= 16);
+    // Should have at least 24 tools (18 + 6 VPN tools)
+    assert!(tools.len() >= 24);
 
     // Check tool names
     let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
@@ -1400,6 +1921,16 @@ mod tests {
     assert!(tool_names.contains(&"create_proxy"));
     assert!(tool_names.contains(&"update_proxy"));
     assert!(tool_names.contains(&"delete_proxy"));
+    // Proxy import/export tools
+    assert!(tool_names.contains(&"export_proxies"));
+    assert!(tool_names.contains(&"import_proxies"));
+    // VPN tools
+    assert!(tool_names.contains(&"import_vpn"));
+    assert!(tool_names.contains(&"list_vpn_configs"));
+    assert!(tool_names.contains(&"delete_vpn"));
+    assert!(tool_names.contains(&"connect_vpn"));
+    assert!(tool_names.contains(&"disconnect_vpn"));
+    assert!(tool_names.contains(&"get_vpn_status"));
   }
 
   #[test]

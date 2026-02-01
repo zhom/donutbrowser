@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use tokio_util::sync::CancellationToken;
 
 use crate::api_client::ApiClient;
 use crate::browser::{create_browser, BrowserType};
@@ -13,6 +14,8 @@ use crate::events;
 lazy_static::lazy_static! {
   static ref DOWNLOADING_BROWSERS: std::sync::Arc<Mutex<std::collections::HashSet<String>>> =
     std::sync::Arc::new(Mutex::new(std::collections::HashSet::new()));
+  static ref DOWNLOAD_CANCELLATION_TOKENS: std::sync::Arc<Mutex<std::collections::HashMap<String, CancellationToken>>> =
+    std::sync::Arc::new(Mutex::new(std::collections::HashMap::new()));
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -438,6 +441,7 @@ impl Downloader {
     version: &str,
     download_info: &DownloadInfo,
     dest_path: &Path,
+    cancel_token: Option<&CancellationToken>,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
     let file_path = dest_path.join(&download_info.filename);
 
@@ -573,6 +577,13 @@ impl Downloader {
 
     use futures_util::StreamExt;
     while let Some(chunk) = stream.next().await {
+      if let Some(token) = cancel_token {
+        if token.is_cancelled() {
+          drop(file);
+          let _ = std::fs::remove_file(&file_path);
+          return Err("Download cancelled".into());
+        }
+      }
       let chunk = chunk?;
       io::copy(&mut chunk.as_ref(), &mut file)?;
       downloaded += chunk.len() as u64;
@@ -635,21 +646,27 @@ impl Downloader {
     browser_str: String,
     version: String,
   ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    // Check if Wayfern terms have been accepted before allowing any browser downloads
-    if !crate::wayfern_terms::WayfernTermsManager::instance().is_terms_accepted() {
+    // Only check Wayfern terms if Wayfern is already downloaded
+    let terms_manager = crate::wayfern_terms::WayfernTermsManager::instance();
+    if terms_manager.is_wayfern_downloaded() && !terms_manager.is_terms_accepted() {
       return Err("Please accept Wayfern Terms and Conditions before downloading browsers".into());
     }
 
     // Check if this browser-version pair is already being downloaded
     let download_key = format!("{browser_str}-{version}");
-    {
+    let cancel_token = {
       let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
       if downloading.contains(&download_key) {
         return Err(format!("Browser '{browser_str}' version '{version}' is already being downloaded. Please wait for the current download to complete.").into());
       }
       // Mark this browser-version pair as being downloaded
       downloading.insert(download_key.clone());
-    }
+
+      let token = CancellationToken::new();
+      let mut tokens = DOWNLOAD_CANCELLATION_TOKENS.lock().unwrap();
+      tokens.insert(download_key.clone(), token.clone());
+      token
+    };
 
     let browser_type =
       BrowserType::from_str(&browser_str).map_err(|e| format!("Invalid browser type: {e}"))?;
@@ -681,6 +698,9 @@ impl Downloader {
         // Remove from downloading set since it's already downloaded
         let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
         downloading.remove(&download_key);
+        drop(downloading);
+        let mut tokens = DOWNLOAD_CANCELLATION_TOKENS.lock().unwrap();
+        tokens.remove(&download_key);
         return Ok(version);
       } else {
         // Registry says it's downloaded but files don't exist - clean up registry
@@ -702,6 +722,9 @@ impl Downloader {
       // Remove from downloading set on error
       let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
       downloading.remove(&download_key);
+      drop(downloading);
+      let mut tokens = DOWNLOAD_CANCELLATION_TOKENS.lock().unwrap();
+      tokens.remove(&download_key);
       return Err(
         format!(
           "Browser '{}' is not supported on your platform ({} {}). Supported browsers: {}",
@@ -741,6 +764,7 @@ impl Downloader {
         &version,
         &download_info,
         &browser_dir,
+        Some(&cancel_token),
       )
       .await
     {
@@ -752,6 +776,25 @@ impl Downloader {
         let _ = self.registry.save();
         let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
         downloading.remove(&download_key);
+        drop(downloading);
+        let mut tokens = DOWNLOAD_CANCELLATION_TOKENS.lock().unwrap();
+        tokens.remove(&download_key);
+
+        // Emit cancelled stage if the download was cancelled by user
+        if cancel_token.is_cancelled() {
+          let progress = DownloadProgress {
+            browser: browser_str.clone(),
+            version: version.clone(),
+            downloaded_bytes: 0,
+            total_bytes: None,
+            percentage: 0.0,
+            speed_bytes_per_sec: 0.0,
+            eta_seconds: None,
+            stage: "cancelled".to_string(),
+          };
+          let _ = events::emit("download-progress", &progress);
+        }
+
         return Err(format!("Failed to download browser: {e}").into());
       }
     };
@@ -781,6 +824,10 @@ impl Downloader {
           {
             let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
             downloading.remove(&download_key);
+          }
+          {
+            let mut tokens = DOWNLOAD_CANCELLATION_TOKENS.lock().unwrap();
+            tokens.remove(&download_key);
           }
           return Err(format!("Failed to extract browser: {e}").into());
         }
@@ -869,6 +916,10 @@ impl Downloader {
         let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
         downloading.remove(&download_key);
       }
+      {
+        let mut tokens = DOWNLOAD_CANCELLATION_TOKENS.lock().unwrap();
+        tokens.remove(&download_key);
+      }
       return Err(error_details.into());
     }
 
@@ -941,10 +992,14 @@ impl Downloader {
     };
     let _ = events::emit("download-progress", &progress);
 
-    // Remove browser-version pair from downloading set
+    // Remove browser-version pair from downloading set and cancel token
     {
       let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
       downloading.remove(&download_key);
+    }
+    {
+      let mut tokens = DOWNLOAD_CANCELLATION_TOKENS.lock().unwrap();
+      tokens.remove(&download_key);
     }
 
     Ok(version)
@@ -962,6 +1017,24 @@ pub async fn download_browser(
     .download_browser_full(&app_handle, browser_str, version)
     .await
     .map_err(|e| format!("Failed to download browser: {e}"))
+}
+
+#[tauri::command]
+pub async fn cancel_download(browser_str: String, version: String) -> Result<(), String> {
+  let download_key = format!("{browser_str}-{version}");
+  let token = {
+    let tokens = DOWNLOAD_CANCELLATION_TOKENS.lock().unwrap();
+    tokens.get(&download_key).cloned()
+  };
+
+  if let Some(token) = token {
+    token.cancel();
+    Ok(())
+  } else {
+    Err(format!(
+      "No active download found for {browser_str} {version}"
+    ))
+  }
 }
 
 #[cfg(test)]
@@ -1074,6 +1147,7 @@ mod tests {
         "139.0",
         &download_info,
         dest_path,
+        None,
       )
       .await;
 
@@ -1118,6 +1192,7 @@ mod tests {
         "139.0",
         &download_info,
         dest_path,
+        None,
       )
       .await;
 
@@ -1163,6 +1238,7 @@ mod tests {
         "1465660",
         &download_info,
         dest_path,
+        None,
       )
       .await;
 

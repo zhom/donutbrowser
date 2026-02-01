@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "@/styles/globals.css";
 import "flag-icons/css/flag-icons.min.css";
 import { useEffect } from "react";
+import { I18nProvider } from "@/components/i18n-provider";
 import { CustomThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -33,11 +34,13 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased overflow-hidden bg-background`}
       >
-        <CustomThemeProvider>
-          <WindowDragArea />
-          <TooltipProvider>{children}</TooltipProvider>
-          <Toaster />
-        </CustomThemeProvider>
+        <I18nProvider>
+          <CustomThemeProvider>
+            <WindowDragArea />
+            <TooltipProvider>{children}</TooltipProvider>
+            <Toaster />
+          </CustomThemeProvider>
+        </I18nProvider>
       </body>
     </html>
   );

@@ -58,13 +58,8 @@ export function CommercialTrialModal({
         <div className="space-y-4 py-4">
           <p className="text-sm text-muted-foreground">
             If you are using Donut Browser for business purposes, you need to
-            purchase a commercial license to continue.
-          </p>
-          <p className="text-sm font-medium">
-            Personal use remains free and unrestricted.
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Visit our website to learn more about commercial licensing options.
+            purchase a commercial license to continue. You can still use it for
+            personal use for free.
           </p>
         </div>
 

@@ -295,13 +295,26 @@ export function useBrowserDownload() {
                   eta: etaText,
                 },
                 {
-                  onCancel: () => dismissToast(toastId),
+                  onCancel: () => {
+                    invoke("cancel_download", {
+                      browserStr: progress.browser,
+                      version: progress.version,
+                    }).catch((err) =>
+                      console.error("Failed to cancel download:", err),
+                    );
+                    dismissToast(toastId);
+                  },
                 },
               );
             } else if (progress.stage === "extracting") {
               showDownloadToast(browserName, progress.version, "extracting");
             } else if (progress.stage === "verifying") {
               showDownloadToast(browserName, progress.version, "verifying");
+            } else if (progress.stage === "cancelled") {
+              dismissToast(
+                `download-${browserName.toLowerCase()}-${progress.version}`,
+              );
+              setDownloadProgress(null);
             } else if (progress.stage === "completed") {
               // On completion, refresh the downloaded versions for this browser and also refresh camoufox,
               // since the Create dialog implicitly uses camoufox on the anti-detect tab

@@ -30,6 +30,7 @@ path = "src/bin/donut_daemon.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+resvg = "0.44"
 
 [dependencies]
 serde_json = "1"
@@ -48,6 +49,7 @@ env_logger = "0.11"
 directories = "6"
 reqwest = { version = "0.13", features = ["json", "stream", "socks"] }
 tokio = { version = "1", features = ["full", "sync"] }
+tokio-util = "0.7"
 sysinfo = "0.37"
 lazy_static = "1.4"
 base64 = "0.22"
@@ -96,6 +98,9 @@ tempfile = "3"
 maxminddb = "0.27"
 quick-xml = { version = "0.38", features = ["serialize"] }
 
+# VPN support
+boringtun = "0.6"
+
 # Daemon dependencies (tray icon)
 tray-icon = "0.21"
 muda = "0.17"
@@ -104,6 +109,7 @@ single-instance = "0.3"
 image = "0.25"
 dirs = "6"
 crossbeam-channel = "0.5"
+sys-locale = "0.3"
 
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
@@ -150,6 +156,10 @@ path = "tests/donut_proxy_integration.rs"
 [[test]]
 name = "sync_e2e"
 path = "tests/sync_e2e.rs"
+
+[[test]]
+name = "vpn_integration"
+path = "tests/vpn_integration.rs"
 
 [profile.dev]
 codegen-units = 256

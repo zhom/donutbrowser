@@ -122,7 +122,7 @@ jobs:
             - If commits are unclear, infer the purpose from the context
 
             The application is a desktop app built with Tauri + Next.js that helps users manage multiple browser profiles with proxy support.
-          model: gpt-5
+          model: gpt-5-mini
 
       - name: Update release with generated notes
         if: steps.get-release.outputs.is-prerelease == 'false'

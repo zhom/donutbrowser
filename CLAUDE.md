@@ -9,10 +9,7 @@
 
 - Don't leave comments that don't add value
 - Don't duplicate code unless there's a very good reason; keep the same logic in one place
-
-## Nodecar
-
-- After changing nodecar's code, recompile it with `cd nodecar && pnpm build` before testing
+- Anytime you make changes that affect copy or add new text, it has to be reflected in all translation files
 
 ## Singletons
 

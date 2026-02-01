@@ -9,10 +9,10 @@ use std::path::PathBuf;
 use std::process;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
+use std::time::{Duration, Instant};
 
 use muda::MenuEvent;
 use serde::{Deserialize, Serialize};
-use single_instance::SingleInstance;
 use tao::event::{Event, StartCause};
 use tao::event_loop::{ControlFlow, EventLoopBuilder};
 use tokio::runtime::Runtime;
@@ -67,52 +67,6 @@ fn write_state(state: &DaemonState) -> std::io::Result<()> {
   let path = get_state_path();
   let content = serde_json::to_string_pretty(state)?;
   fs::write(path, content)
-}
-
-fn detach_from_parent() {
-  #[cfg(unix)]
-  {
-    unsafe {
-      libc::setsid();
-    }
-  }
-}
-
-fn spawn_detached() {
-  #[cfg(unix)]
-  {
-    match unsafe { libc::fork() } {
-      -1 => {
-        eprintln!("Fork failed");
-        process::exit(1);
-      }
-      0 => {
-        detach_from_parent();
-      }
-      _ => {
-        process::exit(0);
-      }
-    }
-  }
-
-  #[cfg(windows)]
-  {
-    use std::os::windows::process::CommandExt;
-    use std::process::{Command, Stdio};
-    const DETACHED_PROCESS: u32 = 0x00000008;
-    const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
-    let current_exe = env::current_exe().expect("Failed to get current exe path");
-
-    let _ = Command::new(current_exe)
-      .arg("--daemon-internal")
-      .stdin(Stdio::null())
-      .stdout(Stdio::null())
-      .stderr(Stdio::null())
-      .creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
-      .spawn();
-
-    process::exit(0);
-  }
 }
 
 fn set_high_priority() {
@@ -174,13 +128,6 @@ fn run_daemon() {
     process::exit(1);
   }
 
-  let instance =
-    SingleInstance::new("donut-browser-daemon").expect("Failed to create single instance lock");
-  if !instance.is_single() {
-    eprintln!("Daemon is already running");
-    process::exit(1);
-  }
-
   log::info!("[daemon] Starting with PID {}", process::id());
 
   // Create tokio runtime for async operations
@@ -231,7 +178,8 @@ fn run_daemon() {
 
   // Run the event loop
   event_loop.run(move |event, _, control_flow| {
-    *control_flow = ControlFlow::Poll;
+    // Use WaitUntil to check for menu events periodically while staying low on CPU
+    *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(100));
 
     match event {
       Event::NewEvents(StartCause::Init) => {
@@ -290,7 +238,8 @@ fn run_daemon() {
           }
         }
 
-        if SHOULD_QUIT.load(Ordering::SeqCst) {
+        // Use swap to only run cleanup once
+        if SHOULD_QUIT.swap(false, Ordering::SeqCst) {
           // Cleanup
           let mut state = read_state();
           state.daemon_pid = None;
@@ -405,8 +354,10 @@ fn main() {
 
   match args[1].as_str() {
     "start" => {
+      // "start" is now an alias for "run"
+      // On macOS, the daemon should be started via launchctl (see daemon_spawn.rs)
+      // This command is kept for backward compatibility
       eprintln!("Starting daemon...");
-      spawn_detached();
       run_daemon();
     }
     "stop" => {
@@ -416,9 +367,6 @@ fn main() {
       show_status();
     }
     "run" => {
-      run_daemon();
-    }
-    "--daemon-internal" => {
       run_daemon();
     }
     "autostart" => {

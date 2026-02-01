@@ -1,0 +1,460 @@
+{
+  "common": {
+    "buttons": {
+      "save": "Save",
+      "cancel": "Cancel",
+      "close": "Close",
+      "delete": "Delete",
+      "create": "Create",
+      "back": "Back",
+      "retry": "Retry",
+      "download": "Download",
+      "confirm": "Confirm",
+      "apply": "Apply",
+      "reset": "Reset",
+      "add": "Add",
+      "edit": "Edit",
+      "copy": "Copy",
+      "clear": "Clear",
+      "search": "Search",
+      "select": "Select",
+      "grant": "Grant",
+      "start": "Start",
+      "stop": "Stop",
+      "enable": "Enable",
+      "disable": "Disable",
+      "import": "Import",
+      "export": "Export",
+      "refresh": "Refresh",
+      "loading": "Loading...",
+      "saveSettings": "Save Settings"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "running": "Running",
+      "stopped": "Stopped",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "granted": "Granted",
+      "notGranted": "Not Granted",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "synced": "Synced",
+      "syncing": "Syncing",
+      "pending": "Pending",
+      "error": "Error"
+    },
+    "labels": {
+      "name": "Name",
+      "type": "Type",
+      "status": "Status",
+      "actions": "Actions",
+      "description": "Description",
+      "none": "None",
+      "default": "Default",
+      "custom": "Custom",
+      "optional": "Optional",
+      "required": "Required"
+    },
+    "time": {
+      "days": "days",
+      "hours": "hours",
+      "minutes": "minutes",
+      "seconds": "seconds",
+      "remaining": "remaining"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "appearance": {
+      "title": "Appearance",
+      "theme": "Theme",
+      "themeDescription": "Choose your preferred theme or follow your system settings. Custom theme changes are applied only when you save.",
+      "themePreset": "Theme Preset",
+      "customColors": "Custom Colors",
+      "selectTheme": "Select theme",
+      "selectThemePreset": "Select a theme preset",
+      "yourOwn": "Your Own",
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    },
+    "language": {
+      "title": "Language",
+      "description": "Choose your preferred language for the application interface.",
+      "systemDefault": "System Default",
+      "selectLanguage": "Select language"
+    },
+    "defaultBrowser": {
+      "title": "Default Browser",
+      "setAsDefault": "Set as Default Browser",
+      "alreadyDefault": "Already Default Browser",
+      "description": "When set as default, Donut Browser will handle web links and allow you to choose which profile to use."
+    },
+    "permissions": {
+      "title": "System Permissions",
+      "loading": "Loading permissions...",
+      "description": "These permissions allow browsers launched from Donut Browser to access system resources. Each website will still ask for your permission individually.",
+      "microphone": "Microphone",
+      "microphoneDescription": "Access to microphone for browser applications",
+      "camera": "Camera",
+      "cameraDescription": "Access to camera for browser applications"
+    },
+    "integrations": {
+      "title": "Integrations",
+      "description": "Configure Local API and MCP (Model Context Protocol) for integrating with external tools and AI assistants.",
+      "openSettings": "Open Integrations Settings"
+    },
+    "commercial": {
+      "title": "Commercial License",
+      "trialActive": "Trial: {{days}} days, {{hours}} hours remaining",
+      "trialActiveDescription": "Commercial use is free during the trial period",
+      "trialExpired": "Trial expired",
+      "trialExpiredDescription": "Personal use remains free. Commercial use requires a license."
+    },
+    "advanced": {
+      "title": "Advanced",
+      "clearCache": "Clear All Version Cache",
+      "clearCacheDescription": "Clear all cached browser version data and refresh all browser versions from their sources. This will force a fresh download of version information for all browsers."
+    }
+  },
+  "header": {
+    "searchPlaceholder": "Search profiles...",
+    "clearSearch": "Clear search",
+    "moreActions": "More actions",
+    "createProfile": "Create a new profile",
+    "menu": {
+      "settings": "Settings",
+      "proxies": "Proxies",
+      "groups": "Groups",
+      "syncService": "Sync Service",
+      "integrations": "Integrations",
+      "importProfile": "Import Profile"
+    }
+  },
+  "profiles": {
+    "title": "Profiles",
+    "empty": "No profiles yet",
+    "emptyDescription": "Create your first browser profile to get started.",
+    "createFirst": "Create Profile",
+    "noResults": "No profiles found",
+    "noResultsDescription": "No profiles match your search criteria.",
+    "table": {
+      "name": "Name",
+      "browser": "Browser",
+      "status": "Status",
+      "actions": "Actions",
+      "note": "Note",
+      "group": "Group",
+      "proxy": "Proxy",
+      "lastLaunch": "Last Launch"
+    },
+    "actions": {
+      "launch": "Launch",
+      "stop": "Stop",
+      "edit": "Edit",
+      "delete": "Delete",
+      "copyCookies": "Copy Cookies",
+      "configure": "Configure"
+    }
+  },
+  "createProfile": {
+    "title": "Create New Profile",
+    "configureTitle": "Configure Profile",
+    "antiDetect": {
+      "title": "Anti-Detect Browser",
+      "description": "Choose a browser with anti-detection capabilities",
+      "chromium": "Chromium (Wayfern)",
+      "firefox": "Firefox (Camoufox)",
+      "badge": "Anti-Detect Browser"
+    },
+    "regular": {
+      "title": "Regular Browsers",
+      "description": "Choose from supported regular browsers",
+      "badge": "Regular Browser"
+    },
+    "profileName": "Profile Name",
+    "profileNamePlaceholder": "Enter profile name",
+    "proxy": {
+      "title": "Proxy",
+      "addProxy": "Add Proxy",
+      "noProxy": "No proxy",
+      "noProxiesAvailable": "No proxies available. Add one to route this profile's traffic."
+    },
+    "version": {
+      "fetching": "Fetching available versions...",
+      "fetchError": "Failed to fetch browser versions. Please check your internet connection and try again.",
+      "needsDownload": "{{browser}} version ({{version}}) needs to be downloaded",
+      "available": "{{browser}} version ({{version}}) is available",
+      "downloading": "Downloading {{browser}} version ({{version}})...",
+      "latestNeedsDownload": "Latest version ({{version}}) needs to be downloaded",
+      "latestAvailable": "Latest version ({{version}}) is available",
+      "latestDownloading": "Downloading version ({{version}})..."
+    }
+  },
+  "deleteDialog": {
+    "title": "Delete Profile",
+    "description": "Are you sure you want to delete this profile? This action cannot be undone.",
+    "profilesTitle": "Delete Profiles",
+    "profilesDescription": "Are you sure you want to delete the selected profiles? This action cannot be undone.",
+    "profilesToDelete": "Profiles to be deleted:"
+  },
+  "proxies": {
+    "title": "Proxies",
+    "management": "Proxy Management",
+    "add": "Add Proxy",
+    "edit": "Edit Proxy",
+    "delete": "Delete Proxy",
+    "import": "Import",
+    "export": "Export",
+    "noProxies": "No proxies configured",
+    "noProxiesDescription": "Add a proxy to route browser traffic through it.",
+    "form": {
+      "name": "Name",
+      "namePlaceholder": "Enter proxy name",
+      "type": "Type",
+      "host": "Host",
+      "hostPlaceholder": "proxy.example.com",
+      "port": "Port",
+      "portPlaceholder": "8080",
+      "username": "Username",
+      "usernamePlaceholder": "Optional",
+      "password": "Password",
+      "passwordPlaceholder": "Optional"
+    },
+    "types": {
+      "http": "HTTP",
+      "https": "HTTPS",
+      "socks4": "SOCKS4",
+      "socks5": "SOCKS5"
+    },
+    "check": {
+      "checking": "Checking proxy...",
+      "valid": "Proxy is valid",
+      "invalid": "Proxy is invalid",
+      "lastChecked": "Last checked: {{time}}"
+    },
+    "sync": {
+      "enabled": "Sync Enabled",
+      "disabled": "Sync Disabled"
+    }
+  },
+  "groups": {
+    "title": "Groups",
+    "management": "Group Management",
+    "add": "Add Group",
+    "edit": "Edit Group",
+    "delete": "Delete Group",
+    "noGroups": "No groups created",
+    "noGroupsDescription": "Create a group to organize your profiles.",
+    "form": {
+      "name": "Name",
+      "namePlaceholder": "Enter group name"
+    },
+    "profileCount": "{{count}} profile",
+    "profileCount_plural": "{{count}} profiles",
+    "assignProfiles": "Assign Profiles",
+    "sync": {
+      "enabled": "Sync Enabled",
+      "disabled": "Sync Disabled"
+    }
+  },
+  "sync": {
+    "title": "Sync Service",
+    "config": "Sync Configuration",
+    "serverUrl": "Server URL",
+    "serverUrlPlaceholder": "https://sync.example.com",
+    "token": "Sync Token",
+    "tokenPlaceholder": "Enter your sync token",
+    "status": {
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "syncing": "Syncing...",
+      "error": "Sync Error"
+    },
+    "description": "Connect to a sync server to synchronize your profiles, proxies, and groups across devices."
+  },
+  "integrations": {
+    "title": "Integrations",
+    "api": {
+      "title": "Local API",
+      "description": "Enable the local API server for external integrations.",
+      "enabled": "API Enabled",
+      "disabled": "API Disabled",
+      "port": "Port",
+      "token": "API Token",
+      "copyToken": "Copy Token",
+      "regenerateToken": "Regenerate Token"
+    },
+    "mcp": {
+      "title": "MCP Server",
+      "description": "Enable the MCP (Model Context Protocol) server for AI assistant integrations.",
+      "enabled": "MCP Enabled",
+      "disabled": "MCP Disabled",
+      "port": "Port",
+      "token": "MCP Token",
+      "config": "MCP Configuration",
+      "copyConfig": "Copy Configuration"
+    }
+  },
+  "import": {
+    "title": "Import Profile",
+    "description": "Import an existing browser profile from your system.",
+    "selectProfile": "Select a profile to import",
+    "noProfiles": "No profiles detected",
+    "noProfilesDescription": "No browser profiles were detected on your system.",
+    "importing": "Importing profile...",
+    "success": "Profile imported successfully",
+    "error": "Failed to import profile"
+  },
+  "config": {
+    "camoufox": {
+      "title": "Camoufox Configuration",
+      "fingerprint": {
+        "title": "Fingerprint",
+        "randomize": "Randomize on Launch",
+        "randomizeDescription": "Generate a new fingerprint each time the browser is launched."
+      },
+      "os": {
+        "title": "Operating System",
+        "description": "The operating system to emulate for fingerprint generation.",
+        "windows": "Windows",
+        "macos": "macOS",
+        "linux": "Linux"
+      },
+      "screen": {
+        "title": "Screen Size",
+        "minWidth": "Min Width",
+        "maxWidth": "Max Width",
+        "minHeight": "Min Height",
+        "maxHeight": "Max Height"
+      },
+      "geoip": {
+        "title": "GeoIP",
+        "auto": "Automatic (based on proxy)",
+        "manual": "Manual",
+        "disabled": "Disabled"
+      },
+      "blocking": {
+        "title": "Blocking",
+        "images": "Block Images",
+        "webrtc": "Block WebRTC",
+        "webgl": "Block WebGL"
+      }
+    },
+    "wayfern": {
+      "title": "Wayfern Configuration",
+      "fingerprint": {
+        "title": "Fingerprint",
+        "randomize": "Randomize on Launch",
+        "randomizeDescription": "Generate a new fingerprint each time the browser is launched."
+      },
+      "os": {
+        "title": "Operating System",
+        "description": "The operating system to emulate for fingerprint generation.",
+        "windows": "Windows",
+        "macos": "macOS",
+        "linux": "Linux",
+        "android": "Android",
+        "ios": "iOS"
+      },
+      "screen": {
+        "title": "Screen Size",
+        "minWidth": "Min Width",
+        "maxWidth": "Max Width",
+        "minHeight": "Min Height",
+        "maxHeight": "Max Height"
+      },
+      "blocking": {
+        "title": "Blocking",
+        "webrtc": "Block WebRTC",
+        "webgl": "Block WebGL"
+      }
+    }
+  },
+  "cookies": {
+    "title": "Cookies",
+    "copy": {
+      "title": "Copy Cookies",
+      "description": "Select cookies to copy to other profiles.",
+      "selectSource": "Select Source Profile",
+      "selectTarget": "Select Target Profiles",
+      "selectCookies": "Select Cookies",
+      "allDomains": "All Domains",
+      "selectedCount": "{{count}} cookie selected",
+      "selectedCount_plural": "{{count}} cookies selected"
+    },
+    "success": "Cookies copied successfully",
+    "error": "Failed to copy cookies"
+  },
+  "toasts": {
+    "success": {
+      "profileCreated": "Profile created successfully",
+      "profileDeleted": "Profile deleted successfully",
+      "profileUpdated": "Profile updated successfully",
+      "profileLaunched": "Profile launched successfully",
+      "proxyCreated": "Proxy created successfully",
+      "proxyDeleted": "Proxy deleted successfully",
+      "proxyUpdated": "Proxy updated successfully",
+      "groupCreated": "Group created successfully",
+      "groupDeleted": "Group deleted successfully",
+      "groupUpdated": "Group updated successfully",
+      "settingsSaved": "Settings saved successfully",
+      "copied": "Copied to clipboard",
+      "permissionRequested": "{{permission}} access requested",
+      "downloadComplete": "{{browser}} {{version}} downloaded successfully!",
+      "importSuccess": "Successfully imported {{count}} items",
+      "exportSuccess": "Successfully exported {{count}} items",
+      "syncSuccess": "Sync completed successfully",
+      "cacheCleared": "Cache cleared successfully"
+    },
+    "error": {
+      "profileCreateFailed": "Failed to create profile",
+      "profileDeleteFailed": "Failed to delete profile",
+      "profileUpdateFailed": "Failed to update profile",
+      "profileLaunchFailed": "Failed to launch profile",
+      "proxyCreateFailed": "Failed to create proxy",
+      "proxyDeleteFailed": "Failed to delete proxy",
+      "proxyUpdateFailed": "Failed to update proxy",
+      "groupCreateFailed": "Failed to create group",
+      "groupDeleteFailed": "Failed to delete group",
+      "groupUpdateFailed": "Failed to update group",
+      "settingsSaveFailed": "Failed to save settings",
+      "copyFailed": "Failed to copy to clipboard",
+      "downloadFailed": "Failed to download {{browser}}",
+      "importFailed": "Failed to import",
+      "exportFailed": "Failed to export",
+      "syncFailed": "Sync failed",
+      "cacheClearFailed": "Failed to clear cache",
+      "unknown": "An unknown error occurred"
+    },
+    "loading": {
+      "downloading": "Downloading {{browser}} {{version}}",
+      "extracting": "Extracting {{browser}} {{version}}",
+      "verifying": "Verifying {{browser}} {{version}}",
+      "syncing": "Syncing...",
+      "updatingVersions": "Updating browser versions..."
+    }
+  },
+  "errors": {
+    "required": "This field is required",
+    "invalidUrl": "Please enter a valid URL",
+    "invalidPort": "Please enter a valid port number (1-65535)",
+    "invalidEmail": "Please enter a valid email address",
+    "minLength": "Must be at least {{min}} characters",
+    "maxLength": "Must be at most {{max}} characters",
+    "networkError": "Network error. Please check your connection.",
+    "serverError": "Server error. Please try again later.",
+    "unknownError": "An unknown error occurred. Please try again."
+  },
+  "browser": {
+    "firefox": "Firefox",
+    "firefoxDeveloper": "Firefox Developer Edition",
+    "chromium": "Chromium",
+    "brave": "Brave",
+    "zen": "Zen Browser",
+    "camoufox": "Camoufox",
+    "wayfern": "Wayfern"
+  }
+}

@@ -80,6 +80,12 @@ pub fn enable_autostart() -> io::Result<()> {
 
   let plist_path = plist_dir.join("com.donutbrowser.daemon.plist");
 
+  // Get log directory (use data directory instead of /tmp)
+  let log_dir = get_data_dir()
+    .unwrap_or_else(|| PathBuf::from("/tmp"))
+    .join("logs");
+  fs::create_dir_all(&log_dir)?;
+
   let plist_content = format!(
     r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -89,21 +95,29 @@ pub fn enable_autostart() -> io::Result<()> {
     <string>com.donutbrowser.daemon</string>
     <key>ProgramArguments</key>
     <array>
-        <string>{}</string>
-        <string>start</string>
+        <string>{daemon_path}</string>
+        <string>run</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
+    <key>LimitLoadToSessionType</key>
+    <string>Aqua</string>
     <key>KeepAlive</key>
-    <false/>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+    <key>ProcessType</key>
+    <string>Interactive</string>
     <key>StandardOutPath</key>
-    <string>/tmp/donut-daemon.out.log</string>
+    <string>{log_dir}/daemon.out.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/donut-daemon.err.log</string>
+    <string>{log_dir}/daemon.err.log</string>
 </dict>
 </plist>
 "#,
-    daemon_path.display()
+    daemon_path = daemon_path.display(),
+    log_dir = log_dir.display()
   );
 
   fs::write(&plist_path, plist_content)?;
@@ -113,12 +127,18 @@ pub fn enable_autostart() -> io::Result<()> {
 }
 
 #[cfg(target_os = "macos")]
+pub fn get_plist_path() -> Option<PathBuf> {
+  dirs::home_dir().map(|h| h.join("Library/LaunchAgents/com.donutbrowser.daemon.plist"))
+}
+
+#[cfg(target_os = "macos")]
 pub fn disable_autostart() -> io::Result<()> {
-  let plist_path = dirs::home_dir()
-    .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Home directory not found"))?
-    .join("Library/LaunchAgents/com.donutbrowser.daemon.plist");
+  let plist_path = get_plist_path()
+    .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Home directory not found"))?;
 
   if plist_path.exists() {
+    // First unload the launch agent if it's loaded
+    let _ = unload_launch_agent();
     fs::remove_file(&plist_path)?;
     log::info!("Removed launch agent at {:?}", plist_path);
   }
@@ -128,12 +148,71 @@ pub fn disable_autostart() -> io::Result<()> {
 
 #[cfg(target_os = "macos")]
 pub fn is_autostart_enabled() -> bool {
-  dirs::home_dir()
-    .map(|h| {
-      h.join("Library/LaunchAgents/com.donutbrowser.daemon.plist")
-        .exists()
-    })
-    .unwrap_or(false)
+  get_plist_path().is_some_and(|p| p.exists())
+}
+
+#[cfg(target_os = "macos")]
+pub fn load_launch_agent() -> io::Result<()> {
+  use std::process::Command;
+
+  let plist_path = get_plist_path()
+    .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Could not determine plist path"))?;
+
+  if !plist_path.exists() {
+    return Err(io::Error::new(
+      io::ErrorKind::NotFound,
+      "Launch agent plist does not exist",
+    ));
+  }
+
+  // Use launchctl load to start the daemon via launchd
+  // The -w flag writes the "disabled" key to the override plist
+  let output = Command::new("launchctl")
+    .args(["load", "-w"])
+    .arg(&plist_path)
+    .output()?;
+
+  if !output.status.success() {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    // "already loaded" is not an error condition for us
+    if !stderr.contains("already loaded") {
+      return Err(io::Error::other(format!(
+        "launchctl load failed: {}",
+        stderr
+      )));
+    }
+  }
+
+  log::info!("Loaded launch agent via launchctl");
+  Ok(())
+}
+
+#[cfg(target_os = "macos")]
+pub fn unload_launch_agent() -> io::Result<()> {
+  use std::process::Command;
+
+  let plist_path = get_plist_path()
+    .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Could not determine plist path"))?;
+
+  if !plist_path.exists() {
+    return Ok(());
+  }
+
+  let output = Command::new("launchctl")
+    .args(["unload"])
+    .arg(&plist_path)
+    .output()?;
+
+  if !output.status.success() {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    // Not being loaded is not an error
+    if !stderr.contains("Could not find specified service") {
+      log::warn!("launchctl unload warning: {}", stderr);
+    }
+  }
+
+  log::info!("Unloaded launch agent via launchctl");
+  Ok(())
 }
 
 #[cfg(target_os = "linux")]

@@ -113,7 +113,7 @@ jobs:
         working-directory: src-tauri
 
       - name: Run Rust unit tests
-        run: cargo test --lib && cargo test --test donut_proxy_integration
+        run: cargo test --lib && cargo test --test donut_proxy_integration && cargo test --test vpn_integration
         working-directory: src-tauri
 
       - name: Run Rust sync e2e tests

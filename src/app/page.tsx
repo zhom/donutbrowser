@@ -786,6 +786,25 @@ export default function Home() {
     }
   }, [profiles]);
 
+  // Re-check Wayfern terms when a browser download completes
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    const setup = async () => {
+      unlisten = await listen<{ stage: string }>(
+        "download-progress",
+        (event) => {
+          if (event.payload.stage === "completed") {
+            void checkTerms();
+          }
+        },
+      );
+    };
+    void setup();
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [checkTerms]);
+
   // Check permissions when they are initialized
   useEffect(() => {
     if (isInitialized) {

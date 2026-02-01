@@ -97,6 +97,12 @@ impl WayfernTermsManager {
     timestamp >= MIN_VALID_TIMESTAMP
   }
 
+  pub fn is_wayfern_downloaded(&self) -> bool {
+    let registry = DownloadedBrowsersRegistry::instance();
+    let versions = registry.get_downloaded_versions("wayfern");
+    !versions.is_empty()
+  }
+
   fn get_any_wayfern_executable(&self) -> Option<PathBuf> {
     // First try to get executable from any downloaded Wayfern version
     let registry = DownloadedBrowsersRegistry::instance();

@@ -1,3 +1,4 @@
+use chrono::Utc;
 use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -11,6 +12,60 @@ use tauri_plugin_shell::ShellExt;
 use crate::browser::ProxySettings;
 use crate::events;
 use crate::ip_utils;
+
+// Export data format for JSON export
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxyExportData {
+  pub version: String,
+  pub proxies: Vec<ExportedProxy>,
+  pub exported_at: String,
+  pub source: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportedProxy {
+  pub name: String,
+  #[serde(rename = "type")]
+  pub proxy_type: String,
+  pub host: String,
+  pub port: u16,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub username: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub password: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxyImportResult {
+  pub imported_count: usize,
+  pub skipped_count: usize,
+  pub errors: Vec<String>,
+  pub proxies: Vec<StoredProxy>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParsedProxyLine {
+  pub proxy_type: String,
+  pub host: String,
+  pub port: u16,
+  pub username: Option<String>,
+  pub password: Option<String>,
+  pub original_line: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "status")]
+pub enum ProxyParseResult {
+  #[serde(rename = "parsed")]
+  Parsed(ParsedProxyLine),
+  #[serde(rename = "ambiguous")]
+  Ambiguous {
+    line: String,
+    possible_formats: Vec<String>,
+  },
+  #[serde(rename = "invalid")]
+  Invalid { line: String, reason: String },
+}
 
 // Store active proxy information
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -539,6 +594,331 @@ impl ProxyManager {
   // Get cached proxy check result
   pub fn get_cached_proxy_check(&self, proxy_id: &str) -> Option<ProxyCheckResult> {
     self.load_proxy_check_cache(proxy_id)
+  }
+
+  // Export all proxies as JSON
+  pub fn export_proxies_json(&self) -> Result<String, String> {
+    let stored_proxies = self.stored_proxies.lock().unwrap();
+    let proxies: Vec<ExportedProxy> = stored_proxies
+      .values()
+      .map(|p| ExportedProxy {
+        name: p.name.clone(),
+        proxy_type: p.proxy_settings.proxy_type.clone(),
+        host: p.proxy_settings.host.clone(),
+        port: p.proxy_settings.port,
+        username: p.proxy_settings.username.clone(),
+        password: p.proxy_settings.password.clone(),
+      })
+      .collect();
+
+    let export_data = ProxyExportData {
+      version: "1.0".to_string(),
+      proxies,
+      exported_at: Utc::now().to_rfc3339(),
+      source: "DonutBrowser".to_string(),
+    };
+
+    serde_json::to_string_pretty(&export_data).map_err(|e| format!("Failed to serialize: {e}"))
+  }
+
+  // Export all proxies as TXT (one per line: protocol://user:pass@host:port)
+  pub fn export_proxies_txt(&self) -> String {
+    let stored_proxies = self.stored_proxies.lock().unwrap();
+    stored_proxies
+      .values()
+      .map(|p| Self::build_proxy_url(&p.proxy_settings))
+      .collect::<Vec<_>>()
+      .join("\n")
+  }
+
+  // Parse TXT content with auto-detection of formats
+  pub fn parse_txt_proxies(content: &str) -> Vec<ProxyParseResult> {
+    content
+      .lines()
+      .filter(|line| !line.trim().is_empty() && !line.trim().starts_with('#'))
+      .map(|line| Self::parse_single_proxy_line(line.trim()))
+      .collect()
+  }
+
+  // Parse a single proxy line with format auto-detection
+  fn parse_single_proxy_line(line: &str) -> ProxyParseResult {
+    // Format 1: protocol://username:password@host:port (full URL)
+    if let Some(result) = Self::try_parse_url_format(line) {
+      return result;
+    }
+
+    // Try colon-separated formats
+    let parts: Vec<&str> = line.split(':').collect();
+
+    match parts.len() {
+      // host:port (no auth)
+      2 => {
+        if let Ok(port) = parts[1].parse::<u16>() {
+          return ProxyParseResult::Parsed(ParsedProxyLine {
+            proxy_type: "http".to_string(),
+            host: parts[0].to_string(),
+            port,
+            username: None,
+            password: None,
+            original_line: line.to_string(),
+          });
+        }
+        ProxyParseResult::Invalid {
+          line: line.to_string(),
+          reason: "Invalid port number".to_string(),
+        }
+      }
+      // Could be: host:port:user or user:pass@host (with @ in the middle)
+      3 => {
+        // Try username:password@host:port first
+        if let Some(result) = Self::try_parse_user_pass_at_host_port(line) {
+          return result;
+        }
+        ProxyParseResult::Invalid {
+          line: line.to_string(),
+          reason: "Could not determine format with 3 parts".to_string(),
+        }
+      }
+      // 4 parts: could be host:port:user:pass OR user:pass:host:port
+      4 => {
+        // Try to detect which format
+        let port_at_1 = parts[1].parse::<u16>().is_ok();
+        let port_at_3 = parts[3].parse::<u16>().is_ok();
+
+        match (port_at_1, port_at_3) {
+          // host:port:user:pass
+          (true, false) => {
+            let port = parts[1].parse::<u16>().unwrap();
+            ProxyParseResult::Parsed(ParsedProxyLine {
+              proxy_type: "http".to_string(),
+              host: parts[0].to_string(),
+              port,
+              username: Some(parts[2].to_string()),
+              password: Some(parts[3].to_string()),
+              original_line: line.to_string(),
+            })
+          }
+          // user:pass:host:port
+          (false, true) => {
+            let port = parts[3].parse::<u16>().unwrap();
+            ProxyParseResult::Parsed(ParsedProxyLine {
+              proxy_type: "http".to_string(),
+              host: parts[2].to_string(),
+              port,
+              username: Some(parts[0].to_string()),
+              password: Some(parts[1].to_string()),
+              original_line: line.to_string(),
+            })
+          }
+          // Both could be ports - ambiguous
+          (true, true) => ProxyParseResult::Ambiguous {
+            line: line.to_string(),
+            possible_formats: vec![
+              "host:port:username:password".to_string(),
+              "username:password:host:port".to_string(),
+            ],
+          },
+          // Neither is a valid port
+          (false, false) => ProxyParseResult::Invalid {
+            line: line.to_string(),
+            reason: "No valid port number found".to_string(),
+          },
+        }
+      }
+      _ => ProxyParseResult::Invalid {
+        line: line.to_string(),
+        reason: format!("Unexpected format with {} parts", parts.len()),
+      },
+    }
+  }
+
+  // Try to parse URL format: protocol://username:password@host:port
+  fn try_parse_url_format(line: &str) -> Option<ProxyParseResult> {
+    // Check for protocol prefix using strip_prefix
+    let (protocol, rest) = if let Some(rest) = line.strip_prefix("http://") {
+      ("http", rest)
+    } else if let Some(rest) = line.strip_prefix("https://") {
+      ("https", rest)
+    } else if let Some(rest) = line.strip_prefix("socks4://") {
+      ("socks4", rest)
+    } else if let Some(rest) = line.strip_prefix("socks5://") {
+      ("socks5", rest)
+    } else if let Some(rest) = line.strip_prefix("socks://") {
+      ("socks5", rest) // Default socks to socks5
+    } else {
+      return None;
+    };
+
+    // Check if there's auth (contains @)
+    if let Some(at_pos) = rest.rfind('@') {
+      let auth = &rest[..at_pos];
+      let host_port = &rest[at_pos + 1..];
+
+      // Parse auth (user:pass)
+      let (username, password) = if let Some(colon_pos) = auth.find(':') {
+        let user = urlencoding::decode(&auth[..colon_pos]).unwrap_or_default();
+        let pass = urlencoding::decode(&auth[colon_pos + 1..]).unwrap_or_default();
+        (Some(user.to_string()), Some(pass.to_string()))
+      } else {
+        (
+          Some(urlencoding::decode(auth).unwrap_or_default().to_string()),
+          None,
+        )
+      };
+
+      // Parse host:port
+      if let Some(colon_pos) = host_port.rfind(':') {
+        let host = &host_port[..colon_pos];
+        if let Ok(port) = host_port[colon_pos + 1..].parse::<u16>() {
+          return Some(ProxyParseResult::Parsed(ParsedProxyLine {
+            proxy_type: protocol.to_string(),
+            host: host.to_string(),
+            port,
+            username,
+            password,
+            original_line: line.to_string(),
+          }));
+        }
+      }
+    } else {
+      // No auth, just host:port
+      if let Some(colon_pos) = rest.rfind(':') {
+        let host = &rest[..colon_pos];
+        if let Ok(port) = rest[colon_pos + 1..].parse::<u16>() {
+          return Some(ProxyParseResult::Parsed(ParsedProxyLine {
+            proxy_type: protocol.to_string(),
+            host: host.to_string(),
+            port,
+            username: None,
+            password: None,
+            original_line: line.to_string(),
+          }));
+        }
+      }
+    }
+
+    Some(ProxyParseResult::Invalid {
+      line: line.to_string(),
+      reason: "Invalid URL format".to_string(),
+    })
+  }
+
+  // Try to parse: username:password@host:port format (no protocol)
+  fn try_parse_user_pass_at_host_port(line: &str) -> Option<ProxyParseResult> {
+    if let Some(at_pos) = line.rfind('@') {
+      let auth = &line[..at_pos];
+      let host_port = &line[at_pos + 1..];
+
+      // Parse auth
+      let (username, password) = if let Some(colon_pos) = auth.find(':') {
+        (
+          Some(auth[..colon_pos].to_string()),
+          Some(auth[colon_pos + 1..].to_string()),
+        )
+      } else {
+        return None;
+      };
+
+      // Parse host:port
+      if let Some(colon_pos) = host_port.rfind(':') {
+        let host = &host_port[..colon_pos];
+        if let Ok(port) = host_port[colon_pos + 1..].parse::<u16>() {
+          return Some(ProxyParseResult::Parsed(ParsedProxyLine {
+            proxy_type: "http".to_string(),
+            host: host.to_string(),
+            port,
+            username,
+            password,
+            original_line: line.to_string(),
+          }));
+        }
+      }
+    }
+    None
+  }
+
+  // Import proxies from JSON content
+  pub fn import_proxies_json(
+    &self,
+    app_handle: &tauri::AppHandle,
+    content: &str,
+  ) -> Result<ProxyImportResult, String> {
+    let export_data: ProxyExportData =
+      serde_json::from_str(content).map_err(|e| format!("Invalid JSON format: {e}"))?;
+
+    let mut imported = Vec::new();
+    let mut skipped = 0;
+    let mut errors = Vec::new();
+
+    for exported in export_data.proxies {
+      let proxy_settings = ProxySettings {
+        proxy_type: exported.proxy_type,
+        host: exported.host,
+        port: exported.port,
+        username: exported.username,
+        password: exported.password,
+      };
+
+      match self.create_stored_proxy(app_handle, exported.name.clone(), proxy_settings) {
+        Ok(proxy) => imported.push(proxy),
+        Err(e) => {
+          if e.contains("already exists") {
+            skipped += 1;
+          } else {
+            errors.push(format!("Failed to import '{}': {}", exported.name, e));
+          }
+        }
+      }
+    }
+
+    Ok(ProxyImportResult {
+      imported_count: imported.len(),
+      skipped_count: skipped,
+      errors,
+      proxies: imported,
+    })
+  }
+
+  // Import proxies from already parsed proxy lines
+  pub fn import_proxies_from_parsed(
+    &self,
+    app_handle: &tauri::AppHandle,
+    parsed_proxies: Vec<ParsedProxyLine>,
+    name_prefix: Option<String>,
+  ) -> Result<ProxyImportResult, String> {
+    let mut imported = Vec::new();
+    let mut skipped = 0;
+    let mut errors = Vec::new();
+    let prefix = name_prefix.unwrap_or_else(|| "Imported".to_string());
+
+    for (i, parsed) in parsed_proxies.into_iter().enumerate() {
+      let proxy_name = format!("{} Proxy {}", prefix, i + 1);
+      let proxy_settings = ProxySettings {
+        proxy_type: parsed.proxy_type,
+        host: parsed.host,
+        port: parsed.port,
+        username: parsed.username,
+        password: parsed.password,
+      };
+
+      match self.create_stored_proxy(app_handle, proxy_name.clone(), proxy_settings) {
+        Ok(proxy) => imported.push(proxy),
+        Err(e) => {
+          if e.contains("already exists") {
+            skipped += 1;
+          } else {
+            errors.push(format!("Failed to import '{}': {}", proxy_name, e));
+          }
+        }
+      }
+    }
+
+    Ok(ProxyImportResult {
+      imported_count: imported.len(),
+      skipped_count: skipped,
+      errors,
+      proxies: imported,
+    })
   }
 
   // Start a proxy for given proxy settings and associate it with a browser process ID

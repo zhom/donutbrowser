@@ -6,7 +6,9 @@ use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 static GUI_RUNNING: AtomicBool = AtomicBool::new(false);
 
 pub fn load_icon() -> Icon {
-  let icon_bytes = include_bytes!("../../icons/32x32.png");
+  // Use the generated template icon (44x44 for retina, macOS standard menu bar size)
+  // This is the donut logo converted to template format (black with alpha)
+  let icon_bytes = include_bytes!("../../icons/tray-icon-44.png");
 
   let image = image::load_from_memory(icon_bytes)
     .expect("Failed to load icon")
@@ -89,12 +91,16 @@ impl TrayMenu {
 }
 
 pub fn create_tray_icon(icon: Icon, menu: &Menu) -> TrayIcon {
-  TrayIconBuilder::new()
+  let builder = TrayIconBuilder::new()
     .with_icon(icon)
     .with_tooltip("Donut Browser")
-    .with_menu(Box::new(menu.clone()))
-    .build()
-    .expect("Failed to create tray icon")
+    .with_menu(Box::new(menu.clone()));
+
+  // On macOS, template icons are automatically colored by the system for light/dark mode
+  #[cfg(target_os = "macos")]
+  let builder = builder.with_icon_as_template(true);
+
+  builder.build().expect("Failed to create tray icon")
 }
 
 pub fn open_gui() {

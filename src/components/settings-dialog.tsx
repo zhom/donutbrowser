@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import Color from "color";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { BsCamera, BsMic } from "react-icons/bs";
 import { LoadingButton } from "@/components/loading-button";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +38,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCommercialTrial } from "@/hooks/use-commercial-trial";
+import { useLanguage } from "@/hooks/use-language";
 import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
 import {
@@ -112,6 +114,7 @@ export function SettingsDialog({
     useState<PermissionType | null>(null);
   const [isMacOS, setIsMacOS] = useState(false);
 
+  const { t } = useTranslation();
   const { setTheme } = useTheme();
   const {
     requestPermission,
@@ -119,6 +122,14 @@ export function SettingsDialog({
     isCameraAccessGranted,
   } = usePermissions();
   const { trialStatus } = useCommercialTrial();
+  const {
+    currentLanguage,
+    changeLanguage,
+    supportedLanguages,
+    isLoading: isLanguageLoading,
+  } = useLanguage();
+  const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null);
+  const [originalLanguage, setOriginalLanguage] = useState<string | null>(null);
 
   const getPermissionIcon = useCallback((type: PermissionType) => {
     switch (type) {
@@ -316,9 +327,26 @@ export function SettingsDialog({
             : settings.custom_theme,
       };
 
+      console.log("[settings-dialog] Saving settings:", {
+        theme: settingsToSave.theme,
+        hasCustomTheme: !!settingsToSave.custom_theme,
+        customThemeKeys: settingsToSave.custom_theme
+          ? Object.keys(settingsToSave.custom_theme).length
+          : 0,
+      });
+
       const savedSettings = await invoke<AppSettings>("save_app_settings", {
         settings: settingsToSave,
       });
+
+      console.log("[settings-dialog] Saved settings response:", {
+        theme: savedSettings.theme,
+        hasCustomTheme: !!savedSettings.custom_theme,
+        customThemeKeys: savedSettings.custom_theme
+          ? Object.keys(savedSettings.custom_theme).length
+          : 0,
+      });
+
       // Update settings with any generated tokens
       setSettings(savedSettings);
       settingsToSave = savedSettings;
@@ -350,6 +378,23 @@ export function SettingsDialog({
         } catch {}
       }
 
+      // Save language if changed
+      if (selectedLanguage !== originalLanguage) {
+        await changeLanguage(
+          selectedLanguage === "system"
+            ? null
+            : (selectedLanguage as
+                | "en"
+                | "es"
+                | "pt"
+                | "fr"
+                | "zh"
+                | "ja"
+                | "ru"),
+        );
+        setOriginalLanguage(selectedLanguage);
+      }
+
       setOriginalSettings(settingsToSave);
       onClose();
     } catch (error) {
@@ -357,7 +402,15 @@ export function SettingsDialog({
     } finally {
       setIsSaving(false);
     }
-  }, [onClose, setTheme, settings, customThemeState]);
+  }, [
+    onClose,
+    setTheme,
+    settings,
+    customThemeState,
+    selectedLanguage,
+    originalLanguage,
+    changeLanguage,
+  ]);
 
   const updateSetting = useCallback(
     (
@@ -428,6 +481,14 @@ export function SettingsDialog({
     }
   }, [isOpen, loadPermissions, checkDefaultBrowserStatus, loadSettings]);
 
+  // Initialize language selection when dialog opens or language loads
+  useEffect(() => {
+    if (isOpen && !isLanguageLoading) {
+      setSelectedLanguage(currentLanguage);
+      setOriginalLanguage(currentLanguage);
+    }
+  }, [isOpen, currentLanguage, isLanguageLoading]);
+
   // Update permissions when the permission states change
   useEffect(() => {
     if (isMacOS) {
@@ -458,6 +519,7 @@ export function SettingsDialog({
   const hasChanges =
     settings.theme !== originalSettings.theme ||
     settings.api_enabled !== originalSettings.api_enabled ||
+    selectedLanguage !== originalLanguage ||
     (settings.theme === "custom" &&
       JSON.stringify(customThemeState.colors) !==
         JSON.stringify(originalSettings.custom_theme ?? {})) ||
@@ -469,7 +531,7 @@ export function SettingsDialog({
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-md max-h-[80vh] my-8 flex flex-col">
         <DialogHeader className="shrink-0">
-          <DialogTitle>Settings</DialogTitle>
+          <DialogTitle>{t("settings.title")}</DialogTitle>
         </DialogHeader>
 
         <div className="grid overflow-y-auto flex-1 gap-6 py-4 min-h-0">
@@ -623,6 +685,38 @@ export function SettingsDialog({
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Language Section */}
+          <div className="space-y-4">
+            <Label className="text-base font-medium">Language</Label>
+
+            <div className="grid gap-2">
+              <Label htmlFor="language-select" className="text-sm">
+                Interface Language
+              </Label>
+              <Select
+                value={selectedLanguage || "system"}
+                onValueChange={(value) => setSelectedLanguage(value)}
+                disabled={isLanguageLoading}
+              >
+                <SelectTrigger id="language-select">
+                  <SelectValue placeholder="Select language" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="system">System Default</SelectItem>
+                  {supportedLanguages.map((lang) => (
+                    <SelectItem key={lang.code} value={lang.code}>
+                      {lang.nativeName} ({lang.name})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Choose your preferred language for the application interface.
+            </p>
           </div>
 
           {/* Default Browser Section */}
