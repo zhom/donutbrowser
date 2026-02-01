@@ -156,7 +156,8 @@
       "edit": "編集",
       "delete": "削除",
       "copyCookies": "Cookieをコピー",
-      "configure": "設定"
+      "configure": "設定",
+      "clone": "プロファイルを複製"
     }
   },
   "createProfile": {

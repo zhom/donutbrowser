@@ -156,7 +156,8 @@
       "edit": "Modifier",
       "delete": "Supprimer",
       "copyCookies": "Copier les cookies",
-      "configure": "Configurer"
+      "configure": "Configurer",
+      "clone": "Cloner le profil"
     }
   },
   "createProfile": {

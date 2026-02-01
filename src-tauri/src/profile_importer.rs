@@ -592,7 +592,7 @@ impl ProfileImporter {
   }
 
   /// Recursively copy directory contents
-  fn copy_directory_recursive(
+  pub fn copy_directory_recursive(
     source: &Path,
     destination: &Path,
   ) -> Result<(), Box<dyn std::error::Error>> {

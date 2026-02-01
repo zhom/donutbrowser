@@ -159,6 +159,7 @@ type TableMeta = {
   // Overflow actions
   onAssignProfilesToGroup?: (profileIds: string[]) => void;
   onConfigureCamoufox?: (profile: BrowserProfile) => void;
+  onCloneProfile?: (profile: BrowserProfile) => void;
   onCopyCookiesToProfile?: (profile: BrowserProfile) => void;
 
   // Traffic snapshots (lightweight real-time data)
@@ -672,6 +673,7 @@ interface ProfilesDataTableProps {
   profiles: BrowserProfile[];
   onLaunchProfile: (profile: BrowserProfile) => void | Promise<void>;
   onKillProfile: (profile: BrowserProfile) => void | Promise<void>;
+  onCloneProfile: (profile: BrowserProfile) => void | Promise<void>;
   onDeleteProfile: (profile: BrowserProfile) => void | Promise<void>;
   onRenameProfile: (profileId: string, newName: string) => Promise<void>;
   onConfigureCamoufox: (profile: BrowserProfile) => void;
@@ -695,6 +697,7 @@ export function ProfilesDataTable({
   profiles,
   onLaunchProfile,
   onKillProfile,
+  onCloneProfile,
   onDeleteProfile,
   onRenameProfile,
   onConfigureCamoufox,
@@ -1310,6 +1313,7 @@ export function ProfilesDataTable({
 
       // Overflow actions
       onAssignProfilesToGroup,
+      onCloneProfile,
       onConfigureCamoufox,
       onCopyCookiesToProfile,
 
@@ -1359,6 +1363,7 @@ export function ProfilesDataTable({
       onKillProfile,
       onLaunchProfile,
       onAssignProfilesToGroup,
+      onCloneProfile,
       onConfigureCamoufox,
       onCopyCookiesToProfile,
       syncStatuses,
@@ -1999,6 +2004,14 @@ export function ProfilesDataTable({
                         Copy Cookies to Profile
                       </DropdownMenuItem>
                     )}
+                  <DropdownMenuItem
+                    onClick={() => {
+                      meta.onCloneProfile?.(profile);
+                    }}
+                    disabled={isDisabled}
+                  >
+                    Clone Profile
+                  </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => {
                       setProfileToDelete(profile);

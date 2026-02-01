@@ -780,6 +780,84 @@ impl ProfileManager {
     Ok(())
   }
 
+  fn generate_clone_name(&self, original_name: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let profiles = self.list_profiles()?;
+    let existing_names: std::collections::HashSet<String> =
+      profiles.iter().map(|p| p.name.clone()).collect();
+
+    let candidate = format!("{original_name} (Copy)");
+    if !existing_names.contains(&candidate) {
+      return Ok(candidate);
+    }
+
+    for i in 2.. {
+      let candidate = format!("{original_name} (Copy {i})");
+      if !existing_names.contains(&candidate) {
+        return Ok(candidate);
+      }
+    }
+
+    unreachable!()
+  }
+
+  pub fn clone_profile(
+    &self,
+    profile_id: &str,
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+    let profile_uuid =
+      uuid::Uuid::parse_str(profile_id).map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
+    let profiles = self.list_profiles()?;
+    let source = profiles
+      .into_iter()
+      .find(|p| p.id == profile_uuid)
+      .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
+
+    if source.process_id.is_some() {
+      return Err(
+        "Cannot clone profile while browser is running. Please stop the browser first.".into(),
+      );
+    }
+
+    let new_id = uuid::Uuid::new_v4();
+    let clone_name = self.generate_clone_name(&source.name)?;
+
+    let profiles_dir = self.get_profiles_dir();
+    let source_dir = profiles_dir.join(source.id.to_string());
+    let dest_dir = profiles_dir.join(new_id.to_string());
+
+    if source_dir.exists() {
+      crate::profile_importer::ProfileImporter::copy_directory_recursive(&source_dir, &dest_dir)?;
+    } else {
+      fs::create_dir_all(&dest_dir)?;
+    }
+
+    let new_profile = BrowserProfile {
+      id: new_id,
+      name: clone_name,
+      browser: source.browser,
+      version: source.version,
+      proxy_id: source.proxy_id,
+      process_id: None,
+      last_launch: None,
+      release_type: source.release_type,
+      camoufox_config: source.camoufox_config,
+      wayfern_config: source.wayfern_config,
+      group_id: source.group_id,
+      tags: source.tags,
+      note: source.note,
+      sync_enabled: false,
+      last_sync: None,
+    };
+
+    self.save_profile(&new_profile)?;
+
+    if let Err(e) = events::emit_empty("profiles-changed") {
+      log::warn!("Warning: Failed to emit profiles-changed event: {e}");
+    }
+
+    Ok(new_profile)
+  }
+
   pub async fn update_camoufox_config(
     &self,
     app_handle: tauri::AppHandle,
@@ -1862,7 +1940,13 @@ pub async fn update_wayfern_config(
     .map_err(|e| format!("Failed to update Wayfern config: {e}"))
 }
 
-// Global singleton instance
+#[tauri::command]
+pub fn clone_profile(profile_id: String) -> Result<BrowserProfile, String> {
+  ProfileManager::instance()
+    .clone_profile(&profile_id)
+    .map_err(|e| format!("Failed to clone profile: {e}"))
+}
+
 #[tauri::command]
 pub fn delete_profile(app_handle: tauri::AppHandle, profile_id: String) -> Result<(), String> {
   ProfileManager::instance()

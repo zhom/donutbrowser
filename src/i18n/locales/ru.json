@@ -156,7 +156,8 @@
       "edit": "Редактировать",
       "delete": "Удалить",
       "copyCookies": "Копировать Cookie",
-      "configure": "Настроить"
+      "configure": "Настроить",
+      "clone": "Клонировать профиль"
     }
   },
   "createProfile": {

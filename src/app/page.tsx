@@ -488,6 +488,18 @@ export default function Home() {
     }
   }, []);
 
+  const handleCloneProfile = useCallback(async (profile: BrowserProfile) => {
+    try {
+      await invoke<BrowserProfile>("clone_profile", {
+        profileId: profile.id,
+      });
+    } catch (err: unknown) {
+      console.error("Failed to clone profile:", err);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      showErrorToast(`Failed to clone profile: ${errorMessage}`);
+    }
+  }, []);
+
   const handleDeleteProfile = useCallback(async (profile: BrowserProfile) => {
     console.log("Attempting to delete profile:", profile.name);
 
@@ -876,6 +888,7 @@ export default function Home() {
             profiles={filteredProfiles}
             onLaunchProfile={launchProfile}
             onKillProfile={handleKillProfile}
+            onCloneProfile={handleCloneProfile}
             onDeleteProfile={handleDeleteProfile}
             onRenameProfile={handleRenameProfile}
             onConfigureCamoufox={handleConfigureCamoufox}

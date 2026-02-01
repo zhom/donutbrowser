@@ -54,9 +54,9 @@ use browser_runner::{
 };
 
 use profile::manager::{
-  check_browser_status, create_browser_profile_new, delete_profile, list_browser_profiles,
-  rename_profile, update_camoufox_config, update_profile_note, update_profile_proxy,
-  update_profile_tags, update_wayfern_config,
+  check_browser_status, clone_profile, create_browser_profile_new, delete_profile,
+  list_browser_profiles, rename_profile, update_camoufox_config, update_profile_note,
+  update_profile_proxy, update_profile_tags, update_wayfern_config,
 };
 
 use browser_version_manager::{
@@ -1092,6 +1092,7 @@ pub fn run() {
       download_browser,
       cancel_download,
       delete_profile,
+      clone_profile,
       check_browser_exists,
       create_browser_profile_new,
       list_browser_profiles,

@@ -60,6 +60,7 @@ fn is_daemon_running() -> bool {
   }
 }
 
+#[cfg(target_os = "macos")]
 fn is_dev_mode() -> bool {
   if let Ok(current_exe) = std::env::current_exe() {
     let path_str = current_exe.to_string_lossy();
@@ -184,11 +185,8 @@ pub fn spawn_daemon() -> Result<(), String> {
 
   // Check if we got a state file at least
   let state = read_state();
-  if state.daemon_pid.is_some() {
-    log::info!(
-      "Daemon appears to have started (PID {} in state file)",
-      state.daemon_pid.unwrap()
-    );
+  if let Some(pid) = state.daemon_pid {
+    log::info!("Daemon appears to have started (PID {} in state file)", pid);
     return Ok(());
   }
 
