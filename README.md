@@ -47,11 +47,11 @@
 
 The app can be downloaded from the [releases page](https://github.com/zhom/donutbrowser/releases/latest).
 
-## Supported Platforms
+<!-- ## Supported Platforms
 
-- ✅ **macOS** (Intel & Apple Silicon)
-- ✅ **Linux** (x64 & arm64)
-- 🔄 **Windows** (Planned)
+- ✅ **macOS** (Apple Silicon)
+- ✅ **Linux** (x64)
+- ✅ **Windows** (x64) -->
 
 ## Development
 
