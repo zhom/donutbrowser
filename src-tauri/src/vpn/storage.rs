@@ -58,6 +58,39 @@ impl VpnStorage {
     }
   }
 
+  /// Create a VPN storage manager with a custom storage directory
+  pub fn with_dir(dir: &std::path::Path) -> Self {
+    let storage_path = dir.join("vpn_configs.json");
+    let key_path = dir.join(".vpn_key");
+
+    let encryption_key = if key_path.exists() {
+      if let Ok(key_data) = fs::read(&key_path) {
+        if key_data.len() == 32 {
+          let mut key = [0u8; 32];
+          key.copy_from_slice(&key_data);
+          key
+        } else {
+          let key: [u8; 32] = rand::rng().random();
+          let _ = fs::write(&key_path, key);
+          key
+        }
+      } else {
+        let key: [u8; 32] = rand::rng().random();
+        let _ = fs::write(&key_path, key);
+        key
+      }
+    } else {
+      let key: [u8; 32] = rand::rng().random();
+      let _ = fs::write(&key_path, key);
+      key
+    };
+
+    Self {
+      storage_path,
+      encryption_key,
+    }
+  }
+
   /// Get the storage file path
   fn get_storage_path() -> PathBuf {
     let data_dir = directories::ProjectDirs::from("com", "donut", "donutbrowser")

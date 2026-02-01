@@ -286,10 +286,8 @@ fn test_vpn_storage_import() {
 // Helper Functions
 // ============================================================================
 
-fn create_test_storage(_temp_dir: &tempfile::TempDir) -> VpnStorage {
-  // VpnStorage::new() uses the default path
-  // TODO: Pass temp_dir path when VpnStorage supports custom paths
-  VpnStorage::new()
+fn create_test_storage(temp_dir: &tempfile::TempDir) -> VpnStorage {
+  VpnStorage::with_dir(temp_dir.path())
 }
 
 // ============================================================================
