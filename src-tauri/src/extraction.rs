@@ -895,6 +895,7 @@ impl Extractor {
   }
 
   #[cfg(target_os = "windows")]
+  #[allow(clippy::type_complexity)]
   fn find_windows_executable_recursive<'a>(
     &'a self,
     dir: &'a Path,
