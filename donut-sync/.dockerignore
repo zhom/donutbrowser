@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+coverage
+.nyc_output
+.temp
+.tmp
+.git
+*.log
+src
+test
+tsconfig.json
+tsconfig.build.json
+nest-cli.json
