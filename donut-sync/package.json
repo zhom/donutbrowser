@@ -18,8 +18,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.971.0",
-    "@aws-sdk/s3-request-presigner": "^3.971.0",
+    "@aws-sdk/client-s3": "^3.980.0",
+    "@aws-sdk/s3-request-presigner": "^3.980.0",
     "@nestjs/common": "^11.1.12",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.1.12",
@@ -33,7 +33,7 @@
     "@nestjs/testing": "^11.1.12",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
-    "@types/node": "^25.0.9",
+    "@types/node": "^25.2.0",
     "@types/supertest": "^6.0.3",
     "jest": "^30.2.0",
     "source-map-support": "^0.5.21",

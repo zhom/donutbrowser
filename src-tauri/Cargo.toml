@@ -30,7 +30,7 @@ path = "src/bin/donut_daemon.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
-resvg = "0.44"
+resvg = "0.46"
 
 [dependencies]
 serde_json = "1"
@@ -50,20 +50,20 @@ directories = "6"
 reqwest = { version = "0.13", features = ["json", "stream", "socks"] }
 tokio = { version = "1", features = ["full", "sync"] }
 tokio-util = "0.7"
-sysinfo = "0.37"
-lazy_static = "1.4"
+sysinfo = "0.38"
+lazy_static = "1.5"
 base64 = "0.22"
 libc = "0.2"
 async-trait = "0.1"
 futures-util = "0.3"
-zip = "7"
+zip = { version = "7", default-features = false, features = ["deflate-flate2"] }
 tar = "0"
 bzip2 = "0"
 flate2 = "1"
 lzma-rs = "0"
 msi-extract = "0"
 
-uuid = { version = "1.19", features = ["v4", "serde"] }
+uuid = { version = "1.20", features = ["v4", "serde"] }
 url = "2.5"
 blake3 = "1"
 globset = "0.4"
@@ -96,10 +96,10 @@ thiserror = "2.0"
 regex-lite = "0.1"
 tempfile = "3"
 maxminddb = "0.27"
-quick-xml = { version = "0.38", features = ["serialize"] }
+quick-xml = { version = "0.39", features = ["serialize"] }
 
 # VPN support
-boringtun = "0.6"
+boringtun = "0.7"
 
 # Daemon dependencies (tray icon)
 tray-icon = "0.21"
@@ -115,12 +115,12 @@ sys-locale = "0.3"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.30", features = ["signal", "process"] }
+nix = { version = "0.31", features = ["signal", "process"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"
-objc2 = "0.6.1"
-objc2-app-kit = { version = "0.3.1", features = ["NSWindow", "NSApplication", "NSRunningApplication"] }
+objc2 = "0.6.3"
+objc2-app-kit = { version = "0.3.2", features = ["NSWindow", "NSApplication", "NSRunningApplication"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winreg = "0.55"

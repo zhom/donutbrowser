@@ -84,8 +84,7 @@ impl WireGuardTunnel {
       self.config.persistent_keepalive,
       0, // index
       None,
-    )
-    .map_err(|e| VpnError::Tunnel(format!("Failed to create tunnel: {e}")))?;
+    );
 
     self.tunnel = Some(Arc::new(Mutex::new(Box::new(tunn))));
     Ok(())
