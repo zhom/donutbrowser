@@ -104,6 +104,7 @@ mod macos {
 }
 
 #[cfg(target_os = "windows")]
+#[allow(clippy::needless_borrows_for_generic_args)]
 mod windows {
   use std::path::Path;
   use winreg::enums::*;
@@ -224,11 +225,11 @@ mod windows {
       .map_err(|e| format!("Failed to create URLAssociations key: {}", e))?;
 
     url_assoc
-      .set_value("http", PROG_ID)
+      .set_value("http", &PROG_ID)
       .map_err(|e| format!("Failed to set http association: {}", e))?;
 
     url_assoc
-      .set_value("https", PROG_ID)
+      .set_value("https", &PROG_ID)
       .map_err(|e| format!("Failed to set https association: {}", e))?;
 
     // Set file associations
@@ -237,11 +238,11 @@ mod windows {
       .map_err(|e| format!("Failed to create FileAssociations key: {}", e))?;
 
     file_assoc
-      .set_value(".html", PROG_ID)
+      .set_value(".html", &PROG_ID)
       .map_err(|e| format!("Failed to set .html association: {}", e))?;
 
     file_assoc
-      .set_value(".htm", PROG_ID)
+      .set_value(".htm", &PROG_ID)
       .map_err(|e| format!("Failed to set .htm association: {}", e))?;
 
     // Register the ProgID
@@ -305,7 +306,7 @@ mod windows {
     match hkcu.create_subkey(&user_choice_path) {
       Ok((user_choice, _)) => {
         // Attempt to set the ProgId
-        if user_choice.set_value("ProgId", PROG_ID).is_err() {
+        if user_choice.set_value("ProgId", &PROG_ID).is_err() {
           // If we can't set UserChoice, that's expected on newer Windows versions
           // The registration is still valuable for the "Open with" menu
         }
@@ -328,7 +329,7 @@ mod windows {
       match hkcu.create_subkey(&ext_path) {
         Ok((ext_key, _)) => {
           // Set the default value to our ProgID
-          let _ = ext_key.set_value("", PROG_ID);
+          let _ = ext_key.set_value("", &PROG_ID);
         }
         Err(_) => {
           // Continue if we can't set the file association
