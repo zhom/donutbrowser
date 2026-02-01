@@ -47,7 +47,7 @@ log = "0.4"
 env_logger = "0.11"
 
 directories = "6"
-reqwest = { version = "0.13", features = ["json", "stream", "socks"] }
+reqwest = { version = "0.13", default-features = false, features = ["native-tls", "json", "stream", "socks", "charset", "http2", "system-proxy"] }
 tokio = { version = "1", features = ["full", "sync"] }
 tokio-util = "0.7"
 sysinfo = "0.38"
