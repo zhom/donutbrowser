@@ -1163,12 +1163,7 @@ export function ProfilesDataTable({
 
       onSelectedProfilesChange(Array.from(newSet));
     },
-    [
-      profiles,
-      browserState.canSelectProfile,
-      onSelectedProfilesChange,
-      selectedProfiles,
-    ],
+    [profiles, browserState, onSelectedProfilesChange, selectedProfiles],
   );
 
   React.useEffect(() => {
