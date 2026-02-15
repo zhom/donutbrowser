@@ -256,6 +256,17 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
                       })}
                     </span>
                   </div>
+                  {user.proxyBandwidthLimitMb > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">
+                        Proxy Bandwidth
+                      </span>
+                      <span>
+                        {user.proxyBandwidthUsedMb} /{" "}
+                        {user.proxyBandwidthLimitMb} MB
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-2 pt-2">

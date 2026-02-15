@@ -67,12 +67,15 @@ export interface ProxyCheckResult {
   is_valid: boolean;
 }
 
+export const CLOUD_PROXY_ID = "cloud-included-proxy";
+
 export interface StoredProxy {
   id: string;
   name: string;
   proxy_settings: ProxySettings;
   sync_enabled?: boolean;
   last_sync?: number;
+  is_cloud_managed?: boolean;
 }
 
 export interface ProfileGroup {

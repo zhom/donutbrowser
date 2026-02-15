@@ -91,6 +91,8 @@ pub struct ProxyCheckResult {
   pub is_valid: bool,
 }
 
+pub const CLOUD_PROXY_ID: &str = "cloud-included-proxy";
+
 // Stored proxy configuration with name and ID for reuse
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredProxy {
@@ -101,6 +103,8 @@ pub struct StoredProxy {
   pub sync_enabled: bool,
   #[serde(default)]
   pub last_sync: Option<u64>,
+  #[serde(default)]
+  pub is_cloud_managed: bool,
 }
 
 impl StoredProxy {
@@ -111,6 +115,7 @@ impl StoredProxy {
       proxy_settings,
       sync_enabled: false,
       last_sync: None,
+      is_cloud_managed: false,
     }
   }
 
@@ -395,6 +400,61 @@ impl ProxyManager {
     Ok(stored_proxy)
   }
 
+  // Upsert the cloud-managed proxy (create or update)
+  pub fn upsert_cloud_proxy(&self, proxy_settings: ProxySettings) -> Result<StoredProxy, String> {
+    let mut stored_proxies = self.stored_proxies.lock().unwrap();
+
+    if let Some(existing) = stored_proxies.get_mut(CLOUD_PROXY_ID) {
+      existing.proxy_settings = proxy_settings;
+      let updated = existing.clone();
+      drop(stored_proxies);
+
+      if let Err(e) = self.save_proxy(&updated) {
+        log::warn!("Failed to save cloud proxy: {e}");
+      }
+      if let Err(e) = events::emit_empty("proxies-changed") {
+        log::error!("Failed to emit proxies-changed event: {e}");
+      }
+      Ok(updated)
+    } else {
+      let cloud_proxy = StoredProxy {
+        id: CLOUD_PROXY_ID.to_string(),
+        name: "Included Proxy".to_string(),
+        proxy_settings,
+        sync_enabled: false,
+        last_sync: None,
+        is_cloud_managed: true,
+      };
+      stored_proxies.insert(CLOUD_PROXY_ID.to_string(), cloud_proxy.clone());
+      drop(stored_proxies);
+
+      if let Err(e) = self.save_proxy(&cloud_proxy) {
+        log::warn!("Failed to save cloud proxy: {e}");
+      }
+      if let Err(e) = events::emit_empty("proxies-changed") {
+        log::error!("Failed to emit proxies-changed event: {e}");
+      }
+      Ok(cloud_proxy)
+    }
+  }
+
+  // Remove the cloud-managed proxy
+  pub fn remove_cloud_proxy(&self) {
+    let removed = {
+      let mut stored_proxies = self.stored_proxies.lock().unwrap();
+      stored_proxies.remove(CLOUD_PROXY_ID).is_some()
+    };
+
+    if removed {
+      if let Err(e) = self.delete_proxy_file(CLOUD_PROXY_ID) {
+        log::warn!("Failed to delete cloud proxy file: {e}");
+      }
+      if let Err(e) = events::emit_empty("proxies-changed") {
+        log::error!("Failed to emit proxies-changed event: {e}");
+      }
+    }
+  }
+
   // Get all stored proxies
   pub fn get_stored_proxies(&self) -> Vec<StoredProxy> {
     let stored_proxies = self.stored_proxies.lock().unwrap();
@@ -421,6 +481,14 @@ impl ProxyManager {
       // Check if proxy exists
       if !stored_proxies.contains_key(proxy_id) {
         return Err(format!("Proxy with ID '{proxy_id}' not found"));
+      }
+
+      // Block editing cloud-managed proxies
+      if stored_proxies
+        .get(proxy_id)
+        .is_some_and(|p| p.is_cloud_managed)
+      {
+        return Err("Cannot edit a cloud-managed proxy".to_string());
       }
 
       // Check if new name conflicts with existing proxies
@@ -471,6 +539,15 @@ impl ProxyManager {
     // Remember if sync was enabled before deleting
     let was_sync_enabled = {
       let stored_proxies = self.stored_proxies.lock().unwrap();
+
+      // Block deleting cloud-managed proxies
+      if stored_proxies
+        .get(proxy_id)
+        .is_some_and(|p| p.is_cloud_managed)
+      {
+        return Err("Cannot delete a cloud-managed proxy".to_string());
+      }
+
       stored_proxies
         .get(proxy_id)
         .map(|p| p.sync_enabled)
@@ -601,6 +678,7 @@ impl ProxyManager {
     let stored_proxies = self.stored_proxies.lock().unwrap();
     let proxies: Vec<ExportedProxy> = stored_proxies
       .values()
+      .filter(|p| !p.is_cloud_managed)
       .map(|p| ExportedProxy {
         name: p.name.clone(),
         proxy_type: p.proxy_settings.proxy_type.clone(),
@@ -626,6 +704,7 @@ impl ProxyManager {
     let stored_proxies = self.stored_proxies.lock().unwrap();
     stored_proxies
       .values()
+      .filter(|p| !p.is_cloud_managed)
       .map(|p| Self::build_proxy_url(&p.proxy_settings))
       .collect::<Vec<_>>()
       .join("\n")

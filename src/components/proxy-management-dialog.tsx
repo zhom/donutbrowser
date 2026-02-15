@@ -100,7 +100,37 @@ export function ProxyManagementDialog({
     {},
   );
 
-  const { storedProxies, proxyUsage, isLoading } = useProxyEvents();
+  const { storedProxies: rawProxies, proxyUsage, isLoading } = useProxyEvents();
+  const [cloudProxyUsage, setCloudProxyUsage] = useState<{
+    used_mb: number;
+    limit_mb: number;
+  } | null>(null);
+
+  // Sort cloud-managed proxies first
+  const storedProxies = [...rawProxies].sort((a, b) => {
+    if (a.is_cloud_managed && !b.is_cloud_managed) return -1;
+    if (!a.is_cloud_managed && b.is_cloud_managed) return 1;
+    return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+  });
+
+  // Fetch cloud proxy usage
+  useEffect(() => {
+    const fetchUsage = async () => {
+      try {
+        const usage = await invoke<{
+          used_mb: number;
+          limit_mb: number;
+          remaining_mb: number;
+        } | null>("cloud_get_proxy_usage");
+        setCloudProxyUsage(usage);
+      } catch {
+        // ignore
+      }
+    };
+    if (isOpen) {
+      void fetchUsage();
+    }
+  }, [isOpen]);
 
   // Listen for proxy sync status events
   useEffect(() => {
@@ -281,6 +311,7 @@ export function ProxyManagementDialog({
                     </TableHeader>
                     <TableBody>
                       {storedProxies.map((proxy) => {
+                        const isCloud = proxy.is_cloud_managed === true;
                         const syncDot = getSyncStatusDot(
                           proxy,
                           proxySyncStatus[proxy.id],
@@ -288,20 +319,32 @@ export function ProxyManagementDialog({
                         return (
                           <TableRow key={proxy.id}>
                             <TableCell className="font-medium">
-                              <div className="flex items-center gap-2">
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <div
-                                      className={`w-2 h-2 rounded-full shrink-0 ${syncDot.color} ${
-                                        syncDot.animate ? "animate-pulse" : ""
-                                      }`}
-                                    />
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>{syncDot.tooltip}</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                                {proxy.name}
+                              <div className="flex flex-col gap-0.5">
+                                <div className="flex items-center gap-2">
+                                  {!isCloud && (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <div
+                                          className={`w-2 h-2 rounded-full shrink-0 ${syncDot.color} ${
+                                            syncDot.animate
+                                              ? "animate-pulse"
+                                              : ""
+                                          }`}
+                                        />
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p>{syncDot.tooltip}</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  )}
+                                  {proxy.name}
+                                </div>
+                                {isCloud && cloudProxyUsage && (
+                                  <span className="text-xs text-muted-foreground">
+                                    {cloudProxyUsage.used_mb} /{" "}
+                                    {cloudProxyUsage.limit_mb} MB used
+                                  </span>
+                                )}
                               </div>
                             </TableCell>
                             <TableCell>
@@ -310,36 +353,40 @@ export function ProxyManagementDialog({
                               </Badge>
                             </TableCell>
                             <TableCell>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <div className="flex items-center">
-                                    <Checkbox
-                                      checked={proxy.sync_enabled}
-                                      onCheckedChange={() =>
-                                        handleToggleSync(proxy)
-                                      }
-                                      disabled={
-                                        isTogglingSync[proxy.id] ||
-                                        proxyInUse[proxy.id]
-                                      }
-                                    />
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  {proxyInUse[proxy.id] ? (
-                                    <p>
-                                      Sync cannot be disabled while this proxy
-                                      is used by synced profiles
-                                    </p>
-                                  ) : (
-                                    <p>
-                                      {proxy.sync_enabled
-                                        ? "Disable sync"
-                                        : "Enable sync"}
-                                    </p>
-                                  )}
-                                </TooltipContent>
-                              </Tooltip>
+                              {isCloud ? (
+                                <Badge variant="outline">Cloud</Badge>
+                              ) : (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="flex items-center">
+                                      <Checkbox
+                                        checked={proxy.sync_enabled}
+                                        onCheckedChange={() =>
+                                          handleToggleSync(proxy)
+                                        }
+                                        disabled={
+                                          isTogglingSync[proxy.id] ||
+                                          proxyInUse[proxy.id]
+                                        }
+                                      />
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {proxyInUse[proxy.id] ? (
+                                      <p>
+                                        Sync cannot be disabled while this proxy
+                                        is used by synced profiles
+                                      </p>
+                                    ) : (
+                                      <p>
+                                        {proxy.sync_enabled
+                                          ? "Disable sync"
+                                          : "Enable sync"}
+                                      </p>
+                                    )}
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
                             </TableCell>
                             <TableCell>
                               <div className="flex gap-1">
@@ -362,47 +409,55 @@ export function ProxyManagementDialog({
                                     }));
                                   }}
                                 />
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => handleEditProxy(proxy)}
-                                    >
-                                      <LuPencil className="w-4 h-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Edit proxy</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => handleDeleteProxy(proxy)}
-                                        disabled={
-                                          (proxyUsage[proxy.id] ?? 0) > 0
-                                        }
-                                      >
-                                        <LuTrash2 className="w-4 h-4" />
-                                      </Button>
-                                    </span>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    {(proxyUsage[proxy.id] ?? 0) > 0 ? (
-                                      <p>
-                                        Cannot delete: in use by{" "}
-                                        {proxyUsage[proxy.id]} profile
-                                        {proxyUsage[proxy.id] > 1 ? "s" : ""}
-                                      </p>
-                                    ) : (
-                                      <p>Delete proxy</p>
-                                    )}
-                                  </TooltipContent>
-                                </Tooltip>
+                                {!isCloud && (
+                                  <>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => handleEditProxy(proxy)}
+                                        >
+                                          <LuPencil className="w-4 h-4" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p>Edit proxy</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() =>
+                                              handleDeleteProxy(proxy)
+                                            }
+                                            disabled={
+                                              (proxyUsage[proxy.id] ?? 0) > 0
+                                            }
+                                          >
+                                            <LuTrash2 className="w-4 h-4" />
+                                          </Button>
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        {(proxyUsage[proxy.id] ?? 0) > 0 ? (
+                                          <p>
+                                            Cannot delete: in use by{" "}
+                                            {proxyUsage[proxy.id]} profile
+                                            {proxyUsage[proxy.id] > 1
+                                              ? "s"
+                                              : ""}
+                                          </p>
+                                        ) : (
+                                          <p>Delete proxy</p>
+                                        )}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </>
+                                )}
                               </div>
                             </TableCell>
                           </TableRow>

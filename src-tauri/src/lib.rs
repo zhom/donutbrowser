@@ -1100,6 +1100,8 @@ pub fn run() {
           if let Err(e) = cloud_auth::CLOUD_AUTH.get_or_refresh_sync_token().await {
             log::warn!("Failed to refresh cloud sync token on startup: {e}");
           }
+          // Sync cloud proxy credentials on startup
+          cloud_auth::CLOUD_AUTH.sync_cloud_proxy().await;
         }
         cloud_auth::CloudAuthManager::start_sync_token_refresh_loop(app_handle_cloud).await;
       });
@@ -1218,6 +1220,7 @@ pub fn run() {
       cloud_auth::cloud_get_user,
       cloud_auth::cloud_refresh_profile,
       cloud_auth::cloud_logout,
+      cloud_auth::cloud_get_proxy_usage,
       cloud_auth::restart_sync_service
     ])
     .run(tauri::generate_context!())

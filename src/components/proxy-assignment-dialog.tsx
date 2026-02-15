@@ -144,6 +144,7 @@ export function ProxyAssignmentDialog({
                 {storedProxies.map((proxy) => (
                   <SelectItem key={proxy.id} value={proxy.id}>
                     {proxy.name}
+                    {proxy.is_cloud_managed ? " (Included)" : ""}
                   </SelectItem>
                 ))}
               </SelectContent>

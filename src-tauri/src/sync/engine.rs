@@ -1228,6 +1228,11 @@ pub async fn set_proxy_sync_enabled(
     .find(|p| p.id == proxy_id)
     .ok_or_else(|| format!("Proxy with ID '{proxy_id}' not found"))?;
 
+  // Block modifying sync for cloud-managed proxies
+  if proxy.is_cloud_managed {
+    return Err("Cannot modify sync for a cloud-managed proxy".to_string());
+  }
+
   // If disabling, check if proxy is used by any synced profile
   if !enabled && is_proxy_used_by_synced_profile(&proxy_id) {
     return Err("Sync cannot be disabled while this proxy is used by synced profiles".to_string());

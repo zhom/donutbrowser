@@ -12,6 +12,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+use crate::browser::ProxySettings;
+use crate::proxy_manager::PROXY_MANAGER;
 use crate::settings_manager::SettingsManager;
 use crate::sync;
 
@@ -69,6 +71,20 @@ struct RefreshTokenResponse {
 struct SyncTokenResponse {
   #[serde(rename = "syncToken")]
   sync_token: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+struct CloudProxyConfigResponse {
+  host: String,
+  port: u16,
+  username: Option<String>,
+  password: Option<String>,
+  protocol: String,
+  #[serde(rename = "bandwidthLimitMb")]
+  bandwidth_limit_mb: i64,
+  #[serde(rename = "bandwidthUsedMb")]
+  bandwidth_used_mb: i64,
 }
 
 pub struct CloudAuthManager {
@@ -400,6 +416,7 @@ impl CloudAuthManager {
       let status = response.status();
       if status == reqwest::StatusCode::UNAUTHORIZED {
         // Refresh token expired — clear everything
+        PROXY_MANAGER.remove_cloud_proxy();
         self.clear_auth().await;
         let _ = crate::events::emit_empty("cloud-auth-expired");
         return Err("Session expired. Please log in again.".to_string());
@@ -519,6 +536,9 @@ impl CloudAuthManager {
         .await;
     }
 
+    // Remove cloud proxy on logout
+    PROXY_MANAGER.remove_cloud_proxy();
+
     self.clear_auth().await;
     Ok(())
   }
@@ -568,6 +588,81 @@ impl CloudAuthManager {
     }
   }
 
+  /// Fetch proxy configuration from the cloud backend
+  async fn fetch_proxy_config(&self) -> Result<Option<CloudProxyConfigResponse>, String> {
+    // Check cached user state for proxy bandwidth
+    {
+      let state = self.state.lock().await;
+      match &*state {
+        Some(auth) if auth.user.proxy_bandwidth_limit_mb > 0 => {}
+        _ => return Ok(None),
+      }
+    }
+
+    match self
+      .api_call_with_retry(|access_token| {
+        let url = format!("{CLOUD_API_URL}/api/proxy/config");
+        let client = self.client.clone();
+        async move {
+          let response = client
+            .get(&url)
+            .header("Authorization", format!("Bearer {access_token}"))
+            .send()
+            .await
+            .map_err(|e| format!("Failed to fetch proxy config: {e}"))?;
+
+          let status = response.status();
+          if status == reqwest::StatusCode::FORBIDDEN {
+            return Err("__403__".to_string());
+          }
+
+          if !response.status().is_success() {
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("Proxy config fetch failed ({status}): {body}"));
+          }
+
+          response
+            .json::<CloudProxyConfigResponse>()
+            .await
+            .map_err(|e| format!("Failed to parse proxy config: {e}"))
+        }
+      })
+      .await
+    {
+      Ok(config) => Ok(Some(config)),
+      Err(e) if e.contains("__403__") => Ok(None),
+      Err(e) => {
+        log::warn!("Failed to fetch cloud proxy config: {e}");
+        Ok(None)
+      }
+    }
+  }
+
+  /// Sync the cloud-managed proxy: fetch config and upsert or remove
+  pub async fn sync_cloud_proxy(&self) {
+    match self.fetch_proxy_config().await {
+      Ok(Some(config)) => {
+        let settings = ProxySettings {
+          proxy_type: config.protocol,
+          host: config.host,
+          port: config.port,
+          username: config.username,
+          password: config.password,
+        };
+        match PROXY_MANAGER.upsert_cloud_proxy(settings) {
+          Ok(_) => log::debug!("Cloud proxy synced successfully"),
+          Err(e) => log::warn!("Failed to upsert cloud proxy: {e}"),
+        }
+      }
+      Ok(None) => {
+        PROXY_MANAGER.remove_cloud_proxy();
+      }
+      Err(e) => {
+        log::warn!("Failed to sync cloud proxy: {e}");
+      }
+    }
+  }
+
   /// Background loop that refreshes the sync token periodically
   pub async fn start_sync_token_refresh_loop(app_handle: tauri::AppHandle) {
     loop {
@@ -601,6 +696,9 @@ impl CloudAuthManager {
         log::debug!("Failed to refresh cloud profile: {e}");
       }
 
+      // Sync cloud proxy credentials
+      CLOUD_AUTH.sync_cloud_proxy().await;
+
       let _ = &app_handle; // keep app_handle alive
     }
   }
@@ -628,6 +726,9 @@ pub async fn cloud_verify_otp(
     }
   }
 
+  // Sync cloud proxy after login
+  CLOUD_AUTH.sync_cloud_proxy().await;
+
   let _ = &app_handle;
   Ok(state)
 }
@@ -652,6 +753,30 @@ pub async fn cloud_logout(app_handle: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn cloud_has_active_subscription() -> Result<bool, String> {
   Ok(CLOUD_AUTH.has_active_paid_subscription().await)
+}
+
+#[derive(Debug, Serialize)]
+pub struct CloudProxyUsage {
+  pub used_mb: i64,
+  pub limit_mb: i64,
+  pub remaining_mb: i64,
+}
+
+#[tauri::command]
+pub async fn cloud_get_proxy_usage() -> Result<Option<CloudProxyUsage>, String> {
+  let state = CLOUD_AUTH.state.lock().await;
+  match &*state {
+    Some(auth) if auth.user.proxy_bandwidth_limit_mb > 0 => {
+      let used = auth.user.proxy_bandwidth_used_mb;
+      let limit = auth.user.proxy_bandwidth_limit_mb;
+      Ok(Some(CloudProxyUsage {
+        used_mb: used,
+        limit_mb: limit,
+        remaining_mb: (limit - used).max(0),
+      }))
+    }
+    _ => Ok(None),
+  }
 }
 
 #[tauri::command]
