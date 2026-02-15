@@ -189,6 +189,9 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security list-keychain -d user -s $KEYCHAIN_PATH login.keychain-db
 
+          echo "Available signing identities:"
+          security find-identity -v -p codesigning $KEYCHAIN_PATH
+
           rm -f $CERT_PATH $KEY_PATH $PEM_PATH $P12_PATH
 
       - name: Generate nightly timestamp
