@@ -274,7 +274,28 @@
       "syncing": "同期中...",
       "error": "同期エラー"
     },
-    "description": "同期サーバーに接続して、デバイス間でプロファイル、プロキシ、グループを同期します。"
+    "description": "同期サーバーに接続して、デバイス間でプロファイル、プロキシ、グループを同期します。",
+    "cloud": {
+      "tabLabel": "クラウド",
+      "selfHostedTabLabel": "セルフホスト",
+      "email": "メールアドレス",
+      "emailPlaceholder": "you@example.com",
+      "sendCode": "コードを送信",
+      "codeSent": "コードを送信しました！メールを確認してください。",
+      "verificationCode": "認証コード",
+      "codePlaceholder": "6桁のコードを入力",
+      "verifyAndLogin": "認証してログイン",
+      "loggingIn": "ログイン中...",
+      "connected": "接続済み",
+      "plan": "プラン",
+      "profiles": "プロファイル",
+      "profileUsage": "{{used}} / {{limit}}",
+      "manageAccount": "アカウント管理",
+      "logout": "ログアウト",
+      "logoutConfirm": "ログアウトしてもよろしいですか？クラウド同期が停止します。",
+      "loginSuccess": "ログインに成功しました！",
+      "logoutSuccess": "ログアウトしました。"
+    }
   },
   "integrations": {
     "title": "統合",
@@ -457,5 +478,8 @@
     "zen": "Zen Browser",
     "camoufox": "Camoufox",
     "wayfern": "Wayfern"
+  },
+  "fingerprint": {
+    "crossOsWarning": "異なるオペレーティングシステムの偽装はより困難です。システムレベルのAPIはマスクしにくく、ウェブサイトが矛盾を検出しやすくなります。どのアンチディテクトブラウザも、異なるOS間のすべての詳細を完璧に偽装することはできません。"
   }
 }

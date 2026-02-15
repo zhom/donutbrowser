@@ -291,19 +291,31 @@ async fn main() {
       log::error!("Proxy worker starting, looking for config id: {}", id);
       log::error!("Process PID: {}", std::process::id());
 
-      let config = match get_proxy_config(id) {
-        Some(config) => {
-          log::error!(
-            "Found config: id={}, port={:?}, upstream={}",
-            config.id,
-            config.local_port,
-            config.upstream_url
-          );
-          config
-        }
-        None => {
-          log::error!("Proxy configuration {} not found", id);
-          process::exit(1);
+      // Retry config loading to handle file system race condition on Windows
+      // where the config file may not be immediately visible after being written
+      let config = {
+        let mut attempts = 0;
+        loop {
+          if let Some(config) = get_proxy_config(id) {
+            log::error!(
+              "Found config: id={}, port={:?}, upstream={}",
+              config.id,
+              config.local_port,
+              config.upstream_url
+            );
+            break config;
+          }
+          attempts += 1;
+          if attempts >= 10 {
+            log::error!(
+              "Proxy configuration {} not found after {} attempts",
+              id,
+              attempts
+            );
+            process::exit(1);
+          }
+          log::error!("Config {} not found yet, retrying ({}/10)...", id, attempts);
+          std::thread::sleep(std::time::Duration::from_millis(50));
         }
       };
 

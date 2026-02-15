@@ -1,4 +1,4 @@
-use muda::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use muda::{Menu, MenuItem, PredefinedMenuItem};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
@@ -6,8 +6,11 @@ use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 static GUI_RUNNING: AtomicBool = AtomicBool::new(false);
 
 pub fn load_icon() -> Icon {
-  // Use the generated template icon (44x44 for retina, macOS standard menu bar size)
-  // This is the donut logo converted to template format (black with alpha)
+  // On Windows, use the full-color icon so it renders well on dark taskbars.
+  // On macOS/Linux, use the template icon (black with alpha) for system light/dark handling.
+  #[cfg(target_os = "windows")]
+  let icon_bytes = include_bytes!("../../icons/tray-icon-win-44.png");
+  #[cfg(not(target_os = "windows"))]
   let icon_bytes = include_bytes!("../../icons/tray-icon-44.png");
 
   let image = image::load_from_memory(icon_bytes)
@@ -23,10 +26,6 @@ pub fn load_icon() -> Icon {
 pub struct TrayMenu {
   pub menu: Menu,
   pub open_item: MenuItem,
-  pub running_profiles_submenu: Submenu,
-  pub api_status_item: MenuItem,
-  pub mcp_status_item: MenuItem,
-  pub preferences_item: MenuItem,
   pub quit_item: MenuItem,
 }
 
@@ -41,52 +40,18 @@ impl TrayMenu {
     let menu = Menu::new();
 
     let open_item = MenuItem::new("Open Donut Browser", true, None);
-    let running_profiles_submenu = Submenu::new("Running Profiles", true);
-    let no_profiles_item = MenuItem::new("No running profiles", false, None);
-    running_profiles_submenu.append(&no_profiles_item).unwrap();
-
-    let separator1 = PredefinedMenuItem::separator();
-    let api_status_item = MenuItem::new("API: Starting...", false, None);
-    let mcp_status_item = MenuItem::new("MCP: Starting...", false, None);
-    let separator2 = PredefinedMenuItem::separator();
-    let preferences_item = MenuItem::new("Preferences...", true, None);
+    let separator = PredefinedMenuItem::separator();
     let quit_item = MenuItem::new("Quit Donut Browser", true, None);
 
     menu.append(&open_item).unwrap();
-    menu.append(&running_profiles_submenu).unwrap();
-    menu.append(&separator1).unwrap();
-    menu.append(&api_status_item).unwrap();
-    menu.append(&mcp_status_item).unwrap();
-    menu.append(&separator2).unwrap();
-    menu.append(&preferences_item).unwrap();
+    menu.append(&separator).unwrap();
     menu.append(&quit_item).unwrap();
 
     Self {
       menu,
       open_item,
-      running_profiles_submenu,
-      api_status_item,
-      mcp_status_item,
-      preferences_item,
       quit_item,
     }
-  }
-
-  pub fn update_api_status(&self, port: Option<u16>) {
-    let text = match port {
-      Some(p) => format!("API: Running on :{}", p),
-      None => "API: Stopped".to_string(),
-    };
-    self.api_status_item.set_text(&text);
-  }
-
-  pub fn update_mcp_status(&self, running: bool) {
-    let text = if running {
-      "MCP: Running"
-    } else {
-      "MCP: Stopped"
-    };
-    self.mcp_status_item.set_text(text);
   }
 }
 
@@ -120,6 +85,17 @@ pub fn open_gui() {
   #[cfg(target_os = "windows")]
   {
     use std::path::PathBuf;
+
+    // In dev mode, find the main exe next to the daemon binary
+    if let Ok(current_exe) = std::env::current_exe() {
+      if let Some(exe_dir) = current_exe.parent() {
+        let app_path = exe_dir.join("donutbrowser.exe");
+        if app_path.exists() {
+          let _ = Command::new(app_path).spawn();
+          return;
+        }
+      }
+    }
 
     let paths = [
       dirs::data_local_dir().map(|p| p.join("Donut Browser").join("Donut Browser.exe")),

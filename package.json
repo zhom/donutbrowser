@@ -25,7 +25,7 @@
     "cargo": "cd src-tauri && cargo",
     "unused-exports:js": "ts-unused-exports tsconfig.json",
     "check-unused-commands": "cd src-tauri && cargo test test_no_unused_tauri_commands",
-    "copy-proxy-binary": "cd src-tauri && bash copy-proxy-binary.sh",
+    "copy-proxy-binary": "node src-tauri/copy-proxy-binary.mjs",
     "prebuild": "pnpm copy-proxy-binary",
     "pretauri:dev": "pnpm copy-proxy-binary",
     "precargo": "pnpm copy-proxy-binary"
@@ -44,7 +44,7 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tanstack/react-table": "^8.21.3",
-    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/api": "~2.9.0",
     "@tauri-apps/plugin-deep-link": "^2.4.7",
     "@tauri-apps/plugin-dialog": "^2.6.0",
     "@tauri-apps/plugin-fs": "~2.4.5",
@@ -74,7 +74,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.3.15",
     "@tailwindcss/postcss": "^4.1.18",
-    "@tauri-apps/cli": "^2.10.0",
+    "@tauri-apps/cli": "~2.9.0",
     "@types/color": "^4.2.0",
     "@types/node": "^25.2.3",
     "@types/react": "^19.2.14",

@@ -36,6 +36,23 @@ export interface SyncSettings {
   sync_token?: string;
 }
 
+export interface CloudUser {
+  id: string;
+  email: string;
+  plan: string;
+  planPeriod: string;
+  subscriptionStatus: string;
+  profileLimit: number;
+  cloudProfilesUsed: number;
+  proxyBandwidthLimitMb: number;
+  proxyBandwidthUsedMb: number;
+}
+
+export interface CloudAuthState {
+  user: CloudUser;
+  logged_in_at: string;
+}
+
 export interface ProfileSyncStatusEvent {
   profile_id: string;
   status: "disabled" | "syncing" | "synced" | "error" | "pending";

@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use tao::event::{Event, StartCause};
 use tao::event_loop::{ControlFlow, EventLoopBuilder};
 use tokio::runtime::Runtime;
-use tray_icon::TrayIcon;
+use tray_icon::{MouseButton, TrayIcon, TrayIconEvent};
 
 use donutbrowser_lib::daemon::{autostart, services, tray};
 
@@ -162,10 +162,7 @@ fn run_daemon() {
   }
 
   // Prepare tray menu and icon (but don't create the tray icon yet)
-  // Show "Starting..." state initially
   let tray_menu = tray::TrayMenu::new();
-  tray_menu.update_api_status(None);
-  tray_menu.update_mcp_status(false);
 
   let icon = tray::load_icon();
   let menu_channel = MenuEvent::receiver();
@@ -208,8 +205,6 @@ fn run_daemon() {
               mcp_running,
             } => {
               log::info!("[daemon] Services started successfully");
-              tray_menu.update_api_status(api_port);
-              tray_menu.update_mcp_status(mcp_running);
 
               // Update state file
               let mut state = read_state();
@@ -221,20 +216,28 @@ fn run_daemon() {
             }
             ServiceStatus::Failed(e) => {
               log::error!("Failed to start services: {}", e);
-              // Keep tray icon running, show error state
-              tray_menu.update_api_status(None);
-              tray_menu.update_mcp_status(false);
             }
           }
         }
 
         // Process menu events
         while let Ok(event) = menu_channel.try_recv() {
-          if event.id == tray_menu.open_item.id() || event.id == tray_menu.preferences_item.id() {
+          if event.id == tray_menu.open_item.id() {
             tray::open_gui();
           } else if event.id == tray_menu.quit_item.id() {
             log::info!("[daemon] Quit requested");
             SHOULD_QUIT.store(true, Ordering::SeqCst);
+          }
+        }
+
+        // Handle tray icon click (left-click opens the app)
+        while let Ok(event) = TrayIconEvent::receiver().try_recv() {
+          if let TrayIconEvent::Click {
+            button: MouseButton::Left,
+            ..
+          } = event
+          {
+            tray::open_gui();
           }
         }
 

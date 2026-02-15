@@ -274,7 +274,28 @@
       "syncing": "Sincronizando...",
       "error": "Erro de Sincronização"
     },
-    "description": "Conecte-se a um servidor de sincronização para sincronizar seus perfis, proxies e grupos entre dispositivos."
+    "description": "Conecte-se a um servidor de sincronização para sincronizar seus perfis, proxies e grupos entre dispositivos.",
+    "cloud": {
+      "tabLabel": "Nuvem",
+      "selfHostedTabLabel": "Auto-hospedado",
+      "email": "E-mail",
+      "emailPlaceholder": "voce@exemplo.com",
+      "sendCode": "Enviar Código",
+      "codeSent": "Código enviado! Verifique seu e-mail.",
+      "verificationCode": "Código de Verificação",
+      "codePlaceholder": "Digite o código de 6 dígitos",
+      "verifyAndLogin": "Verificar e Entrar",
+      "loggingIn": "Entrando...",
+      "connected": "Conectado",
+      "plan": "Plano",
+      "profiles": "Perfis",
+      "profileUsage": "{{used}} / {{limit}}",
+      "manageAccount": "Gerenciar Conta",
+      "logout": "Sair",
+      "logoutConfirm": "Tem certeza de que deseja sair? A sincronização na nuvem será interrompida.",
+      "loginSuccess": "Login realizado com sucesso!",
+      "logoutSuccess": "Logout realizado com sucesso."
+    }
   },
   "integrations": {
     "title": "Integrações",
@@ -457,5 +478,8 @@
     "zen": "Zen Browser",
     "camoufox": "Camoufox",
     "wayfern": "Wayfern"
+  },
+  "fingerprint": {
+    "crossOsWarning": "Falsificar um sistema operacional diferente é mais difícil: as APIs de nível de sistema são mais difíceis de mascarar, facilitando a detecção de inconsistências pelos sites. Nenhum navegador antidetecção consegue falsificar perfeitamente todos os detalhes entre sistemas operacionais."
   }
 }

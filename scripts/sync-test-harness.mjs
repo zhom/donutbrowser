@@ -79,13 +79,16 @@ function getMinioUrl() {
       return "https://dl.min.io/server/minio/release/linux-arm64/minio";
     }
     return "https://dl.min.io/server/minio/release/linux-amd64/minio";
+  } else if (platform === "win32") {
+    return "https://dl.min.io/server/minio/release/windows-amd64/minio.exe";
   }
 
   throw new Error(`Unsupported platform: ${platform}-${arch}`);
 }
 
 async function ensureMinioBinary() {
-  const minioBin = path.join(CACHE_DIR, "minio");
+  const isWindows = os.platform() === "win32";
+  const minioBin = path.join(CACHE_DIR, isWindows ? "minio.exe" : "minio");
 
   if (existsSync(minioBin)) {
     log("MinIO binary already cached");
@@ -97,7 +100,9 @@ async function ensureMinioBinary() {
 
   const url = getMinioUrl();
   await downloadFile(url, minioBin);
-  chmodSync(minioBin, 0o755);
+  if (!isWindows) {
+    chmodSync(minioBin, 0o755);
+  }
 
   log("MinIO binary downloaded");
   return minioBin;
@@ -247,7 +252,16 @@ function cleanup() {
 
   for (const proc of processes) {
     try {
-      proc.kill("SIGTERM");
+      if (os.platform() === "win32") {
+        // On Windows, SIGTERM is not supported; use taskkill for reliable cleanup
+        try {
+          execSync(`taskkill /F /T /PID ${proc.pid}`, { stdio: "ignore" });
+        } catch {
+          // Process may already be dead
+        }
+      } else {
+        proc.kill("SIGTERM");
+      }
     } catch {
       // Already dead
     }

@@ -274,7 +274,28 @@
       "syncing": "Synchronisation...",
       "error": "Erreur de synchronisation"
     },
-    "description": "Connectez-vous à un serveur de synchronisation pour synchroniser vos profils, proxies et groupes entre appareils."
+    "description": "Connectez-vous à un serveur de synchronisation pour synchroniser vos profils, proxies et groupes entre appareils.",
+    "cloud": {
+      "tabLabel": "Cloud",
+      "selfHostedTabLabel": "Auto-hébergé",
+      "email": "E-mail",
+      "emailPlaceholder": "vous@exemple.com",
+      "sendCode": "Envoyer le Code",
+      "codeSent": "Code envoyé ! Vérifiez votre e-mail.",
+      "verificationCode": "Code de Vérification",
+      "codePlaceholder": "Entrez le code à 6 chiffres",
+      "verifyAndLogin": "Vérifier et Se Connecter",
+      "loggingIn": "Connexion en cours...",
+      "connected": "Connecté",
+      "plan": "Forfait",
+      "profiles": "Profils",
+      "profileUsage": "{{used}} / {{limit}}",
+      "manageAccount": "Gérer le Compte",
+      "logout": "Se Déconnecter",
+      "logoutConfirm": "Êtes-vous sûr de vouloir vous déconnecter ? La synchronisation cloud sera arrêtée.",
+      "loginSuccess": "Connexion réussie !",
+      "logoutSuccess": "Déconnexion réussie."
+    }
   },
   "integrations": {
     "title": "Intégrations",
@@ -457,5 +478,8 @@
     "zen": "Zen Browser",
     "camoufox": "Camoufox",
     "wayfern": "Wayfern"
+  },
+  "fingerprint": {
+    "crossOsWarning": "Usurper un système d'exploitation différent est plus difficile : les API au niveau du système sont plus difficiles à masquer, ce qui permet aux sites web de détecter plus facilement les incohérences. Aucun navigateur anti-détection ne peut parfaitement usurper chaque détail d'un système d'exploitation à l'autre."
   }
 }

@@ -26,6 +26,7 @@ import { SettingsDialog } from "@/components/settings-dialog";
 import { SyncConfigDialog } from "@/components/sync-config-dialog";
 import { WayfernTermsDialog } from "@/components/wayfern-terms-dialog";
 import { useAppUpdateNotifications } from "@/hooks/use-app-update-notifications";
+import { useCloudAuth } from "@/hooks/use-cloud-auth";
 import { useCommercialTrial } from "@/hooks/use-commercial-trial";
 import { useGroupEvents } from "@/hooks/use-group-events";
 import type { PermissionType } from "@/hooks/use-permissions";
@@ -87,6 +88,11 @@ export default function Home() {
     hasAcknowledged: trialAcknowledged,
     checkTrialStatus,
   } = useCommercialTrial();
+
+  // Cloud auth for cross-OS unlock
+  const { user: cloudUser } = useCloudAuth();
+  const crossOsUnlocked =
+    cloudUser?.plan !== "free" && cloudUser?.subscriptionStatus === "active";
 
   const [createProfileDialogOpen, setCreateProfileDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
@@ -719,6 +725,13 @@ export default function Home() {
       void checkMissingBinaries();
     }
 
+    // Proactively download Wayfern and Camoufox if not already available
+    if (!profilesLoading) {
+      void invoke("ensure_active_browsers_downloaded").catch((err: unknown) => {
+        console.error("Failed to auto-download browsers:", err);
+      });
+    }
+
     return () => {
       clearInterval(updateInterval);
       if (cleanup) {
@@ -766,7 +779,7 @@ export default function Home() {
     }
   }, [profiles]);
 
-  // Show warning for non-wayfern/camoufox profiles (support ending March 1, 2026)
+  // Show warning for non-wayfern/camoufox profiles (support ending March 15, 2026)
   useEffect(() => {
     if (profiles.length === 0) return;
 
@@ -783,7 +796,7 @@ export default function Home() {
         id: "browser-support-ending-warning",
         type: "error",
         title: "Browser support ending soon",
-        description: `Support for the following profiles will be removed on March 1, 2026: ${unsupportedNames}. Please migrate to Wayfern or Camoufox profiles.`,
+        description: `Support for the following profiles will be removed on March 15, 2026: ${unsupportedNames}. Please migrate to Wayfern or Camoufox profiles.`,
         duration: 15000,
         action: {
           label: "Learn more",
@@ -917,6 +930,7 @@ export default function Home() {
         }}
         onCreateProfile={handleCreateProfile}
         selectedGroupId={selectedGroupId}
+        crossOsUnlocked={crossOsUnlocked}
       />
 
       <SettingsDialog
@@ -988,6 +1002,7 @@ export default function Home() {
             ? runningProfiles.has(currentProfileForCamoufoxConfig.id)
             : false
         }
+        crossOsUnlocked={crossOsUnlocked}
       />
 
       <GroupManagementDialog

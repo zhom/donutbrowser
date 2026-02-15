@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { LuLock } from "react-icons/lu";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -28,6 +29,7 @@ interface WayfernConfigFormProps {
   isCreating?: boolean;
   forceAdvanced?: boolean;
   readOnly?: boolean;
+  crossOsUnlocked?: boolean;
 }
 
 const isFingerprintEditingDisabled = (config: WayfernConfig): boolean => {
@@ -57,7 +59,9 @@ export function WayfernConfigForm({
   isCreating = false,
   forceAdvanced = false,
   readOnly = false,
+  crossOsUnlocked = false,
 }: WayfernConfigFormProps) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState(
     forceAdvanced ? "manual" : "automatic",
   );
@@ -157,7 +161,7 @@ export function WayfernConfigForm({
             {(
               ["windows", "macos", "linux", "android", "ios"] as WayfernOS[]
             ).map((os) => {
-              const isDisabled = os !== currentOS;
+              const isDisabled = os !== currentOS && !crossOsUnlocked;
               return (
                 <SelectItem key={os} value={os} disabled={isDisabled}>
                   <span className="flex items-center gap-2">
@@ -171,6 +175,13 @@ export function WayfernConfigForm({
             })}
           </SelectContent>
         </Select>
+        {selectedOS !== currentOS && crossOsUnlocked && (
+          <Alert className="mt-2">
+            <AlertDescription>
+              {t("fingerprint.crossOsWarning")}
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
 
       {/* Randomize Fingerprint Option */}
@@ -943,7 +954,7 @@ export function WayfernConfigForm({
                       "ios",
                     ] as WayfernOS[]
                   ).map((os) => {
-                    const isDisabled = os !== currentOS;
+                    const isDisabled = os !== currentOS && !crossOsUnlocked;
                     return (
                       <SelectItem key={os} value={os} disabled={isDisabled}>
                         <span className="flex items-center gap-2">
@@ -957,6 +968,15 @@ export function WayfernConfigForm({
                   })}
                 </SelectContent>
               </Select>
+              {selectedOS !== currentOS && crossOsUnlocked && (
+                <Alert className="mt-2">
+                  <AlertDescription>
+                    Cross-OS fingerprinting has limitations. System-level APIs
+                    may still reflect your actual operating system, and some
+                    features may have degraded performance.
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
 
             {/* Randomize Fingerprint Option */}

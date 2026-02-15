@@ -1415,11 +1415,16 @@ mod tests {
       .parent()
       .unwrap()
       .to_path_buf();
+    let proxy_binary_name = if cfg!(windows) {
+      "donut-proxy.exe"
+    } else {
+      "donut-proxy"
+    };
     let proxy_binary = project_root
       .join("src-tauri")
       .join("target")
       .join("debug")
-      .join("donut-proxy");
+      .join(proxy_binary_name);
 
     // Check if binary already exists
     if proxy_binary.exists() {

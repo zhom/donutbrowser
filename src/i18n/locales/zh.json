@@ -274,7 +274,28 @@
       "syncing": "同步中...",
       "error": "同步错误"
     },
-    "description": "连接到同步服务器以在设备之间同步您的配置文件、代理和分组。"
+    "description": "连接到同步服务器以在设备之间同步您的配置文件、代理和分组。",
+    "cloud": {
+      "tabLabel": "云端",
+      "selfHostedTabLabel": "自托管",
+      "email": "电子邮件",
+      "emailPlaceholder": "you@example.com",
+      "sendCode": "发送验证码",
+      "codeSent": "验证码已发送！请检查您的邮箱。",
+      "verificationCode": "验证码",
+      "codePlaceholder": "输入6位验证码",
+      "verifyAndLogin": "验证并登录",
+      "loggingIn": "登录中...",
+      "connected": "已连接",
+      "plan": "套餐",
+      "profiles": "配置文件",
+      "profileUsage": "{{used}} / {{limit}}",
+      "manageAccount": "管理账户",
+      "logout": "退出登录",
+      "logoutConfirm": "您确定要退出登录吗？云同步将会停止。",
+      "loginSuccess": "登录成功！",
+      "logoutSuccess": "已成功退出登录。"
+    }
   },
   "integrations": {
     "title": "集成",
@@ -457,5 +478,8 @@
     "zen": "Zen Browser",
     "camoufox": "Camoufox",
     "wayfern": "Wayfern"
+  },
+  "fingerprint": {
+    "crossOsWarning": "伪装不同的操作系统更加困难——系统级API更难以掩盖，使网站更容易检测到不一致之处。没有任何反检测浏览器能够完美伪装跨操作系统的所有细节。"
   }
 }

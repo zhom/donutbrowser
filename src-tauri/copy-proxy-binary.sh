@@ -1,6 +1,32 @@
 #!/bin/bash
 set -e
 
+# Ensure cargo/rustc are on PATH (pnpm's bash on Windows may not inherit it)
+if ! command -v cargo &>/dev/null; then
+  # Try standard cargo locations
+  for cargo_dir in \
+    "$HOME/.cargo/bin" \
+    "/c/Users/$USER/.cargo/bin" \
+    "/mnt/c/Users/$USER/.cargo/bin"; do
+    if [[ -d "$cargo_dir" ]] && [[ -e "$cargo_dir/cargo" || -e "$cargo_dir/cargo.exe" ]]; then
+      export PATH="$cargo_dir:$PATH"
+      break
+    fi
+  done
+  # Try USERPROFILE (Windows env var with backslashes)
+  if ! command -v cargo &>/dev/null && [[ -n "$USERPROFILE" ]]; then
+    CARGO_DIR="$(cd "$USERPROFILE/.cargo/bin" 2>/dev/null && pwd)"
+    if [[ -n "$CARGO_DIR" ]]; then
+      export PATH="$CARGO_DIR:$PATH"
+    fi
+  fi
+  if ! command -v cargo &>/dev/null; then
+    echo "Error: cargo not found. Please ensure Rust is installed and cargo is on your PATH."
+    echo "  Install Rust: https://rustup.rs"
+    exit 1
+  fi
+fi
+
 # Get the target triple from environment or use default
 TARGET="${TARGET:-$(rustc -vV 2>/dev/null | sed -n 's|host: ||p' || echo "unknown")}"
 MANIFEST_DIR="$(dirname "$0")"

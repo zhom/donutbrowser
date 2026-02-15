@@ -11,10 +11,16 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { Injectable, type OnModuleInit } from "@nestjs/common";
+import {
+  ForbiddenException,
+  Injectable,
+  Logger,
+  type OnModuleInit,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { interval, merge, type Observable, of, Subject } from "rxjs";
 import { catchError, filter, map, startWith, switchMap } from "rxjs/operators";
+import type { UserContext } from "../auth/user-context.interface.js";
 import type {
   DeletePrefixRequestDto,
   DeletePrefixResponseDto,
@@ -37,11 +43,13 @@ import type {
 
 @Injectable()
 export class SyncService implements OnModuleInit {
+  private readonly logger = new Logger(SyncService.name);
   private s3Client: S3Client;
   private bucket: string;
-  private lastKnownState: Map<string, string> = new Map();
   private changeSubject = new Subject<SubscribeEventDto>();
   private s3Ready = false;
+  private backendInternalUrl: string | undefined;
+  private backendInternalKey: string | undefined;
 
   constructor(private configService: ConfigService) {
     const endpoint =
@@ -65,6 +73,13 @@ export class SyncService implements OnModuleInit {
       },
       forcePathStyle,
     });
+
+    this.backendInternalUrl = this.configService.get<string>(
+      "BACKEND_INTERNAL_URL",
+    );
+    this.backendInternalKey = this.configService.get<string>(
+      "BACKEND_INTERNAL_KEY",
+    );
   }
 
   async onModuleInit() {
@@ -124,12 +139,37 @@ export class SyncService implements OnModuleInit {
     }
   }
 
-  async stat(dto: StatRequestDto): Promise<StatResponseDto> {
+  /**
+   * Scope a key to the user's prefix for cloud mode.
+   * Self-hosted mode passes through unchanged.
+   */
+  private scopeKey(ctx: UserContext, key: string): string {
+    if (ctx.mode === "self-hosted") return key;
+    return `${ctx.prefix}${key}`;
+  }
+
+  /**
+   * Validate that a key is accessible by the user.
+   * For cloud mode, key must start with user's prefix or team prefix.
+   */
+  private validateKeyAccess(ctx: UserContext, key: string): void {
+    if (ctx.mode === "self-hosted") return;
+
+    if (key.startsWith(ctx.prefix)) return;
+    if (ctx.teamPrefix && key.startsWith(ctx.teamPrefix)) return;
+
+    throw new ForbiddenException("Access denied to this key");
+  }
+
+  async stat(dto: StatRequestDto, ctx: UserContext): Promise<StatResponseDto> {
+    const key = this.scopeKey(ctx, dto.key);
+    this.validateKeyAccess(ctx, key);
+
     try {
       const response = await this.s3Client.send(
         new HeadObjectCommand({
           Bucket: this.bucket,
-          Key: dto.key,
+          Key: key,
         }),
       );
 
@@ -153,17 +193,31 @@ export class SyncService implements OnModuleInit {
 
   async presignUpload(
     dto: PresignUploadRequestDto,
+    ctx: UserContext,
   ): Promise<PresignUploadResponseDto> {
+    const key = this.scopeKey(ctx, dto.key);
+    this.validateKeyAccess(ctx, key);
+
+    // Check profile limit for cloud users
+    if (ctx.mode === "cloud" && ctx.profileLimit > 0) {
+      await this.checkProfileLimit(ctx);
+    }
+
     const expiresIn = dto.expiresIn || 3600;
     const expiresAt = new Date(Date.now() + expiresIn * 1000);
 
     const command = new PutCmd({
       Bucket: this.bucket,
-      Key: dto.key,
+      Key: key,
       ContentType: dto.contentType || "application/octet-stream",
     });
 
     const url = await getSignedUrl(this.s3Client, command, { expiresIn });
+
+    // Report profile usage after upload presign if key is under profiles/
+    if (ctx.mode === "cloud" && dto.key.startsWith("profiles/")) {
+      this.reportProfileUsageAsync(ctx);
+    }
 
     return {
       url,
@@ -173,13 +227,17 @@ export class SyncService implements OnModuleInit {
 
   async presignDownload(
     dto: PresignDownloadRequestDto,
+    ctx: UserContext,
   ): Promise<PresignDownloadResponseDto> {
+    const key = this.scopeKey(ctx, dto.key);
+    this.validateKeyAccess(ctx, key);
+
     const expiresIn = dto.expiresIn || 3600;
     const expiresAt = new Date(Date.now() + expiresIn * 1000);
 
     const command = new GetObjectCommand({
       Bucket: this.bucket,
-      Key: dto.key,
+      Key: key,
     });
 
     const url = await getSignedUrl(this.s3Client, command, { expiresIn });
@@ -190,7 +248,13 @@ export class SyncService implements OnModuleInit {
     };
   }
 
-  async delete(dto: DeleteRequestDto): Promise<DeleteResponseDto> {
+  async delete(
+    dto: DeleteRequestDto,
+    ctx: UserContext,
+  ): Promise<DeleteResponseDto> {
+    const key = this.scopeKey(ctx, dto.key);
+    this.validateKeyAccess(ctx, key);
+
     let deleted = false;
     let tombstoneCreated = false;
 
@@ -198,7 +262,7 @@ export class SyncService implements OnModuleInit {
       await this.s3Client.send(
         new DeleteObjectCommand({
           Bucket: this.bucket,
-          Key: dto.key,
+          Key: key,
         }),
       );
       deleted = true;
@@ -207,15 +271,16 @@ export class SyncService implements OnModuleInit {
     }
 
     if (dto.tombstoneKey) {
+      const scopedTombstoneKey = this.scopeKey(ctx, dto.tombstoneKey);
       const tombstoneData = JSON.stringify({
-        id: dto.key,
+        id: key,
         deleted_at: dto.deletedAt || new Date().toISOString(),
       });
 
       await this.s3Client.send(
         new PutObjectCommand({
           Bucket: this.bucket,
-          Key: dto.tombstoneKey,
+          Key: scopedTombstoneKey,
           Body: tombstoneData,
           ContentType: "application/json",
         }),
@@ -223,24 +288,39 @@ export class SyncService implements OnModuleInit {
       tombstoneCreated = true;
     }
 
+    // Report profile usage after delete if key is under profiles/
+    if (ctx.mode === "cloud" && dto.key.startsWith("profiles/")) {
+      this.reportProfileUsageAsync(ctx);
+    }
+
     return { deleted, tombstoneCreated };
   }
 
-  async list(dto: ListRequestDto): Promise<ListResponseDto> {
+  async list(dto: ListRequestDto, ctx?: UserContext): Promise<ListResponseDto> {
+    const prefix = ctx ? this.scopeKey(ctx, dto.prefix) : dto.prefix;
+
     const response = await this.s3Client.send(
       new ListObjectsV2Command({
         Bucket: this.bucket,
-        Prefix: dto.prefix,
+        Prefix: prefix,
         MaxKeys: dto.maxKeys || 1000,
         ContinuationToken: dto.continuationToken,
       }),
     );
 
-    const objects = (response.Contents || []).map((obj) => ({
-      key: obj.Key || "",
-      lastModified: obj.LastModified?.toISOString() || "",
-      size: obj.Size || 0,
-    }));
+    const userPrefix = ctx?.prefix || "";
+    const objects = (response.Contents || []).map((obj) => {
+      // Strip user prefix from returned keys so client sees relative keys
+      let key = obj.Key || "";
+      if (userPrefix && key.startsWith(userPrefix)) {
+        key = key.substring(userPrefix.length);
+      }
+      return {
+        key,
+        lastModified: obj.LastModified?.toISOString() || "",
+        size: obj.Size || 0,
+      };
+    });
 
     return {
       objects,
@@ -251,15 +331,24 @@ export class SyncService implements OnModuleInit {
 
   async presignUploadBatch(
     dto: PresignUploadBatchRequestDto,
+    ctx: UserContext,
   ): Promise<PresignUploadBatchResponseDto> {
+    // Check profile limit for cloud users
+    if (ctx.mode === "cloud" && ctx.profileLimit > 0) {
+      await this.checkProfileLimit(ctx);
+    }
+
     const expiresIn = dto.expiresIn || 3600;
     const expiresAt = new Date(Date.now() + expiresIn * 1000);
 
     const items = await Promise.all(
       dto.items.map(async (item) => {
+        const key = this.scopeKey(ctx, item.key);
+        this.validateKeyAccess(ctx, key);
+
         const command = new PutCmd({
           Bucket: this.bucket,
-          Key: item.key,
+          Key: key,
           ContentType: item.contentType || "application/octet-stream",
         });
 
@@ -273,17 +362,29 @@ export class SyncService implements OnModuleInit {
       }),
     );
 
+    // Report profile usage if any key is under profiles/
+    if (
+      ctx.mode === "cloud" &&
+      dto.items.some((item) => item.key.startsWith("profiles/"))
+    ) {
+      this.reportProfileUsageAsync(ctx);
+    }
+
     return { items };
   }
 
   async presignDownloadBatch(
     dto: PresignDownloadBatchRequestDto,
+    ctx: UserContext,
   ): Promise<PresignDownloadBatchResponseDto> {
     const expiresIn = dto.expiresIn || 3600;
     const expiresAt = new Date(Date.now() + expiresIn * 1000);
 
     const items = await Promise.all(
-      dto.keys.map(async (key) => {
+      dto.keys.map(async (rawKey) => {
+        const key = this.scopeKey(ctx, rawKey);
+        this.validateKeyAccess(ctx, key);
+
         const command = new GetObjectCommand({
           Bucket: this.bucket,
           Key: key,
@@ -292,7 +393,7 @@ export class SyncService implements OnModuleInit {
         const url = await getSignedUrl(this.s3Client, command, { expiresIn });
 
         return {
-          key,
+          key: rawKey,
           url,
           expiresAt: expiresAt.toISOString(),
         };
@@ -304,7 +405,9 @@ export class SyncService implements OnModuleInit {
 
   async deletePrefix(
     dto: DeletePrefixRequestDto,
+    ctx: UserContext,
   ): Promise<DeletePrefixResponseDto> {
+    const prefix = this.scopeKey(ctx, dto.prefix);
     let deletedCount = 0;
     let tombstoneCreated = false;
     let continuationToken: string | undefined;
@@ -314,7 +417,7 @@ export class SyncService implements OnModuleInit {
       const listResponse = await this.s3Client.send(
         new ListObjectsV2Command({
           Bucket: this.bucket,
-          Prefix: dto.prefix,
+          Prefix: prefix,
           MaxKeys: 1000,
           ContinuationToken: continuationToken,
         }),
@@ -346,6 +449,7 @@ export class SyncService implements OnModuleInit {
 
     // Create tombstone if requested
     if (dto.tombstoneKey && deletedCount > 0) {
+      const scopedTombstoneKey = this.scopeKey(ctx, dto.tombstoneKey);
       const tombstoneData = JSON.stringify({
         prefix: dto.prefix,
         deleted_at: dto.deletedAt || new Date().toISOString(),
@@ -355,7 +459,7 @@ export class SyncService implements OnModuleInit {
       await this.s3Client.send(
         new PutObjectCommand({
           Bucket: this.bucket,
-          Key: dto.tombstoneKey,
+          Key: scopedTombstoneKey,
           Body: tombstoneData,
           ContentType: "application/json",
         }),
@@ -363,11 +467,28 @@ export class SyncService implements OnModuleInit {
       tombstoneCreated = true;
     }
 
+    // Report profile usage after prefix delete if prefix is under profiles/
+    if (ctx.mode === "cloud" && dto.prefix.startsWith("profiles/")) {
+      this.reportProfileUsageAsync(ctx);
+    }
+
     return { deletedCount, tombstoneCreated };
   }
 
-  subscribe(pollIntervalMs = 2000): Observable<SubscribeEventDto> {
-    const prefixes = ["profiles/", "proxies/", "groups/", "tombstones/"];
+  subscribe(
+    ctx: UserContext,
+    pollIntervalMs = 2000,
+  ): Observable<SubscribeEventDto> {
+    const basePrefixes = ["profiles/", "proxies/", "groups/", "tombstones/"];
+
+    // Scope prefixes for cloud users; self-hosted gets root prefixes
+    const prefixes =
+      ctx.mode === "self-hosted"
+        ? basePrefixes
+        : basePrefixes.map((p) => `${ctx.prefix}${p}`);
+
+    // Per-connection state (not shared across subscribers)
+    let lastKnownState = new Map<string, string>();
 
     const pollChanges$ = interval(pollIntervalMs).pipe(
       startWith(0),
@@ -382,7 +503,7 @@ export class SyncService implements OnModuleInit {
               const stateKey = `${obj.key}:${obj.lastModified}`;
               currentState.set(obj.key, stateKey);
 
-              const previousStateKey = this.lastKnownState.get(obj.key);
+              const previousStateKey = lastKnownState.get(obj.key);
               if (previousStateKey !== stateKey) {
                 events.push({
                   type: "change",
@@ -397,7 +518,7 @@ export class SyncService implements OnModuleInit {
           }
         }
 
-        for (const [key] of this.lastKnownState) {
+        for (const [key] of lastKnownState) {
           if (!currentState.has(key)) {
             events.push({
               type: "delete",
@@ -406,7 +527,7 @@ export class SyncService implements OnModuleInit {
           }
         }
 
-        this.lastKnownState = currentState;
+        lastKnownState = currentState;
         return events;
       }),
       switchMap((events) => of(...events)),
@@ -424,5 +545,98 @@ export class SyncService implements OnModuleInit {
 
   emitChange(event: SubscribeEventDto) {
     this.changeSubject.next(event);
+  }
+
+  /**
+   * Check if the user has reached their profile limit.
+   * Counts objects in the profiles/ prefix.
+   */
+  private async checkProfileLimit(ctx: UserContext): Promise<void> {
+    if (ctx.profileLimit <= 0) return; // 0 = unlimited
+
+    const profilePrefix = `${ctx.prefix}profiles/`;
+    const result = await this.s3Client.send(
+      new ListObjectsV2Command({
+        Bucket: this.bucket,
+        Prefix: profilePrefix,
+        MaxKeys: ctx.profileLimit + 1,
+      }),
+    );
+
+    const count = result.Contents?.length || 0;
+    if (count >= ctx.profileLimit) {
+      throw new ForbiddenException(
+        `Profile limit reached (${ctx.profileLimit}). Upgrade your plan for more profiles.`,
+      );
+    }
+  }
+
+  /**
+   * Count the number of profile objects for a user.
+   */
+  private async countProfiles(ctx: UserContext): Promise<number> {
+    const profilePrefix = `${ctx.prefix}profiles/`;
+    let count = 0;
+    let continuationToken: string | undefined;
+
+    do {
+      const result = await this.s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          Prefix: profilePrefix,
+          MaxKeys: 1000,
+          ContinuationToken: continuationToken,
+        }),
+      );
+      count += result.Contents?.length || 0;
+      continuationToken = result.NextContinuationToken;
+    } while (continuationToken);
+
+    return count;
+  }
+
+  /**
+   * Extract user ID from context prefix (e.g. "users/abc-123/" → "abc-123").
+   */
+  private extractUserId(ctx: UserContext): string | null {
+    const match = ctx.prefix.match(/^users\/([^/]+)\/$/);
+    return match ? match[1] : null;
+  }
+
+  /**
+   * Fire-and-forget: count profiles and report to backend.
+   */
+  private reportProfileUsageAsync(ctx: UserContext): void {
+    if (!this.backendInternalUrl || !this.backendInternalKey) return;
+
+    const userId = this.extractUserId(ctx);
+    if (!userId) return;
+
+    this.countProfiles(ctx)
+      .then((count) => this.reportProfileUsage(userId, count))
+      .catch((err) =>
+        this.logger.warn(`Failed to report profile usage: ${err.message}`),
+      );
+  }
+
+  private async reportProfileUsage(
+    userId: string,
+    count: number,
+  ): Promise<void> {
+    const url = `${this.backendInternalUrl}/api/auth/internal/profile-usage`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-internal-key": this.backendInternalKey!,
+      },
+      body: JSON.stringify({ userId, count }),
+    });
+
+    if (!response.ok) {
+      this.logger.warn(
+        `Profile usage report failed: ${response.status} ${response.statusText}`,
+      );
+    }
   }
 }

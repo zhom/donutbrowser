@@ -71,6 +71,7 @@ interface CreateProfileDialogProps {
     groupId?: string;
   }) => Promise<void>;
   selectedGroupId?: string;
+  crossOsUnlocked?: boolean;
 }
 
 interface BrowserOption {
@@ -106,6 +107,7 @@ export function CreateProfileDialog({
   onClose,
   onCreateProfile,
   selectedGroupId,
+  crossOsUnlocked = false,
 }: CreateProfileDialogProps) {
   const [profileName, setProfileName] = useState("");
   const [currentStep, setCurrentStep] = useState<
@@ -679,6 +681,16 @@ export function CreateProfileDialog({
                             )}
                             {!isLoadingReleaseTypes &&
                               !releaseTypesError &&
+                              !getBestAvailableVersion("wayfern") && (
+                                <div className="flex gap-3 items-center p-3 rounded-md border border-yellow-500/50 bg-yellow-500/10">
+                                  <p className="text-sm text-yellow-500">
+                                    Wayfern is not available on your platform
+                                    yet.
+                                  </p>
+                                </div>
+                              )}
+                            {!isLoadingReleaseTypes &&
+                              !releaseTypesError &&
                               !isBrowserCurrentlyDownloading("wayfern") &&
                               !isBrowserVersionAvailable("wayfern") &&
                               getBestAvailableVersion("wayfern") && (
@@ -732,6 +744,7 @@ export function CreateProfileDialog({
                               config={wayfernConfig}
                               onConfigChange={updateWayfernConfig}
                               isCreating
+                              crossOsUnlocked={crossOsUnlocked}
                             />
                           </div>
                         ) : selectedBrowser === "camoufox" ? (
@@ -763,6 +776,16 @@ export function CreateProfileDialog({
                                 </RippleButton>
                               </div>
                             )}
+                            {!isLoadingReleaseTypes &&
+                              !releaseTypesError &&
+                              !getBestAvailableVersion("camoufox") && (
+                                <div className="flex gap-3 items-center p-3 rounded-md border border-yellow-500/50 bg-yellow-500/10">
+                                  <p className="text-sm text-yellow-500">
+                                    Camoufox is not available on your platform
+                                    yet.
+                                  </p>
+                                </div>
+                              )}
                             {!isLoadingReleaseTypes &&
                               !releaseTypesError &&
                               !isBrowserCurrentlyDownloading("camoufox") &&
@@ -819,6 +842,7 @@ export function CreateProfileDialog({
                               onConfigChange={updateCamoufoxConfig}
                               isCreating
                               browserType="camoufox"
+                              crossOsUnlocked={crossOsUnlocked}
                             />
                           </div>
                         ) : (

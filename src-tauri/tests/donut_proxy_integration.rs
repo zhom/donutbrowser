@@ -16,11 +16,16 @@ async fn setup_test() -> Result<std::path::PathBuf, Box<dyn std::error::Error + 
     .to_path_buf();
 
   // Build donut-proxy binary if it doesn't exist
+  let proxy_binary_name = if cfg!(windows) {
+    "donut-proxy.exe"
+  } else {
+    "donut-proxy"
+  };
   let proxy_binary = project_root
     .join("src-tauri")
     .join("target")
     .join("debug")
-    .join("donut-proxy");
+    .join(proxy_binary_name);
 
   if !proxy_binary.exists() {
     println!("Building donut-proxy binary for integration tests...");

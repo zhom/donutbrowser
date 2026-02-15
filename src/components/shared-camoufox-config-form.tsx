@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { LuLock } from "react-icons/lu";
 import MultipleSelector, { type Option } from "@/components/multiple-selector";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -29,6 +31,7 @@ interface SharedCamoufoxConfigFormProps {
   forceAdvanced?: boolean; // Force advanced mode (for editing)
   readOnly?: boolean; // Flag to indicate if the form should be read-only
   browserType?: "camoufox" | "wayfern"; // Browser type to customize form options
+  crossOsUnlocked?: boolean; // Allow selecting non-current OS (paid feature)
 }
 
 // Determine if fingerprint editing should be disabled
@@ -118,7 +121,9 @@ export function SharedCamoufoxConfigForm({
   forceAdvanced = false,
   readOnly = false,
   browserType = "camoufox",
+  crossOsUnlocked = false,
 }: SharedCamoufoxConfigFormProps) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState(
     forceAdvanced ? "manual" : "automatic",
   );
@@ -128,7 +133,6 @@ export function SharedCamoufoxConfigForm({
 
   // Get selected OS (defaults to current OS)
   const selectedOS = config.os || currentOS;
-  const isOSDifferent = selectedOS !== currentOS;
 
   // Set screen resolution to user's screen size when creating a new profile
   useEffect(() => {
@@ -227,18 +231,25 @@ export function SharedCamoufoxConfigForm({
             <SelectValue placeholder="Select operating system" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="windows">{osLabels.windows}</SelectItem>
-            <SelectItem value="macos">{osLabels.macos}</SelectItem>
-            <SelectItem value="linux">{osLabels.linux}</SelectItem>
+            {(["windows", "macos", "linux"] as CamoufoxOS[]).map((os) => {
+              const isDisabled = os !== currentOS && !crossOsUnlocked;
+              return (
+                <SelectItem key={os} value={os} disabled={isDisabled}>
+                  <span className="flex items-center gap-2">
+                    {osLabels[os]}
+                    {isDisabled && (
+                      <LuLock className="w-3 h-3 text-muted-foreground" />
+                    )}
+                  </span>
+                </SelectItem>
+              );
+            })}
           </SelectContent>
         </Select>
-        {isOSDifferent && (
-          <Alert className="border-yellow-500/50 bg-yellow-500/10">
-            <AlertDescription className="text-yellow-600 dark:text-yellow-400">
-              ⚠️ Warning: Selecting an OS different from your current system (
-              {osLabels[currentOS]}) increases the risk of detection. Websites
-              can detect mismatches between your fingerprint and actual system
-              behavior.
+        {selectedOS !== currentOS && crossOsUnlocked && (
+          <Alert className="mt-2">
+            <AlertDescription>
+              {t("fingerprint.crossOsWarning")}
             </AlertDescription>
           </Alert>
         )}
@@ -994,19 +1005,27 @@ export function SharedCamoufoxConfigForm({
                   <SelectValue placeholder="Select operating system" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="windows">{osLabels.windows}</SelectItem>
-                  <SelectItem value="macos">{osLabels.macos}</SelectItem>
-                  <SelectItem value="linux">{osLabels.linux}</SelectItem>
+                  {(["windows", "macos", "linux"] as CamoufoxOS[]).map((os) => {
+                    const isDisabled = os !== currentOS && !crossOsUnlocked;
+                    return (
+                      <SelectItem key={os} value={os} disabled={isDisabled}>
+                        <span className="flex items-center gap-2">
+                          {osLabels[os]}
+                          {isDisabled && (
+                            <LuLock className="w-3 h-3 text-muted-foreground" />
+                          )}
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
-              {isOSDifferent && (
-                <Alert className="border-yellow-500/50 bg-yellow-500/10">
-                  <AlertDescription className="text-yellow-600 dark:text-yellow-400">
-                    ⚠️ Warning: Selecting an OS different from your current
-                    system ({osLabels[currentOS]}) increases the risk of
-                    detection. Websites with advanced protections can detect
-                    mismatches between your fingerprint and actual system
-                    behavior.
+              {selectedOS !== currentOS && crossOsUnlocked && (
+                <Alert className="mt-2">
+                  <AlertDescription>
+                    Cross-OS fingerprinting has limitations. System-level APIs
+                    may still reflect your actual operating system, and some
+                    features may have degraded performance.
                   </AlertDescription>
                 </Alert>
               )}

@@ -870,6 +870,19 @@ pub async fn save_table_sorting_settings(sorting: TableSortingSettings) -> Resul
 
 #[tauri::command]
 pub async fn get_sync_settings(app_handle: tauri::AppHandle) -> Result<SyncSettings, String> {
+  // Cloud auth takes priority over self-hosted settings
+  if crate::cloud_auth::CLOUD_AUTH.is_logged_in().await {
+    let sync_token = crate::cloud_auth::CLOUD_AUTH
+      .get_or_refresh_sync_token()
+      .await
+      .map_err(|e| format!("Failed to get cloud sync token: {e}"))?;
+    return Ok(SyncSettings {
+      sync_server_url: Some(crate::cloud_auth::CLOUD_SYNC_URL.to_string()),
+      sync_token,
+    });
+  }
+
+  // Fall back to self-hosted settings
   let manager = SettingsManager::instance();
   let mut sync_settings = manager
     .get_sync_settings()

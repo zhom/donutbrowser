@@ -37,6 +37,7 @@ pub mod traffic_stats;
 mod wayfern_manager;
 mod wayfern_terms;
 // mod theme_detector; // removed: theme detection handled in webview via CSS prefers-color-scheme
+pub mod cloud_auth;
 mod commercial_license;
 mod cookie_manager;
 pub mod daemon;
@@ -66,7 +67,8 @@ use browser_version_manager::{
 };
 
 use downloaded_browsers_registry::{
-  check_missing_binaries, ensure_all_binaries_exist, get_downloaded_browser_versions,
+  check_missing_binaries, ensure_active_browsers_downloaded, ensure_all_binaries_exist,
+  get_downloaded_browser_versions,
 };
 
 use downloader::{cancel_download, download_browser};
@@ -654,6 +656,9 @@ pub fn run() {
         .focused(true)
         .visible(true);
 
+      #[cfg(target_os = "windows")]
+      let win_builder = win_builder.decorations(false);
+
       #[allow(unused_variables)]
       let window = win_builder.build().unwrap();
 
@@ -1084,6 +1089,21 @@ pub fn run() {
         }
       });
 
+      // Start cloud auth background refresh loop
+      let app_handle_cloud = app.handle().clone();
+      tauri::async_runtime::spawn(async move {
+        // On startup, refresh access token + sync token if cloud auth is active
+        if cloud_auth::CLOUD_AUTH.is_logged_in().await {
+          if let Err(e) = cloud_auth::CLOUD_AUTH.refresh_access_token().await {
+            log::warn!("Failed to refresh cloud access token on startup: {e}");
+          }
+          if let Err(e) = cloud_auth::CLOUD_AUTH.get_or_refresh_sync_token().await {
+            log::warn!("Failed to refresh cloud sync token on startup: {e}");
+          }
+        }
+        cloud_auth::CloudAuthManager::start_sync_token_refresh_loop(app_handle_cloud).await;
+      });
+
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
@@ -1135,6 +1155,7 @@ pub fn run() {
       check_missing_binaries,
       check_missing_geoip_database,
       ensure_all_binaries_exist,
+      ensure_active_browsers_downloaded,
       create_stored_proxy,
       get_stored_proxies,
       update_stored_proxy,
@@ -1190,7 +1211,14 @@ pub fn run() {
       connect_vpn,
       disconnect_vpn,
       get_vpn_status,
-      list_active_vpn_connections
+      list_active_vpn_connections,
+      // Cloud auth commands
+      cloud_auth::cloud_request_otp,
+      cloud_auth::cloud_verify_otp,
+      cloud_auth::cloud_get_user,
+      cloud_auth::cloud_refresh_profile,
+      cloud_auth::cloud_logout,
+      cloud_auth::restart_sync_service
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
@@ -1340,6 +1368,8 @@ mod tests {
             // Remove trailing comma and whitespace
             let command = line.trim_end_matches(',').trim();
             if !command.is_empty() {
+              // Strip module prefix (e.g., "cloud_auth::cloud_request_otp" -> "cloud_request_otp")
+              let command = command.rsplit("::").next().unwrap_or(command);
               commands.push(command.to_string());
             }
           }

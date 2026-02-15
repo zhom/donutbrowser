@@ -1192,6 +1192,64 @@ mod tests {
 }
 
 #[tauri::command]
+pub async fn ensure_active_browsers_downloaded(
+  app_handle: tauri::AppHandle,
+) -> Result<Vec<String>, String> {
+  let registry = DownloadedBrowsersRegistry::instance();
+  let version_manager = crate::browser_version_manager::BrowserVersionManager::instance();
+  let mut downloaded = Vec::new();
+
+  for browser in &["wayfern", "camoufox"] {
+    // Check if any version is already downloaded
+    let existing = registry.get_downloaded_versions(browser);
+    if !existing.is_empty() {
+      log::debug!(
+        "Skipping {browser}: already have {} version(s) downloaded",
+        existing.len()
+      );
+      continue;
+    }
+
+    // Get the latest release type for this browser
+    let release_types = match version_manager.get_browser_release_types(browser).await {
+      Ok(rt) => rt,
+      Err(e) => {
+        log::warn!("Failed to get release types for {browser}: {e}");
+        continue;
+      }
+    };
+
+    // Use stable version (the only release type for these browsers)
+    let version = match release_types.stable {
+      Some(v) => v,
+      None => {
+        log::debug!("No stable version available for {browser} on this platform, skipping");
+        continue;
+      }
+    };
+
+    log::info!("Auto-downloading {browser} {version} (no versions found locally)");
+    match crate::downloader::download_browser(
+      app_handle.clone(),
+      browser.to_string(),
+      version.clone(),
+    )
+    .await
+    {
+      Ok(_) => {
+        downloaded.push(format!("{browser} {version}"));
+        log::info!("Successfully auto-downloaded {browser} {version}");
+      }
+      Err(e) => {
+        log::warn!("Failed to auto-download {browser} {version}: {e}");
+      }
+    }
+  }
+
+  Ok(downloaded)
+}
+
+#[tauri::command]
 pub fn get_downloaded_browser_versions(browser_str: String) -> Result<Vec<String>, String> {
   let registry = DownloadedBrowsersRegistry::instance();
   Ok(registry.get_downloaded_versions(&browser_str))

@@ -870,6 +870,8 @@ impl Extractor {
       "chromium.exe",
       "zen.exe",
       "brave.exe",
+      "camoufox.exe",
+      "wayfern.exe",
     ];
 
     // First try priority executable names
@@ -938,6 +940,8 @@ impl Extractor {
               || file_name.contains("zen")
               || file_name.contains("brave")
               || file_name.contains("browser")
+              || file_name.contains("camoufox")
+              || file_name.contains("wayfern")
             {
               return Ok(path);
             }

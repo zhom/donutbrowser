@@ -2,7 +2,6 @@ use super::engine::SyncEngine;
 use super::subscription::SyncWorkItem;
 use crate::events;
 use crate::profile::ProfileManager;
-use once_cell::sync::OnceCell;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -11,14 +10,16 @@ use tokio::sync::mpsc;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 
-static GLOBAL_SCHEDULER: OnceCell<Arc<SyncScheduler>> = OnceCell::new();
+static GLOBAL_SCHEDULER: std::sync::Mutex<Option<Arc<SyncScheduler>>> = std::sync::Mutex::new(None);
 
 pub fn get_global_scheduler() -> Option<Arc<SyncScheduler>> {
-  GLOBAL_SCHEDULER.get().cloned()
+  GLOBAL_SCHEDULER.lock().ok().and_then(|g| g.clone())
 }
 
 pub fn set_global_scheduler(scheduler: Arc<SyncScheduler>) {
-  let _ = GLOBAL_SCHEDULER.set(scheduler);
+  if let Ok(mut g) = GLOBAL_SCHEDULER.lock() {
+    *g = Some(scheduler);
+  }
 }
 
 #[derive(Debug, Clone)]

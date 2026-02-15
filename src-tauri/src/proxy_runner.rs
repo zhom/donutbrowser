@@ -60,7 +60,7 @@ pub async fn start_proxy_process_with_profile(
     cmd.stdout(Stdio::null());
 
     // Always log to file for diagnostics (both debug and release builds)
-    let log_path = std::path::PathBuf::from("/tmp").join(format!("donut-proxy-{}.log", id));
+    let log_path = std::env::temp_dir().join(format!("donut-proxy-{}.log", id));
     if let Ok(file) = std::fs::File::create(&log_path) {
       log::info!("Proxy worker stderr will be logged to: {:?}", log_path);
       cmd.stderr(Stdio::from(file));
@@ -105,12 +105,27 @@ pub async fn start_proxy_process_with_profile(
 
   #[cfg(windows)]
   {
+    use std::os::windows::io::AsRawHandle;
     use std::os::windows::process::CommandExt;
     use std::process::Command as StdCommand;
-    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::Foundation::{CloseHandle, SetHandleInformation, HANDLE, HANDLE_FLAGS};
     use windows::Win32::System::Threading::{
       OpenProcess, SetPriorityClass, ABOVE_NORMAL_PRIORITY_CLASS, PROCESS_SET_INFORMATION,
     };
+
+    // Mark current stdout/stderr as non-inheritable so the spawned worker process
+    // does not inherit pipe handles from our parent (prevents blocking when parent exits).
+    let stdout_handle = std::io::stdout().as_raw_handle();
+    let stderr_handle = std::io::stderr().as_raw_handle();
+    const HANDLE_FLAG_INHERIT: u32 = 0x00000001;
+    unsafe {
+      if !stdout_handle.is_null() {
+        let _ = SetHandleInformation(HANDLE(stdout_handle), HANDLE_FLAG_INHERIT, HANDLE_FLAGS(0));
+      }
+      if !stderr_handle.is_null() {
+        let _ = SetHandleInformation(HANDLE(stderr_handle), HANDLE_FLAG_INHERIT, HANDLE_FLAGS(0));
+      }
+    }
 
     let mut cmd = StdCommand::new(&exe);
     cmd.arg("proxy-worker");
@@ -120,11 +135,20 @@ pub async fn start_proxy_process_with_profile(
 
     cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::null());
-    cmd.stderr(Stdio::null());
 
-    // On Windows, use CREATE_NEW_PROCESS_GROUP flag for proper detachment
+    // Log to file for diagnostics (matching Unix behavior)
+    let log_path = std::env::temp_dir().join(format!("donut-proxy-{}.log", id));
+    if let Ok(file) = std::fs::File::create(&log_path) {
+      log::info!("Proxy worker stderr will be logged to: {:?}", log_path);
+      cmd.stderr(Stdio::from(file));
+    } else {
+      cmd.stderr(Stdio::null());
+    }
+
+    // On Windows, use DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP for proper detachment.
+    const DETACHED_PROCESS: u32 = 0x00000008;
     const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
-    cmd.creation_flags(CREATE_NEW_PROCESS_GROUP);
+    cmd.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
 
     let child = cmd.spawn()?;
     let pid = child.id();

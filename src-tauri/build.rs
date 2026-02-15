@@ -56,9 +56,23 @@ fn main() {
   // Only run tauri_build if all external binaries exist
   // This allows building donut-proxy sidecar without the other binaries present
   if external_binaries_exist() {
-    tauri_build::build()
+    tauri_build::build();
+
+    // tauri_build embeds the manifest for bin targets only (cargo:rustc-link-arg-bins).
+    // Test binaries (including `cargo test --lib`) also need the comctl32 v6 manifest
+    // or they crash with STATUS_ENTRYPOINT_NOT_FOUND (0xc0000139). We embed the
+    // manifest for all targets, then suppress the duplicate for bins with /MANIFEST:NO
+    // (tauri_build's resource-embedded manifest still takes effect for bins).
+    #[cfg(target_os = "windows")]
+    {
+      embed_windows_manifest();
+      println!("cargo:rustc-link-arg-bins=/MANIFEST:NO");
+    }
   } else {
     println!("cargo:warning=Skipping tauri_build: external binaries not found. This is expected when building sidecar binaries.");
+
+    #[cfg(target_os = "windows")]
+    embed_windows_manifest();
   }
 }
 
@@ -117,6 +131,25 @@ fn ensure_dist_folder_exists() {
   println!("cargo:rerun-if-changed=../dist");
 }
 
+#[cfg(target_os = "windows")]
+fn embed_windows_manifest() {
+  use std::path::PathBuf;
+
+  let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+  let manifest_path = PathBuf::from(&manifest_dir).join("app.manifest");
+
+  if !manifest_path.exists() {
+    println!("cargo:warning=app.manifest not found, skipping manifest embedding");
+    return;
+  }
+
+  // Use the path directly (avoid canonicalize which adds \\?\ prefix that mt.exe rejects)
+  let manifest_str = manifest_path.to_str().unwrap().replace('/', "\\");
+  println!("cargo:rustc-link-arg=/MANIFEST:EMBED");
+  println!("cargo:rustc-link-arg=/MANIFESTINPUT:{manifest_str}");
+  println!("cargo:rerun-if-changed=app.manifest");
+}
+
 fn generate_tray_icons() {
   use resvg::tiny_skia::{Pixmap, Transform};
   use resvg::usvg::{Options, Tree};
@@ -167,5 +200,22 @@ fn generate_tray_icons() {
     pixmap
       .save_png(&output_path)
       .expect("Failed to save tray icon PNG");
+  }
+
+  // Generate a full-color icon for Windows tray (no template conversion)
+  {
+    let size = 44u32;
+    let mut pixmap = Pixmap::new(size, size).expect("Failed to create pixmap");
+
+    let svg_size = tree.size();
+    let scale = size as f32 / svg_size.width().max(svg_size.height());
+    let transform = Transform::from_scale(scale, scale);
+
+    resvg::render(&tree, transform, &mut pixmap.as_mut());
+
+    let output_path = icons_dir.join("tray-icon-win-44.png");
+    pixmap
+      .save_png(&output_path)
+      .expect("Failed to save Windows tray icon PNG");
   }
 }

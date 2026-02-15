@@ -546,7 +546,11 @@ mod windows {
       for entry in entries.flatten() {
         let path = entry.path();
         if path.extension().is_some_and(|ext| ext == "exe") {
-          let name = path.file_stem().unwrap_or_default().to_string_lossy();
+          let name = path
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_lowercase();
           if name.starts_with("firefox")
             || name.starts_with("zen")
             || name.starts_with("camoufox")
@@ -609,7 +613,11 @@ mod windows {
       for entry in entries.flatten() {
         let path = entry.path();
         if path.extension().is_some_and(|ext| ext == "exe") {
-          let name = path.file_stem().unwrap_or_default().to_string_lossy();
+          let name = path
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_lowercase();
           if name.contains("chromium")
             || name.contains("brave")
             || name.contains("chrome")
@@ -644,7 +652,11 @@ mod windows {
         let path = entry.path();
 
         if path.extension().is_some_and(|ext| ext == "exe") {
-          let name = path.file_stem().unwrap_or_default().to_string_lossy();
+          let name = path
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_lowercase();
           if name.starts_with("firefox")
             || name.starts_with("zen")
             || name.starts_with("camoufox")
@@ -705,7 +717,11 @@ mod windows {
         let path = entry.path();
 
         if path.extension().is_some_and(|ext| ext == "exe") {
-          let name = path.file_stem().unwrap_or_default().to_string_lossy();
+          let name = path
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_lowercase();
           if name.contains("chromium")
             || name.contains("brave")
             || name.contains("chrome")

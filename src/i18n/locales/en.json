@@ -274,7 +274,28 @@
       "syncing": "Syncing...",
       "error": "Sync Error"
     },
-    "description": "Connect to a sync server to synchronize your profiles, proxies, and groups across devices."
+    "description": "Connect to a sync server to synchronize your profiles, proxies, and groups across devices.",
+    "cloud": {
+      "tabLabel": "Cloud",
+      "selfHostedTabLabel": "Self-Hosted",
+      "email": "Email",
+      "emailPlaceholder": "you@example.com",
+      "sendCode": "Send Code",
+      "codeSent": "Code sent! Check your email.",
+      "verificationCode": "Verification Code",
+      "codePlaceholder": "Enter 6-digit code",
+      "verifyAndLogin": "Verify & Log In",
+      "loggingIn": "Logging in...",
+      "connected": "Connected",
+      "plan": "Plan",
+      "profiles": "Profiles",
+      "profileUsage": "{{used}} / {{limit}}",
+      "manageAccount": "Manage Account",
+      "logout": "Log Out",
+      "logoutConfirm": "Are you sure you want to log out? Cloud sync will stop.",
+      "loginSuccess": "Successfully logged in!",
+      "logoutSuccess": "Successfully logged out."
+    }
   },
   "integrations": {
     "title": "Integrations",
@@ -457,5 +478,8 @@
     "zen": "Zen Browser",
     "camoufox": "Camoufox",
     "wayfern": "Wayfern"
+  },
+  "fingerprint": {
+    "crossOsWarning": "Spoofing a different operating system is harder — system-level APIs are more difficult to mask, making it easier for websites to detect inconsistencies. No anti-detect browser can perfectly spoof every detail across operating systems."
   }
 }
