@@ -42,7 +42,6 @@
 
 ## Download
 
-> As of right now, the app is not signed by Apple. You need to have Gatekeeper disabled to run it. The app automatically checks for updates on each launch.
 > For Linux, .deb and .rpm packages are available as well as standalone .AppImage files.
 
 The app can be downloaded from the [releases page](https://github.com/zhom/donutbrowser/releases/latest).

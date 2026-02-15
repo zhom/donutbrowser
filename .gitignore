@@ -53,3 +53,6 @@ nodecar/nodecar-bin
 
 # sync test harness cache
 .cache/
+
+# env
+.env

@@ -161,6 +161,26 @@ jobs:
             chmod +x src-tauri/binaries/donut-daemon-${{ matrix.target }}
           fi
 
+      - name: Import Apple certificate
+        if: matrix.platform == 'macos-latest'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          echo "$APPLE_CERTIFICATE" | base64 --decode -o $CERTIFICATE_PATH
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          security import $CERTIFICATE_PATH -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH login.keychain-db
+
       - name: Generate nightly timestamp
         id: timestamp
         shell: bash
@@ -177,6 +197,10 @@ jobs:
           BUILD_TAG: "nightly-${{ steps.timestamp.outputs.timestamp }}"
           GITHUB_REF_NAME: "nightly-${{ steps.timestamp.outputs.timestamp }}"
           GITHUB_SHA: ${{ github.sha }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           projectPath: ./src-tauri
           tagName: "nightly-${{ steps.timestamp.outputs.timestamp }}"
@@ -185,3 +209,9 @@ jobs:
           releaseDraft: false
           prerelease: true
           args: ${{ matrix.args }}
+
+      - name: Clean up Apple certificate
+        if: matrix.platform == 'macos-latest' && always()
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
+          rm -f $RUNNER_TEMP/build_certificate.p12 || true
