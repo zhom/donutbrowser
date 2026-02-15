@@ -165,21 +165,31 @@ jobs:
         if: matrix.platform == 'macos-latest'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_CERTIFICATE_KEY: ${{ secrets.APPLE_CERTIFICATE_KEY }}
         run: |
-          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          CERT_PATH=$RUNNER_TEMP/cert.cer
+          KEY_PATH=$RUNNER_TEMP/cert.key
+          PEM_PATH=$RUNNER_TEMP/cert.pem
+          P12_PATH=$RUNNER_TEMP/build_certificate.p12
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
           KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+          P12_PASSWORD=$(openssl rand -base64 32)
 
-          echo "$APPLE_CERTIFICATE" | base64 --decode -o $CERTIFICATE_PATH
+          echo "$APPLE_CERTIFICATE" | base64 --decode > $CERT_PATH
+          echo "$APPLE_CERTIFICATE_KEY" | base64 --decode > $KEY_PATH
+
+          openssl x509 -inform DER -in $CERT_PATH -out $PEM_PATH
+          openssl pkcs12 -export -out $P12_PATH -inkey $KEY_PATH -in $PEM_PATH -passout pass:$P12_PASSWORD
 
           security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
-          security import $CERTIFICATE_PATH -P "${APPLE_CERTIFICATE_PASSWORD:-}" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security import $P12_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security list-keychain -d user -s $KEYCHAIN_PATH login.keychain-db
+
+          rm -f $CERT_PATH $KEY_PATH $PEM_PATH $P12_PATH
 
       - name: Generate nightly timestamp
         id: timestamp
