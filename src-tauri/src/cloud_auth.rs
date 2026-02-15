@@ -26,7 +26,7 @@ pub struct CloudUser {
   pub email: String,
   pub plan: String,
   #[serde(rename = "planPeriod")]
-  pub plan_period: String,
+  pub plan_period: Option<String>,
   #[serde(rename = "subscriptionStatus")]
   pub subscription_status: String,
   #[serde(rename = "profileLimit")]

@@ -40,7 +40,7 @@ export interface CloudUser {
   id: string;
   email: string;
   plan: string;
-  planPeriod: string;
+  planPeriod: string | null;
   subscriptionStatus: string;
   profileLimit: number;
   cloudProfilesUsed: number;

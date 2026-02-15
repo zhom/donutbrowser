@@ -2,12 +2,8 @@ import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module.js";
 
 function validateEnv() {
-  const required = ["SYNC_TOKEN"];
-  const missing = required.filter((key) => !process.env[key]);
-  if (missing.length > 0) {
-    console.error(
-      `Missing required environment variables: ${missing.join(", ")}`,
-    );
+  if (!process.env.SYNC_TOKEN && !process.env.SYNC_JWT_PUBLIC_KEY) {
+    console.error("Either SYNC_TOKEN or SYNC_JWT_PUBLIC_KEY must be set");
     process.exit(1);
   }
 }
