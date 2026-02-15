@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -61,7 +61,7 @@ function copyBinary(baseName) {
       buildArgs.push("--target", TARGET);
     }
 
-    execSync(`cargo ${buildArgs.join(" ")}`, {
+    execFileSync("cargo", buildArgs, {
       cwd: MANIFEST_DIR,
       stdio: "inherit",
     });
