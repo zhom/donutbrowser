@@ -92,7 +92,9 @@ export default function Home() {
   // Cloud auth for cross-OS unlock
   const { user: cloudUser } = useCloudAuth();
   const crossOsUnlocked =
-    cloudUser?.plan !== "free" && cloudUser?.subscriptionStatus === "active";
+    cloudUser?.plan !== "free" &&
+    (cloudUser?.subscriptionStatus === "active" ||
+      cloudUser?.planPeriod === "lifetime");
 
   const [createProfileDialogOpen, setCreateProfileDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
