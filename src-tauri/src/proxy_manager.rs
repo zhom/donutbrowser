@@ -105,6 +105,14 @@ pub struct StoredProxy {
   pub last_sync: Option<u64>,
   #[serde(default)]
   pub is_cloud_managed: bool,
+  #[serde(default)]
+  pub is_cloud_derived: bool,
+  #[serde(default)]
+  pub geo_country: Option<String>,
+  #[serde(default)]
+  pub geo_state: Option<String>,
+  #[serde(default)]
+  pub geo_city: Option<String>,
 }
 
 impl StoredProxy {
@@ -116,6 +124,10 @@ impl StoredProxy {
       sync_enabled: false,
       last_sync: None,
       is_cloud_managed: false,
+      is_cloud_derived: false,
+      geo_country: None,
+      geo_state: None,
+      geo_city: None,
     }
   }
 
@@ -400,6 +412,12 @@ impl ProxyManager {
     Ok(stored_proxy)
   }
 
+  // Check if a cloud-managed proxy exists
+  pub fn has_cloud_proxy(&self) -> bool {
+    let stored_proxies = self.stored_proxies.lock().unwrap();
+    stored_proxies.contains_key(CLOUD_PROXY_ID)
+  }
+
   // Upsert the cloud-managed proxy (create or update)
   pub fn upsert_cloud_proxy(&self, proxy_settings: ProxySettings) -> Result<StoredProxy, String> {
     let mut stored_proxies = self.stored_proxies.lock().unwrap();
@@ -424,6 +442,10 @@ impl ProxyManager {
         sync_enabled: false,
         last_sync: None,
         is_cloud_managed: true,
+        is_cloud_derived: false,
+        geo_country: None,
+        geo_state: None,
+        geo_city: None,
       };
       stored_proxies.insert(CLOUD_PROXY_ID.to_string(), cloud_proxy.clone());
       drop(stored_proxies);
@@ -452,6 +474,155 @@ impl ProxyManager {
       if let Err(e) = events::emit_empty("proxies-changed") {
         log::error!("Failed to emit proxies-changed event: {e}");
       }
+    }
+  }
+
+  // Build a geo-targeted username from base username and location parts
+  fn build_geo_username(
+    base_username: &str,
+    country: &str,
+    state: &Option<String>,
+    city: &Option<String>,
+  ) -> String {
+    let mut username = format!("{}-country-{}", base_username, country);
+    if let Some(state) = state {
+      username = format!("{}-state-{}", username, state);
+    }
+    if let Some(city) = city {
+      username = format!("{}-city-{}", username, city);
+    }
+    username
+  }
+
+  // Create a cloud-derived location proxy from the base cloud proxy credentials
+  pub fn create_cloud_location_proxy(
+    &self,
+    name: String,
+    country: String,
+    state: Option<String>,
+    city: Option<String>,
+  ) -> Result<StoredProxy, String> {
+    // Get base cloud proxy credentials
+    let base_proxy = {
+      let stored_proxies = self.stored_proxies.lock().unwrap();
+      stored_proxies
+        .get(CLOUD_PROXY_ID)
+        .cloned()
+        .ok_or_else(|| "No cloud proxy available. Please log in first.".to_string())?
+    };
+
+    let base_username = base_proxy
+      .proxy_settings
+      .username
+      .as_ref()
+      .ok_or_else(|| "Cloud proxy has no username".to_string())?;
+
+    let geo_username = Self::build_geo_username(base_username, &country, &state, &city);
+
+    let proxy_settings = ProxySettings {
+      proxy_type: base_proxy.proxy_settings.proxy_type.clone(),
+      host: base_proxy.proxy_settings.host.clone(),
+      port: base_proxy.proxy_settings.port,
+      username: Some(geo_username),
+      password: base_proxy.proxy_settings.password.clone(),
+    };
+
+    // Check if name already exists
+    {
+      let stored_proxies = self.stored_proxies.lock().unwrap();
+      if stored_proxies.values().any(|p| p.name == name) {
+        return Err(format!("Proxy with name '{}' already exists", name));
+      }
+    }
+
+    let stored_proxy = StoredProxy {
+      id: uuid::Uuid::new_v4().to_string(),
+      name,
+      proxy_settings,
+      sync_enabled: false,
+      last_sync: None,
+      is_cloud_managed: false,
+      is_cloud_derived: true,
+      geo_country: Some(country),
+      geo_state: state,
+      geo_city: city,
+    };
+
+    {
+      let mut stored_proxies = self.stored_proxies.lock().unwrap();
+      stored_proxies.insert(stored_proxy.id.clone(), stored_proxy.clone());
+    }
+
+    if let Err(e) = self.save_proxy(&stored_proxy) {
+      log::warn!("Failed to save location proxy: {e}");
+    }
+
+    if let Err(e) = events::emit_empty("proxies-changed") {
+      log::error!("Failed to emit proxies-changed event: {e}");
+    }
+
+    Ok(stored_proxy)
+  }
+
+  // Update all cloud-derived proxies when base cloud proxy credentials change
+  pub fn update_cloud_derived_proxies(&self) {
+    let base_proxy = {
+      let stored_proxies = self.stored_proxies.lock().unwrap();
+      match stored_proxies.get(CLOUD_PROXY_ID) {
+        Some(p) => p.clone(),
+        None => return, // No cloud proxy, nothing to update
+      }
+    };
+
+    let base_username = match &base_proxy.proxy_settings.username {
+      Some(u) => u.clone(),
+      None => return,
+    };
+
+    let mut updated = false;
+    let mut stored_proxies = self.stored_proxies.lock().unwrap();
+
+    for proxy in stored_proxies.values_mut() {
+      if !proxy.is_cloud_derived {
+        continue;
+      }
+
+      let country = match &proxy.geo_country {
+        Some(c) => c.clone(),
+        None => continue,
+      };
+
+      let geo_username =
+        Self::build_geo_username(&base_username, &country, &proxy.geo_state, &proxy.geo_city);
+
+      proxy.proxy_settings.username = Some(geo_username);
+      proxy.proxy_settings.password = base_proxy.proxy_settings.password.clone();
+      proxy.proxy_settings.host = base_proxy.proxy_settings.host.clone();
+      proxy.proxy_settings.port = base_proxy.proxy_settings.port;
+
+      updated = true;
+    }
+
+    if updated {
+      // Save all updated proxies
+      let proxies_to_save: Vec<StoredProxy> = stored_proxies
+        .values()
+        .filter(|p| p.is_cloud_derived)
+        .cloned()
+        .collect();
+      drop(stored_proxies);
+
+      for proxy in &proxies_to_save {
+        if let Err(e) = self.save_proxy(proxy) {
+          log::warn!("Failed to save updated derived proxy {}: {e}", proxy.id);
+        }
+      }
+
+      if let Err(e) = events::emit_empty("proxies-changed") {
+        log::error!("Failed to emit proxies-changed event: {e}");
+      }
+
+      log::debug!("Updated {} cloud-derived proxies", proxies_to_save.len());
     }
   }
 
@@ -678,7 +849,7 @@ impl ProxyManager {
     let stored_proxies = self.stored_proxies.lock().unwrap();
     let proxies: Vec<ExportedProxy> = stored_proxies
       .values()
-      .filter(|p| !p.is_cloud_managed)
+      .filter(|p| !p.is_cloud_managed && !p.is_cloud_derived)
       .map(|p| ExportedProxy {
         name: p.name.clone(),
         proxy_type: p.proxy_settings.proxy_type.clone(),
@@ -704,7 +875,7 @@ impl ProxyManager {
     let stored_proxies = self.stored_proxies.lock().unwrap();
     stored_proxies
       .values()
-      .filter(|p| !p.is_cloud_managed)
+      .filter(|p| !p.is_cloud_managed && !p.is_cloud_derived)
       .map(|p| Self::build_proxy_url(&p.proxy_settings))
       .collect::<Vec<_>>()
       .join("\n")

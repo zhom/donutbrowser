@@ -128,7 +128,7 @@
       "settings": "设置",
       "proxies": "代理",
       "groups": "分组",
-      "syncService": "同步服务",
+      "syncService": "账户",
       "integrations": "集成",
       "importProfile": "导入配置文件"
     }

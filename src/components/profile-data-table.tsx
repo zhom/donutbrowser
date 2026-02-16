@@ -20,6 +20,7 @@ import {
   LuChevronDown,
   LuChevronUp,
   LuCookie,
+  LuLock,
   LuTrash2,
   LuUsers,
 } from "react-icons/lu";
@@ -73,6 +74,7 @@ import { trimName } from "@/lib/name-utils";
 import { cn } from "@/lib/utils";
 import type {
   BrowserProfile,
+  LocationItem,
   ProxyCheckResult,
   StoredProxy,
   TrafficSnapshot,
@@ -170,6 +172,16 @@ type TableMeta = {
   syncStatuses: Record<string, string>;
   onOpenProfileSyncDialog?: (profile: BrowserProfile) => void;
   onToggleProfileSync?: (profile: BrowserProfile) => void;
+  crossOsUnlocked?: boolean;
+
+  // Country proxy creation (inline in proxy dropdown)
+  countries: LocationItem[];
+  canCreateLocationProxy: boolean;
+  loadCountries: () => Promise<void>;
+  handleCreateCountryProxy: (
+    profileId: string,
+    country: LocationItem,
+  ) => Promise<void>;
 };
 
 const TagsCell = React.memo<{
@@ -691,6 +703,7 @@ interface ProfilesDataTableProps {
   onBulkCopyCookies?: () => void;
   onOpenProfileSyncDialog?: (profile: BrowserProfile) => void;
   onToggleProfileSync?: (profile: BrowserProfile) => void;
+  crossOsUnlocked?: boolean;
 }
 
 export function ProfilesDataTable({
@@ -713,6 +726,7 @@ export function ProfilesDataTable({
   onBulkCopyCookies,
   onOpenProfileSyncDialog,
   onToggleProfileSync,
+  crossOsUnlocked = false,
 }: ProfilesDataTableProps) {
   const { getTableSorting, updateSorting, isLoaded } = useTableSorting();
   const [sorting, setSorting] = React.useState<SortingState>([]);
@@ -822,6 +836,23 @@ export function ProfilesDataTable({
     Record<string, string>
   >({});
 
+  // Country proxy creation state (for inline proxy creation in dropdown)
+  const [countries, setCountries] = React.useState<LocationItem[]>([]);
+  const [countriesLoaded, setCountriesLoaded] = React.useState(false);
+  const hasCloudProxy = storedProxies.some((p) => p.is_cloud_managed);
+  const canCreateLocationProxy = hasCloudProxy || crossOsUnlocked;
+
+  const loadCountries = React.useCallback(async () => {
+    if (countriesLoaded || !canCreateLocationProxy) return;
+    try {
+      const data = await invoke<LocationItem[]>("cloud_get_countries");
+      setCountries(data);
+      setCountriesLoaded(true);
+    } catch (e) {
+      console.error("Failed to load countries:", e);
+    }
+  }, [countriesLoaded, canCreateLocationProxy]);
+
   // Load cached check results for proxies
   React.useEffect(() => {
     const loadCachedResults = async () => {
@@ -878,6 +909,35 @@ export function ProfilesDataTable({
       }
     },
     [],
+  );
+
+  const handleCreateCountryProxy = React.useCallback(
+    async (profileId: string, country: LocationItem) => {
+      try {
+        await invoke("create_cloud_location_proxy", {
+          name: country.name,
+          country: country.code,
+          state: null,
+          city: null,
+        });
+        await emit("stored-proxies-changed");
+        // Wait briefly for proxy list to update, then find and assign the new proxy
+        await new Promise((r) => setTimeout(r, 200));
+        const updatedProxies =
+          await invoke<StoredProxy[]>("get_stored_proxies");
+        const newProxy = updatedProxies.find(
+          (p: StoredProxy) =>
+            p.is_cloud_derived && p.geo_country === country.code,
+        );
+        if (newProxy) {
+          await handleProxySelection(profileId, newProxy.id);
+        }
+        setOpenProxySelectorFor(null);
+      } catch (error) {
+        console.error("Failed to create country proxy:", error);
+      }
+    },
+    [handleProxySelection],
   );
 
   // Use shared browser state hook
@@ -1323,6 +1383,13 @@ export function ProfilesDataTable({
       syncStatuses,
       onOpenProfileSyncDialog,
       onToggleProfileSync,
+      crossOsUnlocked,
+
+      // Country proxy creation
+      countries,
+      canCreateLocationProxy,
+      loadCountries,
+      handleCreateCountryProxy,
     }),
     [
       selectedProfiles,
@@ -1364,6 +1431,11 @@ export function ProfilesDataTable({
       syncStatuses,
       onOpenProfileSyncDialog,
       onToggleProfileSync,
+      crossOsUnlocked,
+      countries,
+      canCreateLocationProxy,
+      loadCountries,
+      handleCreateCountryProxy,
     ],
   );
 
@@ -1835,7 +1907,17 @@ export function ProfilesDataTable({
                     sideOffset={8}
                   >
                     <Command>
-                      <CommandInput placeholder="Search proxies..." />
+                      <CommandInput
+                        placeholder={
+                          meta.canCreateLocationProxy
+                            ? "Search proxies or countries..."
+                            : "Search proxies..."
+                        }
+                        onFocus={() => {
+                          if (meta.canCreateLocationProxy)
+                            void meta.loadCountries();
+                        }}
+                      />
                       <CommandList>
                         <CommandEmpty>No proxies found.</CommandEmpty>
                         <CommandGroup>
@@ -1878,6 +1960,35 @@ export function ProfilesDataTable({
                             </CommandItem>
                           ))}
                         </CommandGroup>
+                        {meta.canCreateLocationProxy &&
+                          meta.countries.length > 0 && (
+                            <CommandGroup heading="Create by country">
+                              {meta.countries
+                                .filter(
+                                  (c) =>
+                                    !meta.storedProxies.some(
+                                      (p) =>
+                                        p.is_cloud_derived &&
+                                        p.geo_country === c.code,
+                                    ),
+                                )
+                                .map((country) => (
+                                  <CommandItem
+                                    key={`country-${country.code}`}
+                                    value={`create-${country.name}`}
+                                    onSelect={() =>
+                                      void meta.handleCreateCountryProxy(
+                                        profile.id,
+                                        country,
+                                      )
+                                    }
+                                  >
+                                    <span className="mr-2 h-4 w-4" />+{" "}
+                                    {country.name}
+                                  </CommandItem>
+                                ))}
+                            </CommandGroup>
+                          )}
                       </CommandList>
                     </Command>
                   </PopoverContent>
@@ -1968,6 +2079,21 @@ export function ProfilesDataTable({
                     }}
                   >
                     View Network
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      if (meta.crossOsUnlocked) {
+                        meta.onToggleProfileSync?.(profile);
+                      }
+                    }}
+                    disabled={!meta.crossOsUnlocked}
+                  >
+                    <span className="flex items-center gap-2">
+                      {profile.sync_enabled ? "Disable Sync" : "Enable Sync"}
+                      {!meta.crossOsUnlocked && (
+                        <LuLock className="w-3 h-3 text-muted-foreground" />
+                      )}
+                    </span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => {

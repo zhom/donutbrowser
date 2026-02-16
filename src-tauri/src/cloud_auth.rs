@@ -73,6 +73,12 @@ struct SyncTokenResponse {
   sync_token: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocationItem {
+  pub code: String,
+  pub name: String,
+}
+
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
 struct CloudProxyConfigResponse {
@@ -650,7 +656,11 @@ impl CloudAuthManager {
           password: config.password,
         };
         match PROXY_MANAGER.upsert_cloud_proxy(settings) {
-          Ok(_) => log::debug!("Cloud proxy synced successfully"),
+          Ok(_) => {
+            log::debug!("Cloud proxy synced successfully");
+            // Propagate credential changes to derived location proxies
+            PROXY_MANAGER.update_cloud_derived_proxies();
+          }
           Err(e) => log::warn!("Failed to upsert cloud proxy: {e}"),
         }
       }
@@ -661,6 +671,106 @@ impl CloudAuthManager {
         log::warn!("Failed to sync cloud proxy: {e}");
       }
     }
+  }
+
+  /// Fetch country list from the cloud backend
+  pub async fn fetch_countries(&self) -> Result<Vec<LocationItem>, String> {
+    self
+      .api_call_with_retry(|access_token| {
+        let url = format!("{CLOUD_API_URL}/api/proxy/locations/countries");
+        let client = self.client.clone();
+        async move {
+          let response = client
+            .get(&url)
+            .header("Authorization", format!("Bearer {access_token}"))
+            .send()
+            .await
+            .map_err(|e| format!("Failed to fetch countries: {e}"))?;
+
+          if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("Countries fetch failed ({status}): {body}"));
+          }
+
+          response
+            .json::<Vec<LocationItem>>()
+            .await
+            .map_err(|e| format!("Failed to parse countries: {e}"))
+        }
+      })
+      .await
+  }
+
+  /// Fetch state list for a country from the cloud backend
+  pub async fn fetch_states(&self, country: &str) -> Result<Vec<LocationItem>, String> {
+    let country = country.to_string();
+    self
+      .api_call_with_retry(move |access_token| {
+        let url = format!(
+          "{CLOUD_API_URL}/api/proxy/locations/states?country={}",
+          country
+        );
+        let client = reqwest::Client::new();
+        async move {
+          let response = client
+            .get(&url)
+            .header("Authorization", format!("Bearer {access_token}"))
+            .send()
+            .await
+            .map_err(|e| format!("Failed to fetch states: {e}"))?;
+
+          if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("States fetch failed ({status}): {body}"));
+          }
+
+          response
+            .json::<Vec<LocationItem>>()
+            .await
+            .map_err(|e| format!("Failed to parse states: {e}"))
+        }
+      })
+      .await
+  }
+
+  /// Fetch city list for a country+state from the cloud backend
+  pub async fn fetch_cities(
+    &self,
+    country: &str,
+    state: &str,
+  ) -> Result<Vec<LocationItem>, String> {
+    let country = country.to_string();
+    let state = state.to_string();
+    self
+      .api_call_with_retry(move |access_token| {
+        let url = format!(
+          "{CLOUD_API_URL}/api/proxy/locations/cities?country={}&state={}",
+          country, state
+        );
+        let client = reqwest::Client::new();
+        async move {
+          let response = client
+            .get(&url)
+            .header("Authorization", format!("Bearer {access_token}"))
+            .send()
+            .await
+            .map_err(|e| format!("Failed to fetch cities: {e}"))?;
+
+          if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("Cities fetch failed ({status}): {body}"));
+          }
+
+          response
+            .json::<Vec<LocationItem>>()
+            .await
+            .map_err(|e| format!("Failed to parse cities: {e}"))
+        }
+      })
+      .await
   }
 
   /// Background loop that refreshes the sync token periodically
@@ -753,6 +863,35 @@ pub async fn cloud_logout(app_handle: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn cloud_has_active_subscription() -> Result<bool, String> {
   Ok(CLOUD_AUTH.has_active_paid_subscription().await)
+}
+
+#[tauri::command]
+pub async fn cloud_get_countries() -> Result<Vec<LocationItem>, String> {
+  CLOUD_AUTH.fetch_countries().await
+}
+
+#[tauri::command]
+pub async fn cloud_get_states(country: String) -> Result<Vec<LocationItem>, String> {
+  CLOUD_AUTH.fetch_states(&country).await
+}
+
+#[tauri::command]
+pub async fn cloud_get_cities(country: String, state: String) -> Result<Vec<LocationItem>, String> {
+  CLOUD_AUTH.fetch_cities(&country, &state).await
+}
+
+#[tauri::command]
+pub async fn create_cloud_location_proxy(
+  name: String,
+  country: String,
+  state: Option<String>,
+  city: Option<String>,
+) -> Result<crate::proxy_manager::StoredProxy, String> {
+  // If no cloud proxy exists yet, attempt to sync it first
+  if !PROXY_MANAGER.has_cloud_proxy() {
+    CLOUD_AUTH.sync_cloud_proxy().await;
+  }
+  PROXY_MANAGER.create_cloud_location_proxy(name, country, state, city)
 }
 
 #[derive(Debug, Serialize)]

@@ -919,6 +919,7 @@ export default function Home() {
             onBulkCopyCookies={handleBulkCopyCookies}
             onOpenProfileSyncDialog={handleOpenProfileSyncDialog}
             onToggleProfileSync={handleToggleProfileSync}
+            crossOsUnlocked={crossOsUnlocked}
           />
         </div>
       </main>

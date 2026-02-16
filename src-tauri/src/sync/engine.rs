@@ -1050,34 +1050,41 @@ pub async fn set_profile_sync_enabled(
 
   // If enabling, first check that sync settings are configured
   if enabled {
-    let manager = SettingsManager::instance();
-    let settings = manager
-      .load_settings()
-      .map_err(|e| format!("Failed to load settings: {e}"))?;
+    // Cloud auth provides sync settings dynamically — skip local checks
+    let cloud_logged_in = crate::cloud_auth::CLOUD_AUTH.is_logged_in().await;
 
-    if settings.sync_server_url.is_none() {
-      let _ = events::emit(
-        "profile-sync-status",
-        serde_json::json!({
-          "profile_id": profile_id,
-          "status": "error",
-          "error": "Sync server not configured. Please configure sync settings first."
-        }),
-      );
-      return Err("Sync server not configured. Please configure sync settings first.".to_string());
-    }
+    if !cloud_logged_in {
+      let manager = SettingsManager::instance();
+      let settings = manager
+        .load_settings()
+        .map_err(|e| format!("Failed to load settings: {e}"))?;
 
-    let token = manager.get_sync_token(&app_handle).await.ok().flatten();
-    if token.is_none() {
-      let _ = events::emit(
-        "profile-sync-status",
-        serde_json::json!({
-          "profile_id": profile_id,
-          "status": "error",
-          "error": "Sync token not configured. Please configure sync settings first."
-        }),
-      );
-      return Err("Sync token not configured. Please configure sync settings first.".to_string());
+      if settings.sync_server_url.is_none() {
+        let _ = events::emit(
+          "profile-sync-status",
+          serde_json::json!({
+            "profile_id": profile_id,
+            "status": "error",
+            "error": "Sync server not configured. Please configure sync settings first."
+          }),
+        );
+        return Err(
+          "Sync server not configured. Please configure sync settings first.".to_string(),
+        );
+      }
+
+      let token = manager.get_sync_token(&app_handle).await.ok().flatten();
+      if token.is_none() {
+        let _ = events::emit(
+          "profile-sync-status",
+          serde_json::json!({
+            "profile_id": profile_id,
+            "status": "error",
+            "error": "Sync token not configured. Please configure sync settings first."
+          }),
+        );
+        return Err("Sync token not configured. Please configure sync settings first.".to_string());
+      }
     }
   }
 
@@ -1240,18 +1247,24 @@ pub async fn set_proxy_sync_enabled(
 
   // If enabling, check that sync settings are configured
   if enabled {
-    let manager = SettingsManager::instance();
-    let settings = manager
-      .load_settings()
-      .map_err(|e| format!("Failed to load settings: {e}"))?;
+    let cloud_logged_in = crate::cloud_auth::CLOUD_AUTH.is_logged_in().await;
 
-    if settings.sync_server_url.is_none() {
-      return Err("Sync server not configured. Please configure sync settings first.".to_string());
-    }
+    if !cloud_logged_in {
+      let manager = SettingsManager::instance();
+      let settings = manager
+        .load_settings()
+        .map_err(|e| format!("Failed to load settings: {e}"))?;
 
-    let token = manager.get_sync_token(&app_handle).await.ok().flatten();
-    if token.is_none() {
-      return Err("Sync token not configured. Please configure sync settings first.".to_string());
+      if settings.sync_server_url.is_none() {
+        return Err(
+          "Sync server not configured. Please configure sync settings first.".to_string(),
+        );
+      }
+
+      let token = manager.get_sync_token(&app_handle).await.ok().flatten();
+      if token.is_none() {
+        return Err("Sync token not configured. Please configure sync settings first.".to_string());
+      }
     }
   }
 
@@ -1318,18 +1331,24 @@ pub async fn set_group_sync_enabled(
 
   // If enabling, check that sync settings are configured
   if enabled {
-    let manager = SettingsManager::instance();
-    let settings = manager
-      .load_settings()
-      .map_err(|e| format!("Failed to load settings: {e}"))?;
+    let cloud_logged_in = crate::cloud_auth::CLOUD_AUTH.is_logged_in().await;
 
-    if settings.sync_server_url.is_none() {
-      return Err("Sync server not configured. Please configure sync settings first.".to_string());
-    }
+    if !cloud_logged_in {
+      let manager = SettingsManager::instance();
+      let settings = manager
+        .load_settings()
+        .map_err(|e| format!("Failed to load settings: {e}"))?;
 
-    let token = manager.get_sync_token(&app_handle).await.ok().flatten();
-    if token.is_none() {
-      return Err("Sync token not configured. Please configure sync settings first.".to_string());
+      if settings.sync_server_url.is_none() {
+        return Err(
+          "Sync server not configured. Please configure sync settings first.".to_string(),
+        );
+      }
+
+      let token = manager.get_sync_token(&app_handle).await.ok().flatten();
+      if token.is_none() {
+        return Err("Sync token not configured. Please configure sync settings first.".to_string());
+      }
     }
   }
 

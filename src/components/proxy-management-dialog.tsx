@@ -3,7 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
-import { GoPlus } from "react-icons/go";
+import { GoGlobe, GoPlus } from "react-icons/go";
 import { LuDownload, LuPencil, LuTrash2, LuUpload } from "react-icons/lu";
 import { toast } from "sonner";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
@@ -38,6 +38,8 @@ import {
 import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import type { ProxyCheckResult, StoredProxy } from "@/types";
+import { FlagIcon } from "./flag-icon";
+import { LocationProxyDialog } from "./location-proxy-dialog";
 import { ProxyCheckButton } from "./proxy-check-button";
 import { RippleButton } from "./ui/ripple";
 
@@ -85,6 +87,7 @@ export function ProxyManagementDialog({
   const [showProxyForm, setShowProxyForm] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showLocationDialog, setShowLocationDialog] = useState(false);
   const [editingProxy, setEditingProxy] = useState<StoredProxy | null>(null);
   const [proxyToDelete, setProxyToDelete] = useState<StoredProxy | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -277,14 +280,27 @@ export function ProxyManagementDialog({
                   Export
                 </RippleButton>
               </div>
-              <RippleButton
-                size="sm"
-                onClick={handleCreateProxy}
-                className="flex gap-2 items-center"
-              >
-                <GoPlus className="w-4 h-4" />
-                Create
-              </RippleButton>
+              <div className="flex gap-2">
+                {storedProxies.some((p) => p.is_cloud_managed) && (
+                  <RippleButton
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowLocationDialog(true)}
+                    className="flex gap-2 items-center"
+                  >
+                    <GoGlobe className="w-4 h-4" />
+                    Location
+                  </RippleButton>
+                )}
+                <RippleButton
+                  size="sm"
+                  onClick={handleCreateProxy}
+                  className="flex gap-2 items-center"
+                >
+                  <GoPlus className="w-4 h-4" />
+                  Create
+                </RippleButton>
+              </div>
             </div>
 
             {/* Proxies list */}
@@ -316,12 +332,19 @@ export function ProxyManagementDialog({
                           proxy,
                           proxySyncStatus[proxy.id],
                         );
+                        const isDerived = proxy.is_cloud_derived === true;
                         return (
                           <TableRow key={proxy.id}>
                             <TableCell className="font-medium">
                               <div className="flex flex-col gap-0.5">
                                 <div className="flex items-center gap-2">
-                                  {!isCloud && (
+                                  {isDerived && proxy.geo_country && (
+                                    <FlagIcon
+                                      countryCode={proxy.geo_country}
+                                      className="shrink-0"
+                                    />
+                                  )}
+                                  {!isCloud && !isDerived && (
                                     <Tooltip>
                                       <TooltipTrigger asChild>
                                         <div
@@ -409,54 +432,52 @@ export function ProxyManagementDialog({
                                     }));
                                   }}
                                 />
+                                {!isCloud && !isDerived && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleEditProxy(proxy)}
+                                      >
+                                        <LuPencil className="w-4 h-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Edit proxy</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )}
                                 {!isCloud && (
-                                  <>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span>
                                         <Button
                                           variant="ghost"
                                           size="sm"
-                                          onClick={() => handleEditProxy(proxy)}
+                                          onClick={() =>
+                                            handleDeleteProxy(proxy)
+                                          }
+                                          disabled={
+                                            (proxyUsage[proxy.id] ?? 0) > 0
+                                          }
                                         >
-                                          <LuPencil className="w-4 h-4" />
+                                          <LuTrash2 className="w-4 h-4" />
                                         </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        <p>Edit proxy</p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <span>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() =>
-                                              handleDeleteProxy(proxy)
-                                            }
-                                            disabled={
-                                              (proxyUsage[proxy.id] ?? 0) > 0
-                                            }
-                                          >
-                                            <LuTrash2 className="w-4 h-4" />
-                                          </Button>
-                                        </span>
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        {(proxyUsage[proxy.id] ?? 0) > 0 ? (
-                                          <p>
-                                            Cannot delete: in use by{" "}
-                                            {proxyUsage[proxy.id]} profile
-                                            {proxyUsage[proxy.id] > 1
-                                              ? "s"
-                                              : ""}
-                                          </p>
-                                        ) : (
-                                          <p>Delete proxy</p>
-                                        )}
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </>
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      {(proxyUsage[proxy.id] ?? 0) > 0 ? (
+                                        <p>
+                                          Cannot delete: in use by{" "}
+                                          {proxyUsage[proxy.id]} profile
+                                          {proxyUsage[proxy.id] > 1 ? "s" : ""}
+                                        </p>
+                                      ) : (
+                                        <p>Delete proxy</p>
+                                      )}
+                                    </TooltipContent>
+                                  </Tooltip>
                                 )}
                               </div>
                             </TableCell>
@@ -499,6 +520,10 @@ export function ProxyManagementDialog({
       <ProxyExportDialog
         isOpen={showExportDialog}
         onClose={() => setShowExportDialog(false)}
+      />
+      <LocationProxyDialog
+        isOpen={showLocationDialog}
+        onClose={() => setShowLocationDialog(false)}
       />
     </>
   );

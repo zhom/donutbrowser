@@ -128,7 +128,7 @@
       "settings": "Settings",
       "proxies": "Proxies",
       "groups": "Groups",
-      "syncService": "Sync Service",
+      "syncService": "Account",
       "integrations": "Integrations",
       "importProfile": "Import Profile"
     }
@@ -262,7 +262,7 @@
     }
   },
   "sync": {
-    "title": "Sync Service",
+    "title": "Account",
     "config": "Sync Configuration",
     "serverUrl": "Server URL",
     "serverUrlPlaceholder": "https://sync.example.com",

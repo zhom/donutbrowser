@@ -76,6 +76,15 @@ export interface StoredProxy {
   sync_enabled?: boolean;
   last_sync?: number;
   is_cloud_managed?: boolean;
+  is_cloud_derived?: boolean;
+  geo_country?: string;
+  geo_state?: string;
+  geo_city?: string;
+}
+
+export interface LocationItem {
+  code: string;
+  name: string;
 }
 
 export interface ProfileGroup {

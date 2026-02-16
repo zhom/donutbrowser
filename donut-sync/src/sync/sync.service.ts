@@ -628,7 +628,7 @@ export class SyncService implements OnModuleInit {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-internal-key": this.backendInternalKey!,
+        "x-internal-key": this.backendInternalKey ?? "undefined",
       },
       body: JSON.stringify({ userId, count }),
     });

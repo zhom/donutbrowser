@@ -1221,6 +1221,10 @@ pub fn run() {
       cloud_auth::cloud_refresh_profile,
       cloud_auth::cloud_logout,
       cloud_auth::cloud_get_proxy_usage,
+      cloud_auth::cloud_get_countries,
+      cloud_auth::cloud_get_states,
+      cloud_auth::cloud_get_cities,
+      cloud_auth::create_cloud_location_proxy,
       cloud_auth::restart_sync_service
     ])
     .run(tauri::generate_context!())
