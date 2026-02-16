@@ -274,9 +274,11 @@ jobs:
 
           # Delete existing rolling nightly release and tag
           gh release delete nightly --yes 2>/dev/null || true
+          cd "$GITHUB_WORKSPACE"
           git push --delete origin nightly 2>/dev/null || true
 
           # Create new rolling nightly release with all assets
+          cd /tmp/nightly-assets
           gh release create nightly \
             Donut_nightly_* \
             Donut_aarch64.app.tar.gz \
