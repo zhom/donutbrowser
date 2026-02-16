@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { getBrowserDisplayName } from "@/lib/browser-utils";
+import {
+  getBrowserDisplayName,
+  getOSDisplayName,
+  isCrossOsProfile,
+} from "@/lib/browser-utils";
 import type { BrowserProfile } from "@/types";
 
 /**
@@ -47,6 +51,8 @@ export function useBrowserState(
   const canLaunchProfile = useCallback(
     (profile: BrowserProfile): boolean => {
       if (!isClient) return false;
+
+      if (isCrossOsProfile(profile)) return false;
 
       const isRunning = runningProfiles.has(profile.id);
       const isLaunching = launchingProfiles.has(profile.id);
@@ -165,6 +171,11 @@ export function useBrowserState(
   const getLaunchTooltipContent = useCallback(
     (profile: BrowserProfile): string => {
       if (!isClient) return "Loading...";
+
+      if (isCrossOsProfile(profile) && profile.host_os) {
+        const osName = getOSDisplayName(profile.host_os);
+        return `Created on ${osName}. Can only be launched on ${osName}.`;
+      }
 
       const isRunning = runningProfiles.has(profile.id);
       const isLaunching = launchingProfiles.has(profile.id);

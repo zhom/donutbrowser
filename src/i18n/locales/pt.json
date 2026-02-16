@@ -481,5 +481,10 @@
   },
   "fingerprint": {
     "crossOsWarning": "Falsificar um sistema operacional diferente é mais difícil: as APIs de nível de sistema são mais difíceis de mascarar, facilitando a detecção de inconsistências pelos sites. Nenhum navegador antidetecção consegue falsificar perfeitamente todos os detalhes entre sistemas operacionais."
+  },
+  "crossOs": {
+    "viewOnly": "Criado em {{os}} - somente leitura",
+    "cannotLaunch": "Criado em {{os}}. Só pode ser iniciado em {{os}}.",
+    "cannotModify": "Não é possível modificar as configurações de sincronização de um perfil de outro sistema operacional"
   }
 }

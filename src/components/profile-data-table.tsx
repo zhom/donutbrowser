@@ -13,6 +13,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import type { Dispatch, SetStateAction } from "react";
 import * as React from "react";
+import { FaApple, FaLinux, FaWindows } from "react-icons/fa";
 import { FiWifi } from "react-icons/fi";
 import { IoEllipsisHorizontal } from "react-icons/io5";
 import {
@@ -68,6 +69,8 @@ import {
   getBrowserDisplayName,
   getBrowserIcon,
   getCurrentOS,
+  getOSDisplayName,
+  isCrossOsProfile,
 } from "@/lib/browser-utils";
 import { formatRelativeTime } from "@/lib/flag-utils";
 import { trimName } from "@/lib/name-utils";
@@ -1464,6 +1467,7 @@ export function ProfilesDataTable({
           const profile = row.original;
           const browser = profile.browser;
           const IconComponent = getBrowserIcon(browser);
+          const isCrossOs = isCrossOsProfile(profile);
 
           const isSelected = meta.isProfileSelected(profile.id);
           const isRunning =
@@ -1473,6 +1477,66 @@ export function ProfilesDataTable({
           const isBrowserUpdating = meta.isUpdating(browser);
           const isDisabled =
             isRunning || isLaunching || isStopping || isBrowserUpdating;
+
+          // Cross-OS profiles: show OS icon when checkboxes aren't visible, show checkbox when they are
+          if (isCrossOs && !meta.showCheckboxes && !isSelected) {
+            const osName = profile.host_os
+              ? getOSDisplayName(profile.host_os)
+              : "another OS";
+            const OsIcon =
+              profile.host_os === "macos"
+                ? FaApple
+                : profile.host_os === "windows"
+                  ? FaWindows
+                  : FaLinux;
+            return (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="flex justify-center items-center w-4 h-4">
+                    <button
+                      type="button"
+                      className="flex justify-center items-center p-0 border-none cursor-pointer"
+                      onClick={() => meta.handleIconClick(profile.id)}
+                      aria-label="Select profile"
+                    >
+                      <span className="w-4 h-4 group">
+                        <OsIcon className="w-4 h-4 text-muted-foreground group-hover:hidden" />
+                        <span className="peer border-input dark:bg-input/30 dark:data-[state=checked]:bg-primary size-4 shrink-0 rounded-[4px] border shadow-xs transition-shadow outline-none w-4 h-4 hidden group-hover:block pointer-events-none items-center justify-center duration-200" />
+                      </span>
+                    </button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Created on {osName} - view only</p>
+                </TooltipContent>
+              </Tooltip>
+            );
+          }
+
+          // Cross-OS profiles with checkboxes visible: show checkbox (selectable for bulk delete)
+          if (isCrossOs && (meta.showCheckboxes || isSelected)) {
+            const osName = profile.host_os
+              ? getOSDisplayName(profile.host_os)
+              : "another OS";
+            return (
+              <NonHoverableTooltip
+                content={<p>Created on {osName} - view only</p>}
+                sideOffset={4}
+                horizontalOffset={8}
+              >
+                <span className="flex justify-center items-center w-4 h-4">
+                  <Checkbox
+                    checked={isSelected}
+                    onCheckedChange={(value) =>
+                      meta.handleCheckboxChange(profile.id, !!value)
+                    }
+                    aria-label="Select row"
+                    className="w-4 h-4"
+                  />
+                </span>
+              </NonHoverableTooltip>
+            );
+          }
 
           if (isDisabled) {
             const tooltipMessage = isRunning
@@ -1718,13 +1782,18 @@ export function ProfilesDataTable({
               </Tooltip>
             );
 
+          const isCrossOs = isCrossOsProfile(profile);
           const isRunning =
             meta.isClient && meta.runningProfiles.has(profile.id);
           const isLaunching = meta.launchingProfiles.has(profile.id);
           const isStopping = meta.stoppingProfiles.has(profile.id);
           const isBrowserUpdating = meta.isUpdating(profile.browser);
           const isDisabled =
-            isRunning || isLaunching || isStopping || isBrowserUpdating;
+            isRunning ||
+            isLaunching ||
+            isStopping ||
+            isBrowserUpdating ||
+            isCrossOs;
 
           return (
             <button
@@ -1762,13 +1831,18 @@ export function ProfilesDataTable({
         cell: ({ row, table }) => {
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
+          const isCrossOs = isCrossOsProfile(profile);
           const isRunning =
             meta.isClient && meta.runningProfiles.has(profile.id);
           const isLaunching = meta.launchingProfiles.has(profile.id);
           const isStopping = meta.stoppingProfiles.has(profile.id);
           const isBrowserUpdating = meta.isUpdating(profile.browser);
           const isDisabled =
-            isRunning || isLaunching || isStopping || isBrowserUpdating;
+            isRunning ||
+            isLaunching ||
+            isStopping ||
+            isBrowserUpdating ||
+            isCrossOs;
 
           return (
             <TagsCell
@@ -1790,13 +1864,18 @@ export function ProfilesDataTable({
         cell: ({ row, table }) => {
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
+          const isCrossOs = isCrossOsProfile(profile);
           const isRunning =
             meta.isClient && meta.runningProfiles.has(profile.id);
           const isLaunching = meta.launchingProfiles.has(profile.id);
           const isStopping = meta.stoppingProfiles.has(profile.id);
           const isBrowserUpdating = meta.isUpdating(profile.browser);
           const isDisabled =
-            isRunning || isLaunching || isStopping || isBrowserUpdating;
+            isRunning ||
+            isLaunching ||
+            isStopping ||
+            isBrowserUpdating ||
+            isCrossOs;
 
           return (
             <NoteCell
@@ -1816,13 +1895,18 @@ export function ProfilesDataTable({
         cell: ({ row, table }) => {
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
+          const isCrossOs = isCrossOsProfile(profile);
           const isRunning =
             meta.isClient && meta.runningProfiles.has(profile.id);
           const isLaunching = meta.launchingProfiles.has(profile.id);
           const isStopping = meta.stoppingProfiles.has(profile.id);
           const isBrowserUpdating = meta.isUpdating(profile.browser);
           const isDisabled =
-            isRunning || isLaunching || isStopping || isBrowserUpdating;
+            isRunning ||
+            isLaunching ||
+            isStopping ||
+            isBrowserUpdating ||
+            isCrossOs;
 
           const hasOverride = Object.hasOwn(meta.proxyOverrides, profile.id);
           const effectiveProxyId = hasOverride
@@ -2050,6 +2134,7 @@ export function ProfilesDataTable({
         cell: ({ row, table }) => {
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
+          const isCrossOs = isCrossOsProfile(profile);
           const isRunning =
             meta.isClient && meta.runningProfiles.has(profile.id);
           const isBrowserUpdating =
@@ -2057,6 +2142,12 @@ export function ProfilesDataTable({
           const isLaunching = meta.launchingProfiles.has(profile.id);
           const isStopping = meta.stoppingProfiles.has(profile.id);
           const isDisabled =
+            isRunning ||
+            isLaunching ||
+            isStopping ||
+            isBrowserUpdating ||
+            isCrossOs;
+          const isDeleteDisabled =
             isRunning || isLaunching || isStopping || isBrowserUpdating;
 
           return (
@@ -2077,6 +2168,7 @@ export function ProfilesDataTable({
                     onClick={() => {
                       meta.onOpenTrafficDialog?.(profile.id);
                     }}
+                    disabled={isCrossOs}
                   >
                     View Network
                   </DropdownMenuItem>
@@ -2086,7 +2178,7 @@ export function ProfilesDataTable({
                         meta.onToggleProfileSync?.(profile);
                       }
                     }}
-                    disabled={!meta.crossOsUnlocked}
+                    disabled={!meta.crossOsUnlocked || isCrossOs}
                   >
                     <span className="flex items-center gap-2">
                       {profile.sync_enabled ? "Disable Sync" : "Enable Sync"}
@@ -2110,6 +2202,7 @@ export function ProfilesDataTable({
                         onClick={() => {
                           meta.onConfigureCamoufox?.(profile);
                         }}
+                        disabled={isDisabled}
                       >
                         Change Fingerprint
                       </DropdownMenuItem>
@@ -2121,6 +2214,7 @@ export function ProfilesDataTable({
                         onClick={() => {
                           meta.onCopyCookiesToProfile?.(profile);
                         }}
+                        disabled={isDisabled}
                       >
                         Copy Cookies to Profile
                       </DropdownMenuItem>
@@ -2137,7 +2231,7 @@ export function ProfilesDataTable({
                     onClick={() => {
                       setProfileToDelete(profile);
                     }}
-                    disabled={isDisabled}
+                    disabled={isDeleteDisabled}
                   >
                     Delete
                   </DropdownMenuItem>
@@ -2210,7 +2304,10 @@ export function ProfilesDataTable({
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
-                  className="overflow-visible hover:bg-accent/50"
+                  className={cn(
+                    "overflow-visible hover:bg-accent/50",
+                    isCrossOsProfile(row.original) && "opacity-60",
+                  )}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id} className="overflow-visible">

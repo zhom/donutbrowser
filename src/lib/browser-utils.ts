@@ -48,3 +48,21 @@ export const getCurrentOS = () => {
   }
   return "unknown";
 };
+
+export function isCrossOsProfile(profile: { host_os?: string }): boolean {
+  if (!profile.host_os) return false;
+  return profile.host_os !== getCurrentOS();
+}
+
+export function getOSDisplayName(os: string): string {
+  switch (os) {
+    case "macos":
+      return "macOS";
+    case "windows":
+      return "Windows";
+    case "linux":
+      return "Linux";
+    default:
+      return os;
+  }
+}

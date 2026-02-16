@@ -481,5 +481,10 @@
   },
   "fingerprint": {
     "crossOsWarning": "Spoofing a different operating system is harder — system-level APIs are more difficult to mask, making it easier for websites to detect inconsistencies. No anti-detect browser can perfectly spoof every detail across operating systems."
+  },
+  "crossOs": {
+    "viewOnly": "Created on {{os}} - view only",
+    "cannotLaunch": "Created on {{os}}. Can only be launched on {{os}}.",
+    "cannotModify": "Cannot modify sync settings for a cross-OS profile"
   }
 }

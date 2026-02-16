@@ -481,5 +481,10 @@
   },
   "fingerprint": {
     "crossOsWarning": "Suplantar un sistema operativo diferente es más difícil: las API a nivel de sistema son más difíciles de enmascarar, lo que facilita que los sitios web detecten inconsistencias. Ningún navegador antidetección puede suplantar perfectamente cada detalle entre sistemas operativos."
+  },
+  "crossOs": {
+    "viewOnly": "Creado en {{os}} - solo lectura",
+    "cannotLaunch": "Creado en {{os}}. Solo se puede iniciar en {{os}}.",
+    "cannotModify": "No se pueden modificar los ajustes de sincronización de un perfil de otro sistema operativo"
   }
 }

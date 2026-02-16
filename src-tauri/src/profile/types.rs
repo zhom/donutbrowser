@@ -41,15 +41,36 @@ pub struct BrowserProfile {
   pub sync_enabled: bool, // Whether sync is enabled for this profile
   #[serde(default)]
   pub last_sync: Option<u64>, // Timestamp of last successful sync (epoch seconds)
+  #[serde(default)]
+  pub host_os: Option<String>, // OS where profile was created ("macos", "windows", "linux")
 }
 
 pub fn default_release_type() -> String {
   "stable".to_string()
 }
 
+pub fn get_host_os() -> String {
+  if cfg!(target_os = "macos") {
+    "macos".to_string()
+  } else if cfg!(target_os = "windows") {
+    "windows".to_string()
+  } else {
+    "linux".to_string()
+  }
+}
+
 impl BrowserProfile {
   /// Get the path to the profile data directory (profiles/{uuid}/profile)
   pub fn get_profile_data_path(&self, profiles_dir: &Path) -> PathBuf {
     profiles_dir.join(self.id.to_string()).join("profile")
+  }
+
+  /// Returns true when the profile was created on a different OS than the current host.
+  /// Profiles without an `os` field (backward compat) are treated as native.
+  pub fn is_cross_os(&self) -> bool {
+    match &self.host_os {
+      Some(host_os) => host_os != &get_host_os(),
+      None => false,
+    }
   }
 }

@@ -481,5 +481,10 @@
   },
   "fingerprint": {
     "crossOsWarning": "Usurper un système d'exploitation différent est plus difficile : les API au niveau du système sont plus difficiles à masquer, ce qui permet aux sites web de détecter plus facilement les incohérences. Aucun navigateur anti-détection ne peut parfaitement usurper chaque détail d'un système d'exploitation à l'autre."
+  },
+  "crossOs": {
+    "viewOnly": "Créé sur {{os}} - lecture seule",
+    "cannotLaunch": "Créé sur {{os}}. Ne peut être lancé que sur {{os}}.",
+    "cannotModify": "Impossible de modifier les paramètres de synchronisation d'un profil d'un autre système d'exploitation"
   }
 }

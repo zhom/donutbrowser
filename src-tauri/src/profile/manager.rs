@@ -3,7 +3,7 @@ use crate::browser::{create_browser, BrowserType, ProxySettings};
 use crate::camoufox_manager::CamoufoxConfig;
 use crate::downloaded_browsers_registry::DownloadedBrowsersRegistry;
 use crate::events;
-use crate::profile::types::BrowserProfile;
+use crate::profile::types::{get_host_os, BrowserProfile};
 use crate::proxy_manager::PROXY_MANAGER;
 use crate::wayfern_manager::WayfernConfig;
 use directories::BaseDirs;
@@ -173,6 +173,7 @@ impl ProfileManager {
           note: None,
           sync_enabled: false,
           last_sync: None,
+          host_os: None,
         };
 
         match self
@@ -286,6 +287,7 @@ impl ProfileManager {
           note: None,
           sync_enabled: false,
           last_sync: None,
+          host_os: None,
         };
 
         match self
@@ -331,6 +333,7 @@ impl ProfileManager {
       note: None,
       sync_enabled: false,
       last_sync: None,
+      host_os: Some(get_host_os()),
     };
 
     // Save profile info
@@ -466,8 +469,8 @@ impl ProfileManager {
       .find(|p| p.id == profile_uuid)
       .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
 
-    // Check if browser is running
-    if profile.process_id.is_some() {
+    // Check if browser is running (cross-OS profiles can't be running locally)
+    if profile.process_id.is_some() && !profile.is_cross_os() {
       return Err(
         "Cannot delete profile while browser is running. Please stop the browser first.".into(),
       );
@@ -733,8 +736,8 @@ impl ProfileManager {
         .find(|p| p.id == profile_uuid)
         .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
 
-      // Check if browser is running
-      if profile.process_id.is_some() {
+      // Check if browser is running (cross-OS profiles can't be running locally)
+      if profile.process_id.is_some() && !profile.is_cross_os() {
         return Err(
           format!(
             "Cannot delete profile '{}' while browser is running. Please stop the browser first.",
@@ -847,6 +850,7 @@ impl ProfileManager {
       note: source.note,
       sync_enabled: false,
       last_sync: None,
+      host_os: Some(get_host_os()),
     };
 
     self.save_profile(&new_profile)?;

@@ -520,6 +520,7 @@ mod tests {
       note: None,
       sync_enabled: false,
       last_sync: None,
+      host_os: None,
     }
   }
 

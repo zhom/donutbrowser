@@ -59,6 +59,15 @@ impl SyncEngine {
     app_handle: &tauri::AppHandle,
     profile: &BrowserProfile,
   ) -> SyncResult<()> {
+    if profile.is_cross_os() {
+      log::info!(
+        "Skipping file sync for cross-OS profile: {} ({})",
+        profile.name,
+        profile.id
+      );
+      return Ok(());
+    }
+
     let profile_manager = ProfileManager::instance();
     let profiles_dir = profile_manager.get_profiles_dir();
     let profile_dir = profiles_dir.join(profile.id.to_string());
@@ -832,6 +841,49 @@ impl SyncEngine {
     let mut profile: BrowserProfile = serde_json::from_slice(&metadata_data)
       .map_err(|e| SyncError::SerializationError(format!("Failed to parse metadata: {e}")))?;
 
+    // Cross-OS profile: save metadata only, skip manifest + file downloads
+    if profile.is_cross_os() {
+      log::info!(
+        "Profile {} is cross-OS (host_os={:?}), downloading metadata only",
+        profile_id,
+        profile.host_os
+      );
+
+      fs::create_dir_all(&profile_dir).map_err(|e| {
+        SyncError::IoError(format!(
+          "Failed to create profile directory {}: {e}",
+          profile_dir.display()
+        ))
+      })?;
+
+      profile.sync_enabled = true;
+      profile.last_sync = Some(
+        std::time::SystemTime::now()
+          .duration_since(std::time::UNIX_EPOCH)
+          .unwrap()
+          .as_secs(),
+      );
+
+      profile_manager
+        .save_profile(&profile)
+        .map_err(|e| SyncError::IoError(format!("Failed to save cross-OS profile: {e}")))?;
+
+      let _ = events::emit("profiles-changed", ());
+      let _ = events::emit(
+        "profile-sync-status",
+        serde_json::json!({
+          "profile_id": profile_id,
+          "status": "synced"
+        }),
+      );
+
+      log::info!(
+        "Cross-OS profile {} metadata downloaded successfully",
+        profile_id
+      );
+      return Ok(true);
+    }
+
     // Download manifest
     let manifest = self.download_manifest(&manifest_key).await?;
     let Some(manifest) = manifest else {
@@ -938,6 +990,57 @@ impl SyncEngine {
       );
     } else {
       log::info!("No missing profiles found");
+    }
+
+    // Refresh metadata for local cross-OS profiles (propagate renames, tags, notes from originating device)
+    let profile_manager = ProfileManager::instance();
+    // Collect cross-OS profiles before async operations to avoid holding non-Send Result across await
+    let cross_os_profiles: Vec<(String, bool)> = profile_manager
+      .list_profiles()
+      .unwrap_or_default()
+      .iter()
+      .filter(|p| p.is_cross_os() && p.sync_enabled)
+      .map(|p| (p.id.to_string(), p.sync_enabled))
+      .collect();
+
+    if !cross_os_profiles.is_empty() {
+      for (pid, sync_enabled) in &cross_os_profiles {
+        let metadata_key = format!("profiles/{}/metadata.json", pid);
+        match self.client.stat(&metadata_key).await {
+          Ok(stat) if stat.exists => match self.client.presign_download(&metadata_key).await {
+            Ok(presign) => match self.client.download_bytes(&presign.url).await {
+              Ok(data) => {
+                if let Ok(mut remote_profile) = serde_json::from_slice::<BrowserProfile>(&data) {
+                  remote_profile.sync_enabled = *sync_enabled;
+                  remote_profile.last_sync = Some(
+                    std::time::SystemTime::now()
+                      .duration_since(std::time::UNIX_EPOCH)
+                      .unwrap()
+                      .as_secs(),
+                  );
+                  if let Err(e) = profile_manager.save_profile(&remote_profile) {
+                    log::warn!("Failed to refresh cross-OS profile {} metadata: {}", pid, e);
+                  } else {
+                    log::debug!("Refreshed cross-OS profile {} metadata", pid);
+                  }
+                }
+              }
+              Err(e) => {
+                log::warn!(
+                  "Failed to download cross-OS profile {} metadata: {}",
+                  pid,
+                  e
+                );
+              }
+            },
+            Err(e) => {
+              log::warn!("Failed to presign cross-OS profile {} metadata: {}", pid, e);
+            }
+          },
+          _ => {}
+        }
+      }
+      let _ = events::emit("profiles-changed", ());
     }
 
     Ok(downloaded)
@@ -1047,6 +1150,10 @@ pub async fn set_profile_sync_enabled(
     .into_iter()
     .find(|p| p.id == profile_uuid)
     .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
+
+  if profile.is_cross_os() {
+    return Err("Cannot modify sync settings for a cross-OS profile".to_string());
+  }
 
   // If enabling, first check that sync settings are configured
   if enabled {
