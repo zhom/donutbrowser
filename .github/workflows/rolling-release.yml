@@ -234,3 +234,53 @@ jobs:
         run: |
           security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
           rm -f $RUNNER_TEMP/build_certificate.p12 || true
+
+  update-nightly-release:
+    needs: [rolling-release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 #v6.0.1
+
+      - name: Generate nightly tag
+        id: tag
+        run: |
+          TIMESTAMP=$(date -u +"%Y-%m-%d")
+          COMMIT_HASH=$(echo "${GITHUB_SHA}" | cut -c1-7)
+          echo "nightly_tag=nightly-${TIMESTAMP}-${COMMIT_HASH}" >> $GITHUB_OUTPUT
+
+      - name: Update rolling nightly release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NIGHTLY_TAG="${{ steps.tag.outputs.nightly_tag }}"
+
+          # Download all assets from the per-commit nightly release
+          mkdir -p /tmp/nightly-assets
+          cd /tmp/nightly-assets
+          gh release download "$NIGHTLY_TAG" --clobber
+
+          # Rename versioned filenames to stable nightly names
+          for f in Donut_*_aarch64.dmg; do [ -f "$f" ] && mv "$f" Donut_nightly_aarch64.dmg; done
+          for f in Donut_*_x64.dmg; do [ -f "$f" ] && mv "$f" Donut_nightly_x64.dmg; done
+          for f in Donut_*_x64-setup.exe; do [ -f "$f" ] && mv "$f" Donut_nightly_x64-setup.exe; done
+          for f in Donut_*_aarch64.AppImage; do [ -f "$f" ] && mv "$f" Donut_nightly_aarch64.AppImage; done
+          for f in Donut_*_amd64.AppImage; do [ -f "$f" ] && mv "$f" Donut_nightly_amd64.AppImage; done
+          for f in Donut_*_amd64.deb; do [ -f "$f" ] && mv "$f" Donut_nightly_amd64.deb; done
+          for f in Donut_*_arm64.deb; do [ -f "$f" ] && mv "$f" Donut_nightly_arm64.deb; done
+          for f in Donut-*.x86_64.rpm; do [ -f "$f" ] && mv "$f" Donut_nightly_x86_64.rpm; done
+          for f in Donut-*.aarch64.rpm; do [ -f "$f" ] && mv "$f" Donut_nightly_aarch64.rpm; done
+
+          # Delete existing rolling nightly release and tag
+          gh release delete nightly --yes 2>/dev/null || true
+          git push --delete origin nightly 2>/dev/null || true
+
+          # Create new rolling nightly release with all assets
+          gh release create nightly \
+            Donut_nightly_* \
+            Donut_aarch64.app.tar.gz \
+            Donut_x64.app.tar.gz \
+            --title "Donut Browser Nightly" \
+            --notes "Automatically updated nightly build from the latest main branch. Install via \`brew install --cask donutbrowser@nightly\`.\n\nCommit: ${GITHUB_SHA}" \
+            --prerelease
