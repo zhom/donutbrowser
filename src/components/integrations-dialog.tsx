@@ -214,176 +214,180 @@ export function IntegrationsDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-xl">
-        <DialogHeader>
+      <DialogContent className="max-w-xl max-h-[80vh] my-8 flex flex-col">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Integrations</DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue="api" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="api">Local API</TabsTrigger>
-            <TabsTrigger value="mcp">MCP (AI Assistants)</TabsTrigger>
-          </TabsList>
+        <div className="overflow-y-auto flex-1 min-h-0">
+          <Tabs defaultValue="api" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="api">Local API</TabsTrigger>
+              <TabsTrigger value="mcp">MCP (AI Assistants)</TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="api" className="space-y-4 mt-4">
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="api-enabled"
-                checked={apiServerPort !== null}
-                disabled={isApiStarting}
-                onCheckedChange={handleApiToggle}
-              />
-              <div className="grid gap-1.5 leading-none">
-                <Label
-                  htmlFor="api-enabled"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                >
-                  Enable Local API Server
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Allow managing profiles, groups, and proxies via REST API.
-                </p>
+            <TabsContent value="api" className="space-y-4 mt-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="api-enabled"
+                  checked={apiServerPort !== null}
+                  disabled={isApiStarting}
+                  onCheckedChange={handleApiToggle}
+                />
+                <div className="grid gap-1.5 leading-none">
+                  <Label
+                    htmlFor="api-enabled"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    Enable Local API Server
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Allow managing profiles, groups, and proxies via REST API.
+                  </p>
+                </div>
               </div>
-            </div>
 
-            {settings.api_enabled && (
-              <div className="space-y-4 p-4 rounded-md border bg-muted/40">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Port</Label>
-                  <div className="flex items-center space-x-2">
-                    <Input
-                      value={apiServerPort ?? settings.api_port}
-                      readOnly
-                      className="w-24 font-mono"
-                    />
-                    <span className="text-xs text-muted-foreground">
-                      Server is running
-                    </span>
+              {settings.api_enabled && (
+                <div className="space-y-4 p-4 rounded-md border bg-muted/40">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Port</Label>
+                    <div className="flex items-center space-x-2">
+                      <Input
+                        value={apiServerPort ?? settings.api_port}
+                        readOnly
+                        className="w-24 font-mono"
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        Server is running
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">
+                      Authentication Token
+                    </Label>
+                    <div className="flex items-center space-x-2">
+                      <div className="relative flex-1">
+                        <Input
+                          type={showApiToken ? "text" : "password"}
+                          value={settings.api_token ?? ""}
+                          readOnly
+                          className="font-mono pr-10"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                          onClick={() => setShowApiToken(!showApiToken)}
+                        >
+                          {showApiToken ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                      <CopyToClipboard
+                        text={settings.api_token ?? ""}
+                        successMessage="Token copied"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Include in Authorization header: Bearer {"<token>"}
+                    </p>
                   </div>
                 </div>
+              )}
+            </TabsContent>
 
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">
-                    Authentication Token
+            <TabsContent value="mcp" className="space-y-4 mt-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="mcp-enabled"
+                  checked={settings.mcp_enabled && mcpConfig !== null}
+                  disabled={!termsAccepted || isMcpStarting}
+                  onCheckedChange={handleMcpToggle}
+                />
+                <div className="grid gap-1.5 leading-none">
+                  <Label
+                    htmlFor="mcp-enabled"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    Enable MCP Server (Model Context Protocol)
                   </Label>
-                  <div className="flex items-center space-x-2">
-                    <div className="relative flex-1">
-                      <Input
-                        type={showApiToken ? "text" : "password"}
-                        value={settings.api_token ?? ""}
-                        readOnly
-                        className="font-mono pr-10"
-                      />
+                  <p className="text-xs text-muted-foreground">
+                    Allow AI assistants like Claude Desktop to control browsers.
+                    {!termsAccepted && (
+                      <span className="ml-1 text-orange-600">
+                        (Accept Wayfern terms in Settings first)
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {mcpConfig && (
+                <div className="space-y-4 p-4 rounded-md border bg-muted/40">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">
+                      Claude Desktop Configuration
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Copy this configuration to your Claude Desktop config file
+                      at{" "}
+                      <code className="bg-muted px-1 rounded">
+                        ~/.config/claude/claude_desktop_config.json
+                      </code>
+                    </p>
+                  </div>
+
+                  <div className="relative">
+                    <pre className="p-3 text-xs font-mono rounded-md bg-background border overflow-x-auto whitespace-pre">
+                      {showMcpToken
+                        ? getFormattedMcpConfig()
+                        : getObfuscatedMcpConfig()}
+                    </pre>
+                    <div className="absolute top-2 right-2 flex items-center space-x-1">
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                        onClick={() => setShowApiToken(!showApiToken)}
+                        className="h-7 w-7 p-0"
+                        onClick={() => setShowMcpToken(!showMcpToken)}
                       >
-                        {showApiToken ? (
-                          <EyeOff className="h-4 w-4" />
+                        {showMcpToken ? (
+                          <EyeOff className="h-3.5 w-3.5" />
                         ) : (
-                          <Eye className="h-4 w-4" />
+                          <Eye className="h-3.5 w-3.5" />
                         )}
                       </Button>
+                      <CopyToClipboard
+                        text={getFormattedMcpConfig()}
+                        successMessage="Configuration copied"
+                      />
                     </div>
-                    <CopyToClipboard
-                      text={settings.api_token ?? ""}
-                      successMessage="Token copied"
-                    />
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Include in Authorization header: Bearer {"<token>"}
-                  </p>
-                </div>
-              </div>
-            )}
-          </TabsContent>
 
-          <TabsContent value="mcp" className="space-y-4 mt-4">
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="mcp-enabled"
-                checked={settings.mcp_enabled && mcpConfig !== null}
-                disabled={!termsAccepted || isMcpStarting}
-                onCheckedChange={handleMcpToggle}
-              />
-              <div className="grid gap-1.5 leading-none">
-                <Label
-                  htmlFor="mcp-enabled"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                >
-                  Enable MCP Server (Model Context Protocol)
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Allow AI assistants like Claude Desktop to control browsers.
-                  {!termsAccepted && (
-                    <span className="ml-1 text-orange-600">
-                      (Accept Wayfern terms in Settings first)
-                    </span>
-                  )}
-                </p>
-              </div>
-            </div>
-
-            {mcpConfig && (
-              <div className="space-y-4 p-4 rounded-md border bg-muted/40">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">
-                    Claude Desktop Configuration
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    Copy this configuration to your Claude Desktop config file
-                    at{" "}
-                    <code className="bg-muted px-1 rounded">
-                      ~/.config/claude/claude_desktop_config.json
-                    </code>
-                  </p>
-                </div>
-
-                <div className="relative">
-                  <pre className="p-3 text-xs font-mono rounded-md bg-background border overflow-x-auto whitespace-pre">
-                    {showMcpToken
-                      ? getFormattedMcpConfig()
-                      : getObfuscatedMcpConfig()}
-                  </pre>
-                  <div className="absolute top-2 right-2 flex items-center space-x-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0"
-                      onClick={() => setShowMcpToken(!showMcpToken)}
-                    >
-                      {showMcpToken ? (
-                        <EyeOff className="h-3.5 w-3.5" />
-                      ) : (
-                        <Eye className="h-3.5 w-3.5" />
-                      )}
-                    </Button>
-                    <CopyToClipboard
-                      text={getFormattedMcpConfig()}
-                      successMessage="Configuration copied"
-                    />
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">
+                      Available Tools
+                    </Label>
+                    <ul className="list-disc ml-5 space-y-0.5 text-xs text-muted-foreground">
+                      <li>list_profiles - List browser profiles</li>
+                      <li>run_profile - Launch a browser</li>
+                      <li>kill_profile - Stop a running browser</li>
+                      <li>get_profile_status - Check if browser is running</li>
+                      <li>list_groups, create_group, etc. - Manage groups</li>
+                      <li>list_proxies, create_proxy, etc. - Manage proxies</li>
+                    </ul>
                   </div>
                 </div>
-
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Available Tools</Label>
-                  <ul className="list-disc ml-5 space-y-0.5 text-xs text-muted-foreground">
-                    <li>list_profiles - List browser profiles</li>
-                    <li>run_profile - Launch a browser</li>
-                    <li>kill_profile - Stop a running browser</li>
-                    <li>get_profile_status - Check if browser is running</li>
-                    <li>list_groups, create_group, etc. - Manage groups</li>
-                    <li>list_proxies, create_proxy, etc. - Manage proxies</li>
-                  </ul>
-                </div>
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
+              )}
+            </TabsContent>
+          </Tabs>
+        </div>
       </DialogContent>
     </Dialog>
   );
