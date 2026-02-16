@@ -193,6 +193,8 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
     try {
       await logout();
       showSuccessToast(t("sync.cloud.logoutSuccess"));
+      setServerUrl("");
+      setToken("");
       // Restart sync service (will fall back to self-hosted or stop)
       try {
         await invoke("restart_sync_service");
