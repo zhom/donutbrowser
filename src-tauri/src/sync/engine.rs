@@ -1146,6 +1146,23 @@ pub async fn set_profile_sync_enabled(
     );
   }
 
+  // Report updated sync-enabled profile count to the cloud backend
+  if crate::cloud_auth::CLOUD_AUTH.is_logged_in().await {
+    let sync_count = profile_manager
+      .list_profiles()
+      .map(|profiles| profiles.iter().filter(|p| p.sync_enabled).count())
+      .unwrap_or(0);
+
+    tokio::spawn(async move {
+      if let Err(e) = crate::cloud_auth::CLOUD_AUTH
+        .report_sync_profile_count(sync_count as i64)
+        .await
+      {
+        log::warn!("Failed to report sync profile count: {e}");
+      }
+    });
+  }
+
   Ok(())
 }
 

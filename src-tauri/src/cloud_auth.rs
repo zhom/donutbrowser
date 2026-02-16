@@ -96,6 +96,7 @@ struct CloudProxyConfigResponse {
 pub struct CloudAuthManager {
   client: Client,
   state: Mutex<Option<CloudAuthState>>,
+  refresh_lock: tokio::sync::Mutex<()>,
 }
 
 lazy_static! {
@@ -108,6 +109,7 @@ impl CloudAuthManager {
     Self {
       client: Client::new(),
       state: Mutex::new(state),
+      refresh_lock: tokio::sync::Mutex::new(()),
     }
   }
 
@@ -388,8 +390,36 @@ impl CloudAuthManager {
       .map_err(|e| format!("Failed to parse response: {e}"))?;
 
     // Store tokens
+    log::info!(
+      "Storing access token (len={}) and refresh token (len={})",
+      result.access_token.len(),
+      result.refresh_token.len()
+    );
     Self::store_access_token(&result.access_token)?;
     Self::store_refresh_token(&result.refresh_token)?;
+
+    // Verify tokens survived the encrypt/decrypt round-trip
+    match Self::load_access_token() {
+      Ok(Some(loaded)) if loaded == result.access_token => {
+        log::info!(
+          "Access token verified after store/load (len={})",
+          loaded.len()
+        );
+      }
+      Ok(Some(loaded)) => {
+        log::error!(
+          "Access token CORRUPTED during store/load: original_len={}, loaded_len={}",
+          result.access_token.len(),
+          loaded.len()
+        );
+      }
+      Ok(None) => {
+        log::error!("Access token missing immediately after store");
+      }
+      Err(e) => {
+        log::error!("Failed to load access token for verification: {e}");
+      }
+    }
 
     // Build and persist auth state
     let auth_state = CloudAuthState {
@@ -397,6 +427,13 @@ impl CloudAuthManager {
       logged_in_at: Utc::now().to_rfc3339(),
     };
     Self::store_auth_state(&auth_state)?;
+
+    log::info!(
+      "Login successful: plan={}, subscription_status={}, proxy_bandwidth_limit={}MB",
+      auth_state.user.plan,
+      auth_state.user.subscription_status,
+      auth_state.user.proxy_bandwidth_limit_mb
+    );
 
     // Update in-memory state
     let mut state = self.state.lock().await;
@@ -406,6 +443,9 @@ impl CloudAuthManager {
   }
 
   pub async fn refresh_access_token(&self) -> Result<(), String> {
+    let _guard = self.refresh_lock.lock().await;
+    log::info!("Refreshing access token (holding lock)...");
+
     let refresh_token =
       Self::load_refresh_token()?.ok_or_else(|| "No refresh token stored".to_string())?;
 
@@ -420,14 +460,8 @@ impl CloudAuthManager {
 
     if !response.status().is_success() {
       let status = response.status();
-      if status == reqwest::StatusCode::UNAUTHORIZED {
-        // Refresh token expired — clear everything
-        PROXY_MANAGER.remove_cloud_proxy();
-        self.clear_auth().await;
-        let _ = crate::events::emit_empty("cloud-auth-expired");
-        return Err("Session expired. Please log in again.".to_string());
-      }
       let body = response.text().await.unwrap_or_default();
+      log::warn!("Token refresh failed ({status}): {body}");
       return Err(format!("Token refresh failed ({status}): {body}"));
     }
 
@@ -439,7 +473,18 @@ impl CloudAuthManager {
     Self::store_access_token(&result.access_token)?;
     Self::store_refresh_token(&result.refresh_token)?;
 
+    log::info!("Access token refreshed successfully");
     Ok(())
+  }
+
+  /// Invalidate the session: clear all auth state and notify the frontend.
+  /// Only call this when the session is definitively dead (explicit logout
+  /// or repeated background refresh failures).
+  pub async fn invalidate_session(&self) {
+    log::warn!("Invalidating session — clearing all auth state");
+    PROXY_MANAGER.remove_cloud_proxy();
+    self.clear_auth().await;
+    let _ = crate::events::emit_empty("cloud-auth-expired");
   }
 
   pub async fn fetch_profile(&self) -> Result<CloudUser, String> {
@@ -574,6 +619,7 @@ impl CloudAuthManager {
   }
 
   /// API call with 401 retry: if first attempt gets 401, refresh access token and retry once.
+  /// Uses refresh_lock to prevent concurrent token rotations from racing.
   async fn api_call_with_retry<F, Fut, T>(&self, make_request: F) -> Result<T, String>
   where
     F: Fn(String) -> Fut + Send,
@@ -581,13 +627,22 @@ impl CloudAuthManager {
   {
     let access_token = Self::load_access_token()?.ok_or_else(|| "Not logged in".to_string())?;
 
-    match make_request(access_token).await {
+    match make_request(access_token.clone()).await {
       Ok(result) => Ok(result),
-      Err(e) if e.contains("(401)") => {
-        // Try refreshing the access token
+      Err(e) if e.contains("(401") || e.contains("Unauthorized") => {
+        log::info!("Got 401/Unauthorized response, attempting token refresh...");
+
+        // Check if another caller already refreshed while we waited
+        let current_token = Self::load_access_token()?.unwrap_or_default();
+        if current_token != access_token && !current_token.is_empty() {
+          log::info!("Token was already refreshed by another caller, retrying...");
+          return make_request(current_token).await;
+        }
+
         self.refresh_access_token().await?;
         let new_token =
           Self::load_access_token()?.ok_or_else(|| "Not logged in after refresh".to_string())?;
+        log::info!("Token refreshed, retrying request...");
         make_request(new_token).await
       }
       Err(e) => Err(e),
@@ -619,6 +674,8 @@ impl CloudAuthManager {
 
           let status = response.status();
           if status == reqwest::StatusCode::FORBIDDEN {
+            let body = response.text().await.unwrap_or_default();
+            log::warn!("Proxy config returned 403: {body}");
             return Err("__403__".to_string());
           }
 
@@ -646,8 +703,15 @@ impl CloudAuthManager {
 
   /// Sync the cloud-managed proxy: fetch config and upsert or remove
   pub async fn sync_cloud_proxy(&self) {
+    log::info!("Syncing cloud proxy configuration...");
     match self.fetch_proxy_config().await {
       Ok(Some(config)) => {
+        log::info!(
+          "Cloud proxy config received: host={}, port={}, protocol={}",
+          config.host,
+          config.port,
+          config.protocol
+        );
         let settings = ProxySettings {
           proxy_type: config.protocol,
           host: config.host,
@@ -657,7 +721,7 @@ impl CloudAuthManager {
         };
         match PROXY_MANAGER.upsert_cloud_proxy(settings) {
           Ok(_) => {
-            log::debug!("Cloud proxy synced successfully");
+            log::info!("Cloud proxy synced successfully");
             // Propagate credential changes to derived location proxies
             PROXY_MANAGER.update_cloud_derived_proxies();
           }
@@ -665,12 +729,40 @@ impl CloudAuthManager {
         }
       }
       Ok(None) => {
+        log::info!("No cloud proxy config available (user may not have proxy bandwidth)");
         PROXY_MANAGER.remove_cloud_proxy();
       }
       Err(e) => {
-        log::warn!("Failed to sync cloud proxy: {e}");
+        log::error!("Failed to sync cloud proxy: {e}");
       }
     }
+  }
+
+  /// Report the number of sync-enabled profiles to the cloud backend
+  pub async fn report_sync_profile_count(&self, count: i64) -> Result<(), String> {
+    self
+      .api_call_with_retry(|access_token| {
+        let url = format!("{CLOUD_API_URL}/api/auth/sync-profile-usage");
+        let client = reqwest::Client::new();
+        async move {
+          let response = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {access_token}"))
+            .json(&serde_json::json!({ "count": count }))
+            .send()
+            .await
+            .map_err(|e| format!("Failed to report profile usage: {e}"))?;
+
+          if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("Profile usage report failed ({status}): {body}"));
+          }
+
+          Ok(())
+        }
+      })
+      .await
   }
 
   /// Fetch country list from the cloud backend
@@ -782,6 +874,22 @@ impl CloudAuthManager {
         continue;
       }
 
+      // Proactively refresh the access token if it's expired or expiring soon.
+      // This runs first so subsequent API calls use a fresh token.
+      if let Ok(Some(token)) = Self::load_access_token() {
+        if Self::is_jwt_expiring_soon(&token) {
+          if let Err(e) = CLOUD_AUTH.refresh_access_token().await {
+            log::warn!("Failed to refresh cloud access token: {e}");
+            // If the refresh token itself was rejected, session is irrecoverable
+            if e.contains("(401") || e.contains("Unauthorized") {
+              log::warn!("Refresh token rejected — invalidating session");
+              CLOUD_AUTH.invalidate_session().await;
+              continue;
+            }
+          }
+        }
+      }
+
       match CLOUD_AUTH.get_or_refresh_sync_token().await {
         Ok(Some(_)) => {
           log::debug!("Cloud sync token refreshed successfully");
@@ -789,15 +897,6 @@ impl CloudAuthManager {
         Ok(None) => {}
         Err(e) => {
           log::warn!("Failed to refresh cloud sync token: {e}");
-        }
-      }
-
-      // Also refresh the access token if needed
-      if let Ok(Some(token)) = Self::load_access_token() {
-        if Self::is_jwt_expiring_soon(&token) {
-          if let Err(e) = CLOUD_AUTH.refresh_access_token().await {
-            log::warn!("Failed to refresh cloud access token: {e}");
-          }
         }
       }
 
@@ -829,15 +928,27 @@ pub async fn cloud_verify_otp(
 ) -> Result<CloudAuthState, String> {
   let state = CLOUD_AUTH.verify_otp(&email, &code).await?;
 
+  let has_subscription = CLOUD_AUTH.has_active_paid_subscription().await;
+  log::info!(
+    "Post-login: plan={}, has_active_subscription={}",
+    state.user.plan,
+    has_subscription
+  );
+
   // Pre-fetch sync token so sync can start immediately
-  if CLOUD_AUTH.has_active_paid_subscription().await {
-    if let Err(e) = CLOUD_AUTH.get_or_refresh_sync_token().await {
-      log::warn!("Failed to pre-fetch sync token after login: {e}");
+  if has_subscription {
+    log::info!("Pre-fetching sync token...");
+    match CLOUD_AUTH.get_or_refresh_sync_token().await {
+      Ok(Some(_)) => log::info!("Sync token pre-fetched successfully"),
+      Ok(None) => log::warn!("Sync token not available despite active subscription"),
+      Err(e) => log::error!("Failed to pre-fetch sync token after login: {e}"),
     }
   }
 
   // Sync cloud proxy after login
   CLOUD_AUTH.sync_cloud_proxy().await;
+
+  let _ = crate::events::emit_empty("cloud-auth-changed");
 
   let _ = &app_handle;
   Ok(state)
@@ -856,7 +967,17 @@ pub async fn cloud_refresh_profile() -> Result<CloudUser, String> {
 #[tauri::command]
 pub async fn cloud_logout(app_handle: tauri::AppHandle) -> Result<(), String> {
   CLOUD_AUTH.logout().await?;
-  let _ = &app_handle;
+
+  // Clear sync settings if they point to the cloud URL (prevent leak into Self-Hosted tab)
+  let manager = crate::settings_manager::SettingsManager::instance();
+  if let Ok(sync_settings) = manager.get_sync_settings() {
+    if sync_settings.sync_server_url.as_deref() == Some(CLOUD_SYNC_URL) {
+      let _ = manager.save_sync_server_url(None);
+    }
+  }
+  let _ = manager.remove_sync_token(&app_handle).await;
+
+  let _ = crate::events::emit_empty("cloud-auth-changed");
   Ok(())
 }
 

@@ -61,8 +61,10 @@ export class AuthGuard implements CanActivate {
           profileLimit: decoded.profileLimit || 0,
         } satisfies UserContext;
         return true;
-      } catch {
-        // JWT verification failed — fall through to error
+      } catch (err) {
+        this.logger.warn(
+          `JWT verification failed: ${err instanceof Error ? err.message : err}`,
+        );
       }
     }
 

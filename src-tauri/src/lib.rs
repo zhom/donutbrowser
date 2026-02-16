@@ -1092,15 +1092,13 @@ pub fn run() {
       // Start cloud auth background refresh loop
       let app_handle_cloud = app.handle().clone();
       tauri::async_runtime::spawn(async move {
-        // On startup, refresh access token + sync token if cloud auth is active
+        // On startup, refresh sync token and proxy if cloud auth is active.
+        // api_call_with_retry handles 401/refresh internally — no direct
+        // refresh_access_token call needed.
         if cloud_auth::CLOUD_AUTH.is_logged_in().await {
-          if let Err(e) = cloud_auth::CLOUD_AUTH.refresh_access_token().await {
-            log::warn!("Failed to refresh cloud access token on startup: {e}");
-          }
           if let Err(e) = cloud_auth::CLOUD_AUTH.get_or_refresh_sync_token().await {
             log::warn!("Failed to refresh cloud sync token on startup: {e}");
           }
-          // Sync cloud proxy credentials on startup
           cloud_auth::CLOUD_AUTH.sync_cloud_proxy().await;
         }
         cloud_auth::CloudAuthManager::start_sync_token_refresh_loop(app_handle_cloud).await;

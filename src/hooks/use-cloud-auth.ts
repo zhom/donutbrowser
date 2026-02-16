@@ -32,12 +32,19 @@ export function useCloudAuth(): UseCloudAuthReturn {
   useEffect(() => {
     loadUser();
 
-    const unlistenPromise = listen("cloud-auth-expired", () => {
+    const unlistenExpired = listen("cloud-auth-expired", () => {
       setAuthState(null);
     });
 
+    const unlistenChanged = listen("cloud-auth-changed", () => {
+      loadUser();
+    });
+
     return () => {
-      void unlistenPromise.then((unlisten) => {
+      void unlistenExpired.then((unlisten) => {
+        unlisten();
+      });
+      void unlistenChanged.then((unlisten) => {
         unlisten();
       });
     };

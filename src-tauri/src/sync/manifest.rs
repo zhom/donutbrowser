@@ -23,9 +23,10 @@ pub const DEFAULT_EXCLUDE_PATTERNS: &[&str] = &[
   "blob_storage/**",
   "*.log",
   "*.tmp",
-  "LOG",
-  "LOG.old",
-  "LOCK",
+  "**/LOG",
+  "**/LOG.old",
+  "**/LOCK",
+  "**/*-journal",
   ".donut-sync/**",
 ];
 

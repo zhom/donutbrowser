@@ -34,7 +34,9 @@ impl SyncClient {
       .map_err(|e| SyncError::NetworkError(e.to_string()))?;
 
     if response.status().is_client_error() {
-      return Err(SyncError::AuthError("Invalid or missing token".to_string()));
+      let status = response.status();
+      let body = response.text().await.unwrap_or_default();
+      return Err(SyncError::AuthError(format!("({status}) {body}")));
     }
 
     response
@@ -62,7 +64,9 @@ impl SyncClient {
       .map_err(|e| SyncError::NetworkError(e.to_string()))?;
 
     if response.status().is_client_error() {
-      return Err(SyncError::AuthError("Invalid or missing token".to_string()));
+      let status = response.status();
+      let body = response.text().await.unwrap_or_default();
+      return Err(SyncError::AuthError(format!("({status}) {body}")));
     }
 
     response
@@ -85,7 +89,9 @@ impl SyncClient {
       .map_err(|e| SyncError::NetworkError(e.to_string()))?;
 
     if response.status().is_client_error() {
-      return Err(SyncError::AuthError("Invalid or missing token".to_string()));
+      let status = response.status();
+      let body = response.text().await.unwrap_or_default();
+      return Err(SyncError::AuthError(format!("({status}) {body}")));
     }
 
     response
@@ -109,7 +115,9 @@ impl SyncClient {
       .map_err(|e| SyncError::NetworkError(e.to_string()))?;
 
     if response.status().is_client_error() {
-      return Err(SyncError::AuthError("Invalid or missing token".to_string()));
+      let status = response.status();
+      let body = response.text().await.unwrap_or_default();
+      return Err(SyncError::AuthError(format!("({status}) {body}")));
     }
 
     response
@@ -133,7 +141,9 @@ impl SyncClient {
       .map_err(|e| SyncError::NetworkError(e.to_string()))?;
 
     if response.status().is_client_error() {
-      return Err(SyncError::AuthError("Invalid or missing token".to_string()));
+      let status = response.status();
+      let body = response.text().await.unwrap_or_default();
+      return Err(SyncError::AuthError(format!("({status}) {body}")));
     }
 
     response
@@ -148,7 +158,11 @@ impl SyncClient {
     data: &[u8],
     content_type: Option<&str>,
   ) -> SyncResult<()> {
-    let mut req = self.client.put(presigned_url).body(data.to_vec());
+    let mut req = self
+      .client
+      .put(presigned_url)
+      .header("Content-Length", data.len().to_string())
+      .body(data.to_vec());
 
     if let Some(ct) = content_type {
       req = req.header("Content-Type", ct);
@@ -214,7 +228,9 @@ impl SyncClient {
       .map_err(|e| SyncError::NetworkError(e.to_string()))?;
 
     if response.status().is_client_error() {
-      return Err(SyncError::AuthError("Invalid or missing token".to_string()));
+      let status = response.status();
+      let body = response.text().await.unwrap_or_default();
+      return Err(SyncError::AuthError(format!("({status}) {body}")));
     }
 
     response
@@ -242,7 +258,9 @@ impl SyncClient {
       .map_err(|e| SyncError::NetworkError(e.to_string()))?;
 
     if response.status().is_client_error() {
-      return Err(SyncError::AuthError("Invalid or missing token".to_string()));
+      let status = response.status();
+      let body = response.text().await.unwrap_or_default();
+      return Err(SyncError::AuthError(format!("({status}) {body}")));
     }
 
     response
@@ -270,7 +288,9 @@ impl SyncClient {
       .map_err(|e| SyncError::NetworkError(e.to_string()))?;
 
     if response.status().is_client_error() {
-      return Err(SyncError::AuthError("Invalid or missing token".to_string()));
+      let status = response.status();
+      let body = response.text().await.unwrap_or_default();
+      return Err(SyncError::AuthError(format!("({status}) {body}")));
     }
 
     response
