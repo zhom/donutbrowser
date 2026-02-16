@@ -559,11 +559,11 @@ export class SyncService implements OnModuleInit {
       new ListObjectsV2Command({
         Bucket: this.bucket,
         Prefix: profilePrefix,
-        MaxKeys: ctx.profileLimit + 1,
+        Delimiter: "/",
       }),
     );
 
-    const count = result.Contents?.length || 0;
+    const count = result.CommonPrefixes?.length || 0;
     if (count >= ctx.profileLimit) {
       throw new ForbiddenException(
         `Profile limit reached (${ctx.profileLimit}). Upgrade your plan for more profiles.`,
@@ -572,7 +572,7 @@ export class SyncService implements OnModuleInit {
   }
 
   /**
-   * Count the number of profile objects for a user.
+   * Count the number of distinct profile directories for a user.
    */
   private async countProfiles(ctx: UserContext): Promise<number> {
     const profilePrefix = `${ctx.prefix}profiles/`;
@@ -584,11 +584,12 @@ export class SyncService implements OnModuleInit {
         new ListObjectsV2Command({
           Bucket: this.bucket,
           Prefix: profilePrefix,
+          Delimiter: "/",
           MaxKeys: 1000,
           ContinuationToken: continuationToken,
         }),
       );
-      count += result.Contents?.length || 0;
+      count += result.CommonPrefixes?.length || 0;
       continuationToken = result.NextContinuationToken;
     } while (continuationToken);
 
