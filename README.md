@@ -25,11 +25,7 @@
   </a>
 </p>
 
-<picture>
- <source media="(prefers-color-scheme: dark)" srcset="assets/preview-dark.png" />
- <source media="(prefers-color-scheme: light)" srcset="assets/preview.png" />
- <img alt="Preview" src="assets/preview.png" />
-</picture>
+<img alt="Donut Browser Preview" src="assets/donut-preview.png" />
 
 ## Features
 
