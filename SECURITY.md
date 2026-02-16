@@ -8,7 +8,7 @@ We take the security of Donut Browser seriously. If you believe you have found a
 
 **Please do not report security vulnerabilities through public GitHub issues, discussions, or pull requests.**
 
-Instead, please send an email to **contact at donutbrowser dot com** with the subject line "Security Vulnerability Report".
+Instead, please send an email to **[contact@donutbrowser.com](mailto:contact@donutbrowser.com)** with the subject line "Security Vulnerability Report".
 
 Please include as much of the information listed below as you can to help us better understand and resolve the issue:
 
@@ -32,7 +32,7 @@ This information will help us triage your report more quickly.
 
 ## Contact
 
-For urgent security matters, please contact us at **contact at donutbrowser dot com**.
+For urgent security matters, please contact us at **[contact@donutbrowser.com](mailto:contact@donutbrowser.com)**.
 
 For general questions about this security policy, you can also reach out through:
 

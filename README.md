@@ -113,7 +113,7 @@ Have questions or want to contribute? We'd love to hear from you!
 
 ## Contact
 
-Have an urgent question or want to report a security vulnerability? Send an email to contact at donutbrowser dot com and we'll get back to you as fast as possible.
+Have an urgent question or want to report a security vulnerability? Send an email to [contact@donutbrowser.com](mailto:contact@donutbrowser.com) and we'll get back to you as fast as possible.
 
 ## License
 
