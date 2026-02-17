@@ -478,15 +478,16 @@ impl ProxyManager {
   }
 
   // Build a geo-targeted username from base username and location parts
+  // LP format: username-zone-lightning-region-{country}-st-{state}-city-{city}
   fn build_geo_username(
     base_username: &str,
     country: &str,
     state: &Option<String>,
     city: &Option<String>,
   ) -> String {
-    let mut username = format!("{}-country-{}", base_username, country);
+    let mut username = format!("{}-zone-lightning-region-{}", base_username, country);
     if let Some(state) = state {
-      username = format!("{}-state-{}", username, state);
+      username = format!("{}-st-{}", username, state);
     }
     if let Some(city) = city {
       username = format!("{}-city-{}", username, city);
