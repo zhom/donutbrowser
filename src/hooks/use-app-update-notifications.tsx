@@ -2,7 +2,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AppUpdateToast } from "@/components/app-update-toast";
 import { showToast } from "@/lib/toast-utils";
@@ -16,6 +16,7 @@ export function useAppUpdateNotifications() {
   const [updateReady, setUpdateReady] = useState(false);
   const [isClient, setIsClient] = useState(false);
   const [dismissedVersion, setDismissedVersion] = useState<string | null>(null);
+  const autoDownloadedVersion = useRef<string | null>(null);
 
   // Ensure we're on the client side to prevent hydration mismatches
   useEffect(() => {
@@ -52,6 +53,7 @@ export function useAppUpdateNotifications() {
       console.log("Manual check result:", update);
 
       // Always show manual check results, even if previously dismissed
+      autoDownloadedVersion.current = null;
       setUpdateInfo(update);
     } catch (error) {
       console.error("Failed to manually check for app updates:", error);
@@ -112,7 +114,7 @@ export function useAppUpdateNotifications() {
     toast.dismiss("app-update");
   }, [isClient, updateInfo]);
 
-  // Listen for app update availability
+  // Listen for app update events
   useEffect(() => {
     if (!isClient) return;
 
@@ -127,16 +129,7 @@ export function useAppUpdateNotifications() {
     const unlistenProgress = listen<AppUpdateProgress>(
       "app-update-progress",
       (event) => {
-        console.log("App update progress:", event.payload);
         setUpdateProgress(event.payload);
-
-        // If update is completed, mark as no longer updating after a delay
-        if (event.payload.stage === "completed") {
-          setTimeout(() => {
-            setIsUpdating(false);
-            setUpdateProgress(null);
-          }, 5000); // Show completion message for 5 seconds instead of 2
-        }
       },
     );
 
@@ -160,41 +153,59 @@ export function useAppUpdateNotifications() {
     };
   }, [isClient]);
 
-  // Show toast when update is available
+  // Auto-download update in background when found
   useEffect(() => {
-    if (!isClient || !updateInfo) return;
+    if (
+      !isClient ||
+      !updateInfo ||
+      updateInfo.manual_update_required ||
+      isUpdating ||
+      updateReady ||
+      autoDownloadedVersion.current === updateInfo.new_version
+    )
+      return;
+
+    autoDownloadedVersion.current = updateInfo.new_version;
+    console.log("Auto-downloading app update:", updateInfo.new_version);
+    void handleAppUpdate(updateInfo);
+  }, [isClient, updateInfo, isUpdating, updateReady, handleAppUpdate]);
+
+  // Show toast only when update is ready to install or requires manual action
+  useEffect(() => {
+    if (!isClient) return;
+
+    const showManualToast = updateInfo?.manual_update_required && !isUpdating;
+    if (!updateReady && !showManualToast) {
+      return;
+    }
+    if (!updateInfo) return;
 
     toast.custom(
       () => (
         <AppUpdateToast
           updateInfo={updateInfo}
-          onUpdate={handleAppUpdate}
           onRestart={handleRestart}
           onDismiss={dismissAppUpdate}
-          isUpdating={isUpdating}
-          updateProgress={updateProgress}
           updateReady={updateReady}
         />
       ),
       {
         id: "app-update",
-        duration: Number.POSITIVE_INFINITY, // Persistent until user action
+        duration: Number.POSITIVE_INFINITY,
         position: "top-left",
         style: {
-          zIndex: 99999, // Ensure app updates appear above dialogs
-          pointerEvents: "auto", // Ensure app updates remain interactive
-          marginTop: "16px", // slightly lower on macOS-like top controls
+          zIndex: 99999,
+          pointerEvents: "auto",
+          marginTop: "16px",
         },
       },
     );
   }, [
     updateInfo,
-    handleAppUpdate,
     handleRestart,
     dismissAppUpdate,
-    isUpdating,
-    updateProgress,
     updateReady,
+    isUpdating,
     isClient,
   ]);
 
