@@ -284,5 +284,5 @@ jobs:
             "$ASSETS_DIR"/Donut_aarch64.app.tar.gz \
             "$ASSETS_DIR"/Donut_x64.app.tar.gz \
             --title "Donut Browser Nightly" \
-            --notes "Automatically updated nightly build from the latest main branch. Install via \`brew install --cask donutbrowser@nightly\`.\n\nCommit: ${GITHUB_SHA}" \
+            --notes "Automatically updated nightly build from the latest main branch.\n\nCommit: ${GITHUB_SHA}" \
             --prerelease
