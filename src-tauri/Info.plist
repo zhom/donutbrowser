@@ -14,6 +14,8 @@
 	<string>Donut</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.donutbrowser</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
     <key>CFBundleURLName</key>
     <string>com.donutbrowser</string>
 	<key>CFBundleExecutable</key>
