@@ -111,7 +111,15 @@ impl CamoufoxManager {
   ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     // Get executable path
     let executable_path = if let Some(path) = &config.executable_path {
-      PathBuf::from(path)
+      let p = PathBuf::from(path);
+      if p.exists() {
+        p
+      } else {
+        log::warn!("Stored Camoufox executable path does not exist: {path}, falling back to dynamic resolution");
+        BrowserRunner::instance()
+          .get_browser_executable_path(profile)
+          .map_err(|e| format!("Failed to get Camoufox executable path: {e}"))?
+      }
     } else {
       BrowserRunner::instance()
         .get_browser_executable_path(profile)
@@ -204,7 +212,15 @@ impl CamoufoxManager {
 
     // Get executable path
     let executable_path = if let Some(path) = &config.executable_path {
-      PathBuf::from(path)
+      let p = PathBuf::from(path);
+      if p.exists() {
+        p
+      } else {
+        log::warn!("Stored Camoufox executable path does not exist: {path}, falling back to dynamic resolution");
+        BrowserRunner::instance()
+          .get_browser_executable_path(profile)
+          .map_err(|e| format!("Failed to get Camoufox executable path: {e}"))?
+      }
     } else {
       BrowserRunner::instance()
         .get_browser_executable_path(profile)

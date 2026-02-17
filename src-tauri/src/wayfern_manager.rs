@@ -231,7 +231,15 @@ impl WayfernManager {
     config: &WayfernConfig,
   ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let executable_path = if let Some(path) = &config.executable_path {
-      PathBuf::from(path)
+      let p = PathBuf::from(path);
+      if p.exists() {
+        p
+      } else {
+        log::warn!("Stored Wayfern executable path does not exist: {path}, falling back to dynamic resolution");
+        BrowserRunner::instance()
+          .get_browser_executable_path(profile)
+          .map_err(|e| format!("Failed to get Wayfern executable path: {e}"))?
+      }
     } else {
       BrowserRunner::instance()
         .get_browser_executable_path(profile)
@@ -400,7 +408,15 @@ impl WayfernManager {
     proxy_url: Option<&str>,
   ) -> Result<WayfernLaunchResult, Box<dyn std::error::Error + Send + Sync>> {
     let executable_path = if let Some(path) = &config.executable_path {
-      PathBuf::from(path)
+      let p = PathBuf::from(path);
+      if p.exists() {
+        p
+      } else {
+        log::warn!("Stored Wayfern executable path does not exist: {path}, falling back to dynamic resolution");
+        BrowserRunner::instance()
+          .get_browser_executable_path(profile)
+          .map_err(|e| format!("Failed to get Wayfern executable path: {e}"))?
+      }
     } else {
       BrowserRunner::instance()
         .get_browser_executable_path(profile)
