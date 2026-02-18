@@ -1902,6 +1902,18 @@ pub async fn create_browser_profile_new(
   wayfern_config: Option<WayfernConfig>,
   group_id: Option<String>,
 ) -> Result<BrowserProfile, String> {
+  let fingerprint_os = camoufox_config
+    .as_ref()
+    .and_then(|c| c.os.as_deref())
+    .or_else(|| wayfern_config.as_ref().and_then(|c| c.os.as_deref()));
+
+  if !crate::cloud_auth::CLOUD_AUTH
+    .is_fingerprint_os_allowed(fingerprint_os)
+    .await
+  {
+    return Err("Fingerprint OS spoofing requires an active Pro subscription".to_string());
+  }
+
   let browser_type =
     BrowserType::from_str(&browser_str).map_err(|e| format!("Invalid browser type: {e}"))?;
   create_browser_profile_with_group(
@@ -1924,6 +1936,13 @@ pub async fn update_camoufox_config(
   profile_id: String,
   config: CamoufoxConfig,
 ) -> Result<(), String> {
+  if !crate::cloud_auth::CLOUD_AUTH
+    .is_fingerprint_os_allowed(config.os.as_deref())
+    .await
+  {
+    return Err("Fingerprint OS spoofing requires an active Pro subscription".to_string());
+  }
+
   let profile_manager = ProfileManager::instance();
   profile_manager
     .update_camoufox_config(app_handle, &profile_id, config)
@@ -1937,6 +1956,13 @@ pub async fn update_wayfern_config(
   profile_id: String,
   config: WayfernConfig,
 ) -> Result<(), String> {
+  if !crate::cloud_auth::CLOUD_AUTH
+    .is_fingerprint_os_allowed(config.os.as_deref())
+    .await
+  {
+    return Err("Fingerprint OS spoofing requires an active Pro subscription".to_string());
+  }
+
   let profile_manager = ProfileManager::instance();
   profile_manager
     .update_wayfern_config(app_handle, &profile_id, config)

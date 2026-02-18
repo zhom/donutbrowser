@@ -602,8 +602,21 @@ impl CloudAuthManager {
   pub async fn has_active_paid_subscription(&self) -> bool {
     let state = self.state.lock().await;
     match &*state {
-      Some(auth) => auth.user.plan != "free" && auth.user.subscription_status == "active",
+      Some(auth) => {
+        auth.user.plan != "free"
+          && (auth.user.subscription_status == "active"
+            || auth.user.plan_period.as_deref() == Some("lifetime"))
+      }
       None => false,
+    }
+  }
+
+  pub async fn is_fingerprint_os_allowed(&self, fingerprint_os: Option<&str>) -> bool {
+    let host_os = crate::profile::types::get_host_os();
+    match fingerprint_os {
+      None => true,
+      Some(os) if os == host_os => true,
+      Some(_) => self.has_active_paid_subscription().await,
     }
   }
 
