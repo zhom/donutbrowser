@@ -506,7 +506,8 @@ impl AppAutoUpdater {
         && (asset.name.contains(&format!("_{arch}.dmg"))
           || asset.name.contains(&format!("-{arch}.dmg"))
           || asset.name.contains(&format!("_{arch}_"))
-          || asset.name.contains(&format!("-{arch}-")))
+          || asset.name.contains(&format!("-{arch}-"))
+          || asset.name.contains(&format!("_{arch}-")))
       {
         log::info!("Found exact architecture match: {}", asset.name);
         return Some(asset.browser_download_url.clone());
@@ -564,7 +565,8 @@ impl AppAutoUpdater {
           && (asset.name.contains(&format!("_{arch}.{ext}"))
             || asset.name.contains(&format!("-{arch}.{ext}"))
             || asset.name.contains(&format!("_{arch}_"))
-            || asset.name.contains(&format!("-{arch}-")))
+            || asset.name.contains(&format!("-{arch}-"))
+            || asset.name.contains(&format!("_{arch}-")))
         {
           log::info!("Found Windows {ext} with exact arch match: {}", asset.name);
           return Some(asset.browser_download_url.clone());
@@ -627,7 +629,8 @@ impl AppAutoUpdater {
           && (asset.name.contains(&format!("_{arch}.{ext}"))
             || asset.name.contains(&format!("-{arch}.{ext}"))
             || asset.name.contains(&format!("_{arch}_"))
-            || asset.name.contains(&format!("-{arch}-")))
+            || asset.name.contains(&format!("-{arch}-"))
+            || asset.name.contains(&format!("_{arch}-")))
         {
           log::info!("Found Linux {ext} with exact arch match: {}", asset.name);
           return Some(asset.browser_download_url.clone());
@@ -1698,15 +1701,10 @@ mod tests {
         browser_download_url: "https://example.com/x64.dmg".to_string(),
         size: 12345,
       },
-      // Windows assets
+      // Windows assets (NSIS naming: _ARCH-setup.exe)
       AppReleaseAsset {
-        name: "Donut.Browser_0.1.0_x64.msi".to_string(),
-        browser_download_url: "https://example.com/x64.msi".to_string(),
-        size: 12345,
-      },
-      AppReleaseAsset {
-        name: "Donut.Browser_0.1.0_x64.exe".to_string(),
-        browser_download_url: "https://example.com/x64.exe".to_string(),
+        name: "Donut_0.1.0_x64-setup.exe".to_string(),
+        browser_download_url: "https://example.com/x64-setup.exe".to_string(),
         size: 12345,
       },
       // Linux assets
