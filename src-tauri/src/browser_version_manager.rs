@@ -685,7 +685,7 @@ impl BrowserVersionManager {
           "macos-arm64" | "macos-x64" => (format!("wayfern-{version}-{platform_key}.dmg"), true),
           "linux-x64" | "linux-arm64" => (format!("wayfern-{version}-{platform_key}.tar.xz"), true),
           "windows-x64" | "windows-arm64" => {
-            (format!("wayfern-{version}-{platform_key}.exe"), false)
+            (format!("wayfern-{version}-{platform_key}.zip"), true)
           }
           _ => {
             return Err(
