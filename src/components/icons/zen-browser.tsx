@@ -8,6 +8,7 @@ export const ZenBrowser = (props: React.SVGProps<SVGSVGElement>) => (
     viewBox="0 0 24 24"
     {...props}
   >
+    <title>Zen Browser</title>
     <path
       d="M12 8.15c-2.12 0-3.85 1.72-3.85 3.85s1.72 3.85 3.85 3.85 3.85-1.72 3.85-3.85S14.13 8.15 12 8.15m0 6.92c-1.7 0-3.08-1.38-3.08-3.08S10.3 8.91 12 8.91s3.08 1.38 3.08 3.08-1.38 3.08-3.08 3.08"
       className="b"
