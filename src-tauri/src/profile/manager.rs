@@ -61,10 +61,14 @@ impl ProfileManager {
     version: &str,
     release_type: &str,
     proxy_id: Option<String>,
+    vpn_id: Option<String>,
     camoufox_config: Option<CamoufoxConfig>,
     wayfern_config: Option<WayfernConfig>,
     group_id: Option<String>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+    if proxy_id.is_some() && vpn_id.is_some() {
+      return Err("Cannot set both proxy_id and vpn_id".into());
+    }
     log::info!("Attempting to create profile: {name}");
 
     // Check if a profile with this name already exists (case insensitive)
@@ -163,6 +167,7 @@ impl ProfileManager {
           browser: browser.to_string(),
           version: version.to_string(),
           proxy_id: proxy_id.clone(),
+          vpn_id: None,
           process_id: None,
           last_launch: None,
           release_type: release_type.to_string(),
@@ -277,6 +282,7 @@ impl ProfileManager {
           browser: browser.to_string(),
           version: version.to_string(),
           proxy_id: proxy_id.clone(),
+          vpn_id: None,
           process_id: None,
           last_launch: None,
           release_type: release_type.to_string(),
@@ -323,6 +329,7 @@ impl ProfileManager {
       browser: browser.to_string(),
       version: version.to_string(),
       proxy_id: proxy_id.clone(),
+      vpn_id: vpn_id.clone(),
       process_id: None,
       last_launch: None,
       release_type: release_type.to_string(),
@@ -840,6 +847,7 @@ impl ProfileManager {
       browser: source.browser,
       version: source.version,
       proxy_id: source.proxy_id,
+      vpn_id: source.vpn_id,
       process_id: None,
       last_launch: None,
       release_type: source.release_type,
@@ -1011,8 +1019,9 @@ impl ProfileManager {
     // Remember old proxy_id for cleanup (not used yet, but may be needed for cleanup)
     let _old_proxy_id = profile.proxy_id.clone();
 
-    // Update proxy settings
+    // Update proxy settings and clear VPN (mutual exclusion)
     profile.proxy_id = proxy_id.clone();
+    profile.vpn_id = None;
 
     // Save the updated profile
     self
@@ -1068,6 +1077,52 @@ impl ProfileManager {
     }
 
     // Emit general profiles changed event for profile list updates
+    if let Err(e) = events::emit_empty("profiles-changed") {
+      log::warn!("Warning: Failed to emit profiles-changed event: {e}");
+    }
+
+    Ok(profile)
+  }
+
+  pub async fn update_profile_vpn(
+    &self,
+    _app_handle: tauri::AppHandle,
+    profile_id: &str,
+    vpn_id: Option<String>,
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
+    let profile_uuid = uuid::Uuid::parse_str(profile_id).map_err(
+      |_| -> Box<dyn std::error::Error + Send + Sync> {
+        format!("Invalid profile ID: {profile_id}").into()
+      },
+    )?;
+    let profiles =
+      self
+        .list_profiles()
+        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+          format!("Failed to list profiles: {e}").into()
+        })?;
+
+    let mut profile = profiles
+      .into_iter()
+      .find(|p| p.id == profile_uuid)
+      .ok_or_else(|| -> Box<dyn std::error::Error + Send + Sync> {
+        format!("Profile with ID '{profile_id}' not found").into()
+      })?;
+
+    // Update VPN and clear proxy (mutual exclusion)
+    profile.vpn_id = vpn_id;
+    profile.proxy_id = None;
+
+    self
+      .save_profile(&profile)
+      .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+        format!("Failed to save profile: {e}").into()
+      })?;
+
+    if let Err(e) = events::emit("profile-updated", &profile) {
+      log::warn!("Warning: Failed to emit profile update event: {e}");
+    }
+
     if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
@@ -1799,6 +1854,7 @@ pub async fn create_browser_profile_with_group(
   version: String,
   release_type: String,
   proxy_id: Option<String>,
+  vpn_id: Option<String>,
   camoufox_config: Option<CamoufoxConfig>,
   wayfern_config: Option<WayfernConfig>,
   group_id: Option<String>,
@@ -1812,6 +1868,7 @@ pub async fn create_browser_profile_with_group(
       &version,
       &release_type,
       proxy_id,
+      vpn_id,
       camoufox_config,
       wayfern_config,
       group_id,
@@ -1839,6 +1896,19 @@ pub async fn update_profile_proxy(
     .update_profile_proxy(app_handle, &profile_id, proxy_id)
     .await
     .map_err(|e| format!("Failed to update profile: {e}"))
+}
+
+#[tauri::command]
+pub async fn update_profile_vpn(
+  app_handle: tauri::AppHandle,
+  profile_id: String,
+  vpn_id: Option<String>,
+) -> Result<BrowserProfile, String> {
+  let profile_manager = ProfileManager::instance();
+  profile_manager
+    .update_profile_vpn(app_handle, &profile_id, vpn_id)
+    .await
+    .map_err(|e| format!("Failed to update profile VPN: {e}"))
 }
 
 #[tauri::command]
@@ -1898,6 +1968,7 @@ pub async fn create_browser_profile_new(
   version: String,
   release_type: String,
   proxy_id: Option<String>,
+  vpn_id: Option<String>,
   camoufox_config: Option<CamoufoxConfig>,
   wayfern_config: Option<WayfernConfig>,
   group_id: Option<String>,
@@ -1923,6 +1994,7 @@ pub async fn create_browser_profile_new(
     version,
     release_type,
     proxy_id,
+    vpn_id,
     camoufox_config,
     wayfern_config,
     group_id,

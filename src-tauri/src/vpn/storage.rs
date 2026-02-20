@@ -32,6 +32,10 @@ struct StoredVpnConfig {
   nonce: String,          // Base64 encoded nonce
   created_at: i64,
   last_used: Option<i64>,
+  #[serde(default)]
+  sync_enabled: bool,
+  #[serde(default)]
+  last_sync: Option<u64>,
 }
 
 /// VPN storage manager with encryption
@@ -220,6 +224,8 @@ impl VpnStorage {
       nonce,
       created_at: config.created_at,
       last_used: config.last_used,
+      sync_enabled: config.sync_enabled,
+      last_sync: config.last_sync,
     };
 
     // Update existing or add new
@@ -251,6 +257,8 @@ impl VpnStorage {
       config_data,
       created_at: stored.created_at,
       last_used: stored.last_used,
+      sync_enabled: stored.sync_enabled,
+      last_sync: stored.last_sync,
     })
   }
 
@@ -269,6 +277,8 @@ impl VpnStorage {
           config_data: String::new(), // Don't include config data in list
           created_at: stored.created_at,
           last_used: stored.last_used,
+          sync_enabled: stored.sync_enabled,
+          last_sync: stored.last_sync,
         })
         .collect(),
     )
@@ -294,6 +304,67 @@ impl VpnStorage {
 
     if let Some(config) = storage.configs.iter_mut().find(|c| c.id == id) {
       config.last_used = Some(Utc::now().timestamp());
+      self.save_storage(&storage)
+    } else {
+      Err(VpnError::NotFound(id.to_string()))
+    }
+  }
+
+  /// Create a VPN config manually from validated data
+  pub fn create_config_manual(
+    &self,
+    name: &str,
+    vpn_type: VpnType,
+    config_data: &str,
+  ) -> Result<VpnConfig, VpnError> {
+    // Validate the config by parsing it
+    match vpn_type {
+      VpnType::WireGuard => {
+        super::parse_wireguard_config(config_data)?;
+      }
+      VpnType::OpenVPN => {
+        super::parse_openvpn_config(config_data)?;
+      }
+    }
+
+    let id = Uuid::new_v4().to_string();
+
+    let config = VpnConfig {
+      id,
+      name: name.to_string(),
+      vpn_type,
+      config_data: config_data.to_string(),
+      created_at: Utc::now().timestamp(),
+      last_used: None,
+      sync_enabled: false,
+      last_sync: None,
+    };
+
+    self.save_config(&config)?;
+
+    Ok(config)
+  }
+
+  /// Update the name of an existing VPN config
+  pub fn update_config_name(&self, id: &str, new_name: &str) -> Result<VpnConfig, VpnError> {
+    let mut config = self.load_config(id)?;
+    config.name = new_name.to_string();
+    self.save_config(&config)?;
+    Ok(config)
+  }
+
+  /// Update sync fields on a VPN config
+  pub fn update_sync_fields(
+    &self,
+    id: &str,
+    sync_enabled: bool,
+    last_sync: Option<u64>,
+  ) -> Result<(), VpnError> {
+    let mut storage = self.load_storage()?;
+
+    if let Some(config) = storage.configs.iter_mut().find(|c| c.id == id) {
+      config.sync_enabled = sync_enabled;
+      config.last_sync = last_sync;
       self.save_storage(&storage)
     } else {
       Err(VpnError::NotFound(id.to_string()))
@@ -333,6 +404,8 @@ impl VpnStorage {
       config_data: content.to_string(),
       created_at: Utc::now().timestamp(),
       last_used: None,
+      sync_enabled: false,
+      last_sync: None,
     };
 
     self.save_config(&config)?;
@@ -375,6 +448,8 @@ mod tests {
       config_data: "[Interface]\nPrivateKey = test\n[Peer]\nPublicKey = peer".to_string(),
       created_at: 1234567890,
       last_used: None,
+      sync_enabled: false,
+      last_sync: None,
     };
 
     storage.save_config(&config).unwrap();
@@ -397,6 +472,8 @@ mod tests {
       config_data: "secret1".to_string(),
       created_at: 1000,
       last_used: None,
+      sync_enabled: false,
+      last_sync: None,
     };
 
     let config2 = VpnConfig {
@@ -406,6 +483,8 @@ mod tests {
       config_data: "secret2".to_string(),
       created_at: 2000,
       last_used: Some(3000),
+      sync_enabled: false,
+      last_sync: None,
     };
 
     storage.save_config(&config1).unwrap();
@@ -430,6 +509,8 @@ mod tests {
       config_data: "data".to_string(),
       created_at: 1000,
       last_used: None,
+      sync_enabled: false,
+      last_sync: None,
     };
 
     storage.save_config(&config).unwrap();

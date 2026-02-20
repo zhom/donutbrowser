@@ -1702,16 +1702,8 @@ impl McpServer {
         message: "Missing vpn_id".to_string(),
       })?;
 
-    // First disconnect if connected
-    {
-      let mut manager = crate::vpn::TUNNEL_MANAGER.lock().await;
-      if manager.is_tunnel_active(vpn_id) {
-        if let Some(tunnel) = manager.get_tunnel_mut(vpn_id) {
-          let _ = tunnel.disconnect().await;
-        }
-        manager.remove_tunnel(vpn_id);
-      }
-    }
+    // First disconnect if connected (stop VPN worker)
+    let _ = crate::vpn_worker_runner::stop_vpn_worker_by_vpn_id(vpn_id).await;
 
     let storage = crate::vpn::VPN_STORAGE.lock().map_err(|e| McpError {
       code: -32000,
@@ -1743,62 +1735,13 @@ impl McpServer {
         message: "Missing vpn_id".to_string(),
       })?;
 
-    // Load config from storage
-    let config = {
-      let storage = crate::vpn::VPN_STORAGE.lock().map_err(|e| McpError {
+    // Start VPN worker process
+    crate::vpn_worker_runner::start_vpn_worker(vpn_id)
+      .await
+      .map_err(|e| McpError {
         code: -32000,
-        message: format!("Failed to lock VPN storage: {e}"),
+        message: format!("Failed to connect VPN: {e}"),
       })?;
-
-      storage.load_config(vpn_id).map_err(|e| McpError {
-        code: -32000,
-        message: format!("Failed to load VPN config: {e}"),
-      })?
-    };
-
-    let mut manager = crate::vpn::TUNNEL_MANAGER.lock().await;
-
-    // Check if already connected
-    if manager.is_tunnel_active(vpn_id) {
-      return Ok(serde_json::json!({
-        "content": [{
-          "type": "text",
-          "text": format!("VPN '{}' is already connected", config.name)
-        }]
-      }));
-    }
-
-    let mut tunnel: Box<dyn crate::vpn::VpnTunnel> = match config.vpn_type {
-      crate::vpn::VpnType::WireGuard => {
-        let wg_config =
-          crate::vpn::parse_wireguard_config(&config.config_data).map_err(|e| McpError {
-            code: -32000,
-            message: format!("Invalid WireGuard config: {e}"),
-          })?;
-        Box::new(crate::vpn::WireGuardTunnel::new(
-          vpn_id.to_string(),
-          wg_config,
-        ))
-      }
-      crate::vpn::VpnType::OpenVPN => {
-        let ovpn_config =
-          crate::vpn::parse_openvpn_config(&config.config_data).map_err(|e| McpError {
-            code: -32000,
-            message: format!("Invalid OpenVPN config: {e}"),
-          })?;
-        Box::new(crate::vpn::OpenVpnTunnel::new(
-          vpn_id.to_string(),
-          ovpn_config,
-        ))
-      }
-    };
-
-    tunnel.connect().await.map_err(|e| McpError {
-      code: -32000,
-      message: format!("Failed to connect VPN: {e}"),
-    })?;
-
-    manager.register_tunnel(vpn_id.to_string(), tunnel);
 
     // Update last_used timestamp
     {
@@ -1812,7 +1755,7 @@ impl McpServer {
     Ok(serde_json::json!({
       "content": [{
         "type": "text",
-        "text": format!("VPN '{}' connected successfully", config.name)
+        "text": format!("VPN '{}' connected successfully", vpn_id)
       }]
     }))
   }
@@ -1829,16 +1772,12 @@ impl McpServer {
         message: "Missing vpn_id".to_string(),
       })?;
 
-    let mut manager = crate::vpn::TUNNEL_MANAGER.lock().await;
-
-    if let Some(tunnel) = manager.get_tunnel_mut(vpn_id) {
-      tunnel.disconnect().await.map_err(|e| McpError {
+    crate::vpn_worker_runner::stop_vpn_worker_by_vpn_id(vpn_id)
+      .await
+      .map_err(|e| McpError {
         code: -32000,
         message: format!("Failed to disconnect VPN: {e}"),
       })?;
-    }
-
-    manager.remove_tunnel(vpn_id);
 
     Ok(serde_json::json!({
       "content": [{
@@ -1860,19 +1799,23 @@ impl McpServer {
         message: "Missing vpn_id".to_string(),
       })?;
 
-    let manager = crate::vpn::TUNNEL_MANAGER.lock().await;
+    let connected =
+      if let Some(worker) = crate::vpn_worker_storage::find_vpn_worker_by_vpn_id(vpn_id) {
+        worker
+          .pid
+          .map(crate::proxy_storage::is_process_running)
+          .unwrap_or(false)
+      } else {
+        false
+      };
 
-    let status = if let Some(tunnel) = manager.get_tunnel(vpn_id) {
-      tunnel.get_status()
-    } else {
-      crate::vpn::VpnStatus {
-        connected: false,
-        vpn_id: vpn_id.to_string(),
-        connected_at: None,
-        bytes_sent: None,
-        bytes_received: None,
-        last_handshake: None,
-      }
+    let status = crate::vpn::VpnStatus {
+      connected,
+      vpn_id: vpn_id.to_string(),
+      connected_at: None,
+      bytes_sent: None,
+      bytes_received: None,
+      last_handshake: None,
     };
 
     Ok(serde_json::json!({

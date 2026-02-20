@@ -172,6 +172,24 @@ async fn main() {
         )
         .arg(Arg::new("action").required(true).help("Action (start)")),
     )
+    .subcommand(
+      Command::new("vpn-worker")
+        .about("Run a VPN worker process (internal use)")
+        .arg(
+          Arg::new("id")
+            .long("id")
+            .required(true)
+            .help("VPN worker configuration ID"),
+        )
+        .arg(
+          Arg::new("port")
+            .long("port")
+            .value_parser(clap::value_parser!(u16))
+            .required(true)
+            .help("Local SOCKS5 port"),
+        )
+        .arg(Arg::new("action").required(true).help("Action (start)")),
+    )
     .get_matches();
 
   if let Some(proxy_matches) = matches.subcommand_matches("proxy") {
@@ -331,6 +349,107 @@ async fn main() {
       process::exit(1);
     } else {
       log::error!("Invalid action for proxy-worker. Use 'start'");
+      process::exit(1);
+    }
+  } else if let Some(vpn_matches) = matches.subcommand_matches("vpn-worker") {
+    let id = vpn_matches.get_one::<String>("id").expect("id is required");
+    let action = vpn_matches
+      .get_one::<String>("action")
+      .expect("action is required");
+    let port = *vpn_matches
+      .get_one::<u16>("port")
+      .expect("port is required");
+
+    if action == "start" {
+      set_high_priority();
+
+      log::info!("VPN worker starting, config id: {}", id);
+      log::info!("Process PID: {}", std::process::id());
+
+      // Retry config loading to handle file system race condition
+      let config = {
+        let mut attempts = 0;
+        loop {
+          if let Some(config) = donutbrowser_lib::vpn_worker_storage::get_vpn_worker_config(id) {
+            log::info!(
+              "Found VPN worker config: id={}, vpn_type={}, vpn_id={}",
+              config.id,
+              config.vpn_type,
+              config.vpn_id
+            );
+            break config;
+          }
+          attempts += 1;
+          if attempts >= 10 {
+            log::error!(
+              "VPN worker configuration {} not found after {} attempts",
+              id,
+              attempts
+            );
+            process::exit(1);
+          }
+          log::info!(
+            "VPN worker config {} not found yet, retrying ({}/10)...",
+            id,
+            attempts
+          );
+          std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+      };
+
+      // Read the decrypted VPN config from the temp file
+      let vpn_config_data = match std::fs::read_to_string(&config.config_file_path) {
+        Ok(data) => data,
+        Err(e) => {
+          log::error!(
+            "Failed to read VPN config file {}: {}",
+            config.config_file_path,
+            e
+          );
+          process::exit(1);
+        }
+      };
+
+      match config.vpn_type.as_str() {
+        "wireguard" => {
+          let wg_config = match donutbrowser_lib::vpn::parse_wireguard_config(&vpn_config_data) {
+            Ok(c) => c,
+            Err(e) => {
+              log::error!("Failed to parse WireGuard config: {}", e);
+              process::exit(1);
+            }
+          };
+
+          let server =
+            donutbrowser_lib::vpn::socks5_server::WireGuardSocks5Server::new(wg_config, port);
+          if let Err(e) = server.run(id.clone()).await {
+            log::error!("VPN worker failed: {}", e);
+            process::exit(1);
+          }
+        }
+        "openvpn" => {
+          let ovpn_config = match donutbrowser_lib::vpn::parse_openvpn_config(&vpn_config_data) {
+            Ok(c) => c,
+            Err(e) => {
+              log::error!("Failed to parse OpenVPN config: {}", e);
+              process::exit(1);
+            }
+          };
+
+          let server =
+            donutbrowser_lib::vpn::openvpn_socks5::OpenVpnSocks5Server::new(ovpn_config, port);
+          if let Err(e) = server.run(id.clone()).await {
+            log::error!("VPN worker failed: {}", e);
+            process::exit(1);
+          }
+        }
+        other => {
+          log::error!("Unknown VPN type: {}", other);
+          process::exit(1);
+        }
+      }
+    } else {
+      log::error!("Invalid action for vpn-worker. Use 'start'");
       process::exit(1);
     }
   } else {

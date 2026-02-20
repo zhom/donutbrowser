@@ -20,7 +20,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -29,6 +31,7 @@ import { WayfernConfigForm } from "@/components/wayfern-config-form";
 
 import { useBrowserDownload } from "@/hooks/use-browser-download";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
+import { useVpnEvents } from "@/hooks/use-vpn-events";
 import { getBrowserIcon } from "@/lib/browser-utils";
 import type {
   BrowserReleaseTypes,
@@ -66,6 +69,7 @@ interface CreateProfileDialogProps {
     version: string;
     releaseType: string;
     proxyId?: string;
+    vpnId?: string;
     camoufoxConfig?: CamoufoxConfig;
     wayfernConfig?: WayfernConfig;
     groupId?: string;
@@ -155,6 +159,7 @@ export function CreateProfileDialog({
 
   const [supportedBrowsers, setSupportedBrowsers] = useState<string[]>([]);
   const { storedProxies } = useProxyEvents();
+  const { vpnConfigs } = useVpnEvents();
   const [showProxyForm, setShowProxyForm] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [releaseTypes, setReleaseTypes] = useState<BrowserReleaseTypes>();
@@ -347,6 +352,11 @@ export function CreateProfileDialog({
     if (!profileName.trim()) return;
 
     setIsCreating(true);
+
+    const isVpnSelection = selectedProxyId?.startsWith("vpn-") ?? false;
+    const resolvedProxyId = isVpnSelection ? undefined : selectedProxyId;
+    const resolvedVpnId =
+      isVpnSelection && selectedProxyId ? selectedProxyId.slice(4) : undefined;
     try {
       if (activeTab === "anti-detect") {
         // Anti-detect browser - check if Wayfern or Camoufox is selected
@@ -365,7 +375,8 @@ export function CreateProfileDialog({
             browserStr: "wayfern" as BrowserTypeString,
             version: bestWayfernVersion.version,
             releaseType: bestWayfernVersion.releaseType,
-            proxyId: selectedProxyId,
+            proxyId: resolvedProxyId,
+            vpnId: resolvedVpnId,
             wayfernConfig: finalWayfernConfig,
             groupId:
               selectedGroupId !== "default" ? selectedGroupId : undefined,
@@ -387,7 +398,8 @@ export function CreateProfileDialog({
             browserStr: "camoufox" as BrowserTypeString,
             version: bestCamoufoxVersion.version,
             releaseType: bestCamoufoxVersion.releaseType,
-            proxyId: selectedProxyId,
+            proxyId: resolvedProxyId,
+            vpnId: resolvedVpnId,
             camoufoxConfig: finalCamoufoxConfig,
             groupId:
               selectedGroupId !== "default" ? selectedGroupId : undefined,
@@ -946,10 +958,10 @@ export function CreateProfileDialog({
                           </div>
                         )}
 
-                        {/* Proxy Selection - Always visible */}
+                        {/* Proxy / VPN Selection - Always visible */}
                         <div className="space-y-3">
                           <div className="flex justify-between items-center">
-                            <Label>Proxy</Label>
+                            <Label>Proxy / VPN</Label>
                             <RippleButton
                               size="sm"
                               variant="outline"
@@ -959,7 +971,7 @@ export function CreateProfileDialog({
                               <GoPlus className="mr-1 w-3 h-3" /> Add Proxy
                             </RippleButton>
                           </div>
-                          {storedProxies.length > 0 ? (
+                          {storedProxies.length > 0 || vpnConfigs.length > 0 ? (
                             <Select
                               value={selectedProxyId || "none"}
                               onValueChange={(value) =>
@@ -969,21 +981,47 @@ export function CreateProfileDialog({
                               }
                             >
                               <SelectTrigger>
-                                <SelectValue placeholder="No proxy" />
+                                <SelectValue placeholder="No proxy / VPN" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="none">No proxy</SelectItem>
-                                {storedProxies.map((proxy) => (
-                                  <SelectItem key={proxy.id} value={proxy.id}>
-                                    {proxy.name}
-                                  </SelectItem>
-                                ))}
+                                <SelectItem value="none">
+                                  No proxy / VPN
+                                </SelectItem>
+                                {storedProxies.length > 0 && (
+                                  <SelectGroup>
+                                    <SelectLabel>Proxies</SelectLabel>
+                                    {storedProxies.map((proxy) => (
+                                      <SelectItem
+                                        key={proxy.id}
+                                        value={proxy.id}
+                                      >
+                                        {proxy.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectGroup>
+                                )}
+                                {vpnConfigs.length > 0 && (
+                                  <SelectGroup>
+                                    <SelectLabel>VPNs</SelectLabel>
+                                    {vpnConfigs.map((vpn) => (
+                                      <SelectItem
+                                        key={vpn.id}
+                                        value={`vpn-${vpn.id}`}
+                                      >
+                                        {vpn.vpn_type === "WireGuard"
+                                          ? "WG"
+                                          : "OVPN"}{" "}
+                                        — {vpn.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectGroup>
+                                )}
                               </SelectContent>
                             </Select>
                           ) : (
                             <div className="flex gap-3 items-center p-3 text-sm rounded-md border text-muted-foreground">
-                              No proxies available. Add one to route this
-                              profile's traffic.
+                              No proxies or VPNs available. Add one to route
+                              this profile's traffic.
                             </div>
                           )}
                         </div>
@@ -1107,10 +1145,10 @@ export function CreateProfileDialog({
                           )}
                         </div>
 
-                        {/* Proxy Selection - Always visible */}
+                        {/* Proxy / VPN Selection - Always visible */}
                         <div className="space-y-3">
                           <div className="flex justify-between items-center">
-                            <Label>Proxy</Label>
+                            <Label>Proxy / VPN</Label>
                             <RippleButton
                               size="sm"
                               variant="outline"
@@ -1120,7 +1158,7 @@ export function CreateProfileDialog({
                               <GoPlus className="mr-1 w-3 h-3" /> Add Proxy
                             </RippleButton>
                           </div>
-                          {storedProxies.length > 0 ? (
+                          {storedProxies.length > 0 || vpnConfigs.length > 0 ? (
                             <Select
                               value={selectedProxyId || "none"}
                               onValueChange={(value) =>
@@ -1130,21 +1168,47 @@ export function CreateProfileDialog({
                               }
                             >
                               <SelectTrigger>
-                                <SelectValue placeholder="No proxy" />
+                                <SelectValue placeholder="No proxy / VPN" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="none">No proxy</SelectItem>
-                                {storedProxies.map((proxy) => (
-                                  <SelectItem key={proxy.id} value={proxy.id}>
-                                    {proxy.name}
-                                  </SelectItem>
-                                ))}
+                                <SelectItem value="none">
+                                  No proxy / VPN
+                                </SelectItem>
+                                {storedProxies.length > 0 && (
+                                  <SelectGroup>
+                                    <SelectLabel>Proxies</SelectLabel>
+                                    {storedProxies.map((proxy) => (
+                                      <SelectItem
+                                        key={proxy.id}
+                                        value={proxy.id}
+                                      >
+                                        {proxy.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectGroup>
+                                )}
+                                {vpnConfigs.length > 0 && (
+                                  <SelectGroup>
+                                    <SelectLabel>VPNs</SelectLabel>
+                                    {vpnConfigs.map((vpn) => (
+                                      <SelectItem
+                                        key={vpn.id}
+                                        value={`vpn-${vpn.id}`}
+                                      >
+                                        {vpn.vpn_type === "WireGuard"
+                                          ? "WG"
+                                          : "OVPN"}{" "}
+                                        — {vpn.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectGroup>
+                                )}
                               </SelectContent>
                             </Select>
                           ) : (
                             <div className="flex gap-3 items-center p-3 text-sm rounded-md border text-muted-foreground">
-                              No proxies available. Add one to route this
-                              profile's traffic.
+                              No proxies or VPNs available. Add one to route
+                              this profile's traffic.
                             </div>
                           )}
                         </div>

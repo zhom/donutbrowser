@@ -511,6 +511,7 @@ mod tests {
       version: version.to_string(),
       process_id: None,
       proxy_id: None,
+      vpn_id: None,
       last_launch: None,
       release_type: "stable".to_string(),
       camoufox_config: None,

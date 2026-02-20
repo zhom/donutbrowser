@@ -65,6 +65,7 @@ import {
 import { useBrowserState } from "@/hooks/use-browser-state";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { useTableSorting } from "@/hooks/use-table-sorting";
+import { useVpnEvents } from "@/hooks/use-vpn-events";
 import {
   getBrowserDisplayName,
   getBrowserIcon,
@@ -81,6 +82,7 @@ import type {
   ProxyCheckResult,
   StoredProxy,
   TrafficSnapshot,
+  VpnConfig,
 } from "@/types";
 import { BandwidthMiniChart } from "./bandwidth-mini-chart";
 import {
@@ -137,6 +139,14 @@ type TableMeta = {
   checkingProfileId: string | null;
   proxyCheckResults: Record<string, ProxyCheckResult>;
 
+  // VPN selector state
+  vpnConfigs: VpnConfig[];
+  vpnOverrides: Record<string, string | null>;
+  handleVpnSelection: (
+    profileId: string,
+    vpnId: string | null,
+  ) => void | Promise<void>;
+
   // Selection helpers
   isProfileSelected: (id: string) => boolean;
   handleToggleAll: (checked: boolean) => void;
@@ -186,6 +196,53 @@ type TableMeta = {
     country: LocationItem,
   ) => Promise<void>;
 };
+
+type SyncStatusDot = { color: string; tooltip: string; animate: boolean };
+
+function getProfileSyncStatusDot(
+  profile: BrowserProfile,
+  liveStatus:
+    | "syncing"
+    | "waiting"
+    | "synced"
+    | "error"
+    | "disabled"
+    | undefined,
+): SyncStatusDot | null {
+  const status = liveStatus ?? (profile.sync_enabled ? "synced" : "disabled");
+
+  switch (status) {
+    case "syncing":
+      return { color: "bg-yellow-500", tooltip: "Syncing...", animate: true };
+    case "waiting":
+      return {
+        color: "bg-yellow-500",
+        tooltip: "Waiting to sync",
+        animate: false,
+      };
+    case "synced":
+      return {
+        color: "bg-green-500",
+        tooltip: profile.last_sync
+          ? `Synced ${new Date(profile.last_sync * 1000).toLocaleString()}`
+          : "Synced",
+        animate: false,
+      };
+    case "error":
+      return { color: "bg-red-500", tooltip: "Sync error", animate: false };
+    case "disabled":
+      if (profile.last_sync) {
+        return {
+          color: "bg-gray-400",
+          tooltip: `Sync disabled, last sync ${formatRelativeTime(profile.last_sync)}`,
+          animate: false,
+        };
+      }
+      return null;
+    default:
+      return null;
+  }
+}
 
 const TagsCell = React.memo<{
   profile: BrowserProfile;
@@ -801,8 +858,12 @@ export function ProfilesDataTable({
   );
 
   const { storedProxies } = useProxyEvents();
+  const { vpnConfigs } = useVpnEvents();
 
   const [proxyOverrides, setProxyOverrides] = React.useState<
+    Record<string, string | null>
+  >({});
+  const [vpnOverrides, setVpnOverrides] = React.useState<
     Record<string, string | null>
   >({});
   const [showCheckboxes, setShowCheckboxes] = React.useState(false);
@@ -903,10 +964,29 @@ export function ProfilesDataTable({
           proxyId,
         });
         setProxyOverrides((prev) => ({ ...prev, [profileId]: proxyId }));
-        // Notify other parts of the app so usage counts and lists refresh
+        setVpnOverrides((prev) => ({ ...prev, [profileId]: null }));
         await emit("profile-updated");
       } catch (error) {
         console.error("Failed to update proxy settings:", error);
+      } finally {
+        setOpenProxySelectorFor(null);
+      }
+    },
+    [],
+  );
+
+  const handleVpnSelection = React.useCallback(
+    async (profileId: string, vpnId: string | null) => {
+      try {
+        await invoke("update_profile_vpn", {
+          profileId,
+          vpnId,
+        });
+        setVpnOverrides((prev) => ({ ...prev, [profileId]: vpnId }));
+        setProxyOverrides((prev) => ({ ...prev, [profileId]: null }));
+        await emit("profile-updated");
+      } catch (error) {
+        console.error("Failed to update VPN settings:", error);
       } finally {
         setOpenProxySelectorFor(null);
       }
@@ -1347,6 +1427,11 @@ export function ProfilesDataTable({
       checkingProfileId,
       proxyCheckResults,
 
+      // VPN selector state
+      vpnConfigs,
+      vpnOverrides,
+      handleVpnSelection,
+
       // Selection helpers
       isProfileSelected: (id: string) => selectedProfiles.includes(id),
       handleToggleAll,
@@ -1415,6 +1500,9 @@ export function ProfilesDataTable({
       handleProxySelection,
       checkingProfileId,
       proxyCheckResults,
+      vpnConfigs,
+      vpnOverrides,
+      handleVpnSelection,
       handleToggleAll,
       handleCheckboxChange,
       handleIconClick,
@@ -1891,7 +1979,7 @@ export function ProfilesDataTable({
       },
       {
         id: "proxy",
-        header: "Proxy",
+        header: "Proxy / VPN",
         cell: ({ row, table }) => {
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
@@ -1908,28 +1996,44 @@ export function ProfilesDataTable({
             isBrowserUpdating ||
             isCrossOs;
 
-          const hasOverride = Object.hasOwn(meta.proxyOverrides, profile.id);
-          const effectiveProxyId = hasOverride
+          const hasProxyOverride = Object.hasOwn(
+            meta.proxyOverrides,
+            profile.id,
+          );
+          const effectiveProxyId = hasProxyOverride
             ? meta.proxyOverrides[profile.id]
             : (profile.proxy_id ?? null);
           const effectiveProxy = effectiveProxyId
             ? (meta.storedProxies.find((p) => p.id === effectiveProxyId) ??
               null)
             : null;
-          const displayName = effectiveProxy
-            ? effectiveProxy.name
-            : "Not Selected";
-          const profileHasProxy = Boolean(effectiveProxy);
-          const tooltipText =
-            profileHasProxy && effectiveProxy ? effectiveProxy.name : null;
+
+          const hasVpnOverride = Object.hasOwn(meta.vpnOverrides, profile.id);
+          const effectiveVpnId = hasVpnOverride
+            ? meta.vpnOverrides[profile.id]
+            : (profile.vpn_id ?? null);
+          const effectiveVpn = effectiveVpnId
+            ? (meta.vpnConfigs.find((v) => v.id === effectiveVpnId) ?? null)
+            : null;
+
+          const hasAssignment = Boolean(effectiveProxy || effectiveVpn);
+          const displayName = effectiveVpn
+            ? effectiveVpn.name
+            : effectiveProxy
+              ? effectiveProxy.name
+              : "Not Selected";
+          const vpnBadge = effectiveVpn
+            ? effectiveVpn.vpn_type === "WireGuard"
+              ? "WG"
+              : "OVPN"
+            : null;
+          const tooltipText = hasAssignment ? displayName : null;
           const isSelectorOpen = meta.openProxySelectorFor === profile.id;
+          const selectedId = effectiveVpnId ?? effectiveProxyId ?? null;
 
           // When profile is running, show bandwidth chart instead of proxy selector
           if (isRunning && meta.trafficSnapshots) {
-            // Find the traffic snapshot for this profile by matching profile_id
             const snapshot = meta.trafficSnapshots[profile.id];
-            // Only use recent_bandwidth (last 60 seconds) - minimal data needed for mini chart
-            // Create a new array reference to ensure React detects changes
             const bandwidthData = snapshot?.recent_bandwidth
               ? [...snapshot.recent_bandwidth]
               : [];
@@ -1966,13 +2070,21 @@ export function ProfilesDataTable({
                             : "cursor-pointer hover:bg-accent/50",
                         )}
                       >
+                        {vpnBadge && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] px-1 py-0 leading-tight"
+                          >
+                            {vpnBadge}
+                          </Badge>
+                        )}
                         <span
                           className={cn(
                             "text-sm",
-                            !profileHasProxy && "text-muted-foreground",
+                            !hasAssignment && "text-muted-foreground",
                           )}
                         >
-                          {profileHasProxy
+                          {hasAssignment
                             ? trimName(displayName, 10)
                             : displayName}
                         </span>
@@ -1994,8 +2106,8 @@ export function ProfilesDataTable({
                       <CommandInput
                         placeholder={
                           meta.canCreateLocationProxy
-                            ? "Search proxies or countries..."
-                            : "Search proxies..."
+                            ? "Search proxies, VPNs, or countries..."
+                            : "Search proxies or VPNs..."
                         }
                         onFocus={() => {
                           if (meta.canCreateLocationProxy)
@@ -2003,7 +2115,7 @@ export function ProfilesDataTable({
                         }}
                       />
                       <CommandList>
-                        <CommandEmpty>No proxies found.</CommandEmpty>
+                        <CommandEmpty>No proxies or VPNs found.</CommandEmpty>
                         <CommandGroup>
                           <CommandItem
                             value="__none__"
@@ -2014,12 +2126,12 @@ export function ProfilesDataTable({
                             <LuCheck
                               className={cn(
                                 "mr-2 h-4 w-4",
-                                effectiveProxyId === null
+                                selectedId === null
                                   ? "opacity-100"
                                   : "opacity-0",
                               )}
                             />
-                            No Proxy
+                            None
                           </CommandItem>
                           {meta.storedProxies.map((proxy) => (
                             <CommandItem
@@ -2035,7 +2147,7 @@ export function ProfilesDataTable({
                               <LuCheck
                                 className={cn(
                                   "mr-2 h-4 w-4",
-                                  effectiveProxyId === proxy.id
+                                  effectiveProxyId === proxy.id && !effectiveVpn
                                     ? "opacity-100"
                                     : "opacity-0",
                                 )}
@@ -2044,6 +2156,38 @@ export function ProfilesDataTable({
                             </CommandItem>
                           ))}
                         </CommandGroup>
+                        {meta.vpnConfigs.length > 0 && (
+                          <CommandGroup heading="VPNs">
+                            {meta.vpnConfigs.map((vpn) => (
+                              <CommandItem
+                                key={vpn.id}
+                                value={`vpn-${vpn.name}`}
+                                onSelect={() =>
+                                  void meta.handleVpnSelection(
+                                    profile.id,
+                                    vpn.id,
+                                  )
+                                }
+                              >
+                                <LuCheck
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    effectiveVpnId === vpn.id
+                                      ? "opacity-100"
+                                      : "opacity-0",
+                                  )}
+                                />
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] px-1 py-0 leading-tight mr-1"
+                                >
+                                  {vpn.vpn_type === "WireGuard" ? "WG" : "OVPN"}
+                                </Badge>
+                                {vpn.name}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        )}
                         {meta.canCreateLocationProxy &&
                           meta.countries.length > 0 && (
                             <CommandGroup heading="Create by country">
@@ -2078,7 +2222,7 @@ export function ProfilesDataTable({
                   </PopoverContent>
                 )}
               </Popover>
-              {profileHasProxy && effectiveProxy && !isDisabled && (
+              {effectiveProxy && !effectiveVpn && !isDisabled && (
                 <ProxyCheckButton
                   proxy={effectiveProxy}
                   profileId={profile.id}
@@ -2107,26 +2251,32 @@ export function ProfilesDataTable({
         id: "sync",
         header: "",
         size: 24,
-        cell: ({ row }) => {
+        cell: ({ row, table }) => {
           const profile = row.original;
+          const meta = table.options.meta as TableMeta;
+          const liveStatus = meta.syncStatuses[profile.id] as
+            | "syncing"
+            | "waiting"
+            | "synced"
+            | "error"
+            | "disabled"
+            | undefined;
 
-          if (!profile.sync_enabled && profile.last_sync) {
-            return (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="flex justify-center items-center w-3 h-3">
-                    <span className="w-2 h-2 rounded-full bg-orange-500" />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  Sync is disabled, last sync{" "}
-                  {formatRelativeTime(profile.last_sync)}
-                </TooltipContent>
-              </Tooltip>
-            );
-          }
+          const dot = getProfileSyncStatusDot(profile, liveStatus);
+          if (!dot) return null;
 
-          return null;
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="flex justify-center items-center w-3 h-3">
+                  <span
+                    className={`w-2 h-2 rounded-full ${dot.color}${dot.animate ? " animate-pulse" : ""}`}
+                  />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{dot.tooltip}</TooltipContent>
+            </Tooltip>
+          );
         },
       },
       {

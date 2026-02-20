@@ -126,7 +126,7 @@
     "createProfile": "Créer un nouveau profil",
     "menu": {
       "settings": "Paramètres",
-      "proxies": "Proxies",
+      "proxies": "Proxys et VPNs",
       "groups": "Groupes",
       "syncService": "Compte",
       "integrations": "Intégrations",
@@ -147,7 +147,7 @@
       "actions": "Actions",
       "note": "Note",
       "group": "Groupe",
-      "proxy": "Proxy",
+      "proxy": "Proxy / VPN",
       "lastLaunch": "Dernier lancement"
     },
     "actions": {
@@ -178,10 +178,10 @@
     "profileName": "Nom du profil",
     "profileNamePlaceholder": "Entrez le nom du profil",
     "proxy": {
-      "title": "Proxy",
+      "title": "Proxy / VPN",
       "addProxy": "Ajouter un proxy",
-      "noProxy": "Pas de proxy",
-      "noProxiesAvailable": "Aucun proxy disponible. Ajoutez-en un pour acheminer le trafic de ce profil."
+      "noProxy": "Pas de proxy / VPN",
+      "noProxiesAvailable": "Aucun proxy ou VPN disponible. Ajoutez-en un pour router le trafic de ce profil."
     },
     "version": {
       "fetching": "Récupération des versions disponibles...",
@@ -203,7 +203,7 @@
   },
   "proxies": {
     "title": "Proxies",
-    "management": "Gestion des proxies",
+    "management": "Proxys et VPNs",
     "add": "Ajouter un proxy",
     "edit": "Modifier le proxy",
     "delete": "Supprimer le proxy",
@@ -429,6 +429,7 @@
       "importSuccess": "{{count}} éléments importés avec succès",
       "exportSuccess": "{{count}} éléments exportés avec succès",
       "syncSuccess": "Synchronisation terminée avec succès",
+      "profileSynced": "Profil '{{name}}' synchronisé avec succès",
       "cacheCleared": "Cache effacé avec succès"
     },
     "error": {
@@ -448,6 +449,7 @@
       "importFailed": "Échec de l'importation",
       "exportFailed": "Échec de l'exportation",
       "syncFailed": "Échec de la synchronisation",
+      "profileSyncFailed": "Échec de la synchronisation du profil '{{name}}'",
       "cacheClearFailed": "Échec de l'effacement du cache",
       "unknown": "Une erreur inconnue s'est produite"
     },
@@ -456,6 +458,7 @@
       "extracting": "Extraction de {{browser}} {{version}}",
       "verifying": "Vérification de {{browser}} {{version}}",
       "syncing": "Synchronisation...",
+      "syncingProfile": "Synchronisation du profil '{{name}}'...",
       "updatingVersions": "Mise à jour des versions de navigateurs..."
     }
   },

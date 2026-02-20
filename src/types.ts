@@ -17,6 +17,7 @@ export interface BrowserProfile {
   browser: string;
   version: string;
   proxy_id?: string; // Reference to stored proxy
+  vpn_id?: string; // Reference to stored VPN config
   process_id?: number;
   last_launch?: number;
   release_type: string; // "stable" or "nightly"
@@ -605,6 +606,8 @@ export interface VpnConfig {
   config_data: string; // Raw config content (may be empty in list view)
   created_at: number;
   last_used?: number;
+  sync_enabled?: boolean;
+  last_sync?: number;
 }
 
 export interface VpnImportResult {

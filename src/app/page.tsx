@@ -3,7 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrent } from "@tauri-apps/plugin-deep-link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CamoufoxConfigDialog } from "@/components/camoufox-config-dialog";
 import { CommercialTrialModal } from "@/components/commercial-trial-modal";
 import { CookieCopyDialog } from "@/components/cookie-copy-dialog";
@@ -35,8 +35,14 @@ import { useProfileEvents } from "@/hooks/use-profile-events";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { useUpdateNotifications } from "@/hooks/use-update-notifications";
 import { useVersionUpdater } from "@/hooks/use-version-updater";
+import { useVpnEvents } from "@/hooks/use-vpn-events";
 import { useWayfernTerms } from "@/hooks/use-wayfern-terms";
-import { showErrorToast, showSuccessToast, showToast } from "@/lib/toast-utils";
+import {
+  dismissToast,
+  showErrorToast,
+  showSuccessToast,
+  showToast,
+} from "@/lib/toast-utils";
 import type { BrowserProfile, CamoufoxConfig, WayfernConfig } from "@/types";
 
 type BrowserTypeString =
@@ -76,6 +82,8 @@ export default function Home() {
     isLoading: proxiesLoading,
     error: proxiesError,
   } = useProxyEvents();
+
+  const { vpnConfigs } = useVpnEvents();
 
   // Wayfern terms and commercial trial hooks
   const {
@@ -140,6 +148,8 @@ export default function Home() {
     useState<BrowserProfile | null>(null);
   const { isMicrophoneAccessGranted, isCameraAccessGranted, isInitialized } =
     usePermissions();
+
+  const userInitiatedSyncIds = useRef<Set<string>>(new Set());
 
   const handleSelectGroup = useCallback((groupId: string) => {
     setSelectedGroupId(groupId);
@@ -448,6 +458,7 @@ export default function Home() {
       version: string;
       releaseType: string;
       proxyId?: string;
+      vpnId?: string;
       camoufoxConfig?: CamoufoxConfig;
       wayfernConfig?: WayfernConfig;
       groupId?: string;
@@ -459,6 +470,7 @@ export default function Home() {
           version: profileData.version,
           releaseType: profileData.releaseType,
           proxyId: profileData.proxyId,
+          vpnId: profileData.vpnId,
           camoufoxConfig: profileData.camoufoxConfig,
           wayfernConfig: profileData.wayfernConfig,
           groupId:
@@ -676,18 +688,19 @@ export default function Home() {
   const handleToggleProfileSync = useCallback(
     async (profile: BrowserProfile) => {
       try {
+        const enabling = !profile.sync_enabled;
         await invoke("set_profile_sync_enabled", {
           profileId: profile.id,
-          enabled: !profile.sync_enabled,
+          enabled: enabling,
         });
-        showSuccessToast(
-          profile.sync_enabled ? "Sync disabled" : "Sync enabled",
-          {
-            description: profile.sync_enabled
-              ? "Profile sync has been disabled"
-              : "Profile sync has been enabled",
-          },
-        );
+        if (enabling) {
+          userInitiatedSyncIds.current.add(profile.id);
+        }
+        showSuccessToast(enabling ? "Sync enabled" : "Sync disabled", {
+          description: enabling
+            ? "Profile sync has been enabled"
+            : "Profile sync has been disabled",
+        });
       } catch (error) {
         console.error("Failed to toggle sync:", error);
         showErrorToast("Failed to update sync settings");
@@ -695,6 +708,47 @@ export default function Home() {
     },
     [],
   );
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      try {
+        unlisten = await listen<{ profile_id: string; status: string }>(
+          "profile-sync-status",
+          (event) => {
+            const { profile_id, status } = event.payload;
+            if (!userInitiatedSyncIds.current.has(profile_id)) return;
+
+            const toastId = `sync-${profile_id}`;
+            const profile = profiles.find((p) => p.id === profile_id);
+            const name = profile?.name ?? "Unknown";
+
+            if (status === "syncing") {
+              showToast({
+                type: "loading",
+                title: `Syncing profile '${name}'...`,
+                id: toastId,
+                duration: 30000,
+              });
+            } else if (status === "synced") {
+              dismissToast(toastId);
+              showSuccessToast(`Profile '${name}' synced successfully`);
+              userInitiatedSyncIds.current.delete(profile_id);
+            } else if (status === "error") {
+              dismissToast(toastId);
+              showErrorToast(`Failed to sync profile '${name}'`);
+              userInitiatedSyncIds.current.delete(profile_id);
+            }
+          },
+        );
+      } catch (error) {
+        console.error("Failed to listen for sync status events:", error);
+      }
+    })();
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [profiles]);
 
   useEffect(() => {
     // Check for startup default browser prompt
@@ -1035,6 +1089,7 @@ export default function Home() {
         onAssignmentComplete={handleProxyAssignmentComplete}
         profiles={profiles}
         storedProxies={storedProxies}
+        vpnConfigs={vpnConfigs}
       />
 
       <CookieCopyDialog

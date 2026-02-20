@@ -127,6 +127,32 @@ pub fn activate_gui() {
   }
 }
 
+pub fn quit_gui() {
+  log::info!("[daemon] Quitting GUI...");
+
+  #[cfg(target_os = "macos")]
+  {
+    let _ = Command::new("osascript")
+      .args(["-e", "tell application \"Donut Browser\" to quit"])
+      .output();
+  }
+
+  #[cfg(target_os = "windows")]
+  {
+    let _ = Command::new("taskkill")
+      .args(["/IM", "Donut.exe", "/F"])
+      .output();
+    let _ = Command::new("taskkill")
+      .args(["/IM", "donutbrowser.exe", "/F"])
+      .output();
+  }
+
+  #[cfg(target_os = "linux")]
+  {
+    let _ = Command::new("pkill").args(["-x", "donutbrowser"]).output();
+  }
+}
+
 pub fn set_gui_running(running: bool) {
   GUI_RUNNING.store(running, Ordering::SeqCst);
 }

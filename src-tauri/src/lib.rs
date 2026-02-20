@@ -49,6 +49,8 @@ mod mcp_server;
 mod tag_manager;
 mod version_updater;
 pub mod vpn;
+pub mod vpn_worker_runner;
+pub mod vpn_worker_storage;
 
 use browser_runner::{
   check_browser_exists, kill_browser_profile, launch_browser_profile, open_url_with_profile,
@@ -57,7 +59,7 @@ use browser_runner::{
 use profile::manager::{
   check_browser_status, clone_profile, create_browser_profile_new, delete_profile,
   list_browser_profiles, rename_profile, update_camoufox_config, update_profile_note,
-  update_profile_proxy, update_profile_tags, update_wayfern_config,
+  update_profile_proxy, update_profile_tags, update_profile_vpn, update_wayfern_config,
 };
 
 use browser_version_manager::{
@@ -80,8 +82,9 @@ use settings_manager::{
 };
 
 use sync::{
-  is_group_in_use_by_synced_profile, is_proxy_in_use_by_synced_profile, request_profile_sync,
-  set_group_sync_enabled, set_profile_sync_enabled, set_proxy_sync_enabled,
+  is_group_in_use_by_synced_profile, is_proxy_in_use_by_synced_profile,
+  is_vpn_in_use_by_synced_profile, request_profile_sync, set_group_sync_enabled,
+  set_profile_sync_enabled, set_proxy_sync_enabled, set_vpn_sync_enabled,
 };
 
 use tag_manager::get_all_tags;
@@ -469,68 +472,141 @@ async fn get_vpn_config(vpn_id: String) -> Result<vpn::VpnConfig, String> {
 }
 
 #[tauri::command]
-async fn delete_vpn_config(vpn_id: String) -> Result<(), String> {
-  // First disconnect if connected
+async fn delete_vpn_config(app_handle: tauri::AppHandle, vpn_id: String) -> Result<(), String> {
+  // First disconnect if connected (stop VPN worker)
+  let _ = vpn_worker_runner::stop_vpn_worker_by_vpn_id(&vpn_id).await;
+
+  // Check if sync was enabled before deleting
+  let was_sync_enabled = {
+    let storage = vpn::VPN_STORAGE
+      .lock()
+      .map_err(|e| format!("Failed to lock VPN storage: {e}"))?;
+    storage
+      .load_config(&vpn_id)
+      .map(|c| c.sync_enabled)
+      .unwrap_or(false)
+  };
+
+  // Delete from storage
   {
-    let mut manager = vpn::TUNNEL_MANAGER.lock().await;
-    if manager.is_tunnel_active(&vpn_id) {
-      if let Some(tunnel) = manager.get_tunnel_mut(&vpn_id) {
-        let _ = tunnel.disconnect().await;
-      }
-      manager.remove_tunnel(&vpn_id);
-    }
-  }
-
-  // Then delete from storage
-  let storage = vpn::VPN_STORAGE
-    .lock()
-    .map_err(|e| format!("Failed to lock VPN storage: {e}"))?;
-
-  storage
-    .delete_config(&vpn_id)
-    .map_err(|e| format!("Failed to delete VPN config: {e}"))
-}
-
-#[tauri::command]
-async fn connect_vpn(vpn_id: String) -> Result<(), String> {
-  // Load config from storage
-  let config = {
     let storage = vpn::VPN_STORAGE
       .lock()
       .map_err(|e| format!("Failed to lock VPN storage: {e}"))?;
 
     storage
-      .load_config(&vpn_id)
-      .map_err(|e| format!("Failed to load VPN config: {e}"))?
-  };
-
-  // Create and connect the appropriate tunnel
-  let mut manager = vpn::TUNNEL_MANAGER.lock().await;
-
-  // Check if already connected
-  if manager.is_tunnel_active(&vpn_id) {
-    return Ok(());
+      .delete_config(&vpn_id)
+      .map_err(|e| format!("Failed to delete VPN config: {e}"))?;
   }
 
-  let mut tunnel: Box<dyn vpn::VpnTunnel> = match config.vpn_type {
-    vpn::VpnType::WireGuard => {
-      let wg_config = vpn::parse_wireguard_config(&config.config_data)
-        .map_err(|e| format!("Invalid WireGuard config: {e}"))?;
-      Box::new(vpn::WireGuardTunnel::new(vpn_id.clone(), wg_config))
+  // If sync was enabled, also delete from remote
+  if was_sync_enabled {
+    let vpn_id_clone = vpn_id.clone();
+    let app_handle_clone = app_handle.clone();
+    tauri::async_runtime::spawn(async move {
+      match sync::SyncEngine::create_from_settings(&app_handle_clone).await {
+        Ok(engine) => {
+          if let Err(e) = engine.delete_vpn(&vpn_id_clone).await {
+            log::warn!("Failed to delete VPN {} from sync: {}", vpn_id_clone, e);
+          } else {
+            log::info!("VPN {} deleted from sync storage", vpn_id_clone);
+          }
+        }
+        Err(e) => {
+          log::debug!("Sync not configured, skipping remote VPN deletion: {}", e);
+        }
+      }
+    });
+  }
+
+  let _ = events::emit("vpn-configs-changed", ());
+
+  Ok(())
+}
+
+#[tauri::command]
+async fn create_vpn_config_manual(
+  name: String,
+  vpn_type: vpn::VpnType,
+  config_data: String,
+) -> Result<vpn::VpnConfig, String> {
+  let storage = vpn::VPN_STORAGE
+    .lock()
+    .map_err(|e| format!("Failed to lock VPN storage: {e}"))?;
+
+  storage
+    .create_config_manual(&name, vpn_type, &config_data)
+    .map_err(|e| format!("Failed to create VPN config: {e}"))
+}
+
+#[tauri::command]
+async fn update_vpn_config(vpn_id: String, name: String) -> Result<vpn::VpnConfig, String> {
+  let storage = vpn::VPN_STORAGE
+    .lock()
+    .map_err(|e| format!("Failed to lock VPN storage: {e}"))?;
+
+  storage
+    .update_config_name(&vpn_id, &name)
+    .map_err(|e| format!("Failed to update VPN config: {e}"))
+}
+
+#[tauri::command]
+async fn check_vpn_validity(
+  vpn_id: String,
+) -> Result<crate::proxy_manager::ProxyCheckResult, String> {
+  let now = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .unwrap_or_default()
+    .as_secs();
+
+  // Start a temporary VPN worker to send real traffic
+  let vpn_worker = vpn_worker_runner::start_vpn_worker(&vpn_id)
+    .await
+    .map_err(|e| format!("Failed to start VPN worker: {e}"))?;
+
+  let socks_url = format!("socks5://127.0.0.1:{}", vpn_worker.local_port.unwrap_or(0));
+
+  // Fetch public IP through the VPN SOCKS5 proxy
+  let result = match ip_utils::fetch_public_ip(Some(&socks_url)).await {
+    Ok(ip) => {
+      let (city, country, country_code) =
+        crate::proxy_manager::ProxyManager::get_ip_geolocation(&ip)
+          .await
+          .unwrap_or_default();
+
+      crate::proxy_manager::ProxyCheckResult {
+        ip,
+        city,
+        country,
+        country_code,
+        timestamp: now,
+        is_valid: true,
+      }
     }
-    vpn::VpnType::OpenVPN => {
-      let ovpn_config = vpn::parse_openvpn_config(&config.config_data)
-        .map_err(|e| format!("Invalid OpenVPN config: {e}"))?;
-      Box::new(vpn::OpenVpnTunnel::new(vpn_id.clone(), ovpn_config))
+    Err(e) => {
+      log::warn!("VPN check failed to fetch public IP: {e}");
+      crate::proxy_manager::ProxyCheckResult {
+        ip: String::new(),
+        city: None,
+        country: None,
+        country_code: None,
+        timestamp: now,
+        is_valid: false,
+      }
     }
   };
 
-  tunnel
-    .connect()
+  // Stop the temporary VPN worker
+  let _ = vpn_worker_runner::stop_vpn_worker(&vpn_worker.id).await;
+
+  Ok(result)
+}
+
+#[tauri::command]
+async fn connect_vpn(vpn_id: String) -> Result<(), String> {
+  // Start VPN worker process (detached, survives GUI shutdown)
+  vpn_worker_runner::start_vpn_worker(&vpn_id)
     .await
     .map_err(|e| format!("Failed to connect VPN: {e}"))?;
-
-  manager.register_tunnel(vpn_id.clone(), tunnel);
 
   // Update last_used timestamp
   {
@@ -545,27 +621,27 @@ async fn connect_vpn(vpn_id: String) -> Result<(), String> {
 
 #[tauri::command]
 async fn disconnect_vpn(vpn_id: String) -> Result<(), String> {
-  let mut manager = vpn::TUNNEL_MANAGER.lock().await;
-
-  if let Some(tunnel) = manager.get_tunnel_mut(&vpn_id) {
-    tunnel
-      .disconnect()
-      .await
-      .map_err(|e| format!("Failed to disconnect VPN: {e}"))?;
-  }
-
-  manager.remove_tunnel(&vpn_id);
+  vpn_worker_runner::stop_vpn_worker_by_vpn_id(&vpn_id)
+    .await
+    .map_err(|e| format!("Failed to disconnect VPN: {e}"))?;
   Ok(())
 }
 
 #[tauri::command]
 async fn get_vpn_status(vpn_id: String) -> Result<vpn::VpnStatus, String> {
-  let manager = vpn::TUNNEL_MANAGER.lock().await;
+  use crate::proxy_storage::is_process_running;
 
-  if let Some(tunnel) = manager.get_tunnel(&vpn_id) {
-    Ok(tunnel.get_status())
+  if let Some(worker) = vpn_worker_storage::find_vpn_worker_by_vpn_id(&vpn_id) {
+    let connected = worker.pid.map(is_process_running).unwrap_or(false);
+    Ok(vpn::VpnStatus {
+      connected,
+      vpn_id,
+      connected_at: None,
+      bytes_sent: None,
+      bytes_received: None,
+      last_handshake: None,
+    })
   } else {
-    // Not connected
     Ok(vpn::VpnStatus {
       connected: false,
       vpn_id,
@@ -579,8 +655,23 @@ async fn get_vpn_status(vpn_id: String) -> Result<vpn::VpnStatus, String> {
 
 #[tauri::command]
 async fn list_active_vpn_connections() -> Result<Vec<vpn::VpnStatus>, String> {
-  let manager = vpn::TUNNEL_MANAGER.lock().await;
-  Ok(manager.get_all_statuses())
+  use crate::proxy_storage::is_process_running;
+
+  let workers = vpn_worker_storage::list_vpn_worker_configs();
+  Ok(
+    workers
+      .into_iter()
+      .filter(|w| w.pid.map(is_process_running).unwrap_or(false))
+      .map(|w| vpn::VpnStatus {
+        connected: true,
+        vpn_id: w.vpn_id,
+        connected_at: None,
+        bytes_sent: None,
+        bytes_received: None,
+        last_handshake: None,
+      })
+      .collect(),
+  )
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -644,6 +735,30 @@ pub fn run() {
       if let Err(e) = daemon_spawn::ensure_daemon_running() {
         log::warn!("Failed to start daemon: {e}");
       }
+
+      // Monitor daemon health - quit GUI if daemon dies
+      let app_handle_daemon = app.handle().clone();
+      tauri::async_runtime::spawn(async move {
+        // Give the daemon time to fully start
+        tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+          interval.tick().await;
+
+          let is_running = tokio::task::spawn_blocking(daemon_spawn::is_daemon_running)
+            .await
+            .unwrap_or(false);
+
+          if !is_running {
+            log::warn!("Daemon is no longer running, quitting GUI");
+            app_handle_daemon.exit(0);
+            break;
+          }
+        }
+      });
 
       // Create the main window programmatically
       #[allow(unused_variables)]
@@ -1124,6 +1239,7 @@ pub fn run() {
       get_all_tags,
       get_browser_release_types,
       update_profile_proxy,
+      update_profile_vpn,
       update_profile_tags,
       update_profile_note,
       check_browser_status,
@@ -1191,6 +1307,8 @@ pub fn run() {
       set_group_sync_enabled,
       is_proxy_in_use_by_synced_profile,
       is_group_in_use_by_synced_profile,
+      set_vpn_sync_enabled,
+      is_vpn_in_use_by_synced_profile,
       read_profile_cookies,
       copy_profile_cookies,
       check_wayfern_terms_accepted,
@@ -1208,6 +1326,9 @@ pub fn run() {
       list_vpn_configs,
       get_vpn_config,
       delete_vpn_config,
+      create_vpn_config_manual,
+      update_vpn_config,
+      check_vpn_validity,
       connect_vpn,
       disconnect_vpn,
       get_vpn_status,
@@ -1247,12 +1368,10 @@ mod tests {
     // Commands that are intentionally not used in the frontend
     // but are used via MCP server or other programmatic APIs
     let mcp_only_commands = [
-      "list_vpn_configs",
-      "get_vpn_config",
-      "delete_vpn_config",
       "connect_vpn",
       "disconnect_vpn",
       "get_vpn_status",
+      "get_vpn_config",
       "list_active_vpn_connections",
     ];
 

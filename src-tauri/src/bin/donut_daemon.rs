@@ -243,7 +243,8 @@ fn run_daemon() {
 
         // Use swap to only run cleanup once
         if SHOULD_QUIT.swap(false, Ordering::SeqCst) {
-          // Cleanup
+          tray::quit_gui();
+
           let mut state = read_state();
           state.daemon_pid = None;
           let _ = write_state(&state);
@@ -357,10 +358,6 @@ fn main() {
 
   match args[1].as_str() {
     "start" => {
-      // "start" is now an alias for "run"
-      // On macOS, the daemon should be started via launchctl (see daemon_spawn.rs)
-      // This command is kept for backward compatibility
-      eprintln!("Starting daemon...");
       run_daemon();
     }
     "stop" => {

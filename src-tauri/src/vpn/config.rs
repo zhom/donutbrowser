@@ -52,6 +52,10 @@ pub struct VpnConfig {
   pub config_data: String, // Raw config content (encrypted at rest)
   pub created_at: i64,
   pub last_used: Option<i64>,
+  #[serde(default)]
+  pub sync_enabled: bool,
+  #[serde(default)]
+  pub last_sync: Option<u64>,
 }
 
 /// Parsed WireGuard configuration

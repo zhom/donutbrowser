@@ -126,7 +126,7 @@
     "createProfile": "新しいプロファイルを作成",
     "menu": {
       "settings": "設定",
-      "proxies": "プロキシ",
+      "proxies": "プロキシ & VPN",
       "groups": "グループ",
       "syncService": "アカウント",
       "integrations": "統合",
@@ -147,7 +147,7 @@
       "actions": "アクション",
       "note": "メモ",
       "group": "グループ",
-      "proxy": "プロキシ",
+      "proxy": "プロキシ / VPN",
       "lastLaunch": "最終起動"
     },
     "actions": {
@@ -178,10 +178,10 @@
     "profileName": "プロファイル名",
     "profileNamePlaceholder": "プロファイル名を入力",
     "proxy": {
-      "title": "プロキシ",
+      "title": "プロキシ / VPN",
       "addProxy": "プロキシを追加",
-      "noProxy": "プロキシなし",
-      "noProxiesAvailable": "利用可能なプロキシがありません。このプロファイルのトラフィックをルーティングするためにプロキシを追加してください。"
+      "noProxy": "プロキシ / VPNなし",
+      "noProxiesAvailable": "利用可能なプロキシまたはVPNがありません。このプロファイルのトラフィックをルーティングするために追加してください。"
     },
     "version": {
       "fetching": "利用可能なバージョンを取得中...",
@@ -203,7 +203,7 @@
   },
   "proxies": {
     "title": "プロキシ",
-    "management": "プロキシ管理",
+    "management": "プロキシ & VPN",
     "add": "プロキシを追加",
     "edit": "プロキシを編集",
     "delete": "プロキシを削除",
@@ -429,6 +429,7 @@
       "importSuccess": "{{count}} 個のアイテムが正常にインポートされました",
       "exportSuccess": "{{count}} 個のアイテムが正常にエクスポートされました",
       "syncSuccess": "同期が正常に完了しました",
+      "profileSynced": "プロファイル '{{name}}' が正常に同期されました",
       "cacheCleared": "キャッシュが正常にクリアされました"
     },
     "error": {
@@ -448,6 +449,7 @@
       "importFailed": "インポートに失敗しました",
       "exportFailed": "エクスポートに失敗しました",
       "syncFailed": "同期に失敗しました",
+      "profileSyncFailed": "プロファイル '{{name}}' の同期に失敗しました",
       "cacheClearFailed": "キャッシュのクリアに失敗しました",
       "unknown": "不明なエラーが発生しました"
     },
@@ -456,6 +458,7 @@
       "extracting": "{{browser}} {{version}} を展開中",
       "verifying": "{{browser}} {{version}} を確認中",
       "syncing": "同期中...",
+      "syncingProfile": "プロファイル '{{name}}' を同期中...",
       "updatingVersions": "ブラウザバージョンを更新中..."
     }
   },

@@ -32,7 +32,7 @@ fn read_state() -> DaemonState {
   DaemonState::default()
 }
 
-fn is_daemon_running() -> bool {
+pub fn is_daemon_running() -> bool {
   let state = read_state();
 
   if let Some(pid) = state.daemon_pid {
@@ -242,6 +242,11 @@ fn spawn_daemon_macos() -> Result<(), String> {
   log::info!("Loading daemon via launchctl...");
   autostart::load_launch_agent().map_err(|e| format!("Failed to load LaunchAgent: {}", e))?;
   log::info!("launchctl load completed");
+
+  // Also explicitly start the agent in case it was already loaded but stopped
+  if let Err(e) = autostart::start_launch_agent() {
+    log::debug!("launchctl start note (non-fatal): {}", e);
+  }
 
   Ok(())
 }

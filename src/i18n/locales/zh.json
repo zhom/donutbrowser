@@ -126,7 +126,7 @@
     "createProfile": "创建新配置文件",
     "menu": {
       "settings": "设置",
-      "proxies": "代理",
+      "proxies": "代理和VPN",
       "groups": "分组",
       "syncService": "账户",
       "integrations": "集成",
@@ -147,7 +147,7 @@
       "actions": "操作",
       "note": "备注",
       "group": "分组",
-      "proxy": "代理",
+      "proxy": "代理 / VPN",
       "lastLaunch": "最后启动"
     },
     "actions": {
@@ -178,10 +178,10 @@
     "profileName": "配置文件名称",
     "profileNamePlaceholder": "输入配置文件名称",
     "proxy": {
-      "title": "代理",
+      "title": "代理 / VPN",
       "addProxy": "添加代理",
-      "noProxy": "无代理",
-      "noProxiesAvailable": "没有可用的代理。添加一个代理来路由此配置文件的流量。"
+      "noProxy": "无代理 / VPN",
+      "noProxiesAvailable": "没有可用的代理或VPN。添加一个来路由此配置文件的流量。"
     },
     "version": {
       "fetching": "正在获取可用版本...",
@@ -203,7 +203,7 @@
   },
   "proxies": {
     "title": "代理",
-    "management": "代理管理",
+    "management": "代理和VPN",
     "add": "添加代理",
     "edit": "编辑代理",
     "delete": "删除代理",
@@ -429,6 +429,7 @@
       "importSuccess": "成功导入 {{count}} 个项目",
       "exportSuccess": "成功导出 {{count}} 个项目",
       "syncSuccess": "同步成功完成",
+      "profileSynced": "配置文件 '{{name}}' 同步成功",
       "cacheCleared": "缓存清除成功"
     },
     "error": {
@@ -448,6 +449,7 @@
       "importFailed": "导入失败",
       "exportFailed": "导出失败",
       "syncFailed": "同步失败",
+      "profileSyncFailed": "配置文件 '{{name}}' 同步失败",
       "cacheClearFailed": "清除缓存失败",
       "unknown": "发生未知错误"
     },
@@ -456,6 +458,7 @@
       "extracting": "正在解压 {{browser}} {{version}}",
       "verifying": "正在验证 {{browser}} {{version}}",
       "syncing": "同步中...",
+      "syncingProfile": "正在同步配置文件 '{{name}}'...",
       "updatingVersions": "正在更新浏览器版本..."
     }
   },

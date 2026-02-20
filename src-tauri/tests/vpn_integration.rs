@@ -188,6 +188,8 @@ fn test_vpn_storage_save_and_load() {
     config_data: "[Interface]\nPrivateKey=key\n[Peer]\nPublicKey=peer".to_string(),
     created_at: 1234567890,
     last_used: None,
+    sync_enabled: false,
+    last_sync: None,
   };
 
   let save_result = storage.save_config(&config);
@@ -230,6 +232,8 @@ fn test_vpn_storage_list() {
       config_data: "secret data".to_string(),
       created_at: 1000 * i as i64,
       last_used: None,
+      sync_enabled: false,
+      last_sync: None,
     };
     storage.save_config(&config).unwrap();
   }
@@ -256,6 +260,8 @@ fn test_vpn_storage_delete() {
     config_data: "data".to_string(),
     created_at: 1000,
     last_used: None,
+    sync_enabled: false,
+    last_sync: None,
   };
 
   storage.save_config(&config).unwrap();

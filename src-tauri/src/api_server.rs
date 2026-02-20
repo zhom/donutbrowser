@@ -601,6 +601,7 @@ async fn create_profile(
       &request.version,
       request.release_type.as_deref().unwrap_or("stable"),
       request.proxy_id.clone(),
+      None, // vpn_id
       camoufox_config,
       wayfern_config,
       request.group_id.clone(),

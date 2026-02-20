@@ -5,6 +5,7 @@ import { emit } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { LoadingButton } from "@/components/loading-button";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -17,11 +18,13 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { BrowserProfile, StoredProxy } from "@/types";
+import type { BrowserProfile, StoredProxy, VpnConfig } from "@/types";
 import { RippleButton } from "./ui/ripple";
 
 interface ProxyAssignmentDialogProps {
@@ -31,6 +34,7 @@ interface ProxyAssignmentDialogProps {
   onAssignmentComplete: () => void;
   profiles?: BrowserProfile[];
   storedProxies?: StoredProxy[];
+  vpnConfigs?: VpnConfig[];
 }
 
 export function ProxyAssignmentDialog({
@@ -40,10 +44,27 @@ export function ProxyAssignmentDialog({
   onAssignmentComplete,
   profiles = [],
   storedProxies = [],
+  vpnConfigs = [],
 }: ProxyAssignmentDialogProps) {
-  const [selectedProxyId, setSelectedProxyId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectionType, setSelectionType] = useState<"none" | "proxy" | "vpn">(
+    "none",
+  );
   const [isAssigning, setIsAssigning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleValueChange = useCallback((value: string) => {
+    if (value === "none") {
+      setSelectedId(null);
+      setSelectionType("none");
+    } else if (value.startsWith("vpn-")) {
+      setSelectedId(value.slice(4));
+      setSelectionType("vpn");
+    } else {
+      setSelectedId(value);
+      setSelectionType("proxy");
+    }
+  }, []);
 
   const handleAssign = useCallback(async () => {
     setIsAssigning(true);
@@ -60,24 +81,29 @@ export function ProxyAssignmentDialog({
         return;
       }
 
-      // Update each profile's proxy sequentially to avoid file locking issues
       for (const profileId of validProfiles) {
-        await invoke("update_profile_proxy", {
-          profileId,
-          proxyId: selectedProxyId,
-        });
+        if (selectionType === "vpn") {
+          await invoke("update_profile_vpn", {
+            profileId,
+            vpnId: selectedId,
+          });
+        } else {
+          await invoke("update_profile_proxy", {
+            profileId,
+            proxyId: selectionType === "proxy" ? selectedId : null,
+          });
+        }
       }
 
-      // Notify other parts of the app so usage counts and lists refresh
       await emit("profile-updated");
       onAssignmentComplete();
       onClose();
     } catch (err) {
-      console.error("Failed to assign proxies to profiles:", err);
+      console.error("Failed to assign proxy/VPN to profiles:", err);
       const errorMessage =
         err instanceof Error
           ? err.message
-          : "Failed to assign proxies to profiles";
+          : "Failed to assign proxy/VPN to profiles";
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
@@ -85,7 +111,8 @@ export function ProxyAssignmentDialog({
     }
   }, [
     selectedProfiles,
-    selectedProxyId,
+    selectedId,
+    selectionType,
     profiles,
     onAssignmentComplete,
     onClose,
@@ -93,18 +120,27 @@ export function ProxyAssignmentDialog({
 
   useEffect(() => {
     if (isOpen) {
-      setSelectedProxyId(null);
+      setSelectedId(null);
+      setSelectionType("none");
       setError(null);
     }
   }, [isOpen]);
+
+  const selectValue =
+    selectionType === "none"
+      ? "none"
+      : selectionType === "vpn"
+        ? `vpn-${selectedId}`
+        : (selectedId ?? "none");
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Assign Proxy</DialogTitle>
+          <DialogTitle>Assign Proxy / VPN</DialogTitle>
           <DialogDescription>
-            Assign a proxy to {selectedProfiles.length} selected profile(s).
+            Assign a proxy or VPN to {selectedProfiles.length} selected
+            profile(s).
           </DialogDescription>
         </DialogHeader>
 
@@ -120,7 +156,7 @@ export function ProxyAssignmentDialog({
                   const displayName = profile ? profile.name : profileId;
                   return (
                     <li key={profileId} className="truncate">
-                      • {displayName}
+                      &bull; {displayName}
                     </li>
                   );
                 })}
@@ -129,24 +165,42 @@ export function ProxyAssignmentDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="proxy-select">Assign Proxy:</Label>
-            <Select
-              value={selectedProxyId || "none"}
-              onValueChange={(value) => {
-                setSelectedProxyId(value === "none" ? null : value);
-              }}
-            >
+            <Label htmlFor="proxy-vpn-select">Assign Proxy / VPN:</Label>
+            <Select value={selectValue} onValueChange={handleValueChange}>
               <SelectTrigger>
-                <SelectValue placeholder="Select a proxy" />
+                <SelectValue placeholder="Select a proxy or VPN" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">No Proxy</SelectItem>
-                {storedProxies.map((proxy) => (
-                  <SelectItem key={proxy.id} value={proxy.id}>
-                    {proxy.name}
-                    {proxy.is_cloud_managed ? " (Included)" : ""}
-                  </SelectItem>
-                ))}
+                <SelectItem value="none">None</SelectItem>
+                {storedProxies.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel>Proxies</SelectLabel>
+                    {storedProxies.map((proxy) => (
+                      <SelectItem key={proxy.id} value={proxy.id}>
+                        {proxy.name}
+                        {proxy.is_cloud_managed ? " (Included)" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
+                {vpnConfigs.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel>VPNs</SelectLabel>
+                    {vpnConfigs.map((vpn) => (
+                      <SelectItem key={vpn.id} value={`vpn-${vpn.id}`}>
+                        <span className="flex items-center gap-1">
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] px-1 py-0 leading-tight"
+                          >
+                            {vpn.vpn_type === "WireGuard" ? "WG" : "OVPN"}
+                          </Badge>
+                          {vpn.name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
               </SelectContent>
             </Select>
           </div>

@@ -34,6 +34,7 @@ pub struct SyncScheduler {
   pending_profiles: Arc<Mutex<HashMap<String, ProfileStopTime>>>,
   pending_proxies: Arc<Mutex<HashSet<String>>>,
   pending_groups: Arc<Mutex<HashSet<String>>>,
+  pending_vpns: Arc<Mutex<HashSet<String>>>,
   pending_tombstones: Arc<Mutex<Vec<(String, String)>>>,
   running_profiles: Arc<Mutex<HashSet<String>>>,
   in_flight_profiles: Arc<Mutex<HashSet<String>>>,
@@ -52,6 +53,7 @@ impl SyncScheduler {
       pending_profiles: Arc::new(Mutex::new(HashMap::new())),
       pending_proxies: Arc::new(Mutex::new(HashSet::new())),
       pending_groups: Arc::new(Mutex::new(HashSet::new())),
+      pending_vpns: Arc::new(Mutex::new(HashSet::new())),
       pending_tombstones: Arc::new(Mutex::new(Vec::new())),
       running_profiles: Arc::new(Mutex::new(HashSet::new())),
       in_flight_profiles: Arc::new(Mutex::new(HashSet::new())),
@@ -91,6 +93,12 @@ impl SyncScheduler {
       return true;
     }
     drop(pending_groups);
+
+    let pending_vpns = self.pending_vpns.lock().await;
+    if !pending_vpns.is_empty() {
+      return true;
+    }
+    drop(pending_vpns);
 
     let pending_tombstones = self.pending_tombstones.lock().await;
     if !pending_tombstones.is_empty() {
@@ -190,6 +198,11 @@ impl SyncScheduler {
     pending.insert(proxy_id);
   }
 
+  pub async fn queue_vpn_sync(&self, vpn_id: String) {
+    let mut pending = self.pending_vpns.lock().await;
+    pending.insert(vpn_id);
+  }
+
   pub async fn queue_group_sync(&self, group_id: String) {
     let mut pending = self.pending_groups.lock().await;
     pending.insert(group_id);
@@ -269,6 +282,7 @@ impl SyncScheduler {
               SyncWorkItem::Profile(id) => scheduler.queue_profile_sync(id).await,
               SyncWorkItem::Proxy(id) => scheduler.queue_proxy_sync(id).await,
               SyncWorkItem::Group(id) => scheduler.queue_group_sync(id).await,
+              SyncWorkItem::Vpn(id) => scheduler.queue_vpn_sync(id).await,
               SyncWorkItem::Tombstone(entity_type, entity_id) => {
                 scheduler.queue_tombstone(entity_type, entity_id).await
               }
@@ -288,6 +302,7 @@ impl SyncScheduler {
     self.process_pending_profiles(app_handle).await;
     self.process_pending_proxies(app_handle).await;
     self.process_pending_groups(app_handle).await;
+    self.process_pending_vpns(app_handle).await;
     self.process_pending_tombstones(app_handle).await;
   }
 
@@ -366,6 +381,7 @@ impl SyncScheduler {
           && self.pending_profiles.lock().await.is_empty()
           && self.pending_proxies.lock().await.is_empty()
           && self.pending_groups.lock().await.is_empty()
+          && self.pending_vpns.lock().await.is_empty()
       };
 
       match result {
@@ -537,6 +553,68 @@ impl SyncScheduler {
     }
   }
 
+  async fn process_pending_vpns(&self, app_handle: &tauri::AppHandle) {
+    let vpns_to_sync: Vec<String> = {
+      let mut pending = self.pending_vpns.lock().await;
+      let list: Vec<String> = pending.drain().collect();
+      list
+    };
+
+    if vpns_to_sync.is_empty() {
+      return;
+    }
+
+    match SyncEngine::create_from_settings(app_handle).await {
+      Ok(engine) => {
+        for vpn_id in vpns_to_sync {
+          log::info!("Syncing VPN {}", vpn_id);
+          let _ = events::emit(
+            "vpn-sync-status",
+            serde_json::json!({
+              "id": vpn_id,
+              "status": "syncing"
+            }),
+          );
+          match engine.sync_vpn_by_id_with_handle(&vpn_id, app_handle).await {
+            Ok(()) => {
+              let _ = events::emit(
+                "vpn-sync-status",
+                serde_json::json!({
+                  "id": vpn_id,
+                  "status": "synced"
+                }),
+              );
+            }
+            Err(e) => {
+              log::error!("Failed to sync VPN {}: {}", vpn_id, e);
+              let _ = events::emit(
+                "vpn-sync-status",
+                serde_json::json!({
+                  "id": vpn_id,
+                  "status": "error"
+                }),
+              );
+            }
+          }
+        }
+
+        if !self.is_sync_in_progress().await {
+          log::debug!("All syncs completed after VPN sync, triggering cleanup");
+          let registry =
+            crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
+          if let Err(e) = registry.cleanup_unused_binaries() {
+            log::warn!("Cleanup after sync failed: {e}");
+          } else {
+            log::debug!("Cleanup after sync completed successfully");
+          }
+        }
+      }
+      Err(e) => {
+        log::error!("Failed to create sync engine: {}", e);
+      }
+    }
+  }
+
   async fn process_pending_tombstones(&self, app_handle: &tauri::AppHandle) {
     let tombstones: Vec<(String, String)> = {
       let mut pending = self.pending_tombstones.lock().await;
@@ -604,6 +682,12 @@ impl SyncScheduler {
         "group" => {
           log::debug!(
             "Group tombstone for {} - local deletion not implemented",
+            entity_id
+          );
+        }
+        "vpn" => {
+          log::debug!(
+            "VPN tombstone for {} - local deletion not implemented",
             entity_id
           );
         }

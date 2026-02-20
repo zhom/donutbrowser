@@ -545,6 +545,7 @@ impl ProfileImporter {
       browser: browser_type.to_string(),
       version: available_versions,
       proxy_id: None,
+      vpn_id: None,
       process_id: None,
       last_launch: None,
       release_type: "stable".to_string(),

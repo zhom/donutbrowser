@@ -7,6 +7,8 @@
 
 mod config;
 mod openvpn;
+pub mod openvpn_socks5;
+pub mod socks5_server;
 mod storage;
 mod tunnel;
 mod wireguard;
@@ -25,7 +27,3 @@ use std::sync::Mutex;
 
 /// Global VPN storage instance
 pub static VPN_STORAGE: Lazy<Mutex<VpnStorage>> = Lazy::new(|| Mutex::new(VpnStorage::new()));
-
-/// Global tunnel manager instance
-pub static TUNNEL_MANAGER: Lazy<tokio::sync::Mutex<TunnelManager>> =
-  Lazy::new(|| tokio::sync::Mutex::new(TunnelManager::new()));

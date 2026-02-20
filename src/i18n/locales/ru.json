@@ -126,7 +126,7 @@
     "createProfile": "Создать новый профиль",
     "menu": {
       "settings": "Настройки",
-      "proxies": "Прокси",
+      "proxies": "Прокси и VPN",
       "groups": "Группы",
       "syncService": "Аккаунт",
       "integrations": "Интеграции",
@@ -147,7 +147,7 @@
       "actions": "Действия",
       "note": "Заметка",
       "group": "Группа",
-      "proxy": "Прокси",
+      "proxy": "Прокси / VPN",
       "lastLaunch": "Последний запуск"
     },
     "actions": {
@@ -178,10 +178,10 @@
     "profileName": "Название профиля",
     "profileNamePlaceholder": "Введите название профиля",
     "proxy": {
-      "title": "Прокси",
+      "title": "Прокси / VPN",
       "addProxy": "Добавить прокси",
-      "noProxy": "Без прокси",
-      "noProxiesAvailable": "Нет доступных прокси. Добавьте один для маршрутизации трафика этого профиля."
+      "noProxy": "Без прокси / VPN",
+      "noProxiesAvailable": "Нет доступных прокси или VPN. Добавьте один для маршрутизации трафика этого профиля."
     },
     "version": {
       "fetching": "Получение доступных версий...",
@@ -203,7 +203,7 @@
   },
   "proxies": {
     "title": "Прокси",
-    "management": "Управление прокси",
+    "management": "Прокси и VPN",
     "add": "Добавить прокси",
     "edit": "Редактировать прокси",
     "delete": "Удалить прокси",
@@ -429,6 +429,7 @@
       "importSuccess": "Успешно импортировано {{count}} элементов",
       "exportSuccess": "Успешно экспортировано {{count}} элементов",
       "syncSuccess": "Синхронизация успешно завершена",
+      "profileSynced": "Профиль '{{name}}' успешно синхронизирован",
       "cacheCleared": "Кэш успешно очищен"
     },
     "error": {
@@ -448,6 +449,7 @@
       "importFailed": "Ошибка импорта",
       "exportFailed": "Ошибка экспорта",
       "syncFailed": "Ошибка синхронизации",
+      "profileSyncFailed": "Ошибка синхронизации профиля '{{name}}'",
       "cacheClearFailed": "Ошибка очистки кэша",
       "unknown": "Произошла неизвестная ошибка"
     },
@@ -456,6 +458,7 @@
       "extracting": "Распаковка {{browser}} {{version}}",
       "verifying": "Проверка {{browser}} {{version}}",
       "syncing": "Синхронизация...",
+      "syncingProfile": "Синхронизация профиля '{{name}}'...",
       "updatingVersions": "Обновление версий браузеров..."
     }
   },

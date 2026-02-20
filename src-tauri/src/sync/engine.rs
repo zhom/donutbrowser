@@ -102,6 +102,24 @@ impl SyncEngine {
     // Generate local manifest
     let local_manifest = generate_manifest(&profile_id, &profile_dir, &mut hash_cache)?;
 
+    let total_size: u64 = local_manifest.files.iter().map(|f| f.size).sum();
+    let has_cookies = local_manifest
+      .files
+      .iter()
+      .any(|f| f.path.contains("Cookies") || f.path.contains("cookies"));
+    let has_local_state = local_manifest
+      .files
+      .iter()
+      .any(|f| f.path.contains("Local State"));
+    log::info!(
+      "Profile {} manifest: {} files, {} bytes total, cookies={}, local_state={}",
+      profile_id,
+      local_manifest.files.len(),
+      total_size,
+      has_cookies,
+      has_local_state
+    );
+
     // Save the hash cache for future runs
     hash_cache.save(&cache_path)?;
 
@@ -174,12 +192,15 @@ impl SyncEngine {
     // Upload manifest.json last for atomicity
     self.upload_manifest(&profile_id, &local_manifest).await?;
 
-    // Sync associated proxy and group
+    // Sync associated proxy, group, and VPN
     if let Some(proxy_id) = &profile.proxy_id {
       let _ = self.sync_proxy(proxy_id, Some(app_handle)).await;
     }
     if let Some(group_id) = &profile.group_id {
       let _ = self.sync_group(group_id, Some(app_handle)).await;
+    }
+    if let Some(vpn_id) = &profile.vpn_id {
+      let _ = self.sync_vpn(vpn_id, Some(app_handle)).await;
     }
 
     // Update profile last_sync
@@ -785,6 +806,145 @@ impl SyncEngine {
     Ok(())
   }
 
+  async fn sync_vpn(&self, vpn_id: &str, app_handle: Option<&tauri::AppHandle>) -> SyncResult<()> {
+    let local_vpn = {
+      let storage = crate::vpn::VPN_STORAGE.lock().unwrap();
+      storage.load_config(vpn_id).ok()
+    };
+
+    let remote_key = format!("vpns/{}.json", vpn_id);
+    let stat = self.client.stat(&remote_key).await?;
+
+    match (local_vpn, stat.exists) {
+      (Some(vpn), true) => {
+        let local_updated = vpn.last_sync.unwrap_or(0);
+        let remote_updated: DateTime<Utc> = stat
+          .last_modified
+          .as_ref()
+          .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+          .map(|dt| dt.with_timezone(&Utc))
+          .unwrap_or_else(Utc::now);
+        let remote_ts = remote_updated.timestamp() as u64;
+
+        if remote_ts > local_updated {
+          self.download_vpn(vpn_id, app_handle).await?;
+        } else if local_updated > remote_ts {
+          self.upload_vpn(&vpn).await?;
+        }
+      }
+      (Some(vpn), false) => {
+        self.upload_vpn(&vpn).await?;
+      }
+      (None, true) => {
+        self.download_vpn(vpn_id, app_handle).await?;
+      }
+      (None, false) => {
+        log::debug!("VPN {} not found locally or remotely", vpn_id);
+      }
+    }
+
+    Ok(())
+  }
+
+  async fn upload_vpn(&self, vpn: &crate::vpn::VpnConfig) -> SyncResult<()> {
+    let now = std::time::SystemTime::now()
+      .duration_since(std::time::UNIX_EPOCH)
+      .unwrap()
+      .as_secs();
+
+    let mut updated_vpn = vpn.clone();
+    updated_vpn.last_sync = Some(now);
+
+    let json = serde_json::to_string_pretty(&updated_vpn)
+      .map_err(|e| SyncError::SerializationError(format!("Failed to serialize VPN: {e}")))?;
+
+    let remote_key = format!("vpns/{}.json", vpn.id);
+    let presign = self
+      .client
+      .presign_upload(&remote_key, Some("application/json"))
+      .await?;
+    self
+      .client
+      .upload_bytes(&presign.url, json.as_bytes(), Some("application/json"))
+      .await?;
+
+    // Update local VPN with new last_sync
+    {
+      let storage = crate::vpn::VPN_STORAGE.lock().unwrap();
+      if let Err(e) = storage.update_sync_fields(&vpn.id, vpn.sync_enabled, Some(now)) {
+        log::warn!("Failed to update VPN last_sync: {}", e);
+      }
+    }
+
+    log::info!("VPN {} uploaded", vpn.id);
+    Ok(())
+  }
+
+  async fn download_vpn(
+    &self,
+    vpn_id: &str,
+    app_handle: Option<&tauri::AppHandle>,
+  ) -> SyncResult<()> {
+    let remote_key = format!("vpns/{}.json", vpn_id);
+    let presign = self.client.presign_download(&remote_key).await?;
+    let data = self.client.download_bytes(&presign.url).await?;
+
+    let mut vpn: crate::vpn::VpnConfig = serde_json::from_slice(&data)
+      .map_err(|e| SyncError::SerializationError(format!("Failed to parse VPN JSON: {e}")))?;
+
+    vpn.last_sync = Some(
+      std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs(),
+    );
+    vpn.sync_enabled = true;
+
+    // Save via VPN storage (handles encryption)
+    {
+      let storage = crate::vpn::VPN_STORAGE.lock().unwrap();
+      if let Err(e) = storage.save_config(&vpn) {
+        log::warn!("Failed to save downloaded VPN: {}", e);
+      }
+    }
+
+    // Emit event for UI update
+    if let Some(_handle) = app_handle {
+      let _ = events::emit("vpn-configs-changed", ());
+      let _ = events::emit(
+        "vpn-sync-status",
+        serde_json::json!({
+          "id": vpn_id,
+          "status": "synced"
+        }),
+      );
+    }
+
+    log::info!("VPN {} downloaded", vpn_id);
+    Ok(())
+  }
+
+  pub async fn sync_vpn_by_id_with_handle(
+    &self,
+    vpn_id: &str,
+    app_handle: &tauri::AppHandle,
+  ) -> SyncResult<()> {
+    self.sync_vpn(vpn_id, Some(app_handle)).await
+  }
+
+  pub async fn delete_vpn(&self, vpn_id: &str) -> SyncResult<()> {
+    let remote_key = format!("vpns/{}.json", vpn_id);
+    let tombstone_key = format!("tombstones/vpns/{}.json", vpn_id);
+
+    self
+      .client
+      .delete(&remote_key, Some(&tombstone_key))
+      .await?;
+
+    log::info!("VPN {} deleted from sync", vpn_id);
+    Ok(())
+  }
+
   /// Download a profile from S3 if it exists remotely but not locally
   pub async fn download_profile_if_missing(
     &self,
@@ -901,6 +1061,21 @@ impl SyncEngine {
     })?;
 
     // Download all files from manifest
+    let total_size: u64 = manifest.files.iter().map(|f| f.size).sum();
+    log::info!(
+      "Profile {} recovery: downloading {} files ({} bytes total)",
+      profile_id,
+      manifest.files.len(),
+      total_size
+    );
+    for file in &manifest.files {
+      log::info!(
+        "  -> {} ({} bytes, hash: {})",
+        file.path,
+        file.size,
+        file.hash
+      );
+    }
     if !manifest.files.is_empty() {
       self
         .download_profile_files(app_handle, profile_id, &profile_dir, &manifest.files)
@@ -1100,6 +1275,43 @@ pub async fn enable_proxy_sync_if_needed(
   Ok(())
 }
 
+/// Check if VPN is used by any synced profile
+pub fn is_vpn_used_by_synced_profile(vpn_id: &str) -> bool {
+  let profile_manager = ProfileManager::instance();
+  if let Ok(profiles) = profile_manager.list_profiles() {
+    profiles
+      .iter()
+      .any(|p| p.sync_enabled && p.vpn_id.as_deref() == Some(vpn_id))
+  } else {
+    false
+  }
+}
+
+/// Enable sync for VPN if not already enabled
+pub async fn enable_vpn_sync_if_needed(
+  vpn_id: &str,
+  _app_handle: &tauri::AppHandle,
+) -> Result<(), String> {
+  let vpn = {
+    let storage = crate::vpn::VPN_STORAGE.lock().unwrap();
+    storage
+      .load_config(vpn_id)
+      .map_err(|e| format!("VPN with ID '{vpn_id}' not found: {e}"))?
+  };
+
+  if !vpn.sync_enabled {
+    let storage = crate::vpn::VPN_STORAGE.lock().unwrap();
+    storage
+      .update_sync_fields(vpn_id, true, None)
+      .map_err(|e| format!("Failed to enable VPN sync: {e}"))?;
+
+    let _ = events::emit("vpn-configs-changed", ());
+    log::info!("Auto-enabled sync for VPN {}", vpn_id);
+  }
+
+  Ok(())
+}
+
 /// Enable sync for group if not already enabled
 pub async fn enable_group_sync_if_needed(
   group_id: &str,
@@ -1197,10 +1409,6 @@ pub async fn set_profile_sync_enabled(
 
   profile.sync_enabled = enabled;
 
-  if !enabled {
-    profile.last_sync = None;
-  }
-
   profile_manager
     .save_profile(&profile)
     .map_err(|e| format!("Failed to save profile: {e}"))?;
@@ -1238,6 +1446,13 @@ pub async fn set_profile_sync_enabled(
           log::warn!("Failed to enable sync for group {}: {}", group_id, e);
         } else {
           scheduler.queue_group_sync(group_id.clone()).await;
+        }
+      }
+      if let Some(ref vpn_id) = profile.vpn_id {
+        if let Err(e) = enable_vpn_sync_if_needed(vpn_id, &app_handle).await {
+          log::warn!("Failed to enable sync for VPN {}: {}", vpn_id, e);
+        } else {
+          scheduler.queue_vpn_sync(vpn_id.clone()).await;
         }
       }
     } else {
@@ -1525,4 +1740,86 @@ pub fn is_proxy_in_use_by_synced_profile(proxy_id: String) -> bool {
 #[tauri::command]
 pub fn is_group_in_use_by_synced_profile(group_id: String) -> bool {
   is_group_used_by_synced_profile(&group_id)
+}
+
+#[tauri::command]
+pub async fn set_vpn_sync_enabled(
+  app_handle: tauri::AppHandle,
+  vpn_id: String,
+  enabled: bool,
+) -> Result<(), String> {
+  let vpn = {
+    let storage = crate::vpn::VPN_STORAGE.lock().unwrap();
+    storage
+      .load_config(&vpn_id)
+      .map_err(|e| format!("VPN with ID '{vpn_id}' not found: {e}"))?
+  };
+
+  // If disabling, check if VPN is used by any synced profile
+  if !enabled && is_vpn_used_by_synced_profile(&vpn_id) {
+    return Err("Sync cannot be disabled while this VPN is used by synced profiles".to_string());
+  }
+
+  // If enabling, check that sync settings are configured
+  if enabled {
+    let cloud_logged_in = crate::cloud_auth::CLOUD_AUTH.is_logged_in().await;
+
+    if !cloud_logged_in {
+      let manager = SettingsManager::instance();
+      let settings = manager
+        .load_settings()
+        .map_err(|e| format!("Failed to load settings: {e}"))?;
+
+      if settings.sync_server_url.is_none() {
+        return Err(
+          "Sync server not configured. Please configure sync settings first.".to_string(),
+        );
+      }
+
+      let token = manager.get_sync_token(&app_handle).await.ok().flatten();
+      if token.is_none() {
+        return Err("Sync token not configured. Please configure sync settings first.".to_string());
+      }
+    }
+  }
+
+  let last_sync = if enabled { vpn.last_sync } else { None };
+
+  {
+    let storage = crate::vpn::VPN_STORAGE.lock().unwrap();
+    storage
+      .update_sync_fields(&vpn_id, enabled, last_sync)
+      .map_err(|e| format!("Failed to update VPN sync: {e}"))?;
+  }
+
+  let _ = events::emit("vpn-configs-changed", ());
+
+  if enabled {
+    let _ = events::emit(
+      "vpn-sync-status",
+      serde_json::json!({
+        "id": vpn_id,
+        "status": "syncing"
+      }),
+    );
+
+    if let Some(scheduler) = super::get_global_scheduler() {
+      scheduler.queue_vpn_sync(vpn_id).await;
+    }
+  } else {
+    let _ = events::emit(
+      "vpn-sync-status",
+      serde_json::json!({
+        "id": vpn_id,
+        "status": "disabled"
+      }),
+    );
+  }
+
+  Ok(())
+}
+
+#[tauri::command]
+pub fn is_vpn_in_use_by_synced_profile(vpn_id: String) -> bool {
+  is_vpn_used_by_synced_profile(&vpn_id)
 }

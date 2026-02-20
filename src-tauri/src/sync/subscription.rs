@@ -23,6 +23,7 @@ pub enum SyncWorkItem {
   Profile(String),
   Proxy(String),
   Group(String),
+  Vpn(String),
   Tombstone(String, String),
 }
 
@@ -229,6 +230,11 @@ impl SyncSubscription {
         .strip_prefix("groups/")
         .and_then(|s| s.strip_suffix(".json"))
         .map(|s| SyncWorkItem::Group(s.to_string()))
+    } else if key.starts_with("vpns/") {
+      key
+        .strip_prefix("vpns/")
+        .and_then(|s| s.strip_suffix(".json"))
+        .map(|s| SyncWorkItem::Vpn(s.to_string()))
     } else if key.starts_with("tombstones/") {
       key.strip_prefix("tombstones/").and_then(|rest| {
         if rest.starts_with("profiles/") {
@@ -246,6 +252,11 @@ impl SyncSubscription {
             .strip_prefix("groups/")
             .and_then(|s| s.strip_suffix(".json"))
             .map(|id| SyncWorkItem::Tombstone("group".to_string(), id.to_string()))
+        } else if rest.starts_with("vpns/") {
+          rest
+            .strip_prefix("vpns/")
+            .and_then(|s| s.strip_suffix(".json"))
+            .map(|id| SyncWorkItem::Tombstone("vpn".to_string(), id.to_string()))
         } else {
           None
         }

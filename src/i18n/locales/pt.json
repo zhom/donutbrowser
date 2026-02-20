@@ -126,7 +126,7 @@
     "createProfile": "Criar um novo perfil",
     "menu": {
       "settings": "Configurações",
-      "proxies": "Proxies",
+      "proxies": "Proxies e VPNs",
       "groups": "Grupos",
       "syncService": "Conta",
       "integrations": "Integrações",
@@ -147,7 +147,7 @@
       "actions": "Ações",
       "note": "Nota",
       "group": "Grupo",
-      "proxy": "Proxy",
+      "proxy": "Proxy / VPN",
       "lastLaunch": "Último Início"
     },
     "actions": {
@@ -178,10 +178,10 @@
     "profileName": "Nome do Perfil",
     "profileNamePlaceholder": "Digite o nome do perfil",
     "proxy": {
-      "title": "Proxy",
+      "title": "Proxy / VPN",
       "addProxy": "Adicionar Proxy",
-      "noProxy": "Sem proxy",
-      "noProxiesAvailable": "Nenhum proxy disponível. Adicione um para rotear o tráfego deste perfil."
+      "noProxy": "Sem proxy / VPN",
+      "noProxiesAvailable": "Nenhum proxy ou VPN disponível. Adicione um para rotear o tráfego deste perfil."
     },
     "version": {
       "fetching": "Buscando versões disponíveis...",
@@ -203,7 +203,7 @@
   },
   "proxies": {
     "title": "Proxies",
-    "management": "Gerenciamento de Proxies",
+    "management": "Proxies e VPNs",
     "add": "Adicionar Proxy",
     "edit": "Editar Proxy",
     "delete": "Excluir Proxy",
@@ -429,6 +429,7 @@
       "importSuccess": "{{count}} itens importados com sucesso",
       "exportSuccess": "{{count}} itens exportados com sucesso",
       "syncSuccess": "Sincronização concluída com sucesso",
+      "profileSynced": "Perfil '{{name}}' sincronizado com sucesso",
       "cacheCleared": "Cache limpo com sucesso"
     },
     "error": {
@@ -448,6 +449,7 @@
       "importFailed": "Falha ao importar",
       "exportFailed": "Falha ao exportar",
       "syncFailed": "Falha na sincronização",
+      "profileSyncFailed": "Falha ao sincronizar perfil '{{name}}'",
       "cacheClearFailed": "Falha ao limpar cache",
       "unknown": "Ocorreu um erro desconhecido"
     },
@@ -456,6 +458,7 @@
       "extracting": "Extraindo {{browser}} {{version}}",
       "verifying": "Verificando {{browser}} {{version}}",
       "syncing": "Sincronizando...",
+      "syncingProfile": "Sincronizando perfil '{{name}}'...",
       "updatingVersions": "Atualizando versões de navegadores..."
     }
   },

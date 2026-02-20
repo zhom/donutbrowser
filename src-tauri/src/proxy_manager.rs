@@ -243,8 +243,7 @@ impl ProxyManager {
       .as_secs()
   }
 
-  // Get geolocation for an IP address
-  async fn get_ip_geolocation(
+  pub async fn get_ip_geolocation(
     ip: &str,
   ) -> Result<(Option<String>, Option<String>, Option<String>), String> {
     // Use ip-api.com (free, no API key required)
@@ -1624,6 +1623,27 @@ impl ProxyManager {
       // Just delete the config file - the process is already dead
       use crate::proxy_storage::delete_proxy_config;
       delete_proxy_config(&config.id);
+    }
+
+    // Clean up orphaned VPN worker configs where the worker process is dead
+    {
+      use crate::proxy_storage::is_process_running;
+      use crate::vpn_worker_storage::{delete_vpn_worker_config, list_vpn_worker_configs};
+
+      let vpn_workers = list_vpn_worker_configs();
+      for worker in vpn_workers {
+        if let Some(pid) = worker.pid {
+          if !is_process_running(pid) {
+            log::info!(
+              "Cleaning up orphaned VPN worker config: {} (process PID {} is dead)",
+              worker.id,
+              pid
+            );
+            let _ = std::fs::remove_file(&worker.config_file_path);
+            delete_vpn_worker_config(&worker.id);
+          }
+        }
+      }
     }
 
     // Emit event for reactive UI updates

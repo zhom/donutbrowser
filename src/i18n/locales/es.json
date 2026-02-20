@@ -126,7 +126,7 @@
     "createProfile": "Crear un nuevo perfil",
     "menu": {
       "settings": "Configuración",
-      "proxies": "Proxies",
+      "proxies": "Proxies y VPNs",
       "groups": "Grupos",
       "syncService": "Cuenta",
       "integrations": "Integraciones",
@@ -147,7 +147,7 @@
       "actions": "Acciones",
       "note": "Nota",
       "group": "Grupo",
-      "proxy": "Proxy",
+      "proxy": "Proxy / VPN",
       "lastLaunch": "Último Inicio"
     },
     "actions": {
@@ -178,10 +178,10 @@
     "profileName": "Nombre del Perfil",
     "profileNamePlaceholder": "Ingresa el nombre del perfil",
     "proxy": {
-      "title": "Proxy",
+      "title": "Proxy / VPN",
       "addProxy": "Agregar Proxy",
-      "noProxy": "Sin proxy",
-      "noProxiesAvailable": "No hay proxies disponibles. Agrega uno para enrutar el tráfico de este perfil."
+      "noProxy": "Sin proxy / VPN",
+      "noProxiesAvailable": "No hay proxies o VPNs disponibles. Agrega uno para enrutar el tráfico de este perfil."
     },
     "version": {
       "fetching": "Obteniendo versiones disponibles...",
@@ -203,7 +203,7 @@
   },
   "proxies": {
     "title": "Proxies",
-    "management": "Gestión de Proxies",
+    "management": "Proxies y VPNs",
     "add": "Agregar Proxy",
     "edit": "Editar Proxy",
     "delete": "Eliminar Proxy",
@@ -429,6 +429,7 @@
       "importSuccess": "{{count}} elementos importados exitosamente",
       "exportSuccess": "{{count}} elementos exportados exitosamente",
       "syncSuccess": "Sincronización completada exitosamente",
+      "profileSynced": "Perfil '{{name}}' sincronizado exitosamente",
       "cacheCleared": "Caché limpiada exitosamente"
     },
     "error": {
@@ -448,6 +449,7 @@
       "importFailed": "Error al importar",
       "exportFailed": "Error al exportar",
       "syncFailed": "Error de sincronización",
+      "profileSyncFailed": "Error al sincronizar perfil '{{name}}'",
       "cacheClearFailed": "Error al limpiar caché",
       "unknown": "Ocurrió un error desconocido"
     },
@@ -456,6 +458,7 @@
       "extracting": "Extrayendo {{browser}} {{version}}",
       "verifying": "Verificando {{browser}} {{version}}",
       "syncing": "Sincronizando...",
+      "syncingProfile": "Sincronizando perfil '{{name}}'...",
       "updatingVersions": "Actualizando versiones de navegadores..."
     }
   },

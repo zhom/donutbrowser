@@ -3,7 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
-import { LuShield, LuUpload } from "react-icons/lu";
+import { LuUpload } from "react-icons/lu";
 import { toast } from "sonner";
 import { LoadingButton } from "@/components/loading-button";
 import {
@@ -22,8 +22,6 @@ import type {
   ParsedProxyLine,
   ProxyImportResult,
   ProxyParseResult,
-  VpnImportResult,
-  VpnType,
 } from "@/types";
 import { RippleButton } from "./ui/ripple";
 
@@ -32,25 +30,12 @@ interface ProxyImportDialogProps {
   onClose: () => void;
 }
 
-type ImportStep =
-  | "dropzone"
-  | "preview"
-  | "ambiguous"
-  | "result"
-  | "vpn-preview"
-  | "vpn-result";
+type ImportStep = "dropzone" | "preview" | "ambiguous" | "result";
 
 interface AmbiguousProxy {
   line: string;
   possible_formats: string[];
   selectedFormat?: string;
-}
-
-interface VpnPreviewData {
-  content: string;
-  filename: string;
-  detectedType: VpnType | null;
-  endpoint: string | null;
 }
 
 export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
@@ -68,11 +53,6 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
   );
   const [isImporting, setIsImporting] = useState(false);
   const [namePrefix, setNamePrefix] = useState("Imported");
-  // VPN import state
-  const [vpnPreview, setVpnPreview] = useState<VpnPreviewData | null>(null);
-  const [vpnName, setVpnName] = useState("");
-  const [vpnImportResult, setVpnImportResult] =
-    useState<VpnImportResult | null>(null);
 
   const os = getCurrentOS();
   const modKey = os === "macos" ? "⌘" : "Ctrl";
@@ -86,76 +66,11 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
     setImportResult(null);
     setIsImporting(false);
     setNamePrefix("Imported");
-    // Reset VPN state
-    setVpnPreview(null);
-    setVpnName("");
-    setVpnImportResult(null);
   }, []);
 
-  // Detect VPN type from content
-  const detectVpnType = useCallback(
-    (
-      content: string,
-      filename: string,
-    ): { isVpn: boolean; type: VpnType | null; endpoint: string | null } => {
-      const lowerFilename = filename.toLowerCase();
-
-      // Check for WireGuard config
-      if (
-        lowerFilename.endsWith(".conf") &&
-        content.includes("[Interface]") &&
-        content.includes("[Peer]")
-      ) {
-        // Extract endpoint from WireGuard config
-        const endpointMatch = content.match(/Endpoint\s*=\s*([^\s\n]+)/i);
-        return {
-          isVpn: true,
-          type: "WireGuard",
-          endpoint: endpointMatch ? endpointMatch[1] : null,
-        };
-      }
-
-      // Check for OpenVPN config
-      if (
-        lowerFilename.endsWith(".ovpn") ||
-        (content.includes("remote ") &&
-          (content.includes("client") || content.includes("dev tun")))
-      ) {
-        // Extract remote from OpenVPN config
-        const remoteMatch = content.match(/remote\s+(\S+)(?:\s+(\d+))?/i);
-        const endpoint = remoteMatch
-          ? `${remoteMatch[1]}${remoteMatch[2] ? `:${remoteMatch[2]}` : ""}`
-          : null;
-        return { isVpn: true, type: "OpenVPN", endpoint };
-      }
-
-      return { isVpn: false, type: null, endpoint: null };
-    },
-    [],
-  );
-
   const processContent = useCallback(
-    async (content: string, isJson: boolean, filename: string = "") => {
+    async (content: string, isJson: boolean, _filename: string = "") => {
       try {
-        // Check if it's a VPN config
-        const vpnDetection = detectVpnType(content, filename);
-        if (vpnDetection.isVpn) {
-          setVpnPreview({
-            content,
-            filename,
-            detectedType: vpnDetection.type,
-            endpoint: vpnDetection.endpoint,
-          });
-          // Generate default name from filename
-          const baseName = filename
-            .replace(/\.(conf|ovpn)$/i, "")
-            .replace(/_/g, " ")
-            .replace(/-/g, " ");
-          setVpnName(baseName || `${vpnDetection.type} VPN`);
-          setStep("vpn-preview");
-          return;
-        }
-
         if (isJson) {
           setIsImporting(true);
           const result = await invoke<ProxyImportResult>(
@@ -213,7 +128,7 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
         setIsImporting(false);
       }
     },
-    [detectVpnType],
+    [],
   );
 
   const handleFileRead = useCallback(
@@ -239,17 +154,13 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
 
       const files = Array.from(e.dataTransfer.files);
       const validFile = files.find(
-        (f) =>
-          f.name.endsWith(".json") ||
-          f.name.endsWith(".txt") ||
-          f.name.endsWith(".conf") || // WireGuard
-          f.name.endsWith(".ovpn"), // OpenVPN
+        (f) => f.name.endsWith(".json") || f.name.endsWith(".txt"),
       );
 
       if (validFile) {
         handleFileRead(validFile);
       } else {
-        toast.error("Please drop a .json, .txt, .conf, or .ovpn file");
+        toast.error("Please drop a .json or .txt file");
       }
     },
     [handleFileRead],
@@ -311,33 +222,6 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
     }
   }, [parsedProxies, namePrefix]);
 
-  const handleVpnImport = useCallback(async () => {
-    if (!vpnPreview) return;
-
-    setIsImporting(true);
-    try {
-      const result = await invoke<VpnImportResult>("import_vpn_config", {
-        content: vpnPreview.content,
-        filename: vpnPreview.filename,
-        name: vpnName.trim() || null,
-      });
-
-      setVpnImportResult(result);
-      setStep("vpn-result");
-
-      if (result.success) {
-        await emit("vpn-configs-changed");
-      }
-    } catch (error) {
-      console.error("Failed to import VPN config:", error);
-      toast.error(
-        error instanceof Error ? error.message : "Failed to import VPN config",
-      );
-    } finally {
-      setIsImporting(false);
-    }
-  }, [vpnPreview, vpnName]);
-
   const handleAmbiguousFormatSelect = useCallback(
     (index: number, format: string) => {
       setAmbiguousProxies((prev) =>
@@ -389,20 +273,13 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>
-            {step === "vpn-preview" || step === "vpn-result"
-              ? "Import VPN Config"
-              : "Import Proxies"}
-          </DialogTitle>
+          <DialogTitle>Import Proxies</DialogTitle>
           <DialogDescription>
-            {step === "dropzone" &&
-              "Import proxies from a JSON or TXT file, or VPN configs (.conf/.ovpn)"}
+            {step === "dropzone" && "Import proxies from a JSON or TXT file"}
             {step === "preview" && "Review the proxies to import"}
             {step === "ambiguous" &&
               "Some proxies have ambiguous formats. Please select the correct format."}
             {step === "result" && "Import completed"}
-            {step === "vpn-preview" && "Review the VPN configuration to import"}
-            {step === "vpn-result" && "VPN import completed"}
           </DialogDescription>
         </DialogHeader>
 
@@ -432,14 +309,14 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
             >
               <LuUpload className="w-10 h-10 text-muted-foreground mb-4" />
               <p className="text-sm text-muted-foreground text-center">
-                Drop a proxy or VPN config file
+                Drop a proxy config file
                 <br />
-                <span className="text-xs">(.json, .txt, .conf, .ovpn)</span>
+                <span className="text-xs">(.json, .txt)</span>
               </p>
               <input
                 id="proxy-file-input"
                 type="file"
-                accept=".json,.txt,.conf,.ovpn"
+                accept=".json,.txt"
                 className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
@@ -594,75 +471,6 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
           </div>
         )}
 
-        {step === "vpn-preview" && vpnPreview && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg">
-              <LuShield className="w-8 h-8 text-primary" />
-              <div>
-                <div className="font-medium">
-                  {vpnPreview.detectedType} Configuration
-                </div>
-                {vpnPreview.endpoint && (
-                  <div className="text-sm text-muted-foreground">
-                    Endpoint: {vpnPreview.endpoint}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="vpn-name">VPN Name</Label>
-              <Input
-                id="vpn-name"
-                placeholder="My VPN"
-                value={vpnName}
-                onChange={(e) => setVpnName(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Config Preview</Label>
-              <ScrollArea className="h-[150px] border rounded-md">
-                <pre className="p-2 text-xs font-mono whitespace-pre-wrap break-all">
-                  {vpnPreview.content.slice(0, 1000)}
-                  {vpnPreview.content.length > 1000 && "..."}
-                </pre>
-              </ScrollArea>
-            </div>
-          </div>
-        )}
-
-        {step === "vpn-result" && vpnImportResult && (
-          <div className="space-y-4">
-            <div
-              className={`p-4 rounded-lg ${vpnImportResult.success ? "bg-green-500/10" : "bg-red-500/10"}`}
-            >
-              {vpnImportResult.success ? (
-                <div className="flex items-center gap-3">
-                  <LuShield className="w-8 h-8 text-green-600 dark:text-green-400" />
-                  <div>
-                    <div className="font-medium text-green-600 dark:text-green-400">
-                      VPN Imported Successfully
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {vpnImportResult.name} ({vpnImportResult.vpn_type})
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="font-medium text-red-600 dark:text-red-400">
-                    Import Failed
-                  </div>
-                  <div className="text-sm text-red-600 dark:text-red-400">
-                    {vpnImportResult.error}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
         <DialogFooter>
           {step === "dropzone" && (
             <RippleButton variant="outline" onClick={handleClose}>
@@ -700,24 +508,6 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
           )}
 
           {step === "result" && (
-            <RippleButton onClick={handleClose}>Done</RippleButton>
-          )}
-
-          {step === "vpn-preview" && (
-            <>
-              <RippleButton variant="outline" onClick={resetState}>
-                Back
-              </RippleButton>
-              <LoadingButton
-                isLoading={isImporting}
-                onClick={() => void handleVpnImport()}
-              >
-                Import VPN
-              </LoadingButton>
-            </>
-          )}
-
-          {step === "vpn-result" && (
             <RippleButton onClick={handleClose}>Done</RippleButton>
           )}
         </DialogFooter>

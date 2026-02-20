@@ -113,10 +113,33 @@ impl BrowserRunner {
       });
 
       // Always start a local proxy for Camoufox (for traffic monitoring and geoip support)
-      let upstream_proxy = profile
+      let mut upstream_proxy = profile
         .proxy_id
         .as_ref()
         .and_then(|id| PROXY_MANAGER.get_proxy_settings_by_id(id));
+
+      // If profile has a VPN instead of proxy, start VPN worker and use it as upstream
+      if upstream_proxy.is_none() {
+        if let Some(ref vpn_id) = profile.vpn_id {
+          match crate::vpn_worker_runner::start_vpn_worker(vpn_id).await {
+            Ok(vpn_worker) => {
+              if let Some(port) = vpn_worker.local_port {
+                upstream_proxy = Some(ProxySettings {
+                  proxy_type: "socks5".to_string(),
+                  host: "127.0.0.1".to_string(),
+                  port,
+                  username: None,
+                  password: None,
+                });
+                log::info!("VPN worker started for Camoufox profile on port {}", port);
+              }
+            }
+            Err(e) => {
+              return Err(format!("Failed to start VPN worker: {e}").into());
+            }
+          }
+        }
+      }
 
       log::info!(
         "Starting local proxy for Camoufox profile: {} (upstream: {})",
@@ -312,10 +335,33 @@ impl BrowserRunner {
       });
 
       // Always start a local proxy for Wayfern (for traffic monitoring and geoip support)
-      let upstream_proxy = profile
+      let mut upstream_proxy = profile
         .proxy_id
         .as_ref()
         .and_then(|id| PROXY_MANAGER.get_proxy_settings_by_id(id));
+
+      // If profile has a VPN instead of proxy, start VPN worker and use it as upstream
+      if upstream_proxy.is_none() {
+        if let Some(ref vpn_id) = profile.vpn_id {
+          match crate::vpn_worker_runner::start_vpn_worker(vpn_id).await {
+            Ok(vpn_worker) => {
+              if let Some(port) = vpn_worker.local_port {
+                upstream_proxy = Some(ProxySettings {
+                  proxy_type: "socks5".to_string(),
+                  host: "127.0.0.1".to_string(),
+                  port,
+                  username: None,
+                  password: None,
+                });
+                log::info!("VPN worker started for Wayfern profile on port {}", port);
+              }
+            }
+            Err(e) => {
+              return Err(format!("Failed to start VPN worker: {e}").into());
+            }
+          }
+        }
+      }
 
       log::info!(
         "Starting local proxy for Wayfern profile: {} (upstream: {})",
@@ -2413,10 +2459,33 @@ pub async fn launch_browser_profile(
   // This ensures all traffic goes through the local proxy for monitoring and future features
   if profile.browser != "camoufox" && profile.browser != "wayfern" {
     // Determine upstream proxy if configured; otherwise use DIRECT (no upstream)
-    let upstream_proxy = profile_for_launch
+    let mut upstream_proxy = profile_for_launch
       .proxy_id
       .as_ref()
       .and_then(|id| PROXY_MANAGER.get_proxy_settings_by_id(id));
+
+    // If profile has a VPN instead of proxy, start VPN worker and use it as upstream
+    if upstream_proxy.is_none() {
+      if let Some(ref vpn_id) = profile_for_launch.vpn_id {
+        match crate::vpn_worker_runner::start_vpn_worker(vpn_id).await {
+          Ok(vpn_worker) => {
+            if let Some(port) = vpn_worker.local_port {
+              upstream_proxy = Some(ProxySettings {
+                proxy_type: "socks5".to_string(),
+                host: "127.0.0.1".to_string(),
+                port,
+                username: None,
+                password: None,
+              });
+              log::info!("VPN worker started for profile on port {}", port);
+            }
+          }
+          Err(e) => {
+            return Err(format!("Failed to start VPN worker: {e}"));
+          }
+        }
+      }
+    }
 
     // Use a temporary PID (1) to start the proxy, we'll update it after browser launch
     let temp_pid = 1u32;

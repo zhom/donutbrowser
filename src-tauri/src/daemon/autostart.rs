@@ -103,11 +103,6 @@ pub fn enable_autostart() -> io::Result<()> {
     <true/>
     <key>LimitLoadToSessionType</key>
     <string>Aqua</string>
-    <key>KeepAlive</key>
-    <dict>
-        <key>SuccessfulExit</key>
-        <false/>
-    </dict>
     <key>ProcessType</key>
     <string>Interactive</string>
     <key>StandardOutPath</key>
@@ -189,6 +184,26 @@ pub fn load_launch_agent() -> io::Result<()> {
 }
 
 #[cfg(target_os = "macos")]
+pub fn start_launch_agent() -> io::Result<()> {
+  use std::process::Command;
+
+  let output = Command::new("launchctl")
+    .args(["start", "com.donutbrowser.daemon"])
+    .output()?;
+
+  if !output.status.success() {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    return Err(io::Error::other(format!(
+      "launchctl start failed: {}",
+      stderr
+    )));
+  }
+
+  log::info!("Started launch agent via launchctl");
+  Ok(())
+}
+
+#[cfg(target_os = "macos")]
 pub fn unload_launch_agent() -> io::Result<()> {
   use std::process::Command;
 
@@ -233,7 +248,7 @@ pub fn enable_autostart() -> io::Result<()> {
     r#"[Desktop Entry]
 Type=Application
 Name=Donut Browser Daemon
-Exec={} start
+Exec={} run
 Hidden=false
 NoDisplay=true
 X-GNOME-Autostart-enabled=true
@@ -281,7 +296,7 @@ pub fn enable_autostart() -> io::Result<()> {
 
   key.set_value(
     "DonutBrowserDaemon",
-    &format!("\"{}\" start", daemon_path.display()),
+    &format!("\"{}\" run", daemon_path.display()),
   )?;
 
   log::info!("Added registry autostart entry");

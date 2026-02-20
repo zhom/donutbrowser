@@ -22,6 +22,8 @@ pub struct BrowserProfile {
   #[serde(default)]
   pub proxy_id: Option<String>, // Reference to stored proxy
   #[serde(default)]
+  pub vpn_id: Option<String>, // Reference to stored VPN config
+  #[serde(default)]
   pub process_id: Option<u32>,
   #[serde(default)]
   pub last_launch: Option<u64>,

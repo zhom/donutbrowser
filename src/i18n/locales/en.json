@@ -126,7 +126,7 @@
     "createProfile": "Create a new profile",
     "menu": {
       "settings": "Settings",
-      "proxies": "Proxies",
+      "proxies": "Proxies & VPNs",
       "groups": "Groups",
       "syncService": "Account",
       "integrations": "Integrations",
@@ -147,7 +147,7 @@
       "actions": "Actions",
       "note": "Note",
       "group": "Group",
-      "proxy": "Proxy",
+      "proxy": "Proxy / VPN",
       "lastLaunch": "Last Launch"
     },
     "actions": {
@@ -178,10 +178,10 @@
     "profileName": "Profile Name",
     "profileNamePlaceholder": "Enter profile name",
     "proxy": {
-      "title": "Proxy",
+      "title": "Proxy / VPN",
       "addProxy": "Add Proxy",
-      "noProxy": "No proxy",
-      "noProxiesAvailable": "No proxies available. Add one to route this profile's traffic."
+      "noProxy": "No proxy / VPN",
+      "noProxiesAvailable": "No proxies or VPNs available. Add one to route this profile's traffic."
     },
     "version": {
       "fetching": "Fetching available versions...",
@@ -203,7 +203,7 @@
   },
   "proxies": {
     "title": "Proxies",
-    "management": "Proxy Management",
+    "management": "Proxies & VPNs",
     "add": "Add Proxy",
     "edit": "Edit Proxy",
     "delete": "Delete Proxy",
@@ -429,6 +429,7 @@
       "importSuccess": "Successfully imported {{count}} items",
       "exportSuccess": "Successfully exported {{count}} items",
       "syncSuccess": "Sync completed successfully",
+      "profileSynced": "Profile '{{name}}' synced successfully",
       "cacheCleared": "Cache cleared successfully"
     },
     "error": {
@@ -448,6 +449,7 @@
       "importFailed": "Failed to import",
       "exportFailed": "Failed to export",
       "syncFailed": "Sync failed",
+      "profileSyncFailed": "Failed to sync profile '{{name}}'",
       "cacheClearFailed": "Failed to clear cache",
       "unknown": "An unknown error occurred"
     },
@@ -456,6 +458,7 @@
       "extracting": "Extracting {{browser}} {{version}}",
       "verifying": "Verifying {{browser}} {{version}}",
       "syncing": "Syncing...",
+      "syncingProfile": "Syncing profile '{{name}}'...",
       "updatingVersions": "Updating browser versions..."
     }
   },
