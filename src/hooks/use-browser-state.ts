@@ -174,7 +174,7 @@ export function useBrowserState(
 
       if (isCrossOsProfile(profile) && profile.host_os) {
         const osName = getOSDisplayName(profile.host_os);
-        return `Created on ${osName}. Can only be launched on ${osName}.`;
+        return `This profile was created on ${osName} and is not supported on this system`;
       }
 
       const isRunning = runningProfiles.has(profile.id);

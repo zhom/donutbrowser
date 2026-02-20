@@ -2401,6 +2401,14 @@ impl BrowserRunner {
       .find(|p| p.id.to_string() == profile_id)
       .ok_or_else(|| format!("Profile '{profile_id}' not found"))?;
 
+    if profile.is_cross_os() {
+      return Err(format!(
+        "Cannot open URL with profile '{}': it was created on {} and is not supported on this system",
+        profile.name,
+        profile.host_os.as_deref().unwrap_or("unknown")
+      ));
+    }
+
     log::info!("Opening URL '{url}' with profile '{profile_id}'");
 
     // Use launch_or_open_url which handles both launching new instances and opening in existing ones
@@ -2428,6 +2436,14 @@ pub async fn launch_browser_profile(
     profile.name,
     profile.id
   );
+
+  if profile.is_cross_os() {
+    return Err(format!(
+      "Cannot launch profile '{}': it was created on {} and is not supported on this system",
+      profile.name,
+      profile.host_os.as_deref().unwrap_or("unknown")
+    ));
+  }
 
   let browser_runner = BrowserRunner::instance();
 
@@ -2664,6 +2680,14 @@ pub async fn launch_browser_profile_with_debugging(
   remote_debugging_port: Option<u16>,
   headless: bool,
 ) -> Result<BrowserProfile, String> {
+  if profile.is_cross_os() {
+    return Err(format!(
+      "Cannot launch profile '{}': it was created on {} and is not supported on this system",
+      profile.name,
+      profile.host_os.as_deref().unwrap_or("unknown")
+    ));
+  }
+
   let browser_runner = BrowserRunner::instance();
   browser_runner
     .launch_browser_with_debugging(app_handle, &profile, url, remote_debugging_port, headless)

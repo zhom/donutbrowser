@@ -166,8 +166,8 @@
     "antiDetect": {
       "title": "防检测浏览器",
       "description": "选择具有防检测功能的浏览器",
-      "chromium": "Chromium (Wayfern)",
-      "firefox": "Firefox (Camoufox)",
+      "chromium": "Wayfern",
+      "firefox": "Camoufox",
       "badge": "防检测浏览器"
     },
     "regular": {
@@ -483,11 +483,25 @@
     "wayfern": "Wayfern"
   },
   "fingerprint": {
-    "crossOsWarning": "伪装不同的操作系统更加困难——系统级API更难以掩盖，使网站更容易检测到不一致之处。没有任何反检测浏览器能够完美伪装跨操作系统的所有细节。"
+    "crossOsWarning": "伪装不同操作系统的指纹不太可靠，因为不可能完美模拟所有底层组件。请谨慎使用。"
+  },
+  "syncAll": {
+    "title": "为现有项目启用同步",
+    "description": "您有未同步的项目。是否要为所有项目启用同步？",
+    "itemsList": "未同步项目: {{items}}",
+    "proxies": "{{count}} 个代理",
+    "proxies_plural": "{{count}} 个代理",
+    "groups": "{{count}} 个分组",
+    "groups_plural": "{{count}} 个分组",
+    "vpns": "{{count}} 个 VPN",
+    "vpns_plural": "{{count}} 个 VPN",
+    "enableAll": "全部启用",
+    "skip": "跳过",
+    "success": "已为所有项目启用同步"
   },
   "crossOs": {
-    "viewOnly": "在 {{os}} 上创建 - 仅查看",
-    "cannotLaunch": "在 {{os}} 上创建。只能在 {{os}} 上启动。",
+    "viewOnly": "此配置文件在 {{os}} 上创建，不受此系统支持",
+    "cannotLaunch": "此配置文件在 {{os}} 上创建，不受此系统支持",
     "cannotModify": "无法修改跨操作系统配置文件的同步设置"
   }
 }

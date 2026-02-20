@@ -28,7 +28,7 @@ import type { SyncSettings } from "@/types";
 
 interface SyncConfigDialogProps {
   isOpen: boolean;
-  onClose: () => void;
+  onClose: (loginOccurred?: boolean) => void;
 }
 
 export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
@@ -179,8 +179,8 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
       } catch (e) {
         console.error("Failed to restart sync service:", e);
       }
-      // Auto-close dialog after successful login
-      onClose();
+      // Auto-close dialog after successful login, signal that login occurred
+      onClose(true);
     } catch (error) {
       console.error("OTP verification failed:", error);
       showErrorToast(String(error));

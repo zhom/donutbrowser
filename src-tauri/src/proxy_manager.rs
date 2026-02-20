@@ -117,11 +117,12 @@ pub struct StoredProxy {
 
 impl StoredProxy {
   pub fn new(name: String, proxy_settings: ProxySettings) -> Self {
+    let sync_enabled = crate::cloud_auth::CLOUD_AUTH.has_active_paid_subscription_sync();
     Self {
       id: uuid::Uuid::new_v4().to_string(),
       name,
       proxy_settings,
-      sync_enabled: false,
+      sync_enabled,
       last_sync: None,
       is_cloud_managed: false,
       is_cloud_derived: false,

@@ -328,6 +328,7 @@ impl VpnStorage {
     }
 
     let id = Uuid::new_v4().to_string();
+    let sync_enabled = crate::cloud_auth::CLOUD_AUTH.has_active_paid_subscription_sync();
 
     let config = VpnConfig {
       id,
@@ -336,7 +337,7 @@ impl VpnStorage {
       config_data: config_data.to_string(),
       created_at: Utc::now().timestamp(),
       last_used: None,
-      sync_enabled: false,
+      sync_enabled,
       last_sync: None,
     };
 
@@ -396,6 +397,7 @@ impl VpnStorage {
       let base = filename.trim_end_matches(".conf").trim_end_matches(".ovpn");
       format!("{} ({})", base, vpn_type)
     });
+    let sync_enabled = crate::cloud_auth::CLOUD_AUTH.has_active_paid_subscription_sync();
 
     let config = VpnConfig {
       id,
@@ -404,7 +406,7 @@ impl VpnStorage {
       config_data: content.to_string(),
       created_at: Utc::now().timestamp(),
       last_used: None,
-      sync_enabled: false,
+      sync_enabled,
       last_sync: None,
     };
 

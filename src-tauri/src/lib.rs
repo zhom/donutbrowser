@@ -82,9 +82,9 @@ use settings_manager::{
 };
 
 use sync::{
-  is_group_in_use_by_synced_profile, is_proxy_in_use_by_synced_profile,
-  is_vpn_in_use_by_synced_profile, request_profile_sync, set_group_sync_enabled,
-  set_profile_sync_enabled, set_proxy_sync_enabled, set_vpn_sync_enabled,
+  enable_sync_for_all_entities, get_unsynced_entity_counts, is_group_in_use_by_synced_profile,
+  is_proxy_in_use_by_synced_profile, is_vpn_in_use_by_synced_profile, request_profile_sync,
+  set_group_sync_enabled, set_profile_sync_enabled, set_proxy_sync_enabled, set_vpn_sync_enabled,
 };
 
 use tag_manager::get_all_tags;
@@ -1309,6 +1309,8 @@ pub fn run() {
       is_group_in_use_by_synced_profile,
       set_vpn_sync_enabled,
       is_vpn_in_use_by_synced_profile,
+      get_unsynced_entity_counts,
+      enable_sync_for_all_entities,
       read_profile_cookies,
       copy_profile_cookies,
       check_wayfern_terms_accepted,

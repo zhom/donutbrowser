@@ -434,6 +434,63 @@ impl Downloader {
     Ok(())
   }
 
+  fn configure_camoufox_search_engine(
+    &self,
+    browser_dir: &Path,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let policies_path = browser_dir.join("distribution").join("policies.json");
+
+    if !policies_path.exists() {
+      if let Some(parent) = policies_path.parent() {
+        std::fs::create_dir_all(parent)?;
+      }
+      let policies = serde_json::json!({
+        "policies": {
+          "SearchEngines": {
+            "Default": "DuckDuckGo"
+          }
+        }
+      });
+      std::fs::write(&policies_path, serde_json::to_string_pretty(&policies)?)?;
+      log::info!("Created policies.json with DuckDuckGo as default search engine");
+      return Ok(());
+    }
+
+    let content = std::fs::read_to_string(&policies_path)?;
+    let mut policies: serde_json::Value = serde_json::from_str(&content)?;
+
+    let current_default = policies
+      .get("policies")
+      .and_then(|p| p.get("SearchEngines"))
+      .and_then(|se| se.get("Default"))
+      .and_then(|d| d.as_str())
+      .unwrap_or("");
+
+    if current_default != "None" {
+      log::info!(
+        "Camoufox search engine already configured to '{}', not overwriting",
+        current_default
+      );
+      return Ok(());
+    }
+
+    if let Some(policies_obj) = policies.get_mut("policies") {
+      if let Some(se) = policies_obj.get_mut("SearchEngines") {
+        se["Default"] = serde_json::json!("DuckDuckGo");
+
+        if let Some(remove_arr) = se.get_mut("Remove").and_then(|r| r.as_array_mut()) {
+          remove_arr.retain(|v| v.as_str() != Some("DuckDuckGo"));
+        }
+      }
+    }
+
+    let updated = serde_json::to_string_pretty(&policies)?;
+    std::fs::write(&policies_path, updated)?;
+
+    log::info!("Updated Camoufox search engine from 'None' to DuckDuckGo");
+    Ok(())
+  }
+
   pub async fn download_browser<R: tauri::Runtime>(
     &self,
     _app_handle: &tauri::AppHandle<R>,
@@ -975,7 +1032,10 @@ impl Downloader {
         .await
       {
         log::warn!("Failed to create version.json for Camoufox: {e}");
-        // Don't fail the download if version.json creation fails
+      }
+
+      if let Err(e) = self.configure_camoufox_search_engine(&browser_dir) {
+        log::warn!("Failed to configure Camoufox search engine: {e}");
       }
     }
 

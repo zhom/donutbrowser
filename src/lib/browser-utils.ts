@@ -15,8 +15,8 @@ export function getBrowserDisplayName(browserType: string): string {
     zen: "Zen Browser",
     brave: "Brave",
     chromium: "Chromium",
-    camoufox: "Firefox (Camoufox)",
-    wayfern: "Chromium (Wayfern)",
+    camoufox: "Camoufox",
+    wayfern: "Wayfern",
   };
 
   return browserNames[browserType] || browserType;

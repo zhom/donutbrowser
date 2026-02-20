@@ -166,8 +166,8 @@
     "antiDetect": {
       "title": "アンチ検出ブラウザ",
       "description": "アンチ検出機能を持つブラウザを選択",
-      "chromium": "Chromium (Wayfern)",
-      "firefox": "Firefox (Camoufox)",
+      "chromium": "Wayfern",
+      "firefox": "Camoufox",
       "badge": "アンチ検出ブラウザ"
     },
     "regular": {
@@ -483,11 +483,25 @@
     "wayfern": "Wayfern"
   },
   "fingerprint": {
-    "crossOsWarning": "異なるオペレーティングシステムの偽装はより困難です。システムレベルのAPIはマスクしにくく、ウェブサイトが矛盾を検出しやすくなります。どのアンチディテクトブラウザも、異なるOS間のすべての詳細を完璧に偽装することはできません。"
+    "crossOsWarning": "異なるオペレーティングシステムのフィンガープリント偽装は、すべての基盤コンポーネントを完璧に模倣することが不可能なため、信頼性が低くなります。注意してご使用ください。"
+  },
+  "syncAll": {
+    "title": "既存アイテムの同期を有効にする",
+    "description": "同期されていないアイテムがあります。すべての同期を有効にしますか？",
+    "itemsList": "未同期アイテム: {{items}}",
+    "proxies": "{{count}}個のプロキシ",
+    "proxies_plural": "{{count}}個のプロキシ",
+    "groups": "{{count}}個のグループ",
+    "groups_plural": "{{count}}個のグループ",
+    "vpns": "{{count}}個のVPN",
+    "vpns_plural": "{{count}}個のVPN",
+    "enableAll": "すべて有効にする",
+    "skip": "スキップ",
+    "success": "すべてのアイテムの同期が有効になりました"
   },
   "crossOs": {
-    "viewOnly": "{{os}}で作成 - 閲覧のみ",
-    "cannotLaunch": "{{os}}で作成されました。{{os}}でのみ起動できます。",
+    "viewOnly": "このプロファイルは{{os}}で作成されたもので、このシステムではサポートされていません",
+    "cannotLaunch": "このプロファイルは{{os}}で作成されたもので、このシステムではサポートされていません",
     "cannotModify": "他のOSのプロファイルの同期設定は変更できません"
   }
 }

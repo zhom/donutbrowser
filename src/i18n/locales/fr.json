@@ -166,8 +166,8 @@
     "antiDetect": {
       "title": "Navigateur anti-détection",
       "description": "Choisissez un navigateur avec des capacités anti-détection",
-      "chromium": "Chromium (Wayfern)",
-      "firefox": "Firefox (Camoufox)",
+      "chromium": "Wayfern",
+      "firefox": "Camoufox",
       "badge": "Navigateur anti-détection"
     },
     "regular": {
@@ -483,11 +483,25 @@
     "wayfern": "Wayfern"
   },
   "fingerprint": {
-    "crossOsWarning": "Usurper un système d'exploitation différent est plus difficile : les API au niveau du système sont plus difficiles à masquer, ce qui permet aux sites web de détecter plus facilement les incohérences. Aucun navigateur anti-détection ne peut parfaitement usurper chaque détail d'un système d'exploitation à l'autre."
+    "crossOsWarning": "L'usurpation d'empreinte pour un système d'exploitation différent est moins fiable car il est impossible d'imiter parfaitement tous les composants sous-jacents. À utiliser avec précaution."
+  },
+  "syncAll": {
+    "title": "Activer la synchronisation pour les éléments existants",
+    "description": "Vous avez des éléments qui ne sont pas synchronisés. Voulez-vous activer la synchronisation pour tous ?",
+    "itemsList": "Éléments non synchronisés : {{items}}",
+    "proxies": "{{count}} proxy",
+    "proxies_plural": "{{count}} proxies",
+    "groups": "{{count}} groupe",
+    "groups_plural": "{{count}} groupes",
+    "vpns": "{{count}} VPN",
+    "vpns_plural": "{{count}} VPNs",
+    "enableAll": "Tout activer",
+    "skip": "Ignorer",
+    "success": "Synchronisation activée pour tous les éléments"
   },
   "crossOs": {
-    "viewOnly": "Créé sur {{os}} - lecture seule",
-    "cannotLaunch": "Créé sur {{os}}. Ne peut être lancé que sur {{os}}.",
+    "viewOnly": "Ce profil a été créé sur {{os}} et n'est pas pris en charge sur ce système",
+    "cannotLaunch": "Ce profil a été créé sur {{os}} et n'est pas pris en charge sur ce système",
     "cannotModify": "Impossible de modifier les paramètres de synchronisation d'un profil d'un autre système d'exploitation"
   }
 }

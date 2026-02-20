@@ -1595,7 +1595,10 @@ export function ProfilesDataTable({
                   </span>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Created on {osName} - view only</p>
+                  <p>
+                    This profile was created on {osName} and is not supported on
+                    this system
+                  </p>
                 </TooltipContent>
               </Tooltip>
             );
@@ -1608,7 +1611,12 @@ export function ProfilesDataTable({
               : "another OS";
             return (
               <NonHoverableTooltip
-                content={<p>Created on {osName} - view only</p>}
+                content={
+                  <p>
+                    This profile was created on {osName} and is not supported on
+                    this system
+                  </p>
+                }
                 sideOffset={4}
                 horizontalOffset={8}
               >

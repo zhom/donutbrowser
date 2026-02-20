@@ -166,8 +166,8 @@
     "antiDetect": {
       "title": "Anti-Detect Browser",
       "description": "Choose a browser with anti-detection capabilities",
-      "chromium": "Chromium (Wayfern)",
-      "firefox": "Firefox (Camoufox)",
+      "chromium": "Wayfern",
+      "firefox": "Camoufox",
       "badge": "Anti-Detect Browser"
     },
     "regular": {
@@ -483,11 +483,25 @@
     "wayfern": "Wayfern"
   },
   "fingerprint": {
-    "crossOsWarning": "Spoofing a different operating system is harder — system-level APIs are more difficult to mask, making it easier for websites to detect inconsistencies. No anti-detect browser can perfectly spoof every detail across operating systems."
+    "crossOsWarning": "Spoofing fingerprint for a different operating system is less reliable because it is impossible to perfectly mimic all underlying components. Use with caution."
+  },
+  "syncAll": {
+    "title": "Enable Sync for Existing Items",
+    "description": "You have items that are not being synced. Would you like to enable sync for all of them?",
+    "itemsList": "Items not synced: {{items}}",
+    "proxies": "{{count}} proxy",
+    "proxies_plural": "{{count}} proxies",
+    "groups": "{{count}} group",
+    "groups_plural": "{{count}} groups",
+    "vpns": "{{count}} VPN",
+    "vpns_plural": "{{count}} VPNs",
+    "enableAll": "Enable All",
+    "skip": "Skip",
+    "success": "Sync enabled for all items"
   },
   "crossOs": {
-    "viewOnly": "Created on {{os}} - view only",
-    "cannotLaunch": "Created on {{os}}. Can only be launched on {{os}}.",
+    "viewOnly": "This profile was created on {{os}} and is not supported on this system",
+    "cannotLaunch": "This profile was created on {{os}} and is not supported on this system",
     "cannotModify": "Cannot modify sync settings for a cross-OS profile"
   }
 }

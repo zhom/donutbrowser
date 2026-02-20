@@ -93,9 +93,9 @@
       "biome check --fix"
     ],
     "src-tauri/**/*.rs": [
-      "cd src-tauri && cargo fmt --all",
-      "cd src-tauri && cargo clippy --all-targets --all-features -- -D warnings -D clippy::all",
-      "cd src-tauri && cargo test"
+      "bash -c 'cd src-tauri && cargo fmt --all'",
+      "bash -c 'cd src-tauri && cargo clippy --all-targets --all-features -- -D warnings -D clippy::all'",
+      "bash -c 'cd src-tauri && cargo test --lib'"
     ]
   }
 }

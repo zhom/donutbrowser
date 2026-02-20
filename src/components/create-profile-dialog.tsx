@@ -555,9 +555,7 @@ export function CreateProfileDialog({
                               })()}
                             </div>
                             <div className="text-left">
-                              <div className="font-medium">
-                                Chromium (Wayfern)
-                              </div>
+                              <div className="font-medium">Wayfern</div>
                               <div className="text-sm text-muted-foreground">
                                 Anti-Detect Browser
                               </div>
@@ -580,9 +578,7 @@ export function CreateProfileDialog({
                               })()}
                             </div>
                             <div className="text-left">
-                              <div className="font-medium">
-                                Firefox (Camoufox)
-                              </div>
+                              <div className="font-medium">Camoufox</div>
                               <div className="text-sm text-muted-foreground">
                                 Anti-Detect Browser
                               </div>

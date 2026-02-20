@@ -593,7 +593,11 @@ impl Extractor {
       }
     }
 
-    log::info!("ZIP extraction completed. Searching for executable...");
+    log::info!("ZIP extraction completed.");
+
+    self.flatten_single_directory_archive(dest_dir)?;
+
+    log::info!("Searching for executable...");
     self
       .find_extracted_executable(dest_dir)
       .await
@@ -617,7 +621,9 @@ impl Extractor {
     // Set executable permissions for extracted files
     self.set_executable_permissions_recursive(dest_dir).await?;
 
-    log::info!("tar.gz extraction completed. Searching for executable...");
+    log::info!("tar.gz extraction completed.");
+    self.flatten_single_directory_archive(dest_dir)?;
+    log::info!("Searching for executable...");
     self.find_extracted_executable(dest_dir).await
   }
 
@@ -638,7 +644,9 @@ impl Extractor {
     // Set executable permissions for extracted files
     self.set_executable_permissions_recursive(dest_dir).await?;
 
-    log::info!("tar.bz2 extraction completed. Searching for executable...");
+    log::info!("tar.bz2 extraction completed.");
+    self.flatten_single_directory_archive(dest_dir)?;
+    log::info!("Searching for executable...");
     self.find_extracted_executable(dest_dir).await
   }
 
@@ -673,7 +681,9 @@ impl Extractor {
     // Set executable permissions for extracted files
     self.set_executable_permissions_recursive(dest_dir).await?;
 
-    log::info!("tar.xz extraction completed. Searching for executable...");
+    log::info!("tar.xz extraction completed.");
+    self.flatten_single_directory_archive(dest_dir)?;
+    log::info!("Searching for executable...");
     self.find_extracted_executable(dest_dir).await
   }
 
@@ -691,7 +701,9 @@ impl Extractor {
       extractor.to(dest_dir);
     }
 
-    log::info!("MSI extraction completed. Searching for executable...");
+    log::info!("MSI extraction completed.");
+    self.flatten_single_directory_archive(dest_dir)?;
+    log::info!("Searching for executable...");
     self.find_extracted_executable(dest_dir).await
   }
 
@@ -776,6 +788,71 @@ impl Extractor {
 
     // Find the installed executable
     self.find_extracted_executable(dest_dir).await
+  }
+
+  fn flatten_single_directory_archive(
+    &self,
+    dest_dir: &Path,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let entries: Vec<_> = fs::read_dir(dest_dir)?.filter_map(|e| e.ok()).collect();
+
+    let archive_extensions = ["zip", "tar", "xz", "gz", "bz2", "dmg", "msi", "exe"];
+
+    let mut dirs = Vec::new();
+    let mut has_non_archive_files = false;
+
+    for entry in &entries {
+      let path = entry.path();
+      if path.is_dir() {
+        dirs.push(path);
+      } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+        if !archive_extensions.contains(&ext.to_lowercase().as_str()) {
+          has_non_archive_files = true;
+        }
+      } else {
+        has_non_archive_files = true;
+      }
+    }
+
+    if dirs.len() == 1 && !has_non_archive_files {
+      let single_dir = &dirs[0];
+      log::info!(
+        "Flattening single-directory archive: moving contents of {} to {}",
+        single_dir.display(),
+        dest_dir.display()
+      );
+
+      let inner_entries: Vec<_> = fs::read_dir(single_dir)?.filter_map(|e| e.ok()).collect();
+
+      for entry in inner_entries {
+        let source = entry.path();
+        let file_name = match source.file_name() {
+          Some(name) => name.to_owned(),
+          None => continue,
+        };
+        let target = dest_dir.join(&file_name);
+        fs::rename(&source, &target).map_err(|e| {
+          format!(
+            "Failed to move {} to {}: {}",
+            source.display(),
+            target.display(),
+            e
+          )
+        })?;
+      }
+
+      fs::remove_dir(single_dir).map_err(|e| {
+        format!(
+          "Failed to remove empty directory {}: {}",
+          single_dir.display(),
+          e
+        )
+      })?;
+
+      log::info!("Successfully flattened archive directory structure");
+    }
+
+    Ok(())
   }
 
   async fn find_extracted_executable(

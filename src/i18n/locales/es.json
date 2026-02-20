@@ -166,8 +166,8 @@
     "antiDetect": {
       "title": "Navegador Anti-Detección",
       "description": "Elige un navegador con capacidades anti-detección",
-      "chromium": "Chromium (Wayfern)",
-      "firefox": "Firefox (Camoufox)",
+      "chromium": "Wayfern",
+      "firefox": "Camoufox",
       "badge": "Navegador Anti-Detección"
     },
     "regular": {
@@ -483,11 +483,25 @@
     "wayfern": "Wayfern"
   },
   "fingerprint": {
-    "crossOsWarning": "Suplantar un sistema operativo diferente es más difícil: las API a nivel de sistema son más difíciles de enmascarar, lo que facilita que los sitios web detecten inconsistencias. Ningún navegador antidetección puede suplantar perfectamente cada detalle entre sistemas operativos."
+    "crossOsWarning": "La suplantación de huella digital para un sistema operativo diferente es menos fiable porque es imposible imitar perfectamente todos los componentes subyacentes. Usar con precaución."
+  },
+  "syncAll": {
+    "title": "Activar sincronización para elementos existentes",
+    "description": "Tienes elementos que no se están sincronizando. ¿Te gustaría activar la sincronización para todos?",
+    "itemsList": "Elementos no sincronizados: {{items}}",
+    "proxies": "{{count}} proxy",
+    "proxies_plural": "{{count}} proxies",
+    "groups": "{{count}} grupo",
+    "groups_plural": "{{count}} grupos",
+    "vpns": "{{count}} VPN",
+    "vpns_plural": "{{count}} VPNs",
+    "enableAll": "Activar todos",
+    "skip": "Omitir",
+    "success": "Sincronización activada para todos los elementos"
   },
   "crossOs": {
-    "viewOnly": "Creado en {{os}} - solo lectura",
-    "cannotLaunch": "Creado en {{os}}. Solo se puede iniciar en {{os}}.",
+    "viewOnly": "Este perfil fue creado en {{os}} y no es compatible con este sistema",
+    "cannotLaunch": "Este perfil fue creado en {{os}} y no es compatible con este sistema",
     "cannotModify": "No se pueden modificar los ajustes de sincronización de un perfil de otro sistema operativo"
   }
 }

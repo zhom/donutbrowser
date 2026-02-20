@@ -273,6 +273,17 @@ export function useBrowserDownload() {
             const progress = event.payload;
             setDownloadProgress(progress);
 
+            if (
+              progress.stage === "downloading" ||
+              progress.stage === "extracting" ||
+              progress.stage === "verifying"
+            ) {
+              setDownloadingBrowsers((prev) => {
+                if (prev.has(progress.browser)) return prev;
+                return new Set(prev).add(progress.browser);
+              });
+            }
+
             const browserName = getBrowserDisplayName(progress.browser);
 
             if (progress.stage === "downloading") {
@@ -311,11 +322,21 @@ export function useBrowserDownload() {
             } else if (progress.stage === "verifying") {
               showDownloadToast(browserName, progress.version, "verifying");
             } else if (progress.stage === "cancelled") {
+              setDownloadingBrowsers((prev) => {
+                const next = new Set(prev);
+                next.delete(progress.browser);
+                return next;
+              });
               dismissToast(
                 `download-${browserName.toLowerCase()}-${progress.version}`,
               );
               setDownloadProgress(null);
             } else if (progress.stage === "completed") {
+              setDownloadingBrowsers((prev) => {
+                const next = new Set(prev);
+                next.delete(progress.browser);
+                return next;
+              });
               // On completion, refresh the downloaded versions for this browser and also refresh camoufox,
               // since the Create dialog implicitly uses camoufox on the anti-detect tab
               try {

@@ -611,6 +611,21 @@ impl CloudAuthManager {
     }
   }
 
+  /// Non-async version that uses try_lock, defaults to false if lock can't be acquired.
+  pub fn has_active_paid_subscription_sync(&self) -> bool {
+    match self.state.try_lock() {
+      Ok(state) => match &*state {
+        Some(auth) => {
+          auth.user.plan != "free"
+            && (auth.user.subscription_status == "active"
+              || auth.user.plan_period.as_deref() == Some("lifetime"))
+        }
+        None => false,
+      },
+      Err(_) => false,
+    }
+  }
+
   pub async fn is_fingerprint_os_allowed(&self, fingerprint_os: Option<&str>) -> bool {
     let host_os = crate::profile::types::get_host_os();
     match fingerprint_os {

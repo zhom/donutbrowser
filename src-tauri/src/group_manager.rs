@@ -119,10 +119,11 @@ impl GroupManager {
       return Err(format!("Group with name '{name}' already exists").into());
     }
 
+    let sync_enabled = crate::cloud_auth::CLOUD_AUTH.has_active_paid_subscription_sync();
     let group = ProfileGroup {
       id: uuid::Uuid::new_v4().to_string(),
       name,
-      sync_enabled: false,
+      sync_enabled,
       last_sync: None,
     };
 

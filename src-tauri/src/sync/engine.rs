@@ -1823,3 +1823,87 @@ pub async fn set_vpn_sync_enabled(
 pub fn is_vpn_in_use_by_synced_profile(vpn_id: String) -> bool {
   is_vpn_used_by_synced_profile(&vpn_id)
 }
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct UnsyncedEntityCounts {
+  pub proxies: usize,
+  pub groups: usize,
+  pub vpns: usize,
+}
+
+#[tauri::command]
+pub fn get_unsynced_entity_counts() -> Result<UnsyncedEntityCounts, String> {
+  let proxy_count = {
+    let proxies = crate::proxy_manager::PROXY_MANAGER.get_stored_proxies();
+    proxies
+      .iter()
+      .filter(|p| !p.sync_enabled && !p.is_cloud_managed)
+      .count()
+  };
+
+  let group_count = {
+    let gm = crate::group_manager::GROUP_MANAGER.lock().unwrap();
+    let groups = gm
+      .get_all_groups()
+      .map_err(|e| format!("Failed to get groups: {e}"))?;
+    groups.iter().filter(|g| !g.sync_enabled).count()
+  };
+
+  let vpn_count = {
+    let storage = crate::vpn::VPN_STORAGE.lock().unwrap();
+    let configs = storage
+      .list_configs()
+      .map_err(|e| format!("Failed to list VPN configs: {e}"))?;
+    configs.iter().filter(|c| !c.sync_enabled).count()
+  };
+
+  Ok(UnsyncedEntityCounts {
+    proxies: proxy_count,
+    groups: group_count,
+    vpns: vpn_count,
+  })
+}
+
+#[tauri::command]
+pub async fn enable_sync_for_all_entities(app_handle: tauri::AppHandle) -> Result<(), String> {
+  // Enable sync for all unsynced proxies
+  {
+    let proxies = crate::proxy_manager::PROXY_MANAGER.get_stored_proxies();
+    for proxy in &proxies {
+      if !proxy.sync_enabled && !proxy.is_cloud_managed {
+        set_proxy_sync_enabled(app_handle.clone(), proxy.id.clone(), true).await?;
+      }
+    }
+  }
+
+  // Enable sync for all unsynced groups
+  {
+    let groups = {
+      let gm = crate::group_manager::GROUP_MANAGER.lock().unwrap();
+      gm.get_all_groups()
+        .map_err(|e| format!("Failed to get groups: {e}"))?
+    };
+    for group in &groups {
+      if !group.sync_enabled {
+        set_group_sync_enabled(app_handle.clone(), group.id.clone(), true).await?;
+      }
+    }
+  }
+
+  // Enable sync for all unsynced VPNs
+  {
+    let configs = {
+      let storage = crate::vpn::VPN_STORAGE.lock().unwrap();
+      storage
+        .list_configs()
+        .map_err(|e| format!("Failed to list VPN configs: {e}"))?
+    };
+    for config in &configs {
+      if !config.sync_enabled {
+        set_vpn_sync_enabled(app_handle.clone(), config.id.clone(), true).await?;
+      }
+    }
+  }
+
+  Ok(())
+}

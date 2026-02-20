@@ -312,6 +312,30 @@ impl DownloadedBrowsersRegistry {
       }
     }
 
+    // Filter out versions that would leave a browser with zero versions in the registry
+    {
+      let data = self.data.lock().unwrap();
+      let mut removal_counts: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
+      for (browser, _) in &to_remove {
+        *removal_counts.entry(browser.clone()).or_insert(0) += 1;
+      }
+      to_remove.retain(|(browser, version)| {
+        let total = data
+          .browsers
+          .get(browser.as_str())
+          .map(|v| v.len())
+          .unwrap_or(0);
+        let removing = *removal_counts.get(browser.as_str()).unwrap_or(&0);
+        if removing >= total {
+          log::info!("Keeping last available version: {browser} {version}");
+          *removal_counts.get_mut(browser.as_str()).unwrap() -= 1;
+          return false;
+        }
+        true
+      });
+    }
+
     // Remove unused binaries and their version folders
     for (browser, version) in to_remove {
       if let Err(e) = self.cleanup_failed_download(&browser, &version) {
@@ -1161,6 +1185,58 @@ mod tests {
     assert!(
       registry.is_browser_registered("zen", "twilight"),
       "Zen twilight version should be registered after verification completes"
+    );
+  }
+
+  #[test]
+  fn test_last_version_kept_during_cleanup() {
+    let registry = DownloadedBrowsersRegistry::new();
+
+    // Add a single version for "firefox"
+    registry.add_browser(DownloadedBrowserInfo {
+      browser: "firefox".to_string(),
+      version: "139.0".to_string(),
+      file_path: PathBuf::from("/test/firefox/139.0"),
+    });
+
+    // Add two versions for "chromium"
+    registry.add_browser(DownloadedBrowserInfo {
+      browser: "chromium".to_string(),
+      version: "120.0".to_string(),
+      file_path: PathBuf::from("/test/chromium/120.0"),
+    });
+    registry.add_browser(DownloadedBrowserInfo {
+      browser: "chromium".to_string(),
+      version: "121.0".to_string(),
+      file_path: PathBuf::from("/test/chromium/121.0"),
+    });
+
+    // No active or running profiles
+    let result = registry
+      .cleanup_unused_binaries_internal(&[], &[])
+      .expect("cleanup should succeed");
+
+    // firefox 139.0 should be kept (last version), chromium should lose one but keep one
+    // The exact one kept depends on iteration order, but at least one must remain
+    assert!(
+      !result.contains(&"firefox 139.0".to_string()),
+      "Last version of firefox should not be cleaned up"
+    );
+    // At most one chromium version should have been cleaned up
+    let chromium_cleaned: Vec<_> = result
+      .iter()
+      .filter(|r| r.starts_with("chromium"))
+      .collect();
+    assert!(
+      chromium_cleaned.len() <= 1,
+      "At most one chromium version should be cleaned up, got: {:?}",
+      chromium_cleaned
+    );
+
+    // Verify firefox is still registered
+    assert!(
+      registry.is_browser_registered("firefox", "139.0"),
+      "Last firefox version should still be registered"
     );
   }
 

@@ -23,6 +23,7 @@ import { ProfileSyncDialog } from "@/components/profile-sync-dialog";
 import { ProxyAssignmentDialog } from "@/components/proxy-assignment-dialog";
 import { ProxyManagementDialog } from "@/components/proxy-management-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
+import { SyncAllDialog } from "@/components/sync-all-dialog";
 import { SyncConfigDialog } from "@/components/sync-config-dialog";
 import { WayfernTermsDialog } from "@/components/wayfern-terms-dialog";
 import { useAppUpdateNotifications } from "@/hooks/use-app-update-notifications";
@@ -143,6 +144,7 @@ export default function Home() {
     useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [syncConfigDialogOpen, setSyncConfigDialogOpen] = useState(false);
+  const [syncAllDialogOpen, setSyncAllDialogOpen] = useState(false);
   const [profileSyncDialogOpen, setProfileSyncDialogOpen] = useState(false);
   const [currentProfileForSync, setCurrentProfileForSync] =
     useState<BrowserProfile | null>(null);
@@ -1118,7 +1120,17 @@ export default function Home() {
 
       <SyncConfigDialog
         isOpen={syncConfigDialogOpen}
-        onClose={() => setSyncConfigDialogOpen(false)}
+        onClose={(loginOccurred) => {
+          setSyncConfigDialogOpen(false);
+          if (loginOccurred) {
+            setSyncAllDialogOpen(true);
+          }
+        }}
+      />
+
+      <SyncAllDialog
+        isOpen={syncAllDialogOpen}
+        onClose={() => setSyncAllDialogOpen(false)}
       />
 
       <ProfileSyncDialog
