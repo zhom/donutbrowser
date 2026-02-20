@@ -438,57 +438,7 @@ impl Downloader {
     &self,
     browser_dir: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let policies_path = browser_dir.join("distribution").join("policies.json");
-
-    if !policies_path.exists() {
-      if let Some(parent) = policies_path.parent() {
-        std::fs::create_dir_all(parent)?;
-      }
-      let policies = serde_json::json!({
-        "policies": {
-          "SearchEngines": {
-            "Default": "DuckDuckGo"
-          }
-        }
-      });
-      std::fs::write(&policies_path, serde_json::to_string_pretty(&policies)?)?;
-      log::info!("Created policies.json with DuckDuckGo as default search engine");
-      return Ok(());
-    }
-
-    let content = std::fs::read_to_string(&policies_path)?;
-    let mut policies: serde_json::Value = serde_json::from_str(&content)?;
-
-    let current_default = policies
-      .get("policies")
-      .and_then(|p| p.get("SearchEngines"))
-      .and_then(|se| se.get("Default"))
-      .and_then(|d| d.as_str())
-      .unwrap_or("");
-
-    if current_default != "None" {
-      log::info!(
-        "Camoufox search engine already configured to '{}', not overwriting",
-        current_default
-      );
-      return Ok(());
-    }
-
-    if let Some(policies_obj) = policies.get_mut("policies") {
-      if let Some(se) = policies_obj.get_mut("SearchEngines") {
-        se["Default"] = serde_json::json!("DuckDuckGo");
-
-        if let Some(remove_arr) = se.get_mut("Remove").and_then(|r| r.as_array_mut()) {
-          remove_arr.retain(|v| v.as_str() != Some("DuckDuckGo"));
-        }
-      }
-    }
-
-    let updated = serde_json::to_string_pretty(&policies)?;
-    std::fs::write(&policies_path, updated)?;
-
-    log::info!("Updated Camoufox search engine from 'None' to DuckDuckGo");
-    Ok(())
+    configure_camoufox_search_engine(browser_dir)
   }
 
   pub async fn download_browser<R: tauri::Runtime>(
@@ -1095,6 +1045,71 @@ pub async fn cancel_download(browser_str: String, version: String) -> Result<(),
       "No active download found for {browser_str} {version}"
     ))
   }
+}
+
+/// Clean up the fake "None" search engine from Camoufox policies.json so that
+/// Camoufox's built-in fallback (DuckDuckGo when nothing else is configured) can work.
+/// Called both at download time and at launch time to cover existing installations.
+pub fn configure_camoufox_search_engine(
+  browser_dir: &Path,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+  let policies_path = browser_dir.join("distribution").join("policies.json");
+
+  if !policies_path.exists() {
+    return Ok(());
+  }
+
+  let content = std::fs::read_to_string(&policies_path)?;
+  let mut policies: serde_json::Value = serde_json::from_str(&content)?;
+
+  let current_default = policies
+    .get("policies")
+    .and_then(|p| p.get("SearchEngines"))
+    .and_then(|se| se.get("Default"))
+    .and_then(|d| d.as_str())
+    .unwrap_or("");
+
+  if current_default != "None" {
+    return Ok(());
+  }
+
+  let mut changed = false;
+
+  if let Some(policies_obj) = policies.get_mut("policies") {
+    if let Some(se) = policies_obj.get_mut("SearchEngines") {
+      // Remove the fake "None" default so Camoufox uses its built-in fallback
+      if let Some(obj) = se.as_object_mut() {
+        obj.remove("Default");
+        changed = true;
+      }
+
+      // Remove the fake "None" search engine entry from Add
+      if let Some(add_arr) = se.get_mut("Add").and_then(|a| a.as_array_mut()) {
+        let before = add_arr.len();
+        add_arr.retain(|entry| entry.get("Name").and_then(|n| n.as_str()) != Some("None"));
+        if add_arr.len() != before {
+          changed = true;
+        }
+      }
+
+      // Ensure DuckDuckGo is not in the Remove list so it's available as fallback
+      if let Some(remove_arr) = se.get_mut("Remove").and_then(|r| r.as_array_mut()) {
+        let before = remove_arr.len();
+        remove_arr.retain(|v| v.as_str() != Some("DuckDuckGo"));
+        if remove_arr.len() != before {
+          changed = true;
+        }
+      }
+    }
+  }
+
+  if changed {
+    let updated = serde_json::to_string_pretty(&policies)?;
+    std::fs::write(&policies_path, updated)?;
+    log::info!("Cleaned up fake 'None' search engine from Camoufox policies.json");
+  }
+
+  Ok(())
 }
 
 #[cfg(test)]
