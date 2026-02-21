@@ -179,8 +179,14 @@ fn run_daemon() {
     extern "C" fn signal_handler(_sig: libc::c_int) {
       SHOULD_QUIT.store(true, std::sync::atomic::Ordering::SeqCst);
     }
-    libc::signal(libc::SIGTERM, signal_handler as libc::sighandler_t);
-    libc::signal(libc::SIGINT, signal_handler as libc::sighandler_t);
+    libc::signal(
+      libc::SIGTERM,
+      signal_handler as *const () as libc::sighandler_t,
+    );
+    libc::signal(
+      libc::SIGINT,
+      signal_handler as *const () as libc::sighandler_t,
+    );
   }
 
   #[cfg(windows)]
@@ -292,7 +298,6 @@ fn run_daemon() {
 }
 
 fn stop_daemon() {
-  let state_path = get_state_path();
   let state = read_state();
 
   if let Some(pid) = state.daemon_pid {
@@ -301,7 +306,7 @@ fn stop_daemon() {
     {
       use std::process::Command;
 
-      // Read gui_pid from state file and kill it first
+      let state_path = get_state_path();
       if let Ok(content) = fs::read_to_string(&state_path) {
         if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
           if let Some(gui_pid) = val.get("gui_pid").and_then(|v| v.as_u64()) {
@@ -320,7 +325,6 @@ fn stop_daemon() {
 
     #[cfg(unix)]
     {
-      let _ = &state_path; // suppress unused warning on unix
       unsafe {
         libc::kill(pid as i32, libc::SIGTERM);
       }
