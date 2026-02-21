@@ -329,5 +329,4 @@ jobs:
           HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          brew tap --force homebrew/cask
-          brew bump-cask-pr --version "$VERSION" --no-browse donutbrowser
+          brew bump-cask-pr --version "$VERSION" --no-browse donut
