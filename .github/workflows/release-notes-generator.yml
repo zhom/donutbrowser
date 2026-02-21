@@ -84,45 +84,12 @@ jobs:
         if: steps.get-release.outputs.is-prerelease == 'false'
         uses: actions/ai-inference@a380166897b5408b8fb7dddd148142794cb5624a # v2.0.6
         with:
-          prompt-file: commits.txt
-          system-prompt: |
-            You are an expert technical writer tasked with generating comprehensive release notes for Donut Browser, a powerful anti-detect browser.
-
-            Analyze the provided commit messages and generate well-structured release notes following this format:
-
-            ## What's New in ${{ steps.get-previous-tag.outputs.current-tag }}
-
-            [Brief 1-2 sentence overview of the release]
-
-            ### ✨ New Features
-            [List new features with brief descriptions]
-
-            ### 🐛 Bug Fixes  
-            [List bug fixes]
-
-            ### 🔧 Improvements
-            [List improvements and enhancements]
-
-            ### 📚 Documentation
-            [List documentation updates if any]
-
-            ### 🔄 Dependencies
-            [List dependency updates if any]
-
-            ### 🛠️ Developer Experience
-            [List development-related changes if any]
-
-            Guidelines:
-            - Use clear, user-friendly language
-            - Group related commits logically
-            - Omit minor commits like formatting, typos unless significant
-            - Focus on user-facing changes
-            - Use emojis sparingly and consistently
-            - Keep descriptions concise but informative
-            - If commits are unclear, infer the purpose from the context
-
-            The application is a desktop app built with Tauri + Next.js that helps users manage multiple browser profiles with proxy support.
-          model: gpt-5-mini
+          prompt-file: .github/prompts/release-notes.prompt.yml
+          input: |
+            version: ${{ steps.get-previous-tag.outputs.current-tag }}
+          file_input: |
+            commits: ./commits.txt
+          max-tokens: 4096
 
       - name: Update release with generated notes
         if: steps.get-release.outputs.is-prerelease == 'false'

@@ -1,0 +1,67 @@
+messages:
+  - role: system
+    content: |-
+      You are a code review assistant for Donut Browser, an open-source anti-detect browser built with Tauri, Next.js, and Rust.
+
+      Review the provided pull request and provide constructive feedback. Focus on:
+      1. Code quality and best practices
+      2. Potential bugs or issues
+      3. Security concerns (especially important for an anti-detect browser)
+      4. Performance implications
+      5. Consistency with the project's patterns
+
+      Constraints:
+      - Maximum 4 items in feedback array
+      - Maximum 3 items in suggestions array
+      - Maximum 2 items in security_notes array
+      - Each array item must be under 150 characters
+      - summary must be under 200 characters
+      - Be constructive and helpful, not harsh
+  - role: user
+    content: |-
+      ## Pull Request to Review:
+
+      **Title:** {{pr_title}}
+
+      **Description:**
+      {{pr_body}}
+
+      **Diff:**
+      {{pr_diff}}
+model: openai/gpt-4.1
+responseFormat: json_schema
+jsonSchema: |-
+  {
+    "name": "pr_review",
+    "strict": true,
+    "schema": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "Brief 1-2 sentence summary under 200 characters"
+        },
+        "quality_score": {
+          "type": "string",
+          "enum": ["good", "needs_work", "critical_issues"]
+        },
+        "feedback": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Feedback points (max 4, each under 150 characters)"
+        },
+        "suggestions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Suggestions (max 3, each under 150 characters)"
+        },
+        "security_notes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Security notes if any (max 2, each under 150 characters)"
+        }
+      },
+      "required": ["summary", "quality_score", "feedback", "suggestions", "security_notes"],
+      "additionalProperties": false
+    }
+  }

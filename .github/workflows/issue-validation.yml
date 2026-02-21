@@ -26,81 +26,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 #v6.0.1
 
-      - name: Get issue templates
-        id: get-templates
-        run: |
-          if [ -f ".github/ISSUE_TEMPLATE/01-bug-report.md" ]; then
-            echo "bug-template-exists=true" >> $GITHUB_OUTPUT
-          fi
-
-          if [ -f ".github/ISSUE_TEMPLATE/02-feature-request.md" ]; then
-            echo "feature-template-exists=true" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create issue analysis prompt
-        id: create-prompt
+      - name: Save issue body to file
         env:
-          ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
-          ISSUE_LABELS: ${{ join(github.event.issue.labels.*.name, ', ') }}
-        run: |
-          cat > issue_analysis.txt << EOF
-          ## Issue Content to Analyze:
-
-          **Title:** $ISSUE_TITLE
-
-          **Body:**
-          $ISSUE_BODY
-
-          **Labels:** $ISSUE_LABELS
-          EOF
+        run: printf '%s' "${ISSUE_BODY:-}" > issue_body.txt
 
       - name: Validate issue with AI
         id: validate
         uses: actions/ai-inference@a380166897b5408b8fb7dddd148142794cb5624a # v2.0.6
         with:
-          prompt-file: issue_analysis.txt
-          system-prompt: |
-            You are an issue validation assistant for Donut Browser, an anti-detect browser.
-
-            Analyze the provided issue content and determine if it contains sufficient information based on these requirements:
-
-            **For Bug Reports, the issue should include:**
-            1. Clear description of the problem
-            2. Steps to reproduce the issue (numbered list preferred)
-            3. Expected vs actual behavior
-            4. Environment information (OS, browser version, etc.)
-            5. Error messages, stack traces, or screenshots if applicable
-
-            **For Feature Requests, the issue should include:**
-            1. Clear description of the requested feature
-            2. Use case or problem it solves
-            3. Proposed solution or how it should work
-            4. Priority level or importance
-
-            **General Requirements for all issues:**
-            1. Descriptive title
-            2. Sufficient detail to understand and act upon
-            3. Professional tone and clear communication
-
-            Respond ONLY with valid JSON (no markdown fences). Keep responses concise.
-
-            JSON structure:
-            {
-              "is_valid": true|false,
-              "issue_type": "bug_report"|"feature_request"|"other",
-              "missing_info": ["item1", "item2"],
-              "suggestions": ["suggestion1", "suggestion2"],
-              "overall_assessment": "One sentence assessment"
-            }
-
-            IMPORTANT CONSTRAINTS:
-            - Maximum 3 items in missing_info array
-            - Maximum 3 items in suggestions array
-            - Each array item must be under 80 characters
-            - overall_assessment must be under 100 characters
-            - Output ONLY the JSON object, nothing else
-          model: gpt-5-mini
+          prompt-file: .github/prompts/issue-validation.prompt.yml
+          input: |
+            issue_title: ${{ github.event.issue.title }}
+            issue_labels: ${{ join(github.event.issue.labels.*.name, ', ') }}
+          file_input: |
+            issue_body: ./issue_body.txt
+          max-tokens: 1024
 
       - name: Check if first-time contributor
         id: check-first-time
@@ -210,7 +151,7 @@ jobs:
           model: zai-coding-plan/glm-4.7
 
       - name: Cleanup
-        run: rm -f issue_analysis.txt comment.md
+        run: rm -f issue_body.txt comment.md
 
   handle-pr:
     if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
@@ -245,54 +186,22 @@ jobs:
           gh pr diff ${{ github.event.pull_request.number }} > pr_diff.txt
           head -c 10000 pr_diff.txt > pr_diff_truncated.txt
 
-      - name: Create PR analysis prompt
+      - name: Save PR body to file
         env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
-        run: |
-          {
-            printf "## Pull Request to Review:\n\n"
-            printf "**Title:** %s\n\n" "$PR_TITLE"
-            printf "**Description:**\n%s\n\n" "$PR_BODY"
-            printf "**Diff:**\n"
-            cat pr_diff_truncated.txt
-          } > pr_analysis.txt
+        run: printf '%s' "${PR_BODY:-No description provided}" > pr_body.txt
 
       - name: Analyze PR with AI
         id: analyze
         uses: actions/ai-inference@a380166897b5408b8fb7dddd148142794cb5624a # v2.0.6
         with:
-          prompt-file: pr_analysis.txt
-          system-prompt: |
-            You are a code review assistant for Donut Browser, an open-source anti-detect browser built with Tauri, Next.js, and Rust.
-
-            Review the provided pull request and provide constructive feedback. Focus on:
-            1. Code quality and best practices
-            2. Potential bugs or issues
-            3. Security concerns (especially important for an anti-detect browser)
-            4. Performance implications
-            5. Consistency with the project's patterns
-
-            Respond ONLY with valid JSON (no markdown fences).
-
-            JSON structure:
-            {
-              "summary": "Brief 1-2 sentence summary of what this PR does",
-              "quality_score": "good"|"needs_work"|"critical_issues",
-              "feedback": ["feedback point 1", "feedback point 2"],
-              "suggestions": ["suggestion 1", "suggestion 2"],
-              "security_notes": ["security note if any"] or []
-            }
-
-            IMPORTANT CONSTRAINTS:
-            - Maximum 4 items in feedback array
-            - Maximum 3 items in suggestions array
-            - Maximum 2 items in security_notes array
-            - Each array item must be under 150 characters
-            - summary must be under 200 characters
-            - Be constructive and helpful, not harsh
-            - Output ONLY the JSON object, nothing else
-          model: gpt-5-mini
+          prompt-file: .github/prompts/pr-review.prompt.yml
+          input: |
+            pr_title: ${{ github.event.pull_request.title }}
+          file_input: |
+            pr_body: ./pr_body.txt
+            pr_diff: ./pr_diff_truncated.txt
+          max-tokens: 1024
 
       - name: Post PR feedback comment
         env:
@@ -371,7 +280,7 @@ jobs:
           model: zai-coding-plan/glm-4.7
 
       - name: Cleanup
-        run: rm -f pr_diff.txt pr_diff_truncated.txt pr_analysis.txt comment.md
+        run: rm -f pr_diff.txt pr_diff_truncated.txt pr_body.txt comment.md
 
   opencode-command:
     if: |
