@@ -231,6 +231,93 @@ jobs:
 #          branch: main
 #          commit_message: "docs: update CHANGELOG.md for ${{ github.ref_name }} [skip ci]"
 
+  publish-repos:
+    needs: [release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Download Linux packages from release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /tmp/packages
+          gh release download "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "*.deb" \
+            --dir /tmp/packages
+          gh release download "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "*.rpm" \
+            --dir /tmp/packages
+          echo "Downloaded packages:"
+          ls -la /tmp/packages/
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff #v5.6.0
+        with:
+          go-version: "1.23"
+          cache: false
+
+      - name: Install repogen
+        run: |
+          go install github.com/ralt/repogen/cmd/repogen@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Configure AWS CLI for Cloudflare R2
+        run: |
+          aws configure set aws_access_key_id "${{ secrets.R2_ACCESS_KEY_ID }}"
+          aws configure set aws_secret_access_key "${{ secrets.R2_SECRET_ACCESS_KEY }}"
+          aws configure set default.region auto
+
+      - name: Sync existing repo metadata from R2
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT_URL }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
+        run: |
+          mkdir -p /tmp/repo
+          aws s3 sync "s3://${R2_BUCKET}/dists" /tmp/repo/dists \
+            --endpoint-url "${R2_ENDPOINT}" --delete 2>/dev/null || true
+          aws s3 sync "s3://${R2_BUCKET}/repodata" /tmp/repo/repodata \
+            --endpoint-url "${R2_ENDPOINT}" --delete 2>/dev/null || true
+
+      - name: Generate repository with repogen
+        run: |
+          repogen generate \
+            --input-dir /tmp/packages \
+            --output-dir /tmp/repo \
+            --incremental \
+            --arch amd64,arm64 \
+            --origin "Donut Browser" \
+            --label "Donut Browser" \
+            --codename stable \
+            --components main \
+            --verbose
+
+      - name: Upload repository to R2
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT_URL }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
+        run: |
+          aws s3 sync /tmp/repo/dists "s3://${R2_BUCKET}/dists" \
+            --endpoint-url "${R2_ENDPOINT}" --delete
+          aws s3 sync /tmp/repo/pool "s3://${R2_BUCKET}/pool" \
+            --endpoint-url "${R2_ENDPOINT}"
+          aws s3 sync /tmp/repo/repodata "s3://${R2_BUCKET}/repodata" \
+            --endpoint-url "${R2_ENDPOINT}" --delete
+          aws s3 sync /tmp/repo/Packages "s3://${R2_BUCKET}/Packages" \
+            --endpoint-url "${R2_ENDPOINT}"
+
+      - name: Verify upload
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT_URL }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
+        run: |
+          echo "DEB repo:"
+          aws s3 ls "s3://${R2_BUCKET}/dists/stable/" --endpoint-url "${R2_ENDPOINT}"
+          echo "RPM repo:"
+          aws s3 ls "s3://${R2_BUCKET}/repodata/" --endpoint-url "${R2_ENDPOINT}"
+
   bump-homebrew-cask:
     needs: [release]
     runs-on: macos-latest
