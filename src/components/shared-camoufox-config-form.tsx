@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LuLock } from "react-icons/lu";
 import MultipleSelector, { type Option } from "@/components/multiple-selector";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ProBadge } from "@/components/ui/pro-badge";
 import {
   Select,
   SelectContent,
@@ -237,9 +237,7 @@ export function SharedCamoufoxConfigForm({
                 <SelectItem key={os} value={os} disabled={isDisabled}>
                   <span className="flex items-center gap-2">
                     {osLabels[os]}
-                    {isDisabled && (
-                      <LuLock className="w-3 h-3 text-muted-foreground" />
-                    )}
+                    {isDisabled && <ProBadge />}
                   </span>
                 </SelectItem>
               );
@@ -1011,9 +1009,7 @@ export function SharedCamoufoxConfigForm({
                       <SelectItem key={os} value={os} disabled={isDisabled}>
                         <span className="flex items-center gap-2">
                           {osLabels[os]}
-                          {isDisabled && (
-                            <LuLock className="w-3 h-3 text-muted-foreground" />
-                          )}
+                          {isDisabled && <ProBadge />}
                         </span>
                       </SelectItem>
                     );

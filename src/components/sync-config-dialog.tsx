@@ -3,7 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LuEye, LuEyeOff, LuLock } from "react-icons/lu";
+import { LuEye, LuEyeOff } from "react-icons/lu";
 import { LoadingButton } from "@/components/loading-button";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ProBadge } from "@/components/ui/pro-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
@@ -294,9 +295,7 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
               >
                 <span className="flex items-center gap-2">
                   {t("sync.cloud.tabLabel")}
-                  {cloudBlocked && (
-                    <LuLock className="w-3 h-3 text-muted-foreground" />
-                  )}
+                  {cloudBlocked && <ProBadge />}
                 </span>
               </TabsTrigger>
               <TabsTrigger
@@ -306,9 +305,7 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
               >
                 <span className="flex items-center gap-2">
                   {t("sync.cloud.selfHostedTabLabel")}
-                  {selfHostedBlocked && (
-                    <LuLock className="w-3 h-3 text-muted-foreground" />
-                  )}
+                  {selfHostedBlocked && <ProBadge />}
                 </span>
               </TabsTrigger>
             </TabsList>

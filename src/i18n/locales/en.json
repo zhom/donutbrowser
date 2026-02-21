@@ -503,5 +503,22 @@
     "viewOnly": "This profile was created on {{os}} and is not supported on this system",
     "cannotLaunch": "This profile was created on {{os}} and is not supported on this system",
     "cannotModify": "Cannot modify sync settings for a cross-OS profile"
+  },
+  "cookies": {
+    "import": {
+      "title": "Import Cookies",
+      "description": "Import cookies from a Netscape format file.",
+      "selectFile": "Choose File",
+      "preview": "{{count}} cookies found",
+      "success": "Successfully imported {{imported}} cookies ({{replaced}} replaced)",
+      "error": "Failed to import cookies",
+      "proFeature": "Cookie import is a Pro feature"
+    }
+  },
+  "pro": {
+    "badge": "PRO",
+    "fingerprintLocked": "Fingerprint editing is a Pro feature",
+    "cookieCopyLocked": "Cookie copying is a Pro feature",
+    "cookieImportLocked": "Cookie import is a Pro feature"
   }
 }

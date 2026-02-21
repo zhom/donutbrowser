@@ -21,7 +21,6 @@ import {
   LuChevronDown,
   LuChevronUp,
   LuCookie,
-  LuLock,
   LuTrash2,
   LuUsers,
 } from "react-icons/lu";
@@ -48,6 +47,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ProBadge } from "@/components/ui/pro-badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Table,
@@ -176,13 +176,14 @@ type TableMeta = {
   onConfigureCamoufox?: (profile: BrowserProfile) => void;
   onCloneProfile?: (profile: BrowserProfile) => void;
   onCopyCookiesToProfile?: (profile: BrowserProfile) => void;
+  onImportCookies?: (profile: BrowserProfile) => void;
 
   // Traffic snapshots (lightweight real-time data)
   trafficSnapshots: Record<string, TrafficSnapshot>;
   onOpenTrafficDialog?: (profileId: string) => void;
 
   // Sync
-  syncStatuses: Record<string, string>;
+  syncStatuses: Record<string, { status: string; error?: string }>;
   onOpenProfileSyncDialog?: (profile: BrowserProfile) => void;
   onToggleProfileSync?: (profile: BrowserProfile) => void;
   crossOsUnlocked?: boolean;
@@ -209,6 +210,7 @@ function getProfileSyncStatusDot(
     | "error"
     | "disabled"
     | undefined,
+  errorMessage?: string,
 ): SyncStatusDot | null {
   const status = liveStatus ?? (profile.sync_enabled ? "synced" : "disabled");
 
@@ -230,7 +232,11 @@ function getProfileSyncStatusDot(
         animate: false,
       };
     case "error":
-      return { color: "bg-red-500", tooltip: "Sync error", animate: false };
+      return {
+        color: "bg-red-500",
+        tooltip: errorMessage ? `Sync error: ${errorMessage}` : "Sync error",
+        animate: false,
+      };
     case "disabled":
       if (profile.last_sync) {
         return {
@@ -751,6 +757,7 @@ interface ProfilesDataTableProps {
   onRenameProfile: (profileId: string, newName: string) => Promise<void>;
   onConfigureCamoufox: (profile: BrowserProfile) => void;
   onCopyCookiesToProfile?: (profile: BrowserProfile) => void;
+  onImportCookies?: (profile: BrowserProfile) => void;
   runningProfiles: Set<string>;
   isUpdating: (browser: string) => boolean;
   onDeleteSelectedProfiles: (profileIds: string[]) => Promise<void>;
@@ -777,6 +784,7 @@ export function ProfilesDataTable({
   onRenameProfile,
   onConfigureCamoufox,
   onCopyCookiesToProfile,
+  onImportCookies,
   runningProfiles,
   isUpdating,
   onAssignProfilesToGroup,
@@ -900,7 +908,7 @@ export function ProfilesDataTable({
     name?: string;
   } | null>(null);
   const [syncStatuses, setSyncStatuses] = React.useState<
-    Record<string, string>
+    Record<string, { status: string; error?: string }>
   >({});
 
   // Country proxy creation state (for inline proxy creation in dropdown)
@@ -1041,13 +1049,17 @@ export function ProfilesDataTable({
     let unlisten: (() => void) | undefined;
     (async () => {
       try {
-        unlisten = await listen<{ profile_id: string; status: string }>(
-          "profile-sync-status",
-          (event) => {
-            const { profile_id, status } = event.payload;
-            setSyncStatuses((prev) => ({ ...prev, [profile_id]: status }));
-          },
-        );
+        unlisten = await listen<{
+          profile_id: string;
+          status: string;
+          error?: string;
+        }>("profile-sync-status", (event) => {
+          const { profile_id, status, error } = event.payload;
+          setSyncStatuses((prev) => ({
+            ...prev,
+            [profile_id]: { status, error },
+          }));
+        });
       } catch (error) {
         console.error("Failed to listen for sync status events:", error);
       }
@@ -1462,6 +1474,7 @@ export function ProfilesDataTable({
       onCloneProfile,
       onConfigureCamoufox,
       onCopyCookiesToProfile,
+      onImportCookies,
 
       // Traffic snapshots (lightweight real-time data)
       trafficSnapshots,
@@ -1523,6 +1536,7 @@ export function ProfilesDataTable({
       onCloneProfile,
       onConfigureCamoufox,
       onCopyCookiesToProfile,
+      onImportCookies,
       syncStatuses,
       onOpenProfileSyncDialog,
       onToggleProfileSync,
@@ -2267,7 +2281,8 @@ export function ProfilesDataTable({
         cell: ({ row, table }) => {
           const profile = row.original;
           const meta = table.options.meta as TableMeta;
-          const liveStatus = meta.syncStatuses[profile.id] as
+          const syncEntry = meta.syncStatuses[profile.id];
+          const liveStatus = syncEntry?.status as
             | "syncing"
             | "waiting"
             | "synced"
@@ -2275,7 +2290,11 @@ export function ProfilesDataTable({
             | "disabled"
             | undefined;
 
-          const dot = getProfileSyncStatusDot(profile, liveStatus);
+          const dot = getProfileSyncStatusDot(
+            profile,
+            liveStatus,
+            syncEntry?.error,
+          );
           if (!dot) return null;
 
           return (
@@ -2345,9 +2364,7 @@ export function ProfilesDataTable({
                   >
                     <span className="flex items-center gap-2">
                       {profile.sync_enabled ? "Disable Sync" : "Enable Sync"}
-                      {!meta.syncUnlocked && (
-                        <LuLock className="w-3 h-3 text-muted-foreground" />
-                      )}
+                      {!meta.syncUnlocked && <ProBadge />}
                     </span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
@@ -2367,7 +2384,10 @@ export function ProfilesDataTable({
                         }}
                         disabled={isDisabled}
                       >
-                        Change Fingerprint
+                        <span className="flex items-center gap-2">
+                          Change Fingerprint
+                          {!meta.crossOsUnlocked && <ProBadge />}
+                        </span>
                       </DropdownMenuItem>
                     )}
                   {(profile.browser === "camoufox" ||
@@ -2375,11 +2395,33 @@ export function ProfilesDataTable({
                     meta.onCopyCookiesToProfile && (
                       <DropdownMenuItem
                         onClick={() => {
-                          meta.onCopyCookiesToProfile?.(profile);
+                          if (meta.crossOsUnlocked) {
+                            meta.onCopyCookiesToProfile?.(profile);
+                          }
                         }}
-                        disabled={isDisabled}
+                        disabled={isDisabled || !meta.crossOsUnlocked}
                       >
-                        Copy Cookies to Profile
+                        <span className="flex items-center gap-2">
+                          Copy Cookies to Profile
+                          {!meta.crossOsUnlocked && <ProBadge />}
+                        </span>
+                      </DropdownMenuItem>
+                    )}
+                  {(profile.browser === "camoufox" ||
+                    profile.browser === "wayfern") &&
+                    meta.onImportCookies && (
+                      <DropdownMenuItem
+                        onClick={() => {
+                          if (meta.crossOsUnlocked) {
+                            meta.onImportCookies?.(profile);
+                          }
+                        }}
+                        disabled={isDisabled || !meta.crossOsUnlocked}
+                      >
+                        <span className="flex items-center gap-2">
+                          Import Cookies
+                          {!meta.crossOsUnlocked && <ProBadge />}
+                        </span>
                       </DropdownMenuItem>
                     )}
                   <DropdownMenuItem
@@ -2526,9 +2568,10 @@ export function ProfilesDataTable({
         )}
         {onBulkCopyCookies && (
           <DataTableActionBarAction
-            tooltip="Copy Cookies"
+            tooltip={crossOsUnlocked ? "Copy Cookies" : "Copy Cookies (Pro)"}
             onClick={onBulkCopyCookies}
             size="icon"
+            disabled={!crossOsUnlocked}
           >
             <LuCookie />
           </DataTableActionBarAction>

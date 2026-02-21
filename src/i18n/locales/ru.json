@@ -503,5 +503,22 @@
     "viewOnly": "Этот профиль был создан на {{os}} и не поддерживается в этой системе",
     "cannotLaunch": "Этот профиль был создан на {{os}} и не поддерживается в этой системе",
     "cannotModify": "Невозможно изменить настройки синхронизации профиля другой ОС"
+  },
+  "cookies": {
+    "import": {
+      "title": "Импорт Cookies",
+      "description": "Импорт cookies из файла в формате Netscape.",
+      "selectFile": "Выбрать файл",
+      "preview": "Найдено {{count}} cookies",
+      "success": "Успешно импортировано {{imported}} cookies ({{replaced}} заменено)",
+      "error": "Ошибка импорта cookies",
+      "proFeature": "Импорт cookies — функция Pro"
+    }
+  },
+  "pro": {
+    "badge": "PRO",
+    "fingerprintLocked": "Редактирование отпечатка — функция Pro",
+    "cookieCopyLocked": "Копирование cookies — функция Pro",
+    "cookieImportLocked": "Импорт cookies — функция Pro"
   }
 }

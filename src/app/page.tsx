@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CamoufoxConfigDialog } from "@/components/camoufox-config-dialog";
 import { CommercialTrialModal } from "@/components/commercial-trial-modal";
 import { CookieCopyDialog } from "@/components/cookie-copy-dialog";
+import { CookieImportDialog } from "@/components/cookie-import-dialog";
 import { CreateProfileDialog } from "@/components/create-profile-dialog";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
 import { GroupAssignmentDialog } from "@/components/group-assignment-dialog";
@@ -142,6 +143,9 @@ export default function Home() {
   const [proxyAssignmentDialogOpen, setProxyAssignmentDialogOpen] =
     useState(false);
   const [cookieCopyDialogOpen, setCookieCopyDialogOpen] = useState(false);
+  const [cookieImportDialogOpen, setCookieImportDialogOpen] = useState(false);
+  const [currentProfileForCookieImport, setCurrentProfileForCookieImport] =
+    useState<BrowserProfile | null>(null);
   const [selectedProfilesForCookies, setSelectedProfilesForCookies] = useState<
     string[]
   >([]);
@@ -688,6 +692,11 @@ export default function Home() {
     setCookieCopyDialogOpen(true);
   }, []);
 
+  const handleImportCookies = useCallback((profile: BrowserProfile) => {
+    setCurrentProfileForCookieImport(profile);
+    setCookieImportDialogOpen(true);
+  }, []);
+
   const handleGroupAssignmentComplete = useCallback(async () => {
     // No need to manually reload - useProfileEvents will handle the update
     setGroupAssignmentDialogOpen(false);
@@ -737,34 +746,37 @@ export default function Home() {
     let unlisten: (() => void) | undefined;
     (async () => {
       try {
-        unlisten = await listen<{ profile_id: string; status: string }>(
-          "profile-sync-status",
-          (event) => {
-            const { profile_id, status } = event.payload;
-            if (!userInitiatedSyncIds.current.has(profile_id)) return;
+        unlisten = await listen<{
+          profile_id: string;
+          status: string;
+          error?: string;
+        }>("profile-sync-status", (event) => {
+          const { profile_id, status, error } = event.payload;
+          if (!userInitiatedSyncIds.current.has(profile_id)) return;
 
-            const toastId = `sync-${profile_id}`;
-            const profile = profiles.find((p) => p.id === profile_id);
-            const name = profile?.name ?? "Unknown";
+          const toastId = `sync-${profile_id}`;
+          const profile = profiles.find((p) => p.id === profile_id);
+          const name = profile?.name ?? "Unknown";
 
-            if (status === "syncing") {
-              showToast({
-                type: "loading",
-                title: `Syncing profile '${name}'...`,
-                id: toastId,
-                duration: 30000,
-              });
-            } else if (status === "synced") {
-              dismissToast(toastId);
-              showSuccessToast(`Profile '${name}' synced successfully`);
-              userInitiatedSyncIds.current.delete(profile_id);
-            } else if (status === "error") {
-              dismissToast(toastId);
-              showErrorToast(`Failed to sync profile '${name}'`);
-              userInitiatedSyncIds.current.delete(profile_id);
-            }
-          },
-        );
+          if (status === "syncing") {
+            showToast({
+              type: "loading",
+              title: `Syncing profile '${name}'...`,
+              id: toastId,
+              duration: 30000,
+            });
+          } else if (status === "synced") {
+            dismissToast(toastId);
+            showSuccessToast(`Profile '${name}' synced successfully`);
+            userInitiatedSyncIds.current.delete(profile_id);
+          } else if (status === "error") {
+            dismissToast(toastId);
+            showErrorToast(
+              `Failed to sync profile '${name}'${error ? `: ${error}` : ""}`,
+            );
+            userInitiatedSyncIds.current.delete(profile_id);
+          }
+        });
       } catch (error) {
         console.error("Failed to listen for sync status events:", error);
       }
@@ -991,6 +1003,7 @@ export default function Home() {
             onRenameProfile={handleRenameProfile}
             onConfigureCamoufox={handleConfigureCamoufox}
             onCopyCookiesToProfile={handleCopyCookiesToProfile}
+            onImportCookies={handleImportCookies}
             runningProfiles={runningProfiles}
             isUpdating={isUpdating}
             onDeleteSelectedProfiles={handleDeleteSelectedProfiles}
@@ -1132,6 +1145,15 @@ export default function Home() {
         profiles={profiles}
         runningProfiles={runningProfiles}
         onCopyComplete={() => setSelectedProfilesForCookies([])}
+      />
+
+      <CookieImportDialog
+        isOpen={cookieImportDialogOpen}
+        onClose={() => {
+          setCookieImportDialogOpen(false);
+          setCurrentProfileForCookieImport(null);
+        }}
+        profile={currentProfileForCookieImport}
       />
 
       <DeleteConfirmationDialog

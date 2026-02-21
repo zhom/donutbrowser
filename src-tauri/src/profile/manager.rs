@@ -2008,6 +2008,14 @@ pub async fn update_camoufox_config(
   profile_id: String,
   config: CamoufoxConfig,
 ) -> Result<(), String> {
+  if config.fingerprint.is_some()
+    && !crate::cloud_auth::CLOUD_AUTH
+      .has_active_paid_subscription()
+      .await
+  {
+    return Err("Fingerprint editing requires an active Pro subscription".to_string());
+  }
+
   if !crate::cloud_auth::CLOUD_AUTH
     .is_fingerprint_os_allowed(config.os.as_deref())
     .await
@@ -2028,6 +2036,14 @@ pub async fn update_wayfern_config(
   profile_id: String,
   config: WayfernConfig,
 ) -> Result<(), String> {
+  if config.fingerprint.is_some()
+    && !crate::cloud_auth::CLOUD_AUTH
+      .has_active_paid_subscription()
+      .await
+  {
+    return Err("Fingerprint editing requires an active Pro subscription".to_string());
+  }
+
   if !crate::cloud_auth::CLOUD_AUTH
     .is_fingerprint_os_allowed(config.os.as_deref())
     .await

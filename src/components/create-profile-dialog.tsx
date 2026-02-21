@@ -3,6 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GoPlus } from "react-icons/go";
+import { LuLock } from "react-icons/lu";
 import { LoadingButton } from "@/components/loading-button";
 import { ProxyFormDialog } from "@/components/proxy-form-dialog";
 import { SharedCamoufoxConfigForm } from "@/components/shared-camoufox-config-form";
@@ -16,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ProBadge } from "@/components/ui/pro-badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
@@ -748,12 +750,23 @@ export function CreateProfileDialog({
                               </div>
                             )}
 
-                            <WayfernConfigForm
-                              config={wayfernConfig}
-                              onConfigChange={updateWayfernConfig}
-                              isCreating
-                              crossOsUnlocked={crossOsUnlocked}
-                            />
+                            <div className="relative">
+                              <WayfernConfigForm
+                                config={wayfernConfig}
+                                onConfigChange={updateWayfernConfig}
+                                isCreating
+                                crossOsUnlocked={crossOsUnlocked}
+                              />
+                              {!crossOsUnlocked && (
+                                <div className="absolute inset-0 backdrop-blur-sm bg-background/60 z-10 flex flex-col items-center justify-center gap-2">
+                                  <LuLock className="w-6 h-6 text-muted-foreground" />
+                                  <p className="text-sm text-muted-foreground font-medium">
+                                    Fingerprint editing is a Pro feature
+                                  </p>
+                                  <ProBadge />
+                                </div>
+                              )}
+                            </div>
                           </div>
                         ) : selectedBrowser === "camoufox" ? (
                           // Camoufox Configuration
@@ -845,13 +858,24 @@ export function CreateProfileDialog({
                               </div>
                             )}
 
-                            <SharedCamoufoxConfigForm
-                              config={camoufoxConfig}
-                              onConfigChange={updateCamoufoxConfig}
-                              isCreating
-                              browserType="camoufox"
-                              crossOsUnlocked={crossOsUnlocked}
-                            />
+                            <div className="relative">
+                              <SharedCamoufoxConfigForm
+                                config={camoufoxConfig}
+                                onConfigChange={updateCamoufoxConfig}
+                                isCreating
+                                browserType="camoufox"
+                                crossOsUnlocked={crossOsUnlocked}
+                              />
+                              {!crossOsUnlocked && (
+                                <div className="absolute inset-0 backdrop-blur-sm bg-background/60 z-10 flex flex-col items-center justify-center gap-2">
+                                  <LuLock className="w-6 h-6 text-muted-foreground" />
+                                  <p className="text-sm text-muted-foreground font-medium">
+                                    Fingerprint editing is a Pro feature
+                                  </p>
+                                  <ProBadge />
+                                </div>
+                              )}
+                            </div>
                           </div>
                         ) : (
                           // Regular Browser Configuration (should not happen in anti-detect tab)

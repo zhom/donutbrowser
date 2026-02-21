@@ -26,7 +26,9 @@ const getCurrentOS = (): CamoufoxOS => {
   return "linux";
 };
 
+import { LuLock } from "react-icons/lu";
 import { LoadingButton } from "./loading-button";
+import { ProBadge } from "./ui/pro-badge";
 import { RippleButton } from "./ui/ripple";
 
 interface CamoufoxConfigDialogProps {
@@ -155,13 +157,13 @@ export function CamoufoxConfigDialog({
         </DialogHeader>
 
         <ScrollArea className="flex-1 h-[300px]">
-          <div className="py-4">
+          <div className="py-4 relative">
             {profile.browser === "wayfern" ? (
               <WayfernConfigForm
                 config={config as WayfernConfig}
                 onConfigChange={updateConfig}
                 forceAdvanced={true}
-                readOnly={isRunning}
+                readOnly={isRunning || !crossOsUnlocked}
                 crossOsUnlocked={crossOsUnlocked}
               />
             ) : (
@@ -169,10 +171,19 @@ export function CamoufoxConfigDialog({
                 config={config as CamoufoxConfig}
                 onConfigChange={updateConfig}
                 forceAdvanced={true}
-                readOnly={isRunning}
+                readOnly={isRunning || !crossOsUnlocked}
                 browserType="camoufox"
                 crossOsUnlocked={crossOsUnlocked}
               />
+            )}
+            {!crossOsUnlocked && (
+              <div className="absolute inset-0 backdrop-blur-sm bg-background/60 z-10 flex flex-col items-center justify-center gap-2">
+                <LuLock className="w-6 h-6 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground font-medium">
+                  Fingerprint editing is a Pro feature
+                </p>
+                <ProBadge />
+              </div>
             )}
           </div>
         </ScrollArea>
@@ -181,7 +192,7 @@ export function CamoufoxConfigDialog({
           <RippleButton variant="outline" onClick={handleClose}>
             {isRunning ? "Close" : "Cancel"}
           </RippleButton>
-          {!isRunning && (
+          {!isRunning && crossOsUnlocked && (
             <LoadingButton
               isLoading={isSaving}
               onClick={handleSave}

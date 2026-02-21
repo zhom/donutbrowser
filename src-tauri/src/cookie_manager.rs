@@ -62,6 +62,14 @@ pub struct CookieCopyResult {
   pub errors: Vec<String>,
 }
 
+/// Result of a cookie import operation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CookieImportResult {
+  pub cookies_imported: usize,
+  pub cookies_replaced: usize,
+  pub errors: Vec<String>,
+}
+
 pub struct CookieManager;
 
 impl CookieManager {
@@ -492,5 +500,107 @@ impl CookieManager {
     }
 
     Ok(results)
+  }
+
+  /// Parse Netscape format cookies from text content
+  fn parse_netscape_cookies(content: &str) -> (Vec<UnifiedCookie>, Vec<String>) {
+    let mut cookies = Vec::new();
+    let mut errors = Vec::new();
+    let now = std::time::SystemTime::now()
+      .duration_since(std::time::UNIX_EPOCH)
+      .unwrap()
+      .as_secs() as i64;
+
+    for (i, line) in content.lines().enumerate() {
+      let line = line.trim();
+      if line.is_empty() || line.starts_with('#') {
+        continue;
+      }
+
+      let fields: Vec<&str> = line.split('\t').collect();
+      if fields.len() < 7 {
+        errors.push(format!(
+          "Line {}: expected 7 tab-separated fields, got {}",
+          i + 1,
+          fields.len()
+        ));
+        continue;
+      }
+
+      let domain = fields[0].to_string();
+      let path = fields[2].to_string();
+      let is_secure = fields[3].eq_ignore_ascii_case("TRUE");
+      let expires = fields[4].parse::<i64>().unwrap_or(0);
+      let name = fields[5].to_string();
+      let value = fields[6].to_string();
+
+      cookies.push(UnifiedCookie {
+        name,
+        value,
+        domain,
+        path,
+        expires,
+        is_secure,
+        is_http_only: false,
+        same_site: 0,
+        creation_time: now,
+        last_accessed: now,
+      });
+    }
+
+    (cookies, errors)
+  }
+
+  /// Public API: Import cookies from Netscape format content
+  pub async fn import_netscape_cookies(
+    app_handle: &AppHandle,
+    profile_id: &str,
+    content: &str,
+  ) -> Result<CookieImportResult, String> {
+    let profile_manager = ProfileManager::instance();
+    let profiles_dir = profile_manager.get_profiles_dir();
+    let profiles = profile_manager
+      .list_profiles()
+      .map_err(|e| format!("Failed to list profiles: {e}"))?;
+
+    let profile = profiles
+      .iter()
+      .find(|p| p.id.to_string() == profile_id)
+      .ok_or_else(|| format!("Profile not found: {profile_id}"))?;
+
+    let is_running = profile_manager
+      .check_browser_status(app_handle.clone(), profile)
+      .await
+      .unwrap_or(false);
+
+    if is_running {
+      return Err(format!(
+        "Cannot import cookies while browser is running for profile: {}",
+        profile.name
+      ));
+    }
+
+    let (cookies, parse_errors) = Self::parse_netscape_cookies(content);
+
+    if cookies.is_empty() {
+      return Err("No valid cookies found in the file".to_string());
+    }
+
+    let db_path = Self::get_cookie_db_path(profile, &profiles_dir)?;
+
+    let write_result = match profile.browser.as_str() {
+      "camoufox" => Self::write_firefox_cookies(&db_path, &cookies),
+      "wayfern" => Self::write_chrome_cookies(&db_path, &cookies),
+      _ => return Err(format!("Unsupported browser type: {}", profile.browser)),
+    };
+
+    match write_result {
+      Ok((imported, replaced)) => Ok(CookieImportResult {
+        cookies_imported: imported,
+        cookies_replaced: replaced,
+        errors: parse_errors,
+      }),
+      Err(e) => Err(format!("Failed to write cookies: {e}")),
+    }
   }
 }

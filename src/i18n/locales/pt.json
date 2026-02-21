@@ -503,5 +503,22 @@
     "viewOnly": "Este perfil foi criado em {{os}} e não é compatível com este sistema",
     "cannotLaunch": "Este perfil foi criado em {{os}} e não é compatível com este sistema",
     "cannotModify": "Não é possível modificar as configurações de sincronização de um perfil de outro sistema operacional"
+  },
+  "cookies": {
+    "import": {
+      "title": "Importar Cookies",
+      "description": "Importar cookies de um arquivo no formato Netscape.",
+      "selectFile": "Escolher Arquivo",
+      "preview": "{{count}} cookies encontrados",
+      "success": "{{imported}} cookies importados com sucesso ({{replaced}} substituídos)",
+      "error": "Falha ao importar cookies",
+      "proFeature": "A importação de cookies é um recurso Pro"
+    }
+  },
+  "pro": {
+    "badge": "PRO",
+    "fingerprintLocked": "A edição de impressão digital é um recurso Pro",
+    "cookieCopyLocked": "A cópia de cookies é um recurso Pro",
+    "cookieImportLocked": "A importação de cookies é um recurso Pro"
   }
 }

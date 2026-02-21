@@ -503,5 +503,22 @@
     "viewOnly": "このプロファイルは{{os}}で作成されたもので、このシステムではサポートされていません",
     "cannotLaunch": "このプロファイルは{{os}}で作成されたもので、このシステムではサポートされていません",
     "cannotModify": "他のOSのプロファイルの同期設定は変更できません"
+  },
+  "cookies": {
+    "import": {
+      "title": "Cookieのインポート",
+      "description": "Netscape形式のファイルからCookieをインポートします。",
+      "selectFile": "ファイルを選択",
+      "preview": "{{count}}件のCookieが見つかりました",
+      "success": "{{imported}}件のCookieをインポートしました（{{replaced}}件を置換）",
+      "error": "Cookieのインポートに失敗しました",
+      "proFeature": "Cookieのインポートはプロ機能です"
+    }
+  },
+  "pro": {
+    "badge": "PRO",
+    "fingerprintLocked": "フィンガープリント編集はプロ機能です",
+    "cookieCopyLocked": "Cookieのコピーはプロ機能です",
+    "cookieImportLocked": "Cookieのインポートはプロ機能です"
   }
 }

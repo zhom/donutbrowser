@@ -283,7 +283,28 @@ async fn copy_profile_cookies(
   app_handle: tauri::AppHandle,
   request: cookie_manager::CookieCopyRequest,
 ) -> Result<Vec<cookie_manager::CookieCopyResult>, String> {
+  if !crate::cloud_auth::CLOUD_AUTH
+    .has_active_paid_subscription()
+    .await
+  {
+    return Err("Cookie copying requires an active Pro subscription".to_string());
+  }
   cookie_manager::CookieManager::copy_cookies(&app_handle, request).await
+}
+
+#[tauri::command]
+async fn import_cookies_from_file(
+  app_handle: tauri::AppHandle,
+  profile_id: String,
+  content: String,
+) -> Result<cookie_manager::CookieImportResult, String> {
+  if !crate::cloud_auth::CLOUD_AUTH
+    .has_active_paid_subscription()
+    .await
+  {
+    return Err("Cookie import requires an active Pro subscription".to_string());
+  }
+  cookie_manager::CookieManager::import_netscape_cookies(&app_handle, &profile_id, &content).await
 }
 
 #[tauri::command]
@@ -1313,6 +1334,7 @@ pub fn run() {
       enable_sync_for_all_entities,
       read_profile_cookies,
       copy_profile_cookies,
+      import_cookies_from_file,
       check_wayfern_terms_accepted,
       check_wayfern_downloaded,
       accept_wayfern_terms,
