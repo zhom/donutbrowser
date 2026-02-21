@@ -203,7 +203,7 @@ jobs:
           fi
 
       - name: Run opencode analysis
-        uses: anomalyco/opencode/github@d1482e148399bfaf808674549199f5f4aa69a22d #v1.2.4
+        uses: anomalyco/opencode/github@296250f1b7e1ec992a3a33bee999f5e09a1697d0 #v1.2.10
         env:
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
         with:
@@ -364,7 +364,7 @@ jobs:
           gh pr comment ${{ github.event.pull_request.number }} --body-file comment.md
 
       - name: Run opencode analysis
-        uses: anomalyco/opencode/github@d1482e148399bfaf808674549199f5f4aa69a22d #v1.2.4
+        uses: anomalyco/opencode/github@296250f1b7e1ec992a3a33bee999f5e09a1697d0 #v1.2.10
         env:
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
         with:
@@ -386,7 +386,7 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 #v6.0.1
 
       - name: Run opencode
-        uses: anomalyco/opencode/github@d1482e148399bfaf808674549199f5f4aa69a22d #v1.2.4
+        uses: anomalyco/opencode/github@296250f1b7e1ec992a3a33bee999f5e09a1697d0 #v1.2.10
         env:
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
         with:
