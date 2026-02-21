@@ -34,6 +34,8 @@
     "deep-link:allow-get-current",
     "dialog:default",
     "dialog:allow-open",
+    "dialog:allow-save",
+    "fs:allow-write-text-file",
     "macos-permissions:default",
     "macos-permissions:allow-request-microphone-permission",
     "macos-permissions:allow-request-camera-permission",

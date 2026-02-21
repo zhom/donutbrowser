@@ -507,18 +507,28 @@
   "cookies": {
     "import": {
       "title": "Импорт Cookies",
-      "description": "Импорт cookies из файла в формате Netscape.",
+      "description": "Импорт cookies из файла в формате Netscape или JSON.",
       "selectFile": "Выбрать файл",
       "preview": "Найдено {{count}} cookies",
       "success": "Успешно импортировано {{imported}} cookies ({{replaced}} заменено)",
       "error": "Ошибка импорта cookies",
       "proFeature": "Импорт cookies — функция Pro"
+    },
+    "export": {
+      "title": "Экспорт Cookies",
+      "description": "Экспорт cookies из этого профиля.",
+      "formatLabel": "Формат",
+      "netscape": "Netscape TXT",
+      "json": "JSON",
+      "success": "Cookies успешно экспортированы",
+      "error": "Ошибка экспорта cookies"
     }
   },
   "pro": {
     "badge": "PRO",
     "fingerprintLocked": "Редактирование отпечатка — функция Pro",
     "cookieCopyLocked": "Копирование cookies — функция Pro",
-    "cookieImportLocked": "Импорт cookies — функция Pro"
+    "cookieImportLocked": "Импорт cookies — функция Pro",
+    "cookieExportLocked": "Экспорт cookies — функция Pro"
   }
 }

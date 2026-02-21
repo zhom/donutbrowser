@@ -76,21 +76,39 @@ impl GeoIPDownloader {
       false
     }
   }
-  /// Check if GeoIP database is missing for Camoufox profiles
+
+  fn get_timestamp_path() -> PathBuf {
+    crate::app_dirs::cache_dir().join("geoip_last_download")
+  }
+
+  fn is_geoip_stale() -> bool {
+    let timestamp_path = Self::get_timestamp_path();
+    let Ok(content) = std::fs::read_to_string(&timestamp_path) else {
+      return true;
+    };
+    let Ok(timestamp) = content.trim().parse::<u64>() else {
+      return true;
+    };
+    let now = std::time::SystemTime::now()
+      .duration_since(std::time::UNIX_EPOCH)
+      .unwrap_or_default()
+      .as_secs();
+    const SEVEN_DAYS: u64 = 7 * 24 * 60 * 60;
+    now.saturating_sub(timestamp) > SEVEN_DAYS
+  }
+
+  /// Check if GeoIP database is missing or stale for Camoufox profiles
   pub fn check_missing_geoip_database(
     &self,
   ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
-    // Get all profiles
     let profiles = ProfileManager::instance()
       .list_profiles()
       .map_err(|e| format!("Failed to list profiles: {e}"))?;
 
-    // Check if there are any Camoufox profiles
     let has_camoufox_profiles = profiles.iter().any(|profile| profile.browser == "camoufox");
 
     if has_camoufox_profiles {
-      // Check if GeoIP database is available
-      return Ok(!Self::is_geoip_database_available());
+      return Ok(!Self::is_geoip_database_available() || Self::is_geoip_stale());
     }
 
     Ok(false)
@@ -200,6 +218,17 @@ impl GeoIPDownloader {
     }
 
     file.flush().await?;
+
+    // Write download timestamp
+    let timestamp_path = Self::get_timestamp_path();
+    if let Some(parent) = timestamp_path.parent() {
+      let _ = fs::create_dir_all(parent).await;
+    }
+    let now = std::time::SystemTime::now()
+      .duration_since(std::time::UNIX_EPOCH)
+      .unwrap_or_default()
+      .as_secs();
+    let _ = fs::write(&timestamp_path, now.to_string()).await;
 
     // Emit completion
     let _ = events::emit(
@@ -360,6 +389,31 @@ mod tests {
 
     let path = mmdb_path.unwrap();
     assert!(path.to_string_lossy().ends_with("GeoLite2-City.mmdb"));
+  }
+
+  #[test]
+  fn test_is_geoip_stale() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let _guard = crate::app_dirs::set_test_cache_dir(tmp.path().to_path_buf());
+
+    // No timestamp file → stale
+    assert!(GeoIPDownloader::is_geoip_stale());
+
+    let timestamp_path = GeoIPDownloader::get_timestamp_path();
+    std::fs::create_dir_all(timestamp_path.parent().unwrap()).unwrap();
+
+    // Recent timestamp → not stale
+    let now = std::time::SystemTime::now()
+      .duration_since(std::time::UNIX_EPOCH)
+      .unwrap()
+      .as_secs();
+    std::fs::write(&timestamp_path, now.to_string()).unwrap();
+    assert!(!GeoIPDownloader::is_geoip_stale());
+
+    // 8 days ago → stale
+    let eight_days_ago = now - 8 * 24 * 60 * 60;
+    std::fs::write(&timestamp_path, eight_days_ago.to_string()).unwrap();
+    assert!(GeoIPDownloader::is_geoip_stale());
   }
 
   #[test]

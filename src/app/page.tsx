@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CamoufoxConfigDialog } from "@/components/camoufox-config-dialog";
 import { CommercialTrialModal } from "@/components/commercial-trial-modal";
 import { CookieCopyDialog } from "@/components/cookie-copy-dialog";
+import { CookieExportDialog } from "@/components/cookie-export-dialog";
 import { CookieImportDialog } from "@/components/cookie-import-dialog";
 import { CreateProfileDialog } from "@/components/create-profile-dialog";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
@@ -145,6 +146,9 @@ export default function Home() {
   const [cookieCopyDialogOpen, setCookieCopyDialogOpen] = useState(false);
   const [cookieImportDialogOpen, setCookieImportDialogOpen] = useState(false);
   const [currentProfileForCookieImport, setCurrentProfileForCookieImport] =
+    useState<BrowserProfile | null>(null);
+  const [cookieExportDialogOpen, setCookieExportDialogOpen] = useState(false);
+  const [currentProfileForCookieExport, setCurrentProfileForCookieExport] =
     useState<BrowserProfile | null>(null);
   const [selectedProfilesForCookies, setSelectedProfilesForCookies] = useState<
     string[]
@@ -697,6 +701,11 @@ export default function Home() {
     setCookieImportDialogOpen(true);
   }, []);
 
+  const handleExportCookies = useCallback((profile: BrowserProfile) => {
+    setCurrentProfileForCookieExport(profile);
+    setCookieExportDialogOpen(true);
+  }, []);
+
   const handleGroupAssignmentComplete = useCallback(async () => {
     // No need to manually reload - useProfileEvents will handle the update
     setGroupAssignmentDialogOpen(false);
@@ -1004,6 +1013,7 @@ export default function Home() {
             onConfigureCamoufox={handleConfigureCamoufox}
             onCopyCookiesToProfile={handleCopyCookiesToProfile}
             onImportCookies={handleImportCookies}
+            onExportCookies={handleExportCookies}
             runningProfiles={runningProfiles}
             isUpdating={isUpdating}
             onDeleteSelectedProfiles={handleDeleteSelectedProfiles}
@@ -1154,6 +1164,15 @@ export default function Home() {
           setCurrentProfileForCookieImport(null);
         }}
         profile={currentProfileForCookieImport}
+      />
+
+      <CookieExportDialog
+        isOpen={cookieExportDialogOpen}
+        onClose={() => {
+          setCookieExportDialogOpen(false);
+          setCurrentProfileForCookieExport(null);
+        }}
+        profile={currentProfileForCookieExport}
       />
 
       <DeleteConfirmationDialog

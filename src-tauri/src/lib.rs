@@ -305,7 +305,18 @@ async fn import_cookies_from_file(
   {
     return Err("Cookie import requires an active Pro subscription".to_string());
   }
-  cookie_manager::CookieManager::import_netscape_cookies(&app_handle, &profile_id, &content).await
+  cookie_manager::CookieManager::import_cookies(&app_handle, &profile_id, &content).await
+}
+
+#[tauri::command]
+async fn export_profile_cookies(profile_id: String, format: String) -> Result<String, String> {
+  if !crate::cloud_auth::CLOUD_AUTH
+    .has_active_paid_subscription()
+    .await
+  {
+    return Err("Cookie export requires an active Pro subscription".to_string());
+  }
+  cookie_manager::CookieManager::export_cookies(&profile_id, &format)
 }
 
 #[tauri::command]
@@ -1331,6 +1342,7 @@ pub fn run() {
       read_profile_cookies,
       copy_profile_cookies,
       import_cookies_from_file,
+      export_profile_cookies,
       check_wayfern_terms_accepted,
       check_wayfern_downloaded,
       accept_wayfern_terms,

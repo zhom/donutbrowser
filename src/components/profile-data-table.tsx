@@ -177,6 +177,7 @@ type TableMeta = {
   onCloneProfile?: (profile: BrowserProfile) => void;
   onCopyCookiesToProfile?: (profile: BrowserProfile) => void;
   onImportCookies?: (profile: BrowserProfile) => void;
+  onExportCookies?: (profile: BrowserProfile) => void;
 
   // Traffic snapshots (lightweight real-time data)
   trafficSnapshots: Record<string, TrafficSnapshot>;
@@ -758,6 +759,7 @@ interface ProfilesDataTableProps {
   onConfigureCamoufox: (profile: BrowserProfile) => void;
   onCopyCookiesToProfile?: (profile: BrowserProfile) => void;
   onImportCookies?: (profile: BrowserProfile) => void;
+  onExportCookies?: (profile: BrowserProfile) => void;
   runningProfiles: Set<string>;
   isUpdating: (browser: string) => boolean;
   onDeleteSelectedProfiles: (profileIds: string[]) => Promise<void>;
@@ -785,6 +787,7 @@ export function ProfilesDataTable({
   onConfigureCamoufox,
   onCopyCookiesToProfile,
   onImportCookies,
+  onExportCookies,
   runningProfiles,
   isUpdating,
   onAssignProfilesToGroup,
@@ -1475,6 +1478,7 @@ export function ProfilesDataTable({
       onConfigureCamoufox,
       onCopyCookiesToProfile,
       onImportCookies,
+      onExportCookies,
 
       // Traffic snapshots (lightweight real-time data)
       trafficSnapshots,
@@ -1537,6 +1541,7 @@ export function ProfilesDataTable({
       onConfigureCamoufox,
       onCopyCookiesToProfile,
       onImportCookies,
+      onExportCookies,
       syncStatuses,
       onOpenProfileSyncDialog,
       onToggleProfileSync,
@@ -2420,6 +2425,23 @@ export function ProfilesDataTable({
                       >
                         <span className="flex items-center gap-2">
                           Import Cookies
+                          {!meta.crossOsUnlocked && <ProBadge />}
+                        </span>
+                      </DropdownMenuItem>
+                    )}
+                  {(profile.browser === "camoufox" ||
+                    profile.browser === "wayfern") &&
+                    meta.onExportCookies && (
+                      <DropdownMenuItem
+                        onClick={() => {
+                          if (meta.crossOsUnlocked) {
+                            meta.onExportCookies?.(profile);
+                          }
+                        }}
+                        disabled={isDisabled || !meta.crossOsUnlocked}
+                      >
+                        <span className="flex items-center gap-2">
+                          Export Cookies
                           {!meta.crossOsUnlocked && <ProBadge />}
                         </span>
                       </DropdownMenuItem>

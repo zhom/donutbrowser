@@ -97,22 +97,17 @@ impl VpnStorage {
 
   /// Get the storage file path
   fn get_storage_path() -> PathBuf {
-    let data_dir = directories::ProjectDirs::from("com", "donut", "donutbrowser")
-      .map(|dirs| dirs.data_local_dir().to_path_buf())
-      .unwrap_or_else(|| PathBuf::from("."));
-
-    if !data_dir.exists() {
-      let _ = fs::create_dir_all(&data_dir);
+    let vpn_dir = crate::app_dirs::vpn_dir();
+    if !vpn_dir.exists() {
+      let _ = fs::create_dir_all(&vpn_dir);
     }
-
-    data_dir.join("vpn_configs.json")
+    Self::migrate_from_old_location(&vpn_dir);
+    vpn_dir.join("vpn_configs.json")
   }
 
   /// Get or create the encryption key
   fn get_or_create_key() -> [u8; 32] {
-    let key_path = directories::ProjectDirs::from("com", "donut", "donutbrowser")
-      .map(|dirs| dirs.data_local_dir().join(".vpn_key"))
-      .unwrap_or_else(|| PathBuf::from(".vpn_key"));
+    let key_path = crate::app_dirs::vpn_dir().join(".vpn_key");
 
     if key_path.exists() {
       if let Ok(key_data) = fs::read(&key_path) {
@@ -136,6 +131,22 @@ impl VpnStorage {
     }
 
     key
+  }
+
+  /// Migrate VPN configs from the old ProjectDirs location to the new app_dirs location.
+  fn migrate_from_old_location(new_dir: &std::path::Path) {
+    let old_dir = match directories::ProjectDirs::from("com", "donut", "donutbrowser") {
+      Some(dirs) => dirs.data_local_dir().to_path_buf(),
+      None => return,
+    };
+
+    for filename in &["vpn_configs.json", ".vpn_key"] {
+      let old_path = old_dir.join(filename);
+      let new_path = new_dir.join(filename);
+      if old_path.exists() && !new_path.exists() {
+        let _ = fs::copy(&old_path, &new_path);
+      }
+    }
   }
 
   /// Load storage data from disk
@@ -423,8 +434,7 @@ mod tests {
 
   fn create_test_storage() -> (VpnStorage, TempDir) {
     let temp_dir = TempDir::new().unwrap();
-    let mut storage = VpnStorage::new();
-    storage.storage_path = temp_dir.path().join("test_vpn_configs.json");
+    let storage = VpnStorage::with_dir(temp_dir.path());
     (storage, temp_dir)
   }
 

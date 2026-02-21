@@ -29,9 +29,18 @@ interface CookieImportDialogProps {
 }
 
 const countCookies = (content: string): number => {
+  const trimmed = content.trim();
+  if (trimmed.startsWith("[")) {
+    try {
+      const arr = JSON.parse(trimmed);
+      if (Array.isArray(arr)) return arr.length;
+    } catch {
+      // Fall through to Netscape counting
+    }
+  }
   return content.split("\n").filter((line) => {
-    const trimmed = line.trim();
-    return trimmed && !trimmed.startsWith("#");
+    const l = line.trim();
+    return l && !l.startsWith("#");
   }).length;
 };
 
@@ -98,7 +107,8 @@ export function CookieImportDialog({
         <DialogHeader>
           <DialogTitle>Import Cookies</DialogTitle>
           <DialogDescription>
-            {!fileContent && "Import cookies from a Netscape format file."}
+            {!fileContent &&
+              "Import cookies from a Netscape or JSON format file."}
             {fileContent &&
               !result &&
               `${cookieCount} cookies found in ${fileName}`}
@@ -124,14 +134,14 @@ export function CookieImportDialog({
             >
               <LuUpload className="w-10 h-10 text-muted-foreground mb-4" />
               <p className="text-sm text-muted-foreground text-center">
-                Click to choose a Netscape cookie file
+                Click to choose a cookie file
                 <br />
-                <span className="text-xs">(.txt or .cookies)</span>
+                <span className="text-xs">(.txt, .cookies, or .json)</span>
               </p>
               <input
                 id="cookie-file-input"
                 type="file"
-                accept=".txt,.cookies"
+                accept=".txt,.cookies,.json"
                 className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0];

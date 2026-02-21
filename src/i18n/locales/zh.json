@@ -507,18 +507,28 @@
   "cookies": {
     "import": {
       "title": "导入 Cookies",
-      "description": "从 Netscape 格式文件导入 Cookies。",
+      "description": "从 Netscape 或 JSON 格式文件导入 Cookies。",
       "selectFile": "选择文件",
       "preview": "找到 {{count}} 个 Cookies",
       "success": "成功导入 {{imported}} 个 Cookies（替换了 {{replaced}} 个）",
       "error": "导入 Cookies 失败",
       "proFeature": "导入 Cookies 是 Pro 功能"
+    },
+    "export": {
+      "title": "导出 Cookies",
+      "description": "从此配置文件导出 Cookies。",
+      "formatLabel": "格式",
+      "netscape": "Netscape TXT",
+      "json": "JSON",
+      "success": "Cookies 导出成功",
+      "error": "导出 Cookies 失败"
     }
   },
   "pro": {
     "badge": "PRO",
     "fingerprintLocked": "指纹编辑是 Pro 功能",
     "cookieCopyLocked": "Cookie 复制是 Pro 功能",
-    "cookieImportLocked": "Cookie 导入是 Pro 功能"
+    "cookieImportLocked": "Cookie 导入是 Pro 功能",
+    "cookieExportLocked": "Cookie 导出是 Pro 功能"
   }
 }

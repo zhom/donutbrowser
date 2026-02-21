@@ -507,18 +507,28 @@
   "cookies": {
     "import": {
       "title": "Importar Cookies",
-      "description": "Importar cookies desde un archivo en formato Netscape.",
+      "description": "Importar cookies desde un archivo en formato Netscape o JSON.",
       "selectFile": "Elegir Archivo",
       "preview": "{{count}} cookies encontradas",
       "success": "Se importaron {{imported}} cookies exitosamente ({{replaced}} reemplazadas)",
       "error": "Error al importar cookies",
       "proFeature": "La importación de cookies es una función Pro"
+    },
+    "export": {
+      "title": "Exportar Cookies",
+      "description": "Exportar cookies de este perfil.",
+      "formatLabel": "Formato",
+      "netscape": "Netscape TXT",
+      "json": "JSON",
+      "success": "Cookies exportadas exitosamente",
+      "error": "Error al exportar cookies"
     }
   },
   "pro": {
     "badge": "PRO",
     "fingerprintLocked": "La edición de huellas digitales es una función Pro",
     "cookieCopyLocked": "La copia de cookies es una función Pro",
-    "cookieImportLocked": "La importación de cookies es una función Pro"
+    "cookieImportLocked": "La importación de cookies es una función Pro",
+    "cookieExportLocked": "La exportación de cookies es una función Pro"
   }
 }
