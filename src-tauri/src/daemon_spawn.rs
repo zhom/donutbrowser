@@ -313,3 +313,26 @@ pub fn ensure_daemon_running() -> Result<(), String> {
   }
   Ok(())
 }
+
+pub fn register_gui_pid() {
+  let path = get_state_path();
+  let mut val: serde_json::Value = if path.exists() {
+    fs::read_to_string(&path)
+      .ok()
+      .and_then(|c| serde_json::from_str(&c).ok())
+      .unwrap_or_else(|| serde_json::json!({}))
+  } else {
+    serde_json::json!({})
+  };
+
+  if let Some(obj) = val.as_object_mut() {
+    obj.insert(
+      "gui_pid".to_string(),
+      serde_json::Value::Number(std::process::id().into()),
+    );
+  }
+
+  if let Ok(content) = serde_json::to_string_pretty(&val) {
+    let _ = fs::write(&path, content);
+  }
+}

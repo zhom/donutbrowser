@@ -127,8 +127,48 @@ pub fn activate_gui() {
   }
 }
 
+fn read_gui_pid() -> Option<u32> {
+  let path = super::autostart::get_data_dir()?.join("daemon-state.json");
+  let content = std::fs::read_to_string(path).ok()?;
+  let val: serde_json::Value = serde_json::from_str(&content).ok()?;
+  val.get("gui_pid")?.as_u64().map(|p| p as u32)
+}
+
+fn kill_gui_by_pid() -> bool {
+  let Some(pid) = read_gui_pid() else {
+    return false;
+  };
+
+  #[cfg(unix)]
+  {
+    let ret = unsafe { libc::kill(pid as i32, libc::SIGTERM) };
+    ret == 0
+  }
+
+  #[cfg(windows)]
+  {
+    Command::new("taskkill")
+      .args(["/PID", &pid.to_string(), "/F"])
+      .output()
+      .map(|o| o.status.success())
+      .unwrap_or(false)
+  }
+
+  #[cfg(not(any(unix, windows)))]
+  {
+    false
+  }
+}
+
 pub fn quit_gui() {
   log::info!("[daemon] Quitting GUI...");
+
+  if kill_gui_by_pid() {
+    log::info!("[daemon] GUI killed by PID");
+    return;
+  }
+
+  log::info!("[daemon] PID-based kill failed, falling back to name-based kill");
 
   #[cfg(target_os = "macos")]
   {

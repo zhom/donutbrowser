@@ -764,13 +764,16 @@ pub fn run() {
         log::warn!("Failed to start daemon: {e}");
       }
 
+      // Register this GUI's PID in daemon state so the daemon can kill us directly
+      daemon_spawn::register_gui_pid();
+
       // Monitor daemon health - quit GUI if daemon dies
       let app_handle_daemon = app.handle().clone();
       tauri::async_runtime::spawn(async move {
         // Give the daemon time to fully start
-        tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+        tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(1));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
         loop {

@@ -173,6 +173,34 @@ fn run_daemon() {
   // Store tray icon in Option - created after event loop starts
   let mut tray_icon: Option<TrayIcon> = None;
 
+  // Install signal handlers so SIGTERM/SIGINT trigger graceful shutdown
+  #[cfg(unix)]
+  unsafe {
+    extern "C" fn signal_handler(_sig: libc::c_int) {
+      SHOULD_QUIT.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+    libc::signal(libc::SIGTERM, signal_handler as libc::sighandler_t);
+    libc::signal(libc::SIGINT, signal_handler as libc::sighandler_t);
+  }
+
+  #[cfg(windows)]
+  unsafe {
+    use windows::Win32::System::Console::{SetConsoleCtrlHandler, PHANDLER_ROUTINE};
+
+    unsafe extern "system" fn ctrl_handler(_ctrl_type: u32) -> windows::Win32::Foundation::BOOL {
+      SHOULD_QUIT.store(true, std::sync::atomic::Ordering::SeqCst);
+      windows::Win32::Foundation::TRUE
+    }
+
+    let _ = SetConsoleCtrlHandler(
+      Some(std::mem::transmute::<
+        unsafe extern "system" fn(u32) -> windows::Win32::Foundation::BOOL,
+        PHANDLER_ROUTINE,
+      >(ctrl_handler)),
+      true,
+    );
+  }
+
   // Run the event loop
   event_loop.run(move |event, _, control_flow| {
     // Use WaitUntil to check for menu events periodically while staying low on CPU
@@ -264,23 +292,38 @@ fn run_daemon() {
 }
 
 fn stop_daemon() {
+  let state_path = get_state_path();
   let state = read_state();
 
   if let Some(pid) = state.daemon_pid {
-    #[cfg(unix)]
-    {
-      unsafe {
-        libc::kill(pid as i32, libc::SIGTERM);
-      }
-      eprintln!("Sent stop signal to daemon (PID {})", pid);
-    }
-
+    // On Windows, taskkill /F kills instantly with no handler, so kill GUI first
     #[cfg(windows)]
     {
       use std::process::Command;
+
+      // Read gui_pid from state file and kill it first
+      if let Ok(content) = fs::read_to_string(&state_path) {
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+          if let Some(gui_pid) = val.get("gui_pid").and_then(|v| v.as_u64()) {
+            let _ = Command::new("taskkill")
+              .args(["/PID", &gui_pid.to_string(), "/F"])
+              .output();
+          }
+        }
+      }
+
       let _ = Command::new("taskkill")
         .args(["/PID", &pid.to_string(), "/F"])
         .output();
+      eprintln!("Sent stop signal to daemon (PID {})", pid);
+    }
+
+    #[cfg(unix)]
+    {
+      let _ = &state_path; // suppress unused warning on unix
+      unsafe {
+        libc::kill(pid as i32, libc::SIGTERM);
+      }
       eprintln!("Sent stop signal to daemon (PID {})", pid);
     }
   } else {
