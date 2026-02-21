@@ -186,6 +186,7 @@ type TableMeta = {
   onOpenProfileSyncDialog?: (profile: BrowserProfile) => void;
   onToggleProfileSync?: (profile: BrowserProfile) => void;
   crossOsUnlocked?: boolean;
+  syncUnlocked?: boolean;
 
   // Country proxy creation (inline in proxy dropdown)
   countries: LocationItem[];
@@ -764,6 +765,7 @@ interface ProfilesDataTableProps {
   onOpenProfileSyncDialog?: (profile: BrowserProfile) => void;
   onToggleProfileSync?: (profile: BrowserProfile) => void;
   crossOsUnlocked?: boolean;
+  syncUnlocked?: boolean;
 }
 
 export function ProfilesDataTable({
@@ -787,6 +789,7 @@ export function ProfilesDataTable({
   onOpenProfileSyncDialog,
   onToggleProfileSync,
   crossOsUnlocked = false,
+  syncUnlocked = false,
 }: ProfilesDataTableProps) {
   const { getTableSorting, updateSorting, isLoaded } = useTableSorting();
   const [sorting, setSorting] = React.useState<SortingState>([]);
@@ -1472,6 +1475,7 @@ export function ProfilesDataTable({
       onOpenProfileSyncDialog,
       onToggleProfileSync,
       crossOsUnlocked,
+      syncUnlocked,
 
       // Country proxy creation
       countries,
@@ -1523,6 +1527,7 @@ export function ProfilesDataTable({
       onOpenProfileSyncDialog,
       onToggleProfileSync,
       crossOsUnlocked,
+      syncUnlocked,
       countries,
       canCreateLocationProxy,
       loadCountries,
@@ -2332,15 +2337,15 @@ export function ProfilesDataTable({
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => {
-                      if (meta.crossOsUnlocked) {
+                      if (meta.syncUnlocked) {
                         meta.onToggleProfileSync?.(profile);
                       }
                     }}
-                    disabled={!meta.crossOsUnlocked || isCrossOs}
+                    disabled={!meta.syncUnlocked || isCrossOs}
                   >
                     <span className="flex items-center gap-2">
                       {profile.sync_enabled ? "Disable Sync" : "Enable Sync"}
-                      {!meta.crossOsUnlocked && (
+                      {!meta.syncUnlocked && (
                         <LuLock className="w-3 h-3 text-muted-foreground" />
                       )}
                     </span>

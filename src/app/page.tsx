@@ -44,7 +44,12 @@ import {
   showSuccessToast,
   showToast,
 } from "@/lib/toast-utils";
-import type { BrowserProfile, CamoufoxConfig, WayfernConfig } from "@/types";
+import type {
+  BrowserProfile,
+  CamoufoxConfig,
+  SyncSettings,
+  WayfernConfig,
+} from "@/types";
 
 type BrowserTypeString =
   | "firefox"
@@ -104,6 +109,23 @@ export default function Home() {
     cloudUser?.plan !== "free" &&
     (cloudUser?.subscriptionStatus === "active" ||
       cloudUser?.planPeriod === "lifetime");
+
+  const [selfHostedSyncConfigured, setSelfHostedSyncConfigured] =
+    useState(false);
+
+  const checkSelfHostedSync = useCallback(async () => {
+    try {
+      const settings = await invoke<SyncSettings>("get_sync_settings");
+      const hasConfig = Boolean(
+        settings.sync_server_url && settings.sync_token,
+      );
+      setSelfHostedSyncConfigured(hasConfig && !cloudUser);
+    } catch {
+      setSelfHostedSyncConfigured(false);
+    }
+  }, [cloudUser]);
+
+  const syncUnlocked = crossOsUnlocked || selfHostedSyncConfigured;
 
   const [createProfileDialogOpen, setCreateProfileDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
@@ -895,6 +917,11 @@ export default function Home() {
     }
   }, [isInitialized, checkAllPermissions]);
 
+  // Check self-hosted sync config on mount and when cloud user changes
+  useEffect(() => {
+    void checkSelfHostedSync();
+  }, [checkSelfHostedSync]);
+
   // Filter data by selected group and search query
   const filteredProfiles = useMemo(() => {
     let filtered = profiles;
@@ -978,6 +1005,7 @@ export default function Home() {
             onOpenProfileSyncDialog={handleOpenProfileSyncDialog}
             onToggleProfileSync={handleToggleProfileSync}
             crossOsUnlocked={crossOsUnlocked}
+            syncUnlocked={syncUnlocked}
           />
         </div>
       </main>
@@ -1122,6 +1150,7 @@ export default function Home() {
         isOpen={syncConfigDialogOpen}
         onClose={(loginOccurred) => {
           setSyncConfigDialogOpen(false);
+          void checkSelfHostedSync();
           if (loginOccurred) {
             setSyncAllDialogOpen(true);
           }
