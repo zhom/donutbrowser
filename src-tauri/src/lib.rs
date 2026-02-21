@@ -11,6 +11,7 @@ static PENDING_URLS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 mod api_client;
 mod api_server;
 mod app_auto_updater;
+pub mod app_dirs;
 mod auto_updater;
 mod browser;
 mod browser_runner;
@@ -706,12 +707,7 @@ pub fn run() {
     pending.push(url.clone());
   }
 
-  // Configure logging plugin with separate logs for dev and production
-  let log_file_name = if cfg!(debug_assertions) {
-    "DonutBrowserDev"
-  } else {
-    "DonutBrowser"
-  };
+  let log_file_name = app_dirs::app_name();
 
   tauri::Builder::default()
     .plugin(

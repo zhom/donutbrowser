@@ -1,7 +1,6 @@
 use crate::browser_runner::BrowserRunner;
 use crate::camoufox::{CamoufoxConfigBuilder, GeoIPOption, ScreenConstraints};
 use crate::profile::BrowserProfile;
-use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -74,7 +73,6 @@ struct CamoufoxManagerInner {
 
 pub struct CamoufoxManager {
   inner: Arc<AsyncMutex<CamoufoxManagerInner>>,
-  base_dirs: BaseDirs,
 }
 
 impl CamoufoxManager {
@@ -83,7 +81,6 @@ impl CamoufoxManager {
       inner: Arc::new(AsyncMutex::new(CamoufoxManagerInner {
         instances: HashMap::new(),
       })),
-      base_dirs: BaseDirs::new().expect("Failed to get base directories"),
     }
   }
 
@@ -92,14 +89,7 @@ impl CamoufoxManager {
   }
 
   pub fn get_profiles_dir(&self) -> PathBuf {
-    let mut path = self.base_dirs.data_local_dir().to_path_buf();
-    path.push(if cfg!(debug_assertions) {
-      "DonutBrowserDev"
-    } else {
-      "DonutBrowser"
-    });
-    path.push("profiles");
-    path
+    crate::app_dirs::profiles_dir()
   }
 
   /// Generate Camoufox fingerprint configuration during profile creation

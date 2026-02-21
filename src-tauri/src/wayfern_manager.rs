@@ -1,6 +1,5 @@
 use crate::browser_runner::BrowserRunner;
 use crate::profile::BrowserProfile;
-use directories::BaseDirs;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -72,8 +71,6 @@ struct WayfernManagerInner {
 
 pub struct WayfernManager {
   inner: Arc<AsyncMutex<WayfernManagerInner>>,
-  #[allow(dead_code)]
-  base_dirs: BaseDirs,
   http_client: Client,
 }
 
@@ -91,7 +88,6 @@ impl WayfernManager {
       inner: Arc::new(AsyncMutex::new(WayfernManagerInner {
         instances: HashMap::new(),
       })),
-      base_dirs: BaseDirs::new().expect("Failed to get base directories"),
       http_client: Client::new(),
     }
   }
@@ -102,26 +98,12 @@ impl WayfernManager {
 
   #[allow(dead_code)]
   pub fn get_profiles_dir(&self) -> PathBuf {
-    let mut path = self.base_dirs.data_local_dir().to_path_buf();
-    path.push(if cfg!(debug_assertions) {
-      "DonutBrowserDev"
-    } else {
-      "DonutBrowser"
-    });
-    path.push("profiles");
-    path
+    crate::app_dirs::profiles_dir()
   }
 
   #[allow(dead_code)]
   fn get_binaries_dir(&self) -> PathBuf {
-    let mut path = self.base_dirs.data_local_dir().to_path_buf();
-    path.push(if cfg!(debug_assertions) {
-      "DonutBrowserDev"
-    } else {
-      "DonutBrowser"
-    });
-    path.push("binaries");
-    path
+    crate::app_dirs::binaries_dir()
   }
 
   async fn find_free_port() -> Result<u16, Box<dyn std::error::Error + Send + Sync>> {

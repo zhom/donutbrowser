@@ -1,4 +1,3 @@
-use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -328,17 +327,8 @@ fn acquire_file_lock(lock_path: &PathBuf) -> Result<FileLockGuard, Box<dyn std::
   Ok(FileLockGuard { _file: file })
 }
 
-/// Get the traffic stats storage directory
 pub fn get_traffic_stats_dir() -> PathBuf {
-  let base_dirs = BaseDirs::new().expect("Failed to get base directories");
-  let mut path = base_dirs.cache_dir().to_path_buf();
-  path.push(if cfg!(debug_assertions) {
-    "DonutBrowserDev"
-  } else {
-    "DonutBrowser"
-  });
-  path.push("traffic_stats");
-  path
+  crate::app_dirs::cache_dir().join("traffic_stats")
 }
 
 /// Get the storage key for traffic stats (profile_id if available, otherwise proxy_id)

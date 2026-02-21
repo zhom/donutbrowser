@@ -516,13 +516,7 @@ async fn test_traffic_tracking() -> Result<(), Box<dyn std::error::Error + Send 
   // Wait for traffic stats to be flushed (happens every second)
   sleep(Duration::from_secs(2)).await;
 
-  // Verify traffic was tracked by checking traffic stats file exists
-  // Note: Traffic stats are stored in the cache directory
-  let cache_dir = directories::BaseDirs::new()
-    .expect("Failed to get base directories")
-    .cache_dir()
-    .to_path_buf();
-  let traffic_stats_dir = cache_dir.join("DonutBrowserDev").join("traffic_stats");
+  let traffic_stats_dir = donutbrowser_lib::app_dirs::cache_dir().join("traffic_stats");
   let stats_file = traffic_stats_dir.join(format!("{}.json", proxy_id));
 
   if stats_file.exists() {

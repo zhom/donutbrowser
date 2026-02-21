@@ -1,56 +1,22 @@
 use crate::profile::BrowserProfile;
-use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::{Path, PathBuf};
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 struct TagsData {
   tags: Vec<String>,
 }
 
-pub struct TagManager {
-  base_dirs: BaseDirs,
-  data_dir_override: Option<PathBuf>,
-}
+pub struct TagManager;
 
 impl TagManager {
   pub fn new() -> Self {
-    Self {
-      base_dirs: BaseDirs::new().expect("Failed to get base directories"),
-      data_dir_override: std::env::var("DONUTBROWSER_DATA_DIR")
-        .ok()
-        .map(PathBuf::from),
-    }
+    Self
   }
 
-  // Helper for tests to override data directory without global env var
-  #[allow(dead_code)]
-  pub fn with_data_dir_override(dir: &Path) -> Self {
-    Self {
-      base_dirs: BaseDirs::new().expect("Failed to get base directories"),
-      data_dir_override: Some(dir.to_path_buf()),
-    }
-  }
-
-  fn get_tags_file_path(&self) -> PathBuf {
-    if let Some(dir) = &self.data_dir_override {
-      let mut override_path = dir.clone();
-      let _ = fs::create_dir_all(&override_path);
-      override_path.push("tags.json");
-      return override_path;
-    }
-
-    let mut path = self.base_dirs.data_local_dir().to_path_buf();
-    path.push(if cfg!(debug_assertions) {
-      "DonutBrowserDev"
-    } else {
-      "DonutBrowser"
-    });
-    path.push("data");
-    path.push("tags.json");
-    path
+  fn get_tags_file_path(&self) -> std::path::PathBuf {
+    crate::app_dirs::data_subdir().join("tags.json")
   }
 
   fn load_tags_data(&self) -> Result<TagsData, Box<dyn std::error::Error>> {

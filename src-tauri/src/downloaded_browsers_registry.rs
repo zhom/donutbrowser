@@ -1,4 +1,3 @@
-use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -71,16 +70,7 @@ impl DownloadedBrowsersRegistry {
   }
 
   fn get_registry_path() -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    let base_dirs = BaseDirs::new().ok_or("Failed to get base directories")?;
-    let mut path = base_dirs.data_local_dir().to_path_buf();
-    path.push(if cfg!(debug_assertions) {
-      "DonutBrowserDev"
-    } else {
-      "DonutBrowser"
-    });
-    path.push("data");
-    path.push("downloaded_browsers.json");
-    Ok(path)
+    Ok(crate::app_dirs::data_subdir().join("downloaded_browsers.json"))
   }
 
   pub fn add_browser(&self, info: DownloadedBrowserInfo) {
@@ -128,19 +118,7 @@ impl DownloadedBrowsersRegistry {
     };
     let browser_instance = create_browser(browser_type.clone());
 
-    // Get binaries directory
-    let binaries_dir = if let Some(base_dirs) = directories::BaseDirs::new() {
-      let mut path = base_dirs.data_local_dir().to_path_buf();
-      path.push(if cfg!(debug_assertions) {
-        "DonutBrowserDev"
-      } else {
-        "DonutBrowser"
-      });
-      path.push("binaries");
-      path
-    } else {
-      return false;
-    };
+    let binaries_dir = crate::app_dirs::binaries_dir();
 
     let files_exist = browser_instance.is_version_downloaded(version, &binaries_dir);
 
@@ -535,15 +513,7 @@ impl DownloadedBrowsersRegistry {
     browser: &str,
     version: &str,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Get binaries directory path
-    let base_dirs = directories::BaseDirs::new().ok_or("Failed to get base directories")?;
-    let mut binaries_dir = base_dirs.data_local_dir().to_path_buf();
-    binaries_dir.push(if cfg!(debug_assertions) {
-      "DonutBrowserDev"
-    } else {
-      "DonutBrowser"
-    });
-    binaries_dir.push("binaries");
+    let binaries_dir = crate::app_dirs::binaries_dir();
 
     let version_dir = binaries_dir.join(browser).join(version);
 
@@ -830,19 +800,7 @@ impl DownloadedBrowsersRegistry {
 
       let browser = create_browser(browser_type.clone());
 
-      // Get binaries directory
-      let binaries_dir = if let Some(base_dirs) = directories::BaseDirs::new() {
-        let mut path = base_dirs.data_local_dir().to_path_buf();
-        path.push(if cfg!(debug_assertions) {
-          "DonutBrowserDev"
-        } else {
-          "DonutBrowser"
-        });
-        path.push("binaries");
-        path
-      } else {
-        return Err("Failed to get base directories".into());
-      };
+      let binaries_dir = crate::app_dirs::binaries_dir();
 
       log::info!(
         "binaries_dir: {binaries_dir:?} for profile: {}",

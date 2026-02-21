@@ -1,5 +1,4 @@
 use chrono::Utc;
-use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -149,18 +148,15 @@ pub struct ProxyManager {
   // Track active proxy IDs by profile name for targeted cleanup
   profile_active_proxy_ids: Mutex<HashMap<String, String>>, // Maps profile name to proxy id
   stored_proxies: Mutex<HashMap<String, StoredProxy>>,      // Maps proxy ID to stored proxy
-  base_dirs: BaseDirs,
 }
 
 impl ProxyManager {
   pub fn new() -> Self {
-    let base_dirs = BaseDirs::new().expect("Failed to get base directories");
     let manager = Self {
       active_proxies: Mutex::new(HashMap::new()),
       profile_proxies: Mutex::new(HashMap::new()),
       profile_active_proxy_ids: Mutex::new(HashMap::new()),
       stored_proxies: Mutex::new(HashMap::new()),
-      base_dirs,
     };
 
     // Load stored proxies on initialization
@@ -171,27 +167,12 @@ impl ProxyManager {
     manager
   }
 
-  // Get the path to the proxies directory
   fn get_proxies_dir(&self) -> PathBuf {
-    let mut path = self.base_dirs.data_local_dir().to_path_buf();
-    path.push(if cfg!(debug_assertions) {
-      "DonutBrowserDev"
-    } else {
-      "DonutBrowser"
-    });
-    path.push("proxies");
-    path
+    crate::app_dirs::proxies_dir()
   }
 
-  // Get the path to the proxy check cache directory
   fn get_proxy_check_cache_dir(&self) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let mut path = self.base_dirs.cache_dir().to_path_buf();
-    path.push(if cfg!(debug_assertions) {
-      "DonutBrowserDev"
-    } else {
-      "DonutBrowser"
-    });
-    path.push("proxy_checks");
+    let path = crate::app_dirs::cache_dir().join("proxy_checks");
     fs::create_dir_all(&path)?;
     Ok(path)
   }

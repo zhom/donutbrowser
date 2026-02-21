@@ -1,4 +1,3 @@
-use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -35,15 +34,7 @@ impl ProxyConfig {
 }
 
 pub fn get_storage_dir() -> PathBuf {
-  let base_dirs = BaseDirs::new().expect("Failed to get base directories");
-  let mut path = base_dirs.data_local_dir().to_path_buf();
-  path.push(if cfg!(debug_assertions) {
-    "DonutBrowserDev"
-  } else {
-    "DonutBrowser"
-  });
-  path.push("proxies");
-  path
+  crate::app_dirs::proxies_dir()
 }
 
 pub fn save_proxy_config(config: &ProxyConfig) -> Result<(), Box<dyn std::error::Error>> {

@@ -681,21 +681,7 @@ impl Downloader {
 
     // Use injected registry instance
 
-    // Get binaries directory - we need to get it from somewhere
-    // This is a bit tricky since we don't have access to BrowserRunner's get_binaries_dir
-    // We'll need to replicate this logic
-    let binaries_dir = if let Some(base_dirs) = directories::BaseDirs::new() {
-      let mut path = base_dirs.data_local_dir().to_path_buf();
-      path.push(if cfg!(debug_assertions) {
-        "DonutBrowserDev"
-      } else {
-        "DonutBrowser"
-      });
-      path.push("binaries");
-      path
-    } else {
-      return Err("Failed to get base directories".into());
-    };
+    let binaries_dir = crate::app_dirs::binaries_dir();
 
     // Check if registry thinks it's downloaded, but also verify files actually exist
     if self.registry.is_browser_downloaded(&browser_str, &version) {

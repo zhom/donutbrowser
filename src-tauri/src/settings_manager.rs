@@ -1,4 +1,3 @@
-use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, create_dir_all};
 use std::path::PathBuf;
@@ -91,27 +90,11 @@ impl Default for AppSettings {
   }
 }
 
-pub struct SettingsManager {
-  base_dirs: BaseDirs,
-  data_dir_override: Option<PathBuf>,
-}
+pub struct SettingsManager;
 
 impl SettingsManager {
-  fn new() -> Self {
-    Self {
-      base_dirs: BaseDirs::new().expect("Failed to get base directories"),
-      data_dir_override: std::env::var("DONUTBROWSER_DATA_DIR")
-        .ok()
-        .map(PathBuf::from),
-    }
-  }
-
-  #[cfg(test)]
-  fn with_data_dir_override(dir: &std::path::Path) -> Self {
-    Self {
-      base_dirs: BaseDirs::new().expect("Failed to get base directories"),
-      data_dir_override: Some(dir.to_path_buf()),
-    }
+  pub(crate) fn new() -> Self {
+    Self
   }
 
   pub fn instance() -> &'static SettingsManager {
@@ -119,18 +102,7 @@ impl SettingsManager {
   }
 
   pub fn get_settings_dir(&self) -> PathBuf {
-    if let Some(dir) = &self.data_dir_override {
-      return dir.join("settings");
-    }
-
-    let mut path = self.base_dirs.data_local_dir().to_path_buf();
-    path.push(if cfg!(debug_assertions) {
-      "DonutBrowserDev"
-    } else {
-      "DonutBrowser"
-    });
-    path.push("settings");
-    path
+    crate::app_dirs::settings_dir()
   }
 
   pub fn get_settings_file(&self) -> PathBuf {
@@ -950,16 +922,16 @@ mod tests {
   use super::*;
   use tempfile::TempDir;
 
-  fn create_test_settings_manager() -> (SettingsManager, TempDir) {
+  fn create_test_settings_manager() -> (SettingsManager, TempDir, crate::app_dirs::TestDirGuard) {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
-    let manager = SettingsManager::with_data_dir_override(temp_dir.path());
-    (manager, temp_dir)
+    let guard = crate::app_dirs::set_test_data_dir(temp_dir.path().to_path_buf());
+    let manager = SettingsManager::new();
+    (manager, temp_dir, guard)
   }
 
   #[test]
   fn test_settings_manager_creation() {
-    let (_manager, _temp_dir) = create_test_settings_manager();
-    // Test passes if no panic occurs
+    let (_manager, _temp_dir, _guard) = create_test_settings_manager();
   }
 
   #[test]
@@ -992,7 +964,7 @@ mod tests {
 
   #[test]
   fn test_load_settings_nonexistent_file() {
-    let (manager, _temp_dir) = create_test_settings_manager();
+    let (manager, _temp_dir, _guard) = create_test_settings_manager();
 
     let result = manager.load_settings();
     assert!(
@@ -1010,7 +982,7 @@ mod tests {
 
   #[test]
   fn test_save_and_load_settings() {
-    let (manager, _temp_dir) = create_test_settings_manager();
+    let (manager, _temp_dir, _guard) = create_test_settings_manager();
 
     let test_settings = AppSettings {
       set_as_default_browser: true,
@@ -1029,11 +1001,9 @@ mod tests {
       language: None,
     };
 
-    // Save settings
     let save_result = manager.save_settings(&test_settings);
     assert!(save_result.is_ok(), "Should save settings successfully");
 
-    // Load settings back
     let load_result = manager.load_settings();
     assert!(load_result.is_ok(), "Should load settings successfully");
 
@@ -1050,7 +1020,7 @@ mod tests {
 
   #[test]
   fn test_load_table_sorting_nonexistent_file() {
-    let (manager, _temp_dir) = create_test_settings_manager();
+    let (manager, _temp_dir, _guard) = create_test_settings_manager();
 
     let result = manager.load_table_sorting();
     assert!(
@@ -1065,18 +1035,16 @@ mod tests {
 
   #[test]
   fn test_save_and_load_table_sorting() {
-    let (manager, _temp_dir) = create_test_settings_manager();
+    let (manager, _temp_dir, _guard) = create_test_settings_manager();
 
     let test_sorting = TableSortingSettings {
       column: "browser".to_string(),
       direction: "desc".to_string(),
     };
 
-    // Save sorting
     let save_result = manager.save_table_sorting(&test_sorting);
     assert!(save_result.is_ok(), "Should save sorting successfully");
 
-    // Load sorting back
     let load_result = manager.load_table_sorting();
     assert!(load_result.is_ok(), "Should load sorting successfully");
 
@@ -1093,45 +1061,37 @@ mod tests {
 
   #[test]
   fn test_should_show_launch_on_login_prompt() {
-    let (manager, _temp_dir) = create_test_settings_manager();
+    let (manager, _temp_dir, _guard) = create_test_settings_manager();
 
     let result = manager.should_show_launch_on_login_prompt();
     assert!(result.is_ok(), "Should not fail");
 
-    // By default, should show prompt (not declined, autostart not enabled)
     let _should_show = result.unwrap();
-    // Note: The actual value depends on system autostart state, so we just test it doesn't fail
   }
 
   #[test]
   fn test_decline_launch_on_login() {
-    let (manager, _temp_dir) = create_test_settings_manager();
+    let (manager, _temp_dir, _guard) = create_test_settings_manager();
 
-    // Initially not declined
     let settings = manager.load_settings().unwrap();
     assert!(!settings.launch_on_login_declined);
 
-    // Decline
     manager.decline_launch_on_login().unwrap();
 
-    // Should be declined now
     let settings = manager.load_settings().unwrap();
     assert!(settings.launch_on_login_declined);
   }
 
   #[test]
   fn test_load_corrupted_settings_file() {
-    let (manager, _temp_dir) = create_test_settings_manager();
+    let (manager, _temp_dir, _guard) = create_test_settings_manager();
 
-    // Create settings directory
     let settings_dir = manager.get_settings_dir();
     fs::create_dir_all(&settings_dir).expect("Should create settings directory");
 
-    // Write corrupted JSON
     let settings_file = manager.get_settings_file();
     fs::write(&settings_file, "{ invalid json }").expect("Should write corrupted file");
 
-    // Should handle corrupted file gracefully
     let result = manager.load_settings();
     assert!(
       result.is_ok(),
@@ -1151,7 +1111,7 @@ mod tests {
 
   #[test]
   fn test_settings_file_paths() {
-    let (manager, _temp_dir) = create_test_settings_manager();
+    let (manager, _temp_dir, _guard) = create_test_settings_manager();
 
     let settings_dir = manager.get_settings_dir();
     let settings_file = manager.get_settings_file();

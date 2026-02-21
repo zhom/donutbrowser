@@ -6,13 +6,11 @@ use crate::events;
 use crate::profile::types::{get_host_os, BrowserProfile};
 use crate::proxy_manager::PROXY_MANAGER;
 use crate::wayfern_manager::WayfernConfig;
-use directories::BaseDirs;
 use std::fs::{self, create_dir_all};
 use std::path::{Path, PathBuf};
 use sysinfo::{Pid, System};
 
 pub struct ProfileManager {
-  base_dirs: BaseDirs,
   camoufox_manager: &'static crate::camoufox_manager::CamoufoxManager,
   wayfern_manager: &'static crate::wayfern_manager::WayfernManager,
 }
@@ -20,7 +18,6 @@ pub struct ProfileManager {
 impl ProfileManager {
   fn new() -> Self {
     Self {
-      base_dirs: BaseDirs::new().expect("Failed to get base directories"),
       camoufox_manager: crate::camoufox_manager::CamoufoxManager::instance(),
       wayfern_manager: crate::wayfern_manager::WayfernManager::instance(),
     }
@@ -31,25 +28,11 @@ impl ProfileManager {
   }
 
   pub fn get_profiles_dir(&self) -> PathBuf {
-    let mut path = self.base_dirs.data_local_dir().to_path_buf();
-    path.push(if cfg!(debug_assertions) {
-      "DonutBrowserDev"
-    } else {
-      "DonutBrowser"
-    });
-    path.push("profiles");
-    path
+    crate::app_dirs::profiles_dir()
   }
 
   pub fn get_binaries_dir(&self) -> PathBuf {
-    let mut path = self.base_dirs.data_local_dir().to_path_buf();
-    path.push(if cfg!(debug_assertions) {
-      "DonutBrowserDev"
-    } else {
-      "DonutBrowser"
-    });
-    path.push("binaries");
-    path
+    crate::app_dirs::binaries_dir()
   }
 
   #[allow(clippy::too_many_arguments)]

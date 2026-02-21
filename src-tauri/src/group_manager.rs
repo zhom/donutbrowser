@@ -1,8 +1,6 @@
-use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
-use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use crate::events;
@@ -33,48 +31,15 @@ struct GroupsData {
   groups: Vec<ProfileGroup>,
 }
 
-pub struct GroupManager {
-  base_dirs: BaseDirs,
-  data_dir_override: Option<PathBuf>,
-}
+pub struct GroupManager;
 
 impl GroupManager {
   pub fn new() -> Self {
-    Self {
-      base_dirs: BaseDirs::new().expect("Failed to get base directories"),
-      data_dir_override: std::env::var("DONUTBROWSER_DATA_DIR")
-        .ok()
-        .map(PathBuf::from),
-    }
+    Self
   }
 
-  // Helper for tests to override data directory without global env var
-  #[allow(dead_code)]
-  pub fn with_data_dir_override(dir: &Path) -> Self {
-    Self {
-      base_dirs: BaseDirs::new().expect("Failed to get base directories"),
-      data_dir_override: Some(dir.to_path_buf()),
-    }
-  }
-
-  fn get_groups_file_path(&self) -> PathBuf {
-    if let Some(dir) = &self.data_dir_override {
-      let mut override_path = dir.clone();
-      // Ensure the directory exists before returning the path
-      let _ = fs::create_dir_all(&override_path);
-      override_path.push("groups.json");
-      return override_path;
-    }
-
-    let mut path = self.base_dirs.data_local_dir().to_path_buf();
-    path.push(if cfg!(debug_assertions) {
-      "DonutBrowserDev"
-    } else {
-      "DonutBrowser"
-    });
-    path.push("data");
-    path.push("groups.json");
-    path
+  fn get_groups_file_path(&self) -> std::path::PathBuf {
+    crate::app_dirs::data_subdir().join("groups.json")
   }
 
   fn load_groups_data(&self) -> Result<GroupsData, Box<dyn std::error::Error>> {

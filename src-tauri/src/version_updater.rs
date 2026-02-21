@@ -1,4 +1,3 @@
-use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -67,13 +66,7 @@ impl VersionUpdater {
   }
 
   fn get_cache_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let base_dirs = BaseDirs::new().ok_or("Failed to get base directories")?;
-    let app_name = if cfg!(debug_assertions) {
-      "DonutBrowserDev"
-    } else {
-      "DonutBrowser"
-    };
-    let cache_dir = base_dirs.cache_dir().join(app_name).join("version_cache");
+    let cache_dir = crate::app_dirs::cache_dir().join("version_cache");
     fs::create_dir_all(&cache_dir)?;
     Ok(cache_dir)
   }
