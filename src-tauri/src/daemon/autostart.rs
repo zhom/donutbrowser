@@ -244,16 +244,22 @@ pub fn enable_autostart() -> io::Result<()> {
 
   let desktop_path = autostart_dir.join("donut-daemon.desktop");
 
+  let escaped_daemon_path = daemon_path
+    .display()
+    .to_string()
+    .replace('\\', "\\\\")
+    .replace('"', "\\\"")
+    .replace('`', "\\`")
+    .replace('$', "\\$");
   let desktop_content = format!(
     r#"[Desktop Entry]
 Type=Application
 Name=Donut Browser Daemon
-Exec={} run
+Exec="{escaped_daemon_path}" run
 Hidden=false
 NoDisplay=true
 X-GNOME-Autostart-enabled=true
 "#,
-    daemon_path.display()
   );
 
   fs::write(&desktop_path, desktop_content)?;

@@ -1682,9 +1682,11 @@ impl ProfileManager {
     let pac_content = "function FindProxyForURL(url, host) { return 'DIRECT'; }";
     let pac_path = uuid_dir.join("proxy.pac");
     fs::write(&pac_path, pac_content)?;
+    let pac_url =
+      url::Url::from_file_path(&pac_path).map_err(|_| "Failed to convert PAC path to file URL")?;
     preferences.push(format!(
-      "user_pref(\"network.proxy.autoconfig_url\", \"file://{}\");",
-      pac_path.to_string_lossy()
+      "user_pref(\"network.proxy.autoconfig_url\", \"{}\");",
+      pac_url.as_str()
     ));
 
     fs::write(user_js_path, preferences.join("\n"))?;
@@ -1841,6 +1843,33 @@ mod tests {
     assert!(
       content.contains("network.proxy.ssl_port\", 8080"),
       "Should set SSL proxy port"
+    );
+  }
+
+  #[test]
+  fn test_pac_url_encodes_spaces_in_path() {
+    let (manager, temp_dir) = create_test_profile_manager();
+
+    let uuid_dir = temp_dir.path().join("path with spaces");
+    let profile_dir = uuid_dir.join("profile");
+    fs::create_dir_all(&profile_dir).expect("Should create profile directory");
+
+    let result = manager.disable_proxy_settings_in_profile(&profile_dir);
+    assert!(result.is_ok(), "Should handle paths with spaces");
+
+    let user_js = fs::read_to_string(profile_dir.join("user.js")).unwrap();
+    let pac_line = user_js
+      .lines()
+      .find(|l| l.contains("autoconfig_url"))
+      .expect("Should have autoconfig_url preference");
+
+    assert!(
+      !pac_line.contains("path with spaces"),
+      "PAC URL should not contain raw spaces: {pac_line}"
+    );
+    assert!(
+      pac_line.contains("path%20with%20spaces"),
+      "PAC URL should percent-encode spaces: {pac_line}"
     );
   }
 }

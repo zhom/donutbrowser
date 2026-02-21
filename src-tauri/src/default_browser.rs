@@ -204,7 +204,7 @@ mod windows {
       .map_err(|e| format!("Failed to set ApplicationDescription: {}", e))?;
 
     app_key
-      .set_value("ApplicationIcon", &format!("{},0", exe_path))
+      .set_value("ApplicationIcon", &format!("\"{}\",0", exe_path))
       .map_err(|e| format!("Failed to set ApplicationIcon: {}", e))?;
 
     // Create Capabilities key
@@ -273,7 +273,7 @@ mod windows {
       .map_err(|e| format!("Failed to create DefaultIcon key: {}", e))?;
 
     icon_key
-      .set_value("", &format!("{},0", exe_path))
+      .set_value("", &format!("\"{}\",0", exe_path))
       .map_err(|e| format!("Failed to set default icon: {}", e))?;
 
     // Create shell\open\command key
