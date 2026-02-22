@@ -29,6 +29,7 @@ export interface BrowserProfile {
   sync_enabled?: boolean; // Whether sync is enabled for this profile
   last_sync?: number; // Timestamp of last successful sync (epoch seconds)
   host_os?: string; // OS where profile was created ("macos", "windows", "linux")
+  ephemeral?: boolean;
 }
 
 export type SyncStatus = "Disabled" | "Syncing" | "Synced" | "Error";

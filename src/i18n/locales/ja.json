@@ -158,7 +158,10 @@
       "copyCookies": "Cookieをコピー",
       "configure": "設定",
       "clone": "プロファイルを複製"
-    }
+    },
+    "ephemeral": "一時的",
+    "ephemeralDescription": "ブラウザを閉じるとデータが削除されます",
+    "ephemeralBadge": "一時的"
   },
   "createProfile": {
     "title": "新しいプロファイルを作成",

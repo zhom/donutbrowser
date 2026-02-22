@@ -45,6 +45,8 @@ pub struct BrowserProfile {
   pub last_sync: Option<u64>, // Timestamp of last successful sync (epoch seconds)
   #[serde(default)]
   pub host_os: Option<String>, // OS where profile was created ("macos", "windows", "linux")
+  #[serde(default)]
+  pub ephemeral: bool,
 }
 
 pub fn default_release_type() -> String {

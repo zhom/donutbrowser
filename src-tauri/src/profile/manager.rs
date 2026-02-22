@@ -48,6 +48,7 @@ impl ProfileManager {
     camoufox_config: Option<CamoufoxConfig>,
     wayfern_config: Option<WayfernConfig>,
     group_id: Option<String>,
+    ephemeral: bool,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
     if proxy_id.is_some() && vpn_id.is_some() {
       return Err("Cannot set both proxy_id and vpn_id".into());
@@ -72,7 +73,9 @@ impl ProfileManager {
 
     // Create profile directory with UUID and profile subdirectory
     create_dir_all(&profile_uuid_dir)?;
-    create_dir_all(&profile_data_dir)?;
+    if !ephemeral {
+      create_dir_all(&profile_data_dir)?;
+    }
 
     // For Camoufox profiles, generate fingerprint during creation
     let final_camoufox_config = if browser == "camoufox" {
@@ -162,6 +165,7 @@ impl ProfileManager {
           sync_enabled: false,
           last_sync: None,
           host_os: None,
+          ephemeral: false,
         };
 
         match self
@@ -277,6 +281,7 @@ impl ProfileManager {
           sync_enabled: false,
           last_sync: None,
           host_os: None,
+          ephemeral: false,
         };
 
         match self
@@ -324,6 +329,7 @@ impl ProfileManager {
       sync_enabled: false,
       last_sync: None,
       host_os: Some(get_host_os()),
+      ephemeral,
     };
 
     // Save profile info
@@ -337,16 +343,19 @@ impl ProfileManager {
     log::info!("Profile '{name}' created successfully with ID: {profile_id}");
 
     // Create user.js with common Firefox preferences and apply proxy settings if provided
-    if let Some(proxy_id_ref) = &proxy_id {
-      if let Some(proxy_settings) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id_ref) {
-        self.apply_proxy_settings_to_profile(&profile_data_dir, &proxy_settings, None)?;
+    // Skip for ephemeral profiles since the data dir is created at launch time
+    if !ephemeral {
+      if let Some(proxy_id_ref) = &proxy_id {
+        if let Some(proxy_settings) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id_ref) {
+          self.apply_proxy_settings_to_profile(&profile_data_dir, &proxy_settings, None)?;
+        } else {
+          // Proxy ID provided but not found, disable proxy
+          self.disable_proxy_settings_in_profile(&profile_data_dir)?;
+        }
       } else {
-        // Proxy ID provided but not found, disable proxy
+        // Create user.js with common Firefox preferences but no proxy
         self.disable_proxy_settings_in_profile(&profile_data_dir)?;
       }
-    } else {
-      // Create user.js with common Firefox preferences but no proxy
-      self.disable_proxy_settings_in_profile(&profile_data_dir)?;
     }
 
     // Emit profile creation event
@@ -842,6 +851,7 @@ impl ProfileManager {
       sync_enabled: false,
       last_sync: None,
       host_os: Some(get_host_os()),
+      ephemeral: false,
     };
 
     self.save_profile(&new_profile)?;
@@ -1290,7 +1300,8 @@ impl ProfileManager {
   ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
     let launcher = self.camoufox_manager;
     let profiles_dir = self.get_profiles_dir();
-    let profile_data_path = profile.get_profile_data_path(&profiles_dir);
+    let profile_data_path =
+      crate::ephemeral_dirs::get_effective_profile_path(profile, &profiles_dir);
     let profile_path_str = profile_data_path.to_string_lossy();
 
     // Check if there's a running Camoufox instance for this profile
@@ -1334,6 +1345,10 @@ impl ProfileManager {
       }
       Ok(None) => {
         // No running instance found, clear process ID if set and stop proxy
+        if profile.ephemeral {
+          crate::ephemeral_dirs::remove_ephemeral_dir(&profile.id.to_string());
+        }
+
         let profiles_dir = self.get_profiles_dir();
         let profile_uuid_dir = profiles_dir.join(profile.id.to_string());
         let metadata_file = profile_uuid_dir.join("metadata.json");
@@ -1364,6 +1379,10 @@ impl ProfileManager {
       Err(e) => {
         // Error checking status, assume not running and clear process ID
         log::warn!("Warning: Failed to check Camoufox status: {e}");
+        if profile.ephemeral {
+          crate::ephemeral_dirs::remove_ephemeral_dir(&profile.id.to_string());
+        }
+
         let profiles_dir = self.get_profiles_dir();
         let profile_uuid_dir = profiles_dir.join(profile.id.to_string());
         let metadata_file = profile_uuid_dir.join("metadata.json");
@@ -1405,7 +1424,8 @@ impl ProfileManager {
   ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
     let manager = self.wayfern_manager;
     let profiles_dir = self.get_profiles_dir();
-    let profile_data_path = profile.get_profile_data_path(&profiles_dir);
+    let profile_data_path =
+      crate::ephemeral_dirs::get_effective_profile_path(profile, &profiles_dir);
     let profile_path_str = profile_data_path.to_string_lossy();
 
     // Check if there's a running Wayfern instance for this profile
@@ -1449,6 +1469,10 @@ impl ProfileManager {
       }
       None => {
         // No running instance found, clear process ID if set
+        if profile.ephemeral {
+          crate::ephemeral_dirs::remove_ephemeral_dir(&profile.id.to_string());
+        }
+
         let profiles_dir = self.get_profiles_dir();
         let profile_uuid_dir = profiles_dir.join(profile.id.to_string());
         let metadata_file = profile_uuid_dir.join("metadata.json");
@@ -1870,6 +1894,7 @@ pub async fn create_browser_profile_with_group(
   camoufox_config: Option<CamoufoxConfig>,
   wayfern_config: Option<WayfernConfig>,
   group_id: Option<String>,
+  ephemeral: bool,
 ) -> Result<BrowserProfile, String> {
   let profile_manager = ProfileManager::instance();
   profile_manager
@@ -1884,6 +1909,7 @@ pub async fn create_browser_profile_with_group(
       camoufox_config,
       wayfern_config,
       group_id,
+      ephemeral,
     )
     .await
     .map_err(|e| format!("Failed to create profile: {e}"))
@@ -1984,6 +2010,7 @@ pub async fn create_browser_profile_new(
   camoufox_config: Option<CamoufoxConfig>,
   wayfern_config: Option<WayfernConfig>,
   group_id: Option<String>,
+  ephemeral: Option<bool>,
 ) -> Result<BrowserProfile, String> {
   let fingerprint_os = camoufox_config
     .as_ref()
@@ -2010,6 +2037,7 @@ pub async fn create_browser_profile_new(
     camoufox_config,
     wayfern_config,
     group_id,
+    ephemeral.unwrap_or(false),
   )
   .await
 }

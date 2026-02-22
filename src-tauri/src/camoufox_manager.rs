@@ -582,10 +582,15 @@ impl CamoufoxManager {
     profile: BrowserProfile,
     config: CamoufoxConfig,
     url: Option<String>,
+    override_profile_path: Option<std::path::PathBuf>,
   ) -> Result<CamoufoxLaunchResult, String> {
     // Get profile path
-    let profiles_dir = self.get_profiles_dir();
-    let profile_path = profile.get_profile_data_path(&profiles_dir);
+    let profile_path = if let Some(ref override_path) = override_profile_path {
+      override_path.clone()
+    } else {
+      let profiles_dir = self.get_profiles_dir();
+      profile.get_profile_data_path(&profiles_dir)
+    };
     let profile_path_str = profile_path.to_string_lossy();
 
     // Check if there's already a running instance for this profile
@@ -596,6 +601,24 @@ impl CamoufoxManager {
 
     // Clean up any dead instances before launching
     let _ = self.cleanup_dead_instances().await;
+
+    // For ephemeral profiles, write Firefox prefs to keep all data inside the profile dir
+    if override_profile_path.is_some() {
+      let cache_dir = profile_path.join("cache2");
+      let user_js_path = profile_path.join("user.js");
+      let prefs = format!(
+        concat!(
+          "user_pref(\"browser.cache.disk.parent_directory\", \"{}\");\n",
+          "user_pref(\"browser.cache.disk.enable\", false);\n",
+          "user_pref(\"browser.cache.memory.enable\", true);\n",
+          "user_pref(\"browser.privatebrowsing.autostart\", true);\n",
+        ),
+        cache_dir.to_string_lossy().replace('\\', "\\\\"),
+      );
+      if let Err(e) = std::fs::write(&user_js_path, prefs) {
+        log::warn!("Failed to write ephemeral user.js: {e}");
+      }
+    }
 
     self
       .launch_camoufox(

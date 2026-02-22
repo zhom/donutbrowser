@@ -158,7 +158,10 @@
       "copyCookies": "Copiar Cookies",
       "configure": "Configurar",
       "clone": "Clonar perfil"
-    }
+    },
+    "ephemeral": "Efêmero",
+    "ephemeralDescription": "Os dados do navegador são excluídos ao fechar",
+    "ephemeralBadge": "Efêmero"
   },
   "createProfile": {
     "title": "Criar Novo Perfil",

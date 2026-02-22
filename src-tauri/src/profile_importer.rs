@@ -557,6 +557,7 @@ impl ProfileImporter {
       sync_enabled: false,
       last_sync: None,
       host_os: Some(crate::profile::types::get_host_os()),
+      ephemeral: false,
     };
 
     // Save the profile metadata

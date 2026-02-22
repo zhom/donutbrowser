@@ -522,6 +522,7 @@ mod tests {
       sync_enabled: false,
       last_sync: None,
       host_os: None,
+      ephemeral: false,
     }
   }
 

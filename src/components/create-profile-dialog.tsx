@@ -8,6 +8,7 @@ import { LoadingButton } from "@/components/loading-button";
 import { ProxyFormDialog } from "@/components/proxy-form-dialog";
 import { SharedCamoufoxConfigForm } from "@/components/shared-camoufox-config-form";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -75,6 +76,7 @@ interface CreateProfileDialogProps {
     camoufoxConfig?: CamoufoxConfig;
     wayfernConfig?: WayfernConfig;
     groupId?: string;
+    ephemeral?: boolean;
   }) => Promise<void>;
   selectedGroupId?: string;
   crossOsUnlocked?: boolean;
@@ -164,6 +166,7 @@ export function CreateProfileDialog({
   const { vpnConfigs } = useVpnEvents();
   const [showProxyForm, setShowProxyForm] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [ephemeral, setEphemeral] = useState(false);
   const [releaseTypes, setReleaseTypes] = useState<BrowserReleaseTypes>();
   const [isLoadingReleaseTypes, setIsLoadingReleaseTypes] = useState(false);
   const [releaseTypesError, setReleaseTypesError] = useState<string | null>(
@@ -382,6 +385,7 @@ export function CreateProfileDialog({
             wayfernConfig: finalWayfernConfig,
             groupId:
               selectedGroupId !== "default" ? selectedGroupId : undefined,
+            ephemeral,
           });
         } else {
           // Default to Camoufox
@@ -405,6 +409,7 @@ export function CreateProfileDialog({
             camoufoxConfig: finalCamoufoxConfig,
             groupId:
               selectedGroupId !== "default" ? selectedGroupId : undefined,
+            ephemeral,
           });
         }
       } else {
@@ -459,6 +464,7 @@ export function CreateProfileDialog({
     setWayfernConfig({
       os: getCurrentOS() as WayfernOS, // Reset to current OS
     });
+    setEphemeral(false);
     onClose();
   };
 
@@ -658,6 +664,28 @@ export function CreateProfileDialog({
                             }}
                             placeholder="Enter profile name"
                           />
+                        </div>
+
+                        {/* Ephemeral Toggle */}
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            id="ephemeral"
+                            checked={ephemeral}
+                            onCheckedChange={(checked) =>
+                              setEphemeral(checked === true)
+                            }
+                          />
+                          <div className="flex flex-col">
+                            <Label
+                              htmlFor="ephemeral"
+                              className="cursor-pointer"
+                            >
+                              Ephemeral
+                            </Label>
+                            <span className="text-xs text-muted-foreground">
+                              Browser data is deleted when closed
+                            </span>
+                          </div>
                         </div>
 
                         {selectedBrowser === "wayfern" ? (

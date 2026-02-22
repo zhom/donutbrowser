@@ -158,7 +158,10 @@
       "copyCookies": "复制 Cookies",
       "configure": "配置",
       "clone": "克隆配置文件"
-    }
+    },
+    "ephemeral": "临时",
+    "ephemeralDescription": "关闭浏览器时数据将被删除",
+    "ephemeralBadge": "临时"
   },
   "createProfile": {
     "title": "创建新配置文件",

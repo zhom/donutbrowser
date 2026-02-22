@@ -21,6 +21,7 @@ mod camoufox_manager;
 mod default_browser;
 mod downloaded_browsers_registry;
 mod downloader;
+mod ephemeral_dirs;
 mod extraction;
 mod geoip_downloader;
 mod group_manager;
@@ -759,6 +760,9 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_macos_permissions::init())
     .setup(|app| {
+      // Clean up stale ephemeral profile dirs from previous sessions
+      ephemeral_dirs::cleanup_stale_dirs();
+
       // Start the daemon for tray icon
       if let Err(e) = daemon_spawn::ensure_daemon_running() {
         log::warn!("Failed to start daemon: {e}");

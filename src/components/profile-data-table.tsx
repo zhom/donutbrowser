@@ -1940,7 +1940,14 @@ export function ProfilesDataTable({
                 }
               }}
             >
-              {display}
+              <span className="flex items-center gap-1">
+                {display}
+                {profile.ephemeral && (
+                  <span className="px-1 py-0.5 text-[10px] leading-none rounded bg-muted text-muted-foreground font-medium">
+                    Ephemeral
+                  </span>
+                )}
+              </span>
             </button>
           );
         },
@@ -2397,6 +2404,7 @@ export function ProfilesDataTable({
                     )}
                   {(profile.browser === "camoufox" ||
                     profile.browser === "wayfern") &&
+                    !profile.ephemeral &&
                     meta.onCopyCookiesToProfile && (
                       <DropdownMenuItem
                         onClick={() => {
@@ -2414,6 +2422,7 @@ export function ProfilesDataTable({
                     )}
                   {(profile.browser === "camoufox" ||
                     profile.browser === "wayfern") &&
+                    !profile.ephemeral &&
                     meta.onImportCookies && (
                       <DropdownMenuItem
                         onClick={() => {
@@ -2431,6 +2440,7 @@ export function ProfilesDataTable({
                     )}
                   {(profile.browser === "camoufox" ||
                     profile.browser === "wayfern") &&
+                    !profile.ephemeral &&
                     meta.onExportCookies && (
                       <DropdownMenuItem
                         onClick={() => {
@@ -2446,14 +2456,16 @@ export function ProfilesDataTable({
                         </span>
                       </DropdownMenuItem>
                     )}
-                  <DropdownMenuItem
-                    onClick={() => {
-                      meta.onCloneProfile?.(profile);
-                    }}
-                    disabled={isDisabled}
-                  >
-                    Clone Profile
-                  </DropdownMenuItem>
+                  {!profile.ephemeral && (
+                    <DropdownMenuItem
+                      onClick={() => {
+                        meta.onCloneProfile?.(profile);
+                      }}
+                      disabled={isDisabled}
+                    >
+                      Clone Profile
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem
                     onClick={() => {
                       setProfileToDelete(profile);

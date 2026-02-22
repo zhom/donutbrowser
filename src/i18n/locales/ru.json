@@ -158,7 +158,10 @@
       "copyCookies": "Копировать Cookie",
       "configure": "Настроить",
       "clone": "Клонировать профиль"
-    }
+    },
+    "ephemeral": "Временный",
+    "ephemeralDescription": "Данные браузера удаляются при закрытии",
+    "ephemeralBadge": "Временный"
   },
   "createProfile": {
     "title": "Создать новый профиль",

@@ -380,6 +380,7 @@ impl WayfernManager {
     Ok(fingerprint_json)
   }
 
+  #[allow(clippy::too_many_arguments)]
   pub async fn launch_wayfern(
     &self,
     _app_handle: &AppHandle,
@@ -388,6 +389,7 @@ impl WayfernManager {
     config: &WayfernConfig,
     url: Option<&str>,
     proxy_url: Option<&str>,
+    ephemeral: bool,
   ) -> Result<WayfernLaunchResult, Box<dyn std::error::Error + Send + Sync>> {
     let executable_path = if let Some(path) = &config.executable_path {
       let p = PathBuf::from(path);
@@ -430,6 +432,11 @@ impl WayfernManager {
 
     if let Some(proxy) = proxy_url {
       args.push(format!("--proxy-server={proxy}"));
+    }
+
+    if ephemeral {
+      args.push(format!("--disk-cache-dir={}/cache", profile_path));
+      args.push("--incognito".to_string());
     }
 
     // Don't add URL to args - we'll navigate via CDP after setting fingerprint
@@ -713,6 +720,7 @@ impl WayfernManager {
         config,
         url,
         proxy_url,
+        profile.ephemeral,
       )
       .await
   }

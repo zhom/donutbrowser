@@ -494,6 +494,7 @@ export default function Home() {
       camoufoxConfig?: CamoufoxConfig;
       wayfernConfig?: WayfernConfig;
       groupId?: string;
+      ephemeral?: boolean;
     }) => {
       try {
         await invoke<BrowserProfile>("create_browser_profile_new", {
@@ -508,6 +509,7 @@ export default function Home() {
           groupId:
             profileData.groupId ||
             (selectedGroupId !== "default" ? selectedGroupId : undefined),
+          ephemeral: profileData.ephemeral,
         });
 
         // No need to manually reload - useProfileEvents will handle the update

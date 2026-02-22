@@ -229,6 +229,15 @@ impl BrowserRunner {
         log::warn!("Failed to configure Camoufox search engine: {e}");
       }
 
+      // Create ephemeral dir for ephemeral profiles
+      let override_profile_path = if profile.ephemeral {
+        let dir = crate::ephemeral_dirs::create_ephemeral_dir(&profile.id.to_string())
+          .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
+        Some(dir)
+      } else {
+        None
+      };
+
       // Launch Camoufox browser
       log::info!("Launching Camoufox for profile: {}", profile.name);
       let camoufox_result = self
@@ -238,6 +247,7 @@ impl BrowserRunner {
           updated_profile.clone(),
           camoufox_config,
           url,
+          override_profile_path,
         )
         .await
         .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
@@ -441,12 +451,19 @@ impl BrowserRunner {
         );
       }
 
+      // Create ephemeral dir for ephemeral profiles
+      if profile.ephemeral {
+        crate::ephemeral_dirs::create_ephemeral_dir(&profile.id.to_string())
+          .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
+      }
+
       // Launch Wayfern browser
       log::info!("Launching Wayfern for profile: {}", profile.name);
 
       // Get profile path for Wayfern
       let profiles_dir = self.profile_manager.get_profiles_dir();
-      let profile_data_path = updated_profile.get_profile_data_path(&profiles_dir);
+      let profile_data_path =
+        crate::ephemeral_dirs::get_effective_profile_path(&updated_profile, &profiles_dir);
       let profile_path_str = profile_data_path.to_string_lossy().to_string();
 
       // Get proxy URL from config
@@ -461,6 +478,7 @@ impl BrowserRunner {
           &wayfern_config,
           url.as_deref(),
           proxy_url,
+          profile.ephemeral,
         )
         .await
         .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
@@ -793,7 +811,8 @@ impl BrowserRunner {
     if profile.browser == "camoufox" {
       // Get the profile path based on the UUID
       let profiles_dir = self.profile_manager.get_profiles_dir();
-      let profile_data_path = profile.get_profile_data_path(&profiles_dir);
+      let profile_data_path =
+        crate::ephemeral_dirs::get_effective_profile_path(profile, &profiles_dir);
       let profile_path_str = profile_data_path.to_string_lossy();
 
       // Check if the process is running
@@ -847,7 +866,8 @@ impl BrowserRunner {
     // Handle Wayfern profiles using WayfernManager
     if profile.browser == "wayfern" {
       let profiles_dir = self.profile_manager.get_profiles_dir();
-      let profile_data_path = profile.get_profile_data_path(&profiles_dir);
+      let profile_data_path =
+        crate::ephemeral_dirs::get_effective_profile_path(profile, &profiles_dir);
       let profile_path_str = profile_data_path.to_string_lossy();
 
       // Check if the process is running
@@ -1245,7 +1265,8 @@ impl BrowserRunner {
     if profile.browser == "camoufox" {
       // Search by profile path to find the running Camoufox instance
       let profiles_dir = self.profile_manager.get_profiles_dir();
-      let profile_data_path = profile.get_profile_data_path(&profiles_dir);
+      let profile_data_path =
+        crate::ephemeral_dirs::get_effective_profile_path(profile, &profiles_dir);
       let profile_path_str = profile_data_path.to_string_lossy();
 
       log::info!(
@@ -1663,6 +1684,10 @@ impl BrowserRunner {
         );
       }
 
+      if profile.ephemeral {
+        crate::ephemeral_dirs::remove_ephemeral_dir(&profile.id.to_string());
+      }
+
       log::info!(
         "Camoufox process cleanup completed for profile: {} (ID: {})",
         profile.name,
@@ -1688,7 +1713,8 @@ impl BrowserRunner {
     // Handle Wayfern profiles using WayfernManager
     if profile.browser == "wayfern" {
       let profiles_dir = self.profile_manager.get_profiles_dir();
-      let profile_data_path = profile.get_profile_data_path(&profiles_dir);
+      let profile_data_path =
+        crate::ephemeral_dirs::get_effective_profile_path(profile, &profiles_dir);
       let profile_path_str = profile_data_path.to_string_lossy();
 
       log::info!(
@@ -1979,6 +2005,10 @@ impl BrowserRunner {
           updated_profile.name,
           payload.is_running
         );
+      }
+
+      if profile.ephemeral {
+        crate::ephemeral_dirs::remove_ephemeral_dir(&profile.id.to_string());
       }
 
       log::info!(

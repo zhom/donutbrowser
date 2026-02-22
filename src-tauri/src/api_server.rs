@@ -605,6 +605,7 @@ async fn create_profile(
       camoufox_config,
       wayfern_config,
       request.group_id.clone(),
+      false,
     )
     .await
   {
