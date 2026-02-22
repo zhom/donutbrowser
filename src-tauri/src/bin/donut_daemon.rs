@@ -190,21 +190,22 @@ fn run_daemon() {
   }
 
   #[cfg(windows)]
-  unsafe {
-    use windows::Win32::System::Console::{SetConsoleCtrlHandler, PHANDLER_ROUTINE};
-
-    unsafe extern "system" fn ctrl_handler(_ctrl_type: u32) -> windows::Win32::Foundation::BOOL {
-      SHOULD_QUIT.store(true, std::sync::atomic::Ordering::SeqCst);
-      windows::Win32::Foundation::TRUE
+  {
+    extern "system" {
+      fn SetConsoleCtrlHandler(
+        handler: Option<unsafe extern "system" fn(u32) -> i32>,
+        add: i32,
+      ) -> i32;
     }
 
-    let _ = SetConsoleCtrlHandler(
-      Some(std::mem::transmute::<
-        unsafe extern "system" fn(u32) -> windows::Win32::Foundation::BOOL,
-        PHANDLER_ROUTINE,
-      >(ctrl_handler)),
-      true,
-    );
+    unsafe extern "system" fn ctrl_handler(_ctrl_type: u32) -> i32 {
+      SHOULD_QUIT.store(true, std::sync::atomic::Ordering::SeqCst);
+      1 // TRUE
+    }
+
+    unsafe {
+      SetConsoleCtrlHandler(Some(ctrl_handler), 1);
+    }
   }
 
   // Run the event loop
