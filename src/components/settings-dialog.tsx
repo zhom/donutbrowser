@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import { BsCamera, BsMic } from "react-icons/bs";
 import { LoadingButton } from "@/components/loading-button";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   ColorPicker,
   ColorPickerAlpha,
@@ -24,6 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Popover,
@@ -113,6 +115,11 @@ export function SettingsDialog({
   const [requestingPermission, setRequestingPermission] =
     useState<PermissionType | null>(null);
   const [isMacOS, setIsMacOS] = useState(false);
+  const [hasE2ePassword, setHasE2ePassword] = useState(false);
+  const [e2ePassword, setE2ePassword] = useState("");
+  const [e2ePasswordConfirm, setE2ePasswordConfirm] = useState("");
+  const [e2eError, setE2eError] = useState("");
+  const [isSavingE2e, setIsSavingE2e] = useState(false);
 
   const { t } = useTranslation();
   const { setTheme } = useTheme();
@@ -201,6 +208,13 @@ export function SettingsDialog({
           selectedThemeId: "tokyo-night",
           colors: tokyoNightTheme.colors,
         });
+      }
+      // Check E2E password status
+      try {
+        const hasPassword = await invoke<boolean>("check_has_e2e_password");
+        setHasE2ePassword(hasPassword);
+      } catch {
+        setHasE2ePassword(false);
       }
     } catch (error) {
       console.error("Failed to load settings:", error);
@@ -825,6 +839,145 @@ export function SettingsDialog({
             >
               Open Integrations Settings
             </RippleButton>
+          </div>
+
+          {/* Sync Encryption Section */}
+          <div className="space-y-4">
+            <Label className="text-base font-medium">
+              {t("settings.encryption.title", "Sync Encryption")}
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              {t(
+                "settings.encryption.description",
+                "Set a password to enable E2E encrypted sync. If you lose this password, encrypted profiles cannot be recovered.",
+              )}
+            </p>
+
+            {hasE2ePassword ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Badge variant="default">
+                    {t("settings.encryption.passwordSet", "Active")}
+                  </Badge>
+                  <span className="text-sm text-muted-foreground">
+                    {t(
+                      "settings.encryption.passwordSetDescription",
+                      "E2E encryption password is set",
+                    )}
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setHasE2ePassword(false);
+                      setE2ePassword("");
+                      setE2ePasswordConfirm("");
+                      setE2eError("");
+                    }}
+                  >
+                    {t("settings.encryption.changePassword", "Change Password")}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        await invoke("delete_e2e_password");
+                        setHasE2ePassword(false);
+                        showSuccessToast(
+                          t(
+                            "settings.encryption.removed",
+                            "Encryption password removed",
+                          ),
+                        );
+                      } catch (error) {
+                        showErrorToast(String(error));
+                      }
+                    }}
+                  >
+                    {t("settings.encryption.removePassword", "Remove Password")}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <Input
+                  type="password"
+                  placeholder={t(
+                    "settings.encryption.passwordPlaceholder",
+                    "Password (min 8 characters)",
+                  )}
+                  value={e2ePassword}
+                  onChange={(e) => {
+                    setE2ePassword(e.target.value);
+                    setE2eError("");
+                  }}
+                />
+                <Input
+                  type="password"
+                  placeholder={t(
+                    "settings.encryption.confirmPlaceholder",
+                    "Confirm password",
+                  )}
+                  value={e2ePasswordConfirm}
+                  onChange={(e) => {
+                    setE2ePasswordConfirm(e.target.value);
+                    setE2eError("");
+                  }}
+                />
+                {e2eError && (
+                  <p className="text-sm text-destructive">{e2eError}</p>
+                )}
+                <LoadingButton
+                  variant="default"
+                  size="sm"
+                  isLoading={isSavingE2e}
+                  onClick={async () => {
+                    if (e2ePassword.length < 8) {
+                      setE2eError(
+                        t(
+                          "settings.encryption.passwordTooShort",
+                          "Password must be at least 8 characters",
+                        ),
+                      );
+                      return;
+                    }
+                    if (e2ePassword !== e2ePasswordConfirm) {
+                      setE2eError(
+                        t(
+                          "settings.encryption.passwordMismatch",
+                          "Passwords do not match",
+                        ),
+                      );
+                      return;
+                    }
+                    setIsSavingE2e(true);
+                    try {
+                      await invoke("set_e2e_password", {
+                        password: e2ePassword,
+                      });
+                      setHasE2ePassword(true);
+                      setE2ePassword("");
+                      setE2ePasswordConfirm("");
+                      showSuccessToast(
+                        t(
+                          "settings.encryption.passwordSaved",
+                          "Encryption password set",
+                        ),
+                      );
+                    } catch (error) {
+                      showErrorToast(String(error));
+                    } finally {
+                      setIsSavingE2e(false);
+                    }
+                  }}
+                >
+                  {t("settings.encryption.setPassword", "Set Password")}
+                </LoadingButton>
+              </div>
+            )}
           </div>
 
           {/* Commercial License Section */}

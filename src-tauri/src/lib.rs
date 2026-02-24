@@ -78,15 +78,17 @@ use downloaded_browsers_registry::{
 use downloader::{cancel_download, download_browser};
 
 use settings_manager::{
-  decline_launch_on_login, enable_launch_on_login, get_app_settings, get_sync_settings,
-  get_system_language, get_table_sorting_settings, save_app_settings, save_sync_settings,
+  decline_launch_on_login, dismiss_window_resize_warning, enable_launch_on_login, get_app_settings,
+  get_sync_settings, get_system_language, get_table_sorting_settings,
+  get_window_resize_warning_dismissed, save_app_settings, save_sync_settings,
   save_table_sorting_settings, should_show_launch_on_login_prompt,
 };
 
 use sync::{
-  enable_sync_for_all_entities, get_unsynced_entity_counts, is_group_in_use_by_synced_profile,
-  is_proxy_in_use_by_synced_profile, is_vpn_in_use_by_synced_profile, request_profile_sync,
-  set_group_sync_enabled, set_profile_sync_enabled, set_proxy_sync_enabled, set_vpn_sync_enabled,
+  check_has_e2e_password, delete_e2e_password, enable_sync_for_all_entities,
+  get_unsynced_entity_counts, is_group_in_use_by_synced_profile, is_proxy_in_use_by_synced_profile,
+  is_vpn_in_use_by_synced_profile, request_profile_sync, set_e2e_password, set_group_sync_enabled,
+  set_profile_sync_mode, set_proxy_sync_enabled, set_vpn_sync_enabled,
 };
 
 use tag_manager::get_all_tags;
@@ -466,13 +468,23 @@ async fn import_vpn_config(
     .map_err(|e| format!("Failed to lock VPN storage: {e}"))?;
 
   match storage.import_config(&content, &filename, name.clone()) {
-    Ok(config) => Ok(vpn::VpnImportResult {
-      success: true,
-      vpn_id: Some(config.id),
-      vpn_type: Some(config.vpn_type),
-      name: config.name,
-      error: None,
-    }),
+    Ok(config) => {
+      if config.sync_enabled {
+        if let Some(scheduler) = sync::get_global_scheduler() {
+          let id = config.id.clone();
+          tauri::async_runtime::spawn(async move {
+            scheduler.queue_vpn_sync(id).await;
+          });
+        }
+      }
+      Ok(vpn::VpnImportResult {
+        success: true,
+        vpn_id: Some(config.id),
+        vpn_type: Some(config.vpn_type),
+        name: config.name,
+        error: None,
+      })
+    }
     Err(e) => Ok(vpn::VpnImportResult {
       success: false,
       vpn_id: None,
@@ -563,24 +575,50 @@ async fn create_vpn_config_manual(
   vpn_type: vpn::VpnType,
   config_data: String,
 ) -> Result<vpn::VpnConfig, String> {
-  let storage = vpn::VPN_STORAGE
-    .lock()
-    .map_err(|e| format!("Failed to lock VPN storage: {e}"))?;
+  let config = {
+    let storage = vpn::VPN_STORAGE
+      .lock()
+      .map_err(|e| format!("Failed to lock VPN storage: {e}"))?;
 
-  storage
-    .create_config_manual(&name, vpn_type, &config_data)
-    .map_err(|e| format!("Failed to create VPN config: {e}"))
+    storage
+      .create_config_manual(&name, vpn_type, &config_data)
+      .map_err(|e| format!("Failed to create VPN config: {e}"))?
+  };
+
+  if config.sync_enabled {
+    if let Some(scheduler) = sync::get_global_scheduler() {
+      let id = config.id.clone();
+      tauri::async_runtime::spawn(async move {
+        scheduler.queue_vpn_sync(id).await;
+      });
+    }
+  }
+
+  Ok(config)
 }
 
 #[tauri::command]
 async fn update_vpn_config(vpn_id: String, name: String) -> Result<vpn::VpnConfig, String> {
-  let storage = vpn::VPN_STORAGE
-    .lock()
-    .map_err(|e| format!("Failed to lock VPN storage: {e}"))?;
+  let config = {
+    let storage = vpn::VPN_STORAGE
+      .lock()
+      .map_err(|e| format!("Failed to lock VPN storage: {e}"))?;
 
-  storage
-    .update_config_name(&vpn_id, &name)
-    .map_err(|e| format!("Failed to update VPN config: {e}"))
+    storage
+      .update_config_name(&vpn_id, &name)
+      .map_err(|e| format!("Failed to update VPN config: {e}"))?
+  };
+
+  if config.sync_enabled {
+    if let Some(scheduler) = sync::get_global_scheduler() {
+      let id = config.id.clone();
+      tauri::async_runtime::spawn(async move {
+        scheduler.queue_vpn_sync(id).await;
+      });
+    }
+  }
+
+  Ok(config)
 }
 
 #[tauri::command]
@@ -750,9 +788,16 @@ pub fn run() {
         })
         .build(),
     )
-    .plugin(tauri_plugin_single_instance::init(|_, args, _cwd| {
-      log::info!("Single instance triggered with args: {args:?}");
-    }))
+    .plugin(tauri_plugin_single_instance::init(
+      |app_handle, args, _cwd| {
+        log::info!("Single instance triggered with args: {args:?}");
+        if let Some(window) = app_handle.get_webview_window("main") {
+          let _ = window.show();
+          let _ = window.set_focus();
+          let _ = window.unminimize();
+        }
+      },
+    ))
     .plugin(tauri_plugin_deep_link::init())
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_opener::init())
@@ -760,8 +805,8 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_macos_permissions::init())
     .setup(|app| {
-      // Clean up stale ephemeral profile dirs from previous sessions
-      ephemeral_dirs::cleanup_stale_dirs();
+      // Recover ephemeral dir mappings from RAM-backed storage (tmpfs/ramdisk)
+      ephemeral_dirs::recover_ephemeral_dirs();
 
       // Start the daemon for tray icon
       if let Err(e) = daemon_spawn::ensure_daemon_running() {
@@ -772,7 +817,6 @@ pub fn run() {
       daemon_spawn::register_gui_pid();
 
       // Monitor daemon health - quit GUI if daemon dies
-      let app_handle_daemon = app.handle().clone();
       tauri::async_runtime::spawn(async move {
         // Give the daemon time to fully start
         tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
@@ -788,9 +832,11 @@ pub fn run() {
             .unwrap_or(false);
 
           if !is_running {
-            log::warn!("Daemon is no longer running, quitting GUI");
-            app_handle_daemon.exit(0);
-            break;
+            log::warn!("Daemon is no longer running, quitting GUI immediately");
+            // Use process::exit for immediate termination. Tauri's exit()
+            // triggers a slow graceful shutdown that can take over a minute
+            // waiting for async tasks (sync, version updater, etc.) to finish.
+            std::process::exit(0);
           }
         }
       });
@@ -1225,6 +1271,12 @@ pub fn run() {
               {
                 log::warn!("Failed to check for missing profiles: {}", e);
               }
+              if let Err(e) = engine
+                .check_for_missing_synced_entities(&app_handle_sync)
+                .await
+              {
+                log::warn!("Failed to check for missing entities: {}", e);
+              }
             }
             Err(e) => {
               log::debug!("Sync not configured, skipping missing profile check: {}", e);
@@ -1288,6 +1340,8 @@ pub fn run() {
       get_table_sorting_settings,
       save_table_sorting_settings,
       get_system_language,
+      dismiss_window_resize_warning,
+      get_window_resize_warning_dismissed,
       clear_all_version_cache_and_refetch,
       is_default_browser,
       open_url_with_profile,
@@ -1336,7 +1390,7 @@ pub fn run() {
       get_traffic_stats_for_period,
       get_sync_settings,
       save_sync_settings,
-      set_profile_sync_enabled,
+      set_profile_sync_mode,
       request_profile_sync,
       set_proxy_sync_enabled,
       set_group_sync_enabled,
@@ -1346,6 +1400,9 @@ pub fn run() {
       is_vpn_in_use_by_synced_profile,
       get_unsynced_entity_counts,
       enable_sync_for_all_entities,
+      set_e2e_password,
+      check_has_e2e_password,
+      delete_e2e_password,
       read_profile_cookies,
       copy_profile_cookies,
       import_cookies_from_file,
@@ -1385,8 +1442,17 @@ pub fn run() {
       cloud_auth::create_cloud_location_proxy,
       cloud_auth::restart_sync_service
     ])
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    .build(tauri::generate_context!())
+    .expect("error while building tauri application")
+    .run(|app_handle, event| {
+      if let tauri::RunEvent::Reopen { .. } = event {
+        if let Some(window) = app_handle.get_webview_window("main") {
+          let _ = window.show();
+          let _ = window.set_focus();
+          let _ = window.unminimize();
+        }
+      }
+    });
 }
 
 #[cfg(test)]
@@ -1412,6 +1478,7 @@ mod tests {
       "get_vpn_status",
       "get_vpn_config",
       "list_active_vpn_connections",
+      "export_profile_cookies",
     ];
 
     // Extract command names from the generate_handler! macro in this file

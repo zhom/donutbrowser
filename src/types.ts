@@ -26,11 +26,14 @@ export interface BrowserProfile {
   group_id?: string; // Reference to profile group
   tags?: string[];
   note?: string; // User note
-  sync_enabled?: boolean; // Whether sync is enabled for this profile
+  sync_mode?: SyncMode;
+  encryption_salt?: string;
   last_sync?: number; // Timestamp of last successful sync (epoch seconds)
   host_os?: string; // OS where profile was created ("macos", "windows", "linux")
   ephemeral?: boolean;
 }
+
+export type SyncMode = "Disabled" | "Regular" | "Encrypted";
 
 export type SyncStatus = "Disabled" | "Syncing" | "Synced" | "Error";
 
@@ -68,6 +71,10 @@ export interface ProxyCheckResult {
   country_code?: string;
   timestamp: number;
   is_valid: boolean;
+}
+
+export function isSyncEnabled(profile: BrowserProfile): boolean {
+  return profile.sync_mode != null && profile.sync_mode !== "Disabled";
 }
 
 export const CLOUD_PROXY_ID = "cloud-included-proxy";

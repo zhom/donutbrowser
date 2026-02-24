@@ -53,6 +53,8 @@ pub struct AppSettings {
   pub launch_on_login_declined: bool, // User permanently declined the launch-on-login prompt
   #[serde(default)]
   pub language: Option<String>, // ISO 639-1: "en", "es", "pt", "fr", "zh", "ja", "ru", or None for system default
+  #[serde(default)]
+  pub window_resize_warning_dismissed: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -86,6 +88,7 @@ impl Default for AppSettings {
       mcp_token: None,
       launch_on_login_declined: false,
       language: None,
+      window_resize_warning_dismissed: false,
     }
   }
 }
@@ -781,6 +784,15 @@ pub async fn save_app_settings(
     settings.mcp_token = None;
   }
 
+  // Preserve server-managed flags that the frontend may not have up-to-date.
+  // Read directly from file to avoid load_settings' save-on-load behavior.
+  if let Ok(content) = std::fs::read_to_string(manager.get_settings_file()) {
+    if let Ok(current) = serde_json::from_str::<AppSettings>(&content) {
+      settings.window_resize_warning_dismissed = current.window_resize_warning_dismissed;
+      settings.launch_on_login_declined = current.launch_on_login_declined;
+    }
+  }
+
   let mut persist_settings = settings.clone();
   persist_settings.api_token = None;
   persist_settings.mcp_token = None;
@@ -899,6 +911,27 @@ pub async fn save_sync_settings(
 }
 
 #[tauri::command]
+pub async fn dismiss_window_resize_warning() -> Result<(), String> {
+  let manager = SettingsManager::instance();
+  let mut settings = manager
+    .load_settings()
+    .map_err(|e| format!("Failed to load settings: {e}"))?;
+  settings.window_resize_warning_dismissed = true;
+  manager
+    .save_settings(&settings)
+    .map_err(|e| format!("Failed to save settings: {e}"))
+}
+
+#[tauri::command]
+pub async fn get_window_resize_warning_dismissed() -> Result<bool, String> {
+  let manager = SettingsManager::instance();
+  let settings = manager
+    .load_settings()
+    .map_err(|e| format!("Failed to load settings: {e}"))?;
+  Ok(settings.window_resize_warning_dismissed)
+}
+
+#[tauri::command]
 pub fn get_system_language() -> String {
   sys_locale::get_locale()
     .map(|locale| {
@@ -999,6 +1032,7 @@ mod tests {
       mcp_token: None,
       launch_on_login_declined: false,
       language: None,
+      window_resize_warning_dismissed: false,
     };
 
     let save_result = manager.save_settings(&test_settings);

@@ -3,7 +3,7 @@ use crate::browser::{create_browser, BrowserType, ProxySettings};
 use crate::camoufox_manager::CamoufoxConfig;
 use crate::downloaded_browsers_registry::DownloadedBrowsersRegistry;
 use crate::events;
-use crate::profile::types::{get_host_os, BrowserProfile};
+use crate::profile::types::{get_host_os, BrowserProfile, SyncMode};
 use crate::proxy_manager::PROXY_MANAGER;
 use crate::wayfern_manager::WayfernConfig;
 use std::fs::{self, create_dir_all};
@@ -162,7 +162,8 @@ impl ProfileManager {
           group_id: group_id.clone(),
           tags: Vec::new(),
           note: None,
-          sync_enabled: false,
+          sync_mode: SyncMode::Disabled,
+          encryption_salt: None,
           last_sync: None,
           host_os: None,
           ephemeral: false,
@@ -278,7 +279,8 @@ impl ProfileManager {
           group_id: group_id.clone(),
           tags: Vec::new(),
           note: None,
-          sync_enabled: false,
+          sync_mode: SyncMode::Disabled,
+          encryption_salt: None,
           last_sync: None,
           host_os: None,
           ephemeral: false,
@@ -326,7 +328,8 @@ impl ProfileManager {
       group_id: group_id.clone(),
       tags: Vec::new(),
       note: None,
-      sync_enabled: false,
+      sync_mode: SyncMode::Disabled,
+      encryption_salt: None,
       last_sync: None,
       host_os: Some(get_host_os()),
       ephemeral,
@@ -475,8 +478,8 @@ impl ProfileManager {
       );
     }
 
-    // Remember sync_enabled before deleting local files
-    let was_sync_enabled = profile.sync_enabled;
+    // Remember sync mode before deleting local files
+    let was_sync_enabled = profile.is_sync_enabled();
 
     let profiles_dir = self.get_profiles_dir();
     let profile_uuid_dir = profiles_dir.join(profile.id.to_string());
@@ -622,7 +625,7 @@ impl ProfileManager {
       self.save_profile(&profile)?;
 
       // Auto-enable sync for new group if profile has sync enabled
-      if profile.sync_enabled {
+      if profile.is_sync_enabled() {
         if let Some(ref new_group_id) = group_id {
           let group_id_clone = new_group_id.clone();
           let app_handle_clone = app_handle.clone();
@@ -747,7 +750,7 @@ impl ProfileManager {
       }
 
       // Track sync-enabled profiles for remote deletion
-      if profile.sync_enabled {
+      if profile.is_sync_enabled() {
         sync_enabled_ids.push(profile_id.clone());
       }
 
@@ -848,7 +851,8 @@ impl ProfileManager {
       group_id: source.group_id,
       tags: source.tags,
       note: source.note,
-      sync_enabled: false,
+      sync_mode: SyncMode::Disabled,
+      encryption_salt: None,
       last_sync: None,
       host_os: Some(get_host_os()),
       ephemeral: false,
@@ -1024,7 +1028,7 @@ impl ProfileManager {
       })?;
 
     // Auto-enable sync for new proxy if profile has sync enabled
-    if profile.sync_enabled {
+    if profile.is_sync_enabled() {
       if let Some(ref new_proxy_id) = proxy_id {
         let _ = crate::sync::enable_proxy_sync_if_needed(new_proxy_id, &app_handle).await;
         if let Some(scheduler) = crate::sync::get_global_scheduler() {

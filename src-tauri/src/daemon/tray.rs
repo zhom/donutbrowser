@@ -1,9 +1,25 @@
-use muda::{Menu, MenuItem, PredefinedMenuItem};
+use muda::{Menu, MenuItem};
 use std::process::Command;
-use std::sync::atomic::{AtomicBool, Ordering};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
-static GUI_RUNNING: AtomicBool = AtomicBool::new(false);
+#[cfg(windows)]
+fn win_process_exists(pid: u32) -> bool {
+  use std::ptr;
+  const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+
+  extern "system" {
+    fn OpenProcess(dwDesiredAccess: u32, bInheritHandles: i32, dwProcessId: u32) -> *mut ();
+    fn CloseHandle(hObject: *mut ()) -> i32;
+  }
+
+  let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+  if handle.is_null() || handle == ptr::null_mut() {
+    false
+  } else {
+    unsafe { CloseHandle(handle) };
+    true
+  }
+}
 
 pub fn load_icon() -> Icon {
   // On Windows, use the full-color icon so it renders well on dark taskbars.
@@ -25,7 +41,6 @@ pub fn load_icon() -> Icon {
 
 pub struct TrayMenu {
   pub menu: Menu,
-  pub open_item: MenuItem,
   pub quit_item: MenuItem,
 }
 
@@ -39,19 +54,11 @@ impl TrayMenu {
   pub fn new() -> Self {
     let menu = Menu::new();
 
-    let open_item = MenuItem::new("Open Donut Browser", true, None);
-    let separator = PredefinedMenuItem::separator();
     let quit_item = MenuItem::new("Quit Donut Browser", true, None);
 
-    menu.append(&open_item).unwrap();
-    menu.append(&separator).unwrap();
     menu.append(&quit_item).unwrap();
 
-    Self {
-      menu,
-      open_item,
-      quit_item,
-    }
+    Self { menu, quit_item }
   }
 }
 
@@ -68,25 +75,41 @@ pub fn create_tray_icon(icon: Icon, menu: &Menu) -> TrayIcon {
   builder.build().expect("Failed to create tray icon")
 }
 
-pub fn open_gui() {
-  if GUI_RUNNING.load(Ordering::SeqCst) {
-    log::info!("GUI already running, activating...");
-    activate_gui();
-    return;
+/// Resolve the .app bundle path from the current daemon executable.
+/// In production the daemon is at `Donut.app/Contents/MacOS/donut-daemon`.
+#[cfg(target_os = "macos")]
+fn get_app_bundle_path() -> Option<std::path::PathBuf> {
+  let exe = std::env::current_exe().ok()?;
+  let macos_dir = exe.parent()?;
+  let contents_dir = macos_dir.parent()?;
+  let app_dir = contents_dir.parent()?;
+  if app_dir.extension().and_then(|e| e.to_str()) == Some("app") {
+    Some(app_dir.to_path_buf())
+  } else {
+    None
   }
+}
 
+pub fn open_gui() {
   log::info!("Opening GUI...");
 
+  // On macOS, use `open` WITHOUT `-n`. The daemon runs with Accessory
+  // activation policy so macOS won't confuse it with the GUI process.
+  // `open` will either activate the existing GUI or launch a new one.
+  // Using `-n` would bypass the single-instance plugin entirely.
   #[cfg(target_os = "macos")]
   {
-    let _ = Command::new("open").arg("-a").arg("Donut Browser").spawn();
+    if let Some(app_bundle) = get_app_bundle_path() {
+      let _ = Command::new("open").arg(&app_bundle).spawn();
+    } else {
+      let _ = Command::new("open").arg("-a").arg("Donut").spawn();
+    }
   }
 
   #[cfg(target_os = "windows")]
   {
     use std::path::PathBuf;
 
-    // In dev mode, find the main exe next to the daemon binary
     if let Ok(current_exe) = std::env::current_exe() {
       if let Some(exe_dir) = current_exe.parent() {
         let app_path = exe_dir.join("donutbrowser.exe");
@@ -118,15 +141,6 @@ pub fn open_gui() {
   }
 }
 
-pub fn activate_gui() {
-  #[cfg(target_os = "macos")]
-  {
-    let _ = Command::new("osascript")
-      .args(["-e", "tell application \"Donut Browser\" to activate"])
-      .spawn();
-  }
-}
-
 fn read_gui_pid() -> Option<u32> {
   let path = super::autostart::get_data_dir()?.join("daemon-state.json");
   let content = std::fs::read_to_string(path).ok()?;
@@ -147,8 +161,11 @@ fn kill_gui_by_pid() -> bool {
 
   #[cfg(windows)]
   {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
     Command::new("taskkill")
       .args(["/PID", &pid.to_string(), "/F"])
+      .creation_flags(CREATE_NO_WINDOW)
       .output()
       .map(|o| o.status.success())
       .unwrap_or(false)
@@ -172,27 +189,29 @@ pub fn quit_gui() {
 
   #[cfg(target_os = "macos")]
   {
+    // Use spawn() instead of output() to avoid blocking the event loop.
+    // AppleScript has a ~2 minute default timeout that would freeze the tray icon.
     let _ = Command::new("osascript")
-      .args(["-e", "tell application \"Donut Browser\" to quit"])
-      .output();
+      .args(["-e", "tell application \"Donut\" to quit"])
+      .spawn();
   }
 
   #[cfg(target_os = "windows")]
   {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
     let _ = Command::new("taskkill")
       .args(["/IM", "Donut.exe", "/F"])
-      .output();
+      .creation_flags(CREATE_NO_WINDOW)
+      .spawn();
     let _ = Command::new("taskkill")
       .args(["/IM", "donutbrowser.exe", "/F"])
-      .output();
+      .creation_flags(CREATE_NO_WINDOW)
+      .spawn();
   }
 
   #[cfg(target_os = "linux")]
   {
-    let _ = Command::new("pkill").args(["-x", "donutbrowser"]).output();
+    let _ = Command::new("pkill").args(["-x", "donutbrowser"]).spawn();
   }
-}
-
-pub fn set_gui_running(running: bool) {
-  GUI_RUNNING.store(running, Ordering::SeqCst);
 }

@@ -80,17 +80,6 @@ impl BrowserRunner {
     remote_debugging_port: Option<u16>,
     headless: bool,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
-    // Check if browser is disabled due to ongoing update
-    if self.auto_updater.is_browser_disabled(&profile.browser)? {
-      return Err(
-        format!(
-          "{} is currently being updated. Please wait for the update to complete.",
-          profile.browser
-        )
-        .into(),
-      );
-    }
-
     // Handle Camoufox profiles using CamoufoxManager
     if profile.browser == "camoufox" {
       // Get or create camoufox config

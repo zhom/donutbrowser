@@ -1099,6 +1099,12 @@ pub async fn restart_sync_service(app_handle: tauri::AppHandle) -> Result<(), St
           {
             log::warn!("Failed to check for missing profiles: {}", e);
           }
+          if let Err(e) = engine
+            .check_for_missing_synced_entities(&app_handle_sync)
+            .await
+          {
+            log::warn!("Failed to check for missing entities: {}", e);
+          }
         }
         Err(e) => {
           log::debug!("Sync not configured, skipping missing profile check: {}", e);

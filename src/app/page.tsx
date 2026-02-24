@@ -7,8 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CamoufoxConfigDialog } from "@/components/camoufox-config-dialog";
 import { CommercialTrialModal } from "@/components/commercial-trial-modal";
 import { CookieCopyDialog } from "@/components/cookie-copy-dialog";
-import { CookieExportDialog } from "@/components/cookie-export-dialog";
-import { CookieImportDialog } from "@/components/cookie-import-dialog";
+import { CookieManagementDialog } from "@/components/cookie-management-dialog";
 import { CreateProfileDialog } from "@/components/create-profile-dialog";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
 import { GroupAssignmentDialog } from "@/components/group-assignment-dialog";
@@ -28,6 +27,7 @@ import { SettingsDialog } from "@/components/settings-dialog";
 import { SyncAllDialog } from "@/components/sync-all-dialog";
 import { SyncConfigDialog } from "@/components/sync-config-dialog";
 import { WayfernTermsDialog } from "@/components/wayfern-terms-dialog";
+import { WindowResizeWarningDialog } from "@/components/window-resize-warning-dialog";
 import { useAppUpdateNotifications } from "@/hooks/use-app-update-notifications";
 import { useCloudAuth } from "@/hooks/use-cloud-auth";
 import { useCommercialTrial } from "@/hooks/use-commercial-trial";
@@ -144,12 +144,12 @@ export default function Home() {
   const [proxyAssignmentDialogOpen, setProxyAssignmentDialogOpen] =
     useState(false);
   const [cookieCopyDialogOpen, setCookieCopyDialogOpen] = useState(false);
-  const [cookieImportDialogOpen, setCookieImportDialogOpen] = useState(false);
-  const [currentProfileForCookieImport, setCurrentProfileForCookieImport] =
-    useState<BrowserProfile | null>(null);
-  const [cookieExportDialogOpen, setCookieExportDialogOpen] = useState(false);
-  const [currentProfileForCookieExport, setCurrentProfileForCookieExport] =
-    useState<BrowserProfile | null>(null);
+  const [cookieManagementDialogOpen, setCookieManagementDialogOpen] =
+    useState(false);
+  const [
+    currentProfileForCookieManagement,
+    setCurrentProfileForCookieManagement,
+  ] = useState<BrowserProfile | null>(null);
   const [selectedProfilesForCookies, setSelectedProfilesForCookies] = useState<
     string[]
   >([]);
@@ -167,6 +167,10 @@ export default function Home() {
     useState<BrowserProfile | null>(null);
   const [hasCheckedStartupPrompt, setHasCheckedStartupPrompt] = useState(false);
   const [launchOnLoginDialogOpen, setLaunchOnLoginDialogOpen] = useState(false);
+  const [windowResizeWarningOpen, setWindowResizeWarningOpen] = useState(false);
+  const windowResizeWarningResolver = useRef<
+    ((proceed: boolean) => void) | null
+  >(null);
   const [permissionDialogOpen, setPermissionDialogOpen] = useState(false);
   const [currentPermissionType, setCurrentPermissionType] =
     useState<PermissionType>("microphone");
@@ -528,6 +532,26 @@ export default function Home() {
   const launchProfile = useCallback(async (profile: BrowserProfile) => {
     console.log("Starting launch for profile:", profile.name);
 
+    // Show one-time warning about window resizing for fingerprinted browsers
+    if (profile.browser === "camoufox" || profile.browser === "wayfern") {
+      try {
+        const dismissed = await invoke<boolean>(
+          "get_window_resize_warning_dismissed",
+        );
+        if (!dismissed) {
+          const proceed = await new Promise<boolean>((resolve) => {
+            windowResizeWarningResolver.current = resolve;
+            setWindowResizeWarningOpen(true);
+          });
+          if (!proceed) {
+            return;
+          }
+        }
+      } catch (error) {
+        console.error("Failed to check window resize warning:", error);
+      }
+    }
+
     try {
       const result = await invoke<BrowserProfile>("launch_browser_profile", {
         profile,
@@ -537,7 +561,6 @@ export default function Home() {
       console.error("Failed to launch browser:", err);
       const errorMessage = err instanceof Error ? err.message : String(err);
       showErrorToast(`Failed to launch browser: ${errorMessage}`);
-      // Re-throw the error so the table component can handle loading state cleanup
       throw err;
     }
   }, []);
@@ -698,14 +721,9 @@ export default function Home() {
     setCookieCopyDialogOpen(true);
   }, []);
 
-  const handleImportCookies = useCallback((profile: BrowserProfile) => {
-    setCurrentProfileForCookieImport(profile);
-    setCookieImportDialogOpen(true);
-  }, []);
-
-  const handleExportCookies = useCallback((profile: BrowserProfile) => {
-    setCurrentProfileForCookieExport(profile);
-    setCookieExportDialogOpen(true);
+  const handleOpenCookieManagement = useCallback((profile: BrowserProfile) => {
+    setCurrentProfileForCookieManagement(profile);
+    setCookieManagementDialogOpen(true);
   }, []);
 
   const handleGroupAssignmentComplete = useCallback(async () => {
@@ -732,10 +750,10 @@ export default function Home() {
   const handleToggleProfileSync = useCallback(
     async (profile: BrowserProfile) => {
       try {
-        const enabling = !profile.sync_enabled;
-        await invoke("set_profile_sync_enabled", {
+        const enabling = !profile.sync_mode || profile.sync_mode === "Disabled";
+        await invoke("set_profile_sync_mode", {
           profileId: profile.id,
-          enabled: enabling,
+          syncMode: enabling ? "Regular" : "Disabled",
         });
         if (enabling) {
           userInitiatedSyncIds.current.add(profile.id);
@@ -1014,8 +1032,7 @@ export default function Home() {
             onRenameProfile={handleRenameProfile}
             onConfigureCamoufox={handleConfigureCamoufox}
             onCopyCookiesToProfile={handleCopyCookiesToProfile}
-            onImportCookies={handleImportCookies}
-            onExportCookies={handleExportCookies}
+            onOpenCookieManagement={handleOpenCookieManagement}
             runningProfiles={runningProfiles}
             isUpdating={isUpdating}
             onDeleteSelectedProfiles={handleDeleteSelectedProfiles}
@@ -1159,22 +1176,13 @@ export default function Home() {
         onCopyComplete={() => setSelectedProfilesForCookies([])}
       />
 
-      <CookieImportDialog
-        isOpen={cookieImportDialogOpen}
+      <CookieManagementDialog
+        isOpen={cookieManagementDialogOpen}
         onClose={() => {
-          setCookieImportDialogOpen(false);
-          setCurrentProfileForCookieImport(null);
+          setCookieManagementDialogOpen(false);
+          setCurrentProfileForCookieManagement(null);
         }}
-        profile={currentProfileForCookieImport}
-      />
-
-      <CookieExportDialog
-        isOpen={cookieExportDialogOpen}
-        onClose={() => {
-          setCookieExportDialogOpen(false);
-          setCurrentProfileForCookieExport(null);
-        }}
-        profile={currentProfileForCookieExport}
+        profile={currentProfileForCookieManagement}
       />
 
       <DeleteConfirmationDialog
@@ -1236,6 +1244,15 @@ export default function Home() {
       <LaunchOnLoginDialog
         isOpen={launchOnLoginDialogOpen}
         onClose={() => setLaunchOnLoginDialogOpen(false)}
+      />
+
+      <WindowResizeWarningDialog
+        isOpen={windowResizeWarningOpen}
+        onResult={(proceed) => {
+          setWindowResizeWarningOpen(false);
+          windowResizeWarningResolver.current?.(proceed);
+          windowResizeWarningResolver.current = null;
+        }}
       />
     </div>
   );

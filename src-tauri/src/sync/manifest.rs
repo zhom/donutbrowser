@@ -52,6 +52,8 @@ pub struct SyncManifest {
   #[serde(rename = "excludeGlobs")]
   pub exclude_globs: Vec<String>,
   pub files: Vec<ManifestFileEntry>,
+  #[serde(default)]
+  pub encrypted: bool,
 }
 
 impl SyncManifest {
@@ -64,6 +66,7 @@ impl SyncManifest {
       updated_at: now,
       exclude_globs,
       files: Vec::new(),
+      encrypted: false,
     }
   }
 
@@ -547,6 +550,7 @@ mod tests {
           hash: "def".to_string(),
         },
       ],
+      encrypted: false,
     };
 
     let diff = compute_diff(&local, None);
@@ -588,6 +592,7 @@ mod tests {
           hash: "new".to_string(),
         },
       ],
+      encrypted: false,
     };
 
     let remote = SyncManifest {
@@ -616,6 +621,7 @@ mod tests {
           hash: "gone".to_string(),
         },
       ],
+      encrypted: false,
     };
 
     let diff = compute_diff(&local, Some(&remote));
@@ -633,5 +639,23 @@ mod tests {
     assert!(diff
       .files_to_delete_remote
       .contains(&"deleted.txt".to_string()));
+  }
+
+  #[test]
+  fn test_manifest_encrypted_flag_default() {
+    let json = r#"{"version":1,"profileId":"test","generatedAt":"2024-01-01T00:00:00Z","updatedAt":"2024-01-01T00:00:00Z","excludeGlobs":[],"files":[]}"#;
+    let manifest: SyncManifest = serde_json::from_str(json).unwrap();
+    assert!(!manifest.encrypted);
+  }
+
+  #[test]
+  fn test_manifest_with_encrypted_flag() {
+    let json = r#"{"version":1,"profileId":"test","generatedAt":"2024-01-01T00:00:00Z","updatedAt":"2024-01-01T00:00:00Z","excludeGlobs":[],"files":[],"encrypted":true}"#;
+    let manifest: SyncManifest = serde_json::from_str(json).unwrap();
+    assert!(manifest.encrypted);
+
+    let serialized = serde_json::to_string(&manifest).unwrap();
+    let deserialized: SyncManifest = serde_json::from_str(&serialized).unwrap();
+    assert!(deserialized.encrypted);
   }
 }

@@ -651,8 +651,11 @@ pub mod windows {
     use std::process::Command;
 
     // Try taskkill command as fallback
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
     let output = Command::new("taskkill")
       .args(["/F", "/PID", &pid.to_string()])
+      .creation_flags(CREATE_NO_WINDOW)
       .output();
 
     match output {

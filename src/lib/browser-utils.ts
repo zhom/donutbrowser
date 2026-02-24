@@ -3,7 +3,12 @@
  * Centralized helpers for browser name mapping, icons, etc.
  */
 
-import { FaChrome, FaExclamationTriangle, FaFirefox } from "react-icons/fa";
+import {
+  FaChrome,
+  FaExclamationTriangle,
+  FaFire,
+  FaFirefox,
+} from "react-icons/fa";
 
 /**
  * Map internal browser names to display names
@@ -37,6 +42,14 @@ export function getBrowserIcon(browserType: string) {
       // All other browsers get a warning icon
       return FaExclamationTriangle;
   }
+}
+
+export function getProfileIcon(profile: {
+  browser: string;
+  ephemeral?: boolean;
+}) {
+  if (profile.ephemeral) return FaFire;
+  return getBrowserIcon(profile.browser);
 }
 
 export const getCurrentOS = () => {

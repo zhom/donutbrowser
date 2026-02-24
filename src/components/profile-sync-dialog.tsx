@@ -2,10 +2,10 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { LoadingButton } from "@/components/loading-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -15,8 +15,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
-import type { BrowserProfile, SyncSettings } from "@/types";
+import type { BrowserProfile, SyncMode, SyncSettings } from "@/types";
+import { isSyncEnabled } from "@/types";
 
 interface ProfileSyncDialogProps {
   isOpen: boolean;
@@ -31,12 +33,14 @@ export function ProfileSyncDialog({
   profile,
   onSyncConfigOpen,
 }: ProfileSyncDialogProps) {
+  const { t } = useTranslation();
   const [isSaving, setIsSaving] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [syncEnabled, setSyncEnabled] = useState(
-    profile?.sync_enabled ?? false,
+  const [syncMode, setSyncMode] = useState<SyncMode>(
+    profile?.sync_mode ?? "Disabled",
   );
   const [hasConfig, setHasConfig] = useState(false);
+  const [hasE2ePassword, setHasE2ePassword] = useState(false);
   const [isCheckingConfig, setIsCheckingConfig] = useState(false);
 
   const checkSyncConfig = useCallback(async () => {
@@ -44,6 +48,8 @@ export function ProfileSyncDialog({
     try {
       const settings = await invoke<SyncSettings>("get_sync_settings");
       setHasConfig(Boolean(settings.sync_server_url && settings.sync_token));
+      const hasPassword = await invoke<boolean>("check_has_e2e_password");
+      setHasE2ePassword(hasPassword);
     } catch {
       setHasConfig(false);
     } finally {
@@ -54,7 +60,7 @@ export function ProfileSyncDialog({
   const handleOpenChange = useCallback(
     (open: boolean) => {
       if (open && profile) {
-        setSyncEnabled(profile.sync_enabled ?? false);
+        setSyncMode(profile.sync_mode ?? "Disabled");
         void checkSyncConfig();
       }
       if (!open) {
@@ -64,39 +70,49 @@ export function ProfileSyncDialog({
     [profile, onClose, checkSyncConfig],
   );
 
-  const handleToggleSync = useCallback(async () => {
-    if (!profile) return;
+  const handleModeChange = useCallback(
+    async (newMode: string) => {
+      if (!profile) return;
 
-    if (!hasConfig) {
-      showErrorToast("Please configure sync service first");
-      onSyncConfigOpen();
-      onClose();
-      return;
-    }
+      if (!hasConfig) {
+        showErrorToast(t("sync.mode.noPasswordWarning"));
+        onSyncConfigOpen();
+        onClose();
+        return;
+      }
 
-    setIsSaving(true);
-    try {
-      await invoke("set_profile_sync_enabled", {
-        profileId: profile.id,
-        enabled: !syncEnabled,
-      });
-      setSyncEnabled(!syncEnabled);
-      showSuccessToast(
-        !syncEnabled ? "Sync enabled - syncing now..." : "Sync disabled",
-      );
-    } catch (error) {
-      console.error("Failed to toggle sync:", error);
-      showErrorToast("Failed to update sync settings");
-    } finally {
-      setIsSaving(false);
-    }
-  }, [profile, syncEnabled, hasConfig, onSyncConfigOpen, onClose]);
+      if (newMode === "Encrypted" && !hasE2ePassword) {
+        showErrorToast(t("sync.mode.passwordRequired"));
+        return;
+      }
+
+      setIsSaving(true);
+      try {
+        await invoke("set_profile_sync_mode", {
+          profileId: profile.id,
+          syncMode: newMode,
+        });
+        setSyncMode(newMode as SyncMode);
+        showSuccessToast(
+          newMode !== "Disabled"
+            ? t("sync.mode.enabledToast")
+            : t("sync.mode.disabledToast"),
+        );
+      } catch (error) {
+        console.error("Failed to set sync mode:", error);
+        showErrorToast(String(error));
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [profile, hasConfig, hasE2ePassword, onSyncConfigOpen, onClose, t],
+  );
 
   const handleSyncNow = useCallback(async () => {
     if (!profile) return;
 
     if (!hasConfig) {
-      showErrorToast("Please configure sync service first");
+      showErrorToast(t("sync.mode.noPasswordWarning"));
       onSyncConfigOpen();
       onClose();
       return;
@@ -105,17 +121,17 @@ export function ProfileSyncDialog({
     setIsSyncing(true);
     try {
       await invoke("request_profile_sync", { profileId: profile.id });
-      showSuccessToast("Sync queued");
+      showSuccessToast(t("sync.mode.syncQueued"));
     } catch (error) {
       console.error("Failed to queue sync:", error);
-      showErrorToast("Failed to queue sync");
+      showErrorToast(String(error));
     } finally {
       setIsSyncing(false);
     }
-  }, [profile, hasConfig, onSyncConfigOpen, onClose]);
+  }, [profile, hasConfig, onSyncConfigOpen, onClose, t]);
 
   const formatLastSync = (timestamp?: number) => {
-    if (!timestamp) return "Never";
+    if (!timestamp) return t("common.labels.never", "Never");
     const date = new Date(timestamp * 1000);
     return date.toLocaleString();
   };
@@ -126,9 +142,12 @@ export function ProfileSyncDialog({
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Profile Sync</DialogTitle>
+          <DialogTitle>{t("sync.mode.title", "Profile Sync")}</DialogTitle>
           <DialogDescription>
-            Manage sync settings for &quot;{profile.name}&quot;
+            {t("sync.mode.description", {
+              name: profile.name,
+              defaultValue: `Manage sync settings for "${profile.name}"`,
+            })}
           </DialogDescription>
         </DialogHeader>
 
@@ -140,7 +159,9 @@ export function ProfileSyncDialog({
           <div className="grid gap-4 py-4">
             {!hasConfig && (
               <div className="p-3 text-sm rounded-md bg-muted">
-                <p className="mb-2">Sync service not configured.</p>
+                <p className="mb-2">
+                  {t("sync.mode.notConfigured", "Sync service not configured.")}
+                </p>
                 <Button
                   variant="outline"
                   size="sm"
@@ -149,39 +170,87 @@ export function ProfileSyncDialog({
                     onClose();
                   }}
                 >
-                  Configure Sync Service
+                  {t("sync.mode.configureService", "Configure Sync Service")}
                 </Button>
               </div>
             )}
 
             {hasConfig && (
               <>
-                <div className="flex justify-between items-center">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="sync-enabled">Sync Enabled</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Sync this profile across devices
-                    </p>
+                <RadioGroup
+                  value={syncMode}
+                  onValueChange={handleModeChange}
+                  disabled={isSaving}
+                  className="grid gap-3"
+                >
+                  <div className="flex items-start space-x-3">
+                    <RadioGroupItem value="Disabled" id="sync-disabled" />
+                    <Label htmlFor="sync-disabled" className="cursor-pointer">
+                      <span className="font-medium">
+                        {t("sync.mode.disabled", "Disabled")}
+                      </span>
+                      <p className="text-sm text-muted-foreground">
+                        {t(
+                          "sync.mode.disabledDescription",
+                          "No sync for this profile",
+                        )}
+                      </p>
+                    </Label>
                   </div>
-                  <Checkbox
-                    id="sync-enabled"
-                    checked={syncEnabled}
-                    onCheckedChange={handleToggleSync}
-                    disabled={isSaving}
-                  />
-                </div>
+
+                  <div className="flex items-start space-x-3">
+                    <RadioGroupItem value="Regular" id="sync-regular" />
+                    <Label htmlFor="sync-regular" className="cursor-pointer">
+                      <span className="font-medium">
+                        {t("sync.mode.regular", "Regular Sync")}
+                      </span>
+                      <p className="text-sm text-muted-foreground">
+                        {t(
+                          "sync.mode.regularDescription",
+                          "Fast sync, unencrypted",
+                        )}
+                      </p>
+                    </Label>
+                  </div>
+
+                  <div className="flex items-start space-x-3">
+                    <RadioGroupItem value="Encrypted" id="sync-encrypted" />
+                    <Label htmlFor="sync-encrypted" className="cursor-pointer">
+                      <span className="font-medium">
+                        {t("sync.mode.encrypted", "E2E Encrypted Sync")}
+                      </span>
+                      <p className="text-sm text-muted-foreground">
+                        {t(
+                          "sync.mode.encryptedDescription",
+                          "Encrypted before upload. Server never sees plaintext data.",
+                        )}
+                      </p>
+                    </Label>
+                  </div>
+                </RadioGroup>
+
+                {syncMode === "Encrypted" && !hasE2ePassword && (
+                  <div className="p-3 text-sm rounded-md bg-destructive/10 text-destructive">
+                    {t(
+                      "sync.mode.noPasswordWarning",
+                      "E2E password not set. Please set a password in Settings.",
+                    )}
+                  </div>
+                )}
 
                 <div className="space-y-2">
-                  <Label>Last Synced</Label>
+                  <Label>{t("sync.mode.lastSynced", "Last Synced")}</Label>
                   <div className="flex gap-2 items-center">
                     <Badge variant="outline">
                       {formatLastSync(profile.last_sync)}
                     </Badge>
-                    {syncEnabled && (
+                    {isSyncEnabled(profile) && (
                       <Badge
                         variant={profile.last_sync ? "default" : "secondary"}
                       >
-                        {profile.last_sync ? "Synced" : "Pending"}
+                        {profile.last_sync
+                          ? t("common.status.synced")
+                          : t("common.status.pending")}
                       </Badge>
                     )}
                   </div>
@@ -193,11 +262,11 @@ export function ProfileSyncDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Close
+            {t("common.buttons.close")}
           </Button>
-          {hasConfig && syncEnabled && (
+          {hasConfig && isSyncEnabled(profile) && (
             <LoadingButton onClick={handleSyncNow} isLoading={isSyncing}>
-              Sync Now
+              {t("sync.mode.syncNow", "Sync Now")}
             </LoadingButton>
           )}
         </DialogFooter>

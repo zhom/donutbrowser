@@ -9,6 +9,27 @@ use std::time::Duration;
 
 use crate::daemon::autostart;
 
+/// Check if a process with the given PID exists using the Windows API.
+/// This avoids spawning tasklist.exe which causes a visible conhost window flash.
+#[cfg(windows)]
+fn win_process_exists(pid: u32) -> bool {
+  use std::ptr;
+  const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+
+  extern "system" {
+    fn OpenProcess(dwDesiredAccess: u32, bInheritHandles: i32, dwProcessId: u32) -> *mut ();
+    fn CloseHandle(hObject: *mut ()) -> i32;
+  }
+
+  let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+  if handle.is_null() || handle == ptr::null_mut() {
+    false
+  } else {
+    unsafe { CloseHandle(handle) };
+    true
+  }
+}
+
 #[derive(Debug, Deserialize, Default)]
 struct DaemonState {
   daemon_pid: Option<u32>,
@@ -43,12 +64,7 @@ pub fn is_daemon_running() -> bool {
 
     #[cfg(windows)]
     {
-      let output = Command::new("tasklist")
-        .args(["/FI", &format!("PID eq {}", pid)])
-        .output();
-      output
-        .map(|o| String::from_utf8_lossy(&o.stdout).contains(&pid.to_string()))
-        .unwrap_or(false)
+      win_process_exists(pid)
     }
 
     #[cfg(not(any(unix, windows)))]
@@ -113,7 +129,13 @@ fn get_daemon_path() -> Option<PathBuf> {
   // Try to find it in PATH
   #[cfg(target_os = "windows")]
   {
-    if let Ok(output) = Command::new("where").arg("donut-daemon").output() {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    if let Ok(output) = Command::new("where")
+      .arg("donut-daemon")
+      .creation_flags(CREATE_NO_WINDOW)
+      .output()
+    {
       if output.status.success() {
         let path = String::from_utf8_lossy(&output.stdout);
         let path = path.lines().next()?.trim();

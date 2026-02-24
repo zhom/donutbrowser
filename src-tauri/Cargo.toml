@@ -40,6 +40,7 @@ tauri-plugin-opener = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-deep-link = "2"
+tauri-plugin-single-instance = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-macos-permissions = "2"
 tauri-plugin-log = "2"
@@ -106,14 +107,10 @@ smoltcp = { version = "0.11", default-features = false, features = ["std", "medi
 tray-icon = "0.21"
 muda = "0.17"
 tao = "0.34"
-single-instance = "0.3"
 image = "0.25"
 dirs = "6"
 crossbeam-channel = "0.5"
 sys-locale = "0.3"
-
-[target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
-tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.31", features = ["signal", "process"] }

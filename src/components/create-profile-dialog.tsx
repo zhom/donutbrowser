@@ -2,8 +2,8 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { GoPlus } from "react-icons/go";
-import { LuLock } from "react-icons/lu";
 import { LoadingButton } from "@/components/loading-button";
 import { ProxyFormDialog } from "@/components/proxy-form-dialog";
 import { SharedCamoufoxConfigForm } from "@/components/shared-camoufox-config-form";
@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ProBadge } from "@/components/ui/pro-badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
@@ -31,7 +30,6 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { WayfernConfigForm } from "@/components/wayfern-config-form";
-
 import { useBrowserDownload } from "@/hooks/use-browser-download";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
@@ -117,6 +115,7 @@ export function CreateProfileDialog({
   selectedGroupId,
   crossOsUnlocked = false,
 }: CreateProfileDialogProps) {
+  const { t } = useTranslation();
   const [profileName, setProfileName] = useState("");
   const [currentStep, setCurrentStep] = useState<
     "browser-selection" | "browser-config"
@@ -180,6 +179,7 @@ export function CreateProfileDialog({
     downloadBrowser,
     loadDownloadedVersions,
     isVersionDownloaded,
+    downloadedVersions,
   } = useBrowserDownload();
 
   const loadSupportedBrowsers = useCallback(async () => {
@@ -338,6 +338,26 @@ export function CreateProfileDialog({
     [releaseTypes],
   );
 
+  const getCreatableVersion = useCallback(
+    (browserType?: string) => {
+      const bestVersion = getBestAvailableVersion(browserType);
+      if (bestVersion && isVersionDownloaded(bestVersion.version)) {
+        return bestVersion;
+      }
+      if (downloadedVersions.length > 0) {
+        const fallbackVersion = downloadedVersions[0];
+        const releaseType =
+          browserType === "firefox-developer" ? "nightly" : "stable";
+        return {
+          version: fallbackVersion,
+          releaseType: releaseType as "stable" | "nightly",
+        };
+      }
+      return null;
+    },
+    [getBestAvailableVersion, isVersionDownloaded, downloadedVersions],
+  );
+
   const handleDownload = async (browserStr: string) => {
     const bestVersion = getBestAvailableVersion(browserStr);
 
@@ -366,7 +386,7 @@ export function CreateProfileDialog({
       if (activeTab === "anti-detect") {
         // Anti-detect browser - check if Wayfern or Camoufox is selected
         if (selectedBrowser === "wayfern") {
-          const bestWayfernVersion = getBestAvailableVersion("wayfern");
+          const bestWayfernVersion = getCreatableVersion("wayfern");
           if (!bestWayfernVersion) {
             console.error("No Wayfern version available");
             return;
@@ -389,7 +409,7 @@ export function CreateProfileDialog({
           });
         } else {
           // Default to Camoufox
-          const bestCamoufoxVersion = getBestAvailableVersion("camoufox");
+          const bestCamoufoxVersion = getCreatableVersion("camoufox");
           if (!bestCamoufoxVersion) {
             console.error("No Camoufox version available");
             return;
@@ -420,7 +440,7 @@ export function CreateProfileDialog({
         }
 
         // Use the best available version (stable preferred, nightly as fallback)
-        const bestVersion = getBestAvailableVersion(selectedBrowser);
+        const bestVersion = getCreatableVersion(selectedBrowser);
         if (!bestVersion) {
           console.error("No version available");
           return;
@@ -497,14 +517,14 @@ export function CreateProfileDialog({
     if (!profileName.trim()) return true;
     if (!selectedBrowser) return true;
     if (isBrowserCurrentlyDownloading(selectedBrowser)) return true;
-    if (!isBrowserVersionAvailable(selectedBrowser)) return true;
+    if (!getCreatableVersion(selectedBrowser)) return true;
 
     return false;
   }, [
     profileName,
     selectedBrowser,
     isBrowserCurrentlyDownloading,
-    isBrowserVersionAvailable,
+    getCreatableVersion,
   ]);
 
   // Filter supported browsers for regular browsers
@@ -666,26 +686,26 @@ export function CreateProfileDialog({
                           />
                         </div>
 
-                        {/* Ephemeral Toggle */}
-                        <div className="flex items-center gap-2">
-                          <Checkbox
-                            id="ephemeral"
-                            checked={ephemeral}
-                            onCheckedChange={(checked) =>
-                              setEphemeral(checked === true)
-                            }
-                          />
-                          <div className="flex flex-col">
-                            <Label
-                              htmlFor="ephemeral"
-                              className="cursor-pointer"
-                            >
-                              Ephemeral
+                        {/* Ephemeral Option */}
+                        <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
+                          <div className="flex items-center space-x-2">
+                            <Checkbox
+                              id="ephemeral"
+                              checked={ephemeral}
+                              onCheckedChange={(checked) =>
+                                setEphemeral(checked === true)
+                              }
+                            />
+                            <Label htmlFor="ephemeral" className="font-medium">
+                              {t("profiles.ephemeral")}
                             </Label>
-                            <span className="text-xs text-muted-foreground">
-                              Browser data is deleted when closed
+                            <span className="px-1 py-0.5 text-[10px] leading-none rounded bg-muted text-muted-foreground font-medium">
+                              {t("profiles.ephemeralAlpha")}
                             </span>
                           </div>
+                          <p className="text-sm text-muted-foreground ml-6">
+                            {t("profiles.ephemeralDescription")}
+                          </p>
                         </div>
 
                         {selectedBrowser === "wayfern" ? (
@@ -778,23 +798,13 @@ export function CreateProfileDialog({
                               </div>
                             )}
 
-                            <div className="relative">
-                              <WayfernConfigForm
-                                config={wayfernConfig}
-                                onConfigChange={updateWayfernConfig}
-                                isCreating
-                                crossOsUnlocked={crossOsUnlocked}
-                              />
-                              {!crossOsUnlocked && (
-                                <div className="absolute inset-0 backdrop-blur-sm bg-background/60 z-10 flex flex-col items-center justify-center gap-2">
-                                  <LuLock className="w-6 h-6 text-muted-foreground" />
-                                  <p className="text-sm text-muted-foreground font-medium">
-                                    Fingerprint editing is a Pro feature
-                                  </p>
-                                  <ProBadge />
-                                </div>
-                              )}
-                            </div>
+                            <WayfernConfigForm
+                              config={wayfernConfig}
+                              onConfigChange={updateWayfernConfig}
+                              isCreating
+                              crossOsUnlocked={crossOsUnlocked}
+                              limitedMode={!crossOsUnlocked}
+                            />
                           </div>
                         ) : selectedBrowser === "camoufox" ? (
                           // Camoufox Configuration
@@ -886,24 +896,14 @@ export function CreateProfileDialog({
                               </div>
                             )}
 
-                            <div className="relative">
-                              <SharedCamoufoxConfigForm
-                                config={camoufoxConfig}
-                                onConfigChange={updateCamoufoxConfig}
-                                isCreating
-                                browserType="camoufox"
-                                crossOsUnlocked={crossOsUnlocked}
-                              />
-                              {!crossOsUnlocked && (
-                                <div className="absolute inset-0 backdrop-blur-sm bg-background/60 z-10 flex flex-col items-center justify-center gap-2">
-                                  <LuLock className="w-6 h-6 text-muted-foreground" />
-                                  <p className="text-sm text-muted-foreground font-medium">
-                                    Fingerprint editing is a Pro feature
-                                  </p>
-                                  <ProBadge />
-                                </div>
-                              )}
-                            </div>
+                            <SharedCamoufoxConfigForm
+                              config={camoufoxConfig}
+                              onConfigChange={updateCamoufoxConfig}
+                              isCreating
+                              browserType="camoufox"
+                              crossOsUnlocked={crossOsUnlocked}
+                              limitedMode={!crossOsUnlocked}
+                            />
                           </div>
                         ) : (
                           // Regular Browser Configuration (should not happen in anti-detect tab)

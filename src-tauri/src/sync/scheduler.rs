@@ -232,7 +232,10 @@ impl SyncScheduler {
       }
     };
 
-    let sync_enabled_profiles: Vec<_> = profiles.into_iter().filter(|p| p.sync_enabled).collect();
+    let sync_enabled_profiles: Vec<_> = profiles
+      .into_iter()
+      .filter(|p| p.is_sync_enabled())
+      .collect();
 
     if sync_enabled_profiles.is_empty() {
       log::debug!("No sync-enabled profiles found");
@@ -353,7 +356,7 @@ impl SyncScheduler {
         profile_manager.list_profiles().ok().and_then(|profiles| {
           profiles
             .into_iter()
-            .find(|p| p.id.to_string() == profile_id && p.sync_enabled)
+            .find(|p| p.id.to_string() == profile_id && p.is_sync_enabled())
         })
       };
 
@@ -615,7 +618,7 @@ impl SyncScheduler {
     }
   }
 
-  async fn process_pending_tombstones(&self, app_handle: &tauri::AppHandle) {
+  async fn process_pending_tombstones(&self, _app_handle: &tauri::AppHandle) {
     let tombstones: Vec<(String, String)> = {
       let mut pending = self.pending_tombstones.lock().await;
       std::mem::take(&mut *pending)
@@ -629,67 +632,68 @@ impl SyncScheduler {
       log::info!("Processing tombstone for {} {}", entity_type, entity_id);
       match entity_type.as_str() {
         "profile" => {
-          let exists_locally = {
-            let profile_manager = ProfileManager::instance();
+          let profile_manager = ProfileManager::instance();
+          let profile_to_delete = {
             if let Ok(profiles) = profile_manager.list_profiles() {
               let profile_uuid = uuid::Uuid::parse_str(&entity_id).ok();
-              profile_uuid
-                .as_ref()
-                .map(|uuid| profiles.iter().any(|p| p.id == *uuid))
-                .unwrap_or(false)
+              profile_uuid.and_then(|uuid| profiles.into_iter().find(|p| p.id == uuid))
             } else {
-              false
+              None
             }
           };
 
-          if exists_locally {
-            // Profile exists locally but was deleted remotely - delete locally
+          if let Some(mut profile) = profile_to_delete {
             log::info!(
-              "Profile {} exists locally, deleting due to remote tombstone",
+              "Profile {} was deleted remotely, disabling sync locally",
               entity_id
             );
-            // Note: We don't actually delete here to avoid data loss.
-            // The user should be notified or we could add a confirmation step.
-            // For now, just log it.
-          } else {
-            // Profile doesn't exist locally - check if it still exists remotely
-            // (tombstone might have been created but profile files still exist)
-            // Try to download it
-            match SyncEngine::create_from_settings(app_handle).await {
-              Ok(engine) => {
-                if let Ok(true) = engine
-                  .download_profile_if_missing(app_handle, &entity_id)
-                  .await
-                {
-                  log::info!(
-                    "Downloaded missing profile {} from remote storage",
-                    entity_id
-                  );
-                }
-              }
-              Err(e) => {
-                log::debug!("Sync not configured, skipping profile download: {}", e);
-              }
+            profile.sync_mode = crate::profile::types::SyncMode::Disabled;
+            if let Err(e) = profile_manager.save_profile(&profile) {
+              log::warn!("Failed to disable sync for profile {}: {}", entity_id, e);
+            } else {
+              log::info!(
+                "Profile {} sync disabled due to remote tombstone (local copy kept)",
+                entity_id
+              );
+              let _ = events::emit("profiles-changed", ());
             }
           }
         }
         "proxy" => {
-          log::debug!(
-            "Proxy tombstone for {} - local deletion not implemented",
-            entity_id
-          );
+          let proxy_manager = &crate::proxy_manager::PROXY_MANAGER;
+          let proxies = proxy_manager.get_stored_proxies();
+          if let Some(proxy) = proxies.iter().find(|p| p.id == entity_id) {
+            if proxy.sync_enabled {
+              log::info!("Proxy {} was deleted remotely, deleting locally", entity_id);
+              let proxy_file = proxy_manager.get_proxy_file_path(&entity_id);
+              if proxy_file.exists() {
+                let _ = std::fs::remove_file(&proxy_file);
+              }
+              proxy_manager.remove_from_memory(&entity_id);
+              let _ = events::emit("stored-proxies-changed", ());
+            }
+          }
         }
         "group" => {
-          log::debug!(
-            "Group tombstone for {} - local deletion not implemented",
-            entity_id
-          );
+          let group_manager = crate::group_manager::GROUP_MANAGER.lock().unwrap();
+          let groups = group_manager.get_all_groups().unwrap_or_default();
+          if let Some(group) = groups.iter().find(|g| g.id == entity_id) {
+            if group.sync_enabled {
+              log::info!("Group {} was deleted remotely, deleting locally", entity_id);
+              let _ = group_manager.delete_group_internal(&entity_id);
+              let _ = events::emit("groups-changed", ());
+            }
+          }
         }
         "vpn" => {
-          log::debug!(
-            "VPN tombstone for {} - local deletion not implemented",
-            entity_id
-          );
+          let storage = crate::vpn::VPN_STORAGE.lock().unwrap();
+          if let Ok(vpn) = storage.load_config(&entity_id) {
+            if vpn.sync_enabled {
+              log::info!("VPN {} was deleted remotely, deleting locally", entity_id);
+              let _ = storage.delete_config(&entity_id);
+              let _ = events::emit("vpn-configs-changed", ());
+            }
+          }
         }
         _ => {}
       }

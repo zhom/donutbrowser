@@ -16,11 +16,32 @@ use serde::{Deserialize, Serialize};
 use tao::event::{Event, StartCause};
 use tao::event_loop::{ControlFlow, EventLoopBuilder};
 use tokio::runtime::Runtime;
-use tray_icon::{MouseButton, TrayIcon, TrayIconEvent};
+use tray_icon::TrayIcon;
+#[cfg(not(target_os = "macos"))]
+use tray_icon::{MouseButton, TrayIconEvent};
 
 use donutbrowser_lib::daemon::{autostart, services, tray};
 
 static SHOULD_QUIT: AtomicBool = AtomicBool::new(false);
+
+#[cfg(windows)]
+fn win_process_exists(pid: u32) -> bool {
+  use std::ptr;
+  const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+
+  extern "system" {
+    fn OpenProcess(dwDesiredAccess: u32, bInheritHandles: i32, dwProcessId: u32) -> *mut ();
+    fn CloseHandle(hObject: *mut ()) -> i32;
+  }
+
+  let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+  if handle.is_null() || handle == ptr::null_mut() {
+    false
+  } else {
+    unsafe { CloseHandle(handle) };
+    true
+  }
+}
 
 enum ServiceStatus {
   Ready {
@@ -257,15 +278,15 @@ fn run_daemon() {
 
         // Process menu events
         while let Ok(event) = menu_channel.try_recv() {
-          if event.id == tray_menu.open_item.id() {
-            tray::open_gui();
-          } else if event.id == tray_menu.quit_item.id() {
+          if event.id == tray_menu.quit_item.id() {
             log::info!("[daemon] Quit requested");
             SHOULD_QUIT.store(true, Ordering::SeqCst);
           }
         }
 
         // Handle tray icon click (left-click opens the app)
+        // On macOS, left-click already shows the menu, so don't also launch the GUI.
+        #[cfg(not(target_os = "macos"))]
         while let Ok(event) = TrayIconEvent::receiver().try_recv() {
           if let TrayIconEvent::Click {
             button: MouseButton::Left,
@@ -278,14 +299,24 @@ fn run_daemon() {
 
         // Use swap to only run cleanup once
         if SHOULD_QUIT.swap(false, Ordering::SeqCst) {
+          // Remove tray icon from status bar immediately so the UI feels responsive
+          tray_icon = None;
+
           tray::quit_gui();
 
           let mut state = read_state();
           state.daemon_pid = None;
           let _ = write_state(&state);
           log::info!("[daemon] Exiting");
-          *control_flow = ControlFlow::Exit;
+
+          // Use process::exit for immediate termination instead of ControlFlow::Exit.
+          // ControlFlow::Exit can delay because tao's macOS event loop defers exit,
+          // and dropping the tokio runtime blocks until all spawned tasks finish.
+          process::exit(0);
         }
+      }
+      Event::Reopen { .. } => {
+        tray::open_gui();
       }
       _ => {}
     }
@@ -305,7 +336,9 @@ fn stop_daemon() {
     // On Windows, taskkill /F kills instantly with no handler, so kill GUI first
     #[cfg(windows)]
     {
+      use std::os::windows::process::CommandExt;
       use std::process::Command;
+      const CREATE_NO_WINDOW: u32 = 0x08000000;
 
       let state_path = get_state_path();
       if let Ok(content) = fs::read_to_string(&state_path) {
@@ -313,6 +346,7 @@ fn stop_daemon() {
           if let Some(gui_pid) = val.get("gui_pid").and_then(|v| v.as_u64()) {
             let _ = Command::new("taskkill")
               .args(["/PID", &gui_pid.to_string(), "/F"])
+              .creation_flags(CREATE_NO_WINDOW)
               .output();
           }
         }
@@ -320,6 +354,7 @@ fn stop_daemon() {
 
       let _ = Command::new("taskkill")
         .args(["/PID", &pid.to_string(), "/F"])
+        .creation_flags(CREATE_NO_WINDOW)
         .output();
       eprintln!("Sent stop signal to daemon (PID {})", pid);
     }
@@ -344,15 +379,7 @@ fn show_status() {
     let is_running = unsafe { libc::kill(pid as i32, 0) == 0 };
 
     #[cfg(windows)]
-    let is_running = {
-      use std::process::Command;
-      let output = Command::new("tasklist")
-        .args(["/FI", &format!("PID eq {}", pid)])
-        .output();
-      output
-        .map(|o| String::from_utf8_lossy(&o.stdout).contains(&pid.to_string()))
-        .unwrap_or(false)
-    };
+    let is_running = win_process_exists(pid);
 
     #[cfg(not(any(unix, windows)))]
     let is_running = false;

@@ -84,7 +84,7 @@ impl GroupManager {
       return Err(format!("Group with name '{name}' already exists").into());
     }
 
-    let sync_enabled = crate::cloud_auth::CLOUD_AUTH.has_active_paid_subscription_sync();
+    let sync_enabled = crate::sync::is_sync_configured();
     let group = ProfileGroup {
       id: uuid::Uuid::new_v4().to_string(),
       name,
@@ -98,6 +98,15 @@ impl GroupManager {
     // Emit event for reactive UI updates
     if let Err(e) = events::emit_empty("groups-changed") {
       log::error!("Failed to emit groups-changed event: {e}");
+    }
+
+    if group.sync_enabled {
+      if let Some(scheduler) = crate::sync::get_global_scheduler() {
+        let id = group.id.clone();
+        tauri::async_runtime::spawn(async move {
+          scheduler.queue_group_sync(id).await;
+        });
+      }
     }
 
     Ok(group)
@@ -136,6 +145,15 @@ impl GroupManager {
       log::error!("Failed to emit groups-changed event: {e}");
     }
 
+    if updated_group.sync_enabled {
+      if let Some(scheduler) = crate::sync::get_global_scheduler() {
+        let id = updated_group.id.clone();
+        tauri::async_runtime::spawn(async move {
+          scheduler.queue_group_sync(id).await;
+        });
+      }
+    }
+
     Ok(updated_group)
   }
 
@@ -169,6 +187,17 @@ impl GroupManager {
       groups_data.groups.push(group.clone());
     }
 
+    self.save_groups_data(&groups_data)?;
+    Ok(())
+  }
+
+  pub fn delete_group_internal(&self, id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let mut groups_data = self.load_groups_data()?;
+    let initial_len = groups_data.groups.len();
+    groups_data.groups.retain(|g| g.id != id);
+    if groups_data.groups.len() == initial_len {
+      return Err(format!("Group with id '{id}' not found").into());
+    }
     self.save_groups_data(&groups_data)?;
     Ok(())
   }

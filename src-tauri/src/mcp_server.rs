@@ -18,6 +18,7 @@ use tokio::net::TcpListener;
 use tokio::sync::Mutex as AsyncMutex;
 
 use crate::browser::ProxySettings;
+use crate::cloud_auth::CLOUD_AUTH;
 use crate::group_manager::GROUP_MANAGER;
 use crate::profile::{BrowserProfile, ProfileManager};
 use crate::proxy_manager::PROXY_MANAGER;
@@ -679,6 +680,51 @@ impl McpServer {
           "required": ["vpn_id"]
         }),
       },
+      // Fingerprint management tools
+      McpTool {
+        name: "get_profile_fingerprint".to_string(),
+        description: "Get the fingerprint configuration for a Wayfern or Camoufox profile"
+          .to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the profile"
+            }
+          },
+          "required": ["profile_id"]
+        }),
+      },
+      McpTool {
+        name: "update_profile_fingerprint".to_string(),
+        description:
+          "Update the fingerprint configuration for a Wayfern or Camoufox profile. Requires an active Pro subscription."
+            .to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the profile to update"
+            },
+            "fingerprint": {
+              "type": "string",
+              "description": "JSON string of the fingerprint configuration, or null to clear"
+            },
+            "os": {
+              "type": "string",
+              "enum": ["windows", "macos", "linux"],
+              "description": "Operating system for fingerprint generation"
+            },
+            "randomize_fingerprint_on_launch": {
+              "type": "boolean",
+              "description": "Whether to generate a new fingerprint on every launch"
+            }
+          },
+          "required": ["profile_id"]
+        }),
+      },
     ]
   }
 
@@ -777,6 +823,9 @@ impl McpServer {
       "connect_vpn" => self.handle_connect_vpn(&arguments).await,
       "disconnect_vpn" => self.handle_disconnect_vpn(&arguments).await,
       "get_vpn_status" => self.handle_get_vpn_status(&arguments).await,
+      // Fingerprint management
+      "get_profile_fingerprint" => self.handle_get_profile_fingerprint(&arguments).await,
+      "update_profile_fingerprint" => self.handle_update_profile_fingerprint(&arguments).await,
       _ => Err(McpError {
         code: -32602,
         message: format!("Unknown tool: {tool_name}"),
@@ -1825,6 +1874,198 @@ impl McpServer {
       }]
     }))
   }
+
+  // Fingerprint management handlers
+  async fn handle_get_profile_fingerprint(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?;
+
+    let profiles = ProfileManager::instance()
+      .list_profiles()
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to list profiles: {e}"),
+      })?;
+
+    let profile = profiles
+      .iter()
+      .find(|p| p.id.to_string() == profile_id)
+      .ok_or_else(|| McpError {
+        code: -32000,
+        message: format!("Profile not found: {profile_id}"),
+      })?;
+
+    let fingerprint_info = match profile.browser.as_str() {
+      "camoufox" => {
+        let config = profile
+          .camoufox_config
+          .as_ref()
+          .cloned()
+          .unwrap_or_default();
+        serde_json::json!({
+          "browser": "camoufox",
+          "fingerprint": config.fingerprint,
+          "os": config.os,
+          "randomize_fingerprint_on_launch": config.randomize_fingerprint_on_launch,
+          "screen_max_width": config.screen_max_width,
+          "screen_max_height": config.screen_max_height,
+          "screen_min_width": config.screen_min_width,
+          "screen_min_height": config.screen_min_height,
+        })
+      }
+      "wayfern" => {
+        let config = profile.wayfern_config.as_ref().cloned().unwrap_or_default();
+        serde_json::json!({
+          "browser": "wayfern",
+          "fingerprint": config.fingerprint,
+          "os": config.os,
+          "randomize_fingerprint_on_launch": config.randomize_fingerprint_on_launch,
+          "screen_max_width": config.screen_max_width,
+          "screen_max_height": config.screen_max_height,
+          "screen_min_width": config.screen_min_width,
+          "screen_min_height": config.screen_min_height,
+        })
+      }
+      _ => {
+        return Err(McpError {
+          code: -32000,
+          message: "MCP only supports Wayfern and Camoufox profiles".to_string(),
+        })
+      }
+    };
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": serde_json::to_string_pretty(&fingerprint_info).unwrap_or_default()
+      }]
+    }))
+  }
+
+  async fn handle_update_profile_fingerprint(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    if !CLOUD_AUTH.has_active_paid_subscription().await {
+      return Err(McpError {
+        code: -32000,
+        message: "Fingerprint editing requires an active Pro subscription".to_string(),
+      });
+    }
+
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?;
+
+    let fingerprint = arguments.get("fingerprint").and_then(|v| v.as_str());
+    let os = arguments.get("os").and_then(|v| v.as_str());
+    let randomize = arguments
+      .get("randomize_fingerprint_on_launch")
+      .and_then(|v| v.as_bool());
+
+    if let Some(os_val) = os {
+      if !CLOUD_AUTH.is_fingerprint_os_allowed(Some(os_val)).await {
+        return Err(McpError {
+          code: -32000,
+          message: format!(
+            "OS spoofing to '{}' requires an active Pro subscription",
+            os_val
+          ),
+        });
+      }
+    }
+
+    let profiles = ProfileManager::instance()
+      .list_profiles()
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to list profiles: {e}"),
+      })?;
+
+    let profile = profiles
+      .iter()
+      .find(|p| p.id.to_string() == profile_id)
+      .ok_or_else(|| McpError {
+        code: -32000,
+        message: format!("Profile not found: {profile_id}"),
+      })?;
+
+    let inner = self.inner.lock().await;
+    let app_handle = inner.app_handle.as_ref().ok_or_else(|| McpError {
+      code: -32000,
+      message: "MCP server not properly initialized".to_string(),
+    })?;
+
+    match profile.browser.as_str() {
+      "camoufox" => {
+        let mut config = profile
+          .camoufox_config
+          .as_ref()
+          .cloned()
+          .unwrap_or_default();
+        if let Some(fp) = fingerprint {
+          config.fingerprint = Some(fp.to_string());
+        }
+        if let Some(os_val) = os {
+          config.os = Some(os_val.to_string());
+        }
+        if let Some(r) = randomize {
+          config.randomize_fingerprint_on_launch = Some(r);
+        }
+        ProfileManager::instance()
+          .update_camoufox_config(app_handle.clone(), profile_id, config)
+          .await
+          .map_err(|e| McpError {
+            code: -32000,
+            message: format!("Failed to update camoufox config: {e}"),
+          })?;
+      }
+      "wayfern" => {
+        let mut config = profile.wayfern_config.as_ref().cloned().unwrap_or_default();
+        if let Some(fp) = fingerprint {
+          config.fingerprint = Some(fp.to_string());
+        }
+        if let Some(os_val) = os {
+          config.os = Some(os_val.to_string());
+        }
+        if let Some(r) = randomize {
+          config.randomize_fingerprint_on_launch = Some(r);
+        }
+        ProfileManager::instance()
+          .update_wayfern_config(app_handle.clone(), profile_id, config)
+          .await
+          .map_err(|e| McpError {
+            code: -32000,
+            message: format!("Failed to update wayfern config: {e}"),
+          })?;
+      }
+      _ => {
+        return Err(McpError {
+          code: -32000,
+          message: "MCP only supports Wayfern and Camoufox profiles".to_string(),
+        })
+      }
+    }
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!("Fingerprint configuration updated for profile '{}'", profile.name)
+      }]
+    }))
+  }
 }
 
 lazy_static::lazy_static! {
@@ -1840,8 +2081,8 @@ mod tests {
     let server = McpServer::new();
     let tools = server.get_tools();
 
-    // Should have at least 24 tools (18 + 6 VPN tools)
-    assert!(tools.len() >= 24);
+    // Should have at least 26 tools (24 + 2 fingerprint tools)
+    assert!(tools.len() >= 26);
 
     // Check tool names
     let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
@@ -1874,6 +2115,9 @@ mod tests {
     assert!(tool_names.contains(&"connect_vpn"));
     assert!(tool_names.contains(&"disconnect_vpn"));
     assert!(tool_names.contains(&"get_vpn_status"));
+    // Fingerprint tools
+    assert!(tool_names.contains(&"get_profile_fingerprint"));
+    assert!(tool_names.contains(&"update_profile_fingerprint"));
   }
 
   #[test]

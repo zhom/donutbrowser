@@ -366,8 +366,11 @@ impl CamoufoxManager {
 
     #[cfg(windows)]
     {
+      use std::os::windows::process::CommandExt;
+      const CREATE_NO_WINDOW: u32 = 0x08000000;
       let result = std::process::Command::new("taskkill")
         .args(["/PID", &pid.to_string(), "/T"])
+        .creation_flags(CREATE_NO_WINDOW)
         .status();
 
       match result {
@@ -602,18 +605,23 @@ impl CamoufoxManager {
     // Clean up any dead instances before launching
     let _ = self.cleanup_dead_instances().await;
 
-    // For ephemeral profiles, write Firefox prefs to keep all data inside the profile dir
+    // For ephemeral profiles, write Firefox prefs to minimize disk writes
     if override_profile_path.is_some() {
-      let cache_dir = profile_path.join("cache2");
       let user_js_path = profile_path.join("user.js");
-      let prefs = format!(
-        concat!(
-          "user_pref(\"browser.cache.disk.parent_directory\", \"{}\");\n",
-          "user_pref(\"browser.cache.disk.enable\", false);\n",
-          "user_pref(\"browser.cache.memory.enable\", true);\n",
-          "user_pref(\"browser.privatebrowsing.autostart\", true);\n",
-        ),
-        cache_dir.to_string_lossy().replace('\\', "\\\\"),
+      let prefs = concat!(
+        "user_pref(\"browser.cache.disk.enable\", false);\n",
+        "user_pref(\"browser.cache.memory.enable\", true);\n",
+        "user_pref(\"browser.sessionstore.resume_from_crash\", false);\n",
+        "user_pref(\"browser.sessionstore.max_tabs_undo\", 0);\n",
+        "user_pref(\"browser.sessionstore.max_windows_undo\", 0);\n",
+        "user_pref(\"places.history.enabled\", false);\n",
+        "user_pref(\"browser.formfill.enable\", false);\n",
+        "user_pref(\"signon.rememberSignons\", false);\n",
+        "user_pref(\"browser.bookmarks.max_backups\", 0);\n",
+        "user_pref(\"browser.shell.checkDefaultBrowser\", false);\n",
+        "user_pref(\"toolkit.crashreporter.enabled\", false);\n",
+        "user_pref(\"browser.pagethumbnails.capturing_disabled\", true);\n",
+        "user_pref(\"browser.download.manager.addToRecentDocs\", false);\n",
       );
       if let Err(e) = std::fs::write(&user_js_path, prefs) {
         log::warn!("Failed to write ephemeral user.js: {e}");

@@ -13,6 +13,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import type { Dispatch, SetStateAction } from "react";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { FaApple, FaLinux, FaWindows } from "react-icons/fa";
 import { FiWifi } from "react-icons/fi";
 import { IoEllipsisHorizontal } from "react-icons/io5";
@@ -68,9 +69,9 @@ import { useTableSorting } from "@/hooks/use-table-sorting";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
 import {
   getBrowserDisplayName,
-  getBrowserIcon,
   getCurrentOS,
   getOSDisplayName,
+  getProfileIcon,
   isCrossOsProfile,
 } from "@/lib/browser-utils";
 import { formatRelativeTime } from "@/lib/flag-utils";
@@ -99,6 +100,7 @@ import { RippleButton } from "./ui/ripple";
 // Stable table meta type to pass volatile state/handlers into TanStack Table without
 // causing column definitions to be recreated on every render.
 type TableMeta = {
+  t: (key: string, options?: Record<string, unknown>) => string;
   selectedProfiles: string[];
   selectableCount: number;
   showCheckboxes: boolean;
@@ -176,8 +178,7 @@ type TableMeta = {
   onConfigureCamoufox?: (profile: BrowserProfile) => void;
   onCloneProfile?: (profile: BrowserProfile) => void;
   onCopyCookiesToProfile?: (profile: BrowserProfile) => void;
-  onImportCookies?: (profile: BrowserProfile) => void;
-  onExportCookies?: (profile: BrowserProfile) => void;
+  onOpenCookieManagement?: (profile: BrowserProfile) => void;
 
   // Traffic snapshots (lightweight real-time data)
   trafficSnapshots: Record<string, TrafficSnapshot>;
@@ -213,7 +214,11 @@ function getProfileSyncStatusDot(
     | undefined,
   errorMessage?: string,
 ): SyncStatusDot | null {
-  const status = liveStatus ?? (profile.sync_enabled ? "synced" : "disabled");
+  const status =
+    liveStatus ??
+    (profile.sync_mode && profile.sync_mode !== "Disabled"
+      ? "synced"
+      : "disabled");
 
   switch (status) {
     case "syncing":
@@ -758,8 +763,7 @@ interface ProfilesDataTableProps {
   onRenameProfile: (profileId: string, newName: string) => Promise<void>;
   onConfigureCamoufox: (profile: BrowserProfile) => void;
   onCopyCookiesToProfile?: (profile: BrowserProfile) => void;
-  onImportCookies?: (profile: BrowserProfile) => void;
-  onExportCookies?: (profile: BrowserProfile) => void;
+  onOpenCookieManagement?: (profile: BrowserProfile) => void;
   runningProfiles: Set<string>;
   isUpdating: (browser: string) => boolean;
   onDeleteSelectedProfiles: (profileIds: string[]) => Promise<void>;
@@ -786,8 +790,7 @@ export function ProfilesDataTable({
   onRenameProfile,
   onConfigureCamoufox,
   onCopyCookiesToProfile,
-  onImportCookies,
-  onExportCookies,
+  onOpenCookieManagement,
   runningProfiles,
   isUpdating,
   onAssignProfilesToGroup,
@@ -802,6 +805,7 @@ export function ProfilesDataTable({
   crossOsUnlocked = false,
   syncUnlocked = false,
 }: ProfilesDataTableProps) {
+  const { t } = useTranslation();
   const { getTableSorting, updateSorting, isLoaded } = useTableSorting();
   const [sorting, setSorting] = React.useState<SortingState>([]);
 
@@ -1201,9 +1205,8 @@ export function ProfilesDataTable({
           browserState.isClient && runningProfiles.has(profile.id);
         const isLaunching = launchingProfiles.has(profile.id);
         const isStopping = stoppingProfiles.has(profile.id);
-        const isBrowserUpdating = isUpdating(profile.browser);
 
-        if (isRunning || isLaunching || isStopping || isBrowserUpdating) {
+        if (isRunning || isLaunching || isStopping) {
           newSet.delete(profileId);
           hasChanges = true;
         }
@@ -1218,7 +1221,6 @@ export function ProfilesDataTable({
     runningProfiles,
     launchingProfiles,
     stoppingProfiles,
-    isUpdating,
     browserState.isClient,
     onSelectedProfilesChange,
     selectedProfiles,
@@ -1364,13 +1366,7 @@ export function ProfilesDataTable({
                   browserState.isClient && runningProfiles.has(profile.id);
                 const isLaunching = launchingProfiles.has(profile.id);
                 const isStopping = stoppingProfiles.has(profile.id);
-                const isBrowserUpdating = isUpdating(profile.browser);
-                return (
-                  !isRunning &&
-                  !isLaunching &&
-                  !isStopping &&
-                  !isBrowserUpdating
-                );
+                return !isRunning && !isLaunching && !isStopping;
               })
               .map((profile) => profile.id),
           )
@@ -1386,7 +1382,6 @@ export function ProfilesDataTable({
       runningProfiles,
       launchingProfiles,
       stoppingProfiles,
-      isUpdating,
     ],
   );
 
@@ -1397,8 +1392,7 @@ export function ProfilesDataTable({
         browserState.isClient && runningProfiles.has(profile.id);
       const isLaunching = launchingProfiles.has(profile.id);
       const isStopping = stoppingProfiles.has(profile.id);
-      const isBrowserUpdating = isUpdating(profile.browser);
-      return !isRunning && !isLaunching && !isStopping && !isBrowserUpdating;
+      return !isRunning && !isLaunching && !isStopping;
     });
   }, [
     profiles,
@@ -1406,12 +1400,12 @@ export function ProfilesDataTable({
     runningProfiles,
     launchingProfiles,
     stoppingProfiles,
-    isUpdating,
   ]);
 
   // Build table meta from volatile state so columns can stay stable
   const tableMeta = React.useMemo<TableMeta>(
     () => ({
+      t,
       selectedProfiles,
       selectableCount: selectableProfiles.length,
       showCheckboxes,
@@ -1477,8 +1471,7 @@ export function ProfilesDataTable({
       onCloneProfile,
       onConfigureCamoufox,
       onCopyCookiesToProfile,
-      onImportCookies,
-      onExportCookies,
+      onOpenCookieManagement,
 
       // Traffic snapshots (lightweight real-time data)
       trafficSnapshots,
@@ -1501,6 +1494,7 @@ export function ProfilesDataTable({
       handleCreateCountryProxy,
     }),
     [
+      t,
       selectedProfiles,
       selectableProfiles.length,
       showCheckboxes,
@@ -1540,8 +1534,7 @@ export function ProfilesDataTable({
       onCloneProfile,
       onConfigureCamoufox,
       onCopyCookiesToProfile,
-      onImportCookies,
-      onExportCookies,
+      onOpenCookieManagement,
       syncStatuses,
       onOpenProfileSyncDialog,
       onToggleProfileSync,
@@ -1578,7 +1571,7 @@ export function ProfilesDataTable({
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
           const browser = profile.browser;
-          const IconComponent = getBrowserIcon(browser);
+          const IconComponent = getProfileIcon(profile);
           const isCrossOs = isCrossOsProfile(profile);
 
           const isSelected = meta.isProfileSelected(profile.id);
@@ -1586,9 +1579,7 @@ export function ProfilesDataTable({
             meta.isClient && meta.runningProfiles.has(profile.id);
           const isLaunching = meta.launchingProfiles.has(profile.id);
           const isStopping = meta.stoppingProfiles.has(profile.id);
-          const isBrowserUpdating = meta.isUpdating(browser);
-          const isDisabled =
-            isRunning || isLaunching || isStopping || isBrowserUpdating;
+          const isDisabled = isRunning || isLaunching || isStopping;
 
           // Cross-OS profiles: show OS icon when checkboxes aren't visible, show checkbox when they are
           if (isCrossOs && !meta.showCheckboxes && !isSelected) {
@@ -1907,13 +1898,8 @@ export function ProfilesDataTable({
             meta.isClient && meta.runningProfiles.has(profile.id);
           const isLaunching = meta.launchingProfiles.has(profile.id);
           const isStopping = meta.stoppingProfiles.has(profile.id);
-          const isBrowserUpdating = meta.isUpdating(profile.browser);
           const isDisabled =
-            isRunning ||
-            isLaunching ||
-            isStopping ||
-            isBrowserUpdating ||
-            isCrossOs;
+            isRunning || isLaunching || isStopping || isCrossOs;
 
           return (
             <button
@@ -1940,14 +1926,7 @@ export function ProfilesDataTable({
                 }
               }}
             >
-              <span className="flex items-center gap-1">
-                {display}
-                {profile.ephemeral && (
-                  <span className="px-1 py-0.5 text-[10px] leading-none rounded bg-muted text-muted-foreground font-medium">
-                    Ephemeral
-                  </span>
-                )}
-              </span>
+              {display}
             </button>
           );
         },
@@ -1963,13 +1942,8 @@ export function ProfilesDataTable({
             meta.isClient && meta.runningProfiles.has(profile.id);
           const isLaunching = meta.launchingProfiles.has(profile.id);
           const isStopping = meta.stoppingProfiles.has(profile.id);
-          const isBrowserUpdating = meta.isUpdating(profile.browser);
           const isDisabled =
-            isRunning ||
-            isLaunching ||
-            isStopping ||
-            isBrowserUpdating ||
-            isCrossOs;
+            isRunning || isLaunching || isStopping || isCrossOs;
 
           return (
             <TagsCell
@@ -1996,13 +1970,8 @@ export function ProfilesDataTable({
             meta.isClient && meta.runningProfiles.has(profile.id);
           const isLaunching = meta.launchingProfiles.has(profile.id);
           const isStopping = meta.stoppingProfiles.has(profile.id);
-          const isBrowserUpdating = meta.isUpdating(profile.browser);
           const isDisabled =
-            isRunning ||
-            isLaunching ||
-            isStopping ||
-            isBrowserUpdating ||
-            isCrossOs;
+            isRunning || isLaunching || isStopping || isCrossOs;
 
           return (
             <NoteCell
@@ -2027,13 +1996,8 @@ export function ProfilesDataTable({
             meta.isClient && meta.runningProfiles.has(profile.id);
           const isLaunching = meta.launchingProfiles.has(profile.id);
           const isStopping = meta.stoppingProfiles.has(profile.id);
-          const isBrowserUpdating = meta.isUpdating(profile.browser);
           const isDisabled =
-            isRunning ||
-            isLaunching ||
-            isStopping ||
-            isBrowserUpdating ||
-            isCrossOs;
+            isRunning || isLaunching || isStopping || isCrossOs;
 
           const hasProxyOverride = Object.hasOwn(
             meta.proxyOverrides,
@@ -2331,18 +2295,11 @@ export function ProfilesDataTable({
           const isCrossOs = isCrossOsProfile(profile);
           const isRunning =
             meta.isClient && meta.runningProfiles.has(profile.id);
-          const isBrowserUpdating =
-            meta.isClient && meta.isUpdating(profile.browser);
           const isLaunching = meta.launchingProfiles.has(profile.id);
           const isStopping = meta.stoppingProfiles.has(profile.id);
           const isDisabled =
-            isRunning ||
-            isLaunching ||
-            isStopping ||
-            isBrowserUpdating ||
-            isCrossOs;
-          const isDeleteDisabled =
-            isRunning || isLaunching || isStopping || isBrowserUpdating;
+            isRunning || isLaunching || isStopping || isCrossOs;
+          const isDeleteDisabled = isRunning || isLaunching || isStopping;
 
           return (
             <div className="flex justify-end items-center">
@@ -2364,28 +2321,25 @@ export function ProfilesDataTable({
                     }}
                     disabled={isCrossOs}
                   >
-                    View Network
+                    {meta.t("profiles.actions.viewNetwork")}
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      if (meta.syncUnlocked) {
-                        meta.onToggleProfileSync?.(profile);
-                      }
-                    }}
-                    disabled={!meta.syncUnlocked || isCrossOs}
-                  >
-                    <span className="flex items-center gap-2">
-                      {profile.sync_enabled ? "Disable Sync" : "Enable Sync"}
-                      {!meta.syncUnlocked && <ProBadge />}
-                    </span>
-                  </DropdownMenuItem>
+                  {!profile.ephemeral && (
+                    <DropdownMenuItem
+                      onClick={() => {
+                        meta.onOpenProfileSyncDialog?.(profile);
+                      }}
+                      disabled={isCrossOs}
+                    >
+                      {meta.t("profiles.actions.syncSettings")}
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem
                     onClick={() => {
                       meta.onAssignProfilesToGroup?.([profile.id]);
                     }}
                     disabled={isDisabled}
                   >
-                    Assign to Group
+                    {meta.t("profiles.actions.assignToGroup")}
                   </DropdownMenuItem>
                   {(profile.browser === "camoufox" ||
                     profile.browser === "wayfern") &&
@@ -2396,10 +2350,7 @@ export function ProfilesDataTable({
                         }}
                         disabled={isDisabled}
                       >
-                        <span className="flex items-center gap-2">
-                          Change Fingerprint
-                          {!meta.crossOsUnlocked && <ProBadge />}
-                        </span>
+                        {meta.t("profiles.actions.changeFingerprint")}
                       </DropdownMenuItem>
                     )}
                   {(profile.browser === "camoufox" ||
@@ -2415,7 +2366,7 @@ export function ProfilesDataTable({
                         disabled={isDisabled || !meta.crossOsUnlocked}
                       >
                         <span className="flex items-center gap-2">
-                          Copy Cookies to Profile
+                          {meta.t("profiles.actions.copyCookiesToProfile")}
                           {!meta.crossOsUnlocked && <ProBadge />}
                         </span>
                       </DropdownMenuItem>
@@ -2423,35 +2374,17 @@ export function ProfilesDataTable({
                   {(profile.browser === "camoufox" ||
                     profile.browser === "wayfern") &&
                     !profile.ephemeral &&
-                    meta.onImportCookies && (
+                    meta.onOpenCookieManagement && (
                       <DropdownMenuItem
                         onClick={() => {
                           if (meta.crossOsUnlocked) {
-                            meta.onImportCookies?.(profile);
+                            meta.onOpenCookieManagement?.(profile);
                           }
                         }}
                         disabled={isDisabled || !meta.crossOsUnlocked}
                       >
                         <span className="flex items-center gap-2">
-                          Import Cookies
-                          {!meta.crossOsUnlocked && <ProBadge />}
-                        </span>
-                      </DropdownMenuItem>
-                    )}
-                  {(profile.browser === "camoufox" ||
-                    profile.browser === "wayfern") &&
-                    !profile.ephemeral &&
-                    meta.onExportCookies && (
-                      <DropdownMenuItem
-                        onClick={() => {
-                          if (meta.crossOsUnlocked) {
-                            meta.onExportCookies?.(profile);
-                          }
-                        }}
-                        disabled={isDisabled || !meta.crossOsUnlocked}
-                      >
-                        <span className="flex items-center gap-2">
-                          Export Cookies
+                          {meta.t("cookies.management.menuItem")}
                           {!meta.crossOsUnlocked && <ProBadge />}
                         </span>
                       </DropdownMenuItem>
@@ -2463,7 +2396,7 @@ export function ProfilesDataTable({
                       }}
                       disabled={isDisabled}
                     >
-                      Clone Profile
+                      {meta.t("profiles.actions.clone")}
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuItem
@@ -2472,7 +2405,7 @@ export function ProfilesDataTable({
                     }}
                     disabled={isDeleteDisabled}
                   >
-                    Delete
+                    {meta.t("profiles.actions.delete")}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -2499,8 +2432,7 @@ export function ProfilesDataTable({
         browserState.isClient && runningProfiles.has(profile.id);
       const isLaunching = launchingProfiles.has(profile.id);
       const isStopping = stoppingProfiles.has(profile.id);
-      const isBrowserUpdating = isUpdating(profile.browser);
-      return !isRunning && !isLaunching && !isStopping && !isBrowserUpdating;
+      return !isRunning && !isLaunching && !isStopping;
     },
     getSortedRowModel: getSortedRowModel(),
     getCoreRowModel: getCoreRowModel(),

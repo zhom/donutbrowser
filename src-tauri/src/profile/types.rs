@@ -13,6 +13,14 @@ pub enum SyncStatus {
   Error,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SyncMode {
+  #[default]
+  Disabled,
+  Regular,
+  Encrypted,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BrowserProfile {
   pub id: uuid::Uuid,
@@ -40,7 +48,9 @@ pub struct BrowserProfile {
   #[serde(default)]
   pub note: Option<String>, // User note
   #[serde(default)]
-  pub sync_enabled: bool, // Whether sync is enabled for this profile
+  pub sync_mode: SyncMode,
+  #[serde(default)]
+  pub encryption_salt: Option<String>,
   #[serde(default)]
   pub last_sync: Option<u64>, // Timestamp of last successful sync (epoch seconds)
   #[serde(default)]
@@ -76,5 +86,15 @@ impl BrowserProfile {
       Some(host_os) => host_os != &get_host_os(),
       None => false,
     }
+  }
+
+  /// Returns true if sync is enabled (either Regular or Encrypted mode).
+  pub fn is_sync_enabled(&self) -> bool {
+    self.sync_mode != SyncMode::Disabled
+  }
+
+  /// Returns true if sync uses E2E encryption.
+  pub fn is_encrypted_sync(&self) -> bool {
+    self.sync_mode == SyncMode::Encrypted
   }
 }

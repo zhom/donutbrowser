@@ -245,6 +245,9 @@ impl WayfernManager {
       .arg("--no-first-run")
       .arg("--no-default-browser-check")
       .arg("--disable-background-mode")
+      .arg("--use-mock-keychain")
+      .arg("--password-store=basic")
+      .arg("--disable-features=DialMediaRouteProvider")
       .stdout(Stdio::null())
       .stderr(Stdio::null());
 
@@ -261,8 +264,11 @@ impl WayfernManager {
         }
         #[cfg(windows)]
         {
+          use std::os::windows::process::CommandExt;
+          const CREATE_NO_WINDOW: u32 = 0x08000000;
           let _ = std::process::Command::new("taskkill")
             .args(["/PID", &id.to_string(), "/F"])
+            .creation_flags(CREATE_NO_WINDOW)
             .output();
         }
       }
@@ -435,8 +441,11 @@ impl WayfernManager {
     }
 
     if ephemeral {
-      args.push(format!("--disk-cache-dir={}/cache", profile_path));
-      args.push("--incognito".to_string());
+      args.push("--disk-cache-size=1".to_string());
+      args.push("--disable-breakpad".to_string());
+      args.push("--disable-crash-reporter".to_string());
+      args.push("--no-service-autorun".to_string());
+      args.push("--disable-sync".to_string());
     }
 
     // Don't add URL to args - we'll navigate via CDP after setting fingerprint
@@ -591,8 +600,11 @@ impl WayfernManager {
         }
         #[cfg(windows)]
         {
+          use std::os::windows::process::CommandExt;
+          const CREATE_NO_WINDOW: u32 = 0x08000000;
           let _ = std::process::Command::new("taskkill")
             .args(["/PID", &pid.to_string(), "/F"])
+            .creation_flags(CREATE_NO_WINDOW)
             .output();
         }
         log::info!("Stopped Wayfern instance {id} (PID: {pid})");
@@ -646,11 +658,19 @@ impl WayfernManager {
 
     let mut inner = self.inner.lock().await;
 
+    // Canonicalize the target path for comparison
+    let target_path = std::path::Path::new(profile_path)
+      .canonicalize()
+      .unwrap_or_else(|_| std::path::Path::new(profile_path).to_path_buf());
+
     // Find the instance with the matching profile path
     let mut found_id: Option<String> = None;
     for (id, instance) in &inner.instances {
       if let Some(path) = &instance.profile_path {
-        if path == profile_path {
+        let instance_path = std::path::Path::new(path)
+          .canonicalize()
+          .unwrap_or_else(|_| std::path::Path::new(path).to_path_buf());
+        if instance_path == target_path {
           found_id = Some(id.clone());
           break;
         }
@@ -667,7 +687,6 @@ impl WayfernManager {
           let sysinfo_pid = sysinfo::Pid::from_u32(pid);
 
           if system.process(sysinfo_pid).is_some() {
-            // Process is still running
             return Some(WayfernLaunchResult {
               id: id.clone(),
               processId: instance.process_id,
@@ -676,7 +695,6 @@ impl WayfernManager {
               cdp_port: instance.cdp_port,
             });
           } else {
-            // Process has died (e.g., Cmd+Q), remove from instances
             log::info!(
               "Wayfern process {} for profile {} is no longer running, cleaning up",
               pid,
@@ -686,6 +704,101 @@ impl WayfernManager {
             return None;
           }
         }
+      }
+    }
+
+    // If not found in in-memory instances, scan system processes.
+    // This handles the case where the GUI was restarted but Wayfern is still running.
+    if let Some((pid, found_profile_path, cdp_port)) =
+      Self::find_wayfern_process_by_profile(&target_path)
+    {
+      log::info!(
+        "Found running Wayfern process (PID: {}) for profile path via system scan",
+        pid
+      );
+
+      let instance_id = format!("recovered_{}", pid);
+      inner.instances.insert(
+        instance_id.clone(),
+        WayfernInstance {
+          id: instance_id.clone(),
+          process_id: Some(pid),
+          profile_path: Some(found_profile_path.clone()),
+          url: None,
+          cdp_port,
+        },
+      );
+
+      return Some(WayfernLaunchResult {
+        id: instance_id,
+        processId: Some(pid),
+        profilePath: Some(found_profile_path),
+        url: None,
+        cdp_port,
+      });
+    }
+
+    None
+  }
+
+  /// Scan system processes to find a Wayfern/Chromium process using a specific profile path
+  fn find_wayfern_process_by_profile(
+    target_path: &std::path::Path,
+  ) -> Option<(u32, String, Option<u16>)> {
+    use sysinfo::{ProcessRefreshKind, RefreshKind, System};
+
+    let system = System::new_with_specifics(
+      RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
+    );
+
+    let target_path_str = target_path.to_string_lossy();
+
+    for (pid, process) in system.processes() {
+      let cmd = process.cmd();
+      if cmd.is_empty() {
+        continue;
+      }
+
+      let exe_name = process.name().to_string_lossy().to_lowercase();
+      let is_chromium_like = exe_name.contains("wayfern")
+        || exe_name.contains("chromium")
+        || exe_name.contains("chrome");
+
+      if !is_chromium_like {
+        continue;
+      }
+
+      // Skip child processes (renderer, GPU, utility, zygote, etc.)
+      // Only the main browser process lacks a --type= argument
+      let is_child = cmd
+        .iter()
+        .any(|a| a.to_str().is_some_and(|s| s.starts_with("--type=")));
+      if is_child {
+        continue;
+      }
+
+      let mut matched = false;
+      let mut cdp_port: Option<u16> = None;
+
+      for arg in cmd.iter() {
+        if let Some(arg_str) = arg.to_str() {
+          if let Some(dir_val) = arg_str.strip_prefix("--user-data-dir=") {
+            let cmd_path = std::path::Path::new(dir_val)
+              .canonicalize()
+              .unwrap_or_else(|_| std::path::Path::new(dir_val).to_path_buf());
+            if cmd_path == target_path {
+              matched = true;
+            }
+          }
+
+          if let Some(port_val) = arg_str.strip_prefix("--remote-debugging-port=") {
+            cdp_port = port_val.parse().ok();
+          }
+        }
+      }
+
+      if matched {
+        return Some((pid.as_u32(), target_path_str.to_string(), cdp_port));
       }
     }
 

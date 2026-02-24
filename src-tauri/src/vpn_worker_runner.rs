@@ -210,9 +210,12 @@ pub async fn stop_vpn_worker(id: &str) -> Result<bool, Box<dyn std::error::Error
       }
       #[cfg(windows)]
       {
+        use std::os::windows::process::CommandExt;
         use std::process::Command;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
         let _ = Command::new("taskkill")
           .args(["/F", "/PID", &pid.to_string()])
+          .creation_flags(CREATE_NO_WINDOW)
           .output();
       }
 

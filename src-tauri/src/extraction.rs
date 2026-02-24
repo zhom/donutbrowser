@@ -816,6 +816,15 @@ impl Extractor {
 
     if dirs.len() == 1 && !has_non_archive_files {
       let single_dir = &dirs[0];
+
+      if single_dir.extension().is_some_and(|ext| ext == "app") {
+        log::info!(
+          "Skipping flatten: {} is a macOS app bundle",
+          single_dir.display()
+        );
+        return Ok(());
+      }
+
       log::info!(
         "Flattening single-directory archive: moving contents of {} to {}",
         single_dir.display(),

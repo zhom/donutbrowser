@@ -1033,8 +1033,8 @@ pub async fn cancel_download(browser_str: String, version: String) -> Result<(),
   }
 }
 
-/// Clean up the fake "None" search engine from Camoufox policies.json so that
-/// Camoufox's built-in fallback (DuckDuckGo when nothing else is configured) can work.
+/// Set DuckDuckGo as the default search engine in Camoufox policies.json.
+/// Removes the fake "None" search engine and explicitly sets DuckDuckGo as default.
 /// Called both at download time and at launch time to cover existing installations.
 pub fn configure_camoufox_search_engine(
   browser_dir: &Path,
@@ -1055,45 +1055,35 @@ pub fn configure_camoufox_search_engine(
     .and_then(|d| d.as_str())
     .unwrap_or("");
 
-  if current_default != "None" {
+  if current_default == "DuckDuckGo" {
     return Ok(());
   }
 
-  let mut changed = false;
-
   if let Some(policies_obj) = policies.get_mut("policies") {
     if let Some(se) = policies_obj.get_mut("SearchEngines") {
-      // Remove the fake "None" default so Camoufox uses its built-in fallback
+      // Set DuckDuckGo as the explicit default
       if let Some(obj) = se.as_object_mut() {
-        obj.remove("Default");
-        changed = true;
+        obj.insert(
+          "Default".to_string(),
+          serde_json::Value::String("DuckDuckGo".to_string()),
+        );
       }
 
       // Remove the fake "None" search engine entry from Add
       if let Some(add_arr) = se.get_mut("Add").and_then(|a| a.as_array_mut()) {
-        let before = add_arr.len();
         add_arr.retain(|entry| entry.get("Name").and_then(|n| n.as_str()) != Some("None"));
-        if add_arr.len() != before {
-          changed = true;
-        }
       }
 
-      // Ensure DuckDuckGo is not in the Remove list so it's available as fallback
+      // Ensure DuckDuckGo is not in the Remove list
       if let Some(remove_arr) = se.get_mut("Remove").and_then(|r| r.as_array_mut()) {
-        let before = remove_arr.len();
         remove_arr.retain(|v| v.as_str() != Some("DuckDuckGo"));
-        if remove_arr.len() != before {
-          changed = true;
-        }
       }
     }
   }
 
-  if changed {
-    let updated = serde_json::to_string_pretty(&policies)?;
-    std::fs::write(&policies_path, updated)?;
-    log::info!("Cleaned up fake 'None' search engine from Camoufox policies.json");
-  }
+  let updated = serde_json::to_string_pretty(&policies)?;
+  std::fs::write(&policies_path, updated)?;
+  log::info!("Set DuckDuckGo as default search engine in Camoufox policies.json");
 
   Ok(())
 }

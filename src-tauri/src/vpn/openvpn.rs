@@ -73,7 +73,13 @@ impl OpenVpnTunnel {
 
     #[cfg(windows)]
     {
-      if let Ok(output) = Command::new("where").arg("openvpn").output() {
+      use std::os::windows::process::CommandExt;
+      const CREATE_NO_WINDOW: u32 = 0x08000000;
+      if let Ok(output) = Command::new("where")
+        .arg("openvpn")
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+      {
         if output.status.success() {
           let path = String::from_utf8_lossy(&output.stdout)
             .lines()

@@ -116,7 +116,7 @@ pub struct StoredProxy {
 
 impl StoredProxy {
   pub fn new(name: String, proxy_settings: ProxySettings) -> Self {
-    let sync_enabled = crate::cloud_auth::CLOUD_AUTH.has_active_paid_subscription_sync();
+    let sync_enabled = crate::sync::is_sync_configured();
     Self {
       id: uuid::Uuid::new_v4().to_string(),
       name,
@@ -390,6 +390,15 @@ impl ProxyManager {
       log::error!("Failed to emit proxies-changed event: {e}");
     }
 
+    if stored_proxy.sync_enabled {
+      if let Some(scheduler) = crate::sync::get_global_scheduler() {
+        let id = stored_proxy.id.clone();
+        tauri::async_runtime::spawn(async move {
+          scheduler.queue_proxy_sync(id).await;
+        });
+      }
+    }
+
     Ok(stored_proxy)
   }
 
@@ -608,6 +617,11 @@ impl ProxyManager {
     }
   }
 
+  pub fn remove_from_memory(&self, proxy_id: &str) {
+    let mut stored_proxies = self.stored_proxies.lock().unwrap();
+    stored_proxies.remove(proxy_id);
+  }
+
   // Get all stored proxies
   pub fn get_stored_proxies(&self) -> Vec<StoredProxy> {
     let stored_proxies = self.stored_proxies.lock().unwrap();
@@ -678,6 +692,15 @@ impl ProxyManager {
     // Emit event for reactive UI updates
     if let Err(e) = events::emit_empty("proxies-changed") {
       log::error!("Failed to emit proxies-changed event: {e}");
+    }
+
+    if updated_proxy.sync_enabled {
+      if let Some(scheduler) = crate::sync::get_global_scheduler() {
+        let id = updated_proxy.id.clone();
+        tauri::async_runtime::spawn(async move {
+          scheduler.queue_proxy_sync(id).await;
+        });
+      }
     }
 
     Ok(updated_proxy)
