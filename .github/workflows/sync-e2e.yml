@@ -24,6 +24,7 @@ jobs:
   rust-sync-e2e:
     name: Rust Sync E2E Tests
     strategy:
+      fail-fast: false
       matrix:
         os: [macos-latest, ubuntu-22.04]
 
