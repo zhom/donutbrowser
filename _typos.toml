@@ -6,3 +6,6 @@ extend-exclude = [
     "src-tauri/build.rs",
     "src-tauri/tests/fixtures/test.ovpn",
 ]
+
+[default.extend-words]
+DBE = "DBE"
