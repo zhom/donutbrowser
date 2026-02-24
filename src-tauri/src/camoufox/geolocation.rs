@@ -267,6 +267,7 @@ impl Default for LocaleSelector {
 }
 
 /// Normalize a locale string to standard format.
+/// Handles formats like "en-US", "zh-Hant-US", "zh-Hans-CN".
 fn normalize_locale(locale: &str) -> Locale {
   let parts: Vec<&str> = locale.split('-').collect();
 
@@ -275,23 +276,33 @@ fn normalize_locale(locale: &str) -> Locale {
     .map(|s| s.to_lowercase())
     .unwrap_or_else(|| "en".to_string());
 
-  let region = parts.get(1).map(|s| s.to_uppercase());
+  // A 4-letter part is a script subtag (e.g. "Hant", "Hans", "Cyrl").
+  // A 2-letter or 3-digit part is a region subtag (e.g. "US", "CN").
+  let mut explicit_script: Option<String> = None;
+  let mut region: Option<String> = None;
 
-  // Determine script based on language if needed
-  let script = match language.as_str() {
-    "zh" => {
-      // Chinese - Traditional for TW/HK, Simplified otherwise
-      if region.as_deref() == Some("TW") || region.as_deref() == Some("HK") {
-        Some("Hant".to_string())
-      } else {
-        Some("Hans".to_string())
+  for part in parts.iter().skip(1) {
+    if part.len() == 4 && part.chars().all(|c| c.is_ascii_alphabetic()) {
+      explicit_script = Some(part[..1].to_uppercase() + &part[1..].to_lowercase());
+    } else {
+      region = Some(part.to_uppercase());
+    }
+  }
+
+  let script = if explicit_script.is_some() {
+    explicit_script
+  } else {
+    match language.as_str() {
+      "zh" => {
+        if region.as_deref() == Some("TW") || region.as_deref() == Some("HK") {
+          Some("Hant".to_string())
+        } else {
+          Some("Hans".to_string())
+        }
       }
+      "sr" => Some("Cyrl".to_string()),
+      _ => None,
     }
-    "sr" => {
-      // Serbian - can be Cyrillic or Latin
-      Some("Cyrl".to_string())
-    }
-    _ => None,
   };
 
   Locale {
@@ -442,5 +453,16 @@ mod tests {
 
     let zh_cn = normalize_locale("zh-CN");
     assert_eq!(zh_cn.script, Some("Hans".to_string()));
+
+    // 3-part locale: language-script-region
+    let zh_hant_us = normalize_locale("zh-Hant-US");
+    assert_eq!(zh_hant_us.language, "zh");
+    assert_eq!(zh_hant_us.region, Some("US".to_string()));
+    assert_eq!(zh_hant_us.script, Some("Hant".to_string()));
+
+    let zh_hans_us = normalize_locale("zh-Hans-US");
+    assert_eq!(zh_hans_us.language, "zh");
+    assert_eq!(zh_hans_us.region, Some("US".to_string()));
+    assert_eq!(zh_hans_us.script, Some("Hans".to_string()));
   }
 }
