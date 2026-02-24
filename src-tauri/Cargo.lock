@@ -796,15 +796,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bzip2"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3a53fac24f34a81bc9954b5d6cfce0c21e18ec6959f44f56e8e90e4bb7c346c"
-dependencies = [
- "libbz2-rs-sys",
-]
-
-[[package]]
 name = "bzip2-sys"
 version = "0.1.13+1.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1597,7 +1588,7 @@ dependencies = [
 
 [[package]]
 name = "donutbrowser"
-version = "0.14.6"
+version = "0.15.0"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -1607,7 +1598,7 @@ dependencies = [
  "base64 0.22.1",
  "blake3",
  "boringtun",
- "bzip2 0.6.1",
+ "bzip2",
  "chrono",
  "clap",
  "core-foundation 0.10.1",
@@ -3348,12 +3339,6 @@ dependencies = [
  "libloading",
  "once_cell",
 ]
-
-[[package]]
-name = "libbz2-rs-sys"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c4a545a15244c7d945065b5d392b2d2d7f21526fba56ce51467b06ed445e8f7"
 
 [[package]]
 name = "libc"
@@ -8720,7 +8705,7 @@ checksum = "fabe6324e908f85a1c52063ce7aa26b68dcb7eb6dbc83a2d148403c9bc3eba50"
 dependencies = [
  "aes",
  "arbitrary",
- "bzip2 0.5.2",
+ "bzip2",
  "constant_time_eq 0.3.1",
  "crc32fast",
  "crossbeam-utils",
