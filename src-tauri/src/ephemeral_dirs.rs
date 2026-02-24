@@ -16,7 +16,7 @@ fn get_ephemeral_base_dir() -> Result<PathBuf, String> {
     let base = PathBuf::from("/dev/shm/donut-ephemeral");
     std::fs::create_dir_all(&base)
       .map_err(|e| format!("Failed to create ephemeral base in /dev/shm: {e}"))?;
-    return Ok(base);
+    Ok(base)
   }
 
   #[cfg(not(target_os = "linux"))]
