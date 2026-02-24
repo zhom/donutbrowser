@@ -2,25 +2,6 @@ use muda::{Menu, MenuItem};
 use std::process::Command;
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
-#[cfg(windows)]
-fn win_process_exists(pid: u32) -> bool {
-  use std::ptr;
-  const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
-
-  extern "system" {
-    fn OpenProcess(dwDesiredAccess: u32, bInheritHandles: i32, dwProcessId: u32) -> *mut ();
-    fn CloseHandle(hObject: *mut ()) -> i32;
-  }
-
-  let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
-  if handle.is_null() || handle == ptr::null_mut() {
-    false
-  } else {
-    unsafe { CloseHandle(handle) };
-    true
-  }
-}
-
 pub fn load_icon() -> Icon {
   // On Windows, use the full-color icon so it renders well on dark taskbars.
   // On macOS/Linux, use the template icon (black with alpha) for system light/dark handling.
