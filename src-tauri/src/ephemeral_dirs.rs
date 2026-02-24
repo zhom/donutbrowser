@@ -19,27 +19,30 @@ fn get_ephemeral_base_dir() -> Result<PathBuf, String> {
     return Ok(base);
   }
 
-  #[cfg(target_os = "macos")]
+  #[cfg(not(target_os = "linux"))]
   {
-    if let Ok(mount) = get_or_create_macos_ramdisk() {
-      return Ok(mount);
+    #[cfg(target_os = "macos")]
+    {
+      if let Ok(mount) = get_or_create_macos_ramdisk() {
+        return Ok(mount);
+      }
+      log::warn!("Failed to create macOS RAM disk, ephemeral profiles may use disk");
     }
-    log::warn!("Failed to create macOS RAM disk, ephemeral profiles may use disk");
-  }
 
-  #[cfg(target_os = "windows")]
-  {
-    if let Ok(mount) = get_or_create_windows_ramdisk() {
-      return Ok(mount);
+    #[cfg(target_os = "windows")]
+    {
+      if let Ok(mount) = get_or_create_windows_ramdisk() {
+        return Ok(mount);
+      }
+      log::warn!("Failed to create Windows RAM disk, ephemeral profiles may use disk");
     }
-    log::warn!("Failed to create Windows RAM disk, ephemeral profiles may use disk");
-  }
 
-  // Fallback
-  let base = std::env::temp_dir().join("donut-ephemeral");
-  std::fs::create_dir_all(&base)
-    .map_err(|e| format!("Failed to create ephemeral base dir: {e}"))?;
-  Ok(base)
+    // Fallback
+    let base = std::env::temp_dir().join("donut-ephemeral");
+    std::fs::create_dir_all(&base)
+      .map_err(|e| format!("Failed to create ephemeral base dir: {e}"))?;
+    Ok(base)
+  }
 }
 
 #[cfg(target_os = "macos")]
