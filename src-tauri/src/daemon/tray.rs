@@ -80,10 +80,14 @@ pub fn open_gui() {
   // Using `-n` would bypass the single-instance plugin entirely.
   #[cfg(target_os = "macos")]
   {
+    // Use `open -n` to force launching a new process. Without `-n`, macOS
+    // re-activates the daemon (the existing process from the bundle) instead
+    // of launching the GUI binary. The single-instance Tauri plugin in the
+    // GUI handles deduplication if a GUI instance is already running.
     if let Some(app_bundle) = get_app_bundle_path() {
-      let _ = Command::new("open").arg(&app_bundle).spawn();
+      let _ = Command::new("open").args(["-n"]).arg(&app_bundle).spawn();
     } else {
-      let _ = Command::new("open").arg("-a").arg("Donut").spawn();
+      let _ = Command::new("open").args(["-n", "-a", "Donut"]).spawn();
     }
   }
 

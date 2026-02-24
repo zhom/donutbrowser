@@ -13,7 +13,6 @@ use crate::daemon::autostart;
 /// This avoids spawning tasklist.exe which causes a visible conhost window flash.
 #[cfg(windows)]
 fn win_process_exists(pid: u32) -> bool {
-  use std::ptr;
   const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
 
   extern "system" {
@@ -22,7 +21,7 @@ fn win_process_exists(pid: u32) -> bool {
   }
 
   let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
-  if handle.is_null() || handle == ptr::null_mut() {
+  if handle.is_null() {
     false
   } else {
     unsafe { CloseHandle(handle) };
