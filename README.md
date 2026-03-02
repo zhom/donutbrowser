@@ -64,7 +64,7 @@ Donut Browser supports syncing profiles, proxies, and groups across devices via 
 
 ## Community
 
-Have questions or want to contribute? We'd love to hear from you!
+Have questions or want to contribute? The team would love to hear from you!
 
 - **Issues**: [GitHub Issues](https://github.com/zhom/donutbrowser/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/zhom/donutbrowser/discussions)
@@ -113,7 +113,7 @@ Have questions or want to contribute? We'd love to hear from you!
 
 ## Contact
 
-Have an urgent question or want to report a security vulnerability? Send an email to [contact@donutbrowser.com](mailto:contact@donutbrowser.com) and we'll get back to you as fast as possible.
+Have an urgent question or want to report a security vulnerability? Send an email to [contact@donutbrowser.com](mailto:contact@donutbrowser.com) and the team will get back to you as fast as possible.
 
 ## License
 

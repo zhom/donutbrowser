@@ -10,11 +10,11 @@ Do keep in mind before you start working on an issue / posting a PR:
 
 - Search existing PRs related to that issue which might close them
 - Confirm if other contributors are working on the same issue
-- Check if the feature aligns with our roadmap and project goals
+- Check if the feature aligns with the project's roadmap and goals
 
 ## Contributor License Agreement
 
-By contributing to Donut Browser, you agree that your contributions will be licensed under the same terms as the project. You must agree to our [Contributor License Agreement](CONTRIBUTOR_LICENSE_AGREEMENT.md) before your contributions can be accepted. This agreement ensures that:
+By contributing to Donut Browser, you agree that your contributions will be licensed under the same terms as the project. You must agree to the [Contributor License Agreement](CONTRIBUTOR_LICENSE_AGREEMENT.md) before your contributions can be accepted. This agreement ensures that:
 
 - Your contributions can be used in the open source version of Donut Browser (licensed under AGPL-3.0)
 - Donut Browser can offer commercial licenses for the software, including your contributions
@@ -27,7 +27,7 @@ When you submit your first pull request, you acknowledge that you agree to the t
 - PRs with tests are highly appreciated
 - Avoid adding third party libraries, whenever possible
 - Unless you are helping out by updating dependencies, you should not be uploading your lock files or updating any dependencies in your PR
-- If you are unsure where to start, open a discussion and we will point you to a good first issue
+- If you are unsure where to start, open a discussion to get pointed to a good first issue
 
 ## Development Setup
 
@@ -80,7 +80,7 @@ This will start the app for local development with live reloading.
 
 ## Code Style & Quality
 
-We use several tools to maintain code quality:
+The project uses several tools to maintain code quality:
 
 - **Biome** for JavaScript/TypeScript linting and formatting
 - **Clippy** for Rust linting
@@ -88,7 +88,7 @@ We use several tools to maintain code quality:
 
 ### Before Committing
 
-Run these commands to ensure your code meets our standards:
+Run these commands to ensure your code meets the project's standards:
 
 ```bash
 # Format and lint frontend code
@@ -151,7 +151,7 @@ Refs #00000
 
 ### PR Checklist
 
-- [ ] Code follows our style guidelines
+- [ ] Code follows the project's style guidelines
 - [ ] I have performed a self-review of my code
 - [ ] I have commented my code, particularly in hard-to-understand areas
 - [ ] I have made corresponding changes to the documentation
@@ -187,7 +187,7 @@ Please note that this project is released with a [Contributor Code of Conduct](C
 
 ## Recognition
 
-All contributors will be recognized! We use the all-contributors specification to acknowledge everyone who contributes to the project.
+All contributors will be recognized! The project uses the all-contributors specification to acknowledge everyone who contributes.
 
 ---
 

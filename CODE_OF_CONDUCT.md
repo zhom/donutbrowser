@@ -1,10 +1,10 @@
 # Code of Conduct
 
-All participants of the Donut Browser project (referred to as "the project") are expected to abide by our Code of Conduct, both online and during in-person events that are hosted and/or associated with the project.
+All participants of the Donut Browser project (referred to as "the project") are expected to abide by this Code of Conduct, both online and during in-person events that are hosted and/or associated with the project.
 
 ## The Pledge
 
-In the interest of fostering an open and welcoming environment, we pledge to make participation in our project and our community a harassment-free experience for everyone, regardless of age, body size, disability, ethnicity, gender identity and expression, level of experience, nationality, personal appearance, race, religion, or sexual identity and orientation.
+In the interest of fostering an open and welcoming environment, the maintainers pledge to make participation in the project and the community a harassment-free experience for everyone, regardless of age, body size, disability, ethnicity, gender identity and expression, level of experience, nationality, personal appearance, race, religion, or sexual identity and orientation.
 
 ## The Standards
 
@@ -25,4 +25,4 @@ Examples of unacceptable behavior by participants include:
 
 Violations of the Code of Conduct may be reported to [contact@donutbrowser.com](mailto:contact@donutbrowser.com). All reports will be reviewed and investigated and will result in a response that is deemed necessary and appropriate to the circumstances. Further details of specific enforcement policies may be posted separately.
 
-We hold the right and responsibility to remove comments or other contributions that are not aligned to this Code of Conduct, or to ban temporarily or permanently any members for other behaviors that they deem inappropriate, threatening, offensive, or harmful.
+The maintainers hold the right and responsibility to remove comments or other contributions that are not aligned to this Code of Conduct, or to ban temporarily or permanently any members for other behaviors that are deemed inappropriate, threatening, offensive, or harmful.

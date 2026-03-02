@@ -27,7 +27,7 @@ Hi there! To expedite issue processing please search open and closed issues befo
 
 ## Your Environment
 
-<!-- Please provide as much information as you feel comfortable to help us understand the issue better -->
+<!-- Please provide as much information as you feel comfortable to help the maintainers understand the issue better -->
 
 ## Exception or Error or Screenshot
 

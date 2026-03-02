@@ -97,21 +97,21 @@ jobs:
             {
               printf "%b" "$GREETING_SECTION"
               printf "## 🤖 Issue Validation\n\n"
-              printf "Thank you for submitting this issue! However, it appears that some required information might be missing to help us better understand and address your concern.\n\n"
+              printf "Thank you for submitting this issue! However, it appears that some required information might be missing to help the maintainers better understand and address your concern.\n\n"
               printf "**Issue Type Detected:** \`%s\`\n\n" "$ISSUE_TYPE"
               printf "**Assessment:** %s\n\n" "$ASSESSMENT"
               printf "### 📋 Missing Information:\n%s\n\n" "$MISSING_INFO"
               printf "### 💡 Suggestions for Improvement:\n%s\n\n" "$SUGGESTIONS"
               printf "### 📝 How to Provide Additional Information:\n\n"
-              printf "Please edit your original issue description to include the missing information. Here are our issue templates for reference:\n\n"
+              printf "Please edit your original issue description to include the missing information. Here are the issue templates for reference:\n\n"
               printf -- "- **Bug Report Template:** [View Template](.github/ISSUE_TEMPLATE/01-bug-report.md)\n"
               printf -- "- **Feature Request Template:** [View Template](.github/ISSUE_TEMPLATE/02-feature-request.md)\n\n"
               printf "### 🔧 Quick Tips:\n"
               printf -- "- For **bug reports**: Include step-by-step reproduction instructions, your environment details, and any error messages\n"
               printf -- "- For **feature requests**: Describe the use case, expected behavior, and why this feature would be valuable\n"
               printf -- "- Add **screenshots** or **logs** when applicable\n\n"
-              printf "Once you have updated the issue with the missing information, feel free to remove this comment or reply to let us know you have made the updates.\n\n"
-              printf -- "---\n*This validation was performed automatically to ensure we have all the information needed to help you effectively.*\n"
+              printf "Once you have updated the issue with the missing information, feel free to remove this comment or reply to let the maintainers know the updates have been made.\n\n"
+              printf -- "---\n*This validation was performed automatically to ensure all the information needed to help effectively is provided.*\n"
             } > comment.md
 
             gh issue comment ${{ github.event.issue.number }} --body-file comment.md
