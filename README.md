@@ -42,6 +42,19 @@
 
 The app can be downloaded from the [releases page](https://github.com/zhom/donutbrowser/releases/latest).
 
+<details>
+<summary>Troubleshooting AppImage on Linux</summary>
+
+If the AppImage segfaults on launch, install **libfuse2** (`sudo apt install libfuse2` / `yay -S libfuse2` / `sudo dnf install fuse-libs`), or bypass FUSE entirely:
+
+```bash
+APPIMAGE_EXTRACT_AND_RUN=1 ./Donut.Browser_x.x.x_amd64.AppImage
+```
+
+If that gives an EGL display error, try adding `WEBKIT_DISABLE_DMABUF_RENDERER=1` or `GDK_BACKEND=x11` to the command above. If issues persist, the **.deb** / **.rpm** packages are a more reliable alternative.
+
+</details>
+
 <!-- ## Supported Platforms
 
 - ✅ **macOS** (Apple Silicon)
