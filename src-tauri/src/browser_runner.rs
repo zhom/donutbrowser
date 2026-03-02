@@ -223,14 +223,6 @@ impl BrowserRunner {
         );
       }
 
-      // Ensure DuckDuckGo is set as default search engine for Camoufox
-      let mut browser_dir = self.get_binaries_dir();
-      browser_dir.push(&profile.browser);
-      browser_dir.push(&profile.version);
-      if let Err(e) = crate::downloader::configure_camoufox_search_engine(&browser_dir) {
-        log::warn!("Failed to configure Camoufox search engine: {e}");
-      }
-
       // Create ephemeral dir for ephemeral profiles
       let override_profile_path = if profile.ephemeral {
         let dir = crate::ephemeral_dirs::create_ephemeral_dir(&profile.id.to_string())
