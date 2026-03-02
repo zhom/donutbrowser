@@ -874,18 +874,158 @@ pub mod linux {
 
   pub async fn kill_browser_process_impl(
     pid: u32,
+    profile_data_path: Option<&str>,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use sysinfo::{Pid, System};
-    let system = System::new_all();
-    if let Some(process) = system.process(Pid::from(pid as usize)) {
-      if !process.kill() {
-        return Err(format!("Failed to kill process {}", pid).into());
+    use sysinfo::{Pid, ProcessRefreshKind, RefreshKind, System};
+
+    log::info!("Attempting to kill browser process with PID: {pid}");
+
+    let mut pids_to_kill = vec![pid];
+
+    // Find all descendant processes
+    let descendants = get_all_descendant_pids(pid);
+    pids_to_kill.extend(descendants);
+
+    // Find additional processes using the same profile path
+    if let Some(profile_path) = profile_data_path {
+      let additional_pids = find_processes_by_profile_path(profile_path);
+      for p in additional_pids {
+        if !pids_to_kill.contains(&p) {
+          log::info!("Found additional process {} using profile path", p);
+          pids_to_kill.push(p);
+        }
       }
-    } else {
-      return Err(format!("Process {} not found", pid).into());
     }
 
-    log::info!("Successfully killed browser process with PID: {pid}");
+    log::info!("Total processes to kill: {:?}", pids_to_kill);
+
+    // Send SIGKILL to all identified processes
+    for &p in &pids_to_kill {
+      log::info!("Sending SIGKILL to PID: {p}");
+      let _ = Command::new("kill")
+        .args(["-KILL", &p.to_string()])
+        .output();
+    }
+
+    // Also kill by process group and parent PID
+    let pid_str = pid.to_string();
+    let _ = Command::new("pkill")
+      .args(["-KILL", "-P", &pid_str])
+      .output();
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+    // Verify processes are dead
+    let system = System::new_with_specifics(
+      RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
+    );
+    let mut still_running = Vec::new();
+    for &p in &pids_to_kill {
+      if system.process(Pid::from(p as usize)).is_some() {
+        still_running.push(p);
+      }
+    }
+
+    if !still_running.is_empty() {
+      log::info!(
+        "Processes {:?} still running, trying final termination",
+        still_running
+      );
+
+      for p in &still_running {
+        let _ = Command::new("kill")
+          .args(["-KILL", &p.to_string()])
+          .output();
+      }
+
+      tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+
+      let system = System::new_with_specifics(
+        RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
+      );
+      let mut final_still_running = Vec::new();
+      for &p in &pids_to_kill {
+        if system.process(Pid::from(p as usize)).is_some() {
+          final_still_running.push(p);
+        }
+      }
+
+      if !final_still_running.is_empty() {
+        log::error!(
+          "ERROR: Processes {:?} could not be terminated despite aggressive attempts",
+          final_still_running
+        );
+        return Err(
+          format!(
+            "Failed to terminate browser processes {:?} - still running",
+            final_still_running
+          )
+          .into(),
+        );
+      }
+    }
+
+    log::info!("Browser termination completed for PID: {pid}");
     Ok(())
+  }
+
+  fn find_processes_by_profile_path(profile_path: &str) -> Vec<u32> {
+    use sysinfo::{ProcessRefreshKind, RefreshKind, System};
+
+    let mut pids = Vec::new();
+    let system = System::new_with_specifics(
+      RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
+    );
+
+    for (pid, process) in system.processes() {
+      let cmd = process.cmd();
+      if cmd.is_empty() {
+        continue;
+      }
+
+      let has_profile = cmd.iter().any(|arg| {
+        if let Some(arg_str) = arg.to_str() {
+          arg_str.contains(profile_path)
+        } else {
+          false
+        }
+      });
+
+      if has_profile {
+        pids.push(pid.as_u32());
+      }
+    }
+
+    pids
+  }
+
+  fn get_all_descendant_pids(parent_pid: u32) -> Vec<u32> {
+    use sysinfo::{ProcessRefreshKind, RefreshKind, System};
+
+    let system = System::new_with_specifics(
+      RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
+    );
+    let mut descendants = Vec::new();
+    let mut to_check = vec![parent_pid];
+    let mut checked = std::collections::HashSet::new();
+
+    while let Some(current_pid) = to_check.pop() {
+      if checked.contains(&current_pid) {
+        continue;
+      }
+      checked.insert(current_pid);
+
+      for (pid, process) in system.processes() {
+        let pid_u32 = pid.as_u32();
+        if let Some(parent) = process.parent() {
+          if parent.as_u32() == current_pid && !checked.contains(&pid_u32) {
+            descendants.push(pid_u32);
+            to_check.push(pid_u32);
+          }
+        }
+      }
+    }
+
+    descendants
   }
 }

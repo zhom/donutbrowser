@@ -9,7 +9,7 @@ use crate::proxy_manager::PROXY_MANAGER;
 use crate::wayfern_manager::WayfernConfig;
 use std::fs::{self, create_dir_all};
 use std::path::{Path, PathBuf};
-use sysinfo::{Pid, System};
+use sysinfo::{Pid, ProcessRefreshKind, RefreshKind, System};
 
 pub struct ProfileManager {
   camoufox_manager: &'static crate::camoufox_manager::CamoufoxManager,
@@ -1217,7 +1217,9 @@ impl ProfileManager {
 
     // For non-camoufox browsers, use the existing PID-based logic
     let inner_profile = profile.clone();
-    let mut system = System::new();
+    let system = System::new_with_specifics(
+      RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
+    );
     let mut is_running = false;
     let mut found_pid: Option<u32> = None;
 
@@ -1259,8 +1261,6 @@ impl ProfileManager {
 
     // If we didn't find the browser with the stored PID, search all processes
     if !is_running {
-      // Refresh all processes only when we need to search (expensive but necessary)
-      system.refresh_all();
       for (pid, process) in system.processes() {
         let cmd = process.cmd();
         if cmd.len() >= 2 {

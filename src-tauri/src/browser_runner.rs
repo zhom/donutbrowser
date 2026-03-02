@@ -1409,7 +1409,11 @@ impl BrowserRunner {
                     #[cfg(target_os = "linux")]
                     {
                       use crate::platform_browser;
-                      if let Err(e) = platform_browser::linux::kill_browser_process_impl(pid).await
+                      if let Err(e) = platform_browser::linux::kill_browser_process_impl(
+                        pid,
+                        Some(&profile_path_str),
+                      )
+                      .await
                       {
                         log::error!("Failed to force kill Camoufox process {}: {}", pid, e);
                       } else {
@@ -1490,7 +1494,12 @@ impl BrowserRunner {
                   #[cfg(target_os = "linux")]
                   {
                     use crate::platform_browser;
-                    if let Err(e) = platform_browser::linux::kill_browser_process_impl(pid).await {
+                    if let Err(e) = platform_browser::linux::kill_browser_process_impl(
+                      pid,
+                      Some(&profile_path_str),
+                    )
+                    .await
+                    {
                       log::error!("Failed to force kill Camoufox process {}: {}", pid, e);
                     } else {
                       // Verify the process is actually dead after force kill
@@ -1578,7 +1587,8 @@ impl BrowserRunner {
                 {
                   use crate::platform_browser;
                   if let Err(kill_err) =
-                    platform_browser::linux::kill_browser_process_impl(pid).await
+                    platform_browser::linux::kill_browser_process_impl(pid, Some(&profile_path_str))
+                      .await
                   {
                     log::error!(
                       "Failed to force kill Camoufox process {}: {}",
@@ -1848,7 +1858,12 @@ impl BrowserRunner {
                   #[cfg(target_os = "linux")]
                   {
                     use crate::platform_browser;
-                    if let Err(e) = platform_browser::linux::kill_browser_process_impl(pid).await {
+                    if let Err(e) = platform_browser::linux::kill_browser_process_impl(
+                      pid,
+                      Some(&profile_path_str),
+                    )
+                    .await
+                    {
                       log::error!("Failed to force kill Wayfern process {}: {}", pid, e);
                     } else {
                       sleep(Duration::from_millis(500)).await;
@@ -1919,7 +1934,8 @@ impl BrowserRunner {
                 {
                   use crate::platform_browser;
                   if let Err(kill_err) =
-                    platform_browser::linux::kill_browser_process_impl(pid).await
+                    platform_browser::linux::kill_browser_process_impl(pid, Some(&profile_path_str))
+                      .await
                   {
                     log::error!("Failed to force kill Wayfern process {}: {}", pid, kill_err);
                   } else {
@@ -2216,7 +2232,12 @@ impl BrowserRunner {
     platform_browser::windows::kill_browser_process_impl(pid).await?;
 
     #[cfg(target_os = "linux")]
-    platform_browser::linux::kill_browser_process_impl(pid).await?;
+    {
+      let profiles_dir = self.profile_manager.get_profiles_dir();
+      let profile_data_path = profile.get_profile_data_path(&profiles_dir);
+      let profile_path_str = profile_data_path.to_string_lossy().to_string();
+      platform_browser::linux::kill_browser_process_impl(pid, Some(&profile_path_str)).await?;
+    }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     return Err("Unsupported platform".into());

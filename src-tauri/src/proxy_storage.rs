@@ -131,7 +131,9 @@ pub fn generate_proxy_id() -> String {
 }
 
 pub fn is_process_running(pid: u32) -> bool {
-  use sysinfo::{Pid, System};
-  let system = System::new();
-  system.process(Pid::from(pid as usize)).is_some()
+  use sysinfo::{ProcessRefreshKind, RefreshKind, System};
+  let system = System::new_with_specifics(
+    RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
+  );
+  system.process(sysinfo::Pid::from_u32(pid)).is_some()
 }
