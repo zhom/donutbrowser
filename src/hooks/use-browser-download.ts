@@ -49,7 +49,9 @@ export function useBrowserDownload() {
   const [availableVersions, setAvailableVersions] = useState<GithubRelease[]>(
     [],
   );
-  const [downloadedVersions, setDownloadedVersions] = useState<string[]>([]);
+  const [downloadedVersionsMap, setDownloadedVersionsMap] = useState<
+    Record<string, string[]>
+  >({});
   const [downloadingBrowsers, setDownloadingBrowsers] = useState<Set<string>>(
     new Set(),
   );
@@ -166,12 +168,12 @@ export function useBrowserDownload() {
 
   const loadDownloadedVersions = useCallback(async (browserStr: string) => {
     try {
-      const downloadedVersions = await invoke<string[]>(
+      const versions = await invoke<string[]>(
         "get_downloaded_browser_versions",
         { browserStr },
       );
-      setDownloadedVersions(downloadedVersions);
-      return downloadedVersions;
+      setDownloadedVersionsMap((prev) => ({ ...prev, [browserStr]: versions }));
+      return versions;
     } catch (error) {
       console.error("Failed to load downloaded versions:", error);
       throw error;
@@ -243,9 +245,11 @@ export function useBrowserDownload() {
 
   const isVersionDownloaded = useCallback(
     (version: string) => {
-      return downloadedVersions.includes(version);
+      return Object.values(downloadedVersionsMap).some((versions) =>
+        versions.includes(version),
+      );
     },
-    [downloadedVersions],
+    [downloadedVersionsMap],
   );
 
   // Check if a browser type is currently downloading
@@ -434,7 +438,7 @@ export function useBrowserDownload() {
 
   return {
     availableVersions,
-    downloadedVersions,
+    downloadedVersionsMap,
     isDownloading,
     isBrowserDownloading,
     downloadingBrowsers,

@@ -179,7 +179,7 @@ export function CreateProfileDialog({
     downloadBrowser,
     loadDownloadedVersions,
     isVersionDownloaded,
-    downloadedVersions,
+    downloadedVersionsMap,
   } = useBrowserDownload();
 
   const loadSupportedBrowsers = useCallback(async () => {
@@ -344,8 +344,9 @@ export function CreateProfileDialog({
       if (bestVersion && isVersionDownloaded(bestVersion.version)) {
         return bestVersion;
       }
-      if (downloadedVersions.length > 0) {
-        const fallbackVersion = downloadedVersions[0];
+      const browserDownloaded = downloadedVersionsMap[browserType ?? ""] ?? [];
+      if (browserDownloaded.length > 0) {
+        const fallbackVersion = browserDownloaded[0];
         const releaseType =
           browserType === "firefox-developer" ? "nightly" : "stable";
         return {
@@ -355,7 +356,7 @@ export function CreateProfileDialog({
       }
       return null;
     },
-    [getBestAvailableVersion, isVersionDownloaded, downloadedVersions],
+    [getBestAvailableVersion, isVersionDownloaded, downloadedVersionsMap],
   );
 
   const handleDownload = async (browserStr: string) => {
