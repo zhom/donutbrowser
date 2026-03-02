@@ -295,30 +295,19 @@ impl ApiServer {
 
     // Create router with OpenAPI documentation
     let (v1_routes, _) = OpenApiRouter::new()
-      .routes(routes!(
-        get_profiles,
-        create_profile,
-        get_profile,
-        update_profile,
-        delete_profile,
-        run_profile,
-        open_url_in_profile,
-        kill_profile,
-        get_groups,
-        create_group,
-        get_group,
-        update_group,
-        delete_group,
-        get_tags,
-        get_proxies,
-        create_proxy,
-        get_proxy,
-        update_proxy,
-        delete_proxy,
-        download_browser_api,
-        get_browser_versions,
-        check_browser_downloaded,
-      ))
+      .routes(routes!(get_profiles, create_profile))
+      .routes(routes!(get_profile, update_profile, delete_profile))
+      .routes(routes!(run_profile))
+      .routes(routes!(open_url_in_profile))
+      .routes(routes!(kill_profile))
+      .routes(routes!(get_groups, create_group))
+      .routes(routes!(get_group, update_group, delete_group))
+      .routes(routes!(get_tags))
+      .routes(routes!(get_proxies, create_proxy))
+      .routes(routes!(get_proxy, update_proxy, delete_proxy))
+      .routes(routes!(download_browser_api))
+      .routes(routes!(get_browser_versions))
+      .routes(routes!(check_browser_downloaded))
       .split_for_parts();
 
     let api = ApiDoc::openapi();
