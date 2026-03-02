@@ -629,6 +629,8 @@
   "warnings": {
     "windowResizeTitle": "自定义窗口尺寸",
     "windowResizeDescription": "更改浏览器窗口尺寸可能会增加网站检测到浏览器信息被伪装的概率。",
+    "windowResizeCamoufoxTitle": "视口已被 Camoufox 锁定",
+    "windowResizeCamoufoxDescription": "Camoufox 将视口锁定为伪装的屏幕尺寸以防止指纹识别。调整窗口大小可能会导致内容被裁剪或出现灰色区域。这是预期行为。",
     "dontShowAgain": "不再显示",
     "continue": "继续",
     "cancel": "取消"

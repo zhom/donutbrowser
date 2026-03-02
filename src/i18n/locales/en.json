@@ -629,6 +629,8 @@
   "warnings": {
     "windowResizeTitle": "Custom Window Dimensions",
     "windowResizeDescription": "Changing browser window dimensions may increase the chance of website detection that browser information is spoofed.",
+    "windowResizeCamoufoxTitle": "Viewport Locked by Camoufox",
+    "windowResizeCamoufoxDescription": "Camoufox locks the viewport to the spoofed screen dimensions for anti-fingerprinting. Resizing the window may cause cropped or grey areas. This is expected behavior.",
     "dontShowAgain": "Don't show this again",
     "continue": "Continue",
     "cancel": "Cancel"

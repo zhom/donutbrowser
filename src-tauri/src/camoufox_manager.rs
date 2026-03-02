@@ -628,6 +628,41 @@ impl CamoufoxManager {
       }
     }
 
+    // Write DuckDuckGo search engine prefs to user.js for all profiles
+    {
+      let user_js_path = profile_path.join("user.js");
+      let ddg_prefs = concat!(
+        "user_pref(\"browser.search.defaultenginename\", \"DuckDuckGo\");\n",
+        "user_pref(\"browser.search.order.1\", \"DuckDuckGo\");\n",
+        "user_pref(\"browser.urlbar.placeholderName\", \"DuckDuckGo\");\n",
+        "user_pref(\"browser.urlbar.placeholderName.private\", \"DuckDuckGo\");\n",
+      );
+
+      let needs_write = if user_js_path.exists() {
+        std::fs::read_to_string(&user_js_path)
+          .map(|existing| !existing.contains("browser.search.defaultenginename"))
+          .unwrap_or(false)
+      } else {
+        true
+      };
+
+      if needs_write {
+        use std::fs::OpenOptions;
+        match OpenOptions::new()
+          .create(true)
+          .append(true)
+          .open(&user_js_path)
+        {
+          Ok(mut f) => {
+            if let Err(e) = std::io::Write::write_all(&mut f, ddg_prefs.as_bytes()) {
+              log::warn!("Failed to write DuckDuckGo prefs to user.js: {e}");
+            }
+          }
+          Err(e) => log::warn!("Failed to open user.js for DuckDuckGo prefs: {e}"),
+        }
+      }
+    }
+
     self
       .launch_camoufox(
         &app_handle,

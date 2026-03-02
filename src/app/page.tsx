@@ -168,6 +168,8 @@ export default function Home() {
   const [hasCheckedStartupPrompt, setHasCheckedStartupPrompt] = useState(false);
   const [launchOnLoginDialogOpen, setLaunchOnLoginDialogOpen] = useState(false);
   const [windowResizeWarningOpen, setWindowResizeWarningOpen] = useState(false);
+  const [windowResizeWarningBrowserType, setWindowResizeWarningBrowserType] =
+    useState<string | undefined>(undefined);
   const windowResizeWarningResolver = useRef<
     ((proceed: boolean) => void) | null
   >(null);
@@ -523,7 +525,6 @@ export default function Home() {
             error instanceof Error ? error.message : String(error)
           }`,
         );
-        throw error;
       }
     },
     [selectedGroupId],
@@ -541,6 +542,7 @@ export default function Home() {
         if (!dismissed) {
           const proceed = await new Promise<boolean>((resolve) => {
             windowResizeWarningResolver.current = resolve;
+            setWindowResizeWarningBrowserType(profile.browser);
             setWindowResizeWarningOpen(true);
           });
           if (!proceed) {
@@ -1248,6 +1250,7 @@ export default function Home() {
 
       <WindowResizeWarningDialog
         isOpen={windowResizeWarningOpen}
+        browserType={windowResizeWarningBrowserType}
         onResult={(proceed) => {
           setWindowResizeWarningOpen(false);
           windowResizeWarningResolver.current?.(proceed);

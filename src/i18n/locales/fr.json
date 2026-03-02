@@ -629,6 +629,8 @@
   "warnings": {
     "windowResizeTitle": "Dimensions de fenêtre personnalisées",
     "windowResizeDescription": "Modifier les dimensions de la fenêtre du navigateur peut augmenter les chances de détection par les sites web que les informations du navigateur sont falsifiées.",
+    "windowResizeCamoufoxTitle": "Viewport verrouillé par Camoufox",
+    "windowResizeCamoufoxDescription": "Camoufox verrouille le viewport aux dimensions d'écran falsifiées pour l'anti-fingerprinting. Redimensionner la fenêtre peut causer des zones recadrées ou grises. C'est le comportement attendu.",
     "dontShowAgain": "Ne plus afficher",
     "continue": "Continuer",
     "cancel": "Annuler"

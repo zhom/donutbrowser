@@ -744,13 +744,36 @@ impl AppAutoUpdater {
     log::info!("Extracting update...");
     let extracted_app_path = self.extract_update(&download_path, &temp_dir).await?;
 
-    log::info!("Installing update (overwriting binary)...");
-    self.install_update(&extracted_app_path).await?;
+    // On Windows, MSI/EXE installers close the running app, so running them now
+    // would kill the process before the "Update ready" toast can appear. Instead,
+    // defer execution to restart_application() when the user clicks "Restart Now".
+    #[cfg(target_os = "windows")]
+    {
+      let ext = extracted_app_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+      if ext == "msi" || ext == "exe" {
+        log::info!("Deferring Windows installer execution until user-initiated restart");
+        *PENDING_INSTALLER_PATH.lock().unwrap() = Some(extracted_app_path);
+      } else {
+        log::info!("Installing update (overwriting binary)...");
+        self.install_update(&extracted_app_path).await?;
+        log::info!("Cleaning up temporary files...");
+        let _ = fs::remove_dir_all(&temp_dir);
+      }
+    }
 
-    log::info!("Cleaning up temporary files...");
-    let _ = fs::remove_dir_all(&temp_dir);
+    #[cfg(not(target_os = "windows"))]
+    {
+      log::info!("Installing update (overwriting binary)...");
+      self.install_update(&extracted_app_path).await?;
+      log::info!("Cleaning up temporary files...");
+      let _ = fs::remove_dir_all(&temp_dir);
+    }
 
-    log::info!("Update installed successfully, emitting app-update-ready event");
+    log::info!("Update ready, emitting app-update-ready event");
 
     let _ = events::emit("app-update-ready", update_info.new_version.clone());
 
@@ -1421,14 +1444,63 @@ rm "{}"
     {
       let app_path = self.get_current_app_path()?;
       let current_pid = std::process::id();
+      let pending = PENDING_INSTALLER_PATH.lock().unwrap().take();
 
-      // Create a temporary restart batch script
       let temp_dir = std::env::temp_dir();
       let script_path = temp_dir.join("donut_restart.bat");
+      let update_temp_dir = temp_dir.join("donut_app_update");
 
-      // Create the restart script content
-      let script_content = format!(
-        r#"@echo off
+      let script_content = if let Some(installer_path) = pending {
+        let ext = installer_path
+          .extension()
+          .and_then(|e| e.to_str())
+          .unwrap_or("")
+          .to_lowercase();
+        let install_cmd = match ext.as_str() {
+          "msi" => format!(
+            "msiexec /i \"{}\" /quiet /norestart REBOOT=ReallySuppress",
+            installer_path.to_str().unwrap()
+          ),
+          "exe" => format!("\"{}\" /S", installer_path.to_str().unwrap()),
+          _ => String::new(),
+        };
+
+        format!(
+          r#"@echo off
+rem Wait for the current process to exit
+:wait_loop
+tasklist /fi "PID eq {pid}" >nul 2>&1
+if %errorlevel% equ 0 (
+    timeout /t 1 /nobreak >nul
+    goto wait_loop
+)
+
+rem Wait a bit more to ensure clean exit
+timeout /t 2 /nobreak >nul
+
+rem Run the installer
+{install_cmd}
+
+rem Wait for installation to complete
+timeout /t 3 /nobreak >nul
+
+rem Start the new application
+start "" "{app_path}"
+
+rem Clean up installer temp files
+rmdir /s /q "{update_temp}"
+
+rem Clean up this script
+del "%~f0"
+"#,
+          pid = current_pid,
+          install_cmd = install_cmd,
+          app_path = app_path.to_str().unwrap(),
+          update_temp = update_temp_dir.to_str().unwrap(),
+        )
+      } else {
+        format!(
+          r#"@echo off
 rem Wait for the current process to exit
 :wait_loop
 tasklist /fi "PID eq {}" >nul 2>&1
@@ -1446,24 +1518,20 @@ start "" "{}"
 rem Clean up this script
 del "%~f0"
 "#,
-        current_pid,
-        app_path.to_str().unwrap()
-      );
+          current_pid,
+          app_path.to_str().unwrap()
+        )
+      };
 
-      // Write the script to file
       fs::write(&script_path, script_content)?;
 
-      // Execute the restart script in the background
       let mut cmd = Command::new("cmd");
       cmd.args(["/C", script_path.to_str().unwrap()]);
 
-      // Start the process detached
       let _child = cmd.spawn()?;
 
-      // Give the script a moment to start
       tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
-      // Exit the current process
       std::process::exit(0);
     }
 
@@ -1926,4 +1994,5 @@ mod tests {
 // Global singleton instance
 lazy_static::lazy_static! {
   static ref APP_AUTO_UPDATER: AppAutoUpdater = AppAutoUpdater::new();
+  static ref PENDING_INSTALLER_PATH: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
 }

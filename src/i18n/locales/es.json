@@ -629,6 +629,8 @@
   "warnings": {
     "windowResizeTitle": "Dimensiones de ventana personalizadas",
     "windowResizeDescription": "Cambiar las dimensiones de la ventana del navegador puede aumentar la posibilidad de que los sitios web detecten que la información del navegador está falsificada.",
+    "windowResizeCamoufoxTitle": "Viewport bloqueado por Camoufox",
+    "windowResizeCamoufoxDescription": "Camoufox bloquea el viewport a las dimensiones de pantalla falsificadas para anti-fingerprinting. Redimensionar la ventana puede causar áreas recortadas o grises. Este es el comportamiento esperado.",
     "dontShowAgain": "No mostrar esto de nuevo",
     "continue": "Continuar",
     "cancel": "Cancelar"

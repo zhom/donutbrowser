@@ -74,18 +74,20 @@ fn get_app_bundle_path() -> Option<std::path::PathBuf> {
 pub fn open_gui() {
   log::info!("Opening GUI...");
 
-  // On macOS, use `open` WITHOUT `-n`. The daemon runs with Accessory
-  // activation policy so macOS won't confuse it with the GUI process.
-  // `open` will either activate the existing GUI or launch a new one.
-  // Using `-n` would bypass the single-instance plugin entirely.
   #[cfg(target_os = "macos")]
   {
-    // Use `open -n` to force launching a new process. Without `-n`, macOS
-    // re-activates the daemon (the existing process from the bundle) instead
-    // of launching the GUI binary. The single-instance Tauri plugin in the
-    // GUI handles deduplication if a GUI instance is already running.
+    // Launch the GUI binary directly. The daemon lives inside the same .app
+    // bundle, so `open` (even with `-n`) can re-activate the daemon instead
+    // of launching the GUI. Directly running the binary avoids macOS's app
+    // activation machinery. The single-instance Tauri plugin in the GUI
+    // handles deduplication if a GUI instance is already running.
     if let Some(app_bundle) = get_app_bundle_path() {
-      let _ = Command::new("open").args(["-n"]).arg(&app_bundle).spawn();
+      let gui_binary = app_bundle.join("Contents").join("MacOS").join("Donut");
+      if gui_binary.exists() {
+        let _ = Command::new(&gui_binary).spawn();
+      } else {
+        let _ = Command::new("open").args(["-n"]).arg(&app_bundle).spawn();
+      }
     } else {
       let _ = Command::new("open").args(["-n", "-a", "Donut"]).spawn();
     }

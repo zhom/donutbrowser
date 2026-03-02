@@ -316,6 +316,20 @@ fn run_daemon() {
       }
       Event::Reopen { .. } => {
         tray::open_gui();
+
+        // Re-hide daemon from Dock. macOS activates the daemon (making it
+        // visible) when the user clicks the Dock icon, overriding the
+        // Accessory policy set at init.
+        #[cfg(target_os = "macos")]
+        {
+          use objc2::MainThreadMarker;
+          use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
+
+          if let Some(mtm) = MainThreadMarker::new() {
+            let app = NSApplication::sharedApplication(mtm);
+            app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
+          }
+        }
       }
       _ => {}
     }

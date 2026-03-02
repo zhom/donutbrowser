@@ -1006,29 +1006,31 @@ pub fn run() {
         }
       });
 
-      let _app_handle_update = app.handle().clone();
       tauri::async_runtime::spawn(async move {
-        log::info!("Starting app update check at startup...");
         let updater = app_auto_updater::AppAutoUpdater::instance();
-        match updater.check_for_updates().await {
-          Ok(Some(update_info)) => {
-            log::info!(
-              "App update available: {} -> {}",
-              update_info.current_version,
-              update_info.new_version
-            );
-            // Emit update available event to the frontend
-            if let Err(e) = events::emit("app-update-available", &update_info) {
-              log::error!("Failed to emit app update event: {e}");
-            } else {
-              log::debug!("App update event emitted successfully");
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3 * 60 * 60));
+
+        loop {
+          interval.tick().await;
+
+          log::info!("Checking for app updates...");
+          match updater.check_for_updates().await {
+            Ok(Some(update_info)) => {
+              log::info!(
+                "App update available: {} -> {}",
+                update_info.current_version,
+                update_info.new_version
+              );
+              if let Err(e) = events::emit("app-update-available", &update_info) {
+                log::error!("Failed to emit app update event: {e}");
+              }
             }
-          }
-          Ok(None) => {
-            log::debug!("No app updates available");
-          }
-          Err(e) => {
-            log::error!("Failed to check for app updates: {e}");
+            Ok(None) => {
+              log::debug!("No app updates available");
+            }
+            Err(e) => {
+              log::error!("Failed to check for app updates: {e}");
+            }
           }
         }
       });

@@ -629,6 +629,8 @@
   "warnings": {
     "windowResizeTitle": "カスタムウィンドウサイズ",
     "windowResizeDescription": "ブラウザウィンドウのサイズを変更すると、ブラウザ情報が偽装されていることをウェブサイトに検出される可能性が高くなります。",
+    "windowResizeCamoufoxTitle": "Camoufoxによりビューポートがロックされています",
+    "windowResizeCamoufoxDescription": "Camoufoxはアンチフィンガープリントのためにビューポートを偽装された画面サイズにロックします。ウィンドウのサイズを変更すると、切り取られた領域やグレーの領域が表示される場合があります。これは想定された動作です。",
     "dontShowAgain": "今後表示しない",
     "continue": "続行",
     "cancel": "キャンセル"

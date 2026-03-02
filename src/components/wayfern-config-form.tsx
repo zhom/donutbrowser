@@ -998,18 +998,19 @@ export function WayfernConfigForm({
         </fieldset>
         {limitedMode && (
           <>
-            <div className="absolute inset-0 backdrop-blur-[6px] bg-background/30" />
-            <div className="absolute inset-0 flex items-center justify-center z-[2]">
-              <div className="flex items-center gap-2">
+            <div className="absolute inset-0 backdrop-blur-[6px] bg-background/30 z-[1]" />
+            <div className="absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-background to-transparent z-[2]" />
+            <div className="absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-background to-transparent z-[2]" />
+            <div className="absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-background to-transparent z-[2]" />
+            <div className="absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-background to-transparent z-[2]" />
+            <div className="absolute inset-0 flex items-center justify-center z-[3]">
+              <div className="flex items-center gap-2 rounded-md bg-background/80 px-3 py-1.5">
                 <ProBadge />
                 <span className="text-sm font-medium text-muted-foreground">
                   {t("fingerprint.proFeature")}
                 </span>
               </div>
             </div>
-            <div className="absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-background to-transparent z-[1]" />
-            <div className="absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-background to-transparent z-[1]" />
-            <div className="absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-background to-transparent z-[1]" />
           </>
         )}
       </div>
@@ -1212,18 +1213,19 @@ export function WayfernConfigForm({
               </fieldset>
               {limitedMode && (
                 <>
-                  <div className="absolute inset-0 backdrop-blur-[6px] bg-background/30" />
-                  <div className="absolute inset-0 flex items-center justify-center z-[2]">
-                    <div className="flex items-center gap-2">
+                  <div className="absolute inset-0 backdrop-blur-[6px] bg-background/30 z-[1]" />
+                  <div className="absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-background to-transparent z-[2]" />
+                  <div className="absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-background to-transparent z-[2]" />
+                  <div className="absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-background to-transparent z-[2]" />
+                  <div className="absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-background to-transparent z-[2]" />
+                  <div className="absolute inset-0 flex items-center justify-center z-[3]">
+                    <div className="flex items-center gap-2 rounded-md bg-background/80 px-3 py-1.5">
                       <ProBadge />
                       <span className="text-sm font-medium text-muted-foreground">
                         {t("fingerprint.proFeature")}
                       </span>
                     </div>
                   </div>
-                  <div className="absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-background to-transparent z-[1]" />
-                  <div className="absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-background to-transparent z-[1]" />
-                  <div className="absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-background to-transparent z-[1]" />
                 </>
               )}
             </div>
