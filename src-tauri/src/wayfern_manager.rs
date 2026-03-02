@@ -396,6 +396,7 @@ impl WayfernManager {
     url: Option<&str>,
     proxy_url: Option<&str>,
     ephemeral: bool,
+    extension_paths: &[String],
   ) -> Result<WayfernLaunchResult, Box<dyn std::error::Error + Send + Sync>> {
     let executable_path = if let Some(path) = &config.executable_path {
       let p = PathBuf::from(path);
@@ -446,6 +447,10 @@ impl WayfernManager {
       args.push("--disable-crash-reporter".to_string());
       args.push("--no-service-autorun".to_string());
       args.push("--disable-sync".to_string());
+    }
+
+    if !extension_paths.is_empty() {
+      args.push(format!("--load-extension={}", extension_paths.join(",")));
     }
 
     // Don't add URL to args - we'll navigate via CDP after setting fingerprint
@@ -834,6 +839,7 @@ impl WayfernManager {
         url,
         proxy_url,
         profile.ephemeral,
+        &[],
       )
       .await
   }

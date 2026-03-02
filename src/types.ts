@@ -31,6 +31,30 @@ export interface BrowserProfile {
   last_sync?: number; // Timestamp of last successful sync (epoch seconds)
   host_os?: string; // OS where profile was created ("macos", "windows", "linux")
   ephemeral?: boolean;
+  extension_group_id?: string;
+  proxy_bypass_rules?: string[];
+}
+
+export interface Extension {
+  id: string;
+  name: string;
+  file_name: string;
+  file_type: string;
+  browser_compatibility: string[];
+  created_at: number;
+  updated_at: number;
+  sync_enabled?: boolean;
+  last_sync?: number;
+}
+
+export interface ExtensionGroup {
+  id: string;
+  name: string;
+  extension_ids: string[];
+  created_at: number;
+  updated_at: number;
+  sync_enabled?: boolean;
+  last_sync?: number;
 }
 
 export type SyncMode = "Disabled" | "Regular" | "Encrypted";

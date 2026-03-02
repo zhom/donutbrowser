@@ -57,6 +57,10 @@ pub struct BrowserProfile {
   pub host_os: Option<String>, // OS where profile was created ("macos", "windows", "linux")
   #[serde(default)]
   pub ephemeral: bool,
+  #[serde(default)]
+  pub extension_group_id: Option<String>,
+  #[serde(default)]
+  pub proxy_bypass_rules: Vec<String>,
 }
 
 pub fn default_release_type() -> String {

@@ -12,6 +12,8 @@ pub struct ProxyConfig {
   pub pid: Option<u32>,
   #[serde(default)]
   pub profile_id: Option<String>,
+  #[serde(default)]
+  pub bypass_rules: Vec<String>,
 }
 
 impl ProxyConfig {
@@ -24,11 +26,17 @@ impl ProxyConfig {
       local_url: None,
       pid: None,
       profile_id: None,
+      bypass_rules: Vec::new(),
     }
   }
 
   pub fn with_profile_id(mut self, profile_id: Option<String>) -> Self {
     self.profile_id = profile_id;
+    self
+  }
+
+  pub fn with_bypass_rules(mut self, bypass_rules: Vec<String>) -> Self {
+    self.bypass_rules = bypass_rules;
     self
   }
 }

@@ -146,7 +146,8 @@
       "groups": "Groups",
       "syncService": "Account",
       "integrations": "Integrations",
-      "importProfile": "Import Profile"
+      "importProfile": "Import Profile",
+      "extensions": "Extensions"
     }
   },
   "profiles": {
@@ -682,6 +683,7 @@
     "title": "Profile Details",
     "tabs": {
       "info": "Info",
+      "network": "Network",
       "settings": "Settings"
     },
     "fields": {
@@ -695,7 +697,8 @@
       "syncStatus": "Sync Status",
       "lastLaunched": "Last Launched",
       "hostOs": "Host OS",
-      "ephemeral": "Ephemeral"
+      "ephemeral": "Ephemeral",
+      "extensionGroup": "Extension Group"
     },
     "values": {
       "none": "None",
@@ -703,9 +706,54 @@
       "copied": "Copied!",
       "yes": "Yes"
     },
+    "network": {
+      "bypassRules": "Proxy Bypass Rules",
+      "bypassRulesDescription": "Requests matching these rules will connect directly, bypassing the proxy.",
+      "addRule": "Add Rule",
+      "rulePlaceholder": "e.g. example.com, 192.168.1.*, .*\\.local",
+      "noRules": "No bypass rules configured.",
+      "ruleTypes": "Supports hostnames, IP addresses, and regex patterns."
+    },
     "actions": {
       "manageCookies": "Manage Cookies"
     }
+  },
+  "extensions": {
+    "title": "Extensions",
+    "description": "Manage browser extensions and extension groups for your profiles.",
+    "upload": "Upload",
+    "delete": "Delete",
+    "extensionsTab": "Extensions",
+    "groupsTab": "Groups",
+    "managedNotice": "Extensions managed here will replace any manually installed extensions in profiles when launched.",
+    "proRequired": "Extension management is a Pro feature",
+    "empty": "No extensions uploaded yet.",
+    "noGroups": "No extension groups created yet.",
+    "createGroup": "Create Group",
+    "addToGroup": "Add extension...",
+    "removeFromGroup": "Remove from group",
+    "deleteGroup": "Delete group",
+    "extensionGroup": "Extension Group",
+    "compatibility": {
+      "label": "Compatibility",
+      "chromium": "Chromium",
+      "firefox": "Firefox",
+      "both": "Chromium & Firefox"
+    },
+    "selectedFile": "Selected file",
+    "namePlaceholder": "Extension name",
+    "groupNamePlaceholder": "Group name",
+    "uploadSuccess": "Extension uploaded successfully",
+    "deleteSuccess": "Extension deleted successfully",
+    "groupCreateSuccess": "Extension group created successfully",
+    "groupUpdateSuccess": "Extension group updated successfully",
+    "groupDeleteSuccess": "Extension group deleted successfully",
+    "deleteConfirmTitle": "Delete Extension",
+    "deleteConfirmDescription": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone.",
+    "deleteGroupConfirmTitle": "Delete Extension Group",
+    "deleteGroupConfirmDescription": "Are you sure you want to delete the group \"{{name}}\"? This action cannot be undone.",
+    "invalidFileType": "Invalid file type. Please upload a .crx, .xpi, or .zip file.",
+    "readError": "Failed to read the extension file."
   },
   "pro": {
     "badge": "PRO",

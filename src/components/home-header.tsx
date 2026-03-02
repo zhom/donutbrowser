@@ -2,7 +2,14 @@ import { useTranslation } from "react-i18next";
 import { FaDownload } from "react-icons/fa";
 import { FiWifi } from "react-icons/fi";
 import { GoGear, GoKebabHorizontal, GoPlus } from "react-icons/go";
-import { LuCloud, LuPlug, LuSearch, LuUsers, LuX } from "react-icons/lu";
+import {
+  LuCloud,
+  LuPlug,
+  LuPuzzle,
+  LuSearch,
+  LuUsers,
+  LuX,
+} from "react-icons/lu";
 import { Logo } from "./icons/logo";
 import { Button } from "./ui/button";
 import { CardTitle } from "./ui/card";
@@ -23,6 +30,7 @@ type Props = {
   onCreateProfileDialogOpen: (open: boolean) => void;
   onSyncConfigDialogOpen: (open: boolean) => void;
   onIntegrationsDialogOpen: (open: boolean) => void;
+  onExtensionManagementDialogOpen: (open: boolean) => void;
   searchQuery: string;
   onSearchQueryChange: (query: string) => void;
 };
@@ -35,6 +43,7 @@ const HomeHeader = ({
   onCreateProfileDialogOpen,
   onSyncConfigDialogOpen,
   onIntegrationsDialogOpen,
+  onExtensionManagementDialogOpen,
   searchQuery,
   onSearchQueryChange,
 }: Props) => {
@@ -123,6 +132,14 @@ const HomeHeader = ({
             >
               <LuUsers className="mr-2 w-4 h-4" />
               {t("header.menu.groups")}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                onExtensionManagementDialogOpen(true);
+              }}
+            >
+              <LuPuzzle className="mr-2 w-4 h-4" />
+              {t("header.menu.extensions")}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => {

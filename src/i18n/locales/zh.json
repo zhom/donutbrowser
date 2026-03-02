@@ -146,7 +146,8 @@
       "groups": "分组",
       "syncService": "账户",
       "integrations": "集成",
-      "importProfile": "导入配置文件"
+      "importProfile": "导入配置文件",
+      "extensions": "扩展程序"
     }
   },
   "profiles": {
@@ -682,6 +683,7 @@
     "title": "配置文件详情",
     "tabs": {
       "info": "信息",
+      "network": "网络",
       "settings": "设置"
     },
     "fields": {
@@ -695,7 +697,8 @@
       "syncStatus": "同步状态",
       "lastLaunched": "上次启动",
       "hostOs": "主机操作系统",
-      "ephemeral": "临时"
+      "ephemeral": "临时",
+      "extensionGroup": "扩展程序组"
     },
     "values": {
       "none": "无",
@@ -703,9 +706,54 @@
       "copied": "已复制！",
       "yes": "是"
     },
+    "network": {
+      "bypassRules": "代理绕过规则",
+      "bypassRulesDescription": "匹配这些规则的请求将直接连接，绕过代理。",
+      "addRule": "添加规则",
+      "rulePlaceholder": "例如 example.com, 192.168.1.*, .*\\.local",
+      "noRules": "未配置绕过规则。",
+      "ruleTypes": "支持主机名、IP地址和正则表达式模式。"
+    },
     "actions": {
       "manageCookies": "管理 Cookie"
     }
+  },
+  "extensions": {
+    "title": "扩展程序",
+    "description": "管理配置文件的浏览器扩展程序和扩展程序组。",
+    "upload": "上传",
+    "delete": "删除",
+    "extensionsTab": "扩展程序",
+    "groupsTab": "分组",
+    "managedNotice": "此处管理的扩展程序将在启动时替换配置文件中手动安装的所有扩展程序。",
+    "proRequired": "扩展程序管理是 Pro 功能",
+    "empty": "尚未上传任何扩展程序。",
+    "noGroups": "尚未创建任何扩展程序组。",
+    "createGroup": "创建分组",
+    "addToGroup": "添加扩展程序...",
+    "removeFromGroup": "从分组中移除",
+    "deleteGroup": "删除分组",
+    "extensionGroup": "扩展程序组",
+    "compatibility": {
+      "label": "兼容性",
+      "chromium": "Chromium",
+      "firefox": "Firefox",
+      "both": "Chromium 和 Firefox"
+    },
+    "selectedFile": "已选文件",
+    "namePlaceholder": "扩展程序名称",
+    "groupNamePlaceholder": "分组名称",
+    "uploadSuccess": "扩展程序上传成功",
+    "deleteSuccess": "扩展程序删除成功",
+    "groupCreateSuccess": "扩展程序组创建成功",
+    "groupUpdateSuccess": "扩展程序组更新成功",
+    "groupDeleteSuccess": "扩展程序组删除成功",
+    "deleteConfirmTitle": "删除扩展程序",
+    "deleteConfirmDescription": "确定要删除「{{name}}」吗？此操作无法撤消。",
+    "deleteGroupConfirmTitle": "删除扩展程序组",
+    "deleteGroupConfirmDescription": "确定要删除分组「{{name}}」吗？此操作无法撤消。",
+    "invalidFileType": "无效的文件类型。请上传 .crx、.xpi 或 .zip 文件。",
+    "readError": "读取扩展程序文件失败。"
   },
   "pro": {
     "badge": "PRO",

@@ -146,7 +146,8 @@
       "groups": "グループ",
       "syncService": "アカウント",
       "integrations": "統合",
-      "importProfile": "プロファイルをインポート"
+      "importProfile": "プロファイルをインポート",
+      "extensions": "拡張機能"
     }
   },
   "profiles": {
@@ -682,6 +683,7 @@
     "title": "プロフィール詳細",
     "tabs": {
       "info": "情報",
+      "network": "ネットワーク",
       "settings": "設定"
     },
     "fields": {
@@ -695,7 +697,8 @@
       "syncStatus": "同期ステータス",
       "lastLaunched": "最終起動",
       "hostOs": "ホストOS",
-      "ephemeral": "エフェメラル"
+      "ephemeral": "エフェメラル",
+      "extensionGroup": "拡張機能グループ"
     },
     "values": {
       "none": "なし",
@@ -703,9 +706,54 @@
       "copied": "コピーしました！",
       "yes": "はい"
     },
+    "network": {
+      "bypassRules": "プロキシバイパスルール",
+      "bypassRulesDescription": "これらのルールに一致するリクエストは、プロキシをバイパスして直接接続します。",
+      "addRule": "ルールを追加",
+      "rulePlaceholder": "例: example.com, 192.168.1.*, .*\\.local",
+      "noRules": "バイパスルールは設定されていません。",
+      "ruleTypes": "ホスト名、IPアドレス、正規表現パターンをサポートしています。"
+    },
     "actions": {
       "manageCookies": "Cookieを管理"
     }
+  },
+  "extensions": {
+    "title": "拡張機能",
+    "description": "プロファイル用のブラウザ拡張機能と拡張機能グループを管理します。",
+    "upload": "アップロード",
+    "delete": "削除",
+    "extensionsTab": "拡張機能",
+    "groupsTab": "グループ",
+    "managedNotice": "ここで管理される拡張機能は、起動時にプロファイルに手動でインストールされた拡張機能を置き換えます。",
+    "proRequired": "拡張機能管理はプロ機能です",
+    "empty": "まだ拡張機能がアップロードされていません。",
+    "noGroups": "まだ拡張機能グループが作成されていません。",
+    "createGroup": "グループを作成",
+    "addToGroup": "拡張機能を追加...",
+    "removeFromGroup": "グループから削除",
+    "deleteGroup": "グループを削除",
+    "extensionGroup": "拡張機能グループ",
+    "compatibility": {
+      "label": "互換性",
+      "chromium": "Chromium",
+      "firefox": "Firefox",
+      "both": "Chromium & Firefox"
+    },
+    "selectedFile": "選択されたファイル",
+    "namePlaceholder": "拡張機能名",
+    "groupNamePlaceholder": "グループ名",
+    "uploadSuccess": "拡張機能が正常にアップロードされました",
+    "deleteSuccess": "拡張機能が正常に削除されました",
+    "groupCreateSuccess": "拡張機能グループが正常に作成されました",
+    "groupUpdateSuccess": "拡張機能グループが正常に更新されました",
+    "groupDeleteSuccess": "拡張機能グループが正常に削除されました",
+    "deleteConfirmTitle": "拡張機能を削除",
+    "deleteConfirmDescription": "「{{name}}」を削除してもよろしいですか？この操作は元に戻せません。",
+    "deleteGroupConfirmTitle": "拡張機能グループを削除",
+    "deleteGroupConfirmDescription": "グループ「{{name}}」を削除してもよろしいですか？この操作は元に戻せません。",
+    "invalidFileType": "無効なファイルタイプです。.crx、.xpi、または .zip ファイルをアップロードしてください。",
+    "readError": "拡張機能ファイルの読み取りに失敗しました。"
   },
   "pro": {
     "badge": "PRO",

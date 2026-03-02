@@ -13,9 +13,11 @@ import {
   LuFingerprint,
   LuGlobe,
   LuGroup,
+  LuPlus,
   LuRefreshCw,
   LuSettings,
   LuTrash2,
+  LuX,
 } from "react-icons/lu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,6 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { ProBadge } from "@/components/ui/pro-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -100,6 +103,11 @@ export function ProfileInfoDialog({
   const { t } = useTranslation();
   const [copied, setCopied] = React.useState(false);
   const [groupName, setGroupName] = React.useState<string | null>(null);
+  const [extensionGroupName, setExtensionGroupName] = React.useState<
+    string | null
+  >(null);
+  const [bypassRules, setBypassRules] = React.useState<string[]>([]);
+  const [newRule, setNewRule] = React.useState("");
 
   React.useEffect(() => {
     if (!isOpen || !profile?.group_id) {
@@ -118,10 +126,32 @@ export function ProfileInfoDialog({
   }, [isOpen, profile?.group_id]);
 
   React.useEffect(() => {
+    if (!isOpen || !profile?.extension_group_id) {
+      setExtensionGroupName(null);
+      return;
+    }
+    (async () => {
+      try {
+        const group = await invoke<{ name: string } | null>(
+          "get_extension_group_for_profile",
+          { profileId: profile.id },
+        );
+        setExtensionGroupName(group?.name ?? null);
+      } catch {
+        setExtensionGroupName(null);
+      }
+    })();
+  }, [isOpen, profile?.extension_group_id, profile?.id]);
+
+  React.useEffect(() => {
     if (!isOpen) {
       setCopied(false);
+      setNewRule("");
     }
-  }, [isOpen]);
+    if (isOpen && profile) {
+      setBypassRules(profile.proxy_bypass_rules ?? []);
+    }
+  }, [isOpen, profile]);
 
   if (!profile) return null;
 
@@ -163,6 +193,31 @@ export function ProfileInfoDialog({
     action();
   };
 
+  const updateBypassRules = async (rules: string[]) => {
+    if (!profile) return;
+    try {
+      await invoke("update_profile_proxy_bypass_rules", {
+        profileId: profile.id,
+        rules,
+      });
+      setBypassRules(rules);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleAddRule = () => {
+    const trimmed = newRule.trim();
+    if (!trimmed || bypassRules.includes(trimmed)) return;
+    const updated = [...bypassRules, trimmed];
+    setNewRule("");
+    void updateBypassRules(updated);
+  };
+
+  const handleRemoveRule = (rule: string) => {
+    void updateBypassRules(bypassRules.filter((r) => r !== rule));
+  };
+
   const infoFields: { label: string; value: React.ReactNode }[] = [
     {
       label: t("profileInfo.fields.profileId"),
@@ -202,6 +257,10 @@ export function ProfileInfoDialog({
     {
       label: t("profileInfo.fields.group"),
       value: groupName ?? t("profileInfo.values.none"),
+    },
+    {
+      label: t("profileInfo.fields.extensionGroup"),
+      value: extensionGroupName ?? t("profileInfo.values.none"),
     },
     {
       label: t("profileInfo.fields.tags"),
@@ -349,6 +408,9 @@ export function ProfileInfoDialog({
             <TabsTrigger value="info" className="flex-1">
               {t("profileInfo.tabs.info")}
             </TabsTrigger>
+            <TabsTrigger value="network" className="flex-1">
+              {t("profileInfo.tabs.network")}
+            </TabsTrigger>
             <TabsTrigger value="settings" className="flex-1">
               {t("profileInfo.tabs.settings")}
             </TabsTrigger>
@@ -363,6 +425,63 @@ export function ProfileInfoDialog({
                   <span className="text-sm">{field.value}</span>
                 </React.Fragment>
               ))}
+            </div>
+          </TabsContent>
+          <TabsContent value="network">
+            <div className="flex flex-col gap-3 py-2">
+              <div>
+                <h4 className="text-sm font-medium">
+                  {t("profileInfo.network.bypassRules")}
+                </h4>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {t("profileInfo.network.bypassRulesDescription")}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  value={newRule}
+                  onChange={(e) => setNewRule(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleAddRule();
+                  }}
+                  placeholder={t("profileInfo.network.rulePlaceholder")}
+                  className="flex-1 text-sm"
+                />
+                <Button
+                  size="sm"
+                  onClick={handleAddRule}
+                  disabled={!newRule.trim()}
+                >
+                  <LuPlus className="w-4 h-4 mr-1" />
+                  {t("profileInfo.network.addRule")}
+                </Button>
+              </div>
+              {bypassRules.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">
+                  {t("profileInfo.network.noRules")}
+                </p>
+              ) : (
+                <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
+                  {bypassRules.map((rule) => (
+                    <div
+                      key={rule}
+                      className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-md bg-muted text-sm"
+                    >
+                      <span className="font-mono text-xs truncate">{rule}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveRule(rule)}
+                        className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                      >
+                        <LuX className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {t("profileInfo.network.ruleTypes")}
+              </p>
             </div>
           </TabsContent>
           <TabsContent value="settings">

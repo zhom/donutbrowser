@@ -150,6 +150,7 @@ impl BrowserRunner {
           upstream_proxy.as_ref(),
           0, // Use 0 as temporary PID, will be updated later
           Some(&profile_id_str),
+          profile.proxy_bypass_rules.clone(),
         )
         .await
         .map_err(|e| {
@@ -238,6 +239,31 @@ impl BrowserRunner {
       } else {
         None
       };
+
+      // Install extensions if an extension group is assigned
+      if updated_profile.extension_group_id.is_some() {
+        let profiles_dir = self.profile_manager.get_profiles_dir();
+        let ext_profile_path = if let Some(ref override_path) = override_profile_path {
+          override_path.clone()
+        } else {
+          updated_profile.get_profile_data_path(&profiles_dir)
+        };
+        let mgr = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+        match mgr.install_extensions_for_profile(&updated_profile, &ext_profile_path) {
+          Ok(paths) => {
+            if !paths.is_empty() {
+              log::info!(
+                "Installed {} Firefox extensions for profile: {}",
+                paths.len(),
+                updated_profile.name
+              );
+            }
+          }
+          Err(e) => {
+            log::warn!("Failed to install extensions for Camoufox profile: {e}");
+          }
+        }
+      }
 
       // Launch Camoufox browser
       log::info!("Launching Camoufox for profile: {}", profile.name);
@@ -390,6 +416,7 @@ impl BrowserRunner {
           upstream_proxy.as_ref(),
           0, // Use 0 as temporary PID, will be updated later
           Some(&profile_id_str),
+          profile.proxy_bypass_rules.clone(),
         )
         .await
         .map_err(|e| {
@@ -467,6 +494,27 @@ impl BrowserRunner {
         crate::ephemeral_dirs::get_effective_profile_path(&updated_profile, &profiles_dir);
       let profile_path_str = profile_data_path.to_string_lossy().to_string();
 
+      // Install extensions if an extension group is assigned
+      let mut extension_paths = Vec::new();
+      if updated_profile.extension_group_id.is_some() {
+        let mgr = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+        match mgr.install_extensions_for_profile(&updated_profile, &profile_data_path) {
+          Ok(paths) => {
+            if !paths.is_empty() {
+              log::info!(
+                "Prepared {} Chromium extensions for profile: {}",
+                paths.len(),
+                updated_profile.name
+              );
+            }
+            extension_paths = paths;
+          }
+          Err(e) => {
+            log::warn!("Failed to install extensions for Wayfern profile: {e}");
+          }
+        }
+      }
+
       // Get proxy URL from config
       let proxy_url = wayfern_config.proxy.as_deref();
 
@@ -480,6 +528,7 @@ impl BrowserRunner {
           url.as_deref(),
           proxy_url,
           profile.ephemeral,
+          &extension_paths,
         )
         .await
         .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
@@ -1052,6 +1101,7 @@ impl BrowserRunner {
         upstream_proxy.as_ref(),
         temp_pid,
         Some(&profile_id_str),
+        profile.proxy_bypass_rules.clone(),
       )
       .await
       .map_err(|e| {
@@ -2543,6 +2593,7 @@ pub async fn launch_browser_profile(
         upstream_proxy.as_ref(),
         temp_pid,
         Some(&profile_id_str),
+        profile_for_launch.proxy_bypass_rules.clone(),
       )
       .await
     {

@@ -146,7 +146,8 @@
       "groups": "Группы",
       "syncService": "Аккаунт",
       "integrations": "Интеграции",
-      "importProfile": "Импорт профиля"
+      "importProfile": "Импорт профиля",
+      "extensions": "Расширения"
     }
   },
   "profiles": {
@@ -682,6 +683,7 @@
     "title": "Детали профиля",
     "tabs": {
       "info": "Информация",
+      "network": "Сеть",
       "settings": "Настройки"
     },
     "fields": {
@@ -695,7 +697,8 @@
       "syncStatus": "Статус синхронизации",
       "lastLaunched": "Последний запуск",
       "hostOs": "ОС хоста",
-      "ephemeral": "Эфемерный"
+      "ephemeral": "Эфемерный",
+      "extensionGroup": "Группа расширений"
     },
     "values": {
       "none": "Нет",
@@ -703,9 +706,54 @@
       "copied": "Скопировано!",
       "yes": "Да"
     },
+    "network": {
+      "bypassRules": "Правила обхода прокси",
+      "bypassRulesDescription": "Запросы, соответствующие этим правилам, будут подключаться напрямую, минуя прокси.",
+      "addRule": "Добавить правило",
+      "rulePlaceholder": "напр. example.com, 192.168.1.*, .*\\.local",
+      "noRules": "Правила обхода не настроены.",
+      "ruleTypes": "Поддерживает имена хостов, IP-адреса и шаблоны регулярных выражений."
+    },
     "actions": {
       "manageCookies": "Управление Cookie"
     }
+  },
+  "extensions": {
+    "title": "Расширения",
+    "description": "Управляйте расширениями браузера и группами расширений для ваших профилей.",
+    "upload": "Загрузить",
+    "delete": "Удалить",
+    "extensionsTab": "Расширения",
+    "groupsTab": "Группы",
+    "managedNotice": "Расширения, управляемые здесь, заменят все вручную установленные расширения в профилях при запуске.",
+    "proRequired": "Управление расширениями — функция Pro",
+    "empty": "Расширения ещё не загружены.",
+    "noGroups": "Группы расширений ещё не созданы.",
+    "createGroup": "Создать группу",
+    "addToGroup": "Добавить расширение...",
+    "removeFromGroup": "Удалить из группы",
+    "deleteGroup": "Удалить группу",
+    "extensionGroup": "Группа расширений",
+    "compatibility": {
+      "label": "Совместимость",
+      "chromium": "Chromium",
+      "firefox": "Firefox",
+      "both": "Chromium и Firefox"
+    },
+    "selectedFile": "Выбранный файл",
+    "namePlaceholder": "Название расширения",
+    "groupNamePlaceholder": "Название группы",
+    "uploadSuccess": "Расширение успешно загружено",
+    "deleteSuccess": "Расширение успешно удалено",
+    "groupCreateSuccess": "Группа расширений успешно создана",
+    "groupUpdateSuccess": "Группа расширений успешно обновлена",
+    "groupDeleteSuccess": "Группа расширений успешно удалена",
+    "deleteConfirmTitle": "Удалить расширение",
+    "deleteConfirmDescription": "Вы уверены, что хотите удалить «{{name}}»? Это действие нельзя отменить.",
+    "deleteGroupConfirmTitle": "Удалить группу расширений",
+    "deleteGroupConfirmDescription": "Вы уверены, что хотите удалить группу «{{name}}»? Это действие нельзя отменить.",
+    "invalidFileType": "Недопустимый тип файла. Загрузите файл .crx, .xpi или .zip.",
+    "readError": "Не удалось прочитать файл расширения."
   },
   "pro": {
     "badge": "PRO",

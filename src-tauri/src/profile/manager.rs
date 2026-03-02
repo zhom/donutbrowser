@@ -177,6 +177,8 @@ impl ProfileManager {
           last_sync: None,
           host_os: None,
           ephemeral: false,
+          extension_group_id: None,
+          proxy_bypass_rules: Vec::new(),
         };
 
         match self
@@ -294,6 +296,8 @@ impl ProfileManager {
           last_sync: None,
           host_os: None,
           ephemeral: false,
+          extension_group_id: None,
+          proxy_bypass_rules: Vec::new(),
         };
 
         match self
@@ -343,6 +347,8 @@ impl ProfileManager {
       last_sync: None,
       host_os: Some(get_host_os()),
       ephemeral,
+      extension_group_id: None,
+      proxy_bypass_rules: Vec::new(),
     };
 
     // Save profile info
@@ -732,6 +738,31 @@ impl ProfileManager {
     Ok(profile)
   }
 
+  pub fn update_profile_proxy_bypass_rules(
+    &self,
+    _app_handle: &tauri::AppHandle,
+    profile_id: &str,
+    rules: Vec<String>,
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+    let profile_uuid =
+      uuid::Uuid::parse_str(profile_id).map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
+    let profiles = self.list_profiles()?;
+    let mut profile = profiles
+      .into_iter()
+      .find(|p| p.id == profile_uuid)
+      .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
+
+    profile.proxy_bypass_rules = rules;
+
+    self.save_profile(&profile)?;
+
+    if let Err(e) = events::emit_empty("profiles-changed") {
+      log::warn!("Warning: Failed to emit profiles-changed event: {e}");
+    }
+
+    Ok(profile)
+  }
+
   pub fn delete_multiple_profiles(
     &self,
     app_handle: &tauri::AppHandle,
@@ -866,6 +897,8 @@ impl ProfileManager {
       last_sync: None,
       host_os: Some(get_host_os()),
       ephemeral: false,
+      extension_group_id: source.extension_group_id,
+      proxy_bypass_rules: source.proxy_bypass_rules,
     };
 
     self.save_profile(&new_profile)?;
@@ -1132,6 +1165,32 @@ impl ProfileManager {
 
     if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Warning: Failed to emit profiles-changed event: {e}");
+    }
+
+    Ok(profile)
+  }
+
+  pub fn update_profile_extension_group(
+    &self,
+    profile_id: &str,
+    extension_group_id: Option<String>,
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+    let profile_uuid =
+      uuid::Uuid::parse_str(profile_id).map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
+    let profiles = self.list_profiles()?;
+    let mut profile = profiles
+      .into_iter()
+      .find(|p| p.id == profile_uuid)
+      .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
+
+    profile.extension_group_id = extension_group_id;
+    self.save_profile(&profile)?;
+
+    if let Err(e) = events::emit("profile-updated", &profile) {
+      log::warn!("Failed to emit profile update event: {e}");
+    }
+    if let Err(e) = events::emit_empty("profiles-changed") {
+      log::warn!("Failed to emit profiles-changed event: {e}");
     }
 
     Ok(profile)
@@ -1531,9 +1590,10 @@ impl ProfileManager {
       "user_pref(\"startup.homepage_welcome_url\", \"\");".to_string(),
       "user_pref(\"startup.homepage_welcome_url.additional\", \"\");".to_string(),
       "user_pref(\"startup.homepage_override_url\", \"\");".to_string(),
-      // Keep extension updates enabled
+      // Keep extension updates enabled and allow sideloaded extensions
       "user_pref(\"extensions.update.enabled\", true);".to_string(),
       "user_pref(\"extensions.update.autoUpdateDefault\", true);".to_string(),
+      "user_pref(\"extensions.autoDisableScopes\", 0);".to_string(),
       // Completely disable browser update checking
       "user_pref(\"app.update.enabled\", false);".to_string(),
       "user_pref(\"app.update.auto\", false);".to_string(),
@@ -1985,6 +2045,18 @@ pub fn update_profile_note(
   profile_manager
     .update_profile_note(&app_handle, &profile_id, note)
     .map_err(|e| format!("Failed to update profile note: {e}"))
+}
+
+#[tauri::command]
+pub fn update_profile_proxy_bypass_rules(
+  app_handle: tauri::AppHandle,
+  profile_id: String,
+  rules: Vec<String>,
+) -> Result<BrowserProfile, String> {
+  let profile_manager = ProfileManager::instance();
+  profile_manager
+    .update_profile_proxy_bypass_rules(&app_handle, &profile_id, rules)
+    .map_err(|e| format!("Failed to update proxy bypass rules: {e}"))
 }
 
 #[tauri::command]

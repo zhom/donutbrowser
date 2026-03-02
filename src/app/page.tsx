@@ -10,6 +10,7 @@ import { CookieCopyDialog } from "@/components/cookie-copy-dialog";
 import { CookieManagementDialog } from "@/components/cookie-management-dialog";
 import { CreateProfileDialog } from "@/components/create-profile-dialog";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
+import { ExtensionManagementDialog } from "@/components/extension-management-dialog";
 import { GroupAssignmentDialog } from "@/components/group-assignment-dialog";
 import { GroupBadges } from "@/components/group-badges";
 import { GroupManagementDialog } from "@/components/group-management-dialog";
@@ -138,6 +139,8 @@ export default function Home() {
   const [camoufoxConfigDialogOpen, setCamoufoxConfigDialogOpen] =
     useState(false);
   const [groupManagementDialogOpen, setGroupManagementDialogOpen] =
+    useState(false);
+  const [extensionManagementDialogOpen, setExtensionManagementDialogOpen] =
     useState(false);
   const [groupAssignmentDialogOpen, setGroupAssignmentDialogOpen] =
     useState(false);
@@ -500,23 +503,38 @@ export default function Home() {
       camoufoxConfig?: CamoufoxConfig;
       wayfernConfig?: WayfernConfig;
       groupId?: string;
+      extensionGroupId?: string;
       ephemeral?: boolean;
     }) => {
       try {
-        await invoke<BrowserProfile>("create_browser_profile_new", {
-          name: profileData.name,
-          browserStr: profileData.browserStr,
-          version: profileData.version,
-          releaseType: profileData.releaseType,
-          proxyId: profileData.proxyId,
-          vpnId: profileData.vpnId,
-          camoufoxConfig: profileData.camoufoxConfig,
-          wayfernConfig: profileData.wayfernConfig,
-          groupId:
-            profileData.groupId ||
-            (selectedGroupId !== "default" ? selectedGroupId : undefined),
-          ephemeral: profileData.ephemeral,
-        });
+        const profile = await invoke<BrowserProfile>(
+          "create_browser_profile_new",
+          {
+            name: profileData.name,
+            browserStr: profileData.browserStr,
+            version: profileData.version,
+            releaseType: profileData.releaseType,
+            proxyId: profileData.proxyId,
+            vpnId: profileData.vpnId,
+            camoufoxConfig: profileData.camoufoxConfig,
+            wayfernConfig: profileData.wayfernConfig,
+            groupId:
+              profileData.groupId ||
+              (selectedGroupId !== "default" ? selectedGroupId : undefined),
+            ephemeral: profileData.ephemeral,
+          },
+        );
+
+        if (profileData.extensionGroupId) {
+          try {
+            await invoke("assign_extension_group_to_profile", {
+              profileId: profile.id,
+              extensionGroupId: profileData.extensionGroupId,
+            });
+          } catch (err) {
+            console.error("Failed to assign extension group:", err);
+          }
+        }
 
         // No need to manually reload - useProfileEvents will handle the update
       } catch (error) {
@@ -1014,6 +1032,7 @@ export default function Home() {
             onSettingsDialogOpen={setSettingsDialogOpen}
             onSyncConfigDialogOpen={setSyncConfigDialogOpen}
             onIntegrationsDialogOpen={setIntegrationsDialogOpen}
+            onExtensionManagementDialogOpen={setExtensionManagementDialogOpen}
             searchQuery={searchQuery}
             onSearchQueryChange={setSearchQuery}
           />
@@ -1142,6 +1161,12 @@ export default function Home() {
           setGroupManagementDialogOpen(false);
         }}
         onGroupManagementComplete={handleGroupManagementComplete}
+      />
+
+      <ExtensionManagementDialog
+        isOpen={extensionManagementDialogOpen}
+        onClose={() => setExtensionManagementDialogOpen(false)}
+        limitedMode={!crossOsUnlocked}
       />
 
       <GroupAssignmentDialog

@@ -78,6 +78,7 @@ pub struct UpdateProfileRequest {
   pub camoufox_config: Option<serde_json::Value>,
   pub group_id: Option<String>,
   pub tags: Option<Vec<String>>,
+  pub extension_group_id: Option<String>,
 }
 
 #[derive(Clone)]
@@ -305,6 +306,10 @@ impl ApiServer {
       .routes(routes!(get_tags))
       .routes(routes!(get_proxies, create_proxy))
       .routes(routes!(get_proxy, update_proxy, delete_proxy))
+      .routes(routes!(get_extensions))
+      .routes(routes!(delete_extension_api))
+      .routes(routes!(get_extension_groups))
+      .routes(routes!(delete_extension_group_api))
       .routes(routes!(download_browser_api))
       .routes(routes!(get_browser_versions))
       .routes(routes!(check_browser_downloaded))
@@ -737,6 +742,20 @@ async fn update_profile(
     }
   }
 
+  if let Some(extension_group_id) = request.extension_group_id {
+    let ext_group = if extension_group_id.is_empty() {
+      None
+    } else {
+      Some(extension_group_id)
+    };
+    if profile_manager
+      .update_profile_extension_group(&id, ext_group)
+      .is_err()
+    {
+      return Err(StatusCode::BAD_REQUEST);
+    }
+  }
+
   // Return updated profile
   get_profile(Path(id), State(state)).await
 }
@@ -1140,6 +1159,94 @@ async fn delete_proxy(
     Ok(_) => Ok(StatusCode::NO_CONTENT),
     Err(_) => Err(StatusCode::BAD_REQUEST),
   }
+}
+
+// Extension API endpoints
+
+#[utoipa::path(
+  get,
+  path = "/v1/extensions",
+  responses(
+    (status = 200, description = "List of extensions"),
+    (status = 401, description = "Unauthorized"),
+  ),
+  security(("bearer_auth" = [])),
+  tag = "extensions"
+)]
+async fn get_extensions(
+  State(_state): State<ApiServerState>,
+) -> Result<Json<Vec<crate::extension_manager::Extension>>, StatusCode> {
+  let mgr = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+  mgr
+    .list_extensions()
+    .map(Json)
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+#[utoipa::path(
+  get,
+  path = "/v1/extension-groups",
+  responses(
+    (status = 200, description = "List of extension groups"),
+    (status = 401, description = "Unauthorized"),
+  ),
+  security(("bearer_auth" = [])),
+  tag = "extensions"
+)]
+async fn get_extension_groups(
+  State(_state): State<ApiServerState>,
+) -> Result<Json<Vec<crate::extension_manager::ExtensionGroup>>, StatusCode> {
+  let mgr = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+  mgr
+    .list_groups()
+    .map(Json)
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+#[utoipa::path(
+  delete,
+  path = "/v1/extensions/{id}",
+  params(("id" = String, Path, description = "Extension ID")),
+  responses(
+    (status = 204, description = "Extension deleted"),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Extension not found"),
+  ),
+  security(("bearer_auth" = [])),
+  tag = "extensions"
+)]
+async fn delete_extension_api(
+  Path(id): Path<String>,
+  State(state): State<ApiServerState>,
+) -> Result<StatusCode, StatusCode> {
+  let mgr = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+  mgr
+    .delete_extension(&state.app_handle, &id)
+    .map(|_| StatusCode::NO_CONTENT)
+    .map_err(|_| StatusCode::NOT_FOUND)
+}
+
+#[utoipa::path(
+  delete,
+  path = "/v1/extension-groups/{id}",
+  params(("id" = String, Path, description = "Extension Group ID")),
+  responses(
+    (status = 204, description = "Extension group deleted"),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Extension group not found"),
+  ),
+  security(("bearer_auth" = [])),
+  tag = "extensions"
+)]
+async fn delete_extension_group_api(
+  Path(id): Path<String>,
+  State(state): State<ApiServerState>,
+) -> Result<StatusCode, StatusCode> {
+  let mgr = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+  mgr
+    .delete_group(&state.app_handle, &id)
+    .map(|_| StatusCode::NO_CONTENT)
+    .map_err(|_| StatusCode::NOT_FOUND)
 }
 
 // API Handler - Run Profile with Remote Debugging

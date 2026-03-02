@@ -146,7 +146,8 @@
       "groups": "Grupos",
       "syncService": "Conta",
       "integrations": "Integrações",
-      "importProfile": "Importar Perfil"
+      "importProfile": "Importar Perfil",
+      "extensions": "Extensões"
     }
   },
   "profiles": {
@@ -682,6 +683,7 @@
     "title": "Detalhes do Perfil",
     "tabs": {
       "info": "Info",
+      "network": "Rede",
       "settings": "Configurações"
     },
     "fields": {
@@ -695,7 +697,8 @@
       "syncStatus": "Status de Sincronização",
       "lastLaunched": "Último Lançamento",
       "hostOs": "SO Host",
-      "ephemeral": "Efêmero"
+      "ephemeral": "Efêmero",
+      "extensionGroup": "Grupo de Extensões"
     },
     "values": {
       "none": "Nenhum",
@@ -703,9 +706,54 @@
       "copied": "Copiado!",
       "yes": "Sim"
     },
+    "network": {
+      "bypassRules": "Regras de Bypass de Proxy",
+      "bypassRulesDescription": "Solicitações que correspondam a estas regras se conectarão diretamente, ignorando o proxy.",
+      "addRule": "Adicionar Regra",
+      "rulePlaceholder": "ex. example.com, 192.168.1.*, .*\\.local",
+      "noRules": "Nenhuma regra de bypass configurada.",
+      "ruleTypes": "Suporta nomes de host, endereços IP e padrões regex."
+    },
     "actions": {
       "manageCookies": "Gerenciar Cookies"
     }
+  },
+  "extensions": {
+    "title": "Extensões",
+    "description": "Gerencie extensões de navegador e grupos de extensões para seus perfis.",
+    "upload": "Enviar",
+    "delete": "Excluir",
+    "extensionsTab": "Extensões",
+    "groupsTab": "Grupos",
+    "managedNotice": "As extensões gerenciadas aqui substituirão quaisquer extensões instaladas manualmente nos perfis ao serem iniciados.",
+    "proRequired": "O gerenciamento de extensões é um recurso Pro",
+    "empty": "Nenhuma extensão enviada ainda.",
+    "noGroups": "Nenhum grupo de extensões criado ainda.",
+    "createGroup": "Criar Grupo",
+    "addToGroup": "Adicionar extensão...",
+    "removeFromGroup": "Remover do grupo",
+    "deleteGroup": "Excluir grupo",
+    "extensionGroup": "Grupo de Extensões",
+    "compatibility": {
+      "label": "Compatibilidade",
+      "chromium": "Chromium",
+      "firefox": "Firefox",
+      "both": "Chromium e Firefox"
+    },
+    "selectedFile": "Arquivo selecionado",
+    "namePlaceholder": "Nome da extensão",
+    "groupNamePlaceholder": "Nome do grupo",
+    "uploadSuccess": "Extensão enviada com sucesso",
+    "deleteSuccess": "Extensão excluída com sucesso",
+    "groupCreateSuccess": "Grupo de extensões criado com sucesso",
+    "groupUpdateSuccess": "Grupo de extensões atualizado com sucesso",
+    "groupDeleteSuccess": "Grupo de extensões excluído com sucesso",
+    "deleteConfirmTitle": "Excluir Extensão",
+    "deleteConfirmDescription": "Tem certeza de que deseja excluir \"{{name}}\"? Esta ação não pode ser desfeita.",
+    "deleteGroupConfirmTitle": "Excluir Grupo de Extensões",
+    "deleteGroupConfirmDescription": "Tem certeza de que deseja excluir o grupo \"{{name}}\"? Esta ação não pode ser desfeita.",
+    "invalidFileType": "Tipo de arquivo inválido. Envie um arquivo .crx, .xpi ou .zip.",
+    "readError": "Falha ao ler o arquivo de extensão."
   },
   "pro": {
     "badge": "PRO",

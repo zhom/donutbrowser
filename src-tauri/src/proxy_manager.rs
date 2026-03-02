@@ -1192,6 +1192,7 @@ impl ProxyManager {
     proxy_settings: Option<&ProxySettings>,
     browser_pid: u32,
     profile_id: Option<&str>,
+    bypass_rules: Vec<String>,
   ) -> Result<ProxySettings, String> {
     if let Some(name) = profile_id {
       // Check if we have an active proxy recorded for this profile
@@ -1310,6 +1311,13 @@ impl ProxyManager {
     // Add profile ID if provided for traffic tracking
     if let Some(id) = profile_id {
       proxy_cmd = proxy_cmd.arg("--profile-id").arg(id);
+    }
+
+    // Add bypass rules if any
+    if !bypass_rules.is_empty() {
+      let rules_json = serde_json::to_string(&bypass_rules)
+        .map_err(|e| format!("Failed to serialize bypass rules: {e}"))?;
+      proxy_cmd = proxy_cmd.arg("--bypass-rules").arg(rules_json);
     }
 
     // Execute the command and wait for it to complete

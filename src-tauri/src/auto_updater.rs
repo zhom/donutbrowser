@@ -61,6 +61,10 @@ impl AutoUpdater {
     let mut browser_profiles: HashMap<String, Vec<BrowserProfile>> = HashMap::new();
 
     for profile in profiles {
+      if profile.is_cross_os() {
+        continue;
+      }
+
       // Only check supported browsers
       if !self
         .browser_version_manager
@@ -313,6 +317,10 @@ impl AutoUpdater {
     // Find all profiles for this browser that should be updated
     for profile in profiles {
       if profile.browser == browser {
+        if profile.is_cross_os() {
+          continue;
+        }
+
         // Check if profile is currently running
         if profile.process_id.is_some() {
           continue; // Skip running profiles
@@ -515,6 +523,8 @@ mod tests {
       last_sync: None,
       host_os: None,
       ephemeral: false,
+      extension_group_id: None,
+      proxy_bypass_rules: Vec::new(),
     }
   }
 

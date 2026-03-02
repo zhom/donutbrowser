@@ -1013,6 +1013,347 @@ impl SyncEngine {
     Ok(())
   }
 
+  // Extension sync
+
+  async fn sync_extension(
+    &self,
+    ext_id: &str,
+    app_handle: Option<&tauri::AppHandle>,
+  ) -> SyncResult<()> {
+    let local_ext = {
+      let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+      manager.get_extension(ext_id).ok()
+    };
+
+    let remote_key = format!("extensions/{}.json", ext_id);
+    let stat = self.client.stat(&remote_key).await?;
+
+    match (local_ext, stat.exists) {
+      (Some(ext), true) => {
+        let local_updated = ext.last_sync.unwrap_or(0);
+        let remote_updated: DateTime<Utc> = stat
+          .last_modified
+          .as_ref()
+          .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+          .map(|dt| dt.with_timezone(&Utc))
+          .unwrap_or_else(Utc::now);
+        let remote_ts = remote_updated.timestamp() as u64;
+
+        if remote_ts > local_updated {
+          self.download_extension(ext_id, app_handle).await?;
+        } else if local_updated > remote_ts {
+          self.upload_extension(&ext).await?;
+        }
+      }
+      (Some(ext), false) => {
+        self.upload_extension(&ext).await?;
+      }
+      (None, true) => {
+        self.download_extension(ext_id, app_handle).await?;
+      }
+      (None, false) => {
+        log::debug!("Extension {} not found locally or remotely", ext_id);
+      }
+    }
+
+    Ok(())
+  }
+
+  async fn upload_extension(&self, ext: &crate::extension_manager::Extension) -> SyncResult<()> {
+    let now = std::time::SystemTime::now()
+      .duration_since(std::time::UNIX_EPOCH)
+      .unwrap()
+      .as_secs();
+
+    let mut updated_ext = ext.clone();
+    updated_ext.last_sync = Some(now);
+
+    let json = serde_json::to_string_pretty(&updated_ext)
+      .map_err(|e| SyncError::SerializationError(format!("Failed to serialize extension: {e}")))?;
+
+    let remote_key = format!("extensions/{}.json", ext.id);
+    let presign = self
+      .client
+      .presign_upload(&remote_key, Some("application/json"))
+      .await?;
+    self
+      .client
+      .upload_bytes(&presign.url, json.as_bytes(), Some("application/json"))
+      .await?;
+
+    // Also upload the extension file data
+    let file_path = {
+      let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+      let file_dir = manager.get_file_dir_public(&ext.id);
+      file_dir.join(&ext.file_name)
+    };
+
+    if file_path.exists() {
+      let file_data = fs::read(&file_path).map_err(|e| {
+        SyncError::IoError(format!(
+          "Failed to read extension file {}: {e}",
+          file_path.display()
+        ))
+      })?;
+
+      let file_remote_key = format!("extensions/{}/file/{}", ext.id, ext.file_name);
+      let file_presign = self
+        .client
+        .presign_upload(&file_remote_key, Some("application/octet-stream"))
+        .await?;
+      self
+        .client
+        .upload_bytes(
+          &file_presign.url,
+          &file_data,
+          Some("application/octet-stream"),
+        )
+        .await?;
+    }
+
+    // Update local extension with new last_sync
+    {
+      let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+      if let Err(e) = manager.update_extension_internal(&updated_ext) {
+        log::warn!("Failed to update extension last_sync: {}", e);
+      }
+    }
+
+    log::info!("Extension {} uploaded", ext.id);
+    Ok(())
+  }
+
+  async fn download_extension(
+    &self,
+    ext_id: &str,
+    app_handle: Option<&tauri::AppHandle>,
+  ) -> SyncResult<()> {
+    let remote_key = format!("extensions/{}.json", ext_id);
+    let presign = self.client.presign_download(&remote_key).await?;
+    let data = self.client.download_bytes(&presign.url).await?;
+
+    let mut ext: crate::extension_manager::Extension = serde_json::from_slice(&data)
+      .map_err(|e| SyncError::SerializationError(format!("Failed to parse extension JSON: {e}")))?;
+
+    ext.last_sync = Some(
+      std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs(),
+    );
+    ext.sync_enabled = true;
+
+    // Download the extension file
+    let file_remote_key = format!("extensions/{}/file/{}", ext.id, ext.file_name);
+    let file_stat = self.client.stat(&file_remote_key).await?;
+    if file_stat.exists {
+      let file_presign = self.client.presign_download(&file_remote_key).await?;
+      let file_data = self.client.download_bytes(&file_presign.url).await?;
+
+      let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+      let file_dir = manager.get_file_dir_public(&ext.id);
+      drop(manager);
+
+      fs::create_dir_all(&file_dir).map_err(|e| {
+        SyncError::IoError(format!(
+          "Failed to create extension file dir {}: {e}",
+          file_dir.display()
+        ))
+      })?;
+      let file_path = file_dir.join(&ext.file_name);
+      fs::write(&file_path, &file_data).map_err(|e| {
+        SyncError::IoError(format!(
+          "Failed to write extension file {}: {e}",
+          file_path.display()
+        ))
+      })?;
+    }
+
+    // Save or update local extension
+    {
+      let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+      if let Err(e) = manager.upsert_extension_internal(&ext) {
+        log::warn!("Failed to save downloaded extension: {}", e);
+      }
+    }
+
+    if let Some(_handle) = app_handle {
+      let _ = events::emit("extensions-changed", ());
+    }
+
+    log::info!("Extension {} downloaded", ext_id);
+    Ok(())
+  }
+
+  pub async fn sync_extension_by_id_with_handle(
+    &self,
+    ext_id: &str,
+    app_handle: &tauri::AppHandle,
+  ) -> SyncResult<()> {
+    self.sync_extension(ext_id, Some(app_handle)).await
+  }
+
+  pub async fn delete_extension(&self, ext_id: &str) -> SyncResult<()> {
+    let remote_key = format!("extensions/{}.json", ext_id);
+    let file_prefix = format!("extensions/{}/file/", ext_id);
+    let tombstone_key = format!("tombstones/extensions/{}.json", ext_id);
+
+    // Delete metadata
+    self
+      .client
+      .delete(&remote_key, Some(&tombstone_key))
+      .await?;
+
+    // Delete file data
+    let _ = self.client.delete_prefix(&file_prefix, None).await;
+
+    log::info!("Extension {} deleted from sync", ext_id);
+    Ok(())
+  }
+
+  // Extension group sync
+
+  async fn sync_extension_group(
+    &self,
+    group_id: &str,
+    app_handle: Option<&tauri::AppHandle>,
+  ) -> SyncResult<()> {
+    let local_group = {
+      let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+      manager.get_group(group_id).ok()
+    };
+
+    let remote_key = format!("extension_groups/{}.json", group_id);
+    let stat = self.client.stat(&remote_key).await?;
+
+    match (local_group, stat.exists) {
+      (Some(group), true) => {
+        let local_updated = group.last_sync.unwrap_or(0);
+        let remote_updated: DateTime<Utc> = stat
+          .last_modified
+          .as_ref()
+          .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+          .map(|dt| dt.with_timezone(&Utc))
+          .unwrap_or_else(Utc::now);
+        let remote_ts = remote_updated.timestamp() as u64;
+
+        if remote_ts > local_updated {
+          self.download_extension_group(group_id, app_handle).await?;
+        } else if local_updated > remote_ts {
+          self.upload_extension_group(&group).await?;
+        }
+      }
+      (Some(group), false) => {
+        self.upload_extension_group(&group).await?;
+      }
+      (None, true) => {
+        self.download_extension_group(group_id, app_handle).await?;
+      }
+      (None, false) => {
+        log::debug!("Extension group {} not found locally or remotely", group_id);
+      }
+    }
+
+    Ok(())
+  }
+
+  async fn upload_extension_group(
+    &self,
+    group: &crate::extension_manager::ExtensionGroup,
+  ) -> SyncResult<()> {
+    let now = std::time::SystemTime::now()
+      .duration_since(std::time::UNIX_EPOCH)
+      .unwrap()
+      .as_secs();
+
+    let mut updated_group = group.clone();
+    updated_group.last_sync = Some(now);
+
+    let json = serde_json::to_string_pretty(&updated_group).map_err(|e| {
+      SyncError::SerializationError(format!("Failed to serialize extension group: {e}"))
+    })?;
+
+    let remote_key = format!("extension_groups/{}.json", group.id);
+    let presign = self
+      .client
+      .presign_upload(&remote_key, Some("application/json"))
+      .await?;
+    self
+      .client
+      .upload_bytes(&presign.url, json.as_bytes(), Some("application/json"))
+      .await?;
+
+    // Update local group with new last_sync
+    {
+      let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+      if let Err(e) = manager.update_group_internal(&updated_group) {
+        log::warn!("Failed to update extension group last_sync: {}", e);
+      }
+    }
+
+    log::info!("Extension group {} uploaded", group.id);
+    Ok(())
+  }
+
+  async fn download_extension_group(
+    &self,
+    group_id: &str,
+    app_handle: Option<&tauri::AppHandle>,
+  ) -> SyncResult<()> {
+    let remote_key = format!("extension_groups/{}.json", group_id);
+    let presign = self.client.presign_download(&remote_key).await?;
+    let data = self.client.download_bytes(&presign.url).await?;
+
+    let mut group: crate::extension_manager::ExtensionGroup = serde_json::from_slice(&data)
+      .map_err(|e| {
+        SyncError::SerializationError(format!("Failed to parse extension group JSON: {e}"))
+      })?;
+
+    group.last_sync = Some(
+      std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs(),
+    );
+    group.sync_enabled = true;
+
+    // Save or update local group
+    {
+      let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+      if let Err(e) = manager.upsert_group_internal(&group) {
+        log::warn!("Failed to save downloaded extension group: {}", e);
+      }
+    }
+
+    if let Some(_handle) = app_handle {
+      let _ = events::emit("extensions-changed", ());
+    }
+
+    log::info!("Extension group {} downloaded", group_id);
+    Ok(())
+  }
+
+  pub async fn sync_extension_group_by_id_with_handle(
+    &self,
+    group_id: &str,
+    app_handle: &tauri::AppHandle,
+  ) -> SyncResult<()> {
+    self.sync_extension_group(group_id, Some(app_handle)).await
+  }
+
+  pub async fn delete_extension_group(&self, group_id: &str) -> SyncResult<()> {
+    let remote_key = format!("extension_groups/{}.json", group_id);
+    let tombstone_key = format!("tombstones/extension_groups/{}.json", group_id);
+
+    self
+      .client
+      .delete(&remote_key, Some(&tombstone_key))
+      .await?;
+
+    log::info!("Extension group {} deleted from sync", group_id);
+    Ok(())
+  }
+
   /// Download a profile from S3 if it exists remotely but not locally
   pub async fn download_profile_if_missing(
     &self,
@@ -2093,6 +2434,8 @@ pub struct UnsyncedEntityCounts {
   pub proxies: usize,
   pub groups: usize,
   pub vpns: usize,
+  pub extensions: usize,
+  pub extension_groups: usize,
 }
 
 #[tauri::command]
@@ -2121,10 +2464,28 @@ pub fn get_unsynced_entity_counts() -> Result<UnsyncedEntityCounts, String> {
     configs.iter().filter(|c| !c.sync_enabled).count()
   };
 
+  let extension_count = {
+    let em = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+    let exts = em
+      .list_extensions()
+      .map_err(|e| format!("Failed to list extensions: {e}"))?;
+    exts.iter().filter(|e| !e.sync_enabled).count()
+  };
+
+  let extension_group_count = {
+    let em = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+    let groups = em
+      .list_groups()
+      .map_err(|e| format!("Failed to list extension groups: {e}"))?;
+    groups.iter().filter(|g| !g.sync_enabled).count()
+  };
+
   Ok(UnsyncedEntityCounts {
     proxies: proxy_count,
     groups: group_count,
     vpns: vpn_count,
+    extensions: extension_count,
+    extension_groups: extension_group_count,
   })
 }
 
@@ -2166,6 +2527,148 @@ pub async fn enable_sync_for_all_entities(app_handle: tauri::AppHandle) -> Resul
       if !config.sync_enabled {
         set_vpn_sync_enabled(app_handle.clone(), config.id.clone(), true).await?;
       }
+    }
+  }
+
+  // Enable sync for all unsynced extensions
+  {
+    let exts = {
+      let em = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+      em.list_extensions()
+        .map_err(|e| format!("Failed to list extensions: {e}"))?
+    };
+    for ext in &exts {
+      if !ext.sync_enabled {
+        set_extension_sync_enabled(app_handle.clone(), ext.id.clone(), true).await?;
+      }
+    }
+  }
+
+  // Enable sync for all unsynced extension groups
+  {
+    let groups = {
+      let em = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+      em.list_groups()
+        .map_err(|e| format!("Failed to list extension groups: {e}"))?
+    };
+    for group in &groups {
+      if !group.sync_enabled {
+        set_extension_group_sync_enabled(app_handle.clone(), group.id.clone(), true).await?;
+      }
+    }
+  }
+
+  Ok(())
+}
+
+#[tauri::command]
+pub async fn set_extension_sync_enabled(
+  app_handle: tauri::AppHandle,
+  extension_id: String,
+  enabled: bool,
+) -> Result<(), String> {
+  let ext = {
+    let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+    manager
+      .get_extension(&extension_id)
+      .map_err(|e| format!("Extension with ID '{extension_id}' not found: {e}"))?
+  };
+
+  if enabled {
+    let cloud_logged_in = crate::cloud_auth::CLOUD_AUTH.is_logged_in().await;
+    if !cloud_logged_in {
+      let manager = SettingsManager::instance();
+      let settings = manager
+        .load_settings()
+        .map_err(|e| format!("Failed to load settings: {e}"))?;
+      if settings.sync_server_url.is_none() {
+        return Err(
+          "Sync server not configured. Please configure sync settings first.".to_string(),
+        );
+      }
+      let token = manager.get_sync_token(&app_handle).await.ok().flatten();
+      if token.is_none() {
+        return Err("Sync token not configured. Please configure sync settings first.".to_string());
+      }
+    }
+  }
+
+  let mut updated_ext = ext;
+  updated_ext.sync_enabled = enabled;
+  if !enabled {
+    updated_ext.last_sync = None;
+  }
+
+  {
+    let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+    manager
+      .update_extension_internal(&updated_ext)
+      .map_err(|e| format!("Failed to update extension sync: {e}"))?;
+  }
+
+  let _ = events::emit("extensions-changed", ());
+
+  if enabled {
+    if let Some(scheduler) = super::get_global_scheduler() {
+      scheduler.queue_extension_sync(extension_id).await;
+    }
+  }
+
+  Ok(())
+}
+
+#[tauri::command]
+pub async fn set_extension_group_sync_enabled(
+  app_handle: tauri::AppHandle,
+  extension_group_id: String,
+  enabled: bool,
+) -> Result<(), String> {
+  let group = {
+    let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+    manager
+      .get_group(&extension_group_id)
+      .map_err(|e| format!("Extension group with ID '{extension_group_id}' not found: {e}"))?
+  };
+
+  if enabled {
+    let cloud_logged_in = crate::cloud_auth::CLOUD_AUTH.is_logged_in().await;
+    if !cloud_logged_in {
+      let manager = SettingsManager::instance();
+      let settings = manager
+        .load_settings()
+        .map_err(|e| format!("Failed to load settings: {e}"))?;
+      if settings.sync_server_url.is_none() {
+        return Err(
+          "Sync server not configured. Please configure sync settings first.".to_string(),
+        );
+      }
+      let token = manager.get_sync_token(&app_handle).await.ok().flatten();
+      if token.is_none() {
+        return Err("Sync token not configured. Please configure sync settings first.".to_string());
+      }
+    }
+  }
+
+  let mut updated_group = group;
+  updated_group.sync_enabled = enabled;
+  if !enabled {
+    updated_group.last_sync = None;
+  }
+
+  {
+    let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+    manager
+      .update_group_internal(&updated_group)
+      .map_err(|e| format!("Failed to update extension group sync: {e}"))?;
+  }
+
+  let _ = events::emit("extensions-changed", ());
+
+  if enabled {
+    if let Some(scheduler) = super::get_global_scheduler() {
+      scheduler
+        .queue_extension_group_sync(extension_group_id)
+        .await;
     }
   }
 

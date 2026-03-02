@@ -725,6 +725,69 @@ impl McpServer {
           "required": ["profile_id"]
         }),
       },
+      McpTool {
+        name: "list_extensions".to_string(),
+        description: "List all managed browser extensions. Requires Pro subscription.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {},
+          "required": []
+        }),
+      },
+      McpTool {
+        name: "list_extension_groups".to_string(),
+        description: "List all extension groups. Requires Pro subscription.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {},
+          "required": []
+        }),
+      },
+      McpTool {
+        name: "create_extension_group".to_string(),
+        description: "Create a new extension group. Requires Pro subscription.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "name": { "type": "string", "description": "Name for the extension group" }
+          },
+          "required": ["name"]
+        }),
+      },
+      McpTool {
+        name: "delete_extension".to_string(),
+        description: "Delete a managed extension. Requires Pro subscription.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "extension_id": { "type": "string", "description": "The extension ID to delete" }
+          },
+          "required": ["extension_id"]
+        }),
+      },
+      McpTool {
+        name: "delete_extension_group".to_string(),
+        description: "Delete an extension group. Requires Pro subscription.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "group_id": { "type": "string", "description": "The extension group ID to delete" }
+          },
+          "required": ["group_id"]
+        }),
+      },
+      McpTool {
+        name: "assign_extension_group_to_profile".to_string(),
+        description: "Assign an extension group to a profile, or remove the assignment. Requires Pro subscription.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": { "type": "string", "description": "The profile ID" },
+            "extension_group_id": { "type": "string", "description": "The extension group ID, or empty string to remove" }
+          },
+          "required": ["profile_id"]
+        }),
+      },
     ]
   }
 
@@ -826,6 +889,17 @@ impl McpServer {
       // Fingerprint management
       "get_profile_fingerprint" => self.handle_get_profile_fingerprint(&arguments).await,
       "update_profile_fingerprint" => self.handle_update_profile_fingerprint(&arguments).await,
+      // Extension management
+      "list_extensions" => self.handle_list_extensions().await,
+      "list_extension_groups" => self.handle_list_extension_groups().await,
+      "create_extension_group" => self.handle_create_extension_group(&arguments).await,
+      "delete_extension" => self.handle_delete_extension_mcp(&arguments).await,
+      "delete_extension_group" => self.handle_delete_extension_group_mcp(&arguments).await,
+      "assign_extension_group_to_profile" => {
+        self
+          .handle_assign_extension_group_to_profile(&arguments)
+          .await
+      }
       _ => Err(McpError {
         code: -32602,
         message: format!("Unknown tool: {tool_name}"),
@@ -2066,6 +2140,180 @@ impl McpServer {
       }]
     }))
   }
+
+  async fn handle_list_extensions(&self) -> Result<serde_json::Value, McpError> {
+    if !CLOUD_AUTH.has_active_paid_subscription().await {
+      return Err(McpError {
+        code: -32000,
+        message: "Extension management requires an active Pro subscription".to_string(),
+      });
+    }
+    let mgr = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+    let extensions = mgr.list_extensions().map_err(|e| McpError {
+      code: -32000,
+      message: format!("Failed to list extensions: {e}"),
+    })?;
+    Ok(serde_json::to_value(extensions).unwrap())
+  }
+
+  async fn handle_list_extension_groups(&self) -> Result<serde_json::Value, McpError> {
+    if !CLOUD_AUTH.has_active_paid_subscription().await {
+      return Err(McpError {
+        code: -32000,
+        message: "Extension management requires an active Pro subscription".to_string(),
+      });
+    }
+    let mgr = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+    let groups = mgr.list_groups().map_err(|e| McpError {
+      code: -32000,
+      message: format!("Failed to list extension groups: {e}"),
+    })?;
+    Ok(serde_json::to_value(groups).unwrap())
+  }
+
+  async fn handle_create_extension_group(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    if !CLOUD_AUTH.has_active_paid_subscription().await {
+      return Err(McpError {
+        code: -32000,
+        message: "Extension management requires an active Pro subscription".to_string(),
+      });
+    }
+    let name = arguments
+      .get("name")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing required parameter: name".to_string(),
+      })?;
+    let mgr = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+    let group = mgr.create_group(name.to_string()).map_err(|e| McpError {
+      code: -32000,
+      message: format!("Failed to create extension group: {e}"),
+    })?;
+    Ok(serde_json::to_value(group).unwrap())
+  }
+
+  async fn handle_delete_extension_mcp(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    if !CLOUD_AUTH.has_active_paid_subscription().await {
+      return Err(McpError {
+        code: -32000,
+        message: "Extension management requires an active Pro subscription".to_string(),
+      });
+    }
+    let extension_id = arguments
+      .get("extension_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing required parameter: extension_id".to_string(),
+      })?;
+    let mgr = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+    mgr
+      .delete_extension_internal(extension_id)
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to delete extension: {e}"),
+      })?;
+    Ok(serde_json::json!({"success": true}))
+  }
+
+  async fn handle_delete_extension_group_mcp(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    if !CLOUD_AUTH.has_active_paid_subscription().await {
+      return Err(McpError {
+        code: -32000,
+        message: "Extension management requires an active Pro subscription".to_string(),
+      });
+    }
+    let group_id = arguments
+      .get("group_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing required parameter: group_id".to_string(),
+      })?;
+    let mgr = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+    // For MCP, we don't have an app_handle, but we need one for sync deletion.
+    // Use the delete_group_internal which skips sync remote deletion.
+    mgr.delete_group_internal(group_id).map_err(|e| McpError {
+      code: -32000,
+      message: format!("Failed to delete extension group: {e}"),
+    })?;
+    if let Err(e) = crate::events::emit_empty("extensions-changed") {
+      log::error!("Failed to emit extensions-changed event: {e}");
+    }
+    Ok(serde_json::json!({"success": true}))
+  }
+
+  async fn handle_assign_extension_group_to_profile(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    if !CLOUD_AUTH.has_active_paid_subscription().await {
+      return Err(McpError {
+        code: -32000,
+        message: "Extension management requires an active Pro subscription".to_string(),
+      });
+    }
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing required parameter: profile_id".to_string(),
+      })?;
+    let extension_group_id = arguments
+      .get("extension_group_id")
+      .and_then(|v| v.as_str())
+      .map(|s| {
+        if s.is_empty() {
+          None
+        } else {
+          Some(s.to_string())
+        }
+      })
+      .unwrap_or(None);
+
+    // Validate compatibility if assigning
+    if let Some(ref gid) = extension_group_id {
+      let profile_manager = ProfileManager::instance();
+      let profiles = profile_manager.list_profiles().map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to list profiles: {e}"),
+      })?;
+      let profile = profiles
+        .iter()
+        .find(|p| p.id.to_string() == profile_id)
+        .ok_or_else(|| McpError {
+          code: -32000,
+          message: format!("Profile '{profile_id}' not found"),
+        })?;
+      let mgr = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+      mgr
+        .validate_group_compatibility(gid, &profile.browser)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("{e}"),
+        })?;
+    }
+
+    let profile_manager = ProfileManager::instance();
+    let profile = profile_manager
+      .update_profile_extension_group(profile_id, extension_group_id)
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to assign extension group: {e}"),
+      })?;
+    Ok(serde_json::to_value(profile).unwrap())
+  }
 }
 
 lazy_static::lazy_static! {
@@ -2081,8 +2329,8 @@ mod tests {
     let server = McpServer::new();
     let tools = server.get_tools();
 
-    // Should have at least 26 tools (24 + 2 fingerprint tools)
-    assert!(tools.len() >= 26);
+    // Should have at least 32 tools (26 + 6 extension tools)
+    assert!(tools.len() >= 32);
 
     // Check tool names
     let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
@@ -2118,6 +2366,13 @@ mod tests {
     // Fingerprint tools
     assert!(tool_names.contains(&"get_profile_fingerprint"));
     assert!(tool_names.contains(&"update_profile_fingerprint"));
+    // Extension tools
+    assert!(tool_names.contains(&"list_extensions"));
+    assert!(tool_names.contains(&"list_extension_groups"));
+    assert!(tool_names.contains(&"create_extension_group"));
+    assert!(tool_names.contains(&"delete_extension"));
+    assert!(tool_names.contains(&"delete_extension_group"));
+    assert!(tool_names.contains(&"assign_extension_group_to_profile"));
   }
 
   #[test]

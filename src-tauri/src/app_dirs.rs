@@ -70,6 +70,10 @@ pub fn vpn_dir() -> PathBuf {
   data_dir().join("vpn")
 }
 
+pub fn extensions_dir() -> PathBuf {
+  data_dir().join("extensions")
+}
+
 #[cfg(test)]
 thread_local! {
   static TEST_DATA_DIR: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
@@ -152,6 +156,7 @@ mod tests {
     assert!(settings_dir().ends_with("settings"));
     assert!(proxies_dir().ends_with("proxies"));
     assert!(vpn_dir().ends_with("vpn"));
+    assert!(extensions_dir().ends_with("extensions"));
   }
 
   #[test]

@@ -146,7 +146,8 @@
       "groups": "Groupes",
       "syncService": "Compte",
       "integrations": "Intégrations",
-      "importProfile": "Importer un profil"
+      "importProfile": "Importer un profil",
+      "extensions": "Extensions"
     }
   },
   "profiles": {
@@ -682,6 +683,7 @@
     "title": "Détails du Profil",
     "tabs": {
       "info": "Info",
+      "network": "Réseau",
       "settings": "Paramètres"
     },
     "fields": {
@@ -695,7 +697,8 @@
       "syncStatus": "État de Synchronisation",
       "lastLaunched": "Dernier Lancement",
       "hostOs": "OS Hôte",
-      "ephemeral": "Éphémère"
+      "ephemeral": "Éphémère",
+      "extensionGroup": "Groupe d'Extensions"
     },
     "values": {
       "none": "Aucun",
@@ -703,9 +706,54 @@
       "copied": "Copié !",
       "yes": "Oui"
     },
+    "network": {
+      "bypassRules": "Règles de Contournement du Proxy",
+      "bypassRulesDescription": "Les requêtes correspondant à ces règles se connecteront directement, contournant le proxy.",
+      "addRule": "Ajouter une Règle",
+      "rulePlaceholder": "ex. example.com, 192.168.1.*, .*\\.local",
+      "noRules": "Aucune règle de contournement configurée.",
+      "ruleTypes": "Prend en charge les noms d'hôte, les adresses IP et les expressions régulières."
+    },
     "actions": {
       "manageCookies": "Gérer les Cookies"
     }
+  },
+  "extensions": {
+    "title": "Extensions",
+    "description": "Gérez les extensions de navigateur et les groupes d'extensions pour vos profils.",
+    "upload": "Télécharger",
+    "delete": "Supprimer",
+    "extensionsTab": "Extensions",
+    "groupsTab": "Groupes",
+    "managedNotice": "Les extensions gérées ici remplaceront toutes les extensions installées manuellement dans les profils lors du lancement.",
+    "proRequired": "La gestion des extensions est une fonctionnalité Pro",
+    "empty": "Aucune extension téléchargée pour l'instant.",
+    "noGroups": "Aucun groupe d'extensions créé pour l'instant.",
+    "createGroup": "Créer un Groupe",
+    "addToGroup": "Ajouter une extension...",
+    "removeFromGroup": "Retirer du groupe",
+    "deleteGroup": "Supprimer le groupe",
+    "extensionGroup": "Groupe d'Extensions",
+    "compatibility": {
+      "label": "Compatibilité",
+      "chromium": "Chromium",
+      "firefox": "Firefox",
+      "both": "Chromium et Firefox"
+    },
+    "selectedFile": "Fichier sélectionné",
+    "namePlaceholder": "Nom de l'extension",
+    "groupNamePlaceholder": "Nom du groupe",
+    "uploadSuccess": "Extension téléchargée avec succès",
+    "deleteSuccess": "Extension supprimée avec succès",
+    "groupCreateSuccess": "Groupe d'extensions créé avec succès",
+    "groupUpdateSuccess": "Groupe d'extensions mis à jour avec succès",
+    "groupDeleteSuccess": "Groupe d'extensions supprimé avec succès",
+    "deleteConfirmTitle": "Supprimer l'Extension",
+    "deleteConfirmDescription": "Êtes-vous sûr de vouloir supprimer \"{{name}}\" ? Cette action est irréversible.",
+    "deleteGroupConfirmTitle": "Supprimer le Groupe d'Extensions",
+    "deleteGroupConfirmDescription": "Êtes-vous sûr de vouloir supprimer le groupe \"{{name}}\" ? Cette action est irréversible.",
+    "invalidFileType": "Type de fichier non valide. Veuillez télécharger un fichier .crx, .xpi ou .zip.",
+    "readError": "Impossible de lire le fichier d'extension."
   },
   "pro": {
     "badge": "PRO",

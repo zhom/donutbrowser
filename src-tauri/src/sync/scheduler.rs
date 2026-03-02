@@ -35,6 +35,8 @@ pub struct SyncScheduler {
   pending_proxies: Arc<Mutex<HashSet<String>>>,
   pending_groups: Arc<Mutex<HashSet<String>>>,
   pending_vpns: Arc<Mutex<HashSet<String>>>,
+  pending_extensions: Arc<Mutex<HashSet<String>>>,
+  pending_extension_groups: Arc<Mutex<HashSet<String>>>,
   pending_tombstones: Arc<Mutex<Vec<(String, String)>>>,
   running_profiles: Arc<Mutex<HashSet<String>>>,
   in_flight_profiles: Arc<Mutex<HashSet<String>>>,
@@ -54,6 +56,8 @@ impl SyncScheduler {
       pending_proxies: Arc::new(Mutex::new(HashSet::new())),
       pending_groups: Arc::new(Mutex::new(HashSet::new())),
       pending_vpns: Arc::new(Mutex::new(HashSet::new())),
+      pending_extensions: Arc::new(Mutex::new(HashSet::new())),
+      pending_extension_groups: Arc::new(Mutex::new(HashSet::new())),
       pending_tombstones: Arc::new(Mutex::new(Vec::new())),
       running_profiles: Arc::new(Mutex::new(HashSet::new())),
       in_flight_profiles: Arc::new(Mutex::new(HashSet::new())),
@@ -99,6 +103,18 @@ impl SyncScheduler {
       return true;
     }
     drop(pending_vpns);
+
+    let pending_extensions = self.pending_extensions.lock().await;
+    if !pending_extensions.is_empty() {
+      return true;
+    }
+    drop(pending_extensions);
+
+    let pending_extension_groups = self.pending_extension_groups.lock().await;
+    if !pending_extension_groups.is_empty() {
+      return true;
+    }
+    drop(pending_extension_groups);
 
     let pending_tombstones = self.pending_tombstones.lock().await;
     if !pending_tombstones.is_empty() {
@@ -208,6 +224,16 @@ impl SyncScheduler {
     pending.insert(group_id);
   }
 
+  pub async fn queue_extension_sync(&self, extension_id: String) {
+    let mut pending = self.pending_extensions.lock().await;
+    pending.insert(extension_id);
+  }
+
+  pub async fn queue_extension_group_sync(&self, extension_group_id: String) {
+    let mut pending = self.pending_extension_groups.lock().await;
+    pending.insert(extension_group_id);
+  }
+
   pub async fn queue_tombstone(&self, entity_type: String, entity_id: String) {
     let mut pending = self.pending_tombstones.lock().await;
     if !pending
@@ -234,7 +260,7 @@ impl SyncScheduler {
 
     let sync_enabled_profiles: Vec<_> = profiles
       .into_iter()
-      .filter(|p| p.is_sync_enabled())
+      .filter(|p| p.is_sync_enabled() && !p.is_cross_os())
       .collect();
 
     if sync_enabled_profiles.is_empty() {
@@ -286,6 +312,8 @@ impl SyncScheduler {
               SyncWorkItem::Proxy(id) => scheduler.queue_proxy_sync(id).await,
               SyncWorkItem::Group(id) => scheduler.queue_group_sync(id).await,
               SyncWorkItem::Vpn(id) => scheduler.queue_vpn_sync(id).await,
+              SyncWorkItem::Extension(id) => scheduler.queue_extension_sync(id).await,
+              SyncWorkItem::ExtensionGroup(id) => scheduler.queue_extension_group_sync(id).await,
               SyncWorkItem::Tombstone(entity_type, entity_id) => {
                 scheduler.queue_tombstone(entity_type, entity_id).await
               }
@@ -306,6 +334,8 @@ impl SyncScheduler {
     self.process_pending_proxies(app_handle).await;
     self.process_pending_groups(app_handle).await;
     self.process_pending_vpns(app_handle).await;
+    self.process_pending_extensions(app_handle).await;
+    self.process_pending_extension_groups(app_handle).await;
     self.process_pending_tombstones(app_handle).await;
   }
 
@@ -356,7 +386,7 @@ impl SyncScheduler {
         profile_manager.list_profiles().ok().and_then(|profiles| {
           profiles
             .into_iter()
-            .find(|p| p.id.to_string() == profile_id && p.is_sync_enabled())
+            .find(|p| p.id.to_string() == profile_id && p.is_sync_enabled() && !p.is_cross_os())
         })
       };
 
@@ -385,6 +415,8 @@ impl SyncScheduler {
           && self.pending_proxies.lock().await.is_empty()
           && self.pending_groups.lock().await.is_empty()
           && self.pending_vpns.lock().await.is_empty()
+          && self.pending_extensions.lock().await.is_empty()
+          && self.pending_extension_groups.lock().await.is_empty()
       };
 
       match result {
@@ -618,6 +650,82 @@ impl SyncScheduler {
     }
   }
 
+  async fn process_pending_extensions(&self, app_handle: &tauri::AppHandle) {
+    let extensions_to_sync: Vec<String> = {
+      let mut pending = self.pending_extensions.lock().await;
+      let list: Vec<String> = pending.drain().collect();
+      list
+    };
+
+    if extensions_to_sync.is_empty() {
+      return;
+    }
+
+    match SyncEngine::create_from_settings(app_handle).await {
+      Ok(engine) => {
+        for ext_id in extensions_to_sync {
+          log::info!("Syncing extension {}", ext_id);
+          if let Err(e) = engine
+            .sync_extension_by_id_with_handle(&ext_id, app_handle)
+            .await
+          {
+            log::error!("Failed to sync extension {}: {}", ext_id, e);
+          }
+        }
+
+        if !self.is_sync_in_progress().await {
+          log::debug!("All syncs completed after extension sync, triggering cleanup");
+          let registry =
+            crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
+          if let Err(e) = registry.cleanup_unused_binaries() {
+            log::warn!("Cleanup after sync failed: {e}");
+          }
+        }
+      }
+      Err(e) => {
+        log::error!("Failed to create sync engine: {}", e);
+      }
+    }
+  }
+
+  async fn process_pending_extension_groups(&self, app_handle: &tauri::AppHandle) {
+    let groups_to_sync: Vec<String> = {
+      let mut pending = self.pending_extension_groups.lock().await;
+      let list: Vec<String> = pending.drain().collect();
+      list
+    };
+
+    if groups_to_sync.is_empty() {
+      return;
+    }
+
+    match SyncEngine::create_from_settings(app_handle).await {
+      Ok(engine) => {
+        for group_id in groups_to_sync {
+          log::info!("Syncing extension group {}", group_id);
+          if let Err(e) = engine
+            .sync_extension_group_by_id_with_handle(&group_id, app_handle)
+            .await
+          {
+            log::error!("Failed to sync extension group {}: {}", group_id, e);
+          }
+        }
+
+        if !self.is_sync_in_progress().await {
+          log::debug!("All syncs completed after extension group sync, triggering cleanup");
+          let registry =
+            crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
+          if let Err(e) = registry.cleanup_unused_binaries() {
+            log::warn!("Cleanup after sync failed: {e}");
+          }
+        }
+      }
+      Err(e) => {
+        log::error!("Failed to create sync engine: {}", e);
+      }
+    }
+  }
+
   async fn process_pending_tombstones(&self, _app_handle: &tauri::AppHandle) {
     let tombstones: Vec<(String, String)> = {
       let mut pending = self.pending_tombstones.lock().await;
@@ -692,6 +800,32 @@ impl SyncScheduler {
               log::info!("VPN {} was deleted remotely, deleting locally", entity_id);
               let _ = storage.delete_config(&entity_id);
               let _ = events::emit("vpn-configs-changed", ());
+            }
+          }
+        }
+        "extension" => {
+          let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+          if let Ok(ext) = manager.get_extension(&entity_id) {
+            if ext.sync_enabled {
+              log::info!(
+                "Extension {} was deleted remotely, deleting locally",
+                entity_id
+              );
+              let _ = manager.delete_extension_internal(&entity_id);
+              let _ = events::emit("extensions-changed", ());
+            }
+          }
+        }
+        "extension_group" => {
+          let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+          if let Ok(group) = manager.get_group(&entity_id) {
+            if group.sync_enabled {
+              log::info!(
+                "Extension group {} was deleted remotely, deleting locally",
+                entity_id
+              );
+              let _ = manager.delete_group_internal(&entity_id);
+              let _ = events::emit("extensions-changed", ());
             }
           }
         }

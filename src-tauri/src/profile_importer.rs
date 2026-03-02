@@ -559,6 +559,8 @@ impl ProfileImporter {
       last_sync: None,
       host_os: Some(crate::profile::types::get_host_os()),
       ephemeral: false,
+      extension_group_id: None,
+      proxy_bypass_rules: Vec::new(),
     };
 
     // Save the profile metadata

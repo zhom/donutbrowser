@@ -74,6 +74,7 @@ interface CreateProfileDialogProps {
     camoufoxConfig?: CamoufoxConfig;
     wayfernConfig?: WayfernConfig;
     groupId?: string;
+    extensionGroupId?: string;
     ephemeral?: boolean;
   }) => Promise<void>;
   selectedGroupId?: string;
@@ -166,6 +167,21 @@ export function CreateProfileDialog({
   const [showProxyForm, setShowProxyForm] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [ephemeral, setEphemeral] = useState(false);
+  const [selectedExtensionGroupId, setSelectedExtensionGroupId] =
+    useState<string>();
+  const [extensionGroups, setExtensionGroups] = useState<
+    { id: string; name: string; extension_ids: string[] }[]
+  >([]);
+
+  useEffect(() => {
+    if (isOpen) {
+      invoke<{ id: string; name: string; extension_ids: string[] }[]>(
+        "list_extension_groups",
+      )
+        .then(setExtensionGroups)
+        .catch(() => setExtensionGroups([]));
+    }
+  }, [isOpen]);
   const [releaseTypes, setReleaseTypes] = useState<BrowserReleaseTypes>();
   const [isLoadingReleaseTypes, setIsLoadingReleaseTypes] = useState(false);
   const [releaseTypesError, setReleaseTypesError] = useState<string | null>(
@@ -406,6 +422,7 @@ export function CreateProfileDialog({
             wayfernConfig: finalWayfernConfig,
             groupId:
               selectedGroupId !== "default" ? selectedGroupId : undefined,
+            extensionGroupId: selectedExtensionGroupId,
             ephemeral,
           });
         } else {
@@ -430,6 +447,7 @@ export function CreateProfileDialog({
             camoufoxConfig: finalCamoufoxConfig,
             groupId:
               selectedGroupId !== "default" ? selectedGroupId : undefined,
+            extensionGroupId: selectedExtensionGroupId,
             ephemeral,
           });
         }
@@ -1074,6 +1092,37 @@ export function CreateProfileDialog({
                             </div>
                           )}
                         </div>
+
+                        {/* Extension Group */}
+                        {extensionGroups.length > 0 && (
+                          <div className="space-y-2">
+                            <Label>{t("extensions.extensionGroup")}</Label>
+                            <Select
+                              value={selectedExtensionGroupId || "none"}
+                              onValueChange={(val) =>
+                                setSelectedExtensionGroupId(
+                                  val === "none" ? undefined : val,
+                                )
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue
+                                  placeholder={t("profileInfo.values.none")}
+                                />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">
+                                  {t("profileInfo.values.none")}
+                                </SelectItem>
+                                {extensionGroups.map((g) => (
+                                  <SelectItem key={g.id} value={g.id}>
+                                    {g.name} ({g.extension_ids.length})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
                       </div>
                     </TabsContent>
 

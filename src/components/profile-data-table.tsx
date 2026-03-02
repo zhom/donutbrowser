@@ -1582,6 +1582,7 @@ export function ProfilesDataTable({
             const osName = profile.host_os
               ? getOSDisplayName(profile.host_os)
               : "another OS";
+            const crossOsTooltip = t("crossOs.viewOnly", { os: osName });
             const OsIcon =
               profile.host_os === "macos"
                 ? FaApple
@@ -1606,10 +1607,7 @@ export function ProfilesDataTable({
                   </span>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>
-                    This profile was created on {osName} and is not supported on
-                    this system
-                  </p>
+                  <p>{crossOsTooltip}</p>
                 </TooltipContent>
               </Tooltip>
             );
@@ -1620,14 +1618,10 @@ export function ProfilesDataTable({
             const osName = profile.host_os
               ? getOSDisplayName(profile.host_os)
               : "another OS";
+            const crossOsTooltip = t("crossOs.viewOnly", { os: osName });
             return (
               <NonHoverableTooltip
-                content={
-                  <p>
-                    This profile was created on {osName} and is not supported on
-                    this system
-                  </p>
-                }
+                content={<p>{crossOsTooltip}</p>}
                 sideOffset={4}
                 horizontalOffset={8}
               >
@@ -2305,7 +2299,7 @@ export function ProfilesDataTable({
         },
       },
     ],
-    [],
+    [t],
   );
 
   const table = useReactTable({
@@ -2362,25 +2356,34 @@ export function ProfilesDataTable({
           </TableHeader>
           <TableBody className="overflow-visible">
             {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() && "selected"}
-                  className={cn(
-                    "overflow-visible hover:bg-accent/50",
-                    isCrossOsProfile(row.original) && "opacity-60",
-                  )}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} className="overflow-visible">
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext(),
-                      )}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
+              table.getRowModel().rows.map((row) => {
+                const rowIsCrossOs = isCrossOsProfile(row.original);
+                const crossOsTitle = rowIsCrossOs
+                  ? t("crossOs.viewOnly", {
+                      os: getOSDisplayName(row.original.host_os ?? ""),
+                    })
+                  : undefined;
+                return (
+                  <TableRow
+                    key={row.id}
+                    data-state={row.getIsSelected() && "selected"}
+                    title={crossOsTitle}
+                    className={cn(
+                      "overflow-visible hover:bg-accent/50",
+                      rowIsCrossOs && "opacity-60",
+                    )}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id} className="overflow-visible">
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext(),
+                        )}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                );
+              })
             ) : (
               <TableRow>
                 <TableCell

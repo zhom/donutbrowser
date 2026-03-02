@@ -12,13 +12,14 @@ pub async fn start_proxy_process(
   upstream_url: Option<String>,
   port: Option<u16>,
 ) -> Result<ProxyConfig, Box<dyn std::error::Error>> {
-  start_proxy_process_with_profile(upstream_url, port, None).await
+  start_proxy_process_with_profile(upstream_url, port, None, Vec::new()).await
 }
 
 pub async fn start_proxy_process_with_profile(
   upstream_url: Option<String>,
   port: Option<u16>,
   profile_id: Option<String>,
+  bypass_rules: Vec<String>,
 ) -> Result<ProxyConfig, Box<dyn std::error::Error>> {
   let id = generate_proxy_id();
   let upstream = upstream_url.unwrap_or_else(|| "DIRECT".to_string());
@@ -30,8 +31,9 @@ pub async fn start_proxy_process_with_profile(
     listener.local_addr().unwrap().port()
   });
 
-  let config =
-    ProxyConfig::new(id.clone(), upstream, Some(local_port)).with_profile_id(profile_id.clone());
+  let config = ProxyConfig::new(id.clone(), upstream, Some(local_port))
+    .with_profile_id(profile_id.clone())
+    .with_bypass_rules(bypass_rules);
   save_proxy_config(&config)?;
 
   // Log profile_id for debugging

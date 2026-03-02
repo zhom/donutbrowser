@@ -22,6 +22,7 @@ mod default_browser;
 mod downloaded_browsers_registry;
 mod downloader;
 mod ephemeral_dirs;
+mod extension_manager;
 mod extraction;
 mod geoip_downloader;
 mod group_manager;
@@ -61,7 +62,8 @@ use browser_runner::{
 use profile::manager::{
   check_browser_status, clone_profile, create_browser_profile_new, delete_profile,
   list_browser_profiles, rename_profile, update_camoufox_config, update_profile_note,
-  update_profile_proxy, update_profile_tags, update_profile_vpn, update_wayfern_config,
+  update_profile_proxy, update_profile_proxy_bypass_rules, update_profile_tags, update_profile_vpn,
+  update_wayfern_config,
 };
 
 use browser_version_manager::{
@@ -87,7 +89,8 @@ use settings_manager::{
 use sync::{
   check_has_e2e_password, delete_e2e_password, enable_sync_for_all_entities,
   get_unsynced_entity_counts, is_group_in_use_by_synced_profile, is_proxy_in_use_by_synced_profile,
-  is_vpn_in_use_by_synced_profile, request_profile_sync, set_e2e_password, set_group_sync_enabled,
+  is_vpn_in_use_by_synced_profile, request_profile_sync, set_e2e_password,
+  set_extension_group_sync_enabled, set_extension_sync_enabled, set_group_sync_enabled,
   set_profile_sync_mode, set_proxy_sync_enabled, set_vpn_sync_enabled,
 };
 
@@ -110,6 +113,12 @@ use app_auto_updater::{
 };
 
 use profile_importer::{detect_existing_profiles, import_browser_profile};
+
+use extension_manager::{
+  add_extension, add_extension_to_group, assign_extension_group_to_profile, create_extension_group,
+  delete_extension, delete_extension_group, get_extension_group_for_profile, list_extension_groups,
+  list_extensions, remove_extension_from_group, update_extension, update_extension_group,
+};
 
 use group_manager::{
   assign_profiles_to_group, create_profile_group, delete_profile_group, delete_selected_profiles,
@@ -1331,6 +1340,7 @@ pub fn run() {
       update_profile_vpn,
       update_profile_tags,
       update_profile_note,
+      update_profile_proxy_bypass_rules,
       check_browser_status,
       kill_browser_profile,
       rename_profile,
@@ -1382,6 +1392,18 @@ pub fn run() {
       delete_profile_group,
       assign_profiles_to_group,
       delete_selected_profiles,
+      list_extensions,
+      add_extension,
+      update_extension,
+      delete_extension,
+      list_extension_groups,
+      create_extension_group,
+      update_extension_group,
+      delete_extension_group,
+      add_extension_to_group,
+      remove_extension_from_group,
+      assign_extension_group_to_profile,
+      get_extension_group_for_profile,
       is_geoip_database_available,
       download_geoip_database,
       start_api_server,
@@ -1400,6 +1422,8 @@ pub fn run() {
       is_group_in_use_by_synced_profile,
       set_vpn_sync_enabled,
       is_vpn_in_use_by_synced_profile,
+      set_extension_sync_enabled,
+      set_extension_group_sync_enabled,
       get_unsynced_entity_counts,
       enable_sync_for_all_entities,
       set_e2e_password,
@@ -1482,6 +1506,9 @@ mod tests {
       "get_vpn_config",
       "list_active_vpn_connections",
       "export_profile_cookies",
+      "update_extension",
+      "set_extension_sync_enabled",
+      "set_extension_group_sync_enabled",
     ];
 
     // Extract command names from the generate_handler! macro in this file

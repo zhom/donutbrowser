@@ -147,6 +147,11 @@ async fn main() {
               Arg::new("profile-id")
                 .long("profile-id")
                 .help("ID of the profile this proxy is associated with"),
+            )
+            .arg(
+              Arg::new("bypass-rules")
+                .long("bypass-rules")
+                .help("JSON array of bypass rules (hostnames, IPs, or regex patterns)"),
             ),
         )
         .subcommand(
@@ -217,8 +222,12 @@ async fn main() {
 
       let port = start_matches.get_one::<u16>("port").copied();
       let profile_id = start_matches.get_one::<String>("profile-id").cloned();
+      let bypass_rules: Vec<String> = start_matches
+        .get_one::<String>("bypass-rules")
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or_default();
 
-      match start_proxy_process_with_profile(upstream_url, port, profile_id).await {
+      match start_proxy_process_with_profile(upstream_url, port, profile_id, bypass_rules).await {
         Ok(config) => {
           // Output the configuration as JSON for the Rust side to parse
           // Use println! here because this needs to go to stdout for parsing

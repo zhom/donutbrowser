@@ -24,6 +24,8 @@ pub enum SyncWorkItem {
   Proxy(String),
   Group(String),
   Vpn(String),
+  Extension(String),
+  ExtensionGroup(String),
   Tombstone(String, String),
 }
 
@@ -235,6 +237,16 @@ impl SyncSubscription {
         .strip_prefix("vpns/")
         .and_then(|s| s.strip_suffix(".json"))
         .map(|s| SyncWorkItem::Vpn(s.to_string()))
+    } else if key.starts_with("extensions/") {
+      key
+        .strip_prefix("extensions/")
+        .and_then(|s| s.strip_suffix(".json"))
+        .map(|s| SyncWorkItem::Extension(s.to_string()))
+    } else if key.starts_with("extension_groups/") {
+      key
+        .strip_prefix("extension_groups/")
+        .and_then(|s| s.strip_suffix(".json"))
+        .map(|s| SyncWorkItem::ExtensionGroup(s.to_string()))
     } else if key.starts_with("tombstones/") {
       key.strip_prefix("tombstones/").and_then(|rest| {
         if rest.starts_with("profiles/") {
@@ -257,6 +269,16 @@ impl SyncSubscription {
             .strip_prefix("vpns/")
             .and_then(|s| s.strip_suffix(".json"))
             .map(|id| SyncWorkItem::Tombstone("vpn".to_string(), id.to_string()))
+        } else if rest.starts_with("extensions/") {
+          rest
+            .strip_prefix("extensions/")
+            .and_then(|s| s.strip_suffix(".json"))
+            .map(|id| SyncWorkItem::Tombstone("extension".to_string(), id.to_string()))
+        } else if rest.starts_with("extension_groups/") {
+          rest
+            .strip_prefix("extension_groups/")
+            .and_then(|s| s.strip_suffix(".json"))
+            .map(|id| SyncWorkItem::Tombstone("extension_group".to_string(), id.to_string()))
         } else {
           None
         }
