@@ -33,7 +33,7 @@ jobs:
 
       - name: Validate issue with AI
         id: validate
-        uses: actions/ai-inference@a380166897b5408b8fb7dddd148142794cb5624a # v2.0.6
+        uses: actions/ai-inference@e09e65981758de8b2fdab13c2bfb7c7d5493b0b6 # v2.0.7
         with:
           prompt-file: .github/prompts/issue-validation.prompt.yml
           input: |
@@ -144,7 +144,7 @@ jobs:
           fi
 
       - name: Run opencode analysis
-        uses: anomalyco/opencode/github@296250f1b7e1ec992a3a33bee999f5e09a1697d0 #v1.2.10
+        uses: anomalyco/opencode/github@799b2623cbb1c0f19e045d87c2c8593e83678bc0 #v1.2.15
         env:
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
         with:
@@ -193,7 +193,7 @@ jobs:
 
       - name: Analyze PR with AI
         id: analyze
-        uses: actions/ai-inference@a380166897b5408b8fb7dddd148142794cb5624a # v2.0.6
+        uses: actions/ai-inference@e09e65981758de8b2fdab13c2bfb7c7d5493b0b6 # v2.0.7
         with:
           prompt-file: .github/prompts/pr-review.prompt.yml
           input: |
@@ -273,7 +273,7 @@ jobs:
           gh pr comment ${{ github.event.pull_request.number }} --body-file comment.md
 
       - name: Run opencode analysis
-        uses: anomalyco/opencode/github@296250f1b7e1ec992a3a33bee999f5e09a1697d0 #v1.2.10
+        uses: anomalyco/opencode/github@799b2623cbb1c0f19e045d87c2c8593e83678bc0 #v1.2.15
         env:
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
         with:
@@ -295,7 +295,7 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 #v6.0.1
 
       - name: Run opencode
-        uses: anomalyco/opencode/github@296250f1b7e1ec992a3a33bee999f5e09a1697d0 #v1.2.10
+        uses: anomalyco/opencode/github@799b2623cbb1c0f19e045d87c2c8593e83678bc0 #v1.2.15
         env:
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
         with:
