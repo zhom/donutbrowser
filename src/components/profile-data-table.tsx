@@ -202,7 +202,12 @@ type TableMeta = {
   getProfileLockEmail: (profileId: string) => string | undefined;
 };
 
-type SyncStatusDot = { color: string; tooltip: string; animate: boolean };
+type SyncStatusDot = {
+  color: string;
+  tooltip: string;
+  animate: boolean;
+  encrypted: boolean;
+};
 
 function getProfileSyncStatusDot(
   profile: BrowserProfile,
@@ -215,6 +220,7 @@ function getProfileSyncStatusDot(
     | undefined,
   errorMessage?: string,
 ): SyncStatusDot | null {
+  const encrypted = profile.sync_mode === "Encrypted";
   const status =
     liveStatus ??
     (profile.sync_mode && profile.sync_mode !== "Disabled"
@@ -223,12 +229,18 @@ function getProfileSyncStatusDot(
 
   switch (status) {
     case "syncing":
-      return { color: "bg-yellow-500", tooltip: "Syncing...", animate: true };
+      return {
+        color: "bg-yellow-500",
+        tooltip: "Syncing...",
+        animate: true,
+        encrypted,
+      };
     case "waiting":
       return {
         color: "bg-yellow-500",
         tooltip: "Waiting to sync",
         animate: false,
+        encrypted,
       };
     case "synced":
       return {
@@ -237,12 +249,14 @@ function getProfileSyncStatusDot(
           ? `Synced ${new Date(profile.last_sync * 1000).toLocaleString()}`
           : "Synced",
         animate: false,
+        encrypted,
       };
     case "error":
       return {
         color: "bg-red-500",
         tooltip: errorMessage ? `Sync error: ${errorMessage}` : "Sync error",
         animate: false,
+        encrypted,
       };
     case "disabled":
       if (profile.last_sync) {
@@ -250,6 +264,7 @@ function getProfileSyncStatusDot(
           color: "bg-gray-400",
           tooltip: `Sync disabled, last sync ${formatRelativeTime(profile.last_sync)}`,
           animate: false,
+          encrypted: false,
         };
       }
       return null;
@@ -2303,9 +2318,15 @@ export function ProfilesDataTable({
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="flex justify-center items-center w-3 h-3">
-                  <span
-                    className={`w-2 h-2 rounded-full ${dot.color}${dot.animate ? " animate-pulse" : ""}`}
-                  />
+                  {dot.encrypted ? (
+                    <LuLock
+                      className={`w-3 h-3 ${dot.color.replace("bg-", "text-")}${dot.animate ? " animate-pulse" : ""}`}
+                    />
+                  ) : (
+                    <span
+                      className={`w-2 h-2 rounded-full ${dot.color}${dot.animate ? " animate-pulse" : ""}`}
+                    />
+                  )}
                 </span>
               </TooltipTrigger>
               <TooltipContent>{dot.tooltip}</TooltipContent>
