@@ -340,6 +340,19 @@
       "logoutConfirm": "Вы уверены, что хотите выйти? Облачная синхронизация будет остановлена.",
       "loginSuccess": "Вход выполнен успешно!",
       "logoutSuccess": "Выход выполнен успешно."
+    },
+    "team": {
+      "title": "Команда",
+      "name": "Название команды",
+      "role": "Роль",
+      "roleOwner": "Владелец",
+      "roleAdmin": "Администратор",
+      "roleMember": "Участник",
+      "manageOnWeb": "Управление командой в веб-панели",
+      "profileLocked": "Используется {{email}}",
+      "profileLockedShort": "Используется",
+      "cannotLaunchLocked": "Невозможно запустить — профиль используется {{email}}",
+      "createdBy": "Создано {{email}}"
     }
   },
   "integrations": {
@@ -504,6 +517,7 @@
       "verifying": "Проверка {{browser}} {{version}}",
       "syncing": "Синхронизация...",
       "syncingProfile": "Синхронизация профиля '{{name}}'...",
+      "syncingProfileWithProgress": "{{count}} файлов ({{size}})",
       "updatingVersions": "Обновление версий браузеров..."
     }
   },
@@ -707,6 +721,7 @@
     },
     "network": {
       "bypassRules": "Правила обхода прокси",
+      "bypassRulesTitle": "Правила обхода прокси",
       "bypassRulesDescription": "Запросы, соответствующие этим правилам, будут подключаться напрямую, минуя прокси.",
       "addRule": "Добавить правило",
       "rulePlaceholder": "напр. example.com, 192.168.1.*, .*\\.local",

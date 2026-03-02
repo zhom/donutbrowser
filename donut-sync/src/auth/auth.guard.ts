@@ -43,6 +43,7 @@ export class AuthGuard implements CanActivate {
         prefix: "",
         teamPrefix: null,
         profileLimit: 0,
+        teamProfileLimit: 0,
       } satisfies UserContext;
       return true;
     }
@@ -59,6 +60,7 @@ export class AuthGuard implements CanActivate {
           prefix: decoded.prefix || `users/${decoded.sub}/`,
           teamPrefix: decoded.teamPrefix || null,
           profileLimit: decoded.profileLimit || 0,
+          teamProfileLimit: decoded.teamProfileLimit || 0,
         } satisfies UserContext;
         return true;
       } catch (err) {

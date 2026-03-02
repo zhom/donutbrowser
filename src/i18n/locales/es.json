@@ -340,6 +340,19 @@
       "logoutConfirm": "¿Estás seguro de que deseas cerrar sesión? La sincronización en la nube se detendrá.",
       "loginSuccess": "¡Sesión iniciada exitosamente!",
       "logoutSuccess": "Sesión cerrada exitosamente."
+    },
+    "team": {
+      "title": "Equipo",
+      "name": "Nombre del Equipo",
+      "role": "Rol",
+      "roleOwner": "Propietario",
+      "roleAdmin": "Administrador",
+      "roleMember": "Miembro",
+      "manageOnWeb": "Gestionar equipo en el panel web",
+      "profileLocked": "En uso por {{email}}",
+      "profileLockedShort": "En uso",
+      "cannotLaunchLocked": "No se puede iniciar — el perfil está en uso por {{email}}",
+      "createdBy": "Creado por {{email}}"
     }
   },
   "integrations": {
@@ -504,6 +517,7 @@
       "verifying": "Verificando {{browser}} {{version}}",
       "syncing": "Sincronizando...",
       "syncingProfile": "Sincronizando perfil '{{name}}'...",
+      "syncingProfileWithProgress": "{{count}} archivos ({{size}})",
       "updatingVersions": "Actualizando versiones de navegadores..."
     }
   },
@@ -707,6 +721,7 @@
     },
     "network": {
       "bypassRules": "Reglas de Omisión de Proxy",
+      "bypassRulesTitle": "Reglas de Omisión de Proxy",
       "bypassRulesDescription": "Las solicitudes que coincidan con estas reglas se conectarán directamente, omitiendo el proxy.",
       "addRule": "Agregar Regla",
       "rulePlaceholder": "ej. example.com, 192.168.1.*, .*\\.local",

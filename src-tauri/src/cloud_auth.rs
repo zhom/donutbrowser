@@ -39,6 +39,12 @@ pub struct CloudUser {
   pub proxy_bandwidth_used_mb: i64,
   #[serde(rename = "proxyBandwidthExtraMb", default)]
   pub proxy_bandwidth_extra_mb: i64,
+  #[serde(rename = "teamId", default)]
+  pub team_id: Option<String>,
+  #[serde(rename = "teamName", default)]
+  pub team_name: Option<String>,
+  #[serde(rename = "teamRole", default)]
+  pub team_role: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -249,7 +255,7 @@ impl CloudAuthManager {
     Self::encrypt_and_store(&path, b"DBCAT", token)
   }
 
-  fn load_access_token() -> Result<Option<String>, String> {
+  pub(crate) fn load_access_token() -> Result<Option<String>, String> {
     let path = Self::get_settings_dir().join("cloud_access_token.dat");
     Self::decrypt_from_file(&path, b"DBCAT")
   }
@@ -572,6 +578,9 @@ impl CloudAuthManager {
   }
 
   pub async fn logout(&self) -> Result<(), String> {
+    // Disconnect team lock manager
+    crate::team_lock::TEAM_LOCK.disconnect().await;
+
     // Try to call the logout API (best-effort)
     if let Ok(Some(access_token)) = Self::load_access_token() {
       let refresh_token = Self::load_refresh_token().ok().flatten();
@@ -635,6 +644,13 @@ impl CloudAuthManager {
       Some(os) if os == host_os => true,
       Some(_) => self.has_active_paid_subscription().await,
     }
+  }
+
+  pub async fn is_on_team_plan(&self) -> bool {
+    if let Some(state) = self.get_user().await {
+      return state.user.team_id.is_some();
+    }
+    false
   }
 
   pub async fn get_user(&self) -> Option<CloudAuthState> {
@@ -935,6 +951,13 @@ impl CloudAuthManager {
         log::debug!("Failed to refresh cloud profile: {e}");
       }
 
+      // Reconnect team lock manager if needed
+      if let Some(auth_state) = CLOUD_AUTH.get_user().await {
+        if let Some(tid) = &auth_state.user.team_id {
+          crate::team_lock::TEAM_LOCK.connect(tid).await;
+        }
+      }
+
       // Sync cloud proxy credentials
       CLOUD_AUTH.sync_cloud_proxy().await;
 
@@ -977,6 +1000,13 @@ pub async fn cloud_verify_otp(
 
   // Sync cloud proxy after login
   CLOUD_AUTH.sync_cloud_proxy().await;
+
+  // Connect team lock manager if on a team plan
+  if state.user.team_id.is_some() {
+    if let Some(tid) = &state.user.team_id {
+      crate::team_lock::TEAM_LOCK.connect(tid).await;
+    }
+  }
 
   let _ = crate::events::emit_empty("cloud-auth-changed");
 

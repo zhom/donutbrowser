@@ -275,6 +275,8 @@ mod tests {
       ephemeral,
       extension_group_id: None,
       proxy_bypass_rules: Vec::new(),
+      created_by_id: None,
+      created_by_email: None,
     }
   }
 

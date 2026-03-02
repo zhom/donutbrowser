@@ -145,6 +145,7 @@ export class SyncService implements OnModuleInit {
    */
   private scopeKey(ctx: UserContext, key: string): string {
     if (ctx.mode === "self-hosted") return key;
+    if (ctx.teamPrefix && key.startsWith(ctx.teamPrefix)) return key;
     return `${ctx.prefix}${key}`;
   }
 
@@ -309,10 +310,12 @@ export class SyncService implements OnModuleInit {
     );
 
     const userPrefix = ctx?.prefix || "";
+    const teamPrefix = ctx?.teamPrefix || "";
     const objects = (response.Contents || []).map((obj) => {
-      // Strip user prefix from returned keys so client sees relative keys
       let key = obj.Key || "";
-      if (userPrefix && key.startsWith(userPrefix)) {
+      if (teamPrefix && key.startsWith(teamPrefix)) {
+        key = key.substring(teamPrefix.length);
+      } else if (userPrefix && key.startsWith(userPrefix)) {
         key = key.substring(userPrefix.length);
       }
       return {
@@ -481,11 +484,15 @@ export class SyncService implements OnModuleInit {
   ): Observable<SubscribeEventDto> {
     const basePrefixes = ["profiles/", "proxies/", "groups/", "tombstones/"];
 
-    // Scope prefixes for cloud users; self-hosted gets root prefixes
-    const prefixes =
-      ctx.mode === "self-hosted"
-        ? basePrefixes
-        : basePrefixes.map((p) => `${ctx.prefix}${p}`);
+    let prefixes: string[];
+    if (ctx.mode === "self-hosted") {
+      prefixes = basePrefixes;
+    } else {
+      prefixes = basePrefixes.map((p) => `${ctx.prefix}${p}`);
+      if (ctx.teamPrefix) {
+        prefixes.push(...basePrefixes.map((p) => `${ctx.teamPrefix}${p}`));
+      }
+    }
 
     // Per-connection state (not shared across subscribers)
     let lastKnownState = new Map<string, string>();
@@ -554,16 +561,33 @@ export class SyncService implements OnModuleInit {
   private async checkProfileLimit(ctx: UserContext): Promise<void> {
     if (ctx.profileLimit <= 0) return; // 0 = unlimited
 
-    const profilePrefix = `${ctx.prefix}profiles/`;
-    const result = await this.s3Client.send(
+    let count = 0;
+
+    const userResult = await this.s3Client.send(
       new ListObjectsV2Command({
         Bucket: this.bucket,
-        Prefix: profilePrefix,
+        Prefix: `${ctx.prefix}profiles/`,
         Delimiter: "/",
       }),
     );
+    count += userResult.CommonPrefixes?.length || 0;
 
-    const count = result.CommonPrefixes?.length || 0;
+    if (ctx.teamPrefix && ctx.teamProfileLimit && ctx.teamProfileLimit > 0) {
+      const teamResult = await this.s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          Prefix: `${ctx.teamPrefix}profiles/`,
+          Delimiter: "/",
+        }),
+      );
+      const teamCount = teamResult.CommonPrefixes?.length || 0;
+      if (teamCount >= ctx.teamProfileLimit) {
+        throw new ForbiddenException(
+          `Team profile limit reached (${ctx.teamProfileLimit}). Ask the team owner to upgrade.`,
+        );
+      }
+    }
+
     if (count >= ctx.profileLimit) {
       throw new ForbiddenException(
         `Profile limit reached (${ctx.profileLimit}). Upgrade your plan for more profiles.`,
@@ -604,6 +628,35 @@ export class SyncService implements OnModuleInit {
     return match ? match[1] : null;
   }
 
+  private async countTeamProfiles(ctx: UserContext): Promise<number> {
+    if (!ctx.teamPrefix) return 0;
+    const profilePrefix = `${ctx.teamPrefix}profiles/`;
+    let count = 0;
+    let continuationToken: string | undefined;
+
+    do {
+      const result = await this.s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          Prefix: profilePrefix,
+          Delimiter: "/",
+          MaxKeys: 1000,
+          ContinuationToken: continuationToken,
+        }),
+      );
+      count += result.CommonPrefixes?.length || 0;
+      continuationToken = result.NextContinuationToken;
+    } while (continuationToken);
+
+    return count;
+  }
+
+  private extractTeamId(ctx: UserContext): string | null {
+    if (!ctx.teamPrefix) return null;
+    const match = ctx.teamPrefix.match(/^teams\/([^/]+)\/$/);
+    return match ? match[1] : null;
+  }
+
   /**
    * Fire-and-forget: count profiles and report to backend.
    */
@@ -614,7 +667,17 @@ export class SyncService implements OnModuleInit {
     if (!userId) return;
 
     this.countProfiles(ctx)
-      .then((count) => this.reportProfileUsage(userId, count))
+      .then(async (count) => {
+        await this.reportProfileUsage(userId, count);
+
+        if (ctx.teamPrefix) {
+          const teamCount = await this.countTeamProfiles(ctx);
+          const teamId = this.extractTeamId(ctx);
+          if (teamId) {
+            await this.reportProfileUsage(teamId, teamCount);
+          }
+        }
+      })
       .catch((err) =>
         this.logger.warn(`Failed to report profile usage: ${err.message}`),
       );

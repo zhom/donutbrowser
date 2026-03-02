@@ -309,6 +309,31 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
                   </span>
                 </div>
               )}
+              {user.teamName && (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">
+                      {t("sync.team.name")}
+                    </span>
+                    <span>{user.teamName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">
+                      {t("sync.team.role")}
+                    </span>
+                    <span className="capitalize">
+                      {user.teamRole === "owner"
+                        ? t("sync.team.roleOwner")
+                        : user.teamRole === "admin"
+                          ? t("sync.team.roleAdmin")
+                          : t("sync.team.roleMember")}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground pt-1">
+                    {t("sync.team.manageOnWeb")}
+                  </p>
+                </>
+              )}
             </div>
 
             <div className="flex gap-2 pt-2">

@@ -67,6 +67,23 @@ impl SyncEngine {
     Ok(Self::new(server_url, token))
   }
 
+  /// Get the key prefix for team profiles. Returns empty string for personal profiles.
+  async fn get_team_key_prefix(profile: &BrowserProfile) -> String {
+    if profile.created_by_id.is_some() {
+      if let Some(auth) = crate::cloud_auth::CLOUD_AUTH.get_user().await {
+        if let Some(team_id) = &auth.user.team_id {
+          return format!("teams/{}/", team_id);
+        }
+      }
+    }
+    String::new()
+  }
+
+  /// Check if this is a self-hosted sync (no cloud login).
+  async fn is_self_hosted_sync() -> bool {
+    !crate::cloud_auth::CLOUD_AUTH.is_logged_in().await
+  }
+
   pub async fn sync_profile(
     &self,
     app_handle: &tauri::AppHandle,
@@ -75,6 +92,16 @@ impl SyncEngine {
     if profile.is_cross_os() {
       log::info!(
         "Skipping file sync for cross-OS profile: {} ({})",
+        profile.name,
+        profile.id
+      );
+      return Ok(());
+    }
+
+    // Skip team profiles for self-hosted sync
+    if Self::is_self_hosted_sync().await && profile.created_by_id.is_some() {
+      log::info!(
+        "Skipping team profile for self-hosted sync: {} ({})",
         profile.name,
         profile.id
       );
@@ -104,10 +131,18 @@ impl SyncEngine {
     let profile_dir = profiles_dir.join(profile.id.to_string());
     let profile_id = profile.id.to_string();
 
+    // Determine team key prefix for team profiles
+    let key_prefix = Self::get_team_key_prefix(profile).await;
+
     log::info!(
-      "Starting delta sync for profile: {} ({})",
+      "Starting delta sync for profile: {} ({}){}",
       profile.name,
-      profile_id
+      profile_id,
+      if key_prefix.is_empty() {
+        String::new()
+      } else {
+        format!(" [team prefix: {}]", key_prefix)
+      }
     );
 
     let _ = events::emit(
@@ -155,7 +190,7 @@ impl SyncEngine {
     hash_cache.save(&cache_path)?;
 
     // Try to download remote manifest
-    let remote_manifest_key = format!("profiles/{}/manifest.json", profile_id);
+    let remote_manifest_key = format!("{}profiles/{}/manifest.json", key_prefix, profile_id);
     let remote_manifest = self.download_manifest(&remote_manifest_key).await?;
 
     // Compute diff
@@ -173,6 +208,13 @@ impl SyncEngine {
       return Ok(());
     }
 
+    let upload_bytes: u64 = diff.files_to_upload.iter().map(|f| f.size).sum();
+    let download_bytes: u64 = diff.files_to_download.iter().map(|f| f.size).sum();
+    let total_files = diff.files_to_upload.len()
+      + diff.files_to_download.len()
+      + diff.files_to_delete_local.len()
+      + diff.files_to_delete_remote.len();
+
     log::info!(
       "Profile {} diff: {} to upload, {} to download, {} to delete local, {} to delete remote",
       profile_id,
@@ -180,6 +222,16 @@ impl SyncEngine {
       diff.files_to_download.len(),
       diff.files_to_delete_local.len(),
       diff.files_to_delete_remote.len()
+    );
+
+    let _ = events::emit(
+      "profile-sync-progress",
+      serde_json::json!({
+        "profile_id": profile_id,
+        "phase": "started",
+        "total_files": total_files,
+        "total_bytes": upload_bytes + download_bytes
+      }),
     );
 
     // Perform uploads
@@ -191,6 +243,7 @@ impl SyncEngine {
           &profile_dir,
           &diff.files_to_upload,
           encryption_key.as_ref(),
+          &key_prefix,
         )
         .await?;
     }
@@ -204,6 +257,7 @@ impl SyncEngine {
           &profile_dir,
           &diff.files_to_download,
           encryption_key.as_ref(),
+          &key_prefix,
         )
         .await?;
     }
@@ -219,18 +273,22 @@ impl SyncEngine {
 
     // Delete remote files that don't exist locally (when local is newer)
     for path in &diff.files_to_delete_remote {
-      let remote_key = format!("profiles/{}/files/{}", profile_id, path);
+      let remote_key = format!("{}profiles/{}/files/{}", key_prefix, profile_id, path);
       let _ = self.client.delete(&remote_key, None).await;
       log::debug!("Deleted remote file: {}", path);
     }
 
     // Upload metadata.json (sanitized profile)
-    self.upload_profile_metadata(&profile_id, profile).await?;
+    self
+      .upload_profile_metadata(&profile_id, profile, &key_prefix)
+      .await?;
 
     // Upload manifest.json last for atomicity
     let mut final_manifest = local_manifest;
     final_manifest.encrypted = encryption_key.is_some();
-    self.upload_manifest(&profile_id, &final_manifest).await?;
+    self
+      .upload_manifest(&profile_id, &final_manifest, &key_prefix)
+      .await?;
 
     // Sync associated proxy, group, and VPN
     if let Some(proxy_id) = &profile.proxy_id {
@@ -281,11 +339,16 @@ impl SyncEngine {
     Ok(Some(manifest))
   }
 
-  async fn upload_manifest(&self, profile_id: &str, manifest: &SyncManifest) -> SyncResult<()> {
+  async fn upload_manifest(
+    &self,
+    profile_id: &str,
+    manifest: &SyncManifest,
+    key_prefix: &str,
+  ) -> SyncResult<()> {
     let json = serde_json::to_string_pretty(manifest)
       .map_err(|e| SyncError::SerializationError(format!("Failed to serialize manifest: {e}")))?;
 
-    let remote_key = format!("profiles/{}/manifest.json", profile_id);
+    let remote_key = format!("{}profiles/{}/manifest.json", key_prefix, profile_id);
     let presign = self
       .client
       .presign_upload(&remote_key, Some("application/json"))
@@ -303,6 +366,7 @@ impl SyncEngine {
     &self,
     profile_id: &str,
     profile: &BrowserProfile,
+    key_prefix: &str,
   ) -> SyncResult<()> {
     let mut sanitized = profile.clone();
     sanitized.process_id = None;
@@ -311,7 +375,7 @@ impl SyncEngine {
     let json = serde_json::to_string_pretty(&sanitized)
       .map_err(|e| SyncError::SerializationError(format!("Failed to serialize profile: {e}")))?;
 
-    let remote_key = format!("profiles/{}/metadata.json", profile_id);
+    let remote_key = format!("{}profiles/{}/metadata.json", key_prefix, profile_id);
     let presign = self
       .client
       .presign_upload(&remote_key, Some("application/json"))
@@ -332,6 +396,7 @@ impl SyncEngine {
     profile_dir: &Path,
     files: &[super::manifest::ManifestFileEntry],
     encryption_key: Option<&[u8; 32]>,
+    key_prefix: &str,
   ) -> SyncResult<()> {
     if files.is_empty() {
       return Ok(());
@@ -343,7 +408,7 @@ impl SyncEngine {
     let items: Vec<(String, Option<String>)> = files
       .iter()
       .map(|f| {
-        let key = format!("profiles/{}/files/{}", profile_id, f.path);
+        let key = format!("{}profiles/{}/files/{}", key_prefix, profile_id, f.path);
         let content_type = mime_guess::from_path(&f.path)
           .first()
           .map(|m| m.to_string());
@@ -372,7 +437,7 @@ impl SyncEngine {
     for file in files {
       let sem = semaphore.clone();
       let file_path = profile_dir.join(&file.path);
-      let remote_key = format!("profiles/{}/files/{}", profile_id, file.path);
+      let remote_key = format!("{}profiles/{}/files/{}", key_prefix, profile_id, file.path);
       let url = url_map.get(&remote_key).cloned();
 
       if url.is_none() {
@@ -442,6 +507,7 @@ impl SyncEngine {
     profile_dir: &Path,
     files: &[super::manifest::ManifestFileEntry],
     encryption_key: Option<&[u8; 32]>,
+    key_prefix: &str,
   ) -> SyncResult<()> {
     if files.is_empty() {
       return Ok(());
@@ -456,7 +522,7 @@ impl SyncEngine {
     // Get batch presigned URLs
     let keys: Vec<String> = files
       .iter()
-      .map(|f| format!("profiles/{}/files/{}", profile_id, f.path))
+      .map(|f| format!("{}profiles/{}/files/{}", key_prefix, profile_id, f.path))
       .collect();
 
     let batch_response = self.client.presign_download_batch(keys).await?;
@@ -480,7 +546,7 @@ impl SyncEngine {
     for file in files {
       let sem = semaphore.clone();
       let file_path = profile_dir.join(&file.path);
-      let remote_key = format!("profiles/{}/files/{}", profile_id, file.path);
+      let remote_key = format!("{}profiles/{}/files/{}", key_prefix, profile_id, file.path);
       let url = url_map.get(&remote_key).cloned();
 
       if url.is_none() {
@@ -845,6 +911,26 @@ impl SyncEngine {
       profile_id,
       result.deleted_count
     );
+
+    // Also delete from team path if user is on a team
+    if let Some(auth) = crate::cloud_auth::CLOUD_AUTH.get_user().await {
+      if let Some(team_id) = &auth.user.team_id {
+        let team_prefix = format!("teams/{}/profiles/{}/", team_id, profile_id);
+        let team_tombstone = format!("teams/{}/tombstones/profiles/{}.json", team_id, profile_id);
+        let team_result = self
+          .client
+          .delete_prefix(&team_prefix, Some(&team_tombstone))
+          .await?;
+        if team_result.deleted_count > 0 {
+          log::info!(
+            "Profile {} deleted from team sync ({} objects removed)",
+            profile_id,
+            team_result.deleted_count
+          );
+        }
+      }
+    }
+
     Ok(())
   }
 
@@ -1359,6 +1445,7 @@ impl SyncEngine {
     &self,
     app_handle: &tauri::AppHandle,
     profile_id: &str,
+    key_prefix: &str,
   ) -> SyncResult<bool> {
     let profile_manager = ProfileManager::instance();
     let profiles_dir = profile_manager.get_profiles_dir();
@@ -1380,7 +1467,7 @@ impl SyncEngine {
     }
 
     // Check if profile exists remotely
-    let manifest_key = format!("profiles/{}/manifest.json", profile_id);
+    let manifest_key = format!("{}profiles/{}/manifest.json", key_prefix, profile_id);
     let stat = self.client.stat(&manifest_key).await?;
 
     if !stat.exists {
@@ -1394,7 +1481,7 @@ impl SyncEngine {
     );
 
     // Download metadata.json first to get profile info
-    let metadata_key = format!("profiles/{}/metadata.json", profile_id);
+    let metadata_key = format!("{}profiles/{}/metadata.json", key_prefix, profile_id);
     let metadata_stat = self.client.stat(&metadata_key).await?;
 
     if !metadata_stat.exists {
@@ -1515,6 +1602,7 @@ impl SyncEngine {
           &profile_dir,
           &manifest.files,
           encryption_key.as_ref(),
+          key_prefix,
         )
         .await?;
     }
@@ -1558,13 +1646,13 @@ impl SyncEngine {
   ) -> SyncResult<Vec<String>> {
     log::info!("Checking for missing synced profiles...");
 
-    // List all profiles from S3
+    // List personal profiles from S3
     let list_response = self.client.list("profiles/").await?;
 
     let mut downloaded: Vec<String> = Vec::new();
 
-    // Extract unique profile IDs from the list
-    let mut profile_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+    // Extract unique profile IDs with their key prefix
+    let mut profiles_to_check: HashMap<String, String> = HashMap::new();
     for obj in list_response.objects {
       if obj.key.starts_with("profiles/") && obj.key.ends_with("/manifest.json") {
         if let Some(profile_id) = obj
@@ -1572,24 +1660,45 @@ impl SyncEngine {
           .strip_prefix("profiles/")
           .and_then(|s| s.strip_suffix("/manifest.json"))
         {
-          profile_ids.insert(profile_id.to_string());
+          profiles_to_check.insert(profile_id.to_string(), String::new());
+        }
+      }
+    }
+
+    // Also list team profiles if user is on a team
+    if let Some(auth) = crate::cloud_auth::CLOUD_AUTH.get_user().await {
+      if let Some(team_id) = &auth.user.team_id {
+        let team_prefix = format!("teams/{}/", team_id);
+        let team_list_key = format!("{}profiles/", team_prefix);
+        if let Ok(team_list) = self.client.list(&team_list_key).await {
+          for obj in team_list.objects {
+            if obj.key.starts_with("profiles/") && obj.key.ends_with("/manifest.json") {
+              if let Some(profile_id) = obj
+                .key
+                .strip_prefix("profiles/")
+                .and_then(|s| s.strip_suffix("/manifest.json"))
+              {
+                profiles_to_check.insert(profile_id.to_string(), team_prefix.clone());
+              }
+            }
+          }
         }
       }
     }
 
     log::info!(
       "Found {} profiles in remote storage, checking for missing ones...",
-      profile_ids.len()
+      profiles_to_check.len()
     );
 
     // For each remote profile, check if it exists locally and download if missing
-    for profile_id in profile_ids {
+    for (profile_id, key_prefix) in &profiles_to_check {
       match self
-        .download_profile_if_missing(app_handle, &profile_id)
+        .download_profile_if_missing(app_handle, profile_id, key_prefix)
         .await
       {
         Ok(true) => {
-          downloaded.push(profile_id);
+          downloaded.push(profile_id.clone());
         }
         Ok(false) => {
           // Profile exists locally or doesn't exist remotely, skip
@@ -1613,17 +1722,28 @@ impl SyncEngine {
     // Refresh metadata for local cross-OS profiles (propagate renames, tags, notes from originating device)
     let profile_manager = ProfileManager::instance();
     // Collect cross-OS profiles before async operations to avoid holding non-Send Result across await
-    let cross_os_profiles: Vec<(String, SyncMode)> = profile_manager
+    let cross_os_profiles: Vec<(String, SyncMode, Option<String>)> = profile_manager
       .list_profiles()
       .unwrap_or_default()
       .iter()
       .filter(|p| p.is_cross_os() && p.is_sync_enabled())
-      .map(|p| (p.id.to_string(), p.sync_mode))
+      .map(|p| (p.id.to_string(), p.sync_mode, p.created_by_id.clone()))
       .collect();
 
     if !cross_os_profiles.is_empty() {
-      for (pid, sync_mode) in &cross_os_profiles {
-        let metadata_key = format!("profiles/{}/metadata.json", pid);
+      let team_prefix = if let Some(auth) = crate::cloud_auth::CLOUD_AUTH.get_user().await {
+        auth.user.team_id.map(|tid| format!("teams/{}/", tid))
+      } else {
+        None
+      };
+
+      for (pid, sync_mode, created_by_id) in &cross_os_profiles {
+        let kp = if created_by_id.is_some() {
+          team_prefix.as_deref().unwrap_or("")
+        } else {
+          ""
+        };
+        let metadata_key = format!("{}profiles/{}/metadata.json", kp, pid);
         match self.client.stat(&metadata_key).await {
           Ok(stat) if stat.exists => match self.client.presign_download(&metadata_key).await {
             Ok(presign) => match self.client.download_bytes(&presign.url).await {
@@ -1981,7 +2101,8 @@ pub async fn set_profile_sync_mode(
   let mode_switched = old_mode != SyncMode::Disabled && enabling && old_mode != new_mode;
   if mode_switched {
     if let Ok(engine) = SyncEngine::create_from_settings(&app_handle).await {
-      let manifest_key = format!("profiles/{}/manifest.json", profile_id);
+      let key_prefix = SyncEngine::get_team_key_prefix(&profile).await;
+      let manifest_key = format!("{}profiles/{}/manifest.json", key_prefix, profile_id);
       let _ = engine.client.delete(&manifest_key, None).await;
       log::info!(
         "Deleted remote manifest for profile {} due to sync mode change ({:?} -> {:?})",

@@ -809,6 +809,30 @@ impl McpServer {
           "required": ["profile_id"]
         }),
       },
+      // Team lock tools
+      McpTool {
+        name: "get_team_locks".to_string(),
+        description: "List all active team profile locks. Requires team plan.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {},
+          "required": []
+        }),
+      },
+      McpTool {
+        name: "get_team_lock_status".to_string(),
+        description: "Check if a profile is locked by a team member. Requires team plan.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the profile to check"
+            }
+          },
+          "required": ["profile_id"]
+        }),
+      },
     ]
   }
 
@@ -926,6 +950,9 @@ impl McpServer {
           .handle_assign_extension_group_to_profile(&arguments)
           .await
       }
+      // Team lock tools
+      "get_team_locks" => self.handle_get_team_locks().await,
+      "get_team_lock_status" => self.handle_get_team_lock_status(&arguments).await,
       _ => Err(McpError {
         code: -32602,
         message: format!("Unknown tool: {tool_name}"),
@@ -1040,6 +1067,14 @@ impl McpServer {
       });
     }
 
+    // Team lock check
+    crate::team_lock::acquire_team_lock_if_needed(profile)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+
     // Get app handle to launch
     let inner = self.inner.lock().await;
     let app_handle = inner.app_handle.as_ref().ok_or_else(|| McpError {
@@ -1120,6 +1155,8 @@ impl McpServer {
         code: -32000,
         message: format!("Failed to kill browser: {e}"),
       })?;
+
+    crate::team_lock::release_team_lock_if_needed(profile).await;
 
     Ok(serde_json::json!({
       "content": [{
@@ -2388,6 +2425,50 @@ impl McpServer {
       })?;
     Ok(serde_json::to_value(profile).unwrap())
   }
+
+  async fn handle_get_team_locks(&self) -> Result<serde_json::Value, McpError> {
+    if !CLOUD_AUTH.is_on_team_plan().await {
+      return Err(McpError {
+        code: -32000,
+        message: "Team features require an active team plan".to_string(),
+      });
+    }
+    let locks = crate::team_lock::TEAM_LOCK.get_locks().await;
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": serde_json::to_string_pretty(&locks).unwrap_or_default()
+      }]
+    }))
+  }
+
+  async fn handle_get_team_lock_status(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    if !CLOUD_AUTH.is_on_team_plan().await {
+      return Err(McpError {
+        code: -32000,
+        message: "Team features require an active team plan".to_string(),
+      });
+    }
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?;
+    let lock_status = crate::team_lock::TEAM_LOCK
+      .get_lock_status(profile_id)
+      .await;
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": serde_json::to_string_pretty(&lock_status).unwrap_or_default()
+      }]
+    }))
+  }
 }
 
 lazy_static::lazy_static! {
@@ -2403,8 +2484,8 @@ mod tests {
     let server = McpServer::new();
     let tools = server.get_tools();
 
-    // Should have at least 32 tools (26 + 6 extension tools)
-    assert!(tools.len() >= 32);
+    // Should have at least 34 tools (26 + 6 extension tools + 2 team lock tools)
+    assert!(tools.len() >= 34);
 
     // Check tool names
     let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
@@ -2448,6 +2529,9 @@ mod tests {
     assert!(tool_names.contains(&"delete_extension"));
     assert!(tool_names.contains(&"delete_extension_group"));
     assert!(tool_names.contains(&"assign_extension_group_to_profile"));
+    // Team lock tools
+    assert!(tool_names.contains(&"get_team_locks"));
+    assert!(tool_names.contains(&"get_team_lock_status"));
   }
 
   #[test]

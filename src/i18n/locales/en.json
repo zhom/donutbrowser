@@ -340,6 +340,19 @@
       "logoutConfirm": "Are you sure you want to log out? Cloud sync will stop.",
       "loginSuccess": "Successfully logged in!",
       "logoutSuccess": "Successfully logged out."
+    },
+    "team": {
+      "title": "Team",
+      "name": "Team Name",
+      "role": "Role",
+      "roleOwner": "Owner",
+      "roleAdmin": "Admin",
+      "roleMember": "Member",
+      "manageOnWeb": "Manage team on the web dashboard",
+      "profileLocked": "In use by {{email}}",
+      "profileLockedShort": "In use",
+      "cannotLaunchLocked": "Cannot launch — profile is in use by {{email}}",
+      "createdBy": "Created by {{email}}"
     }
   },
   "integrations": {
@@ -504,6 +517,7 @@
       "verifying": "Verifying {{browser}} {{version}}",
       "syncing": "Syncing...",
       "syncingProfile": "Syncing profile '{{name}}'...",
+      "syncingProfileWithProgress": "{{count}} files ({{size}})",
       "updatingVersions": "Updating browser versions..."
     }
   },
@@ -707,6 +721,7 @@
     },
     "network": {
       "bypassRules": "Proxy Bypass Rules",
+      "bypassRulesTitle": "Proxy Bypass Rules",
       "bypassRulesDescription": "Requests matching these rules will connect directly, bypassing the proxy.",
       "addRule": "Add Rule",
       "rulePlaceholder": "e.g. example.com, 192.168.1.*, .*\\.local",

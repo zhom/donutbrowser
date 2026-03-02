@@ -1305,6 +1305,11 @@ async fn run_profile(
     return Err(StatusCode::BAD_REQUEST);
   }
 
+  // Team lock check
+  crate::team_lock::acquire_team_lock_if_needed(profile)
+    .await
+    .map_err(|_| StatusCode::CONFLICT)?;
+
   // Generate a random port for remote debugging
   let remote_debugging_port = rand::random::<u16>().saturating_add(9000).max(9000);
 
@@ -1398,6 +1403,8 @@ async fn kill_profile(
     .kill_browser_process(state.app_handle.clone(), profile)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+  crate::team_lock::release_team_lock_if_needed(profile).await;
 
   Ok(StatusCode::NO_CONTENT)
 }

@@ -22,6 +22,7 @@ import {
   LuChevronUp,
   LuCookie,
   LuInfo,
+  LuLock,
   LuTrash2,
   LuUsers,
 } from "react-icons/lu";
@@ -58,8 +59,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useBrowserState } from "@/hooks/use-browser-state";
+import { useCloudAuth } from "@/hooks/use-cloud-auth";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { useTableSorting } from "@/hooks/use-table-sorting";
+import { useTeamLocks } from "@/hooks/use-team-locks";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
 import {
   getBrowserDisplayName,
@@ -193,6 +196,10 @@ type TableMeta = {
     profileId: string,
     country: LocationItem,
   ) => Promise<void>;
+
+  // Team locks
+  isProfileLockedByAnother: (profileId: string) => boolean;
+  getProfileLockEmail: (profileId: string) => string | undefined;
 };
 
 type SyncStatusDot = { color: string; tooltip: string; animate: boolean };
@@ -873,6 +880,8 @@ export function ProfilesDataTable({
 
   const { storedProxies } = useProxyEvents();
   const { vpnConfigs } = useVpnEvents();
+  const { user } = useCloudAuth();
+  const { isProfileLocked, getLockInfo } = useTeamLocks(user?.id);
 
   const [proxyOverrides, setProxyOverrides] = React.useState<
     Record<string, string | null>
@@ -1488,6 +1497,11 @@ export function ProfilesDataTable({
       canCreateLocationProxy,
       loadCountries,
       handleCreateCountryProxy,
+
+      // Team locks
+      isProfileLockedByAnother: isProfileLocked,
+      getProfileLockEmail: (profileId: string) =>
+        getLockInfo(profileId)?.lockedByEmail,
     }),
     [
       t,
@@ -1540,6 +1554,8 @@ export function ProfilesDataTable({
       canCreateLocationProxy,
       loadCountries,
       handleCreateCountryProxy,
+      isProfileLocked,
+      getLockInfo,
     ],
   );
 
@@ -1724,9 +1740,13 @@ export function ProfilesDataTable({
             meta.isClient && meta.runningProfiles.has(profile.id);
           const isLaunching = meta.launchingProfiles.has(profile.id);
           const isStopping = meta.stoppingProfiles.has(profile.id);
-          const canLaunch = meta.browserState.canLaunchProfile(profile);
-          const tooltipContent =
-            meta.browserState.getLaunchTooltipContent(profile);
+          const isLockedByAnother = meta.isProfileLockedByAnother(profile.id);
+          const canLaunch =
+            meta.browserState.canLaunchProfile(profile) && !isLockedByAnother;
+          const lockEmail = meta.getProfileLockEmail(profile.id);
+          const tooltipContent = isLockedByAnother
+            ? meta.t("sync.team.cannotLaunchLocked", { email: lockEmail })
+            : meta.browserState.getLaunchTooltipContent(profile);
 
           const handleProfileStop = async (profile: BrowserProfile) => {
             meta.setStoppingProfiles((prev: Set<string>) =>
@@ -1890,34 +1910,50 @@ export function ProfilesDataTable({
           const isStopping = meta.stoppingProfiles.has(profile.id);
           const isDisabled =
             isRunning || isLaunching || isStopping || isCrossOs;
+          const lockedEmail = meta.getProfileLockEmail(profile.id);
+          const isLocked = meta.isProfileLockedByAnother(profile.id);
 
           return (
-            <button
-              type="button"
-              className={cn(
-                "px-2 py-1 mr-auto text-left bg-transparent rounded border-none w-30 h-6",
-                isDisabled
-                  ? "opacity-60 cursor-not-allowed"
-                  : "cursor-pointer hover:bg-accent/50",
-              )}
-              onClick={() => {
-                if (isDisabled) return;
-                meta.setProfileToRename(profile);
-                meta.setNewProfileName(profile.name);
-                meta.setRenameError(null);
-              }}
-              onKeyDown={(e) => {
-                if (isDisabled) return;
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                className={cn(
+                  "px-2 py-1 mr-auto text-left bg-transparent rounded border-none w-30 h-6",
+                  isDisabled
+                    ? "opacity-60 cursor-not-allowed"
+                    : "cursor-pointer hover:bg-accent/50",
+                )}
+                onClick={() => {
+                  if (isDisabled) return;
                   meta.setProfileToRename(profile);
                   meta.setNewProfileName(profile.name);
                   meta.setRenameError(null);
-                }
-              }}
-            >
-              {display}
-            </button>
+                }}
+                onKeyDown={(e) => {
+                  if (isDisabled) return;
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    meta.setProfileToRename(profile);
+                    meta.setNewProfileName(profile.name);
+                    meta.setRenameError(null);
+                  }
+                }}
+              >
+                {display}
+              </button>
+              {isLocked && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <LuLock className="w-3 h-3 text-muted-foreground" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {meta.t("sync.team.profileLocked", { email: lockedEmail })}
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
           );
         },
       },

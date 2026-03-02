@@ -340,6 +340,19 @@
       "logoutConfirm": "ログアウトしてもよろしいですか？クラウド同期が停止します。",
       "loginSuccess": "ログインに成功しました！",
       "logoutSuccess": "ログアウトしました。"
+    },
+    "team": {
+      "title": "チーム",
+      "name": "チーム名",
+      "role": "役割",
+      "roleOwner": "オーナー",
+      "roleAdmin": "管理者",
+      "roleMember": "メンバー",
+      "manageOnWeb": "Webダッシュボードでチームを管理",
+      "profileLocked": "{{email}} が使用中",
+      "profileLockedShort": "使用中",
+      "cannotLaunchLocked": "起動できません — {{email}} がプロファイルを使用中です",
+      "createdBy": "{{email}} が作成"
     }
   },
   "integrations": {
@@ -504,6 +517,7 @@
       "verifying": "{{browser}} {{version}} を確認中",
       "syncing": "同期中...",
       "syncingProfile": "プロファイル '{{name}}' を同期中...",
+      "syncingProfileWithProgress": "{{count}} ファイル ({{size}})",
       "updatingVersions": "ブラウザバージョンを更新中..."
     }
   },
@@ -707,6 +721,7 @@
     },
     "network": {
       "bypassRules": "プロキシバイパスルール",
+      "bypassRulesTitle": "プロキシバイパスルール",
       "bypassRulesDescription": "これらのルールに一致するリクエストは、プロキシをバイパスして直接接続します。",
       "addRule": "ルールを追加",
       "rulePlaceholder": "例: example.com, 192.168.1.*, .*\\.local",

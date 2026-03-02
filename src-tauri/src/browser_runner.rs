@@ -2536,6 +2536,9 @@ pub async fn launch_browser_profile(
     ));
   }
 
+  // Team lock check: if profile is sync-enabled and user is on a team, acquire lock
+  crate::team_lock::acquire_team_lock_if_needed(&profile).await?;
+
   let browser_runner = BrowserRunner::instance();
 
   // Store the internal proxy settings for passing to launch_browser
@@ -2739,6 +2742,9 @@ pub async fn kill_browser_profile(
         profile.name,
         profile.id
       );
+
+      // Release team lock if applicable
+      crate::team_lock::release_team_lock_if_needed(&profile).await;
 
       // Auto-update non-running profiles and cleanup unused binaries
       let browser_for_update = profile.browser.clone();

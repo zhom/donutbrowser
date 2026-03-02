@@ -33,6 +33,8 @@ export interface BrowserProfile {
   ephemeral?: boolean;
   extension_group_id?: string;
   proxy_bypass_rules?: string[];
+  created_by_id?: string;
+  created_by_email?: string;
 }
 
 export interface Extension {
@@ -77,6 +79,17 @@ export interface CloudUser {
   proxyBandwidthLimitMb: number;
   proxyBandwidthUsedMb: number;
   proxyBandwidthExtraMb: number;
+  teamId?: string;
+  teamName?: string;
+  teamRole?: string;
+}
+
+export interface ProfileLockInfo {
+  profileId: string;
+  lockedBy: string;
+  lockedByEmail: string;
+  lockedAt: string;
+  expiresAt?: string;
 }
 
 export interface CloudAuthState {

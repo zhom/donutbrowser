@@ -340,6 +340,19 @@
       "logoutConfirm": "Êtes-vous sûr de vouloir vous déconnecter ? La synchronisation cloud sera arrêtée.",
       "loginSuccess": "Connexion réussie !",
       "logoutSuccess": "Déconnexion réussie."
+    },
+    "team": {
+      "title": "Équipe",
+      "name": "Nom de l'équipe",
+      "role": "Rôle",
+      "roleOwner": "Propriétaire",
+      "roleAdmin": "Administrateur",
+      "roleMember": "Membre",
+      "manageOnWeb": "Gérer l'équipe sur le tableau de bord web",
+      "profileLocked": "Utilisé par {{email}}",
+      "profileLockedShort": "En cours d'utilisation",
+      "cannotLaunchLocked": "Impossible de lancer — le profil est utilisé par {{email}}",
+      "createdBy": "Créé par {{email}}"
     }
   },
   "integrations": {
@@ -504,6 +517,7 @@
       "verifying": "Vérification de {{browser}} {{version}}",
       "syncing": "Synchronisation...",
       "syncingProfile": "Synchronisation du profil '{{name}}'...",
+      "syncingProfileWithProgress": "{{count}} fichiers ({{size}})",
       "updatingVersions": "Mise à jour des versions de navigateurs..."
     }
   },
@@ -707,6 +721,7 @@
     },
     "network": {
       "bypassRules": "Règles de Contournement du Proxy",
+      "bypassRulesTitle": "Règles de Contournement du Proxy",
       "bypassRulesDescription": "Les requêtes correspondant à ces règles se connecteront directement, contournant le proxy.",
       "addRule": "Ajouter une Règle",
       "rulePlaceholder": "ex. example.com, 192.168.1.*, .*\\.local",

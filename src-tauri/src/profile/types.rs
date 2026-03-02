@@ -61,6 +61,10 @@ pub struct BrowserProfile {
   pub extension_group_id: Option<String>,
   #[serde(default)]
   pub proxy_bypass_rules: Vec<String>,
+  #[serde(default)]
+  pub created_by_id: Option<String>,
+  #[serde(default)]
+  pub created_by_email: Option<String>,
 }
 
 pub fn default_release_type() -> String {

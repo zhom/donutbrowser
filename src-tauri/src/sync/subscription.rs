@@ -208,14 +208,29 @@ impl SyncSubscription {
     data_line.and_then(|data| serde_json::from_str(data).ok())
   }
 
+  fn strip_team_prefix(key: &str) -> &str {
+    if key.starts_with("teams/") {
+      if let Some(rest) = key.find('/').and_then(|first_slash| {
+        key[first_slash + 1..]
+          .find('/')
+          .map(|second_slash| first_slash + 1 + second_slash + 1)
+      }) {
+        return &key[rest..];
+      }
+    }
+    key
+  }
+
   fn handle_event(event: &SubscribeEvent, work_tx: &mpsc::UnboundedSender<SyncWorkItem>) {
-    let Some(key) = &event.key else {
+    let Some(raw_key) = &event.key else {
       return;
     };
 
     if event.event_type == "ping" {
       return;
     }
+
+    let key = Self::strip_team_prefix(raw_key);
 
     let work_item = if key.starts_with("profiles/") {
       key

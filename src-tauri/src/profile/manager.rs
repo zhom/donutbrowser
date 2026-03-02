@@ -179,6 +179,8 @@ impl ProfileManager {
           ephemeral: false,
           extension_group_id: None,
           proxy_bypass_rules: Vec::new(),
+          created_by_id: None,
+          created_by_email: None,
         };
 
         match self
@@ -298,6 +300,8 @@ impl ProfileManager {
           ephemeral: false,
           extension_group_id: None,
           proxy_bypass_rules: Vec::new(),
+          created_by_id: None,
+          created_by_email: None,
         };
 
         match self
@@ -349,6 +353,8 @@ impl ProfileManager {
       ephemeral,
       extension_group_id: None,
       proxy_bypass_rules: Vec::new(),
+      created_by_id: None,
+      created_by_email: None,
     };
 
     // Save profile info
@@ -903,6 +909,8 @@ impl ProfileManager {
       ephemeral: false,
       extension_group_id: source.extension_group_id,
       proxy_bypass_rules: source.proxy_bypass_rules,
+      created_by_id: None,
+      created_by_email: None,
     };
 
     self.save_profile(&new_profile)?;

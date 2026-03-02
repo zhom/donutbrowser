@@ -46,6 +46,7 @@ import {
   dismissToast,
   showErrorToast,
   showSuccessToast,
+  showSyncProgressToast,
   showToast,
 } from "@/lib/toast-utils";
 import type {
@@ -191,8 +192,6 @@ export default function Home() {
     useState<BrowserProfile | null>(null);
   const { isMicrophoneAccessGranted, isCameraAccessGranted, isInitialized } =
     usePermissions();
-
-  const userInitiatedSyncIds = useRef<Set<string>>(new Set());
 
   const handleSelectGroup = useCallback((groupId: string) => {
     setSelectedGroupId(groupId);
@@ -769,9 +768,6 @@ export default function Home() {
           profileId: profile.id,
           syncMode: enabling ? "Regular" : "Disabled",
         });
-        if (enabling) {
-          userInitiatedSyncIds.current.add(profile.id);
-        }
         showSuccessToast(enabling ? "Sync enabled" : "Sync disabled", {
           description: enabling
             ? "Profile sync has been enabled"
@@ -786,17 +782,16 @@ export default function Home() {
   );
 
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
+    let unlistenStatus: (() => void) | undefined;
+    let unlistenProgress: (() => void) | undefined;
     (async () => {
       try {
-        unlisten = await listen<{
+        unlistenStatus = await listen<{
           profile_id: string;
           status: string;
           error?: string;
         }>("profile-sync-status", (event) => {
           const { profile_id, status, error } = event.payload;
-          if (!userInitiatedSyncIds.current.has(profile_id)) return;
-
           const toastId = `sync-${profile_id}`;
           const profile = profiles.find((p) => p.id === profile_id);
           const name = profile?.name ?? "Unknown";
@@ -806,26 +801,44 @@ export default function Home() {
               type: "loading",
               title: `Syncing profile '${name}'...`,
               id: toastId,
-              duration: 30000,
+              duration: Number.POSITIVE_INFINITY,
+              onCancel: () => dismissToast(toastId),
             });
           } else if (status === "synced") {
             dismissToast(toastId);
             showSuccessToast(`Profile '${name}' synced successfully`);
-            userInitiatedSyncIds.current.delete(profile_id);
           } else if (status === "error") {
             dismissToast(toastId);
             showErrorToast(
               `Failed to sync profile '${name}'${error ? `: ${error}` : ""}`,
             );
-            userInitiatedSyncIds.current.delete(profile_id);
           }
         });
+
+        unlistenProgress = await listen<{
+          profile_id: string;
+          phase: string;
+          total_files?: number;
+          total_bytes?: number;
+        }>("profile-sync-progress", (event) => {
+          const { profile_id, phase, total_files, total_bytes } = event.payload;
+          if (phase !== "started") return;
+
+          const toastId = `sync-${profile_id}`;
+          const profile = profiles.find((p) => p.id === profile_id);
+          const name = profile?.name ?? "Unknown";
+
+          showSyncProgressToast(name, total_files ?? 0, total_bytes ?? 0, {
+            id: toastId,
+          });
+        });
       } catch (error) {
-        console.error("Failed to listen for sync status events:", error);
+        console.error("Failed to listen for sync events:", error);
       }
     })();
     return () => {
-      if (unlisten) unlisten();
+      if (unlistenStatus) unlistenStatus();
+      if (unlistenProgress) unlistenProgress();
     };
   }, [profiles]);
 

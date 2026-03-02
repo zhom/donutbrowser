@@ -50,6 +50,7 @@ pub mod daemon_ws;
 pub mod events;
 mod mcp_server;
 mod tag_manager;
+mod team_lock;
 mod version_updater;
 pub mod vpn;
 pub mod vpn_worker_runner;
@@ -1466,7 +1467,10 @@ pub fn run() {
       cloud_auth::cloud_get_states,
       cloud_auth::cloud_get_cities,
       cloud_auth::create_cloud_location_proxy,
-      cloud_auth::restart_sync_service
+      cloud_auth::restart_sync_service,
+      // Team lock commands
+      team_lock::get_team_locks,
+      team_lock::get_team_lock_status,
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application")
@@ -1509,6 +1513,7 @@ mod tests {
       "update_extension",
       "set_extension_sync_enabled",
       "set_extension_group_sync_enabled",
+      "get_team_lock_status",
     ];
 
     // Extract command names from the generate_handler! macro in this file

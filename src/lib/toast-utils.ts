@@ -232,6 +232,38 @@ export function dismissToast(id: string) {
   sonnerToast.dismiss(id);
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const i = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    units.length - 1,
+  );
+  const value = bytes / 1024 ** i;
+  return `${i === 0 ? value : value.toFixed(1)} ${units[i]}`;
+}
+
+export function showSyncProgressToast(
+  profileName: string,
+  totalFiles: number,
+  totalBytes: number,
+  options?: { id?: string },
+) {
+  const description = `${totalFiles} files (${formatBytes(totalBytes)})`;
+  return showToast({
+    type: "loading",
+    title: `Syncing profile '${profileName}'...`,
+    description,
+    id: options?.id,
+    duration: Number.POSITIVE_INFINITY,
+    onCancel: () => {
+      if (options?.id) {
+        dismissToast(options.id);
+      }
+    },
+  });
+}
+
 export function showUnifiedVersionUpdateToast(
   title: string,
   options?: {
