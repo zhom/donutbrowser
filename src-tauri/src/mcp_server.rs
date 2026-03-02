@@ -726,6 +726,27 @@ impl McpServer {
         }),
       },
       McpTool {
+        name: "update_profile_proxy_bypass_rules".to_string(),
+        description:
+          "Update proxy bypass rules for a profile. Requests matching these rules will connect directly, bypassing the proxy."
+            .to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the profile to update"
+            },
+            "rules": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Array of bypass rules. Supports hostnames (e.g. 'example.com'), IP addresses, and regex patterns."
+            }
+          },
+          "required": ["profile_id", "rules"]
+        }),
+      },
+      McpTool {
         name: "list_extensions".to_string(),
         description: "List all managed browser extensions. Requires Pro subscription.".to_string(),
         input_schema: serde_json::json!({
@@ -889,6 +910,11 @@ impl McpServer {
       // Fingerprint management
       "get_profile_fingerprint" => self.handle_get_profile_fingerprint(&arguments).await,
       "update_profile_fingerprint" => self.handle_update_profile_fingerprint(&arguments).await,
+      "update_profile_proxy_bypass_rules" => {
+        self
+          .handle_update_profile_proxy_bypass_rules(&arguments)
+          .await
+      }
       // Extension management
       "list_extensions" => self.handle_list_extensions().await,
       "list_extension_groups" => self.handle_list_extension_groups().await,
@@ -2141,6 +2167,54 @@ impl McpServer {
     }))
   }
 
+  async fn handle_update_profile_proxy_bypass_rules(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?;
+
+    let rules: Vec<String> = arguments
+      .get("rules")
+      .and_then(|v| v.as_array())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing rules array".to_string(),
+      })?
+      .iter()
+      .filter_map(|v| v.as_str().map(|s| s.to_string()))
+      .collect();
+
+    let inner = self.inner.lock().await;
+    let app_handle = inner.app_handle.as_ref().ok_or_else(|| McpError {
+      code: -32000,
+      message: "MCP server not properly initialized".to_string(),
+    })?;
+
+    let profile = ProfileManager::instance()
+      .update_profile_proxy_bypass_rules(app_handle, profile_id, rules.clone())
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to update proxy bypass rules: {e}"),
+      })?;
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!(
+          "Proxy bypass rules updated for profile '{}': {} rule(s) configured",
+          profile.name,
+          rules.len()
+        )
+      }]
+    }))
+  }
+
   async fn handle_list_extensions(&self) -> Result<serde_json::Value, McpError> {
     if !CLOUD_AUTH.has_active_paid_subscription().await {
       return Err(McpError {
@@ -2366,6 +2440,7 @@ mod tests {
     // Fingerprint tools
     assert!(tool_names.contains(&"get_profile_fingerprint"));
     assert!(tool_names.contains(&"update_profile_fingerprint"));
+    assert!(tool_names.contains(&"update_profile_proxy_bypass_rules"));
     // Extension tools
     assert!(tool_names.contains(&"list_extensions"));
     assert!(tool_names.contains(&"list_extension_groups"));

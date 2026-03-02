@@ -238,6 +238,46 @@ fn create_test_profile_bundle(temp_dir: &Path) -> Vec<u8> {
   encoder.finish().unwrap()
 }
 
+fn create_test_profile_bundle_with_bypass_rules(temp_dir: &Path, bypass_rules: &[&str]) -> Vec<u8> {
+  use flate2::write::GzEncoder;
+  use flate2::Compression;
+  use tar::Builder;
+
+  let metadata = json!({
+    "id": "test-bypass-profile-id",
+    "name": "Bypass Rules Profile",
+    "browser": "camoufox",
+    "version": "120.0.0",
+    "release_type": "stable",
+    "sync_enabled": true,
+    "tags": [],
+    "proxy_bypass_rules": bypass_rules
+  });
+
+  let profile_dir = temp_dir.join("bypass_profile");
+  fs::create_dir_all(&profile_dir).unwrap();
+  fs::write(profile_dir.join("test_file.txt"), "bypass test content").unwrap();
+
+  let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+  {
+    let mut tar = Builder::new(&mut encoder);
+
+    let metadata_json = serde_json::to_string_pretty(&metadata).unwrap();
+    let mut header = tar::Header::new_gnu();
+    header.set_size(metadata_json.len() as u64);
+    header.set_mode(0o644);
+    header.set_cksum();
+    tar
+      .append_data(&mut header, "metadata.json", metadata_json.as_bytes())
+      .unwrap();
+
+    tar.append_dir_all("profile", &profile_dir).unwrap();
+    tar.finish().unwrap();
+  }
+
+  encoder.finish().unwrap()
+}
+
 fn extract_bundle(data: &[u8], target_dir: &Path) -> serde_json::Value {
   use flate2::read::GzDecoder;
   use tar::Archive;
@@ -726,4 +766,78 @@ async fn test_delta_sync_only_changed_files() {
   client.delete(&file1_key, None).await.unwrap();
   client.delete(&file2_key, None).await.unwrap();
   client.delete(&file3_key, None).await.unwrap();
+}
+
+#[tokio::test]
+async fn test_profile_bypass_rules_sync() {
+  ensure_sync_server_available().await;
+  let client = TestClient::new();
+  let temp_dir = TempDir::new().unwrap();
+  let profile_id = uuid::Uuid::new_v4().to_string();
+  let test_key = format!("profiles/{}.tar.gz", profile_id);
+
+  let bypass_rules = vec!["example.com", "192.168.1.0/24", ".*\\.internal\\.net"];
+
+  let bundle = create_test_profile_bundle_with_bypass_rules(temp_dir.path(), &bypass_rules);
+
+  let presign = client
+    .presign_upload(&test_key, "application/gzip")
+    .await
+    .unwrap();
+  client
+    .upload_bytes(&presign.url, &bundle, "application/gzip")
+    .await
+    .unwrap();
+
+  let stat = client.stat(&test_key).await.unwrap();
+  assert!(stat.exists);
+
+  // Download and verify bypass rules survive the round-trip
+  let download_presign = client.presign_download(&test_key).await.unwrap();
+  let downloaded = client.download_bytes(&download_presign.url).await.unwrap();
+  assert_eq!(downloaded.len(), bundle.len());
+
+  let extract_dir = temp_dir.path().join("extracted");
+  fs::create_dir_all(&extract_dir).unwrap();
+  let metadata = extract_bundle(&downloaded, &extract_dir);
+
+  assert_eq!(metadata["name"], "Bypass Rules Profile");
+  assert_eq!(metadata["browser"], "camoufox");
+
+  let synced_rules = metadata["proxy_bypass_rules"]
+    .as_array()
+    .expect("proxy_bypass_rules should be an array");
+  assert_eq!(synced_rules.len(), 3);
+  assert_eq!(synced_rules[0], "example.com");
+  assert_eq!(synced_rules[1], "192.168.1.0/24");
+  assert_eq!(synced_rules[2], ".*\\.internal\\.net");
+
+  // Also verify empty bypass rules are handled correctly
+  let empty_bundle = create_test_profile_bundle_with_bypass_rules(temp_dir.path(), &[]);
+  let empty_key = format!("profiles/{}.tar.gz", uuid::Uuid::new_v4());
+
+  let presign2 = client
+    .presign_upload(&empty_key, "application/gzip")
+    .await
+    .unwrap();
+  client
+    .upload_bytes(&presign2.url, &empty_bundle, "application/gzip")
+    .await
+    .unwrap();
+
+  let download_presign2 = client.presign_download(&empty_key).await.unwrap();
+  let downloaded2 = client.download_bytes(&download_presign2.url).await.unwrap();
+
+  let extract_dir2 = temp_dir.path().join("extracted2");
+  fs::create_dir_all(&extract_dir2).unwrap();
+  let metadata2 = extract_bundle(&downloaded2, &extract_dir2);
+
+  let empty_rules = metadata2["proxy_bypass_rules"]
+    .as_array()
+    .expect("proxy_bypass_rules should be an array");
+  assert!(empty_rules.is_empty());
+
+  // Cleanup
+  client.delete(&test_key, None).await.unwrap();
+  client.delete(&empty_key, None).await.unwrap();
 }

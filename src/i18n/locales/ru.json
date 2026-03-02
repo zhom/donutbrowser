@@ -683,7 +683,6 @@
     "title": "Детали профиля",
     "tabs": {
       "info": "Информация",
-      "network": "Сеть",
       "settings": "Настройки"
     },
     "fields": {
@@ -716,6 +715,12 @@
     },
     "actions": {
       "manageCookies": "Управление Cookie"
+    },
+    "clone": {
+      "title": "Клонировать профиль",
+      "description": "Введите имя для клонированного профиля",
+      "namePlaceholder": "Имя профиля",
+      "button": "Клонировать"
     }
   },
   "extensions": {

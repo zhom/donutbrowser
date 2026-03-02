@@ -683,7 +683,6 @@
     "title": "配置文件详情",
     "tabs": {
       "info": "信息",
-      "network": "网络",
       "settings": "设置"
     },
     "fields": {
@@ -716,6 +715,12 @@
     },
     "actions": {
       "manageCookies": "管理 Cookie"
+    },
+    "clone": {
+      "title": "克隆配置文件",
+      "description": "输入克隆配置文件的名称",
+      "namePlaceholder": "配置文件名称",
+      "button": "克隆"
     }
   },
   "extensions": {

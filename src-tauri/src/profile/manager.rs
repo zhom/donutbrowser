@@ -849,6 +849,7 @@ impl ProfileManager {
   pub fn clone_profile(
     &self,
     profile_id: &str,
+    custom_name: Option<String>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
     let profile_uuid =
       uuid::Uuid::parse_str(profile_id).map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
@@ -865,7 +866,10 @@ impl ProfileManager {
     }
 
     let new_id = uuid::Uuid::new_v4();
-    let clone_name = self.generate_clone_name(&source.name)?;
+    let clone_name = match custom_name {
+      Some(name) if !name.trim().is_empty() => name.trim().to_string(),
+      _ => self.generate_clone_name(&source.name)?,
+    };
 
     let profiles_dir = self.get_profiles_dir();
     let source_dir = profiles_dir.join(source.id.to_string());
@@ -2185,9 +2189,9 @@ pub async fn update_wayfern_config(
 }
 
 #[tauri::command]
-pub fn clone_profile(profile_id: String) -> Result<BrowserProfile, String> {
+pub fn clone_profile(profile_id: String, name: Option<String>) -> Result<BrowserProfile, String> {
   ProfileManager::instance()
-    .clone_profile(&profile_id)
+    .clone_profile(&profile_id, name)
     .map_err(|e| format!("Failed to clone profile: {e}"))
 }
 

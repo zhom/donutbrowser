@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrent } from "@tauri-apps/plugin-deep-link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CamoufoxConfigDialog } from "@/components/camoufox-config-dialog";
+import { CloneProfileDialog } from "@/components/clone-profile-dialog";
 import { CommercialTrialModal } from "@/components/commercial-trial-modal";
 import { CookieCopyDialog } from "@/components/cookie-copy-dialog";
 import { CookieManagementDialog } from "@/components/cookie-management-dialog";
@@ -168,6 +169,7 @@ export default function Home() {
   const [pendingUrls, setPendingUrls] = useState<PendingUrl[]>([]);
   const [currentProfileForCamoufoxConfig, setCurrentProfileForCamoufoxConfig] =
     useState<BrowserProfile | null>(null);
+  const [cloneProfile, setCloneProfile] = useState<BrowserProfile | null>(null);
   const [hasCheckedStartupPrompt, setHasCheckedStartupPrompt] = useState(false);
   const [launchOnLoginDialogOpen, setLaunchOnLoginDialogOpen] = useState(false);
   const [windowResizeWarningOpen, setWindowResizeWarningOpen] = useState(false);
@@ -585,16 +587,8 @@ export default function Home() {
     }
   }, []);
 
-  const handleCloneProfile = useCallback(async (profile: BrowserProfile) => {
-    try {
-      await invoke<BrowserProfile>("clone_profile", {
-        profileId: profile.id,
-      });
-    } catch (err: unknown) {
-      console.error("Failed to clone profile:", err);
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      showErrorToast(`Failed to clone profile: ${errorMessage}`);
-    }
+  const handleCloneProfile = useCallback((profile: BrowserProfile) => {
+    setCloneProfile(profile);
   }, []);
 
   const handleDeleteProfile = useCallback(async (profile: BrowserProfile) => {
@@ -1137,6 +1131,12 @@ export default function Home() {
         }}
         permissionType={currentPermissionType}
         onPermissionGranted={checkNextPermission}
+      />
+
+      <CloneProfileDialog
+        isOpen={!!cloneProfile}
+        onClose={() => setCloneProfile(null)}
+        profile={cloneProfile}
       />
 
       <CamoufoxConfigDialog

@@ -2726,6 +2726,53 @@ pub async fn kill_browser_profile(
         profile.name,
         profile.id
       );
+
+      // Auto-update non-running profiles and cleanup unused binaries
+      let browser_for_update = profile.browser.clone();
+      let app_handle_for_update = app_handle.clone();
+      tauri::async_runtime::spawn(async move {
+        let registry = crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
+        let mut versions = registry.get_downloaded_versions(&browser_for_update);
+        if !versions.is_empty() {
+          versions.sort_by(|a, b| crate::api_client::compare_versions(b, a));
+          let latest_version = &versions[0];
+
+          let auto_updater = crate::auto_updater::AutoUpdater::instance();
+          match auto_updater
+            .auto_update_profile_versions(
+              &app_handle_for_update,
+              &browser_for_update,
+              latest_version,
+            )
+            .await
+          {
+            Ok(updated) => {
+              if !updated.is_empty() {
+                log::info!(
+                  "Auto-updated {} profiles after stop: {:?}",
+                  updated.len(),
+                  updated
+                );
+              }
+            }
+            Err(e) => {
+              log::error!("Failed to auto-update profile versions after stop: {e}");
+            }
+          }
+        }
+
+        match registry.cleanup_unused_binaries() {
+          Ok(cleaned) => {
+            if !cleaned.is_empty() {
+              log::info!("Cleaned up unused binaries after stop: {:?}", cleaned);
+            }
+          }
+          Err(e) => {
+            log::error!("Failed to cleanup unused binaries after stop: {e}");
+          }
+        }
+      });
+
       Ok(())
     }
     Err(e) => {

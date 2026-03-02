@@ -398,36 +398,63 @@ export function ProfileInfoDialog({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <ProfileIcon className="w-5 h-5" />
-            {profile.name}
-          </DialogTitle>
+          <DialogTitle>{t("profileInfo.title")}</DialogTitle>
         </DialogHeader>
         <Tabs defaultValue="info">
           <TabsList className="w-full">
             <TabsTrigger value="info" className="flex-1">
               {t("profileInfo.tabs.info")}
             </TabsTrigger>
-            <TabsTrigger value="network" className="flex-1">
-              {t("profileInfo.tabs.network")}
-            </TabsTrigger>
             <TabsTrigger value="settings" className="flex-1">
               {t("profileInfo.tabs.settings")}
             </TabsTrigger>
           </TabsList>
           <TabsContent value="info">
-            <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 py-2">
-              {infoFields.map((field) => (
-                <React.Fragment key={field.label}>
-                  <span className="text-sm text-muted-foreground whitespace-nowrap">
-                    {field.label}
-                  </span>
-                  <span className="text-sm">{field.value}</span>
-                </React.Fragment>
-              ))}
+            <div className="flex flex-col items-center gap-1 py-3">
+              <ProfileIcon className="w-12 h-12 text-muted-foreground" />
+              <h3 className="text-lg font-semibold">{profile.name}</h3>
+              <p className="text-sm text-muted-foreground">
+                {getBrowserDisplayName(profile.browser)} {profile.version}
+              </p>
+            </div>
+            <div className="max-h-[300px] overflow-y-auto">
+              <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 py-2">
+                {infoFields.map((field) => (
+                  <React.Fragment key={field.label}>
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">
+                      {field.label}
+                    </span>
+                    <span className="text-sm">{field.value}</span>
+                  </React.Fragment>
+                ))}
+              </div>
             </div>
           </TabsContent>
-          <TabsContent value="network">
+          <TabsContent value="settings">
+            <div className="flex flex-col py-1">
+              {visibleActions.map((action) => (
+                <button
+                  key={action.label}
+                  type="button"
+                  disabled={action.disabled}
+                  onClick={action.onClick}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors text-left w-full",
+                    "hover:bg-accent disabled:opacity-50 disabled:pointer-events-none",
+                    action.destructive &&
+                      "text-destructive hover:bg-destructive/10",
+                  )}
+                >
+                  {action.icon}
+                  <span className="flex-1 flex items-center gap-2">
+                    {action.label}
+                    {action.proBadge && <ProBadge />}
+                  </span>
+                  <LuChevronRight className="w-4 h-4 text-muted-foreground" />
+                </button>
+              ))}
+            </div>
+            <div className="border-t my-2" />
             <div className="flex flex-col gap-3 py-2">
               <div>
                 <h4 className="text-sm font-medium">
@@ -482,31 +509,6 @@ export function ProfileInfoDialog({
               <p className="text-xs text-muted-foreground">
                 {t("profileInfo.network.ruleTypes")}
               </p>
-            </div>
-          </TabsContent>
-          <TabsContent value="settings">
-            <div className="flex flex-col py-1">
-              {visibleActions.map((action) => (
-                <button
-                  key={action.label}
-                  type="button"
-                  disabled={action.disabled}
-                  onClick={action.onClick}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors text-left w-full",
-                    "hover:bg-accent disabled:opacity-50 disabled:pointer-events-none",
-                    action.destructive &&
-                      "text-destructive hover:bg-destructive/10",
-                  )}
-                >
-                  {action.icon}
-                  <span className="flex-1 flex items-center gap-2">
-                    {action.label}
-                    {action.proBadge && <ProBadge />}
-                  </span>
-                  <LuChevronRight className="w-4 h-4 text-muted-foreground" />
-                </button>
-              ))}
             </div>
           </TabsContent>
         </Tabs>

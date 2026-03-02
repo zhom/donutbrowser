@@ -1033,6 +1033,51 @@ impl Downloader {
       tokens.remove(&download_key);
     }
 
+    // Auto-update non-running profiles to the new version and cleanup unused binaries
+    {
+      let browser_for_update = browser_str.clone();
+      let version_for_update = version.clone();
+      let app_handle_for_update = app_handle.clone();
+      tauri::async_runtime::spawn(async move {
+        let auto_updater = crate::auto_updater::AutoUpdater::instance();
+        match auto_updater
+          .auto_update_profile_versions(
+            &app_handle_for_update,
+            &browser_for_update,
+            &version_for_update,
+          )
+          .await
+        {
+          Ok(updated) => {
+            if !updated.is_empty() {
+              log::info!(
+                "Auto-updated {} profiles to {} {}: {:?}",
+                updated.len(),
+                browser_for_update,
+                version_for_update,
+                updated
+              );
+            }
+          }
+          Err(e) => {
+            log::error!("Failed to auto-update profile versions: {e}");
+          }
+        }
+
+        let registry = crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
+        match registry.cleanup_unused_binaries() {
+          Ok(cleaned) => {
+            if !cleaned.is_empty() {
+              log::info!("Cleaned up unused binaries after download: {:?}", cleaned);
+            }
+          }
+          Err(e) => {
+            log::error!("Failed to cleanup unused binaries: {e}");
+          }
+        }
+      });
+    }
+
     Ok(version)
   }
 }

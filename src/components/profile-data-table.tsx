@@ -2279,6 +2279,7 @@ export function ProfilesDataTable({
       },
       {
         id: "settings",
+        size: 40,
         cell: ({ row, table }) => {
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
@@ -2341,7 +2342,14 @@ export function ProfilesDataTable({
               <TableRow key={headerGroup.id} className="overflow-visible">
                 {headerGroup.headers.map((header) => {
                   return (
-                    <TableHead key={header.id}>
+                    <TableHead
+                      key={header.id}
+                      style={{
+                        width: header.column.columnDef.size
+                          ? `${header.column.getSize()}px`
+                          : undefined,
+                      }}
+                    >
                       {header.isPlaceholder
                         ? null
                         : flexRender(
@@ -2374,7 +2382,15 @@ export function ProfilesDataTable({
                     )}
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id} className="overflow-visible">
+                      <TableCell
+                        key={cell.id}
+                        className="overflow-visible"
+                        style={{
+                          width: cell.column.columnDef.size
+                            ? `${cell.column.getSize()}px`
+                            : undefined,
+                        }}
+                      >
                         {flexRender(
                           cell.column.columnDef.cell,
                           cell.getContext(),

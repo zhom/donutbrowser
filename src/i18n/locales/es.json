@@ -683,7 +683,6 @@
     "title": "Detalles del Perfil",
     "tabs": {
       "info": "Info",
-      "network": "Red",
       "settings": "Configuración"
     },
     "fields": {
@@ -716,6 +715,12 @@
     },
     "actions": {
       "manageCookies": "Administrar Cookies"
+    },
+    "clone": {
+      "title": "Clonar Perfil",
+      "description": "Ingrese un nombre para el perfil clonado",
+      "namePlaceholder": "Nombre del perfil",
+      "button": "Clonar"
     }
   },
   "extensions": {

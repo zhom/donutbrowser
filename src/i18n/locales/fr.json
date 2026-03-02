@@ -683,7 +683,6 @@
     "title": "Détails du Profil",
     "tabs": {
       "info": "Info",
-      "network": "Réseau",
       "settings": "Paramètres"
     },
     "fields": {
@@ -716,6 +715,12 @@
     },
     "actions": {
       "manageCookies": "Gérer les Cookies"
+    },
+    "clone": {
+      "title": "Cloner le Profil",
+      "description": "Entrez un nom pour le profil cloné",
+      "namePlaceholder": "Nom du profil",
+      "button": "Cloner"
     }
   },
   "extensions": {

@@ -683,7 +683,6 @@
     "title": "プロフィール詳細",
     "tabs": {
       "info": "情報",
-      "network": "ネットワーク",
       "settings": "設定"
     },
     "fields": {
@@ -716,6 +715,12 @@
     },
     "actions": {
       "manageCookies": "Cookieを管理"
+    },
+    "clone": {
+      "title": "プロフィールを複製",
+      "description": "複製されたプロフィールの名前を入力してください",
+      "namePlaceholder": "プロフィール名",
+      "button": "複製"
     }
   },
   "extensions": {

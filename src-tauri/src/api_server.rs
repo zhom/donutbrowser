@@ -39,6 +39,7 @@ pub struct ApiProfile {
   pub group_id: Option<String>,
   pub tags: Vec<String>,
   pub is_running: bool,
+  pub proxy_bypass_rules: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -79,6 +80,7 @@ pub struct UpdateProfileRequest {
   pub group_id: Option<String>,
   pub tags: Option<Vec<String>>,
   pub extension_group_id: Option<String>,
+  pub proxy_bypass_rules: Option<Vec<String>>,
 }
 
 #[derive(Clone)]
@@ -487,6 +489,7 @@ async fn get_profiles() -> Result<Json<ApiProfilesResponse>, StatusCode> {
           group_id: profile.group_id.clone(),
           tags: profile.tags.clone(),
           is_running: profile.process_id.is_some(), // Simple check based on process_id
+          proxy_bypass_rules: profile.proxy_bypass_rules.clone(),
         })
         .collect();
 
@@ -541,6 +544,7 @@ async fn get_profile(
             group_id: profile.group_id.clone(),
             tags: profile.tags.clone(),
             is_running: profile.process_id.is_some(), // Simple check based on process_id
+            proxy_bypass_rules: profile.proxy_bypass_rules.clone(),
           },
         }))
       } else {
@@ -639,6 +643,7 @@ async fn create_profile(
           group_id: profile.group_id,
           tags: profile.tags,
           is_running: false,
+          proxy_bypass_rules: profile.proxy_bypass_rules,
         },
       }))
     }
@@ -750,6 +755,15 @@ async fn update_profile(
     };
     if profile_manager
       .update_profile_extension_group(&id, ext_group)
+      .is_err()
+    {
+      return Err(StatusCode::BAD_REQUEST);
+    }
+  }
+
+  if let Some(proxy_bypass_rules) = request.proxy_bypass_rules {
+    if profile_manager
+      .update_profile_proxy_bypass_rules(&state.app_handle, &id, proxy_bypass_rules)
       .is_err()
     {
       return Err(StatusCode::BAD_REQUEST);
