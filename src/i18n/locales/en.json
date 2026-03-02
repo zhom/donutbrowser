@@ -120,7 +120,8 @@
       "removed": "Encryption password removed",
       "passwordSaved": "Encryption password set",
       "passwordMismatch": "Passwords do not match",
-      "passwordTooShort": "Password must be at least 8 characters"
+      "passwordTooShort": "Password must be at least 8 characters",
+      "requiresProOrOwner": "Profile encryption is available for Pro users and team owners."
     },
     "commercial": {
       "title": "Commercial License",

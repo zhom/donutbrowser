@@ -2087,8 +2087,15 @@ pub async fn set_profile_sync_mode(
     }
   }
 
-  // If switching to Encrypted, verify password and generate salt
+  // If switching to Encrypted, verify eligibility, password, and generate salt
   if new_mode == SyncMode::Encrypted {
+    // Only pro users and team owners can enable encryption
+    if let Some(state) = crate::cloud_auth::CLOUD_AUTH.get_user().await {
+      if state.user.plan == "team" && state.user.team_role.as_deref() != Some("owner") {
+        return Err("Profile encryption is available for Pro users and team owners.".to_string());
+      }
+    }
+
     if !encryption::has_e2e_password() {
       return Err("E2E password not set. Please set a password in Settings first.".to_string());
     }

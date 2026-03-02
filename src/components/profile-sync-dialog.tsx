@@ -41,6 +41,10 @@ export function ProfileSyncDialog({
     cloudUser.plan !== "free" &&
     (cloudUser.subscriptionStatus === "active" ||
       cloudUser.planPeriod === "lifetime");
+  const canUseEncryption =
+    isCloudSyncEligible &&
+    cloudUser != null &&
+    (cloudUser.plan !== "team" || cloudUser.teamRole === "owner");
   const [isSaving, setIsSaving] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMode, setSyncMode] = useState<SyncMode>(
@@ -92,6 +96,11 @@ export function ProfileSyncDialog({
         return;
       }
 
+      if (newMode === "Encrypted" && !canUseEncryption) {
+        showErrorToast(t("settings.encryption.requiresProOrOwner"));
+        return;
+      }
+
       if (newMode === "Encrypted" && !hasE2ePassword) {
         showErrorToast(t("sync.mode.passwordRequired"));
         return;
@@ -116,7 +125,15 @@ export function ProfileSyncDialog({
         setIsSaving(false);
       }
     },
-    [profile, hasConfig, hasE2ePassword, onSyncConfigOpen, onClose, t],
+    [
+      profile,
+      hasConfig,
+      hasE2ePassword,
+      canUseEncryption,
+      onSyncConfigOpen,
+      onClose,
+      t,
+    ],
   );
 
   const handleSyncNow = useCallback(async () => {
@@ -225,16 +242,32 @@ export function ProfileSyncDialog({
                   </div>
 
                   <div className="flex items-start space-x-3">
-                    <RadioGroupItem value="Encrypted" id="sync-encrypted" />
-                    <Label htmlFor="sync-encrypted" className="cursor-pointer">
+                    <RadioGroupItem
+                      value="Encrypted"
+                      id="sync-encrypted"
+                      disabled={!canUseEncryption}
+                    />
+                    <Label
+                      htmlFor="sync-encrypted"
+                      className={
+                        canUseEncryption
+                          ? "cursor-pointer"
+                          : "cursor-not-allowed opacity-50"
+                      }
+                    >
                       <span className="font-medium">
                         {t("sync.mode.encrypted", "E2E Encrypted Sync")}
                       </span>
                       <p className="text-sm text-muted-foreground">
-                        {t(
-                          "sync.mode.encryptedDescription",
-                          "Encrypted before upload. Server never sees plaintext data.",
-                        )}
+                        {canUseEncryption
+                          ? t(
+                              "sync.mode.encryptedDescription",
+                              "Encrypted before upload. Server never sees plaintext data.",
+                            )
+                          : t(
+                              "settings.encryption.requiresProOrOwner",
+                              "Profile encryption is available for Pro users and team owners.",
+                            )}
                       </p>
                     </Label>
                   </div>

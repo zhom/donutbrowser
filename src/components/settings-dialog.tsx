@@ -39,6 +39,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useCloudAuth } from "@/hooks/use-cloud-auth";
 import { useCommercialTrial } from "@/hooks/use-commercial-trial";
 import { useLanguage } from "@/hooks/use-language";
 import type { PermissionType } from "@/hooks/use-permissions";
@@ -129,6 +130,13 @@ export function SettingsDialog({
     isCameraAccessGranted,
   } = usePermissions();
   const { trialStatus } = useCommercialTrial();
+  const { user: cloudUser } = useCloudAuth();
+  const canUseEncryption =
+    cloudUser != null &&
+    cloudUser.plan !== "free" &&
+    (cloudUser.subscriptionStatus === "active" ||
+      cloudUser.planPeriod === "lifetime") &&
+    (cloudUser.plan !== "team" || cloudUser.teamRole === "owner");
   const {
     currentLanguage,
     changeLanguage,
@@ -853,7 +861,14 @@ export function SettingsDialog({
               )}
             </p>
 
-            {hasE2ePassword ? (
+            {!canUseEncryption ? (
+              <p className="text-sm text-muted-foreground">
+                {t(
+                  "settings.encryption.requiresProOrOwner",
+                  "Profile encryption is available for Pro users and team owners.",
+                )}
+              </p>
+            ) : hasE2ePassword ? (
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <Badge variant="default">

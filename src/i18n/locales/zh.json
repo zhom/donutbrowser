@@ -120,7 +120,8 @@
       "removed": "加密密码已删除",
       "passwordSaved": "加密密码已设置",
       "passwordMismatch": "密码不匹配",
-      "passwordTooShort": "密码必须至少8个字符"
+      "passwordTooShort": "密码必须至少8个字符",
+      "requiresProOrOwner": "配置文件加密仅适用于Pro用户和团队所有者。"
     },
     "commercial": {
       "title": "商业许可",

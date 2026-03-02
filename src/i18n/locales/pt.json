@@ -120,7 +120,8 @@
       "removed": "Senha de criptografia removida",
       "passwordSaved": "Senha de criptografia definida",
       "passwordMismatch": "As senhas não coincidem",
-      "passwordTooShort": "A senha deve ter pelo menos 8 caracteres"
+      "passwordTooShort": "A senha deve ter pelo menos 8 caracteres",
+      "requiresProOrOwner": "A criptografia de perfis está disponível para usuários Pro e proprietários de equipe."
     },
     "commercial": {
       "title": "Licença Comercial",

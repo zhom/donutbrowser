@@ -120,7 +120,8 @@
       "removed": "Contraseña de cifrado eliminada",
       "passwordSaved": "Contraseña de cifrado establecida",
       "passwordMismatch": "Las contraseñas no coinciden",
-      "passwordTooShort": "La contraseña debe tener al menos 8 caracteres"
+      "passwordTooShort": "La contraseña debe tener al menos 8 caracteres",
+      "requiresProOrOwner": "El cifrado de perfiles está disponible para usuarios Pro y propietarios de equipos."
     },
     "commercial": {
       "title": "Licencia Comercial",

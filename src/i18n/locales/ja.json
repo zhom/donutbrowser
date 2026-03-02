@@ -120,7 +120,8 @@
       "removed": "暗号化パスワードが削除されました",
       "passwordSaved": "暗号化パスワードが設定されました",
       "passwordMismatch": "パスワードが一致しません",
-      "passwordTooShort": "パスワードは8文字以上である必要があります"
+      "passwordTooShort": "パスワードは8文字以上である必要があります",
+      "requiresProOrOwner": "プロファイルの暗号化はProユーザーとチームオーナーのみ利用できます。"
     },
     "commercial": {
       "title": "商用ライセンス",
