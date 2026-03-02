@@ -5,6 +5,7 @@ use directories::BaseDirs;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 
@@ -21,6 +22,8 @@ pub struct GeoIPDownloadProgress {
   pub speed_bytes_per_sec: Option<f64>,
   pub eta_seconds: Option<f64>,
 }
+
+static DOWNLOAD_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 
 pub struct GeoIPDownloader {
   client: Client,
@@ -124,6 +127,22 @@ impl GeoIPDownloader {
   }
 
   pub async fn download_geoip_database(
+    &self,
+    _app_handle: &tauri::AppHandle,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    if DOWNLOAD_IN_PROGRESS
+      .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+      .is_err()
+    {
+      log::info!("GeoIP database download already in progress, skipping");
+      return Ok(());
+    }
+    let result = self.download_geoip_database_inner(_app_handle).await;
+    DOWNLOAD_IN_PROGRESS.store(false, Ordering::SeqCst);
+    result
+  }
+
+  async fn download_geoip_database_inner(
     &self,
     _app_handle: &tauri::AppHandle,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
