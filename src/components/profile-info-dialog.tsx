@@ -82,6 +82,15 @@ function OSIcon({ os }: { os: string }) {
   }
 }
 
+function InfoCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md bg-muted/50 border px-3 py-2.5">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-sm mt-0.5 truncate">{value}</p>
+    </div>
+  );
+}
+
 export function ProfileInfoDialog({
   isOpen,
   onClose,
@@ -222,110 +231,12 @@ export function ProfileInfoDialog({
     void updateBypassRules(bypassRules.filter((r) => r !== rule));
   };
 
-  const infoFields: { label: string; value: React.ReactNode }[] = [
-    {
-      label: t("profileInfo.fields.profileId"),
-      value: (
-        <span className="flex items-center gap-1.5">
-          <span className="font-mono text-xs truncate max-w-[180px]">
-            {profile.id}
-          </span>
-          <button
-            type="button"
-            onClick={() => void handleCopyId()}
-            className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
-          >
-            {copied ? (
-              <LuClipboardCheck className="w-3.5 h-3.5" />
-            ) : (
-              <LuClipboard className="w-3.5 h-3.5" />
-            )}
-          </button>
-        </span>
-      ),
-    },
-    {
-      label: t("profileInfo.fields.browser"),
-      value: `${getBrowserDisplayName(profile.browser)} ${profile.version}`,
-    },
-    {
-      label: t("profileInfo.fields.releaseType"),
-      value:
-        profile.release_type.charAt(0).toUpperCase() +
-        profile.release_type.slice(1),
-    },
-    {
-      label: t("profileInfo.fields.proxyVpn"),
-      value: networkLabel,
-    },
-    {
-      label: t("profileInfo.fields.group"),
-      value: groupName ?? t("profileInfo.values.none"),
-    },
-    {
-      label: t("profileInfo.fields.extensionGroup"),
-      value: extensionGroupName ?? t("profileInfo.values.none"),
-    },
-    {
-      label: t("profileInfo.fields.tags"),
-      value:
-        profile.tags && profile.tags.length > 0 ? (
-          <span className="flex flex-wrap gap-1">
-            {profile.tags.map((tag) => (
-              <Badge key={tag} variant="secondary" className="text-xs">
-                {tag}
-              </Badge>
-            ))}
-          </span>
-        ) : (
-          t("profileInfo.values.none")
-        ),
-    },
-    {
-      label: t("profileInfo.fields.note"),
-      value: profile.note || t("profileInfo.values.none"),
-    },
-    {
-      label: t("profileInfo.fields.syncStatus"),
-      value: syncLabel,
-    },
-    {
-      label: t("profileInfo.fields.lastLaunched"),
-      value: profile.last_launch
-        ? formatRelativeTime(profile.last_launch)
-        : t("profileInfo.values.never"),
-    },
-  ];
-
-  if (profile.host_os && isCrossOsProfile(profile)) {
-    infoFields.push({
-      label: t("profileInfo.fields.hostOs"),
-      value: (
-        <span className="flex items-center gap-1.5">
-          <OSIcon os={profile.host_os} />
-          {getOSDisplayName(profile.host_os)}
-        </span>
-      ),
-    });
-  }
-
-  if (profile.created_by_email) {
-    infoFields.push({
-      label: t("sync.team.title"),
-      value: t("sync.team.createdBy", { email: profile.created_by_email }),
-    });
-  }
-
-  if (profile.ephemeral) {
-    infoFields.push({
-      label: t("profileInfo.fields.ephemeral"),
-      value: (
-        <Badge variant="secondary" className="text-xs">
-          {t("profileInfo.values.yes")}
-        </Badge>
-      ),
-    });
-  }
+  const releaseLabel =
+    profile.release_type.charAt(0).toUpperCase() +
+    profile.release_type.slice(1);
+  const hasTags = profile.tags && profile.tags.length > 0;
+  const hasNote = !!profile.note;
+  const showCrossOs = !!(profile.host_os && isCrossOsProfile(profile));
 
   type ActionItem = {
     icon: React.ReactNode;
@@ -413,7 +324,7 @@ export function ProfileInfoDialog({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col">
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col overflow-hidden">
           <DialogHeader className="shrink-0">
             <DialogTitle>{t("profileInfo.title")}</DialogTitle>
           </DialogHeader>
@@ -428,22 +339,156 @@ export function ProfileInfoDialog({
             </TabsList>
             <TabsContent value="info" className="flex-1 min-h-0 flex flex-col">
               <ScrollArea className="flex-1 min-h-0">
-                <div className="flex flex-col items-center gap-1 py-3">
-                  <ProfileIcon className="w-12 h-12 text-muted-foreground" />
-                  <h3 className="text-lg font-semibold">{profile.name}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {getBrowserDisplayName(profile.browser)} {profile.version}
-                  </p>
-                </div>
-                <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 py-2">
-                  {infoFields.map((field) => (
-                    <React.Fragment key={field.label}>
-                      <span className="text-sm text-muted-foreground whitespace-nowrap">
-                        {field.label}
+                <div className="flex flex-col gap-4 py-3 pr-3">
+                  {/* Hero */}
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-lg bg-muted p-2.5 shrink-0">
+                      <ProfileIcon className="w-8 h-8 text-foreground" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-base font-semibold truncate">
+                        {profile.name}
+                      </h3>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                        <Badge variant="secondary" className="text-xs">
+                          {getBrowserDisplayName(profile.browser)}{" "}
+                          {profile.version}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">
+                          {releaseLabel}
+                        </Badge>
+                        {isRunning && (
+                          <Badge className="text-xs bg-primary/15 text-primary border-primary/25">
+                            {t("common.status.running")}
+                          </Badge>
+                        )}
+                        {profile.ephemeral && (
+                          <Badge variant="outline" className="text-xs">
+                            {t("profiles.ephemeralBadge")}
+                          </Badge>
+                        )}
+                        {showCrossOs && profile.host_os && (
+                          <Badge variant="outline" className="text-xs gap-1">
+                            <OSIcon os={profile.host_os} />
+                            {getOSDisplayName(profile.host_os)}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Profile ID */}
+                  <div className="flex items-center gap-2 rounded-md bg-muted/50 border px-3 py-2">
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      ID
+                    </span>
+                    <span className="font-mono text-xs truncate flex-1">
+                      {profile.id}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void handleCopyId()}
+                      className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                    >
+                      {copied ? (
+                        <LuClipboardCheck className="w-3.5 h-3.5" />
+                      ) : (
+                        <LuClipboard className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Network & Organization */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <InfoCard
+                      label={t("profileInfo.fields.proxyVpn")}
+                      value={networkLabel}
+                    />
+                    <InfoCard
+                      label={t("profileInfo.fields.group")}
+                      value={groupName ?? t("profileInfo.values.none")}
+                    />
+                    <InfoCard
+                      label={t("profileInfo.fields.extensionGroup")}
+                      value={extensionGroupName ?? t("profileInfo.values.none")}
+                    />
+                    <InfoCard
+                      label={t("profileInfo.fields.lastLaunched")}
+                      value={
+                        profile.last_launch
+                          ? formatRelativeTime(profile.last_launch)
+                          : t("profileInfo.values.never")
+                      }
+                    />
+                  </div>
+
+                  {/* Sync */}
+                  <div className="rounded-md bg-muted/50 border px-3 py-2.5 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        {t("profileInfo.fields.syncStatus")}
+                      </p>
+                      <p className="text-sm mt-0.5">{syncLabel}</p>
+                    </div>
+                    <Badge
+                      variant={
+                        syncMode === "Disabled" ? "outline" : "secondary"
+                      }
+                      className="text-xs shrink-0"
+                    >
+                      {syncMode === "Disabled"
+                        ? t("sync.mode.disabled")
+                        : syncStatus?.status === "syncing"
+                          ? t("common.status.syncing")
+                          : t("common.status.synced")}
+                    </Badge>
+                  </div>
+
+                  {/* Tags */}
+                  {hasTags && (
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-xs text-muted-foreground">
+                        {t("profileInfo.fields.tags")}
                       </span>
-                      <span className="text-sm">{field.value}</span>
-                    </React.Fragment>
-                  ))}
+                      <div className="flex flex-wrap gap-1.5">
+                        {profile.tags?.map((tag) => (
+                          <Badge
+                            key={tag}
+                            variant="secondary"
+                            className="text-xs"
+                          >
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Note */}
+                  {hasNote && (
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-xs text-muted-foreground">
+                        {t("profileInfo.fields.note")}
+                      </span>
+                      <p className="text-sm rounded-md bg-muted/50 border px-3 py-2 whitespace-pre-wrap break-words">
+                        {profile.note}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Team */}
+                  {profile.created_by_email && (
+                    <div className="rounded-md bg-muted/50 border px-3 py-2.5">
+                      <p className="text-xs text-muted-foreground">
+                        {t("sync.team.title")}
+                      </p>
+                      <p className="text-sm mt-0.5">
+                        {t("sync.team.createdBy", {
+                          email: profile.created_by_email,
+                        })}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </ScrollArea>
             </TabsContent>
