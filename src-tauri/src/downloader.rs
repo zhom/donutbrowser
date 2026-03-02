@@ -1118,6 +1118,7 @@ pub async fn cancel_download(browser_str: String, version: String) -> Result<(),
 /// On Linux: `<browser_dir>/camoufox/distribution/`
 /// On Windows: `<browser_dir>/distribution/`
 /// Also includes `<browser_dir>/distribution/` as a fallback for all platforms.
+#[allow(clippy::vec_init_then_push)]
 fn find_camoufox_distribution_dirs(browser_dir: &Path) -> Vec<std::path::PathBuf> {
   let mut dirs = Vec::new();
 
@@ -1140,8 +1141,7 @@ fn find_camoufox_distribution_dirs(browser_dir: &Path) -> Vec<std::path::PathBuf
 
   #[cfg(target_os = "linux")]
   {
-    let camoufox_subdir = browser_dir.join("camoufox").join("distribution");
-    dirs.push(camoufox_subdir);
+    dirs.push(browser_dir.join("camoufox").join("distribution"));
   }
 
   // Fallback for all platforms
