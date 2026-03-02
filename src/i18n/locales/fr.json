@@ -730,7 +730,8 @@
       "ruleTypes": "Prend en charge les noms d'hôte, les adresses IP et les expressions régulières."
     },
     "actions": {
-      "manageCookies": "Gérer les Cookies"
+      "manageCookies": "Gérer les Cookies",
+      "assignExtensionGroup": "Assigner un Groupe d'Extensions"
     },
     "clone": {
       "title": "Cloner le Profil",
@@ -774,7 +775,11 @@
     "deleteGroupConfirmTitle": "Supprimer le Groupe d'Extensions",
     "deleteGroupConfirmDescription": "Êtes-vous sûr de vouloir supprimer le groupe \"{{name}}\" ? Cette action est irréversible.",
     "invalidFileType": "Type de fichier non valide. Veuillez télécharger un fichier .crx, .xpi ou .zip.",
-    "readError": "Impossible de lire le fichier d'extension."
+    "readError": "Impossible de lire le fichier d'extension.",
+    "assignTitle": "Assigner un Groupe d'Extensions",
+    "assignDescription": "Assigner {{count}} profil(s) sélectionné(s) à un groupe d'extensions.",
+    "noGroup": "Aucun (Pas de Groupe d'Extensions)",
+    "assignSuccess": "Groupe d'extensions assigné avec succès"
   },
   "pro": {
     "badge": "PRO",

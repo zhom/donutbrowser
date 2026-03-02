@@ -730,7 +730,8 @@
       "ruleTypes": "ホスト名、IPアドレス、正規表現パターンをサポートしています。"
     },
     "actions": {
-      "manageCookies": "Cookieを管理"
+      "manageCookies": "Cookieを管理",
+      "assignExtensionGroup": "拡張機能グループを割り当て"
     },
     "clone": {
       "title": "プロフィールを複製",
@@ -774,7 +775,11 @@
     "deleteGroupConfirmTitle": "拡張機能グループを削除",
     "deleteGroupConfirmDescription": "グループ「{{name}}」を削除してもよろしいですか？この操作は元に戻せません。",
     "invalidFileType": "無効なファイルタイプです。.crx、.xpi、または .zip ファイルをアップロードしてください。",
-    "readError": "拡張機能ファイルの読み取りに失敗しました。"
+    "readError": "拡張機能ファイルの読み取りに失敗しました。",
+    "assignTitle": "拡張機能グループの割り当て",
+    "assignDescription": "選択した{{count}}件のプロファイルを拡張機能グループに割り当てます。",
+    "noGroup": "なし（拡張機能グループなし）",
+    "assignSuccess": "拡張機能グループが正常に割り当てられました"
   },
   "pro": {
     "badge": "PRO",

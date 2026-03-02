@@ -730,7 +730,8 @@
       "ruleTypes": "Supports hostnames, IP addresses, and regex patterns."
     },
     "actions": {
-      "manageCookies": "Manage Cookies"
+      "manageCookies": "Manage Cookies",
+      "assignExtensionGroup": "Assign Extension Group"
     },
     "clone": {
       "title": "Clone Profile",
@@ -774,7 +775,11 @@
     "deleteGroupConfirmTitle": "Delete Extension Group",
     "deleteGroupConfirmDescription": "Are you sure you want to delete the group \"{{name}}\"? This action cannot be undone.",
     "invalidFileType": "Invalid file type. Please upload a .crx, .xpi, or .zip file.",
-    "readError": "Failed to read the extension file."
+    "readError": "Failed to read the extension file.",
+    "assignTitle": "Assign Extension Group",
+    "assignDescription": "Assign {{count}} selected profile(s) to an extension group.",
+    "noGroup": "None (No Extension Group)",
+    "assignSuccess": "Extension group assigned successfully"
   },
   "pro": {
     "badge": "PRO",

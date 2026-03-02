@@ -14,6 +14,7 @@ import {
   LuGlobe,
   LuGroup,
   LuPlus,
+  LuPuzzle,
   LuRefreshCw,
   LuSettings,
   LuShieldCheck,
@@ -60,6 +61,8 @@ interface ProfileInfoDialogProps {
   onConfigureCamoufox?: (profile: BrowserProfile) => void;
   onCopyCookiesToProfile?: (profile: BrowserProfile) => void;
   onOpenCookieManagement?: (profile: BrowserProfile) => void;
+  onAssignExtensionGroup?: (profileIds: string[]) => void;
+  onOpenBypassRules?: (profile: BrowserProfile) => void;
   onCloneProfile?: (profile: BrowserProfile) => void;
   onDeleteProfile?: (profile: BrowserProfile) => void;
   crossOsUnlocked?: boolean;
@@ -103,6 +106,8 @@ export function ProfileInfoDialog({
   onConfigureCamoufox,
   onCopyCookiesToProfile,
   onOpenCookieManagement,
+  onAssignExtensionGroup,
+  onOpenBypassRules,
   onCloneProfile,
   onDeleteProfile,
   crossOsUnlocked = false,
@@ -117,10 +122,6 @@ export function ProfileInfoDialog({
   const [extensionGroupName, setExtensionGroupName] = React.useState<
     string | null
   >(null);
-  const [bypassRules, setBypassRules] = React.useState<string[]>([]);
-  const [newRule, setNewRule] = React.useState("");
-  const [bypassRulesDialogOpen, setBypassRulesDialogOpen] =
-    React.useState(false);
 
   React.useEffect(() => {
     if (!isOpen || !profile?.group_id) {
@@ -159,12 +160,8 @@ export function ProfileInfoDialog({
   React.useEffect(() => {
     if (!isOpen) {
       setCopied(false);
-      setNewRule("");
     }
-    if (isOpen && profile) {
-      setBypassRules(profile.proxy_bypass_rules ?? []);
-    }
-  }, [isOpen, profile]);
+  }, [isOpen]);
 
   if (!profile) return null;
 
@@ -204,31 +201,6 @@ export function ProfileInfoDialog({
   const handleAction = (action: () => void) => {
     onClose();
     action();
-  };
-
-  const updateBypassRules = async (rules: string[]) => {
-    if (!profile) return;
-    try {
-      await invoke("update_profile_proxy_bypass_rules", {
-        profileId: profile.id,
-        rules,
-      });
-      setBypassRules(rules);
-    } catch {
-      // ignore
-    }
-  };
-
-  const handleAddRule = () => {
-    const trimmed = newRule.trim();
-    if (!trimmed || bypassRules.includes(trimmed)) return;
-    const updated = [...bypassRules, trimmed];
-    setNewRule("");
-    void updateBypassRules(updated);
-  };
-
-  const handleRemoveRule = (rule: string) => {
-    void updateBypassRules(bypassRules.filter((r) => r !== rule));
   };
 
   const releaseLabel =
@@ -306,9 +278,17 @@ export function ProfileInfoDialog({
       hidden: profile.ephemeral === true,
     },
     {
+      icon: <LuPuzzle className="w-4 h-4" />,
+      label: t("profileInfo.actions.assignExtensionGroup"),
+      onClick: () => handleAction(() => onAssignExtensionGroup?.([profile.id])),
+      disabled: isDisabled || !crossOsUnlocked,
+      proBadge: !crossOsUnlocked,
+      hidden: profile.ephemeral === true,
+    },
+    {
       icon: <LuShieldCheck className="w-4 h-4" />,
       label: t("profileInfo.network.bypassRulesTitle"),
-      onClick: () => setBypassRulesDialogOpen(true),
+      onClick: () => handleAction(() => onOpenBypassRules?.(profile)),
     },
     {
       icon: <LuTrash2 className="w-4 h-4" />,
@@ -322,247 +302,254 @@ export function ProfileInfoDialog({
   const visibleActions = actions.filter((a) => !a.hidden);
 
   return (
-    <>
-      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col overflow-hidden">
-          <DialogHeader className="shrink-0">
-            <DialogTitle>{t("profileInfo.title")}</DialogTitle>
-          </DialogHeader>
-          <Tabs defaultValue="info" className="flex-1 min-h-0 flex flex-col">
-            <TabsList className="w-full shrink-0">
-              <TabsTrigger value="info" className="flex-1">
-                {t("profileInfo.tabs.info")}
-              </TabsTrigger>
-              <TabsTrigger value="settings" className="flex-1">
-                {t("profileInfo.tabs.settings")}
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="info" className="flex-1 min-h-0 flex flex-col">
-              <ScrollArea className="flex-1 min-h-0">
-                <div className="flex flex-col gap-4 py-3 pr-3">
-                  {/* Hero */}
-                  <div className="flex items-center gap-3">
-                    <div className="rounded-lg bg-muted p-2.5 shrink-0">
-                      <ProfileIcon className="w-8 h-8 text-foreground" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="text-base font-semibold truncate">
-                        {profile.name}
-                      </h3>
-                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                        <Badge variant="secondary" className="text-xs">
-                          {getBrowserDisplayName(profile.browser)}{" "}
-                          {profile.version}
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{t("profileInfo.title")}</DialogTitle>
+        </DialogHeader>
+        <Tabs defaultValue="info">
+          <TabsList className="w-full">
+            <TabsTrigger value="info" className="flex-1">
+              {t("profileInfo.tabs.info")}
+            </TabsTrigger>
+            <TabsTrigger value="settings" className="flex-1">
+              {t("profileInfo.tabs.settings")}
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="info">
+            <div className="overflow-y-auto max-h-[calc(80vh-12rem)] pr-1">
+              <div className="flex flex-col gap-4 py-3">
+                {/* Hero */}
+                <div className="flex items-center gap-3">
+                  <div className="rounded-lg bg-muted p-2.5 shrink-0">
+                    <ProfileIcon className="w-8 h-8 text-foreground" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-base font-semibold truncate">
+                      {profile.name}
+                    </h3>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                      <Badge variant="secondary" className="text-xs">
+                        {getBrowserDisplayName(profile.browser)}{" "}
+                        {profile.version}
+                      </Badge>
+                      <Badge variant="outline" className="text-xs">
+                        {releaseLabel}
+                      </Badge>
+                      {isRunning && (
+                        <Badge className="text-xs bg-primary/15 text-primary border-primary/25">
+                          {t("common.status.running")}
                         </Badge>
+                      )}
+                      {profile.ephemeral && (
                         <Badge variant="outline" className="text-xs">
-                          {releaseLabel}
+                          {t("profiles.ephemeralBadge")}
                         </Badge>
-                        {isRunning && (
-                          <Badge className="text-xs bg-primary/15 text-primary border-primary/25">
-                            {t("common.status.running")}
-                          </Badge>
-                        )}
-                        {profile.ephemeral && (
-                          <Badge variant="outline" className="text-xs">
-                            {t("profiles.ephemeralBadge")}
-                          </Badge>
-                        )}
-                        {showCrossOs && profile.host_os && (
-                          <Badge variant="outline" className="text-xs gap-1">
-                            <OSIcon os={profile.host_os} />
-                            {getOSDisplayName(profile.host_os)}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Profile ID */}
-                  <div className="flex items-center gap-2 rounded-md bg-muted/50 border px-3 py-2">
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      ID
-                    </span>
-                    <span className="font-mono text-xs truncate flex-1">
-                      {profile.id}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => void handleCopyId()}
-                      className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
-                    >
-                      {copied ? (
-                        <LuClipboardCheck className="w-3.5 h-3.5" />
-                      ) : (
-                        <LuClipboard className="w-3.5 h-3.5" />
                       )}
-                    </button>
-                  </div>
-
-                  {/* Network & Organization */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <InfoCard
-                      label={t("profileInfo.fields.proxyVpn")}
-                      value={networkLabel}
-                    />
-                    <InfoCard
-                      label={t("profileInfo.fields.group")}
-                      value={groupName ?? t("profileInfo.values.none")}
-                    />
-                    <InfoCard
-                      label={t("profileInfo.fields.extensionGroup")}
-                      value={extensionGroupName ?? t("profileInfo.values.none")}
-                    />
-                    <InfoCard
-                      label={t("profileInfo.fields.lastLaunched")}
-                      value={
-                        profile.last_launch
-                          ? formatRelativeTime(profile.last_launch)
-                          : t("profileInfo.values.never")
-                      }
-                    />
-                  </div>
-
-                  {/* Sync */}
-                  <div className="rounded-md bg-muted/50 border px-3 py-2.5 flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-muted-foreground">
-                        {t("profileInfo.fields.syncStatus")}
-                      </p>
-                      <p className="text-sm mt-0.5">{syncLabel}</p>
-                    </div>
-                    <Badge
-                      variant={
-                        syncMode === "Disabled" ? "outline" : "secondary"
-                      }
-                      className="text-xs shrink-0"
-                    >
-                      {syncMode === "Disabled"
-                        ? t("sync.mode.disabled")
-                        : syncStatus?.status === "syncing"
-                          ? t("common.status.syncing")
-                          : t("common.status.synced")}
-                    </Badge>
-                  </div>
-
-                  {/* Tags */}
-                  {hasTags && (
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-xs text-muted-foreground">
-                        {t("profileInfo.fields.tags")}
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {profile.tags?.map((tag) => (
-                          <Badge
-                            key={tag}
-                            variant="secondary"
-                            className="text-xs"
-                          >
-                            {tag}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Note */}
-                  {hasNote && (
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-xs text-muted-foreground">
-                        {t("profileInfo.fields.note")}
-                      </span>
-                      <p className="text-sm rounded-md bg-muted/50 border px-3 py-2 whitespace-pre-wrap break-words">
-                        {profile.note}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Team */}
-                  {profile.created_by_email && (
-                    <div className="rounded-md bg-muted/50 border px-3 py-2.5">
-                      <p className="text-xs text-muted-foreground">
-                        {t("sync.team.title")}
-                      </p>
-                      <p className="text-sm mt-0.5">
-                        {t("sync.team.createdBy", {
-                          email: profile.created_by_email,
-                        })}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </ScrollArea>
-            </TabsContent>
-            <TabsContent
-              value="settings"
-              className="flex-1 min-h-0 flex flex-col"
-            >
-              <ScrollArea className="flex-1 min-h-0">
-                <div className="flex flex-col py-1">
-                  {visibleActions.map((action) => (
-                    <button
-                      key={action.label}
-                      type="button"
-                      disabled={action.disabled}
-                      onClick={action.onClick}
-                      className={cn(
-                        "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors text-left w-full",
-                        "hover:bg-accent disabled:opacity-50 disabled:pointer-events-none",
-                        action.destructive &&
-                          "text-destructive hover:bg-destructive/10",
+                      {showCrossOs && profile.host_os && (
+                        <Badge variant="outline" className="text-xs gap-1">
+                          <OSIcon os={profile.host_os} />
+                          {getOSDisplayName(profile.host_os)}
+                        </Badge>
                       )}
-                    >
-                      {action.icon}
-                      <span className="flex-1 flex items-center gap-2">
-                        {action.label}
-                        {action.proBadge && <ProBadge />}
-                      </span>
-                      <LuChevronRight className="w-4 h-4 text-muted-foreground" />
-                    </button>
-                  ))}
+                    </div>
+                  </div>
                 </div>
-              </ScrollArea>
-            </TabsContent>
-          </Tabs>
-          <DialogFooter className="shrink-0">
-            <Button variant="outline" onClick={onClose}>
-              {t("common.buttons.close")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <ProfileBypassRulesDialog
-        isOpen={bypassRulesDialogOpen}
-        onClose={() => setBypassRulesDialogOpen(false)}
-        bypassRules={bypassRules}
-        newRule={newRule}
-        onNewRuleChange={setNewRule}
-        onAddRule={handleAddRule}
-        onRemoveRule={handleRemoveRule}
-      />
-    </>
+
+                {/* Profile ID */}
+                <div className="flex items-center gap-2 rounded-md bg-muted/50 border px-3 py-2">
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    ID
+                  </span>
+                  <span className="font-mono text-xs truncate flex-1">
+                    {profile.id}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void handleCopyId()}
+                    className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                  >
+                    {copied ? (
+                      <LuClipboardCheck className="w-3.5 h-3.5" />
+                    ) : (
+                      <LuClipboard className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
+
+                {/* Network & Organization */}
+                <div className="grid grid-cols-2 gap-2">
+                  <InfoCard
+                    label={t("profileInfo.fields.proxyVpn")}
+                    value={networkLabel}
+                  />
+                  <InfoCard
+                    label={t("profileInfo.fields.group")}
+                    value={groupName ?? t("profileInfo.values.none")}
+                  />
+                  <InfoCard
+                    label={t("profileInfo.fields.extensionGroup")}
+                    value={extensionGroupName ?? t("profileInfo.values.none")}
+                  />
+                  <InfoCard
+                    label={t("profileInfo.fields.lastLaunched")}
+                    value={
+                      profile.last_launch
+                        ? formatRelativeTime(profile.last_launch)
+                        : t("profileInfo.values.never")
+                    }
+                  />
+                </div>
+
+                {/* Sync */}
+                <div className="rounded-md bg-muted/50 border px-3 py-2.5 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-muted-foreground">
+                      {t("profileInfo.fields.syncStatus")}
+                    </p>
+                    <p className="text-sm mt-0.5">{syncLabel}</p>
+                  </div>
+                  <Badge
+                    variant={syncMode === "Disabled" ? "outline" : "secondary"}
+                    className="text-xs shrink-0"
+                  >
+                    {syncMode === "Disabled"
+                      ? t("sync.mode.disabled")
+                      : syncStatus?.status === "syncing"
+                        ? t("common.status.syncing")
+                        : t("common.status.synced")}
+                  </Badge>
+                </div>
+
+                {/* Tags */}
+                {hasTags && (
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-xs text-muted-foreground">
+                      {t("profileInfo.fields.tags")}
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {profile.tags?.map((tag) => (
+                        <Badge
+                          key={tag}
+                          variant="secondary"
+                          className="text-xs"
+                        >
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Note */}
+                {hasNote && (
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-xs text-muted-foreground">
+                      {t("profileInfo.fields.note")}
+                    </span>
+                    <p className="text-sm rounded-md bg-muted/50 border px-3 py-2 whitespace-pre-wrap break-words">
+                      {profile.note}
+                    </p>
+                  </div>
+                )}
+
+                {/* Team */}
+                {profile.created_by_email && (
+                  <div className="rounded-md bg-muted/50 border px-3 py-2.5">
+                    <p className="text-xs text-muted-foreground">
+                      {t("sync.team.title")}
+                    </p>
+                    <p className="text-sm mt-0.5">
+                      {t("sync.team.createdBy", {
+                        email: profile.created_by_email,
+                      })}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </TabsContent>
+          <TabsContent value="settings">
+            <div className="overflow-y-auto max-h-[calc(80vh-12rem)]">
+              <div className="flex flex-col py-1">
+                {visibleActions.map((action) => (
+                  <button
+                    key={action.label}
+                    type="button"
+                    disabled={action.disabled}
+                    onClick={action.onClick}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors text-left w-full",
+                      "hover:bg-accent disabled:opacity-50 disabled:pointer-events-none",
+                      action.destructive &&
+                        "text-destructive hover:bg-destructive/10",
+                    )}
+                  >
+                    {action.icon}
+                    <span className="flex-1 flex items-center gap-2">
+                      {action.label}
+                      {action.proBadge && <ProBadge />}
+                    </span>
+                    <LuChevronRight className="w-4 h-4 text-muted-foreground" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 interface ProfileBypassRulesDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  bypassRules: string[];
-  newRule: string;
-  onNewRuleChange: (value: string) => void;
-  onAddRule: () => void;
-  onRemoveRule: (rule: string) => void;
+  profileId: string | null;
+  initialRules?: string[];
 }
 
-function ProfileBypassRulesDialog({
+export function ProfileBypassRulesDialog({
   isOpen,
   onClose,
-  bypassRules,
-  newRule,
-  onNewRuleChange,
-  onAddRule,
-  onRemoveRule,
+  profileId,
+  initialRules,
 }: ProfileBypassRulesDialogProps) {
   const { t } = useTranslation();
+  const [bypassRules, setBypassRules] = React.useState<string[]>([]);
+  const [newRule, setNewRule] = React.useState("");
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setBypassRules(initialRules ?? []);
+      setNewRule("");
+    }
+  }, [isOpen, initialRules]);
+
+  const updateBypassRules = async (rules: string[]) => {
+    if (!profileId) return;
+    try {
+      await invoke("update_profile_proxy_bypass_rules", {
+        profileId,
+        rules,
+      });
+      setBypassRules(rules);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleAddRule = () => {
+    const trimmed = newRule.trim();
+    if (!trimmed || bypassRules.includes(trimmed)) return;
+    const updated = [...bypassRules, trimmed];
+    setNewRule("");
+    void updateBypassRules(updated);
+  };
+
+  const handleRemoveRule = (rule: string) => {
+    void updateBypassRules(bypassRules.filter((r) => r !== rule));
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -578,14 +565,18 @@ function ProfileBypassRulesDialog({
             <div className="flex gap-2">
               <Input
                 value={newRule}
-                onChange={(e) => onNewRuleChange(e.target.value)}
+                onChange={(e) => setNewRule(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") onAddRule();
+                  if (e.key === "Enter") handleAddRule();
                 }}
                 placeholder={t("profileInfo.network.rulePlaceholder")}
                 className="flex-1 text-sm"
               />
-              <Button size="sm" onClick={onAddRule} disabled={!newRule.trim()}>
+              <Button
+                size="sm"
+                onClick={handleAddRule}
+                disabled={!newRule.trim()}
+              >
                 <LuPlus className="w-4 h-4 mr-1" />
                 {t("profileInfo.network.addRule")}
               </Button>
@@ -604,7 +595,7 @@ function ProfileBypassRulesDialog({
                     <span className="font-mono text-xs truncate">{rule}</span>
                     <button
                       type="button"
-                      onClick={() => onRemoveRule(rule)}
+                      onClick={() => handleRemoveRule(rule)}
                       className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
                     >
                       <LuX className="w-3.5 h-3.5" />

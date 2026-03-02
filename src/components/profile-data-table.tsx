@@ -23,11 +23,15 @@ import {
   LuCookie,
   LuInfo,
   LuLock,
+  LuPuzzle,
   LuTrash2,
   LuUsers,
 } from "react-icons/lu";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
-import { ProfileInfoDialog } from "@/components/profile-info-dialog";
+import {
+  ProfileBypassRulesDialog,
+  ProfileInfoDialog,
+} from "@/components/profile-info-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -791,6 +795,8 @@ interface ProfilesDataTableProps {
   onBulkGroupAssignment?: () => void;
   onBulkProxyAssignment?: () => void;
   onBulkCopyCookies?: () => void;
+  onBulkExtensionGroupAssignment?: () => void;
+  onAssignExtensionGroup?: (profileIds: string[]) => void;
   onOpenProfileSyncDialog?: (profile: BrowserProfile) => void;
   onToggleProfileSync?: (profile: BrowserProfile) => void;
   crossOsUnlocked?: boolean;
@@ -816,6 +822,8 @@ export function ProfilesDataTable({
   onBulkGroupAssignment,
   onBulkProxyAssignment,
   onBulkCopyCookies,
+  onBulkExtensionGroupAssignment,
+  onAssignExtensionGroup,
   onOpenProfileSyncDialog,
   onToggleProfileSync,
   crossOsUnlocked = false,
@@ -885,6 +893,8 @@ export function ProfilesDataTable({
     React.useState<BrowserProfile | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [profileForInfoDialog, setProfileForInfoDialog] =
+    React.useState<BrowserProfile | null>(null);
+  const [bypassRulesProfile, setBypassRulesProfile] =
     React.useState<BrowserProfile | null>(null);
   const [launchingProfiles, setLaunchingProfiles] = React.useState<Set<string>>(
     new Set(),
@@ -2505,6 +2515,8 @@ export function ProfilesDataTable({
               onConfigureCamoufox={onConfigureCamoufox}
               onCopyCookiesToProfile={onCopyCookiesToProfile}
               onOpenCookieManagement={onOpenCookieManagement}
+              onAssignExtensionGroup={onAssignExtensionGroup}
+              onOpenBypassRules={(profile) => setBypassRulesProfile(profile)}
               onCloneProfile={onCloneProfile}
               onDeleteProfile={(profile) => {
                 setProfileForInfoDialog(null);
@@ -2538,6 +2550,27 @@ export function ProfilesDataTable({
             <FiWifi />
           </DataTableActionBarAction>
         )}
+        {onBulkExtensionGroupAssignment && (
+          <DataTableActionBarAction
+            tooltip={
+              crossOsUnlocked
+                ? "Assign Extension Group"
+                : "Assign Extension Group (Pro)"
+            }
+            onClick={onBulkExtensionGroupAssignment}
+            size="icon"
+            disabled={!crossOsUnlocked}
+          >
+            <span className="relative">
+              <LuPuzzle />
+              {!crossOsUnlocked && (
+                <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 text-[6px] font-bold leading-none bg-primary text-primary-foreground px-0.5 rounded-sm">
+                  PRO
+                </span>
+              )}
+            </span>
+          </DataTableActionBarAction>
+        )}
         {onBulkCopyCookies && (
           <DataTableActionBarAction
             tooltip={crossOsUnlocked ? "Copy Cookies" : "Copy Cookies (Pro)"}
@@ -2545,7 +2578,14 @@ export function ProfilesDataTable({
             size="icon"
             disabled={!crossOsUnlocked}
           >
-            <LuCookie />
+            <span className="relative">
+              <LuCookie />
+              {!crossOsUnlocked && (
+                <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 text-[6px] font-bold leading-none bg-primary text-primary-foreground px-0.5 rounded-sm">
+                  PRO
+                </span>
+              )}
+            </span>
           </DataTableActionBarAction>
         )}
         {onBulkDelete && (
@@ -2568,6 +2608,12 @@ export function ProfilesDataTable({
           profileName={trafficDialogProfile.name}
         />
       )}
+      <ProfileBypassRulesDialog
+        isOpen={bypassRulesProfile !== null}
+        onClose={() => setBypassRulesProfile(null)}
+        profileId={bypassRulesProfile?.id ?? null}
+        initialRules={bypassRulesProfile?.proxy_bypass_rules ?? []}
+      />
     </>
   );
 }

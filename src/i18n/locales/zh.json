@@ -730,7 +730,8 @@
       "ruleTypes": "支持主机名、IP地址和正则表达式模式。"
     },
     "actions": {
-      "manageCookies": "管理 Cookie"
+      "manageCookies": "管理 Cookie",
+      "assignExtensionGroup": "分配扩展程序组"
     },
     "clone": {
       "title": "克隆配置文件",
@@ -774,7 +775,11 @@
     "deleteGroupConfirmTitle": "删除扩展程序组",
     "deleteGroupConfirmDescription": "确定要删除分组「{{name}}」吗？此操作无法撤消。",
     "invalidFileType": "无效的文件类型。请上传 .crx、.xpi 或 .zip 文件。",
-    "readError": "读取扩展程序文件失败。"
+    "readError": "读取扩展程序文件失败。",
+    "assignTitle": "分配扩展程序组",
+    "assignDescription": "将 {{count}} 个选定的配置文件分配到扩展程序组。",
+    "noGroup": "无（不使用扩展程序组）",
+    "assignSuccess": "扩展程序组分配成功"
   },
   "pro": {
     "badge": "PRO",

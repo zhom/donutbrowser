@@ -10,6 +10,7 @@ import {
   LuUsers,
   LuX,
 } from "react-icons/lu";
+import { cn } from "@/lib/utils";
 import { Logo } from "./icons/logo";
 import { Button } from "./ui/button";
 import { CardTitle } from "./ui/card";
@@ -20,6 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { Input } from "./ui/input";
+import { ProBadge } from "./ui/pro-badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 type Props = {
@@ -33,6 +35,7 @@ type Props = {
   onExtensionManagementDialogOpen: (open: boolean) => void;
   searchQuery: string;
   onSearchQueryChange: (query: string) => void;
+  crossOsUnlocked?: boolean;
 };
 
 const HomeHeader = ({
@@ -46,6 +49,7 @@ const HomeHeader = ({
   onExtensionManagementDialogOpen,
   searchQuery,
   onSearchQueryChange,
+  crossOsUnlocked = false,
 }: Props) => {
   const { t } = useTranslation();
   const handleLogoClick = () => {
@@ -134,12 +138,15 @@ const HomeHeader = ({
               {t("header.menu.groups")}
             </DropdownMenuItem>
             <DropdownMenuItem
+              disabled={!crossOsUnlocked}
+              className={cn(!crossOsUnlocked && "opacity-50")}
               onClick={() => {
                 onExtensionManagementDialogOpen(true);
               }}
             >
               <LuPuzzle className="mr-2 w-4 h-4" />
               {t("header.menu.extensions")}
+              {!crossOsUnlocked && <ProBadge className="ml-auto" />}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => {

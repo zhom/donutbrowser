@@ -11,6 +11,7 @@ import { CookieCopyDialog } from "@/components/cookie-copy-dialog";
 import { CookieManagementDialog } from "@/components/cookie-management-dialog";
 import { CreateProfileDialog } from "@/components/create-profile-dialog";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
+import { ExtensionGroupAssignmentDialog } from "@/components/extension-group-assignment-dialog";
 import { ExtensionManagementDialog } from "@/components/extension-management-dialog";
 import { GroupAssignmentDialog } from "@/components/group-assignment-dialog";
 import { GroupBadges } from "@/components/group-badges";
@@ -146,6 +147,14 @@ export default function Home() {
     useState(false);
   const [groupAssignmentDialogOpen, setGroupAssignmentDialogOpen] =
     useState(false);
+  const [
+    extensionGroupAssignmentDialogOpen,
+    setExtensionGroupAssignmentDialogOpen,
+  ] = useState(false);
+  const [
+    selectedProfilesForExtensionGroup,
+    setSelectedProfilesForExtensionGroup,
+  ] = useState<string[]>([]);
   const [proxyAssignmentDialogOpen, setProxyAssignmentDialogOpen] =
     useState(false);
   const [cookieCopyDialogOpen, setCookieCopyDialogOpen] = useState(false);
@@ -701,6 +710,22 @@ export default function Home() {
     setSelectedProfiles([]);
   }, [selectedProfiles, handleAssignProfilesToGroup]);
 
+  const handleAssignExtensionGroup = useCallback((profileIds: string[]) => {
+    setSelectedProfilesForExtensionGroup(profileIds);
+    setExtensionGroupAssignmentDialogOpen(true);
+  }, []);
+
+  const handleBulkExtensionGroupAssignment = useCallback(() => {
+    if (selectedProfiles.length === 0) return;
+    handleAssignExtensionGroup(selectedProfiles);
+    setSelectedProfiles([]);
+  }, [selectedProfiles, handleAssignExtensionGroup]);
+
+  const handleExtensionGroupAssignmentComplete = useCallback(() => {
+    setExtensionGroupAssignmentDialogOpen(false);
+    setSelectedProfilesForExtensionGroup([]);
+  }, []);
+
   const handleAssignProfilesToProxy = useCallback((profileIds: string[]) => {
     setSelectedProfilesForProxy(profileIds);
     setProxyAssignmentDialogOpen(true);
@@ -1042,6 +1067,7 @@ export default function Home() {
             onExtensionManagementDialogOpen={setExtensionManagementDialogOpen}
             searchQuery={searchQuery}
             onSearchQueryChange={setSearchQuery}
+            crossOsUnlocked={crossOsUnlocked}
           />
         </div>
         <div className="w-full mt-2.5">
@@ -1072,6 +1098,8 @@ export default function Home() {
             onBulkGroupAssignment={handleBulkGroupAssignment}
             onBulkProxyAssignment={handleBulkProxyAssignment}
             onBulkCopyCookies={handleBulkCopyCookies}
+            onBulkExtensionGroupAssignment={handleBulkExtensionGroupAssignment}
+            onAssignExtensionGroup={handleAssignExtensionGroup}
             onOpenProfileSyncDialog={handleOpenProfileSyncDialog}
             onToggleProfileSync={handleToggleProfileSync}
             crossOsUnlocked={crossOsUnlocked}
@@ -1189,6 +1217,16 @@ export default function Home() {
         }}
         selectedProfiles={selectedProfilesForGroup}
         onAssignmentComplete={handleGroupAssignmentComplete}
+        profiles={profiles}
+      />
+
+      <ExtensionGroupAssignmentDialog
+        isOpen={extensionGroupAssignmentDialogOpen}
+        onClose={() => {
+          setExtensionGroupAssignmentDialogOpen(false);
+        }}
+        selectedProfiles={selectedProfilesForExtensionGroup}
+        onAssignmentComplete={handleExtensionGroupAssignmentComplete}
         profiles={profiles}
       />
 
