@@ -426,8 +426,8 @@ export function ProfileInfoDialog({
                 {t("profileInfo.tabs.settings")}
               </TabsTrigger>
             </TabsList>
-            <TabsContent value="info" className="flex-1 min-h-0">
-              <ScrollArea className="h-full">
+            <TabsContent value="info" className="flex-1 min-h-0 flex flex-col">
+              <ScrollArea className="flex-1 min-h-0">
                 <div className="flex flex-col items-center gap-1 py-3">
                   <ProfileIcon className="w-12 h-12 text-muted-foreground" />
                   <h3 className="text-lg font-semibold">{profile.name}</h3>
@@ -447,8 +447,11 @@ export function ProfileInfoDialog({
                 </div>
               </ScrollArea>
             </TabsContent>
-            <TabsContent value="settings" className="flex-1 min-h-0">
-              <ScrollArea className="h-full">
+            <TabsContent
+              value="settings"
+              className="flex-1 min-h-0 flex flex-col"
+            >
+              <ScrollArea className="flex-1 min-h-0">
                 <div className="flex flex-col py-1">
                   {visibleActions.map((action) => (
                     <button
