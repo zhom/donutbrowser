@@ -678,6 +678,35 @@
       "error": "Échec de l'exportation des cookies"
     }
   },
+  "profileInfo": {
+    "title": "Détails du Profil",
+    "tabs": {
+      "info": "Info",
+      "settings": "Paramètres"
+    },
+    "fields": {
+      "profileId": "ID du Profil",
+      "browser": "Navigateur",
+      "releaseType": "Type de Version",
+      "proxyVpn": "Proxy / VPN",
+      "group": "Groupe",
+      "tags": "Tags",
+      "note": "Note",
+      "syncStatus": "État de Synchronisation",
+      "lastLaunched": "Dernier Lancement",
+      "hostOs": "OS Hôte",
+      "ephemeral": "Éphémère"
+    },
+    "values": {
+      "none": "Aucun",
+      "never": "Jamais",
+      "copied": "Copié !",
+      "yes": "Oui"
+    },
+    "actions": {
+      "manageCookies": "Gérer les Cookies"
+    }
+  },
   "pro": {
     "badge": "PRO",
     "fingerprintLocked": "La modification d'empreinte est une fonctionnalité Pro",

@@ -292,8 +292,20 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Proxy Bandwidth</span>
                   <span>
-                    {user.proxyBandwidthUsedMb} / {user.proxyBandwidthLimitMb}{" "}
+                    {user.proxyBandwidthUsedMb} /{" "}
+                    {user.proxyBandwidthLimitMb +
+                      (user.proxyBandwidthExtraMb || 0)}{" "}
                     MB
+                  </span>
+                </div>
+              )}
+              {(user.proxyBandwidthExtraMb || 0) > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Extra Bandwidth</span>
+                  <span>
+                    {user.proxyBandwidthExtraMb >= 1000
+                      ? `${(user.proxyBandwidthExtraMb / 1000).toFixed(1)} GB`
+                      : `${user.proxyBandwidthExtraMb} MB`}
                   </span>
                 </div>
               )}

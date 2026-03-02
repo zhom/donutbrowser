@@ -678,6 +678,35 @@
       "error": "Cookieのエクスポートに失敗しました"
     }
   },
+  "profileInfo": {
+    "title": "プロフィール詳細",
+    "tabs": {
+      "info": "情報",
+      "settings": "設定"
+    },
+    "fields": {
+      "profileId": "プロフィールID",
+      "browser": "ブラウザ",
+      "releaseType": "リリースタイプ",
+      "proxyVpn": "プロキシ / VPN",
+      "group": "グループ",
+      "tags": "タグ",
+      "note": "メモ",
+      "syncStatus": "同期ステータス",
+      "lastLaunched": "最終起動",
+      "hostOs": "ホストOS",
+      "ephemeral": "エフェメラル"
+    },
+    "values": {
+      "none": "なし",
+      "never": "なし",
+      "copied": "コピーしました！",
+      "yes": "はい"
+    },
+    "actions": {
+      "manageCookies": "Cookieを管理"
+    }
+  },
   "pro": {
     "badge": "PRO",
     "fingerprintLocked": "フィンガープリント編集はプロ機能です",

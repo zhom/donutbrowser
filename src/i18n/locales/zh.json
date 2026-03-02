@@ -678,6 +678,35 @@
       "error": "导出 Cookies 失败"
     }
   },
+  "profileInfo": {
+    "title": "配置文件详情",
+    "tabs": {
+      "info": "信息",
+      "settings": "设置"
+    },
+    "fields": {
+      "profileId": "配置文件 ID",
+      "browser": "浏览器",
+      "releaseType": "发布类型",
+      "proxyVpn": "代理 / VPN",
+      "group": "分组",
+      "tags": "标签",
+      "note": "备注",
+      "syncStatus": "同步状态",
+      "lastLaunched": "上次启动",
+      "hostOs": "主机操作系统",
+      "ephemeral": "临时"
+    },
+    "values": {
+      "none": "无",
+      "never": "从未",
+      "copied": "已复制！",
+      "yes": "是"
+    },
+    "actions": {
+      "manageCookies": "管理 Cookie"
+    }
+  },
   "pro": {
     "badge": "PRO",
     "fingerprintLocked": "指纹编辑是 Pro 功能",

@@ -52,6 +52,7 @@ export interface CloudUser {
   cloudProfilesUsed: number;
   proxyBandwidthLimitMb: number;
   proxyBandwidthUsedMb: number;
+  proxyBandwidthExtraMb: number;
 }
 
 export interface CloudAuthState {

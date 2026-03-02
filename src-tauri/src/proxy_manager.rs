@@ -769,6 +769,14 @@ impl ProxyManager {
     Ok(())
   }
 
+  // Check if a proxy is cloud-managed or cloud-derived (needs fresh credentials)
+  pub fn is_cloud_or_derived(&self, proxy_id: &str) -> bool {
+    let stored_proxies = self.stored_proxies.lock().unwrap();
+    stored_proxies
+      .get(proxy_id)
+      .is_some_and(|p| p.is_cloud_managed || p.is_cloud_derived)
+  }
+
   // Get proxy settings for a stored proxy ID
   pub fn get_proxy_settings_by_id(&self, proxy_id: &str) -> Option<ProxySettings> {
     let stored_proxies = self.stored_proxies.lock().unwrap();

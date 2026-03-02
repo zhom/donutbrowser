@@ -678,6 +678,35 @@
       "error": "Falha ao exportar cookies"
     }
   },
+  "profileInfo": {
+    "title": "Detalhes do Perfil",
+    "tabs": {
+      "info": "Info",
+      "settings": "Configurações"
+    },
+    "fields": {
+      "profileId": "ID do Perfil",
+      "browser": "Navegador",
+      "releaseType": "Tipo de Versão",
+      "proxyVpn": "Proxy / VPN",
+      "group": "Grupo",
+      "tags": "Tags",
+      "note": "Nota",
+      "syncStatus": "Status de Sincronização",
+      "lastLaunched": "Último Lançamento",
+      "hostOs": "SO Host",
+      "ephemeral": "Efêmero"
+    },
+    "values": {
+      "none": "Nenhum",
+      "never": "Nunca",
+      "copied": "Copiado!",
+      "yes": "Sim"
+    },
+    "actions": {
+      "manageCookies": "Gerenciar Cookies"
+    }
+  },
   "pro": {
     "badge": "PRO",
     "fingerprintLocked": "A edição de impressão digital é um recurso Pro",

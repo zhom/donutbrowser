@@ -362,20 +362,15 @@ impl VersionUpdater {
       eprintln!("Failed to emit completion progress: {e}");
     }
 
-    // After all version updates are complete, trigger auto-update check
-    if total_new_versions > 0 {
-      println!(
-        "Found {total_new_versions} new versions across all browsers. Checking for auto-updates..."
-      );
-
-      // Trigger auto-update check which will automatically download browsers
-      self
-        .auto_updater
-        .check_for_updates_with_progress(app_handle)
-        .await;
-    } else {
-      println!("No new versions found, skipping auto-update check");
-    }
+    // Always check for auto-updates — profiles may still be on older versions
+    // even if no new versions were found in the cache this cycle
+    println!(
+      "Checking for browser auto-updates (found {total_new_versions} new versions in cache)..."
+    );
+    self
+      .auto_updater
+      .check_for_updates_with_progress(app_handle)
+      .await;
 
     Ok(results)
   }

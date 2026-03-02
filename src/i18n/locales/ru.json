@@ -678,6 +678,35 @@
       "error": "Ошибка экспорта cookies"
     }
   },
+  "profileInfo": {
+    "title": "Детали профиля",
+    "tabs": {
+      "info": "Информация",
+      "settings": "Настройки"
+    },
+    "fields": {
+      "profileId": "ID профиля",
+      "browser": "Браузер",
+      "releaseType": "Тип релиза",
+      "proxyVpn": "Прокси / VPN",
+      "group": "Группа",
+      "tags": "Теги",
+      "note": "Заметка",
+      "syncStatus": "Статус синхронизации",
+      "lastLaunched": "Последний запуск",
+      "hostOs": "ОС хоста",
+      "ephemeral": "Эфемерный"
+    },
+    "values": {
+      "none": "Нет",
+      "never": "Никогда",
+      "copied": "Скопировано!",
+      "yes": "Да"
+    },
+    "actions": {
+      "manageCookies": "Управление Cookie"
+    }
+  },
   "pro": {
     "badge": "PRO",
     "fingerprintLocked": "Редактирование отпечатка — функция Pro",

@@ -16,16 +16,17 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { FaApple, FaLinux, FaWindows } from "react-icons/fa";
 import { FiWifi } from "react-icons/fi";
-import { IoEllipsisHorizontal } from "react-icons/io5";
 import {
   LuCheck,
   LuChevronDown,
   LuChevronUp,
   LuCookie,
+  LuInfo,
   LuTrash2,
   LuUsers,
 } from "react-icons/lu";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
+import { ProfileInfoDialog } from "@/components/profile-info-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -38,17 +39,10 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { ProBadge } from "@/components/ui/pro-badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Table,
@@ -868,6 +862,8 @@ export function ProfilesDataTable({
   const [profileToDelete, setProfileToDelete] =
     React.useState<BrowserProfile | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
+  const [profileForInfoDialog, setProfileForInfoDialog] =
+    React.useState<BrowserProfile | null>(null);
   const [launchingProfiles, setLaunchingProfiles] = React.useState<Set<string>>(
     new Set(),
   );
@@ -2292,123 +2288,18 @@ export function ProfilesDataTable({
         cell: ({ row, table }) => {
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
-          const isCrossOs = isCrossOsProfile(profile);
-          const isRunning =
-            meta.isClient && meta.runningProfiles.has(profile.id);
-          const isLaunching = meta.launchingProfiles.has(profile.id);
-          const isStopping = meta.stoppingProfiles.has(profile.id);
-          const isDisabled =
-            isRunning || isLaunching || isStopping || isCrossOs;
-          const isDeleteDisabled = isRunning || isLaunching || isStopping;
 
           return (
             <div className="flex justify-end items-center">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    className="p-0 w-8 h-8"
-                    disabled={!meta.isClient}
-                  >
-                    <span className="sr-only">Open menu</span>
-                    <IoEllipsisHorizontal className="w-4 h-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={() => {
-                      meta.onOpenTrafficDialog?.(profile.id);
-                    }}
-                    disabled={isCrossOs}
-                  >
-                    {meta.t("profiles.actions.viewNetwork")}
-                  </DropdownMenuItem>
-                  {!profile.ephemeral && (
-                    <DropdownMenuItem
-                      onClick={() => {
-                        meta.onOpenProfileSyncDialog?.(profile);
-                      }}
-                      disabled={isCrossOs}
-                    >
-                      {meta.t("profiles.actions.syncSettings")}
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem
-                    onClick={() => {
-                      meta.onAssignProfilesToGroup?.([profile.id]);
-                    }}
-                    disabled={isDisabled}
-                  >
-                    {meta.t("profiles.actions.assignToGroup")}
-                  </DropdownMenuItem>
-                  {(profile.browser === "camoufox" ||
-                    profile.browser === "wayfern") &&
-                    meta.onConfigureCamoufox && (
-                      <DropdownMenuItem
-                        onClick={() => {
-                          meta.onConfigureCamoufox?.(profile);
-                        }}
-                        disabled={isDisabled}
-                      >
-                        {meta.t("profiles.actions.changeFingerprint")}
-                      </DropdownMenuItem>
-                    )}
-                  {(profile.browser === "camoufox" ||
-                    profile.browser === "wayfern") &&
-                    !profile.ephemeral &&
-                    meta.onCopyCookiesToProfile && (
-                      <DropdownMenuItem
-                        onClick={() => {
-                          if (meta.crossOsUnlocked) {
-                            meta.onCopyCookiesToProfile?.(profile);
-                          }
-                        }}
-                        disabled={isDisabled || !meta.crossOsUnlocked}
-                      >
-                        <span className="flex items-center gap-2">
-                          {meta.t("profiles.actions.copyCookiesToProfile")}
-                          {!meta.crossOsUnlocked && <ProBadge />}
-                        </span>
-                      </DropdownMenuItem>
-                    )}
-                  {(profile.browser === "camoufox" ||
-                    profile.browser === "wayfern") &&
-                    !profile.ephemeral &&
-                    meta.onOpenCookieManagement && (
-                      <DropdownMenuItem
-                        onClick={() => {
-                          if (meta.crossOsUnlocked) {
-                            meta.onOpenCookieManagement?.(profile);
-                          }
-                        }}
-                        disabled={isDisabled || !meta.crossOsUnlocked}
-                      >
-                        <span className="flex items-center gap-2">
-                          {meta.t("cookies.management.menuItem")}
-                          {!meta.crossOsUnlocked && <ProBadge />}
-                        </span>
-                      </DropdownMenuItem>
-                    )}
-                  {!profile.ephemeral && (
-                    <DropdownMenuItem
-                      onClick={() => {
-                        meta.onCloneProfile?.(profile);
-                      }}
-                      disabled={isDisabled}
-                    >
-                      {meta.t("profiles.actions.clone")}
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setProfileToDelete(profile);
-                    }}
-                    disabled={isDeleteDisabled}
-                  >
-                    {meta.t("profiles.actions.delete")}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <Button
+                variant="ghost"
+                className="p-0 w-8 h-8"
+                disabled={!meta.isClient}
+                onClick={() => setProfileForInfoDialog(profile)}
+              >
+                <span className="sr-only">Profile info</span>
+                <LuInfo className="w-4 h-4" />
+              </Button>
             </div>
           );
         },
@@ -2512,6 +2403,45 @@ export function ProfilesDataTable({
         confirmButtonText="Delete Profile"
         isLoading={isDeleting}
       />
+      {profileForInfoDialog &&
+        (() => {
+          const infoProfile = profileForInfoDialog;
+          const infoIsRunning =
+            browserState.isClient && runningProfiles.has(infoProfile.id);
+          const infoIsLaunching = launchingProfiles.has(infoProfile.id);
+          const infoIsStopping = stoppingProfiles.has(infoProfile.id);
+          const infoIsCrossOs = isCrossOsProfile(infoProfile);
+          const infoIsDisabled =
+            infoIsRunning || infoIsLaunching || infoIsStopping || infoIsCrossOs;
+          return (
+            <ProfileInfoDialog
+              isOpen={profileForInfoDialog !== null}
+              onClose={() => setProfileForInfoDialog(null)}
+              profile={infoProfile}
+              storedProxies={storedProxies}
+              vpnConfigs={vpnConfigs}
+              onOpenTrafficDialog={(profileId) => {
+                const profile = profiles.find((p) => p.id === profileId);
+                setTrafficDialogProfile({ id: profileId, name: profile?.name });
+              }}
+              onOpenProfileSyncDialog={onOpenProfileSyncDialog}
+              onAssignProfilesToGroup={onAssignProfilesToGroup}
+              onConfigureCamoufox={onConfigureCamoufox}
+              onCopyCookiesToProfile={onCopyCookiesToProfile}
+              onOpenCookieManagement={onOpenCookieManagement}
+              onCloneProfile={onCloneProfile}
+              onDeleteProfile={(profile) => {
+                setProfileForInfoDialog(null);
+                setProfileToDelete(profile);
+              }}
+              crossOsUnlocked={crossOsUnlocked}
+              isRunning={infoIsRunning}
+              isDisabled={infoIsDisabled}
+              isCrossOs={infoIsCrossOs}
+              syncStatuses={syncStatuses}
+            />
+          );
+        })()}
       <DataTableActionBar table={table}>
         <DataTableActionBarSelection table={table} />
         {onBulkGroupAssignment && (

@@ -37,6 +37,8 @@ pub struct CloudUser {
   pub proxy_bandwidth_limit_mb: i64,
   #[serde(rename = "proxyBandwidthUsedMb")]
   pub proxy_bandwidth_used_mb: i64,
+  #[serde(rename = "proxyBandwidthExtraMb", default)]
+  pub proxy_bandwidth_extra_mb: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

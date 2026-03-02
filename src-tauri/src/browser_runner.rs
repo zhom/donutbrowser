@@ -1,5 +1,6 @@
 use crate::browser::{create_browser, BrowserType, ProxySettings};
 use crate::camoufox_manager::{CamoufoxConfig, CamoufoxManager};
+use crate::cloud_auth::CLOUD_AUTH;
 use crate::downloaded_browsers_registry::DownloadedBrowsersRegistry;
 use crate::events;
 use crate::platform_browser;
@@ -35,6 +36,17 @@ impl BrowserRunner {
 
   pub fn get_binaries_dir(&self) -> PathBuf {
     crate::app_dirs::binaries_dir()
+  }
+
+  /// Refresh cloud proxy credentials if the profile uses a cloud or cloud-derived proxy,
+  /// then resolve the proxy settings.
+  async fn resolve_proxy_with_refresh(&self, proxy_id: Option<&String>) -> Option<ProxySettings> {
+    let proxy_id = proxy_id?;
+    if PROXY_MANAGER.is_cloud_or_derived(proxy_id) {
+      log::info!("Refreshing cloud proxy credentials before launch for proxy {proxy_id}");
+      CLOUD_AUTH.sync_cloud_proxy().await;
+    }
+    PROXY_MANAGER.get_proxy_settings_by_id(proxy_id)
   }
 
   /// Get the executable path for a browser profile
@@ -92,10 +104,10 @@ impl BrowserRunner {
       });
 
       // Always start a local proxy for Camoufox (for traffic monitoring and geoip support)
-      let mut upstream_proxy = profile
-        .proxy_id
-        .as_ref()
-        .and_then(|id| PROXY_MANAGER.get_proxy_settings_by_id(id));
+      // Refresh cloud proxy credentials if needed before resolving
+      let mut upstream_proxy = self
+        .resolve_proxy_with_refresh(profile.proxy_id.as_ref())
+        .await;
 
       // If profile has a VPN instead of proxy, start VPN worker and use it as upstream
       if upstream_proxy.is_none() {
@@ -332,10 +344,10 @@ impl BrowserRunner {
       });
 
       // Always start a local proxy for Wayfern (for traffic monitoring and geoip support)
-      let mut upstream_proxy = profile
-        .proxy_id
-        .as_ref()
-        .and_then(|id| PROXY_MANAGER.get_proxy_settings_by_id(id));
+      // Refresh cloud proxy credentials if needed before resolving
+      let mut upstream_proxy = self
+        .resolve_proxy_with_refresh(profile.proxy_id.as_ref())
+        .await;
 
       // If profile has a VPN instead of proxy, start VPN worker and use it as upstream
       if upstream_proxy.is_none() {
@@ -567,11 +579,10 @@ impl BrowserRunner {
       // Continue anyway, the error might not be critical
     }
 
-    // Get stored proxy settings for later use (removed as we handle this in proxy startup)
-    let _stored_proxy_settings = profile
-      .proxy_id
-      .as_ref()
-      .and_then(|id| PROXY_MANAGER.get_proxy_settings_by_id(id));
+    // Refresh cloud proxy credentials if needed before resolving
+    let _stored_proxy_settings = self
+      .resolve_proxy_with_refresh(profile.proxy_id.as_ref())
+      .await;
 
     // Use provided local proxy for Chromium-based browsers launch arguments
     let proxy_for_launch_args: Option<&ProxySettings> = local_proxy_settings;

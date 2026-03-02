@@ -678,6 +678,35 @@
       "error": "Failed to export cookies"
     }
   },
+  "profileInfo": {
+    "title": "Profile Details",
+    "tabs": {
+      "info": "Info",
+      "settings": "Settings"
+    },
+    "fields": {
+      "profileId": "Profile ID",
+      "browser": "Browser",
+      "releaseType": "Release Type",
+      "proxyVpn": "Proxy / VPN",
+      "group": "Group",
+      "tags": "Tags",
+      "note": "Note",
+      "syncStatus": "Sync Status",
+      "lastLaunched": "Last Launched",
+      "hostOs": "Host OS",
+      "ephemeral": "Ephemeral"
+    },
+    "values": {
+      "none": "None",
+      "never": "Never",
+      "copied": "Copied!",
+      "yes": "Yes"
+    },
+    "actions": {
+      "manageCookies": "Manage Cookies"
+    }
+  },
   "pro": {
     "badge": "PRO",
     "fingerprintLocked": "Fingerprint editing is a Pro feature",
