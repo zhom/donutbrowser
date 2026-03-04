@@ -10,8 +10,16 @@
     };
   };
 
-  outputs = { self, nixpkgs, flake-utils, rust-overlay, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+      rust-overlay,
+      ...
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs {
@@ -20,7 +28,12 @@
 
         # Rust toolchain
         rustToolchain = pkgs.rust-bin.stable.latest.default.override {
-          extensions = [ "rust-src" "rust-analyzer" "clippy" "rustfmt" ];
+          extensions = [
+            "rust-src"
+            "rust-analyzer"
+            "clippy"
+            "rustfmt"
+          ];
         };
 
         # System dependencies for Tauri on Linux
@@ -33,18 +46,23 @@
           dbus
           librsvg
           libsoup_3
+          rust-analyzer
+          xdotool
         ];
 
-        packages = with pkgs; [
-          rustToolchain
-          nodejs_22
-          pnpm
-          pkg-config
-          cargo-tauri
-          openssl
-          # App specific tools
-          biome
-        ] ++ libraries;
+        packages =
+          with pkgs;
+          [
+            rustToolchain
+            nodejs_22
+            pnpm
+            pkg-config
+            cargo-tauri
+            openssl
+            # App specific tools
+            biome
+          ]
+          ++ libraries;
 
       in
       {
@@ -54,7 +72,7 @@
           shellHook = ''
             export LD_LIBRARY_PATH=${pkgs.lib.makeLibraryPath libraries}:$LD_LIBRARY_PATH
             export XDG_DATA_DIRS=${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}:${pkgs.gtk3}/share/gsettings-schemas/${pkgs.gtk3.name}:$XDG_DATA_DIRS
-            
+
             echo "🍩 Donut Browser Dev Environment Loaded!"
             echo "Node: $(node --version)"
             echo "Rust: $(rustc --version)"
