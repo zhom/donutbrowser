@@ -456,7 +456,7 @@ pub async fn get_api_server_status() -> Result<Option<u16>, String> {
 // API Handlers - Profiles
 #[utoipa::path(
   get,
-  path = "/v1/profiles",
+  path = "/profiles",
   responses(
     (status = 200, description = "List of all profiles", body = ApiProfilesResponse),
     (status = 401, description = "Unauthorized"),
@@ -504,7 +504,7 @@ async fn get_profiles() -> Result<Json<ApiProfilesResponse>, StatusCode> {
 
 #[utoipa::path(
   get,
-  path = "/v1/profiles/{id}",
+  path = "/profiles/{id}",
   params(
     ("id" = String, Path, description = "Profile ID")
   ),
@@ -557,7 +557,7 @@ async fn get_profile(
 
 #[utoipa::path(
   post,
-  path = "/v1/profiles",
+  path = "/profiles",
   request_body = CreateProfileRequest,
   responses(
     (status = 200, description = "Profile created successfully", body = ApiProfileResponse),
@@ -653,7 +653,7 @@ async fn create_profile(
 
 #[utoipa::path(
   put,
-  path = "/v1/profiles/{id}",
+  path = "/profiles/{id}",
   params(
     ("id" = String, Path, description = "Profile ID")
   ),
@@ -776,7 +776,7 @@ async fn update_profile(
 
 #[utoipa::path(
   delete,
-  path = "/v1/profiles/{id}",
+  path = "/profiles/{id}",
   params(
     ("id" = String, Path, description = "Profile ID")
   ),
@@ -805,7 +805,7 @@ async fn delete_profile(
 // API Handlers - Groups
 #[utoipa::path(
   get,
-  path = "/v1/groups",
+  path = "/groups",
   responses(
     (status = 200, description = "List of all groups", body = Vec<ApiGroupResponse>),
     (status = 401, description = "Unauthorized"),
@@ -842,7 +842,7 @@ async fn get_groups(
 
 #[utoipa::path(
   get,
-  path = "/v1/groups/{id}",
+  path = "/groups/{id}",
   params(
     ("id" = String, Path, description = "Group ID")
   ),
@@ -882,7 +882,7 @@ async fn get_group(
 
 #[utoipa::path(
   post,
-  path = "/v1/groups",
+  path = "/groups",
   request_body = CreateGroupRequest,
   responses(
     (status = 200, description = "Group created successfully", body = ApiGroupResponse),
@@ -914,7 +914,7 @@ async fn create_group(
 
 #[utoipa::path(
   put,
-  path = "/v1/groups/{id}",
+  path = "/groups/{id}",
   params(
     ("id" = String, Path, description = "Group ID")
   ),
@@ -951,7 +951,7 @@ async fn update_group(
 
 #[utoipa::path(
   delete,
-  path = "/v1/groups/{id}",
+  path = "/groups/{id}",
   params(
     ("id" = String, Path, description = "Group ID")
   ),
@@ -982,7 +982,7 @@ async fn delete_group(
 // API Handlers - Tags
 #[utoipa::path(
   get,
-  path = "/v1/tags",
+  path = "/tags",
   responses(
     (status = 200, description = "List of all tags", body = Vec<String>),
     (status = 401, description = "Unauthorized"),
@@ -1006,7 +1006,7 @@ async fn get_tags(State(_state): State<ApiServerState>) -> Result<Json<Vec<Strin
 // API Handlers - Proxies
 #[utoipa::path(
   get,
-  path = "/v1/proxies",
+  path = "/proxies",
   responses(
     (status = 200, description = "List of all proxies", body = Vec<ApiProxyResponse>),
     (status = 401, description = "Unauthorized"),
@@ -1035,7 +1035,7 @@ async fn get_proxies(
 
 #[utoipa::path(
   get,
-  path = "/v1/proxies/{id}",
+  path = "/proxies/{id}",
   params(
     ("id" = String, Path, description = "Proxy ID")
   ),
@@ -1068,7 +1068,7 @@ async fn get_proxy(
 
 #[utoipa::path(
   post,
-  path = "/v1/proxies",
+  path = "/proxies",
   request_body = CreateProxyRequest,
   responses(
     (status = 200, description = "Proxy created successfully", body = ApiProxyResponse),
@@ -1101,7 +1101,7 @@ async fn create_proxy(
 
 #[utoipa::path(
   put,
-  path = "/v1/proxies/{id}",
+  path = "/proxies/{id}",
   params(
     ("id" = String, Path, description = "Proxy ID")
   ),
@@ -1150,7 +1150,7 @@ async fn update_proxy(
 
 #[utoipa::path(
   delete,
-  path = "/v1/proxies/{id}",
+  path = "/proxies/{id}",
   params(
     ("id" = String, Path, description = "Proxy ID")
   ),
@@ -1179,7 +1179,7 @@ async fn delete_proxy(
 
 #[utoipa::path(
   get,
-  path = "/v1/extensions",
+  path = "/extensions",
   responses(
     (status = 200, description = "List of extensions"),
     (status = 401, description = "Unauthorized"),
@@ -1199,7 +1199,7 @@ async fn get_extensions(
 
 #[utoipa::path(
   get,
-  path = "/v1/extension-groups",
+  path = "/extension-groups",
   responses(
     (status = 200, description = "List of extension groups"),
     (status = 401, description = "Unauthorized"),
@@ -1219,7 +1219,7 @@ async fn get_extension_groups(
 
 #[utoipa::path(
   delete,
-  path = "/v1/extensions/{id}",
+  path = "/extensions/{id}",
   params(("id" = String, Path, description = "Extension ID")),
   responses(
     (status = 204, description = "Extension deleted"),
@@ -1242,7 +1242,7 @@ async fn delete_extension_api(
 
 #[utoipa::path(
   delete,
-  path = "/v1/extension-groups/{id}",
+  path = "/extension-groups/{id}",
   params(("id" = String, Path, description = "Extension Group ID")),
   responses(
     (status = 204, description = "Extension group deleted"),
@@ -1266,7 +1266,7 @@ async fn delete_extension_group_api(
 // API Handler - Run Profile with Remote Debugging
 #[utoipa::path(
   post,
-  path = "/v1/profiles/{id}/run",
+  path = "/profiles/{id}/run",
   params(
     ("id" = String, Path, description = "Profile ID")
   ),
@@ -1335,7 +1335,7 @@ async fn run_profile(
 // API Handler - Open URL in existing browser
 #[utoipa::path(
   post,
-  path = "/v1/profiles/{id}/open-url",
+  path = "/profiles/{id}/open-url",
   params(
     ("id" = String, Path, description = "Profile ID")
   ),
@@ -1369,7 +1369,7 @@ async fn open_url_in_profile(
 // API Handler - Kill browser process
 #[utoipa::path(
   post,
-  path = "/v1/profiles/{id}/kill",
+  path = "/profiles/{id}/kill",
   params(
     ("id" = String, Path, description = "Profile ID")
   ),
@@ -1412,7 +1412,7 @@ async fn kill_profile(
 // API Handler - Download Browser
 #[utoipa::path(
   post,
-  path = "/v1/browsers/download",
+  path = "/browsers/download",
   request_body = DownloadBrowserRequest,
   responses(
     (status = 200, description = "Browser download initiated", body = DownloadBrowserResponse),
@@ -1447,7 +1447,7 @@ async fn download_browser_api(
 // API Handler - Get Browser Versions
 #[utoipa::path(
   get,
-  path = "/v1/browsers/{browser}/versions",
+  path = "/browsers/{browser}/versions",
   params(
     ("browser" = String, Path, description = "Browser name")
   ),
@@ -1479,7 +1479,7 @@ async fn get_browser_versions(
 // API Handler - Check if Browser is Downloaded
 #[utoipa::path(
   get,
-  path = "/v1/browsers/{browser}/versions/{version}/downloaded",
+  path = "/browsers/{browser}/versions/{version}/downloaded",
   params(
     ("browser" = String, Path, description = "Browser name"),
     ("version" = String, Path, description = "Browser version")
