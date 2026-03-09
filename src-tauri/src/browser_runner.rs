@@ -1662,9 +1662,14 @@ impl BrowserRunner {
         );
       }
 
-      // Clear the process ID from the profile
+      // Clear the process ID from the profile and save immediately so that
+      // subsequent calls to update_profile_version (which re-reads from disk)
+      // see the cleared process_id.
       let mut updated_profile = profile.clone();
       updated_profile.process_id = None;
+      self
+        .save_process_info(&updated_profile)
+        .map_err(|e| format!("Failed to update profile: {e}"))?;
 
       // Check for pending updates and apply them for Camoufox profiles too
       if let Ok(Some(pending_update)) = self
@@ -1678,7 +1683,6 @@ impl BrowserRunner {
           pending_update.new_version
         );
 
-        // Update the profile to the new version
         match self.profile_manager.update_profile_version(
           &app_handle,
           &profile.id.to_string(),
@@ -1693,7 +1697,6 @@ impl BrowserRunner {
             );
             updated_profile = updated_profile_after_update;
 
-            // Remove the pending update from the auto updater state
             if let Err(e) = self
               .auto_updater
               .dismiss_update_notification(&pending_update.id)
@@ -1707,7 +1710,6 @@ impl BrowserRunner {
               profile.name,
               e
             );
-            // Continue with the original profile update (just clearing process_id)
           }
         }
       }
@@ -1721,10 +1723,6 @@ impl BrowserRunner {
           updated_profile = p;
         }
       }
-
-      self
-        .save_process_info(&updated_profile)
-        .map_err(|e| format!("Failed to update profile: {e}"))?;
 
       log::info!(
         "Emitting profile events for successful Camoufox kill: {}",
@@ -2004,9 +2002,14 @@ impl BrowserRunner {
         );
       }
 
-      // Clear the process ID from the profile
+      // Clear the process ID from the profile and save immediately so that
+      // subsequent calls to update_profile_version (which re-reads from disk)
+      // see the cleared process_id.
       let mut updated_profile = profile.clone();
       updated_profile.process_id = None;
+      self
+        .save_process_info(&updated_profile)
+        .map_err(|e| format!("Failed to update profile: {e}"))?;
 
       // Check for pending updates and apply them
       if let Ok(Some(pending_update)) = self
@@ -2060,10 +2063,6 @@ impl BrowserRunner {
           updated_profile = p;
         }
       }
-
-      self
-        .save_process_info(&updated_profile)
-        .map_err(|e| format!("Failed to update profile: {e}"))?;
 
       log::info!(
         "Emitting profile events for successful Wayfern kill: {}",
@@ -2289,9 +2288,14 @@ impl BrowserRunner {
       profile.id
     );
 
-    // Clear the process ID from the profile
+    // Clear the process ID from the profile and save immediately so that
+    // subsequent calls to update_profile_version (which re-reads from disk)
+    // see the cleared process_id.
     let mut updated_profile = profile.clone();
     updated_profile.process_id = None;
+    self
+      .save_process_info(&updated_profile)
+      .map_err(|e| format!("Failed to update profile: {e}"))?;
 
     // Check for pending updates and apply them
     if let Ok(Some(pending_update)) = self
@@ -2305,7 +2309,6 @@ impl BrowserRunner {
         pending_update.new_version
       );
 
-      // Update the profile to the new version
       match self.profile_manager.update_profile_version(
         &app_handle,
         &profile.id.to_string(),
@@ -2320,7 +2323,6 @@ impl BrowserRunner {
           );
           updated_profile = updated_profile_after_update;
 
-          // Remove the pending update from the auto updater state
           if let Err(e) = self
             .auto_updater
             .dismiss_update_notification(&pending_update.id)
@@ -2334,7 +2336,6 @@ impl BrowserRunner {
             profile.name,
             e
           );
-          // Continue with the original profile update (just clearing process_id)
         }
       }
     }
@@ -2348,10 +2349,6 @@ impl BrowserRunner {
         updated_profile = p;
       }
     }
-
-    self
-      .save_process_info(&updated_profile)
-      .map_err(|e| format!("Failed to update profile: {e}"))?;
 
     log::info!(
       "Emitting profile events for successful kill: {}",
