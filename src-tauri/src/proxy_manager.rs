@@ -2474,18 +2474,19 @@ mod tests {
   async fn test_cleanup_distinguishes_live_and_dead_proxy_configs() {
     use crate::proxy_storage::{save_proxy_config, ProxyConfig};
 
-    // Spawn a live child process to use its PID
-    let mut live_child =
-      std::process::Command::new(if cfg!(windows) { "timeout" } else { "sleep" })
-        .args(if cfg!(windows) {
-          vec!["/T", "30"]
-        } else {
-          vec!["30"]
-        })
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .expect("spawn live child");
+    // Spawn a live child process to use its PID.
+    // On Windows, `timeout` requires console input and exits immediately in CI,
+    // so use `ping` which works reliably in non-interactive contexts.
+    let mut live_child = std::process::Command::new(if cfg!(windows) { "ping" } else { "sleep" })
+      .args(if cfg!(windows) {
+        vec!["-n", "30", "127.0.0.1"]
+      } else {
+        vec!["30"]
+      })
+      .stdout(std::process::Stdio::null())
+      .stderr(std::process::Stdio::null())
+      .spawn()
+      .expect("spawn live child");
     let live_pid = live_child.id();
 
     // Spawn and kill a short-lived process to get a dead PID

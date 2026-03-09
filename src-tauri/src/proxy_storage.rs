@@ -174,7 +174,9 @@ mod tests {
 
   #[test]
   fn test_is_process_running_returns_false_for_nonexistent_pid() {
-    // PID 0 is not a valid user process on any supported platform
+    // PID 0 is the "System Idle Process" on Windows and sysinfo reports it as running,
+    // so only assert on non-Windows platforms where PID 0 is not a real user process.
+    #[cfg(not(windows))]
     assert!(
       !is_process_running(0),
       "is_process_running must return false for PID 0"
