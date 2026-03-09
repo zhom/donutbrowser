@@ -272,7 +272,7 @@ jobs:
 
       - name: Sync existing repo metadata from R2
         env:
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT_URL }}
+          R2_ENDPOINT: "https://${{ secrets.R2_ENDPOINT_URL }}"
           R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
         run: |
           mkdir -p /tmp/repo
@@ -296,7 +296,7 @@ jobs:
 
       - name: Upload repository to R2
         env:
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT_URL }}
+          R2_ENDPOINT: "https://${{ secrets.R2_ENDPOINT_URL }}"
           R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
         run: |
           aws s3 sync /tmp/repo/dists "s3://${R2_BUCKET}/dists" \
@@ -310,24 +310,10 @@ jobs:
 
       - name: Verify upload
         env:
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT_URL }}
+          R2_ENDPOINT: "https://${{ secrets.R2_ENDPOINT_URL }}"
           R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
         run: |
           echo "DEB repo:"
           aws s3 ls "s3://${R2_BUCKET}/dists/stable/" --endpoint-url "${R2_ENDPOINT}"
           echo "RPM repo:"
           aws s3 ls "s3://${R2_BUCKET}/repodata/" --endpoint-url "${R2_ENDPOINT}"
-
-  bump-homebrew-cask:
-    needs: [release]
-    runs-on: macos-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Bump Homebrew cask
-        env:
-          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
-        run: |
-          brew tap --force homebrew/cask
-          VERSION="${GITHUB_REF_NAME#v}"
-          brew bump-cask-pr --version "$VERSION" --no-browse donut
