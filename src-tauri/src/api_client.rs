@@ -12,6 +12,7 @@ pub struct VersionComponent {
   pub major: u32,
   pub minor: u32,
   pub patch: u32,
+  pub build: u32,
   pub pre_release: Option<PreRelease>,
 }
 
@@ -47,6 +48,7 @@ impl VersionComponent {
         major: 999, // High major version to indicate it's a rolling release
         minor: 0,
         patch: 0,
+        build: 0,
         pre_release: Some(PreRelease {
           kind: PreReleaseKind::Alpha,
           number: Some(999), // High number to indicate it's a rolling release
@@ -66,6 +68,7 @@ impl VersionComponent {
     let major = parts.first().copied().unwrap_or(0);
     let minor = parts.get(1).copied().unwrap_or(0);
     let patch = parts.get(2).copied().unwrap_or(0);
+    let build = parts.get(3).copied().unwrap_or(0);
 
     // Parse pre-release part
     let pre_release = pre_release_part
@@ -76,6 +79,7 @@ impl VersionComponent {
       major,
       minor,
       patch,
+      build,
       pre_release,
     }
   }
@@ -173,7 +177,12 @@ impl Ord for VersionComponent {
     match (self_is_twilight, other_is_twilight) {
       (true, true) => {
         // Both are twilight, compare by base version
-        return (self.major, self.minor, self.patch).cmp(&(other.major, other.minor, other.patch));
+        return (self.major, self.minor, self.patch, self.build).cmp(&(
+          other.major,
+          other.minor,
+          other.patch,
+          other.build,
+        ));
       }
       (false, false) => {
         // Neither is twilight, continue with normal comparison
@@ -181,8 +190,13 @@ impl Ord for VersionComponent {
       _ => unreachable!(), // Already handled above
     }
 
-    // Compare major.minor.patch first
-    match (self.major, self.minor, self.patch).cmp(&(other.major, other.minor, other.patch)) {
+    // Compare major.minor.patch.build first
+    match (self.major, self.minor, self.patch, self.build).cmp(&(
+      other.major,
+      other.minor,
+      other.patch,
+      other.build,
+    )) {
       Ordering::Equal => {
         // If numeric parts are equal, compare pre-release
         match (&self.pre_release, &other.pre_release) {

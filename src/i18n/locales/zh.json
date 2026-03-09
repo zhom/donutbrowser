@@ -135,8 +135,8 @@
       "clearCache": "清除所有版本缓存",
       "clearCacheDescription": "清除所有缓存的浏览器版本数据并从源刷新所有浏览器版本。这将强制重新下载所有浏览器的版本信息。"
     },
-    "disableAutoUpdates": "禁用自动更新",
-    "disableAutoUpdatesDescription": "阻止应用程序自动检查和安装更新。您需要手动更新应用程序。"
+    "disableAutoUpdates": "禁用应用自动更新",
+    "disableAutoUpdatesDescription": "阻止应用程序自动检查和安装 Donut Browser 更新。浏览器更新不受影响。"
   },
   "header": {
     "searchPlaceholder": "搜索配置文件...",

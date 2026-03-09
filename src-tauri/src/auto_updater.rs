@@ -1,5 +1,4 @@
 use crate::browser_version_manager::{BrowserVersionInfo, BrowserVersionManager};
-use crate::events;
 use crate::profile::{BrowserProfile, ProfileManager};
 use crate::settings_manager::SettingsManager;
 use serde::{Deserialize, Serialize};
@@ -146,115 +145,72 @@ impl AutoUpdater {
   pub async fn check_for_updates_with_progress(&self, app_handle: &tauri::AppHandle) {
     log::info!("Starting auto-update check with progress...");
 
-    // Check if auto-updates are disabled in settings
-    let auto_download = {
-      let disable = self
-        .settings_manager
-        .load_settings()
-        .map(|s| s.disable_auto_updates)
-        .unwrap_or(false);
-      !disable && !cfg!(target_os = "linux")
-    };
+    // Browser auto-updates are always enabled — the disable_auto_updates setting
+    // only controls app self-updates, not browser version updates.
 
     // Check for browser updates and trigger auto-downloads
     match self.check_for_updates().await {
       Ok(update_notifications) => {
-        if !update_notifications.is_empty() {
-          log::info!(
-            "Found {} browser updates (auto_download={})",
-            update_notifications.len(),
-            auto_download
-          );
+        // Group by browser+version to avoid duplicate downloads
+        let grouped = self.group_update_notifications(update_notifications);
+        if !grouped.is_empty() {
+          log::info!("Found {} browser updates", grouped.len());
 
-          if !auto_download {
-            // Emit notification events instead of downloading
-            for notification in update_notifications {
-              let update_event = serde_json::json!({
-                "browser": notification.browser,
-                "new_version": notification.new_version,
-                "current_version": notification.current_version,
-                "affected_profiles": notification.affected_profiles
-              });
-
-              if let Err(e) = events::emit("browser-update-available", &update_event) {
-                log::error!(
-                  "Failed to emit update-available event for {}: {e}",
-                  notification.browser
-                );
-              } else {
-                log::info!(
-                  "Emitted update-available event for {} {}",
-                  notification.browser,
-                  notification.new_version
-                );
-              }
-            }
-            return;
-          }
-
-          // Trigger automatic downloads for each update
-          for notification in update_notifications {
+          for notification in grouped {
             log::info!(
-              "Auto-downloading {} version {}",
+              "Auto-updating {} to version {} ({} profiles)",
               notification.browser,
-              notification.new_version
+              notification.new_version,
+              notification.affected_profiles.len()
             );
 
-            // Clone app_handle for the async task
             let browser = notification.browser.clone();
             let new_version = notification.new_version.clone();
-            let notification_id = notification.id.clone();
-            let affected_profiles = notification.affected_profiles.clone();
             let app_handle_clone = app_handle.clone();
 
             // Spawn async task to handle the download and auto-update
             tokio::spawn(async move {
-              // TODO: update the logic to use the downloaded browsers registry instance instead of the static method
-              // First, check if browser already exists
-              match crate::downloaded_browsers_registry::is_browser_downloaded(
-                browser.clone(),
-                new_version.clone(),
-              ) {
-                true => {
-                  log::info!("Browser {browser} {new_version} already downloaded, proceeding to auto-update profiles");
+              let registry =
+                crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
 
-                  // Browser already exists, go straight to profile update
-                  match AutoUpdater::instance()
-                    .complete_browser_update_with_auto_update(
-                      &app_handle_clone,
-                      &browser.clone(),
-                      &new_version.clone(),
-                    )
-                    .await
-                  {
-                    Ok(updated_profiles) => {
+              if registry.is_browser_downloaded(&browser, &new_version) {
+                log::info!("Browser {browser} {new_version} already downloaded, proceeding to auto-update profiles");
+
+                // Browser already exists, go straight to profile update
+                match AutoUpdater::instance()
+                  .auto_update_profile_versions(&app_handle_clone, &browser, &new_version)
+                  .await
+                {
+                  Ok(updated_profiles) => {
+                    if !updated_profiles.is_empty() {
                       log::info!(
-                        "Auto-update completed for {} profiles: {:?}",
+                        "Auto-updated {} profiles to {browser} {new_version}: {:?}",
                         updated_profiles.len(),
                         updated_profiles
                       );
                     }
-                    Err(e) => {
-                      log::error!("Failed to complete auto-update for {browser}: {e}");
-                    }
+                  }
+                  Err(e) => {
+                    log::error!("Failed to auto-update profiles for {browser}: {e}");
                   }
                 }
-                false => {
-                  log::info!("Downloading browser {browser} version {new_version}...");
+              } else {
+                log::info!("Downloading browser {browser} version {new_version}...");
 
-                  // Emit the auto-update event to trigger frontend handling
-                  let auto_update_event = serde_json::json!({
-                    "browser": browser,
-                    "new_version": new_version,
-                    "notification_id": notification_id,
-                    "affected_profiles": affected_profiles
-                  });
-
-                  if let Err(e) = events::emit("browser-auto-update-available", &auto_update_event)
-                  {
-                    log::error!("Failed to emit auto-update event for {browser}: {e}");
-                  } else {
-                    log::info!("Emitted auto-update event for {browser}");
+                // Download directly from Rust — download_browser_full already
+                // auto-updates non-running profiles after successful download.
+                match crate::downloader::download_browser(
+                  app_handle_clone,
+                  browser.clone(),
+                  new_version.clone(),
+                )
+                .await
+                {
+                  Ok(actual_version) => {
+                    log::info!("Auto-download completed for {browser} {actual_version}");
+                  }
+                  Err(e) => {
+                    log::error!("Failed to auto-download {browser} {new_version}: {e}");
                   }
                 }
               }
@@ -266,6 +222,24 @@ impl AutoUpdater {
       }
       Err(e) => {
         log::error!("Failed to check for browser updates: {e}");
+      }
+    }
+
+    // Also update any profiles that can be bumped to an already-installed newer version.
+    // This handles cases where a version was downloaded but profiles weren't updated
+    // (e.g., they were running at the time, or the update was missed).
+    match self.update_profiles_to_latest_installed(app_handle) {
+      Ok(updated) => {
+        if !updated.is_empty() {
+          log::info!(
+            "Updated {} profiles to latest installed versions: {:?}",
+            updated.len(),
+            updated
+          );
+        }
+      }
+      Err(e) => {
+        log::error!("Failed to update profiles to latest installed versions: {e}");
       }
     }
   }
@@ -531,6 +505,148 @@ impl AutoUpdater {
     }
 
     Ok(None)
+  }
+
+  /// Get the latest installed version for a browser from the downloaded browsers registry
+  pub fn get_latest_installed_version(&self, browser: &str) -> Option<String> {
+    let registry = crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
+    let versions = registry.get_downloaded_versions(browser);
+    versions
+      .into_iter()
+      .filter(|v| registry.is_browser_downloaded(browser, v))
+      .max_by(|a, b| self.compare_versions(a, b))
+  }
+
+  /// Update a single profile to the latest installed version for its browser.
+  /// Used when a browser closes to ensure it's on the latest version.
+  pub fn update_profile_to_latest_installed(
+    &self,
+    app_handle: &tauri::AppHandle,
+    profile: &crate::profile::BrowserProfile,
+  ) -> Option<crate::profile::BrowserProfile> {
+    let latest = self.get_latest_installed_version(&profile.browser)?;
+
+    if !self.is_version_newer(&latest, &profile.version) {
+      return None;
+    }
+
+    // Only update stable->stable and nightly->nightly
+    let is_profile_nightly =
+      crate::api_client::is_browser_version_nightly(&profile.browser, &profile.version, None);
+    let is_latest_nightly =
+      crate::api_client::is_browser_version_nightly(&profile.browser, &latest, None);
+    if is_profile_nightly != is_latest_nightly {
+      return None;
+    }
+
+    match self
+      .profile_manager
+      .update_profile_version(app_handle, &profile.id.to_string(), &latest)
+    {
+      Ok(updated) => {
+        log::info!(
+          "Updated profile {} from {} {} to latest installed version {}",
+          profile.name,
+          profile.browser,
+          profile.version,
+          latest
+        );
+        Some(updated)
+      }
+      Err(e) => {
+        log::error!(
+          "Failed to update profile {} to latest installed version: {e}",
+          profile.name
+        );
+        None
+      }
+    }
+  }
+
+  /// Update all non-running profiles to the latest installed version for each browser.
+  /// Handles the case where a newer version was downloaded but profiles weren't updated.
+  pub fn update_profiles_to_latest_installed(
+    &self,
+    app_handle: &tauri::AppHandle,
+  ) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+    let registry = crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
+    let profiles = self
+      .profile_manager
+      .list_profiles()
+      .map_err(|e| format!("Failed to list profiles: {e}"))?;
+
+    let mut all_updated = Vec::new();
+
+    // Group profiles by browser
+    let mut browser_profiles: HashMap<String, Vec<BrowserProfile>> = HashMap::new();
+    for profile in profiles {
+      if profile.is_cross_os() {
+        continue;
+      }
+      browser_profiles
+        .entry(profile.browser.clone())
+        .or_default()
+        .push(profile);
+    }
+
+    for (browser, profiles) in browser_profiles {
+      let installed_versions = registry.get_downloaded_versions(&browser);
+      if installed_versions.is_empty() {
+        continue;
+      }
+
+      // Find the latest installed version that actually exists on disk
+      let latest_installed = installed_versions
+        .iter()
+        .filter(|v| registry.is_browser_downloaded(&browser, v))
+        .max_by(|a, b| self.compare_versions(a, b));
+
+      let latest_version = match latest_installed {
+        Some(v) => v.clone(),
+        None => continue,
+      };
+
+      for profile in profiles {
+        if profile.process_id.is_some() {
+          continue;
+        }
+
+        if !self.is_version_newer(&latest_version, &profile.version) {
+          continue;
+        }
+
+        // Only update stable->stable and nightly->nightly
+        let is_profile_nightly =
+          crate::api_client::is_browser_version_nightly(&browser, &profile.version, None);
+        let is_latest_nightly =
+          crate::api_client::is_browser_version_nightly(&browser, &latest_version, None);
+        if is_profile_nightly != is_latest_nightly {
+          continue;
+        }
+
+        match self.profile_manager.update_profile_version(
+          app_handle,
+          &profile.id.to_string(),
+          &latest_version,
+        ) {
+          Ok(_) => {
+            log::info!(
+              "Updated profile {} from {} {} to latest installed version {}",
+              profile.name,
+              browser,
+              profile.version,
+              latest_version
+            );
+            all_updated.push(profile.name);
+          }
+          Err(e) => {
+            log::error!("Failed to update profile {}: {e}", profile.name);
+          }
+        }
+      }
+    }
+
+    Ok(all_updated)
   }
 }
 

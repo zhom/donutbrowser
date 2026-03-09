@@ -135,8 +135,8 @@
       "clearCache": "Limpar Todo o Cache de Versões",
       "clearCacheDescription": "Limpa todos os dados de versões de navegadores em cache e atualiza todas as versões de suas fontes. Isso forçará um novo download das informações de versão para todos os navegadores."
     },
-    "disableAutoUpdates": "Desativar Atualizações Automáticas",
-    "disableAutoUpdatesDescription": "Impede que o aplicativo verifique e instale atualizações automaticamente. Você precisará atualizar o aplicativo manualmente."
+    "disableAutoUpdates": "Desativar Atualizações Automáticas do App",
+    "disableAutoUpdatesDescription": "Impede que o aplicativo verifique e instale atualizações do Donut Browser automaticamente. As atualizações de navegadores não são afetadas."
   },
   "header": {
     "searchPlaceholder": "Pesquisar perfis...",

@@ -1602,6 +1602,16 @@ rm "{}"
 
 #[tauri::command]
 pub async fn check_for_app_updates() -> Result<Option<AppUpdateInfo>, String> {
+  // The disable_auto_updates setting controls app self-updates only
+  let disabled = crate::settings_manager::SettingsManager::instance()
+    .load_settings()
+    .map(|s| s.disable_auto_updates)
+    .unwrap_or(false);
+  if disabled {
+    log::info!("App auto-updates disabled by user setting");
+    return Ok(None);
+  }
+
   let updater = AppAutoUpdater::instance();
   updater
     .check_for_updates()

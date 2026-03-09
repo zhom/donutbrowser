@@ -1133,6 +1133,28 @@ pub fn run() {
         }
       }
 
+      // Immediately bump non-running profiles to the latest installed browser version.
+      // This runs synchronously before any network calls so profiles are updated on launch.
+      {
+        let app_handle_bump = app.handle().clone();
+        match auto_updater::AutoUpdater::instance()
+          .update_profiles_to_latest_installed(&app_handle_bump)
+        {
+          Ok(updated) => {
+            if !updated.is_empty() {
+              log::info!(
+                "Startup: bumped {} profiles to latest installed versions: {:?}",
+                updated.len(),
+                updated
+              );
+            }
+          }
+          Err(e) => {
+            log::error!("Startup: failed to bump profiles to latest installed versions: {e}");
+          }
+        }
+      }
+
       let app_handle_auto_updater = app.handle().clone();
 
       // Start the auto-update check task separately

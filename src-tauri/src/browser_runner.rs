@@ -1712,6 +1712,16 @@ impl BrowserRunner {
         }
       }
 
+      // If no pending update was applied, check if a newer installed version exists
+      if updated_profile.version == profile.version {
+        if let Some(p) = self
+          .auto_updater
+          .update_profile_to_latest_installed(&app_handle, &updated_profile)
+        {
+          updated_profile = p;
+        }
+      }
+
       self
         .save_process_info(&updated_profile)
         .map_err(|e| format!("Failed to update profile: {e}"))?;
@@ -2041,6 +2051,16 @@ impl BrowserRunner {
         }
       }
 
+      // If no pending update was applied, check if a newer installed version exists
+      if updated_profile.version == profile.version {
+        if let Some(p) = self
+          .auto_updater
+          .update_profile_to_latest_installed(&app_handle, &updated_profile)
+        {
+          updated_profile = p;
+        }
+      }
+
       self
         .save_process_info(&updated_profile)
         .map_err(|e| format!("Failed to update profile: {e}"))?;
@@ -2316,6 +2336,16 @@ impl BrowserRunner {
           );
           // Continue with the original profile update (just clearing process_id)
         }
+      }
+    }
+
+    // If no pending update was applied, check if a newer installed version exists
+    if updated_profile.version == profile.version {
+      if let Some(p) = self
+        .auto_updater
+        .update_profile_to_latest_installed(&app_handle, &updated_profile)
+      {
+        updated_profile = p;
       }
     }
 

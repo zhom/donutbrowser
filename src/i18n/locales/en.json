@@ -135,8 +135,8 @@
       "clearCache": "Clear All Version Cache",
       "clearCacheDescription": "Clear all cached browser version data and refresh all browser versions from their sources. This will force a fresh download of version information for all browsers."
     },
-    "disableAutoUpdates": "Disable Auto Updates",
-    "disableAutoUpdatesDescription": "Only notify when browser updates are available, without downloading automatically."
+    "disableAutoUpdates": "Disable App Auto Updates",
+    "disableAutoUpdatesDescription": "Prevent the app from automatically checking and installing Donut Browser updates. Browser updates are not affected."
   },
   "header": {
     "searchPlaceholder": "Search profiles...",

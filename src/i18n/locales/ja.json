@@ -135,8 +135,8 @@
       "clearCache": "すべてのバージョンキャッシュをクリア",
       "clearCacheDescription": "キャッシュされたすべてのブラウザバージョンデータをクリアし、すべてのブラウザバージョンをソースから更新します。これにより、すべてのブラウザのバージョン情報が強制的に再ダウンロードされます。"
     },
-    "disableAutoUpdates": "自動更新を無効にする",
-    "disableAutoUpdatesDescription": "アプリケーションが自動的に更新を確認・インストールすることを防ぎます。手動でアプリケーションを更新する必要があります。"
+    "disableAutoUpdates": "アプリの自動更新を無効にする",
+    "disableAutoUpdatesDescription": "Donut Browserの自動更新確認・インストールを無効にします。ブラウザの更新には影響しません。"
   },
   "header": {
     "searchPlaceholder": "プロファイルを検索...",
