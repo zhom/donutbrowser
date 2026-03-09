@@ -6,7 +6,10 @@ import type {
   Props as DefaultLegendContentProps,
   LegendPayload,
 } from "recharts/types/component/DefaultLegendContent";
-import type { Payload } from "recharts/types/component/DefaultTooltipContent";
+import type {
+  NameType,
+  ValueType,
+} from "recharts/types/component/DefaultTooltipContent";
 import type { TooltipContentProps } from "recharts/types/component/Tooltip";
 
 import { cn } from "@/lib/utils";
@@ -111,7 +114,7 @@ const ChartTooltip = RechartsPrimitive.Tooltip;
 
 const ChartTooltipContent = React.forwardRef<
   HTMLDivElement,
-  TooltipContentProps<number, string> &
+  TooltipContentProps<ValueType, NameType> &
     React.ComponentProps<"div"> & {
       hideLabel?: boolean;
       hideIndicator?: boolean;
@@ -195,8 +198,8 @@ const ChartTooltipContent = React.forwardRef<
         {!nestLabel ? tooltipLabel : null}
         <div className="grid gap-1.5">
           {payload
-            .filter((item: Payload<number, string>) => item.type !== "none")
-            .map((item: Payload<number, string>, index: number) => {
+            .filter((item) => item.type !== "none")
+            .map((item, index) => {
               const key = `${nameKey || item.name || item.dataKey || "value"}`;
               const itemConfig = getPayloadConfigFromPayload(config, item, key);
               const indicatorColor = color || item.payload?.fill || item.color;

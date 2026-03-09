@@ -11,6 +11,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import type {
+  NameType,
+  ValueType,
+} from "recharts/types/component/DefaultTooltipContent";
 import type { TooltipContentProps } from "recharts/types/component/Tooltip";
 import {
   Dialog,
@@ -192,7 +196,7 @@ export function TrafficDetailsDialog({
 
   // Tooltip render function
   const renderTooltip = React.useCallback(
-    (props: TooltipContentProps<number, string>) => {
+    (props: TooltipContentProps<ValueType, NameType>) => {
       const { active, payload, label } = props;
       if (!active || !payload?.length) return null;
 
