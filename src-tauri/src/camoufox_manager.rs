@@ -557,9 +557,11 @@ impl CamoufoxManager {
   /// Check if a Camoufox server is running with the given process ID
   async fn is_server_running(&self, process_id: u32) -> bool {
     // Check if the process is still running
-    use sysinfo::{Pid, System};
+    use sysinfo::{Pid, ProcessRefreshKind, RefreshKind, System};
 
-    let system = System::new_all();
+    let system = System::new_with_specifics(
+      RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
+    );
     if let Some(process) = system.process(Pid::from(process_id as usize)) {
       // Check if this is actually a Camoufox process by looking at the command line
       let cmd = process.cmd();

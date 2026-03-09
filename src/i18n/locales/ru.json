@@ -134,7 +134,9 @@
       "title": "Дополнительно",
       "clearCache": "Очистить весь кэш версий",
       "clearCacheDescription": "Очищает все кэшированные данные версий браузеров и обновляет все версии из источников. Это принудительно загрузит информацию о версиях для всех браузеров."
-    }
+    },
+    "disableAutoUpdates": "Отключить автоматические обновления",
+    "disableAutoUpdatesDescription": "Запретить приложению автоматически проверять и устанавливать обновления. Вам нужно будет обновлять приложение вручную."
   },
   "header": {
     "searchPlaceholder": "Поиск профилей...",
@@ -189,7 +191,7 @@
   },
   "createProfile": {
     "title": "Создать новый профиль",
-    "configureTitle": "Настроить профиль",
+    "configureTitle": "Создать новый профиль {{browser}}",
     "antiDetect": {
       "title": "Антидетект браузер",
       "description": "Выберите браузер с возможностями защиты от обнаружения",
@@ -219,7 +221,12 @@
       "latestNeedsDownload": "Последнюю версию ({{version}}) необходимо скачать",
       "latestAvailable": "Последняя версия ({{version}}) доступна",
       "latestDownloading": "Загрузка версии ({{version}})..."
-    }
+    },
+    "chromiumLabel": "Chromium",
+    "chromiumSubtitle": "На базе Wayfern",
+    "firefoxLabel": "Firefox",
+    "firefoxSubtitle": "На базе Camoufox",
+    "camoufoxWarning": "Firefox (Camoufox) поддерживается сторонней организацией. Для промышленного использования используйте Chromium."
   },
   "deleteDialog": {
     "title": "Удалить профиль",
@@ -640,7 +647,9 @@
     "productSub": "Product Sub",
     "brand": "Бренд",
     "brandVersion": "Версия бренда",
-    "proFeature": "Это функция Pro"
+    "proFeature": "Это функция Pro",
+    "generateFingerprint": "Сгенерировать отпечаток",
+    "refreshFingerprint": "Обновить отпечаток"
   },
   "warnings": {
     "windowResizeTitle": "Пользовательские размеры окна",
@@ -779,7 +788,25 @@
     "assignTitle": "Назначить группу расширений",
     "assignDescription": "Назначить {{count}} выбранных профилей в группу расширений.",
     "noGroup": "Нет (Без группы расширений)",
-    "assignSuccess": "Группа расширений успешно назначена"
+    "assignSuccess": "Группа расширений успешно назначена",
+    "editExtension": "Редактировать расширение",
+    "updateSuccess": "Расширение успешно обновлено",
+    "reupload": "Загрузить заново",
+    "version": "Версия",
+    "author": "Автор",
+    "homepage": "Домашняя страница",
+    "editGroup": "Редактировать группу",
+    "editGroupDescription": "Обновите название группы и управляйте включёнными расширениями.",
+    "groupExtensions": "Расширения в этой группе",
+    "noExtensionsInGroup": "Расширения ещё не добавлены",
+    "editExtensionDescription": "Обновите имя расширения, просмотрите метаданные или загрузите файл расширения повторно.",
+    "metadata": "Метаданные",
+    "noMetadata": "Метаданные из манифеста недоступны.",
+    "selectFile": "Выбрать файл",
+    "syncEnabled": "Синхронизация включена",
+    "syncDisabled": "Синхронизация отключена",
+    "syncEnableTooltip": "Включить синхронизацию",
+    "syncDisableTooltip": "Отключить синхронизацию"
   },
   "pro": {
     "badge": "PRO",

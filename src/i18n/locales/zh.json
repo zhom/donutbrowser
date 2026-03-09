@@ -134,7 +134,9 @@
       "title": "高级",
       "clearCache": "清除所有版本缓存",
       "clearCacheDescription": "清除所有缓存的浏览器版本数据并从源刷新所有浏览器版本。这将强制重新下载所有浏览器的版本信息。"
-    }
+    },
+    "disableAutoUpdates": "禁用自动更新",
+    "disableAutoUpdatesDescription": "阻止应用程序自动检查和安装更新。您需要手动更新应用程序。"
   },
   "header": {
     "searchPlaceholder": "搜索配置文件...",
@@ -189,7 +191,7 @@
   },
   "createProfile": {
     "title": "创建新配置文件",
-    "configureTitle": "配置配置文件",
+    "configureTitle": "创建新的 {{browser}} 配置文件",
     "antiDetect": {
       "title": "防检测浏览器",
       "description": "选择具有防检测功能的浏览器",
@@ -219,7 +221,12 @@
       "latestNeedsDownload": "最新版本 ({{version}}) 需要下载",
       "latestAvailable": "最新版本 ({{version}}) 可用",
       "latestDownloading": "正在下载版本 ({{version}})..."
-    }
+    },
+    "chromiumLabel": "Chromium",
+    "chromiumSubtitle": "由 Wayfern 驱动",
+    "firefoxLabel": "Firefox",
+    "firefoxSubtitle": "由 Camoufox 驱动",
+    "camoufoxWarning": "Firefox（Camoufox）由第三方组织维护。在生产环境中，请使用 Chromium。"
   },
   "deleteDialog": {
     "title": "删除配置文件",
@@ -640,7 +647,9 @@
     "productSub": "Product Sub",
     "brand": "品牌",
     "brandVersion": "品牌版本",
-    "proFeature": "这是 Pro 功能"
+    "proFeature": "这是 Pro 功能",
+    "generateFingerprint": "生成指纹",
+    "refreshFingerprint": "刷新指纹"
   },
   "warnings": {
     "windowResizeTitle": "自定义窗口尺寸",
@@ -779,7 +788,25 @@
     "assignTitle": "分配扩展程序组",
     "assignDescription": "将 {{count}} 个选定的配置文件分配到扩展程序组。",
     "noGroup": "无（不使用扩展程序组）",
-    "assignSuccess": "扩展程序组分配成功"
+    "assignSuccess": "扩展程序组分配成功",
+    "editExtension": "编辑扩展",
+    "updateSuccess": "扩展更新成功",
+    "reupload": "重新上传",
+    "version": "版本",
+    "author": "作者",
+    "homepage": "主页",
+    "editGroup": "编辑分组",
+    "editGroupDescription": "更新分组名称并管理包含的扩展。",
+    "groupExtensions": "此分组中的扩展",
+    "noExtensionsInGroup": "尚未添加扩展",
+    "editExtensionDescription": "更新扩展名称、查看元数据或重新上传扩展文件。",
+    "metadata": "元数据",
+    "noMetadata": "清单中没有可用的元数据。",
+    "selectFile": "选择文件",
+    "syncEnabled": "同步已启用",
+    "syncDisabled": "同步已禁用",
+    "syncEnableTooltip": "启用同步",
+    "syncDisableTooltip": "禁用同步"
   },
   "pro": {
     "badge": "PRO",

@@ -164,6 +164,8 @@ export function CamoufoxConfigDialog({
                 readOnly={isRunning}
                 crossOsUnlocked={crossOsUnlocked}
                 limitedMode={!crossOsUnlocked}
+                profileVersion={profile.version}
+                profileBrowser="wayfern"
               />
             ) : (
               <SharedCamoufoxConfigForm
@@ -174,6 +176,8 @@ export function CamoufoxConfigDialog({
                 browserType="camoufox"
                 crossOsUnlocked={crossOsUnlocked}
                 limitedMode={!crossOsUnlocked}
+                profileVersion={profile.version}
+                profileBrowser="camoufox"
               />
             )}
           </div>

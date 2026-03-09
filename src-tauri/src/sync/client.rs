@@ -210,63 +210,84 @@ impl SyncClient {
     &self,
     items: Vec<(String, Option<String>)>,
   ) -> SyncResult<PresignUploadBatchResponse> {
-    let request = PresignUploadBatchRequest {
-      items: items
-        .into_iter()
-        .map(|(key, content_type)| PresignUploadBatchItem { key, content_type })
-        .collect(),
-      expires_in: Some(3600),
-    };
+    let chunk_size = 500;
+    let mut all_items = Vec::new();
 
-    let response = self
-      .client
-      .post(self.url("presign-upload-batch"))
-      .header("Authorization", format!("Bearer {}", self.token))
-      .json(&request)
-      .send()
-      .await
-      .map_err(|e| SyncError::NetworkError(e.to_string()))?;
+    for chunk in items.chunks(chunk_size) {
+      let request = PresignUploadBatchRequest {
+        items: chunk
+          .iter()
+          .map(|(key, content_type)| PresignUploadBatchItem {
+            key: key.clone(),
+            content_type: content_type.clone(),
+          })
+          .collect(),
+        expires_in: Some(3600),
+      };
 
-    if response.status().is_client_error() {
-      let status = response.status();
-      let body = response.text().await.unwrap_or_default();
-      return Err(SyncError::AuthError(format!("({status}) {body}")));
+      let response = self
+        .client
+        .post(self.url("presign-upload-batch"))
+        .header("Authorization", format!("Bearer {}", self.token))
+        .json(&request)
+        .send()
+        .await
+        .map_err(|e| SyncError::NetworkError(e.to_string()))?;
+
+      if response.status().is_client_error() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(SyncError::AuthError(format!("({status}) {body}")));
+      }
+
+      let batch_response: PresignUploadBatchResponse = response
+        .json()
+        .await
+        .map_err(|e| SyncError::SerializationError(e.to_string()))?;
+
+      all_items.extend(batch_response.items);
     }
 
-    response
-      .json()
-      .await
-      .map_err(|e| SyncError::SerializationError(e.to_string()))
+    Ok(PresignUploadBatchResponse { items: all_items })
   }
 
   pub async fn presign_download_batch(
     &self,
     keys: Vec<String>,
   ) -> SyncResult<PresignDownloadBatchResponse> {
-    let request = PresignDownloadBatchRequest {
-      keys,
-      expires_in: Some(3600),
-    };
+    let chunk_size = 500;
+    let mut all_items = Vec::new();
 
-    let response = self
-      .client
-      .post(self.url("presign-download-batch"))
-      .header("Authorization", format!("Bearer {}", self.token))
-      .json(&request)
-      .send()
-      .await
-      .map_err(|e| SyncError::NetworkError(e.to_string()))?;
+    for chunk in keys.chunks(chunk_size) {
+      let request = PresignDownloadBatchRequest {
+        keys: chunk.to_vec(),
+        expires_in: Some(3600),
+      };
 
-    if response.status().is_client_error() {
-      let status = response.status();
-      let body = response.text().await.unwrap_or_default();
-      return Err(SyncError::AuthError(format!("({status}) {body}")));
+      let response = self
+        .client
+        .post(self.url("presign-download-batch"))
+        .header("Authorization", format!("Bearer {}", self.token))
+        .json(&request)
+        .send()
+        .await
+        .map_err(|e| SyncError::NetworkError(e.to_string()))?;
+
+      if response.status().is_client_error() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(SyncError::AuthError(format!("({status}) {body}")));
+      }
+
+      let batch_response: PresignDownloadBatchResponse = response
+        .json()
+        .await
+        .map_err(|e| SyncError::SerializationError(e.to_string()))?;
+
+      all_items.extend(batch_response.items);
     }
 
-    response
-      .json()
-      .await
-      .map_err(|e| SyncError::SerializationError(e.to_string()))
+    Ok(PresignDownloadBatchResponse { items: all_items })
   }
 
   pub async fn delete_prefix(

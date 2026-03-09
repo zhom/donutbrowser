@@ -55,6 +55,8 @@ pub struct AppSettings {
   pub language: Option<String>, // ISO 639-1: "en", "es", "pt", "fr", "zh", "ja", "ru", or None for system default
   #[serde(default)]
   pub window_resize_warning_dismissed: bool,
+  #[serde(default)]
+  pub disable_auto_updates: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -89,6 +91,7 @@ impl Default for AppSettings {
       launch_on_login_declined: false,
       language: None,
       window_resize_warning_dismissed: false,
+      disable_auto_updates: false,
     }
   }
 }
@@ -1020,6 +1023,7 @@ mod tests {
       launch_on_login_declined: false,
       language: None,
       window_resize_warning_dismissed: false,
+      disable_auto_updates: false,
     };
 
     let save_result = manager.save_settings(&test_settings);

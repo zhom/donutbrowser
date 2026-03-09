@@ -43,6 +43,7 @@ type SyncStatus = "disabled" | "syncing" | "synced" | "error" | "waiting";
 function getSyncStatusDot(
   group: GroupWithCount,
   liveStatus: SyncStatus | undefined,
+  errorMessage?: string,
 ): { color: string; tooltip: string; animate: boolean } {
   const status = liveStatus ?? (group.sync_enabled ? "synced" : "disabled");
 
@@ -64,7 +65,11 @@ function getSyncStatusDot(
         animate: false,
       };
     case "error":
-      return { color: "bg-red-500", tooltip: "Sync error", animate: false };
+      return {
+        color: "bg-red-500",
+        tooltip: errorMessage ? `Sync error: ${errorMessage}` : "Sync error",
+        animate: false,
+      };
     default:
       return { color: "bg-gray-400", tooltip: "Not synced", animate: false };
   }
@@ -95,6 +100,9 @@ export function GroupManagementDialog({
   const [groupSyncStatus, setGroupSyncStatus] = useState<
     Record<string, SyncStatus>
   >({});
+  const [groupSyncErrors, setGroupSyncErrors] = useState<
+    Record<string, string>
+  >({});
   const [groupInUse, setGroupInUse] = useState<Record<string, boolean>>({});
   const [isTogglingSync, setIsTogglingSync] = useState<Record<string, boolean>>(
     {},
@@ -105,14 +113,17 @@ export function GroupManagementDialog({
     let unlisten: (() => void) | undefined;
 
     const setupListener = async () => {
-      unlisten = await listen<{ id: string; status: string }>(
+      unlisten = await listen<{ id: string; status: string; error?: string }>(
         "group-sync-status",
         (event) => {
-          const { id, status } = event.payload;
+          const { id, status, error } = event.payload;
           setGroupSyncStatus((prev) => ({
             ...prev,
             [id]: status as SyncStatus,
           }));
+          if (error) {
+            setGroupSyncErrors((prev) => ({ ...prev, [id]: error }));
+          }
         },
       );
     };
@@ -216,7 +227,7 @@ export function GroupManagementDialog({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Manage Profile Groups</DialogTitle>
             <DialogDescription>
@@ -225,149 +236,152 @@ export function GroupManagementDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            {/* Create new group button */}
-            <div className="flex justify-between items-center">
-              <Label>Groups</Label>
-              <RippleButton
-                size="sm"
-                onClick={() => setCreateDialogOpen(true)}
-                className="flex gap-2 items-center"
-              >
-                <GoPlus className="w-4 h-4" />
-                Create
-              </RippleButton>
+          <ScrollArea className="overflow-y-auto flex-1">
+            <div className="space-y-4">
+              {/* Create new group button */}
+              <div className="flex justify-between items-center">
+                <Label>Groups</Label>
+                <RippleButton
+                  size="sm"
+                  onClick={() => setCreateDialogOpen(true)}
+                  className="flex gap-2 items-center"
+                >
+                  <GoPlus className="w-4 h-4" />
+                  Create
+                </RippleButton>
+              </div>
+
+              {error && (
+                <div className="p-3 text-sm text-red-600 bg-red-50 rounded-md dark:bg-red-900/20 dark:text-red-400">
+                  {error}
+                </div>
+              )}
+
+              {/* Groups list */}
+              {isLoading ? (
+                <div className="text-sm text-muted-foreground">
+                  Loading groups...
+                </div>
+              ) : groups.length === 0 ? (
+                <div className="text-sm text-muted-foreground">
+                  No groups created yet. Create your first group using the
+                  button above.
+                </div>
+              ) : (
+                <div className="border rounded-md">
+                  <ScrollArea className="h-[240px]">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead className="w-20">Profiles</TableHead>
+                          <TableHead className="w-24">Sync</TableHead>
+                          <TableHead className="w-24">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {groups.map((group) => {
+                          const syncDot = getSyncStatusDot(
+                            group,
+                            groupSyncStatus[group.id],
+                            groupSyncErrors[group.id],
+                          );
+                          return (
+                            <TableRow key={group.id}>
+                              <TableCell className="font-medium">
+                                <div className="flex items-center gap-2">
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <div
+                                        className={`w-2 h-2 rounded-full shrink-0 ${syncDot.color} ${
+                                          syncDot.animate ? "animate-pulse" : ""
+                                        }`}
+                                      />
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>{syncDot.tooltip}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                  {group.name}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="secondary">{group.count}</Badge>
+                              </TableCell>
+                              <TableCell>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="flex items-center">
+                                      <Checkbox
+                                        checked={group.sync_enabled}
+                                        onCheckedChange={() =>
+                                          handleToggleSync(group)
+                                        }
+                                        disabled={
+                                          isTogglingSync[group.id] ||
+                                          groupInUse[group.id]
+                                        }
+                                      />
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {groupInUse[group.id] ? (
+                                      <p>
+                                        Sync cannot be disabled while this group
+                                        is used by synced profiles
+                                      </p>
+                                    ) : (
+                                      <p>
+                                        {group.sync_enabled
+                                          ? "Disable sync"
+                                          : "Enable sync"}
+                                      </p>
+                                    )}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex gap-1">
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleEditGroup(group)}
+                                      >
+                                        <LuPencil className="w-4 h-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Edit group</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleDeleteGroup(group)}
+                                      >
+                                        <LuTrash2 className="w-4 h-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Delete group</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                </div>
+              )}
             </div>
-
-            {error && (
-              <div className="p-3 text-sm text-red-600 bg-red-50 rounded-md dark:bg-red-900/20 dark:text-red-400">
-                {error}
-              </div>
-            )}
-
-            {/* Groups list */}
-            {isLoading ? (
-              <div className="text-sm text-muted-foreground">
-                Loading groups...
-              </div>
-            ) : groups.length === 0 ? (
-              <div className="text-sm text-muted-foreground">
-                No groups created yet. Create your first group using the button
-                above.
-              </div>
-            ) : (
-              <div className="border rounded-md">
-                <ScrollArea className="h-[240px]">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead className="w-20">Profiles</TableHead>
-                        <TableHead className="w-24">Sync</TableHead>
-                        <TableHead className="w-24">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {groups.map((group) => {
-                        const syncDot = getSyncStatusDot(
-                          group,
-                          groupSyncStatus[group.id],
-                        );
-                        return (
-                          <TableRow key={group.id}>
-                            <TableCell className="font-medium">
-                              <div className="flex items-center gap-2">
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <div
-                                      className={`w-2 h-2 rounded-full shrink-0 ${syncDot.color} ${
-                                        syncDot.animate ? "animate-pulse" : ""
-                                      }`}
-                                    />
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>{syncDot.tooltip}</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                                {group.name}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="secondary">{group.count}</Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <div className="flex items-center">
-                                    <Checkbox
-                                      checked={group.sync_enabled}
-                                      onCheckedChange={() =>
-                                        handleToggleSync(group)
-                                      }
-                                      disabled={
-                                        isTogglingSync[group.id] ||
-                                        groupInUse[group.id]
-                                      }
-                                    />
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  {groupInUse[group.id] ? (
-                                    <p>
-                                      Sync cannot be disabled while this group
-                                      is used by synced profiles
-                                    </p>
-                                  ) : (
-                                    <p>
-                                      {group.sync_enabled
-                                        ? "Disable sync"
-                                        : "Enable sync"}
-                                    </p>
-                                  )}
-                                </TooltipContent>
-                              </Tooltip>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex gap-1">
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => handleEditGroup(group)}
-                                    >
-                                      <LuPencil className="w-4 h-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Edit group</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => handleDeleteGroup(group)}
-                                    >
-                                      <LuTrash2 className="w-4 h-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Delete group</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </ScrollArea>
-              </div>
-            )}
-          </div>
+          </ScrollArea>
 
           <DialogFooter>
             <RippleButton variant="outline" onClick={onClose}>

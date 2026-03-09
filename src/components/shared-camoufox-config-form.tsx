@@ -1,7 +1,9 @@
 "use client";
 
+import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { LoadingButton } from "@/components/loading-button";
 import MultipleSelector, { type Option } from "@/components/multiple-selector";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -33,6 +35,8 @@ interface SharedCamoufoxConfigFormProps {
   browserType?: "camoufox" | "wayfern"; // Browser type to customize form options
   crossOsUnlocked?: boolean; // Allow selecting non-current OS (paid feature)
   limitedMode?: boolean; // Blur and disable advanced fields while keeping basic options accessible
+  profileVersion?: string;
+  profileBrowser?: string;
 }
 
 // Determine if fingerprint editing should be disabled
@@ -124,6 +128,8 @@ export function SharedCamoufoxConfigForm({
   browserType = "camoufox",
   crossOsUnlocked = false,
   limitedMode = false,
+  profileVersion,
+  profileBrowser,
 }: SharedCamoufoxConfigFormProps) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState(
@@ -132,6 +138,26 @@ export function SharedCamoufoxConfigForm({
   const [fingerprintConfig, setFingerprintConfig] =
     useState<CamoufoxFingerprintConfig>({});
   const [currentOS] = useState<CamoufoxOS>(getCurrentOS);
+  const [isGeneratingFingerprint, setIsGeneratingFingerprint] = useState(false);
+
+  const handleGenerateFingerprint = async () => {
+    if (!profileVersion) return;
+    const browser = profileBrowser || browserType || "camoufox";
+    setIsGeneratingFingerprint(true);
+    try {
+      const configJson = JSON.stringify(config);
+      const result = await invoke<string>("generate_sample_fingerprint", {
+        browser,
+        version: profileVersion,
+        configJson,
+      });
+      onConfigChange("fingerprint", result);
+    } catch (error) {
+      console.error("Failed to generate fingerprint:", error);
+    } finally {
+      setIsGeneratingFingerprint(false);
+    }
+  };
 
   // Get selected OS (defaults to current OS)
   const selectedOS = config.os || currentOS;
@@ -223,7 +249,22 @@ export function SharedCamoufoxConfigForm({
     <div className="space-y-6">
       {/* Operating System Selection */}
       <div className="space-y-3">
-        <Label>{t("fingerprint.osLabel")}</Label>
+        <div className="flex items-center justify-between">
+          <Label>{t("fingerprint.osLabel")}</Label>
+          {profileVersion && (!isCreating || crossOsUnlocked) && (
+            <LoadingButton
+              isLoading={isGeneratingFingerprint}
+              onClick={handleGenerateFingerprint}
+              disabled={readOnly}
+              variant="outline"
+              size="sm"
+            >
+              {isCreating
+                ? t("fingerprint.generateFingerprint")
+                : t("fingerprint.refreshFingerprint")}
+            </LoadingButton>
+          )}
+        </div>
         <Select
           value={selectedOS}
           onValueChange={(value: CamoufoxOS) => onConfigChange("os", value)}

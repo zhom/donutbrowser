@@ -39,12 +39,22 @@ impl BrowserRunner {
   }
 
   /// Refresh cloud proxy credentials if the profile uses a cloud or cloud-derived proxy,
-  /// then resolve the proxy settings.
-  async fn resolve_proxy_with_refresh(&self, proxy_id: Option<&String>) -> Option<ProxySettings> {
+  /// then resolve the proxy settings with profile-specific sid for sticky sessions.
+  async fn resolve_proxy_with_refresh(
+    &self,
+    proxy_id: Option<&String>,
+    profile_id: Option<&str>,
+  ) -> Option<ProxySettings> {
     let proxy_id = proxy_id?;
     if PROXY_MANAGER.is_cloud_or_derived(proxy_id) {
       log::info!("Refreshing cloud proxy credentials before launch for proxy {proxy_id}");
       CLOUD_AUTH.sync_cloud_proxy().await;
+    }
+    // For cloud-derived proxies, inject profile-specific sid for sticky sessions
+    if let Some(pid) = profile_id {
+      if PROXY_MANAGER.is_cloud_or_derived(proxy_id) {
+        return PROXY_MANAGER.resolve_proxy_for_profile(proxy_id, pid);
+      }
     }
     PROXY_MANAGER.get_proxy_settings_by_id(proxy_id)
   }
@@ -106,7 +116,7 @@ impl BrowserRunner {
       // Always start a local proxy for Camoufox (for traffic monitoring and geoip support)
       // Refresh cloud proxy credentials if needed before resolving
       let mut upstream_proxy = self
-        .resolve_proxy_with_refresh(profile.proxy_id.as_ref())
+        .resolve_proxy_with_refresh(profile.proxy_id.as_ref(), Some(&profile.id.to_string()))
         .await;
 
       // If profile has a VPN instead of proxy, start VPN worker and use it as upstream
@@ -364,7 +374,7 @@ impl BrowserRunner {
       // Always start a local proxy for Wayfern (for traffic monitoring and geoip support)
       // Refresh cloud proxy credentials if needed before resolving
       let mut upstream_proxy = self
-        .resolve_proxy_with_refresh(profile.proxy_id.as_ref())
+        .resolve_proxy_with_refresh(profile.proxy_id.as_ref(), Some(&profile.id.to_string()))
         .await;
 
       // If profile has a VPN instead of proxy, start VPN worker and use it as upstream
@@ -521,6 +531,7 @@ impl BrowserRunner {
           proxy_url,
           profile.ephemeral,
           &extension_paths,
+          remote_debugging_port,
         )
         .await
         .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
@@ -622,7 +633,7 @@ impl BrowserRunner {
 
     // Refresh cloud proxy credentials if needed before resolving
     let _stored_proxy_settings = self
-      .resolve_proxy_with_refresh(profile.proxy_id.as_ref())
+      .resolve_proxy_with_refresh(profile.proxy_id.as_ref(), Some(&profile.id.to_string()))
       .await;
 
     // Use provided local proxy for Chromium-based browsers launch arguments
@@ -1077,10 +1088,10 @@ impl BrowserRunner {
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
     // Always start a local proxy for API launches
     // Determine upstream proxy if configured; otherwise use DIRECT
-    let upstream_proxy = profile
-      .proxy_id
-      .as_ref()
-      .and_then(|id| PROXY_MANAGER.get_proxy_settings_by_id(id));
+    // Refresh cloud proxy credentials before resolving
+    let upstream_proxy = self
+      .resolve_proxy_with_refresh(profile.proxy_id.as_ref(), Some(&profile.id.to_string()))
+      .await;
 
     // Use a temporary PID (1) to start the proxy, we'll update it after browser launch
     let temp_pid = 1u32;
@@ -2539,6 +2550,13 @@ pub async fn launch_browser_profile(
   // Team lock check: if profile is sync-enabled and user is on a team, acquire lock
   crate::team_lock::acquire_team_lock_if_needed(&profile).await?;
 
+  // Notify sync scheduler that profile is now running
+  if let Some(scheduler) = crate::sync::get_global_scheduler() {
+    scheduler
+      .mark_profile_running(&profile.id.to_string())
+      .await;
+  }
+
   let browser_runner = BrowserRunner::instance();
 
   // Store the internal proxy settings for passing to launch_browser
@@ -2569,10 +2587,13 @@ pub async fn launch_browser_profile(
   // This ensures all traffic goes through the local proxy for monitoring and future features
   if profile.browser != "camoufox" && profile.browser != "wayfern" {
     // Determine upstream proxy if configured; otherwise use DIRECT (no upstream)
-    let mut upstream_proxy = profile_for_launch
-      .proxy_id
-      .as_ref()
-      .and_then(|id| PROXY_MANAGER.get_proxy_settings_by_id(id));
+    // Refresh cloud proxy credentials and inject profile-specific sid
+    let mut upstream_proxy = BrowserRunner::instance()
+      .resolve_proxy_with_refresh(
+        profile_for_launch.proxy_id.as_ref(),
+        Some(&profile_for_launch.id.to_string()),
+      )
+      .await;
 
     // If profile has a VPN instead of proxy, start VPN worker and use it as upstream
     if upstream_proxy.is_none() {
@@ -2745,6 +2766,16 @@ pub async fn kill_browser_profile(
 
       // Release team lock if applicable
       crate::team_lock::release_team_lock_if_needed(&profile).await;
+
+      // Notify sync scheduler that profile stopped and queue sync
+      if let Some(scheduler) = crate::sync::get_global_scheduler() {
+        let pid = profile.id.to_string();
+        scheduler.mark_profile_stopped(&pid).await;
+        if profile.is_sync_enabled() {
+          log::info!("Profile '{}' killed, queuing sync", profile.name);
+          scheduler.queue_profile_sync(pid).await;
+        }
+      }
 
       // Auto-update non-running profiles and cleanup unused binaries
       let browser_for_update = profile.browser.clone();

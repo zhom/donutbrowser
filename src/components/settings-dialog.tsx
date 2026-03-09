@@ -9,6 +9,7 @@ import { BsCamera, BsMic } from "react-icons/bs";
 import { LoadingButton } from "@/components/loading-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   ColorPicker,
   ColorPickerAlpha,
@@ -60,6 +61,7 @@ interface AppSettings {
   api_enabled: boolean;
   api_port: number;
   api_token?: string;
+  disable_auto_updates?: boolean;
 }
 
 interface CustomThemeState {
@@ -116,6 +118,7 @@ export function SettingsDialog({
   const [requestingPermission, setRequestingPermission] =
     useState<PermissionType | null>(null);
   const [isMacOS, setIsMacOS] = useState(false);
+  const [isLinux, setIsLinux] = useState(false);
   const [hasE2ePassword, setHasE2ePassword] = useState(false);
   const [e2ePassword, setE2ePassword] = useState("");
   const [e2ePasswordConfirm, setE2ePasswordConfirm] = useState("");
@@ -486,6 +489,8 @@ export function SettingsDialog({
       const userAgent = navigator.userAgent;
       const isMac = userAgent.includes("Mac");
       setIsMacOS(isMac);
+      const isLin = !userAgent.includes("Mac") && !userAgent.includes("Win");
+      setIsLinux(isLin);
 
       if (isMac) {
         loadPermissions().catch(console.error);
@@ -547,7 +552,8 @@ export function SettingsDialog({
         JSON.stringify(originalSettings.custom_theme ?? {})) ||
     (settings.theme !== "custom" &&
       JSON.stringify(settings.custom_theme ?? {}) !==
-        JSON.stringify(originalSettings.custom_theme ?? {}));
+        JSON.stringify(originalSettings.custom_theme ?? {})) ||
+    settings.disable_auto_updates !== originalSettings.disable_auto_updates;
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -1027,6 +1033,29 @@ export function SettingsDialog({
           {/* Advanced Section */}
           <div className="space-y-4">
             <Label className="text-base font-medium">Advanced</Label>
+
+            {!isLinux && (
+              <div className="flex items-start space-x-3 p-3 rounded-lg border">
+                <Checkbox
+                  id="disable-auto-updates"
+                  checked={settings.disable_auto_updates || false}
+                  onCheckedChange={(checked) =>
+                    updateSetting("disable_auto_updates", checked as boolean)
+                  }
+                />
+                <div className="space-y-1">
+                  <Label
+                    htmlFor="disable-auto-updates"
+                    className="text-sm font-medium"
+                  >
+                    {t("settings.disableAutoUpdates")}
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    {t("settings.disableAutoUpdatesDescription")}
+                  </p>
+                </div>
+              </div>
+            )}
 
             <LoadingButton
               isLoading={isClearingCache}

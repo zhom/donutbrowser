@@ -48,12 +48,27 @@ interface VersionUpdateToastProps extends BaseToastProps {
   };
 }
 
+interface SyncProgressToastProps extends BaseToastProps {
+  type: "sync-progress";
+  progress?: {
+    completed_files: number;
+    total_files: number;
+    completed_bytes: number;
+    total_bytes: number;
+    speed_bytes_per_sec: number;
+    eta_seconds: number;
+    failed_count: number;
+    phase: string;
+  };
+}
+
 type ToastProps =
   | SuccessToastProps
   | ErrorToastProps
   | DownloadToastProps
   | LoadingToastProps
-  | VersionUpdateToastProps;
+  | VersionUpdateToastProps
+  | SyncProgressToastProps;
 
 export function showToast(props: ToastProps & { id?: string }) {
   const toastId = props.id ?? `toast-${props.type}-${Date.now()}`;
@@ -84,6 +99,9 @@ export function showToast(props: ToastProps & { id?: string }) {
         break;
       case "version-update":
         duration = 15000;
+        break;
+      case "sync-progress":
+        duration = Number.POSITIVE_INFINITY;
         break;
       default:
         duration = 5000;
@@ -232,28 +250,24 @@ export function dismissToast(id: string) {
   sonnerToast.dismiss(id);
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  const i = Math.min(
-    Math.floor(Math.log(bytes) / Math.log(1024)),
-    units.length - 1,
-  );
-  const value = bytes / 1024 ** i;
-  return `${i === 0 ? value : value.toFixed(1)} ${units[i]}`;
-}
-
 export function showSyncProgressToast(
   profileName: string,
-  totalFiles: number,
-  totalBytes: number,
+  progress: {
+    completed_files: number;
+    total_files: number;
+    completed_bytes: number;
+    total_bytes: number;
+    speed_bytes_per_sec: number;
+    eta_seconds: number;
+    failed_count: number;
+    phase: string;
+  },
   options?: { id?: string },
 ) {
-  const description = `${totalFiles} files (${formatBytes(totalBytes)})`;
   return showToast({
-    type: "loading",
+    type: "sync-progress",
     title: `Syncing profile '${profileName}'...`,
-    description,
+    progress,
     id: options?.id,
     duration: Number.POSITIVE_INFINITY,
     onCancel: () => {

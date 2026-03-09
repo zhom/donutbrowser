@@ -1,7 +1,9 @@
 "use client";
 
+import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { LoadingButton } from "@/components/loading-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -31,6 +33,8 @@ interface WayfernConfigFormProps {
   readOnly?: boolean;
   crossOsUnlocked?: boolean;
   limitedMode?: boolean;
+  profileVersion?: string;
+  profileBrowser?: string;
 }
 
 const isFingerprintEditingDisabled = (config: WayfernConfig): boolean => {
@@ -62,6 +66,8 @@ export function WayfernConfigForm({
   readOnly = false,
   crossOsUnlocked = false,
   limitedMode = false,
+  profileVersion,
+  profileBrowser,
 }: WayfernConfigFormProps) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState(
@@ -70,6 +76,25 @@ export function WayfernConfigForm({
   const [fingerprintConfig, setFingerprintConfig] =
     useState<WayfernFingerprintConfig>({});
   const [currentOS] = useState<WayfernOS>(getCurrentOS);
+  const [isGeneratingFingerprint, setIsGeneratingFingerprint] = useState(false);
+
+  const handleGenerateFingerprint = async () => {
+    if (!profileVersion) return;
+    setIsGeneratingFingerprint(true);
+    try {
+      const configJson = JSON.stringify(config);
+      const result = await invoke<string>("generate_sample_fingerprint", {
+        browser: profileBrowser || "wayfern",
+        version: profileVersion,
+        configJson,
+      });
+      onConfigChange("fingerprint", result);
+    } catch (error) {
+      console.error("Failed to generate fingerprint:", error);
+    } finally {
+      setIsGeneratingFingerprint(false);
+    }
+  };
 
   const selectedOS = config.os || currentOS;
 
@@ -150,7 +175,22 @@ export function WayfernConfigForm({
     <div className="space-y-6">
       {/* Operating System Selection */}
       <div className="space-y-3">
-        <Label>{t("fingerprint.osLabel")}</Label>
+        <div className="flex items-center justify-between">
+          <Label>{t("fingerprint.osLabel")}</Label>
+          {profileVersion && (!isCreating || crossOsUnlocked) && (
+            <LoadingButton
+              isLoading={isGeneratingFingerprint}
+              onClick={handleGenerateFingerprint}
+              disabled={readOnly}
+              variant="outline"
+              size="sm"
+            >
+              {isCreating
+                ? t("fingerprint.generateFingerprint")
+                : t("fingerprint.refreshFingerprint")}
+            </LoadingButton>
+          )}
+        </div>
         <Select
           value={selectedOS}
           onValueChange={(value: WayfernOS) => onConfigChange("os", value)}

@@ -311,12 +311,18 @@ impl WayfernManager {
         "windows"
       });
 
+    // Include wayfern token if available (enables cross-OS fingerprinting for paid users)
+    let wayfern_token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
+    let mut refresh_params = json!({ "operatingSystem": os });
+    if let Some(ref token) = wayfern_token {
+      refresh_params
+        .as_object_mut()
+        .unwrap()
+        .insert("wayfernToken".to_string(), json!(token));
+    }
+
     let refresh_result = self
-      .send_cdp_command(
-        &ws_url,
-        "Wayfern.refreshFingerprint",
-        json!({ "operatingSystem": os }),
-      )
+      .send_cdp_command(&ws_url, "Wayfern.refreshFingerprint", refresh_params)
       .await;
 
     if let Err(e) = refresh_result {
@@ -397,6 +403,7 @@ impl WayfernManager {
     proxy_url: Option<&str>,
     ephemeral: bool,
     extension_paths: &[String],
+    remote_debugging_port: Option<u16>,
   ) -> Result<WayfernLaunchResult, Box<dyn std::error::Error + Send + Sync>> {
     let executable_path = if let Some(path) = &config.executable_path {
       let p = PathBuf::from(path);
@@ -414,7 +421,10 @@ impl WayfernManager {
         .map_err(|e| format!("Failed to get Wayfern executable path: {e}"))?
     };
 
-    let port = Self::find_free_port().await?;
+    let port = match remote_debugging_port {
+      Some(p) => p,
+      None => Self::find_free_port().await?,
+    };
     log::info!("Launching Wayfern on CDP port {port}");
 
     let mut args = vec![
@@ -528,16 +538,21 @@ impl WayfernManager {
         );
       }
 
+      // Include wayfern token if available (enables cross-OS fingerprinting for paid users)
+      let wayfern_token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
+      let mut fingerprint_params = fingerprint_for_cdp.clone();
+      if let Some(ref token) = wayfern_token {
+        if let Some(obj) = fingerprint_params.as_object_mut() {
+          obj.insert("wayfernToken".to_string(), json!(token));
+        }
+      }
+
       for target in &page_targets {
         if let Some(ws_url) = &target.websocket_debugger_url {
           log::info!("Applying fingerprint to target via WebSocket: {}", ws_url);
           // Wayfern.setFingerprint expects the fingerprint object directly, NOT wrapped
           match self
-            .send_cdp_command(
-              ws_url,
-              "Wayfern.setFingerprint",
-              fingerprint_for_cdp.clone(),
-            )
+            .send_cdp_command(ws_url, "Wayfern.setFingerprint", fingerprint_params.clone())
             .await
           {
             Ok(result) => log::info!(
@@ -840,6 +855,7 @@ impl WayfernManager {
         proxy_url,
         profile.ephemeral,
         &[],
+        None,
       )
       .await
   }

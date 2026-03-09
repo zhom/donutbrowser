@@ -1048,8 +1048,9 @@ export function ProfilesDataTable({
         await invoke("create_cloud_location_proxy", {
           name: country.name,
           country: country.code,
-          state: null,
+          region: null,
           city: null,
+          isp: null,
         });
         await emit("stored-proxies-changed");
         // Wait briefly for proxy list to update, then find and assign the new proxy

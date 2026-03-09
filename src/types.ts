@@ -47,6 +47,10 @@ export interface Extension {
   updated_at: number;
   sync_enabled?: boolean;
   last_sync?: number;
+  version?: string;
+  description?: string;
+  author?: string;
+  homepage_url?: string;
 }
 
 export interface ExtensionGroup {
@@ -127,7 +131,9 @@ export interface StoredProxy {
   is_cloud_derived?: boolean;
   geo_country?: string;
   geo_state?: string;
+  geo_region?: string;
   geo_city?: string;
+  geo_isp?: string;
 }
 
 export interface LocationItem {

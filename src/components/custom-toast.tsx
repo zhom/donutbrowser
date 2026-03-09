@@ -116,6 +116,20 @@ interface TwilightUpdateToastProps extends BaseToastProps {
   hasUpdate?: boolean;
 }
 
+interface SyncProgressToastProps extends BaseToastProps {
+  type: "sync-progress";
+  progress?: {
+    completed_files: number;
+    total_files: number;
+    completed_bytes: number;
+    total_bytes: number;
+    speed_bytes_per_sec: number;
+    eta_seconds: number;
+    failed_count: number;
+    phase: string;
+  };
+}
+
 type ToastProps =
   | LoadingToastProps
   | SuccessToastProps
@@ -123,7 +137,38 @@ type ToastProps =
   | DownloadToastProps
   | VersionUpdateToastProps
   | FetchingToastProps
-  | TwilightUpdateToastProps;
+  | TwilightUpdateToastProps
+  | SyncProgressToastProps;
+
+function formatBytesCompact(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const i = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    units.length - 1,
+  );
+  const value = bytes / 1024 ** i;
+  return `${i === 0 ? value : value.toFixed(1)} ${units[i]}`;
+}
+
+function formatSpeedCompact(bytesPerSec: number): string {
+  if (bytesPerSec >= 1024 * 1024) {
+    return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
+  }
+  return `${(bytesPerSec / 1024).toFixed(0)} KB/s`;
+}
+
+function formatEtaCompact(seconds: number): string {
+  if (seconds >= 3600) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    return `${h}h ${m}m`;
+  }
+  if (seconds >= 60) {
+    return `${Math.floor(seconds / 60)} min`;
+  }
+  return `${Math.round(seconds)}s`;
+}
 
 function getToastIcon(type: ToastProps["type"], stage?: string) {
   switch (type) {
@@ -150,6 +195,10 @@ function getToastIcon(type: ToastProps["type"], stage?: string) {
         <LuRefreshCw className="flex-shrink-0 w-4 h-4 animate-spin text-foreground" />
       );
     case "twilight-update":
+      return (
+        <LuRefreshCw className="flex-shrink-0 w-4 h-4 animate-spin text-foreground" />
+      );
+    case "sync-progress":
       return (
         <LuRefreshCw className="flex-shrink-0 w-4 h-4 animate-spin text-foreground" />
       );
@@ -234,6 +283,39 @@ export function UnifiedToast(props: ToastProps) {
                   {progress.current}/{progress.total}
                 </span>
               </div>
+            </div>
+          )}
+
+        {/* Sync progress */}
+        {type === "sync-progress" &&
+          progress &&
+          "completed_files" in progress && (
+            <div className="mt-1">
+              <p className="text-xs text-muted-foreground">
+                {progress.phase === "uploading" ? "Uploading" : "Downloading"}{" "}
+                {progress.completed_files}/{progress.total_files} files
+                {" \u2022 "}
+                {formatBytesCompact(progress.completed_bytes)} /{" "}
+                {formatBytesCompact(progress.total_bytes)}
+                {progress.speed_bytes_per_sec > 0 && (
+                  <>
+                    {" \u2022 "}
+                    {formatSpeedCompact(progress.speed_bytes_per_sec)}
+                  </>
+                )}
+                {progress.eta_seconds > 0 &&
+                  progress.completed_files < progress.total_files && (
+                    <>
+                      {" \u2022 ~"}
+                      {formatEtaCompact(progress.eta_seconds)} remaining
+                    </>
+                  )}
+              </p>
+              {progress.failed_count > 0 && (
+                <p className="text-xs text-destructive mt-0.5">
+                  {progress.failed_count} file(s) failed
+                </p>
+              )}
             </div>
           )}
 

@@ -81,6 +81,14 @@ struct SyncTokenResponse {
   sync_token: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct WayfernTokenResponse {
+  token: String,
+  #[serde(rename = "expiresIn")]
+  #[allow(dead_code)]
+  expires_in: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocationItem {
   pub code: String,
@@ -105,6 +113,7 @@ pub struct CloudAuthManager {
   client: Client,
   state: Mutex<Option<CloudAuthState>>,
   refresh_lock: tokio::sync::Mutex<()>,
+  wayfern_token: Mutex<Option<String>>,
 }
 
 lazy_static! {
@@ -118,6 +127,7 @@ impl CloudAuthManager {
       client: Client::new(),
       state: Mutex::new(state),
       refresh_lock: tokio::sync::Mutex::new(()),
+      wayfern_token: Mutex::new(None),
     }
   }
 
@@ -578,6 +588,9 @@ impl CloudAuthManager {
   }
 
   pub async fn logout(&self) -> Result<(), String> {
+    // Clear wayfern token
+    self.clear_wayfern_token().await;
+
     // Disconnect team lock manager
     crate::team_lock::TEAM_LOCK.disconnect().await;
 
@@ -666,7 +679,7 @@ impl CloudAuthManager {
 
   /// API call with 401 retry: if first attempt gets 401, refresh access token and retry once.
   /// Uses refresh_lock to prevent concurrent token rotations from racing.
-  async fn api_call_with_retry<F, Fut, T>(&self, make_request: F) -> Result<T, String>
+  pub async fn api_call_with_retry<F, Fut, T>(&self, make_request: F) -> Result<T, String>
   where
     F: Fn(String) -> Fut + Send,
     Fut: std::future::Future<Output = Result<T, String>> + Send,
@@ -697,11 +710,12 @@ impl CloudAuthManager {
 
   /// Fetch proxy configuration from the cloud backend
   async fn fetch_proxy_config(&self) -> Result<Option<CloudProxyConfigResponse>, String> {
-    // Check cached user state for proxy bandwidth
+    // Check cached user state for proxy bandwidth (subscription or extra)
     {
       let state = self.state.lock().await;
       match &*state {
-        Some(auth) if auth.user.proxy_bandwidth_limit_mb > 0 => {}
+        Some(auth)
+          if auth.user.proxy_bandwidth_limit_mb > 0 || auth.user.proxy_bandwidth_extra_mb > 0 => {}
         _ => return Ok(None),
       }
     }
@@ -840,13 +854,13 @@ impl CloudAuthManager {
       .await
   }
 
-  /// Fetch state list for a country from the cloud backend
-  pub async fn fetch_states(&self, country: &str) -> Result<Vec<LocationItem>, String> {
+  /// Fetch region list for a country from the cloud backend
+  pub async fn fetch_regions(&self, country: &str) -> Result<Vec<LocationItem>, String> {
     let country = country.to_string();
     self
       .api_call_with_retry(move |access_token| {
         let url = format!(
-          "{CLOUD_API_URL}/api/proxy/locations/states?country={}",
+          "{CLOUD_API_URL}/api/proxy/locations/regions?country={}",
           country
         );
         let client = reqwest::Client::new();
@@ -856,37 +870,40 @@ impl CloudAuthManager {
             .header("Authorization", format!("Bearer {access_token}"))
             .send()
             .await
-            .map_err(|e| format!("Failed to fetch states: {e}"))?;
+            .map_err(|e| format!("Failed to fetch regions: {e}"))?;
 
           if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(format!("States fetch failed ({status}): {body}"));
+            return Err(format!("Regions fetch failed ({status}): {body}"));
           }
 
           response
             .json::<Vec<LocationItem>>()
             .await
-            .map_err(|e| format!("Failed to parse states: {e}"))
+            .map_err(|e| format!("Failed to parse regions: {e}"))
         }
       })
       .await
   }
 
-  /// Fetch city list for a country+state from the cloud backend
+  /// Fetch city list for a country, optionally filtered by region
   pub async fn fetch_cities(
     &self,
     country: &str,
-    state: &str,
+    region: Option<&str>,
   ) -> Result<Vec<LocationItem>, String> {
     let country = country.to_string();
-    let state = state.to_string();
+    let region = region.map(|s| s.to_string());
     self
       .api_call_with_retry(move |access_token| {
-        let url = format!(
-          "{CLOUD_API_URL}/api/proxy/locations/cities?country={}&state={}",
-          country, state
+        let mut url = format!(
+          "{CLOUD_API_URL}/api/proxy/locations/cities?country={}",
+          country
         );
+        if let Some(ref r) = region {
+          url.push_str(&format!("&region={}", r));
+        }
         let client = reqwest::Client::new();
         async move {
           let response = client
@@ -911,14 +928,116 @@ impl CloudAuthManager {
       .await
   }
 
+  /// Fetch ISP list for a country, optionally filtered by region and city
+  pub async fn fetch_isps(
+    &self,
+    country: &str,
+    region: Option<&str>,
+    city: Option<&str>,
+  ) -> Result<Vec<LocationItem>, String> {
+    let country = country.to_string();
+    let region = region.map(|s| s.to_string());
+    let city = city.map(|s| s.to_string());
+    self
+      .api_call_with_retry(move |access_token| {
+        let mut url = format!(
+          "{CLOUD_API_URL}/api/proxy/locations/isps?country={}",
+          country
+        );
+        if let Some(ref r) = region {
+          url.push_str(&format!("&region={}", r));
+        }
+        if let Some(ref c) = city {
+          url.push_str(&format!("&city={}", c));
+        }
+        let client = reqwest::Client::new();
+        async move {
+          let response = client
+            .get(&url)
+            .header("Authorization", format!("Bearer {access_token}"))
+            .send()
+            .await
+            .map_err(|e| format!("Failed to fetch ISPs: {e}"))?;
+
+          if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("ISPs fetch failed ({status}): {body}"));
+          }
+
+          response
+            .json::<Vec<LocationItem>>()
+            .await
+            .map_err(|e| format!("Failed to parse ISPs: {e}"))
+        }
+      })
+      .await
+  }
+
+  /// Request a wayfern token from the cloud API. Only succeeds for paid users.
+  pub async fn request_wayfern_token(&self) -> Result<(), String> {
+    if !self.has_active_paid_subscription().await {
+      self.clear_wayfern_token().await;
+      return Ok(());
+    }
+
+    let token = self
+      .api_call_with_retry(|access_token| {
+        let url = format!("{CLOUD_API_URL}/api/auth/wayfern-start");
+        let client = reqwest::Client::new();
+        async move {
+          let response = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {access_token}"))
+            .send()
+            .await
+            .map_err(|e| format!("Failed to request wayfern token: {e}"))?;
+
+          if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("Wayfern token request failed ({status}): {body}"));
+          }
+
+          let result: WayfernTokenResponse = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse wayfern token response: {e}"))?;
+
+          Ok(result.token)
+        }
+      })
+      .await?;
+
+    let mut wt = self.wayfern_token.lock().await;
+    *wt = Some(token);
+    log::info!("Wayfern token acquired");
+    Ok(())
+  }
+
+  /// Get the current wayfern token, if any.
+  pub async fn get_wayfern_token(&self) -> Option<String> {
+    let wt = self.wayfern_token.lock().await;
+    wt.clone()
+  }
+
+  /// Clear the cached wayfern token.
+  pub async fn clear_wayfern_token(&self) {
+    let mut wt = self.wayfern_token.lock().await;
+    *wt = None;
+  }
+
   /// Background loop that refreshes the sync token periodically
   pub async fn start_sync_token_refresh_loop(app_handle: tauri::AppHandle) {
+    let mut wayfern_refresh_counter: u32 = 0;
     loop {
       tokio::time::sleep(std::time::Duration::from_secs(600)).await; // 10 minutes
 
       if !CLOUD_AUTH.is_logged_in().await {
         continue;
       }
+
+      wayfern_refresh_counter += 1;
 
       // Proactively refresh the access token if it's expired or expiring soon.
       // This runs first so subsequent API calls use a fresh token.
@@ -961,6 +1080,18 @@ impl CloudAuthManager {
       // Sync cloud proxy credentials
       CLOUD_AUTH.sync_cloud_proxy().await;
 
+      // Refresh wayfern token every 12 hours (72 iterations of 10-minute loop)
+      if wayfern_refresh_counter >= 72 {
+        wayfern_refresh_counter = 0;
+        if CLOUD_AUTH.has_active_paid_subscription().await {
+          if let Err(e) = CLOUD_AUTH.request_wayfern_token().await {
+            log::warn!("Failed to refresh wayfern token: {e}");
+          }
+        } else {
+          CLOUD_AUTH.clear_wayfern_token().await;
+        }
+      }
+
       let _ = &app_handle; // keep app_handle alive
     }
   }
@@ -995,6 +1126,11 @@ pub async fn cloud_verify_otp(
       Ok(Some(_)) => log::info!("Sync token pre-fetched successfully"),
       Ok(None) => log::warn!("Sync token not available despite active subscription"),
       Err(e) => log::error!("Failed to pre-fetch sync token after login: {e}"),
+    }
+
+    // Request wayfern token for paid users
+    if let Err(e) = CLOUD_AUTH.request_wayfern_token().await {
+      log::warn!("Failed to request wayfern token after login: {e}");
     }
   }
 
@@ -1037,6 +1173,9 @@ pub async fn cloud_logout(app_handle: tauri::AppHandle) -> Result<(), String> {
   }
   let _ = manager.remove_sync_token(&app_handle).await;
 
+  // Remove cloud-managed and cloud-derived proxies
+  crate::proxy_manager::PROXY_MANAGER.remove_cloud_proxies();
+
   let _ = crate::events::emit_empty("cloud-auth-changed");
   Ok(())
 }
@@ -1047,32 +1186,58 @@ pub async fn cloud_has_active_subscription() -> Result<bool, String> {
 }
 
 #[tauri::command]
+pub async fn cloud_get_wayfern_token() -> Result<Option<String>, String> {
+  Ok(CLOUD_AUTH.get_wayfern_token().await)
+}
+
+#[tauri::command]
+pub async fn cloud_refresh_wayfern_token() -> Result<Option<String>, String> {
+  CLOUD_AUTH.request_wayfern_token().await?;
+  Ok(CLOUD_AUTH.get_wayfern_token().await)
+}
+
+#[tauri::command]
 pub async fn cloud_get_countries() -> Result<Vec<LocationItem>, String> {
   CLOUD_AUTH.fetch_countries().await
 }
 
 #[tauri::command]
-pub async fn cloud_get_states(country: String) -> Result<Vec<LocationItem>, String> {
-  CLOUD_AUTH.fetch_states(&country).await
+pub async fn cloud_get_regions(country: String) -> Result<Vec<LocationItem>, String> {
+  CLOUD_AUTH.fetch_regions(&country).await
 }
 
 #[tauri::command]
-pub async fn cloud_get_cities(country: String, state: String) -> Result<Vec<LocationItem>, String> {
-  CLOUD_AUTH.fetch_cities(&country, &state).await
+pub async fn cloud_get_cities(
+  country: String,
+  region: Option<String>,
+) -> Result<Vec<LocationItem>, String> {
+  CLOUD_AUTH.fetch_cities(&country, region.as_deref()).await
+}
+
+#[tauri::command]
+pub async fn cloud_get_isps(
+  country: String,
+  region: Option<String>,
+  city: Option<String>,
+) -> Result<Vec<LocationItem>, String> {
+  CLOUD_AUTH
+    .fetch_isps(&country, region.as_deref(), city.as_deref())
+    .await
 }
 
 #[tauri::command]
 pub async fn create_cloud_location_proxy(
   name: String,
   country: String,
-  state: Option<String>,
+  region: Option<String>,
   city: Option<String>,
+  isp: Option<String>,
 ) -> Result<crate::proxy_manager::StoredProxy, String> {
   // If no cloud proxy exists yet, attempt to sync it first
   if !PROXY_MANAGER.has_cloud_proxy() {
     CLOUD_AUTH.sync_cloud_proxy().await;
   }
-  PROXY_MANAGER.create_cloud_location_proxy(name, country, state, city)
+  PROXY_MANAGER.create_cloud_location_proxy(name, country, region, city, isp)
 }
 
 #[derive(Debug, Serialize)]
@@ -1080,22 +1245,108 @@ pub struct CloudProxyUsage {
   pub used_mb: i64,
   pub limit_mb: i64,
   pub remaining_mb: i64,
+  pub recurring_limit_mb: i64,
+  pub extra_limit_mb: i64,
+}
+
+#[derive(Debug, Deserialize)]
+struct ProxyUsageResponse {
+  #[serde(rename = "usedMb")]
+  used_mb: i64,
+  #[serde(rename = "limitMb")]
+  limit_mb: i64,
+  #[serde(rename = "remainingMb")]
+  remaining_mb: i64,
+  #[serde(rename = "recurringLimitMb", default)]
+  recurring_limit_mb: i64,
+  #[serde(rename = "extraLimitMb", default)]
+  extra_limit_mb: i64,
 }
 
 #[tauri::command]
 pub async fn cloud_get_proxy_usage() -> Result<Option<CloudProxyUsage>, String> {
-  let state = CLOUD_AUTH.state.lock().await;
-  match &*state {
-    Some(auth) if auth.user.proxy_bandwidth_limit_mb > 0 => {
-      let used = auth.user.proxy_bandwidth_used_mb;
-      let limit = auth.user.proxy_bandwidth_limit_mb;
-      Ok(Some(CloudProxyUsage {
-        used_mb: used,
-        limit_mb: limit,
-        remaining_mb: (limit - used).max(0),
-      }))
+  let (has_proxy, cached_recurring, cached_extra) = {
+    let state = CLOUD_AUTH.state.lock().await;
+    match &*state {
+      Some(auth)
+        if auth.user.proxy_bandwidth_limit_mb > 0 || auth.user.proxy_bandwidth_extra_mb > 0 =>
+      {
+        (
+          true,
+          auth.user.proxy_bandwidth_limit_mb,
+          auth.user.proxy_bandwidth_extra_mb,
+        )
+      }
+      _ => return Ok(None),
     }
-    _ => Ok(None),
+  };
+
+  if !has_proxy {
+    return Ok(None);
+  }
+
+  // Fetch live usage from the API
+  match CLOUD_AUTH
+    .api_call_with_retry(|access_token| {
+      let url = format!("{CLOUD_API_URL}/api/proxy/usage");
+      let client = reqwest::Client::new();
+      async move {
+        let response = client
+          .get(&url)
+          .header("Authorization", format!("Bearer {access_token}"))
+          .send()
+          .await
+          .map_err(|e| format!("Failed to fetch proxy usage: {e}"))?;
+
+        if !response.status().is_success() {
+          return Err(format!(
+            "Proxy usage API returned status {}",
+            response.status()
+          ));
+        }
+
+        response
+          .json::<ProxyUsageResponse>()
+          .await
+          .map_err(|e| format!("Failed to parse proxy usage: {e}"))
+      }
+    })
+    .await
+  {
+    Ok(usage) => Ok(Some(CloudProxyUsage {
+      used_mb: usage.used_mb,
+      limit_mb: usage.limit_mb,
+      remaining_mb: usage.remaining_mb,
+      recurring_limit_mb: if usage.recurring_limit_mb > 0 {
+        usage.recurring_limit_mb
+      } else {
+        cached_recurring
+      },
+      extra_limit_mb: if usage.recurring_limit_mb > 0 {
+        usage.extra_limit_mb
+      } else {
+        cached_extra
+      },
+    })),
+    Err(e) => {
+      log::warn!("Failed to fetch live proxy usage, falling back to cached: {e}");
+      // Fallback to cached values
+      let state = CLOUD_AUTH.state.lock().await;
+      match &*state {
+        Some(auth) => {
+          let used = auth.user.proxy_bandwidth_used_mb;
+          let total = cached_recurring + cached_extra;
+          Ok(Some(CloudProxyUsage {
+            used_mb: used,
+            limit_mb: total,
+            remaining_mb: (total - used).max(0),
+            recurring_limit_mb: cached_recurring,
+            extra_limit_mb: cached_extra,
+          }))
+        }
+        _ => Ok(None),
+      }
+    }
   }
 }
 

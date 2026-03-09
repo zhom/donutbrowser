@@ -81,24 +81,25 @@ impl AutoUpdater {
     }
 
     for (browser, profiles) in browser_profiles {
-      // Get cached versions first, then try to fetch if needed
-      let versions = if let Some(cached) = self
+      // Always fetch fresh versions for update checks — stale cache would miss new releases
+      let versions = match self
         .browser_version_manager
-        .get_cached_browser_versions_detailed(&browser)
+        .fetch_browser_versions_detailed(&browser, false)
+        .await
       {
-        cached
-      } else if self.browser_version_manager.should_update_cache(&browser) {
-        // Try to fetch fresh versions
-        match self
-          .browser_version_manager
-          .fetch_browser_versions_detailed(&browser, false)
-          .await
-        {
-          Ok(versions) => versions,
-          Err(_) => continue, // Skip this browser if fetch fails
+        Ok(versions) => versions,
+        Err(e) => {
+          log::warn!("Failed to fetch versions for {browser}: {e}, trying cache");
+          // Fall back to cache if network fails
+          if let Some(cached) = self
+            .browser_version_manager
+            .get_cached_browser_versions_detailed(&browser)
+          {
+            cached
+          } else {
+            continue;
+          }
         }
-      } else {
-        continue; // No cached versions and cache doesn't need update
       };
 
       browser_versions.insert(browser.clone(), versions.clone());
@@ -108,20 +109,29 @@ impl AutoUpdater {
         if let Some(update) = self.check_profile_update(&profile, &versions)? {
           // Apply chromium threshold logic
           if browser == "chromium" {
-            // For chromium, only show notifications if there are 400+ new versions
-            let current_version = &profile.version.parse::<u32>().unwrap();
-            let new_version = &update.new_version.parse::<u32>().unwrap();
+            // For chromium, only show notifications if there's a significant version jump
+            // Compare the major version component (first number before the dot)
+            let current_major: u32 = profile
+              .version
+              .split('.')
+              .next()
+              .and_then(|s| s.parse().ok())
+              .unwrap_or(0);
+            let new_major: u32 = update
+              .new_version
+              .split('.')
+              .next()
+              .and_then(|s| s.parse().ok())
+              .unwrap_or(0);
 
-            let result = new_version - current_version;
+            let result = new_major.saturating_sub(current_major);
             log::info!(
-              "Current version: {current_version}, New version: {new_version}, Result: {result}"
+              "Current major version: {current_major}, New major version: {new_major}, Diff: {result}"
             );
-            if result > 400 {
+            if result > 0 {
               notifications.push(update);
             } else {
-              log::info!(
-                "Skipping chromium update notification: only {result} new versions (need 400+)"
-              );
+              log::info!("Skipping chromium update notification: same major version");
             }
           } else {
             notifications.push(update);
@@ -136,14 +146,51 @@ impl AutoUpdater {
   pub async fn check_for_updates_with_progress(&self, app_handle: &tauri::AppHandle) {
     log::info!("Starting auto-update check with progress...");
 
+    // Check if auto-updates are disabled in settings
+    let auto_download = {
+      let disable = self
+        .settings_manager
+        .load_settings()
+        .map(|s| s.disable_auto_updates)
+        .unwrap_or(false);
+      !disable && !cfg!(target_os = "linux")
+    };
+
     // Check for browser updates and trigger auto-downloads
     match self.check_for_updates().await {
       Ok(update_notifications) => {
         if !update_notifications.is_empty() {
           log::info!(
-            "Found {} browser updates to auto-download",
-            update_notifications.len()
+            "Found {} browser updates (auto_download={})",
+            update_notifications.len(),
+            auto_download
           );
+
+          if !auto_download {
+            // Emit notification events instead of downloading
+            for notification in update_notifications {
+              let update_event = serde_json::json!({
+                "browser": notification.browser,
+                "new_version": notification.new_version,
+                "current_version": notification.current_version,
+                "affected_profiles": notification.affected_profiles
+              });
+
+              if let Err(e) = events::emit("browser-update-available", &update_event) {
+                log::error!(
+                  "Failed to emit update-available event for {}: {e}",
+                  notification.browser
+                );
+              } else {
+                log::info!(
+                  "Emitted update-available event for {} {}",
+                  notification.browser,
+                  notification.new_version
+                );
+              }
+            }
+            return;
+          }
 
           // Trigger automatic downloads for each update
           for notification in update_notifications {
@@ -323,7 +370,36 @@ impl AutoUpdater {
 
         // Check if profile is currently running
         if profile.process_id.is_some() {
-          continue; // Skip running profiles
+          // Store as pending update so it gets applied when browser closes
+          log::info!(
+            "Profile {} is running, storing pending update {} -> {}",
+            profile.name,
+            profile.version,
+            new_version
+          );
+          let mut state = self.load_auto_update_state().unwrap_or_default();
+          let notification = UpdateNotification {
+            id: format!("{}_{}_to_{}", browser, profile.version, new_version),
+            browser: browser.to_string(),
+            current_version: profile.version.clone(),
+            new_version: new_version.to_string(),
+            affected_profiles: vec![profile.name.clone()],
+            is_stable_update: true,
+            timestamp: std::time::SystemTime::now()
+              .duration_since(std::time::UNIX_EPOCH)
+              .unwrap_or_default()
+              .as_secs(),
+          };
+          // Add if not already pending
+          if !state
+            .pending_updates
+            .iter()
+            .any(|u| u.id == notification.id)
+          {
+            state.pending_updates.push(notification);
+            let _ = self.save_auto_update_state(&state);
+          }
+          continue;
         }
 
         // Check if this is an update (newer version)

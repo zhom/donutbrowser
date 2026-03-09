@@ -134,7 +134,9 @@
       "title": "詳細設定",
       "clearCache": "すべてのバージョンキャッシュをクリア",
       "clearCacheDescription": "キャッシュされたすべてのブラウザバージョンデータをクリアし、すべてのブラウザバージョンをソースから更新します。これにより、すべてのブラウザのバージョン情報が強制的に再ダウンロードされます。"
-    }
+    },
+    "disableAutoUpdates": "自動更新を無効にする",
+    "disableAutoUpdatesDescription": "アプリケーションが自動的に更新を確認・インストールすることを防ぎます。手動でアプリケーションを更新する必要があります。"
   },
   "header": {
     "searchPlaceholder": "プロファイルを検索...",
@@ -189,7 +191,7 @@
   },
   "createProfile": {
     "title": "新しいプロファイルを作成",
-    "configureTitle": "プロファイルを設定",
+    "configureTitle": "新しい{{browser}}プロファイルを作成",
     "antiDetect": {
       "title": "アンチ検出ブラウザ",
       "description": "アンチ検出機能を持つブラウザを選択",
@@ -219,7 +221,12 @@
       "latestNeedsDownload": "最新バージョン ({{version}}) をダウンロードする必要があります",
       "latestAvailable": "最新バージョン ({{version}}) は利用可能です",
       "latestDownloading": "バージョン ({{version}}) をダウンロード中..."
-    }
+    },
+    "chromiumLabel": "Chromium",
+    "chromiumSubtitle": "Wayfern搭載",
+    "firefoxLabel": "Firefox",
+    "firefoxSubtitle": "Camoufox搭載",
+    "camoufoxWarning": "Firefox（Camoufox）はサードパーティの組織によって管理されています。本番環境での使用にはChromiumをご利用ください。"
   },
   "deleteDialog": {
     "title": "プロファイルを削除",
@@ -640,7 +647,9 @@
     "productSub": "Product Sub",
     "brand": "ブランド",
     "brandVersion": "ブランドバージョン",
-    "proFeature": "これはPro機能です"
+    "proFeature": "これはPro機能です",
+    "generateFingerprint": "フィンガープリントを生成",
+    "refreshFingerprint": "フィンガープリントを更新"
   },
   "warnings": {
     "windowResizeTitle": "カスタムウィンドウサイズ",
@@ -779,7 +788,25 @@
     "assignTitle": "拡張機能グループの割り当て",
     "assignDescription": "選択した{{count}}件のプロファイルを拡張機能グループに割り当てます。",
     "noGroup": "なし（拡張機能グループなし）",
-    "assignSuccess": "拡張機能グループが正常に割り当てられました"
+    "assignSuccess": "拡張機能グループが正常に割り当てられました",
+    "editExtension": "拡張機能を編集",
+    "updateSuccess": "拡張機能が正常に更新されました",
+    "reupload": "再アップロード",
+    "version": "バージョン",
+    "author": "作者",
+    "homepage": "ホームページ",
+    "editGroup": "グループを編集",
+    "editGroupDescription": "グループ名を更新し、含まれる拡張機能を管理します。",
+    "groupExtensions": "このグループの拡張機能",
+    "noExtensionsInGroup": "拡張機能がまだ追加されていません",
+    "editExtensionDescription": "拡張機能の名前を更新、メタデータを表示、またはファイルを再アップロードします。",
+    "metadata": "メタデータ",
+    "noMetadata": "マニフェストからのメタデータはありません。",
+    "selectFile": "ファイルを選択",
+    "syncEnabled": "同期が有効",
+    "syncDisabled": "同期が無効",
+    "syncEnableTooltip": "同期を有効にする",
+    "syncDisableTooltip": "同期を無効にする"
   },
   "pro": {
     "badge": "PRO",

@@ -9,24 +9,44 @@ use std::time::SystemTime;
 
 use super::types::{SyncError, SyncResult};
 
-/// Default exclude patterns for volatile Chromium profile files
+/// Default exclude patterns for volatile browser profile files.
+/// Patterns use `**/` prefix to match at any directory depth, since the sync
+/// engine scans from `profiles/{uuid}/` which contains `profile/Default/...`.
 pub const DEFAULT_EXCLUDE_PATTERNS: &[&str] = &[
-  "Cache/**",
-  "Code Cache/**",
-  "GPUCache/**",
-  "GrShaderCache/**",
-  "ShaderCache/**",
-  "Service Worker/CacheStorage/**",
-  "Crashpad/**",
-  "Crash Reports/**",
-  "BrowserMetrics/**",
-  "blob_storage/**",
+  // Chromium caches (re-downloadable / re-generated)
+  "**/Cache/**",
+  "**/Code Cache/**",
+  "**/GPUCache/**",
+  "**/GrShaderCache/**",
+  "**/ShaderCache/**",
+  "**/DawnCache/**",
+  "**/DawnGraphiteCache/**",
+  "**/Service Worker/CacheStorage/**",
+  "**/Service Worker/ScriptCache/**",
+  // Chromium transient / volatile data
+  "**/Session Storage/**",
+  "**/blob_storage/**",
+  "**/Crashpad/**",
+  "**/Crash Reports/**",
+  "**/BrowserMetrics/**",
+  "**/optimization_guide_model_store/**",
+  "**/Safe Browsing/**",
+  "**/component_crx_cache/**",
+  // Firefox/Camoufox caches (re-downloadable / re-generated)
+  "**/cache2/**",
+  "**/startupCache/**",
+  "**/safebrowsing/**",
+  "**/storage/temporary/**",
+  "**/crashes/**",
+  "**/minidumps/**",
+  // Common volatile files
   "*.log",
   "*.tmp",
   "**/LOG",
   "**/LOG.old",
   "**/LOCK",
   "**/*-journal",
+  "**/*-wal",
   ".donut-sync/**",
 ];
 
@@ -526,6 +546,66 @@ mod tests {
 
     assert_eq!(manifest.files.len(), 1);
     assert_eq!(manifest.files[0].path, "file1.txt");
+  }
+
+  #[test]
+  fn test_generate_manifest_excludes_nested_caches() {
+    let temp_dir = TempDir::new().unwrap();
+    let profile_dir = temp_dir.path().join("profile_root");
+    fs::create_dir_all(&profile_dir).unwrap();
+
+    // Simulate real Chromium structure: profile/Default/Cache/...
+    let default_dir = profile_dir.join("profile/Default");
+    fs::create_dir_all(&default_dir).unwrap();
+    fs::write(default_dir.join("Cookies"), "keep").unwrap();
+    fs::create_dir_all(default_dir.join("Cache")).unwrap();
+    fs::write(default_dir.join("Cache/data_0"), "exclude").unwrap();
+    fs::create_dir_all(default_dir.join("Code Cache/js")).unwrap();
+    fs::write(default_dir.join("Code Cache/js/abc"), "exclude").unwrap();
+    fs::create_dir_all(default_dir.join("GPUCache")).unwrap();
+    fs::write(default_dir.join("GPUCache/data_0"), "exclude").unwrap();
+    fs::create_dir_all(default_dir.join("Session Storage")).unwrap();
+    fs::write(default_dir.join("Session Storage/000003.log"), "exclude").unwrap();
+    fs::create_dir_all(default_dir.join("Local Storage/leveldb")).unwrap();
+    fs::write(default_dir.join("Local Storage/leveldb/000001.ldb"), "keep").unwrap();
+
+    // Caches at user-data-dir level
+    fs::create_dir_all(profile_dir.join("profile/ShaderCache")).unwrap();
+    fs::write(profile_dir.join("profile/ShaderCache/data"), "exclude").unwrap();
+    fs::create_dir_all(profile_dir.join("profile/Crashpad")).unwrap();
+    fs::write(profile_dir.join("profile/Crashpad/report"), "exclude").unwrap();
+
+    // metadata.json at root
+    fs::write(profile_dir.join("metadata.json"), "keep").unwrap();
+
+    let mut cache = HashCache::default();
+    let manifest = generate_manifest("test-profile", &profile_dir, &mut cache).unwrap();
+
+    let paths: Vec<&str> = manifest.files.iter().map(|f| f.path.as_str()).collect();
+    assert!(
+      paths.contains(&"metadata.json"),
+      "metadata.json should be synced"
+    );
+    assert!(
+      paths.contains(&"profile/Default/Cookies"),
+      "Cookies should be synced"
+    );
+    assert!(
+      paths.contains(&"profile/Default/Local Storage/leveldb/000001.ldb"),
+      "Local Storage should be synced"
+    );
+    assert!(
+      !paths.iter().any(|p| p.contains("Cache")),
+      "Cache directories should be excluded: {paths:?}"
+    );
+    assert!(
+      !paths.iter().any(|p| p.contains("Session Storage")),
+      "Session Storage should be excluded: {paths:?}"
+    );
+    assert!(
+      !paths.iter().any(|p| p.contains("Crashpad")),
+      "Crashpad should be excluded: {paths:?}"
+    );
   }
 
   #[test]

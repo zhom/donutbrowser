@@ -117,8 +117,9 @@ use profile_importer::{detect_existing_profiles, import_browser_profile};
 
 use extension_manager::{
   add_extension, add_extension_to_group, assign_extension_group_to_profile, create_extension_group,
-  delete_extension, delete_extension_group, get_extension_group_for_profile, list_extension_groups,
-  list_extensions, remove_extension_from_group, update_extension, update_extension_group,
+  delete_extension, delete_extension_group, get_extension_group_for_profile, get_extension_icon,
+  list_extension_groups, list_extensions, remove_extension_from_group, update_extension,
+  update_extension_group,
 };
 
 use group_manager::{
@@ -303,7 +304,33 @@ async fn copy_profile_cookies(
   {
     return Err("Cookie copying requires an active Pro subscription".to_string());
   }
-  cookie_manager::CookieManager::copy_cookies(&app_handle, request).await
+  let target_ids = request.target_profile_ids.clone();
+  let results = cookie_manager::CookieManager::copy_cookies(&app_handle, request).await?;
+
+  // Trigger sync for target profiles that have sync enabled
+  if let Some(scheduler) = crate::sync::get_global_scheduler() {
+    let profile_manager = profile::manager::ProfileManager::instance();
+    if let Ok(profiles) = profile_manager.list_profiles() {
+      let sync_ids: Vec<String> = target_ids
+        .iter()
+        .filter(|tid| {
+          profiles
+            .iter()
+            .any(|p| p.id.to_string() == **tid && p.is_sync_enabled())
+        })
+        .cloned()
+        .collect();
+      if !sync_ids.is_empty() {
+        tauri::async_runtime::spawn(async move {
+          for id in sync_ids {
+            scheduler.queue_profile_sync(id).await;
+          }
+        });
+      }
+    }
+  }
+
+  Ok(results)
 }
 
 #[tauri::command]
@@ -318,7 +345,25 @@ async fn import_cookies_from_file(
   {
     return Err("Cookie import requires an active Pro subscription".to_string());
   }
-  cookie_manager::CookieManager::import_cookies(&app_handle, &profile_id, &content).await
+  let result =
+    cookie_manager::CookieManager::import_cookies(&app_handle, &profile_id, &content).await?;
+
+  // Trigger sync for the profile if sync is enabled
+  if let Some(scheduler) = crate::sync::get_global_scheduler() {
+    let profile_manager = profile::manager::ProfileManager::instance();
+    if let Ok(profiles) = profile_manager.list_profiles() {
+      if let Some(profile) = profiles.iter().find(|p| p.id.to_string() == profile_id) {
+        if profile.is_sync_enabled() {
+          let pid = profile_id.clone();
+          tauri::async_runtime::spawn(async move {
+            scheduler.queue_profile_sync(pid).await;
+          });
+        }
+      }
+    }
+  }
+
+  Ok(result)
 }
 
 #[tauri::command]
@@ -756,6 +801,62 @@ async fn list_active_vpn_connections() -> Result<Vec<vpn::VpnStatus>, String> {
   )
 }
 
+#[tauri::command]
+async fn generate_sample_fingerprint(
+  app_handle: tauri::AppHandle,
+  browser: String,
+  version: String,
+  config_json: String,
+) -> Result<String, String> {
+  let temp_profile = crate::profile::BrowserProfile {
+    id: uuid::Uuid::new_v4(),
+    name: "temp_fingerprint_gen".to_string(),
+    browser: browser.clone(),
+    version: version.clone(),
+    process_id: None,
+    proxy_id: None,
+    vpn_id: None,
+    last_launch: None,
+    release_type: "stable".to_string(),
+    camoufox_config: None,
+    wayfern_config: None,
+    group_id: None,
+    tags: Vec::new(),
+    note: None,
+    sync_mode: crate::profile::types::SyncMode::Disabled,
+    encryption_salt: None,
+    last_sync: None,
+    host_os: None,
+    ephemeral: false,
+    extension_group_id: None,
+    proxy_bypass_rules: Vec::new(),
+    created_by_id: None,
+    created_by_email: None,
+  };
+
+  if browser == "camoufox" {
+    let config: crate::camoufox_manager::CamoufoxConfig =
+      serde_json::from_str(&config_json).map_err(|e| format!("Failed to parse config: {e}"))?;
+    let manager = crate::camoufox_manager::CamoufoxManager::instance();
+    manager
+      .generate_fingerprint_config(&app_handle, &temp_profile, &config)
+      .await
+      .map_err(|e| format!("Failed to generate fingerprint: {e}"))
+  } else if browser == "wayfern" {
+    let config: crate::wayfern_manager::WayfernConfig =
+      serde_json::from_str(&config_json).map_err(|e| format!("Failed to parse config: {e}"))?;
+    let manager = crate::wayfern_manager::WayfernManager::instance();
+    manager
+      .generate_fingerprint_config(&app_handle, &temp_profile, &config)
+      .await
+      .map_err(|e| format!("Failed to generate fingerprint: {e}"))
+  } else {
+    Err(format!(
+      "Unsupported browser for fingerprint generation: {browser}"
+    ))
+  }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   let args: Vec<String> = env::args().collect();
@@ -817,6 +918,12 @@ pub fn run() {
     .setup(|app| {
       // Recover ephemeral dir mappings from RAM-backed storage (tmpfs/ramdisk)
       ephemeral_dirs::recover_ephemeral_dirs();
+
+      // Extract icons and metadata for existing extensions that don't have them yet
+      {
+        let mgr = extension_manager::ExtensionManager::new();
+        mgr.ensure_icons_extracted();
+      }
 
       // Start the daemon for tray icon
       if let Err(e) = daemon_spawn::ensure_daemon_running() {
@@ -960,6 +1067,71 @@ pub fn run() {
       tauri::async_runtime::spawn(async move {
         version_updater::VersionUpdater::run_background_task().await;
       });
+
+      // TODO(v0.17+): Remove this migration block after a few releases.
+      // Migrate proxy/VPN worker configs from old proxies/ dir to new proxy_workers/ cache dir.
+      // Before v0.16, ephemeral worker configs (proxy_*, vpnw_*) lived alongside persistent
+      // StoredProxy files in proxies/. Now they live in cache_dir/proxy_workers/.
+      {
+        let old_dir = crate::app_dirs::proxies_dir();
+        let new_dir = crate::app_dirs::proxy_workers_dir();
+        if old_dir.exists() {
+          if let Err(e) = std::fs::create_dir_all(&new_dir) {
+            log::error!("Failed to create proxy_workers dir: {e}");
+          } else if let Ok(entries) = std::fs::read_dir(&old_dir) {
+            for entry in entries.flatten() {
+              let path = entry.path();
+              if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                if (name.starts_with("proxy_") || name.starts_with("vpnw_"))
+                  && name.ends_with(".json")
+                {
+                  let dest = new_dir.join(name);
+                  match std::fs::rename(&path, &dest) {
+                    Ok(()) => log::info!("Migrated worker config {name} to proxy_workers/"),
+                    Err(e) => {
+                      // rename fails across filesystems, fall back to copy+delete
+                      if let Ok(content) = std::fs::read(&path) {
+                        if std::fs::write(&dest, &content).is_ok() {
+                          let _ = std::fs::remove_file(&path);
+                          log::info!("Migrated worker config {name} to proxy_workers/ (copy)");
+                        }
+                      } else {
+                        log::warn!("Failed to migrate worker config {name}: {e}");
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Clear stale process IDs from profiles (processes that died while app was closed)
+      {
+        let profile_manager = crate::profile::ProfileManager::instance();
+        if let Ok(profiles) = profile_manager.list_profiles() {
+          let system = sysinfo::System::new_with_specifics(
+            sysinfo::RefreshKind::nothing()
+              .with_processes(sysinfo::ProcessRefreshKind::everything()),
+          );
+          for profile in profiles {
+            if let Some(pid) = profile.process_id {
+              let sysinfo_pid = sysinfo::Pid::from_u32(pid);
+              if system.process(sysinfo_pid).is_none() {
+                log::info!(
+                  "Clearing stale process_id {} for profile {}",
+                  pid,
+                  profile.name
+                );
+                let mut updated = profile.clone();
+                updated.process_id = None;
+                let _ = profile_manager.save_profile(&updated);
+              }
+            }
+          }
+        }
+      }
 
       let app_handle_auto_updater = app.handle().clone();
 
@@ -1187,6 +1359,20 @@ pub fn run() {
                     );
                   }
 
+                  // Notify sync scheduler of running state changes
+                  if let Some(scheduler) = sync::get_global_scheduler() {
+                    if is_running {
+                      scheduler.mark_profile_running(&profile_id).await;
+                    } else {
+                      scheduler.mark_profile_stopped(&profile_id).await;
+                      // Queue sync after profile stops (if sync is enabled)
+                      if profile.is_sync_enabled() {
+                        log::info!("Profile '{}' stopped, queuing sync", profile.name);
+                        scheduler.queue_profile_sync(profile_id.clone()).await;
+                      }
+                    }
+                  }
+
                   last_running_states.insert(profile_id, is_running);
                 } else {
                   // Update the state even if unchanged to ensure we have it tracked
@@ -1314,6 +1500,13 @@ pub fn run() {
             log::warn!("Failed to refresh cloud sync token on startup: {e}");
           }
           cloud_auth::CLOUD_AUTH.sync_cloud_proxy().await;
+
+          // Request wayfern token on startup for paid users
+          if cloud_auth::CLOUD_AUTH.has_active_paid_subscription().await {
+            if let Err(e) = cloud_auth::CLOUD_AUTH.request_wayfern_token().await {
+              log::warn!("Failed to request wayfern token on startup: {e}");
+            }
+          }
         }
         cloud_auth::CloudAuthManager::start_sync_token_refresh_loop(app_handle_cloud).await;
       });
@@ -1386,6 +1579,7 @@ pub fn run() {
       import_proxies_from_parsed,
       update_camoufox_config,
       update_wayfern_config,
+      generate_sample_fingerprint,
       get_profile_groups,
       get_groups_with_profile_counts,
       create_profile_group,
@@ -1394,6 +1588,7 @@ pub fn run() {
       assign_profiles_to_group,
       delete_selected_profiles,
       list_extensions,
+      get_extension_icon,
       add_extension,
       update_extension,
       delete_extension,
@@ -1464,10 +1659,13 @@ pub fn run() {
       cloud_auth::cloud_logout,
       cloud_auth::cloud_get_proxy_usage,
       cloud_auth::cloud_get_countries,
-      cloud_auth::cloud_get_states,
+      cloud_auth::cloud_get_regions,
       cloud_auth::cloud_get_cities,
+      cloud_auth::cloud_get_isps,
       cloud_auth::create_cloud_location_proxy,
       cloud_auth::restart_sync_service,
+      cloud_auth::cloud_get_wayfern_token,
+      cloud_auth::cloud_refresh_wayfern_token,
       // Team lock commands
       team_lock::get_team_locks,
       team_lock::get_team_lock_status,
@@ -1514,6 +1712,9 @@ mod tests {
       "set_extension_sync_enabled",
       "set_extension_group_sync_enabled",
       "get_team_lock_status",
+      "generate_sample_fingerprint",
+      "cloud_get_wayfern_token",
+      "cloud_refresh_wayfern_token",
     ];
 
     // Extract command names from the generate_handler! macro in this file

@@ -134,7 +134,9 @@
       "title": "Advanced",
       "clearCache": "Clear All Version Cache",
       "clearCacheDescription": "Clear all cached browser version data and refresh all browser versions from their sources. This will force a fresh download of version information for all browsers."
-    }
+    },
+    "disableAutoUpdates": "Disable Auto Updates",
+    "disableAutoUpdatesDescription": "Only notify when browser updates are available, without downloading automatically."
   },
   "header": {
     "searchPlaceholder": "Search profiles...",
@@ -189,7 +191,7 @@
   },
   "createProfile": {
     "title": "Create New Profile",
-    "configureTitle": "Configure Profile",
+    "configureTitle": "Create New {{browser}} Profile",
     "antiDetect": {
       "title": "Anti-Detect Browser",
       "description": "Choose a browser with anti-detection capabilities",
@@ -219,7 +221,12 @@
       "latestNeedsDownload": "Latest version ({{version}}) needs to be downloaded",
       "latestAvailable": "Latest version ({{version}}) is available",
       "latestDownloading": "Downloading version ({{version}})..."
-    }
+    },
+    "chromiumLabel": "Chromium",
+    "chromiumSubtitle": "Powered by Wayfern",
+    "firefoxLabel": "Firefox",
+    "firefoxSubtitle": "Powered by Camoufox",
+    "camoufoxWarning": "Firefox (Camoufox) is maintained by a third-party organization. For production use, please use Chromium."
   },
   "deleteDialog": {
     "title": "Delete Profile",
@@ -640,7 +647,9 @@
     "productSub": "Product Sub",
     "brand": "Brand",
     "brandVersion": "Brand Version",
-    "proFeature": "This is a Pro feature"
+    "proFeature": "This is a Pro feature",
+    "generateFingerprint": "Generate Fingerprint",
+    "refreshFingerprint": "Refresh Fingerprint"
   },
   "warnings": {
     "windowResizeTitle": "Custom Window Dimensions",
@@ -779,7 +788,25 @@
     "assignTitle": "Assign Extension Group",
     "assignDescription": "Assign {{count}} selected profile(s) to an extension group.",
     "noGroup": "None (No Extension Group)",
-    "assignSuccess": "Extension group assigned successfully"
+    "assignSuccess": "Extension group assigned successfully",
+    "editExtension": "Edit extension",
+    "updateSuccess": "Extension updated successfully",
+    "reupload": "Re-upload",
+    "version": "Version",
+    "author": "Author",
+    "homepage": "Homepage",
+    "editGroup": "Edit Group",
+    "editGroupDescription": "Update the group name and manage which extensions are included.",
+    "groupExtensions": "Extensions in this group",
+    "noExtensionsInGroup": "No extensions added yet",
+    "editExtensionDescription": "Update extension name, view metadata, or re-upload the extension file.",
+    "metadata": "Metadata",
+    "noMetadata": "No metadata available from manifest.",
+    "selectFile": "Choose File",
+    "syncEnabled": "Sync enabled",
+    "syncDisabled": "Sync disabled",
+    "syncEnableTooltip": "Enable sync",
+    "syncDisableTooltip": "Disable sync"
   },
   "pro": {
     "badge": "PRO",

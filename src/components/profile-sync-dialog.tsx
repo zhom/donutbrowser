@@ -1,7 +1,7 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LoadingButton } from "@/components/loading-button";
 import { Badge } from "@/components/ui/badge";
@@ -53,6 +53,7 @@ export function ProfileSyncDialog({
   const [hasSelfHostedConfig, setHasSelfHostedConfig] = useState(false);
   const [hasE2ePassword, setHasE2ePassword] = useState(false);
   const [isCheckingConfig, setIsCheckingConfig] = useState(false);
+  const [userChangedMode, setUserChangedMode] = useState(false);
 
   const hasConfig = isCloudSyncEligible || hasSelfHostedConfig;
 
@@ -72,17 +73,21 @@ export function ProfileSyncDialog({
     }
   }, []);
 
+  useEffect(() => {
+    if (isOpen && profile) {
+      setSyncMode(profile.sync_mode ?? "Disabled");
+      setUserChangedMode(false);
+      void checkSyncConfig();
+    }
+  }, [isOpen, profile, checkSyncConfig]);
+
   const handleOpenChange = useCallback(
     (open: boolean) => {
-      if (open && profile) {
-        setSyncMode(profile.sync_mode ?? "Disabled");
-        void checkSyncConfig();
-      }
       if (!open) {
         onClose();
       }
     },
-    [profile, onClose, checkSyncConfig],
+    [onClose],
   );
 
   const handleModeChange = useCallback(
@@ -113,6 +118,7 @@ export function ProfileSyncDialog({
           syncMode: newMode,
         });
         setSyncMode(newMode as SyncMode);
+        setUserChangedMode(true);
         showSuccessToast(
           newMode !== "Disabled"
             ? t("sync.mode.enabledToast")
@@ -273,14 +279,16 @@ export function ProfileSyncDialog({
                   </div>
                 </RadioGroup>
 
-                {syncMode === "Encrypted" && !hasE2ePassword && (
-                  <div className="p-3 text-sm rounded-md bg-destructive/10 text-destructive">
-                    {t(
-                      "sync.mode.noPasswordWarning",
-                      "E2E password not set. Please set a password in Settings.",
-                    )}
-                  </div>
-                )}
+                {syncMode === "Encrypted" &&
+                  !hasE2ePassword &&
+                  userChangedMode && (
+                    <div className="p-3 text-sm rounded-md bg-destructive/10 text-destructive">
+                      {t(
+                        "sync.mode.noPasswordWarning",
+                        "E2E password not set. Please set a password in Settings.",
+                      )}
+                    </div>
+                  )}
 
                 <div className="space-y-2">
                   <Label>{t("sync.mode.lastSynced", "Last Synced")}</Label>

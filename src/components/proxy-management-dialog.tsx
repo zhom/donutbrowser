@@ -53,6 +53,7 @@ type SyncStatus = "disabled" | "syncing" | "synced" | "error" | "waiting";
 function getSyncStatusDot(
   item: { sync_enabled?: boolean; last_sync?: number },
   liveStatus: SyncStatus | undefined,
+  errorMessage?: string,
 ): { color: string; tooltip: string; animate: boolean } {
   const status = liveStatus ?? (item.sync_enabled ? "synced" : "disabled");
 
@@ -74,7 +75,11 @@ function getSyncStatusDot(
         animate: false,
       };
     case "error":
-      return { color: "bg-red-500", tooltip: "Sync error", animate: false };
+      return {
+        color: "bg-red-500",
+        tooltip: errorMessage ? `Sync error: ${errorMessage}` : "Sync error",
+        animate: false,
+      };
     default:
       return { color: "bg-gray-400", tooltip: "Not synced", animate: false };
   }
@@ -104,6 +109,9 @@ export function ProxyManagementDialog({
   const [proxySyncStatus, setProxySyncStatus] = useState<
     Record<string, SyncStatus>
   >({});
+  const [proxySyncErrors, setProxySyncErrors] = useState<
+    Record<string, string>
+  >({});
   const [proxyInUse, setProxyInUse] = useState<Record<string, boolean>>({});
   const [isTogglingSync, setIsTogglingSync] = useState<Record<string, boolean>>(
     {},
@@ -119,6 +127,9 @@ export function ProxyManagementDialog({
   const [vpnSyncStatus, setVpnSyncStatus] = useState<
     Record<string, SyncStatus>
   >({});
+  const [vpnSyncErrors, setVpnSyncErrors] = useState<Record<string, string>>(
+    {},
+  );
   const [vpnInUse, setVpnInUse] = useState<Record<string, boolean>>({});
   const [isTogglingVpnSync, setIsTogglingVpnSync] = useState<
     Record<string, boolean>
@@ -126,50 +137,30 @@ export function ProxyManagementDialog({
 
   const { storedProxies: rawProxies, proxyUsage, isLoading } = useProxyEvents();
   const { vpnConfigs, vpnUsage, isLoading: isLoadingVpns } = useVpnEvents();
-  const [cloudProxyUsage, setCloudProxyUsage] = useState<{
-    used_mb: number;
-    limit_mb: number;
-  } | null>(null);
 
-  // Sort cloud-managed proxies first
-  const storedProxies = [...rawProxies].sort((a, b) => {
-    if (a.is_cloud_managed && !b.is_cloud_managed) return -1;
-    if (!a.is_cloud_managed && b.is_cloud_managed) return 1;
-    return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-  });
-
-  // Fetch cloud proxy usage
-  useEffect(() => {
-    const fetchUsage = async () => {
-      try {
-        const usage = await invoke<{
-          used_mb: number;
-          limit_mb: number;
-          remaining_mb: number;
-        } | null>("cloud_get_proxy_usage");
-        setCloudProxyUsage(usage);
-      } catch {
-        // ignore
-      }
-    };
-    if (isOpen) {
-      void fetchUsage();
-    }
-  }, [isOpen]);
+  // Filter out the base cloud-managed proxy (it's an internal indicator, not user-facing)
+  // Keep cloud-derived location proxies
+  const storedProxies = rawProxies
+    .filter((p) => !p.is_cloud_managed)
+    .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+  const hasCloudProxy = rawProxies.some((p) => p.is_cloud_managed);
 
   // Listen for proxy sync status events
   useEffect(() => {
     let unlisten: (() => void) | undefined;
 
     const setupListener = async () => {
-      unlisten = await listen<{ id: string; status: string }>(
+      unlisten = await listen<{ id: string; status: string; error?: string }>(
         "proxy-sync-status",
         (event) => {
-          const { id, status } = event.payload;
+          const { id, status, error } = event.payload;
           setProxySyncStatus((prev) => ({
             ...prev,
             [id]: status as SyncStatus,
           }));
+          if (error) {
+            setProxySyncErrors((prev) => ({ ...prev, [id]: error }));
+          }
         },
       );
     };
@@ -185,14 +176,17 @@ export function ProxyManagementDialog({
     let unlisten: (() => void) | undefined;
 
     const setupListener = async () => {
-      unlisten = await listen<{ id: string; status: string }>(
+      unlisten = await listen<{ id: string; status: string; error?: string }>(
         "vpn-sync-status",
         (event) => {
-          const { id, status } = event.payload;
+          const { id, status, error } = event.payload;
           setVpnSyncStatus((prev) => ({
             ...prev,
             [id]: status as SyncStatus,
           }));
+          if (error) {
+            setVpnSyncErrors((prev) => ({ ...prev, [id]: error }));
+          }
         },
       );
     };
@@ -370,7 +364,7 @@ export function ProxyManagementDialog({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Proxies & VPNs</DialogTitle>
             <DialogDescription>
@@ -378,96 +372,96 @@ export function ProxyManagementDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <Tabs defaultValue="proxies">
-            <TabsList className="w-full">
-              <TabsTrigger value="proxies" className="flex-1">
-                Proxies
-              </TabsTrigger>
-              <TabsTrigger value="vpns" className="flex-1">
-                VPNs
-              </TabsTrigger>
-            </TabsList>
+          <ScrollArea className="overflow-y-auto flex-1">
+            <Tabs defaultValue="proxies">
+              <TabsList className="w-full">
+                <TabsTrigger value="proxies" className="flex-1">
+                  Proxies
+                </TabsTrigger>
+                <TabsTrigger value="vpns" className="flex-1">
+                  VPNs
+                </TabsTrigger>
+              </TabsList>
 
-            <TabsContent value="proxies">
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <div className="flex gap-2">
-                    <RippleButton
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setShowImportDialog(true)}
-                      className="flex gap-2 items-center"
-                    >
-                      <LuUpload className="w-4 h-4" />
-                      Import
-                    </RippleButton>
-                    <RippleButton
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setShowExportDialog(true)}
-                      className="flex gap-2 items-center"
-                      disabled={storedProxies.length === 0}
-                    >
-                      <LuDownload className="w-4 h-4" />
-                      Export
-                    </RippleButton>
-                  </div>
-                  <div className="flex gap-2">
-                    {storedProxies.some((p) => p.is_cloud_managed) && (
+              <TabsContent value="proxies">
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <div className="flex gap-2">
                       <RippleButton
                         size="sm"
                         variant="outline"
-                        onClick={() => setShowLocationDialog(true)}
+                        onClick={() => setShowImportDialog(true)}
                         className="flex gap-2 items-center"
                       >
-                        <GoGlobe className="w-4 h-4" />
-                        Location
+                        <LuUpload className="w-4 h-4" />
+                        Import
                       </RippleButton>
-                    )}
-                    <RippleButton
-                      size="sm"
-                      onClick={handleCreateProxy}
-                      className="flex gap-2 items-center"
-                    >
-                      <GoPlus className="w-4 h-4" />
-                      Create
-                    </RippleButton>
+                      <RippleButton
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setShowExportDialog(true)}
+                        className="flex gap-2 items-center"
+                        disabled={storedProxies.length === 0}
+                      >
+                        <LuDownload className="w-4 h-4" />
+                        Export
+                      </RippleButton>
+                    </div>
+                    <div className="flex gap-2">
+                      {hasCloudProxy && (
+                        <RippleButton
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setShowLocationDialog(true)}
+                          className="flex gap-2 items-center"
+                        >
+                          <GoGlobe className="w-4 h-4" />
+                          Location
+                        </RippleButton>
+                      )}
+                      <RippleButton
+                        size="sm"
+                        onClick={handleCreateProxy}
+                        className="flex gap-2 items-center"
+                      >
+                        <GoPlus className="w-4 h-4" />
+                        Create
+                      </RippleButton>
+                    </div>
                   </div>
-                </div>
 
-                {isLoading ? (
-                  <div className="text-sm text-muted-foreground">
-                    Loading proxies...
-                  </div>
-                ) : storedProxies.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">
-                    No proxies created yet. Create your first proxy using the
-                    button above.
-                  </div>
-                ) : (
-                  <div className="border rounded-md">
-                    <ScrollArea className="h-[240px]">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Name</TableHead>
-                            <TableHead className="w-20">Usage</TableHead>
-                            <TableHead className="w-24">Sync</TableHead>
-                            <TableHead className="w-24">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {storedProxies.map((proxy) => {
-                            const isCloud = proxy.is_cloud_managed === true;
-                            const syncDot = getSyncStatusDot(
-                              proxy,
-                              proxySyncStatus[proxy.id],
-                            );
-                            const isDerived = proxy.is_cloud_derived === true;
-                            return (
-                              <TableRow key={proxy.id}>
-                                <TableCell className="font-medium">
-                                  <div className="flex flex-col gap-0.5">
+                  {isLoading ? (
+                    <div className="text-sm text-muted-foreground">
+                      Loading proxies...
+                    </div>
+                  ) : storedProxies.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">
+                      No proxies created yet. Create your first proxy using the
+                      button above.
+                    </div>
+                  ) : (
+                    <div className="border rounded-md">
+                      <ScrollArea className="h-[240px]">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Name</TableHead>
+                              <TableHead className="w-20">Usage</TableHead>
+                              <TableHead className="w-24">Sync</TableHead>
+                              <TableHead className="w-24">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {storedProxies.map((proxy) => {
+                              const syncDot = getSyncStatusDot(
+                                proxy,
+                                proxySyncStatus[proxy.id],
+                                proxySyncErrors[proxy.id],
+                              );
+                              const isDerived = proxy.is_cloud_derived === true;
+                              return (
+                                <TableRow key={proxy.id}>
+                                  <TableCell className="font-medium">
                                     <div className="flex items-center gap-2">
                                       {isDerived && proxy.geo_country && (
                                         <FlagIcon
@@ -475,7 +469,7 @@ export function ProxyManagementDialog({
                                           className="shrink-0"
                                         />
                                       )}
-                                      {!isCloud && !isDerived && (
+                                      {!isDerived && (
                                         <Tooltip>
                                           <TooltipTrigger asChild>
                                             <div
@@ -493,23 +487,13 @@ export function ProxyManagementDialog({
                                       )}
                                       {proxy.name}
                                     </div>
-                                    {isCloud && cloudProxyUsage && (
-                                      <span className="text-xs text-muted-foreground">
-                                        {cloudProxyUsage.used_mb} /{" "}
-                                        {cloudProxyUsage.limit_mb} MB used
-                                      </span>
-                                    )}
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant="secondary">
-                                    {proxyUsage[proxy.id] ?? 0}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell>
-                                  {isCloud ? (
-                                    <Badge variant="outline">Cloud</Badge>
-                                  ) : (
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="secondary">
+                                      {proxyUsage[proxy.id] ?? 0}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
                                     <Tooltip>
                                       <TooltipTrigger asChild>
                                         <div className="flex items-center">
@@ -540,48 +524,50 @@ export function ProxyManagementDialog({
                                         )}
                                       </TooltipContent>
                                     </Tooltip>
-                                  )}
-                                </TableCell>
-                                <TableCell>
-                                  <div className="flex gap-1">
-                                    <ProxyCheckButton
-                                      proxy={proxy}
-                                      profileId={proxy.id}
-                                      checkingProfileId={checkingProxyId}
-                                      cachedResult={proxyCheckResults[proxy.id]}
-                                      setCheckingProfileId={setCheckingProxyId}
-                                      onCheckComplete={(result) => {
-                                        setProxyCheckResults((prev) => ({
-                                          ...prev,
-                                          [proxy.id]: result,
-                                        }));
-                                      }}
-                                      onCheckFailed={(result) => {
-                                        setProxyCheckResults((prev) => ({
-                                          ...prev,
-                                          [proxy.id]: result,
-                                        }));
-                                      }}
-                                    />
-                                    {!isCloud && !isDerived && (
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() =>
-                                              handleEditProxy(proxy)
-                                            }
-                                          >
-                                            <LuPencil className="w-4 h-4" />
-                                          </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                          <p>Edit proxy</p>
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    )}
-                                    {!isCloud && (
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex gap-1">
+                                      <ProxyCheckButton
+                                        proxy={proxy}
+                                        profileId={proxy.id}
+                                        checkingProfileId={checkingProxyId}
+                                        cachedResult={
+                                          proxyCheckResults[proxy.id]
+                                        }
+                                        setCheckingProfileId={
+                                          setCheckingProxyId
+                                        }
+                                        onCheckComplete={(result) => {
+                                          setProxyCheckResults((prev) => ({
+                                            ...prev,
+                                            [proxy.id]: result,
+                                          }));
+                                        }}
+                                        onCheckFailed={(result) => {
+                                          setProxyCheckResults((prev) => ({
+                                            ...prev,
+                                            [proxy.id]: result,
+                                          }));
+                                        }}
+                                      />
+                                      {!isDerived && (
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() =>
+                                                handleEditProxy(proxy)
+                                              }
+                                            >
+                                              <LuPencil className="w-4 h-4" />
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            <p>Edit proxy</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      )}
                                       <Tooltip>
                                         <TooltipTrigger asChild>
                                           <span>
@@ -613,199 +599,202 @@ export function ProxyManagementDialog({
                                           )}
                                         </TooltipContent>
                                       </Tooltip>
-                                    )}
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    </ScrollArea>
-                  </div>
-                )}
-              </div>
-            </TabsContent>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </ScrollArea>
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
 
-            <TabsContent value="vpns">
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <div className="flex gap-2">
+              <TabsContent value="vpns">
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <div className="flex gap-2">
+                      <RippleButton
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setShowVpnImportDialog(true)}
+                        className="flex gap-2 items-center"
+                      >
+                        <LuUpload className="w-4 h-4" />
+                        Import
+                      </RippleButton>
+                    </div>
                     <RippleButton
                       size="sm"
-                      variant="outline"
-                      onClick={() => setShowVpnImportDialog(true)}
+                      onClick={handleCreateVpn}
                       className="flex gap-2 items-center"
                     >
-                      <LuUpload className="w-4 h-4" />
-                      Import
+                      <GoPlus className="w-4 h-4" />
+                      Create
                     </RippleButton>
                   </div>
-                  <RippleButton
-                    size="sm"
-                    onClick={handleCreateVpn}
-                    className="flex gap-2 items-center"
-                  >
-                    <GoPlus className="w-4 h-4" />
-                    Create
-                  </RippleButton>
-                </div>
 
-                {isLoadingVpns ? (
-                  <div className="text-sm text-muted-foreground">
-                    Loading VPNs...
-                  </div>
-                ) : vpnConfigs.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">
-                    No VPN configs created yet. Import or create one using the
-                    buttons above.
-                  </div>
-                ) : (
-                  <div className="border rounded-md">
-                    <ScrollArea className="h-[240px]">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Name</TableHead>
-                            <TableHead className="w-16">Type</TableHead>
-                            <TableHead className="w-20">Usage</TableHead>
-                            <TableHead className="w-24">Sync</TableHead>
-                            <TableHead className="w-24">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {vpnConfigs.map((vpn) => {
-                            const syncDot = getSyncStatusDot(
-                              vpn,
-                              vpnSyncStatus[vpn.id],
-                            );
-                            return (
-                              <TableRow key={vpn.id}>
-                                <TableCell className="font-medium">
-                                  <div className="flex items-center gap-2">
+                  {isLoadingVpns ? (
+                    <div className="text-sm text-muted-foreground">
+                      Loading VPNs...
+                    </div>
+                  ) : vpnConfigs.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">
+                      No VPN configs created yet. Import or create one using the
+                      buttons above.
+                    </div>
+                  ) : (
+                    <div className="border rounded-md">
+                      <ScrollArea className="h-[240px]">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Name</TableHead>
+                              <TableHead className="w-16">Type</TableHead>
+                              <TableHead className="w-20">Usage</TableHead>
+                              <TableHead className="w-24">Sync</TableHead>
+                              <TableHead className="w-24">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {vpnConfigs.map((vpn) => {
+                              const syncDot = getSyncStatusDot(
+                                vpn,
+                                vpnSyncStatus[vpn.id],
+                                vpnSyncErrors[vpn.id],
+                              );
+                              return (
+                                <TableRow key={vpn.id}>
+                                  <TableCell className="font-medium">
+                                    <div className="flex items-center gap-2">
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <div
+                                            className={`w-2 h-2 rounded-full shrink-0 ${syncDot.color} ${
+                                              syncDot.animate
+                                                ? "animate-pulse"
+                                                : ""
+                                            }`}
+                                          />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p>{syncDot.tooltip}</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                      {vpn.name}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline">
+                                      {vpn.vpn_type === "WireGuard"
+                                        ? "WG"
+                                        : "OVPN"}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="secondary">
+                                      {vpnUsage[vpn.id] ?? 0}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
                                     <Tooltip>
                                       <TooltipTrigger asChild>
-                                        <div
-                                          className={`w-2 h-2 rounded-full shrink-0 ${syncDot.color} ${
-                                            syncDot.animate
-                                              ? "animate-pulse"
-                                              : ""
-                                          }`}
-                                        />
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        <p>{syncDot.tooltip}</p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                    {vpn.name}
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant="outline">
-                                    {vpn.vpn_type === "WireGuard"
-                                      ? "WG"
-                                      : "OVPN"}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant="secondary">
-                                    {vpnUsage[vpn.id] ?? 0}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div className="flex items-center">
-                                        <Checkbox
-                                          checked={vpn.sync_enabled}
-                                          onCheckedChange={() =>
-                                            handleToggleVpnSync(vpn)
-                                          }
-                                          disabled={
-                                            isTogglingVpnSync[vpn.id] ||
-                                            vpnInUse[vpn.id]
-                                          }
-                                        />
-                                      </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      {vpnInUse[vpn.id] ? (
-                                        <p>
-                                          Sync cannot be disabled while this VPN
-                                          is used by synced profiles
-                                        </p>
-                                      ) : (
-                                        <p>
-                                          {vpn.sync_enabled
-                                            ? "Disable sync"
-                                            : "Enable sync"}
-                                        </p>
-                                      )}
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TableCell>
-                                <TableCell>
-                                  <div className="flex gap-1">
-                                    <VpnCheckButton
-                                      vpnId={vpn.id}
-                                      vpnName={vpn.name}
-                                      checkingVpnId={checkingVpnId}
-                                      setCheckingVpnId={setCheckingVpnId}
-                                    />
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => handleEditVpn(vpn)}
-                                        >
-                                          <LuPencil className="w-4 h-4" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        <p>Edit VPN</p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <span>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => handleDeleteVpn(vpn)}
-                                            disabled={
-                                              (vpnUsage[vpn.id] ?? 0) > 0
+                                        <div className="flex items-center">
+                                          <Checkbox
+                                            checked={vpn.sync_enabled}
+                                            onCheckedChange={() =>
+                                              handleToggleVpnSync(vpn)
                                             }
-                                          >
-                                            <LuTrash2 className="w-4 h-4" />
-                                          </Button>
-                                        </span>
+                                            disabled={
+                                              isTogglingVpnSync[vpn.id] ||
+                                              vpnInUse[vpn.id]
+                                            }
+                                          />
+                                        </div>
                                       </TooltipTrigger>
                                       <TooltipContent>
-                                        {(vpnUsage[vpn.id] ?? 0) > 0 ? (
+                                        {vpnInUse[vpn.id] ? (
                                           <p>
-                                            Cannot delete: in use by{" "}
-                                            {vpnUsage[vpn.id]} profile
-                                            {vpnUsage[vpn.id] > 1 ? "s" : ""}
+                                            Sync cannot be disabled while this
+                                            VPN is used by synced profiles
                                           </p>
                                         ) : (
-                                          <p>Delete VPN</p>
+                                          <p>
+                                            {vpn.sync_enabled
+                                              ? "Disable sync"
+                                              : "Enable sync"}
+                                          </p>
                                         )}
                                       </TooltipContent>
                                     </Tooltip>
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    </ScrollArea>
-                  </div>
-                )}
-              </div>
-            </TabsContent>
-          </Tabs>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex gap-1">
+                                      <VpnCheckButton
+                                        vpnId={vpn.id}
+                                        vpnName={vpn.name}
+                                        checkingVpnId={checkingVpnId}
+                                        setCheckingVpnId={setCheckingVpnId}
+                                      />
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => handleEditVpn(vpn)}
+                                          >
+                                            <LuPencil className="w-4 h-4" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p>Edit VPN</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <span>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() =>
+                                                handleDeleteVpn(vpn)
+                                              }
+                                              disabled={
+                                                (vpnUsage[vpn.id] ?? 0) > 0
+                                              }
+                                            >
+                                              <LuTrash2 className="w-4 h-4" />
+                                            </Button>
+                                          </span>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          {(vpnUsage[vpn.id] ?? 0) > 0 ? (
+                                            <p>
+                                              Cannot delete: in use by{" "}
+                                              {vpnUsage[vpn.id]} profile
+                                              {vpnUsage[vpn.id] > 1 ? "s" : ""}
+                                            </p>
+                                          ) : (
+                                            <p>Delete VPN</p>
+                                          )}
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </ScrollArea>
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+            </Tabs>
+          </ScrollArea>
 
           <DialogFooter>
             <RippleButton variant="outline" onClick={onClose}>

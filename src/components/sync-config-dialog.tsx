@@ -32,6 +32,14 @@ interface SyncConfigDialogProps {
   onClose: (loginOccurred?: boolean) => void;
 }
 
+interface ProxyUsage {
+  used_mb: number;
+  limit_mb: number;
+  remaining_mb: number;
+  recurring_limit_mb: number;
+  extra_limit_mb: number;
+}
+
 export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
   const { t } = useTranslation();
 
@@ -59,6 +67,7 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
   const [isVerifying, setIsVerifying] = useState(false);
 
   const [activeTab, setActiveTab] = useState<string>("cloud");
+  const [liveProxyUsage, setLiveProxyUsage] = useState<ProxyUsage | null>(null);
 
   const [connectionStatus, setConnectionStatus] = useState<
     "unknown" | "testing" | "connected" | "error"
@@ -99,6 +108,9 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
       setCodeSent(false);
       setOtpCode("");
       setEmail("");
+      invoke<ProxyUsage | null>("cloud_get_proxy_usage")
+        .then(setLiveProxyUsage)
+        .catch(() => setLiveProxyUsage(null));
     }
   }, [isOpen, loadSettings]);
 
@@ -288,26 +300,39 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
                   })}
                 </span>
               </div>
-              {user.proxyBandwidthLimitMb > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Proxy Bandwidth</span>
-                  <span>
-                    {user.proxyBandwidthUsedMb} /{" "}
-                    {user.proxyBandwidthLimitMb +
-                      (user.proxyBandwidthExtraMb || 0)}{" "}
-                    MB
-                  </span>
-                </div>
-              )}
-              {(user.proxyBandwidthExtraMb || 0) > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Extra Bandwidth</span>
-                  <span>
-                    {user.proxyBandwidthExtraMb >= 1000
-                      ? `${(user.proxyBandwidthExtraMb / 1000).toFixed(1)} GB`
-                      : `${user.proxyBandwidthExtraMb} MB`}
-                  </span>
-                </div>
+              {liveProxyUsage && (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">
+                      Recurring Proxy Bandwidth
+                    </span>
+                    <span>
+                      {Math.max(
+                        0,
+                        liveProxyUsage.recurring_limit_mb -
+                          liveProxyUsage.used_mb,
+                      )}{" "}
+                      / {liveProxyUsage.recurring_limit_mb} MB remaining
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">
+                      Extra Proxy Bandwidth
+                    </span>
+                    <span>
+                      {Math.max(
+                        0,
+                        liveProxyUsage.remaining_mb -
+                          Math.max(
+                            0,
+                            liveProxyUsage.recurring_limit_mb -
+                              liveProxyUsage.used_mb,
+                          ),
+                      )}{" "}
+                      / {liveProxyUsage.extra_limit_mb} MB remaining
+                    </span>
+                  </div>
+                </>
               )}
               {user.teamName && (
                 <>

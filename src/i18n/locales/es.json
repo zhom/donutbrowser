@@ -134,7 +134,9 @@
       "title": "Avanzado",
       "clearCache": "Limpiar Toda la Caché de Versiones",
       "clearCacheDescription": "Limpia todos los datos de versiones de navegadores en caché y actualiza todas las versiones desde sus fuentes. Esto forzará una descarga nueva de información de versiones para todos los navegadores."
-    }
+    },
+    "disableAutoUpdates": "Desactivar Actualizaciones Automáticas",
+    "disableAutoUpdatesDescription": "Evita que la aplicación busque e instale actualizaciones automáticamente. Deberá actualizar la aplicación manualmente."
   },
   "header": {
     "searchPlaceholder": "Buscar perfiles...",
@@ -189,7 +191,7 @@
   },
   "createProfile": {
     "title": "Crear Nuevo Perfil",
-    "configureTitle": "Configurar Perfil",
+    "configureTitle": "Crear Nuevo Perfil de {{browser}}",
     "antiDetect": {
       "title": "Navegador Anti-Detección",
       "description": "Elige un navegador con capacidades anti-detección",
@@ -219,7 +221,12 @@
       "latestNeedsDownload": "La última versión ({{version}}) necesita ser descargada",
       "latestAvailable": "La última versión ({{version}}) está disponible",
       "latestDownloading": "Descargando versión ({{version}})..."
-    }
+    },
+    "chromiumLabel": "Chromium",
+    "chromiumSubtitle": "Impulsado por Wayfern",
+    "firefoxLabel": "Firefox",
+    "firefoxSubtitle": "Impulsado por Camoufox",
+    "camoufoxWarning": "Firefox (Camoufox) está mantenido por una organización de terceros. Para uso en producción, utilice Chromium."
   },
   "deleteDialog": {
     "title": "Eliminar Perfil",
@@ -640,7 +647,9 @@
     "productSub": "Product Sub",
     "brand": "Marca",
     "brandVersion": "Versión de marca",
-    "proFeature": "Esta es una función Pro"
+    "proFeature": "Esta es una función Pro",
+    "generateFingerprint": "Generar Huella Digital",
+    "refreshFingerprint": "Actualizar Huella Digital"
   },
   "warnings": {
     "windowResizeTitle": "Dimensiones de ventana personalizadas",
@@ -779,7 +788,25 @@
     "assignTitle": "Asignar Grupo de Extensiones",
     "assignDescription": "Asignar {{count}} perfil(es) seleccionado(s) a un grupo de extensiones.",
     "noGroup": "Ninguno (Sin Grupo de Extensiones)",
-    "assignSuccess": "Grupo de extensiones asignado exitosamente"
+    "assignSuccess": "Grupo de extensiones asignado exitosamente",
+    "editExtension": "Editar extensión",
+    "updateSuccess": "Extensión actualizada exitosamente",
+    "reupload": "Re-subir",
+    "version": "Versión",
+    "author": "Autor",
+    "homepage": "Página de inicio",
+    "editGroup": "Editar grupo",
+    "editGroupDescription": "Actualiza el nombre del grupo y gestiona qué extensiones están incluidas.",
+    "groupExtensions": "Extensiones en este grupo",
+    "noExtensionsInGroup": "Aún no se han añadido extensiones",
+    "editExtensionDescription": "Actualizar el nombre de la extensión, ver metadatos o volver a cargar el archivo de extensión.",
+    "metadata": "Metadatos",
+    "noMetadata": "No hay metadatos disponibles del manifiesto.",
+    "selectFile": "Elegir archivo",
+    "syncEnabled": "Sincronización habilitada",
+    "syncDisabled": "Sincronización deshabilitada",
+    "syncEnableTooltip": "Habilitar sincronización",
+    "syncDisableTooltip": "Deshabilitar sincronización"
   },
   "pro": {
     "badge": "PRO",

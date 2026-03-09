@@ -1124,18 +1124,47 @@ impl ApiClient {
     log::info!("Fetching Wayfern version from https://donutbrowser.com/wayfern.json");
     let url = "https://donutbrowser.com/wayfern.json";
 
-    let response = self
-      .client
-      .get(url)
-      .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
-      .send()
-      .await?;
+    let mut last_err = None;
+    let mut version_info: Option<WayfernVersionInfo> = None;
 
-    if !response.status().is_success() {
-      return Err(format!("Failed to fetch Wayfern version: {}", response.status()).into());
+    for attempt in 1..=3 {
+      match self
+        .client
+        .get(url)
+        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36")
+        .send()
+        .await
+      {
+        Ok(response) => {
+          if !response.status().is_success() {
+            last_err = Some(format!("HTTP {}", response.status()));
+          } else {
+            match response.json::<WayfernVersionInfo>().await {
+              Ok(info) => {
+                version_info = Some(info);
+                break;
+              }
+              Err(e) => last_err = Some(format!("Failed to parse response: {e}")),
+            }
+          }
+        }
+        Err(e) => {
+          log::warn!("Wayfern fetch attempt {attempt}/3 failed: {e}");
+          last_err = Some(e.to_string());
+        }
+      }
+
+      if attempt < 3 {
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+      }
     }
 
-    let version_info: WayfernVersionInfo = response.json().await?;
+    let version_info = version_info.ok_or_else(|| {
+      format!(
+        "Failed to fetch Wayfern version after 3 attempts: {}",
+        last_err.unwrap_or_default()
+      )
+    })?;
     log::info!("Fetched Wayfern version: {}", version_info.version);
 
     // Cache the results (unless bypassing cache)

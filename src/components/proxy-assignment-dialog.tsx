@@ -3,9 +3,19 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
+import { LuCheck, LuChevronsUpDown } from "react-icons/lu";
 import { toast } from "sonner";
 import { LoadingButton } from "@/components/loading-button";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import {
   Dialog,
   DialogContent,
@@ -16,14 +26,11 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import type { BrowserProfile, StoredProxy, VpnConfig } from "@/types";
 import { RippleButton } from "./ui/ripple";
 
@@ -51,6 +58,7 @@ export function ProxyAssignmentDialog({
     "none",
   );
   const [isAssigning, setIsAssigning] = useState(false);
+  const [proxyPopoverOpen, setProxyPopoverOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleValueChange = useCallback((value: string) => {
@@ -126,13 +134,6 @@ export function ProxyAssignmentDialog({
     }
   }, [isOpen]);
 
-  const selectValue =
-    selectionType === "none"
-      ? "none"
-      : selectionType === "vpn"
-        ? `vpn-${selectedId}`
-        : (selectedId ?? "none");
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md">
@@ -166,43 +167,112 @@ export function ProxyAssignmentDialog({
 
           <div className="space-y-2">
             <Label htmlFor="proxy-vpn-select">Assign Proxy / VPN:</Label>
-            <Select value={selectValue} onValueChange={handleValueChange}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a proxy or VPN" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None</SelectItem>
-                {storedProxies.length > 0 && (
-                  <SelectGroup>
-                    <SelectLabel>Proxies</SelectLabel>
-                    {storedProxies.map((proxy) => (
-                      <SelectItem key={proxy.id} value={proxy.id}>
-                        {proxy.name}
-                        {proxy.is_cloud_managed ? " (Included)" : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                )}
-                {vpnConfigs.length > 0 && (
-                  <SelectGroup>
-                    <SelectLabel>VPNs</SelectLabel>
-                    {vpnConfigs.map((vpn) => (
-                      <SelectItem key={vpn.id} value={`vpn-${vpn.id}`}>
-                        <span className="flex items-center gap-1">
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] px-1 py-0 leading-tight"
+            <Popover open={proxyPopoverOpen} onOpenChange={setProxyPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={proxyPopoverOpen}
+                  className="w-full justify-between font-normal"
+                >
+                  {(() => {
+                    if (selectionType === "none") return "None";
+                    if (selectionType === "vpn") {
+                      const vpn = vpnConfigs.find((v) => v.id === selectedId);
+                      return vpn
+                        ? `${vpn.vpn_type === "WireGuard" ? "WG" : "OVPN"} — ${vpn.name}`
+                        : "None";
+                    }
+                    const proxy = storedProxies.find(
+                      (p) => p.id === selectedId,
+                    );
+                    return proxy
+                      ? `${proxy.name}${proxy.is_cloud_managed ? " (Included)" : ""}`
+                      : "None";
+                  })()}
+                  <LuChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[240px] p-0" sideOffset={8}>
+                <Command>
+                  <CommandInput placeholder="Search proxies or VPNs..." />
+                  <CommandList>
+                    <CommandEmpty>No proxies or VPNs found.</CommandEmpty>
+                    <CommandGroup>
+                      <CommandItem
+                        value="__none__"
+                        onSelect={() => {
+                          handleValueChange("none");
+                          setProxyPopoverOpen(false);
+                        }}
+                      >
+                        <LuCheck
+                          className={cn(
+                            "mr-2 h-4 w-4",
+                            selectionType === "none"
+                              ? "opacity-100"
+                              : "opacity-0",
+                          )}
+                        />
+                        None
+                      </CommandItem>
+                      {storedProxies.map((proxy) => (
+                        <CommandItem
+                          key={proxy.id}
+                          value={proxy.name}
+                          onSelect={() => {
+                            handleValueChange(proxy.id);
+                            setProxyPopoverOpen(false);
+                          }}
+                        >
+                          <LuCheck
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              selectionType === "proxy" &&
+                                selectedId === proxy.id
+                                ? "opacity-100"
+                                : "opacity-0",
+                            )}
+                          />
+                          {proxy.name}
+                          {proxy.is_cloud_managed ? " (Included)" : ""}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                    {vpnConfigs.length > 0 && (
+                      <CommandGroup heading="VPNs">
+                        {vpnConfigs.map((vpn) => (
+                          <CommandItem
+                            key={vpn.id}
+                            value={`vpn-${vpn.name}`}
+                            onSelect={() => {
+                              handleValueChange(`vpn-${vpn.id}`);
+                              setProxyPopoverOpen(false);
+                            }}
                           >
-                            {vpn.vpn_type === "WireGuard" ? "WG" : "OVPN"}
-                          </Badge>
-                          {vpn.name}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                )}
-              </SelectContent>
-            </Select>
+                            <LuCheck
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                selectionType === "vpn" && selectedId === vpn.id
+                                  ? "opacity-100"
+                                  : "opacity-0",
+                              )}
+                            />
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] px-1 py-0 leading-tight mr-1"
+                            >
+                              {vpn.vpn_type === "WireGuard" ? "WG" : "OVPN"}
+                            </Badge>
+                            {vpn.name}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    )}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
 
           {error && (

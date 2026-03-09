@@ -66,6 +66,10 @@ pub fn proxies_dir() -> PathBuf {
   data_dir().join("proxies")
 }
 
+pub fn proxy_workers_dir() -> PathBuf {
+  cache_dir().join("proxy_workers")
+}
+
 pub fn vpn_dir() -> PathBuf {
   data_dir().join("vpn")
 }
@@ -155,6 +159,7 @@ mod tests {
     assert!(data_subdir().ends_with("data"));
     assert!(settings_dir().ends_with("settings"));
     assert!(proxies_dir().ends_with("proxies"));
+    assert!(proxy_workers_dir().ends_with("proxy_workers"));
     assert!(vpn_dir().ends_with("vpn"));
     assert!(extensions_dir().ends_with("extensions"));
   }

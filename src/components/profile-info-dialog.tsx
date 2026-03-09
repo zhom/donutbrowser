@@ -217,6 +217,7 @@ export function ProfileInfoDialog({
     disabled?: boolean;
     destructive?: boolean;
     proBadge?: boolean;
+    runningBadge?: boolean;
     hidden?: boolean;
   };
 
@@ -240,12 +241,14 @@ export function ProfileInfoDialog({
       onClick: () =>
         handleAction(() => onAssignProfilesToGroup?.([profile.id])),
       disabled: isDisabled,
+      runningBadge: isRunning,
     },
     {
       icon: <LuFingerprint className="w-4 h-4" />,
       label: t("profiles.actions.changeFingerprint"),
       onClick: () => handleAction(() => onConfigureCamoufox?.(profile)),
       disabled: isDisabled,
+      runningBadge: isRunning,
       hidden: !isCamoufoxOrWayfern || !onConfigureCamoufox,
     },
     {
@@ -254,6 +257,7 @@ export function ProfileInfoDialog({
       onClick: () => handleAction(() => onCopyCookiesToProfile?.(profile)),
       disabled: isDisabled || !crossOsUnlocked,
       proBadge: !crossOsUnlocked,
+      runningBadge: isRunning && crossOsUnlocked,
       hidden:
         !isCamoufoxOrWayfern ||
         profile.ephemeral === true ||
@@ -265,6 +269,7 @@ export function ProfileInfoDialog({
       onClick: () => handleAction(() => onOpenCookieManagement?.(profile)),
       disabled: isDisabled || !crossOsUnlocked,
       proBadge: !crossOsUnlocked,
+      runningBadge: isRunning && crossOsUnlocked,
       hidden:
         !isCamoufoxOrWayfern ||
         profile.ephemeral === true ||
@@ -275,6 +280,7 @@ export function ProfileInfoDialog({
       label: t("profiles.actions.clone"),
       onClick: () => handleAction(() => onCloneProfile?.(profile)),
       disabled: isDisabled,
+      runningBadge: isRunning,
       hidden: profile.ephemeral === true,
     },
     {
@@ -283,6 +289,7 @@ export function ProfileInfoDialog({
       onClick: () => handleAction(() => onAssignExtensionGroup?.([profile.id])),
       disabled: isDisabled || !crossOsUnlocked,
       proBadge: !crossOsUnlocked,
+      runningBadge: isRunning && crossOsUnlocked,
       hidden: profile.ephemeral === true,
     },
     {
@@ -488,7 +495,12 @@ export function ProfileInfoDialog({
                     {action.icon}
                     <span className="flex-1 flex items-center gap-2">
                       {action.label}
-                      {action.proBadge && <ProBadge />}
+                      {action.runningBadge && (
+                        <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-primary/15 text-primary uppercase">
+                          {t("common.status.running")}
+                        </span>
+                      )}
+                      {action.proBadge && !action.runningBadge && <ProBadge />}
                     </span>
                     <LuChevronRight className="w-4 h-4 text-muted-foreground" />
                   </button>

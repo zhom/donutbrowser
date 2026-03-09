@@ -815,11 +815,12 @@ export default function Home() {
           profile_id: string;
           status: string;
           error?: string;
+          profile_name?: string;
         }>("profile-sync-status", (event) => {
-          const { profile_id, status, error } = event.payload;
+          const { profile_id, status, error, profile_name } = event.payload;
           const toastId = `sync-${profile_id}`;
           const profile = profiles.find((p) => p.id === profile_id);
-          const name = profile?.name ?? "Unknown";
+          const name = profile_name || profile?.name || "Unknown";
 
           if (status === "syncing") {
             showToast({
@@ -845,17 +846,38 @@ export default function Home() {
           phase: string;
           total_files?: number;
           total_bytes?: number;
+          completed_files?: number;
+          completed_bytes?: number;
+          speed_bytes_per_sec?: number;
+          eta_seconds?: number;
+          failed_count?: number;
+          profile_name?: string;
         }>("profile-sync-progress", (event) => {
-          const { profile_id, phase, total_files, total_bytes } = event.payload;
-          if (phase !== "started") return;
+          const payload = event.payload;
+          const toastId = `sync-${payload.profile_id}`;
+          const profile = profiles.find((p) => p.id === payload.profile_id);
+          const name = payload.profile_name || profile?.name || "Unknown";
 
-          const toastId = `sync-${profile_id}`;
-          const profile = profiles.find((p) => p.id === profile_id);
-          const name = profile?.name ?? "Unknown";
-
-          showSyncProgressToast(name, total_files ?? 0, total_bytes ?? 0, {
-            id: toastId,
-          });
+          if (
+            payload.phase === "started" ||
+            payload.phase === "uploading" ||
+            payload.phase === "downloading"
+          ) {
+            showSyncProgressToast(
+              name,
+              {
+                completed_files: payload.completed_files ?? 0,
+                total_files: payload.total_files ?? 0,
+                completed_bytes: payload.completed_bytes ?? 0,
+                total_bytes: payload.total_bytes ?? 0,
+                speed_bytes_per_sec: payload.speed_bytes_per_sec ?? 0,
+                eta_seconds: payload.eta_seconds ?? 0,
+                failed_count: payload.failed_count ?? 0,
+                phase: payload.phase,
+              },
+              { id: toastId },
+            );
+          }
         });
       } catch (error) {
         console.error("Failed to listen for sync events:", error);

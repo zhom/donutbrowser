@@ -1,4 +1,5 @@
 import { NestFactory } from "@nestjs/core";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { AppModule } from "./app.module.js";
 
 function validateEnv() {
@@ -11,7 +12,10 @@ function validateEnv() {
 async function bootstrap() {
   validateEnv();
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // biome-ignore lint/correctness/useHookAtTopLevel: NestJS method, not a React hook
+  app.useBodyParser("json", { limit: "50mb" });
 
   app.enableCors({
     origin: "*",

@@ -914,7 +914,7 @@ async fn test_bypass_rules_in_config() -> Result<(), Box<dyn std::error::Error +
   sleep(Duration::from_millis(500)).await;
 
   // Read the proxy config file from disk to verify bypass rules are persisted
-  let proxies_dir = donutbrowser_lib::app_dirs::proxies_dir();
+  let proxies_dir = donutbrowser_lib::app_dirs::proxy_workers_dir();
   let config_file = proxies_dir.join(format!("{proxy_id}.json"));
 
   assert!(

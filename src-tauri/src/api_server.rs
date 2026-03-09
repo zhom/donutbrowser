@@ -315,6 +315,7 @@ impl ApiServer {
       .routes(routes!(download_browser_api))
       .routes(routes!(get_browser_versions))
       .routes(routes!(check_browser_downloaded))
+      .routes(routes!(get_wayfern_token, refresh_wayfern_token))
       .split_for_parts();
 
     let api = ApiDoc::openapi();
@@ -333,7 +334,7 @@ impl ApiServer {
       .with_state(ws_state);
 
     let app = Router::new()
-      .nest("/v1", v1_routes)
+      .merge(v1_routes)
       .nest("/ws", ws_routes)
       .route("/openapi.json", get(move || async move { Json(api) }))
       .layer(CorsLayer::permissive())
@@ -1500,4 +1501,55 @@ async fn check_browser_downloaded(
 ) -> Result<Json<bool>, StatusCode> {
   let is_downloaded = crate::downloaded_browsers_registry::is_browser_downloaded(browser, version);
   Ok(Json(is_downloaded))
+}
+
+// API Handlers - Wayfern Token
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct WayfernTokenResponse {
+  pub token: Option<String>,
+}
+
+#[utoipa::path(
+  get,
+  path = "/v1/wayfern-token",
+  responses(
+    (status = 200, description = "Current wayfern token", body = WayfernTokenResponse),
+    (status = 401, description = "Unauthorized"),
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "wayfern"
+)]
+async fn get_wayfern_token(
+  State(_state): State<ApiServerState>,
+) -> Result<Json<WayfernTokenResponse>, StatusCode> {
+  let token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
+  Ok(Json(WayfernTokenResponse { token }))
+}
+
+#[utoipa::path(
+  post,
+  path = "/v1/wayfern-token/refresh",
+  responses(
+    (status = 200, description = "Refreshed wayfern token", body = WayfernTokenResponse),
+    (status = 401, description = "Unauthorized"),
+    (status = 500, description = "Failed to refresh token"),
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "wayfern"
+)]
+async fn refresh_wayfern_token(
+  State(_state): State<ApiServerState>,
+) -> Result<Json<WayfernTokenResponse>, (StatusCode, String)> {
+  crate::cloud_auth::CLOUD_AUTH
+    .request_wayfern_token()
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
+  let token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
+  Ok(Json(WayfernTokenResponse { token }))
 }

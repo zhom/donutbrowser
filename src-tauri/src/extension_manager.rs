@@ -19,6 +19,14 @@ pub struct Extension {
   pub sync_enabled: bool,
   #[serde(default)]
   pub last_sync: Option<u64>,
+  #[serde(default)]
+  pub version: Option<String>,
+  #[serde(default)]
+  pub description: Option<String>,
+  #[serde(default)]
+  pub author: Option<String>,
+  #[serde(default)]
+  pub homepage_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,6 +79,166 @@ fn get_file_type(file_name: &str) -> Option<String> {
   }
 }
 
+fn find_zip_start(data: &[u8]) -> usize {
+  for i in 0..data.len().saturating_sub(3) {
+    if data[i] == 0x50 && data[i + 1] == 0x4B && data[i + 2] == 0x03 && data[i + 3] == 0x04 {
+      return i;
+    }
+  }
+  0
+}
+
+#[allow(clippy::type_complexity)]
+fn extract_manifest_metadata(
+  file_data: &[u8],
+  file_type: &str,
+) -> (
+  Option<String>,
+  Option<String>,
+  Option<String>,
+  Option<String>,
+  Option<String>,
+) {
+  let zip_start = if file_type == "crx" {
+    find_zip_start(file_data)
+  } else {
+    0
+  };
+
+  let cursor = std::io::Cursor::new(&file_data[zip_start..]);
+  let mut archive = match zip::ZipArchive::new(cursor) {
+    Ok(a) => a,
+    Err(_) => return (None, None, None, None, None),
+  };
+
+  let manifest_content = if let Ok(mut file) = archive.by_name("manifest.json") {
+    let mut contents = String::new();
+    if std::io::Read::read_to_string(&mut file, &mut contents).is_ok() {
+      Some(contents)
+    } else {
+      None
+    }
+  } else {
+    None
+  };
+
+  let manifest_content = match manifest_content {
+    Some(c) => c,
+    None => return (None, None, None, None, None),
+  };
+
+  let manifest: serde_json::Value = match serde_json::from_str(&manifest_content) {
+    Ok(v) => v,
+    Err(_) => return (None, None, None, None, None),
+  };
+
+  let name = manifest
+    .get("name")
+    .and_then(|v| v.as_str())
+    .map(|s| s.to_string());
+  let version = manifest
+    .get("version")
+    .and_then(|v| v.as_str())
+    .map(|s| s.to_string());
+  let description = manifest
+    .get("description")
+    .and_then(|v| v.as_str())
+    .map(|s| s.to_string());
+  let author = manifest
+    .get("author")
+    .and_then(|v| v.as_str())
+    .map(|s| s.to_string());
+  let homepage_url = manifest
+    .get("homepage_url")
+    .or_else(|| manifest.get("homepage"))
+    .and_then(|v| v.as_str())
+    .map(|s| s.to_string());
+
+  (name, version, description, author, homepage_url)
+}
+
+fn extract_icon_from_archive(file_data: &[u8], file_type: &str) -> Option<(Vec<u8>, String)> {
+  let zip_start = if file_type == "crx" {
+    find_zip_start(file_data)
+  } else {
+    0
+  };
+
+  let cursor = std::io::Cursor::new(&file_data[zip_start..]);
+  let mut archive = match zip::ZipArchive::new(cursor) {
+    Ok(a) => a,
+    Err(_) => return None,
+  };
+
+  let icon_path = {
+    let manifest_content = if let Ok(mut file) = archive.by_name("manifest.json") {
+      let mut contents = String::new();
+      if std::io::Read::read_to_string(&mut file, &mut contents).is_ok() {
+        Some(contents)
+      } else {
+        None
+      }
+    } else {
+      None
+    };
+
+    let manifest_content = manifest_content?;
+    let manifest: serde_json::Value = serde_json::from_str(&manifest_content).ok()?;
+
+    let mut best_path: Option<String> = None;
+    let mut best_size: u32 = 0;
+
+    if let Some(icons) = manifest.get("icons").and_then(|v| v.as_object()) {
+      for (size_str, path_val) in icons {
+        if let (Ok(size), Some(path)) = (size_str.parse::<u32>(), path_val.as_str()) {
+          if size > best_size {
+            best_size = size;
+            best_path = Some(path.to_string());
+          }
+        }
+      }
+    }
+
+    if best_path.is_none() {
+      for key in &["action", "browser_action"] {
+        if let Some(action) = manifest.get(*key) {
+          if let Some(icon) = action.get("default_icon") {
+            if let Some(path) = icon.as_str() {
+              best_path = Some(path.to_string());
+            } else if let Some(icons) = icon.as_object() {
+              for (size_str, path_val) in icons {
+                if let (Ok(size), Some(path)) = (size_str.parse::<u32>(), path_val.as_str()) {
+                  if size > best_size {
+                    best_size = size;
+                    best_path = Some(path.to_string());
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    best_path
+  };
+
+  let icon_path = icon_path?;
+
+  let clean_path = icon_path.trim_start_matches('/');
+  let mut file = archive.by_name(clean_path).ok()?;
+  let mut data = Vec::new();
+  std::io::Read::read_to_end(&mut file, &mut data).ok()?;
+
+  let ext = clean_path
+    .rsplit('.')
+    .next()
+    .unwrap_or("png")
+    .to_lowercase();
+
+  Some((data, ext))
+}
+
 pub struct ExtensionManager;
 
 impl ExtensionManager {
@@ -108,9 +276,18 @@ impl ExtensionManager {
     let browser_compatibility = determine_browser_compatibility(&file_type);
     let now = now_secs();
 
+    let (manifest_name, version, description, author, homepage_url) =
+      extract_manifest_metadata(&file_data, &file_type);
+
+    let final_name = if manifest_name.is_some() {
+      manifest_name.clone().unwrap_or(name)
+    } else {
+      name
+    };
+
     let ext = Extension {
       id: uuid::Uuid::new_v4().to_string(),
-      name,
+      name: final_name,
       file_name: file_name.clone(),
       file_type,
       browser_compatibility,
@@ -118,11 +295,22 @@ impl ExtensionManager {
       updated_at: now,
       sync_enabled: crate::sync::is_sync_configured(),
       last_sync: None,
+      version,
+      description,
+      author,
+      homepage_url,
     };
 
     let file_dir = self.get_file_dir(&ext.id);
     fs::create_dir_all(&file_dir)?;
     fs::write(file_dir.join(&file_name), &file_data)?;
+
+    if let Some((icon_data, icon_ext)) = extract_icon_from_archive(&file_data, &ext.file_type) {
+      let icon_path = self
+        .get_extension_dir(&ext.id)
+        .join(format!("icon.{icon_ext}"));
+      let _ = fs::write(icon_path, icon_data);
+    }
 
     let metadata_path = self.get_metadata_path(&ext.id);
     let json = serde_json::to_string_pretty(&ext)?;
@@ -187,6 +375,7 @@ impl ExtensionManager {
   ) -> Result<Extension, Box<dyn std::error::Error>> {
     let mut ext = self.get_extension(id)?;
 
+    let explicit_name_provided = name.is_some();
     if let Some(new_name) = name {
       ext.name = new_name;
     }
@@ -206,6 +395,31 @@ impl ExtensionManager {
       ext.file_name = new_file_name;
       ext.file_type = new_file_type.clone();
       ext.browser_compatibility = determine_browser_compatibility(&new_file_type);
+
+      let (manifest_name, version, description, author, homepage_url) =
+        extract_manifest_metadata(&data, &new_file_type);
+      if let Some(v) = version {
+        ext.version = Some(v);
+      }
+      if let Some(d) = description {
+        ext.description = Some(d);
+      }
+      if let Some(a) = author {
+        ext.author = Some(a);
+      }
+      if let Some(h) = homepage_url {
+        ext.homepage_url = Some(h);
+      }
+      if let Some(mn) = manifest_name {
+        if !explicit_name_provided {
+          ext.name = mn;
+        }
+      }
+
+      if let Some((icon_data, icon_ext)) = extract_icon_from_archive(&data, &new_file_type) {
+        let icon_path = self.get_extension_dir(id).join(format!("icon.{icon_ext}"));
+        let _ = fs::write(icon_path, icon_data);
+      }
     }
 
     ext.updated_at = now_secs();
@@ -777,6 +991,95 @@ impl ExtensionManager {
     let magic = [0x50, 0x4B, 0x03, 0x04];
     data.windows(4).position(|window| window == magic)
   }
+
+  pub fn ensure_icons_extracted(&self) {
+    let extensions = match self.list_extensions() {
+      Ok(exts) => exts,
+      Err(_) => return,
+    };
+
+    for ext in extensions {
+      let ext_dir = self.get_extension_dir(&ext.id);
+      let has_icon = ext_dir
+        .read_dir()
+        .map(|entries| {
+          entries
+            .filter_map(|e| e.ok())
+            .any(|e| e.file_name().to_string_lossy().starts_with("icon."))
+        })
+        .unwrap_or(false);
+
+      if has_icon {
+        continue;
+      }
+
+      let file_dir = self.get_file_dir(&ext.id);
+      let file_path = file_dir.join(&ext.file_name);
+      if let Ok(file_data) = fs::read(&file_path) {
+        if let Some((icon_data, icon_ext)) = extract_icon_from_archive(&file_data, &ext.file_type) {
+          let icon_path = ext_dir.join(format!("icon.{icon_ext}"));
+          let _ = fs::write(icon_path, icon_data);
+        }
+      }
+
+      if ext.version.is_none() && ext.description.is_none() {
+        let file_path = file_dir.join(&ext.file_name);
+        if let Ok(file_data) = fs::read(&file_path) {
+          let (manifest_name, version, description, author, homepage_url) =
+            extract_manifest_metadata(&file_data, &ext.file_type);
+          if version.is_some()
+            || description.is_some()
+            || author.is_some()
+            || homepage_url.is_some()
+            || manifest_name.is_some()
+          {
+            let mut updated_ext = ext.clone();
+            if let Some(v) = version {
+              updated_ext.version = Some(v);
+            }
+            if let Some(d) = description {
+              updated_ext.description = Some(d);
+            }
+            if let Some(a) = author {
+              updated_ext.author = Some(a);
+            }
+            if let Some(h) = homepage_url {
+              updated_ext.homepage_url = Some(h);
+            }
+            let metadata_path = self.get_metadata_path(&ext.id);
+            if let Ok(json) = serde_json::to_string_pretty(&updated_ext) {
+              let _ = fs::write(metadata_path, json);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  pub fn get_extension_icon(&self, ext_id: &str) -> Option<String> {
+    let ext_dir = self.get_extension_dir(ext_id);
+    let entries = ext_dir.read_dir().ok()?;
+    for entry in entries.filter_map(|e| e.ok()) {
+      let name = entry.file_name().to_string_lossy().to_string();
+      if name.starts_with("icon.") {
+        let icon_path = entry.path();
+        let data = fs::read(&icon_path).ok()?;
+        let ext = name.rsplit('.').next().unwrap_or("png");
+        let mime = match ext {
+          "png" => "image/png",
+          "jpg" | "jpeg" => "image/jpeg",
+          "svg" => "image/svg+xml",
+          "gif" => "image/gif",
+          "webp" => "image/webp",
+          _ => "image/png",
+        };
+        use base64::Engine;
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&data);
+        return Some(format!("data:{};base64,{}", mime, b64));
+      }
+    }
+    None
+  }
 }
 
 // Global instance
@@ -798,6 +1101,12 @@ pub async fn list_extensions() -> Result<Vec<Extension>, String> {
   mgr
     .list_extensions()
     .map_err(|e| format!("Failed to list extensions: {e}"))
+}
+
+#[tauri::command]
+pub fn get_extension_icon(extension_id: String) -> Option<String> {
+  let manager = crate::extension_manager::ExtensionManager::new();
+  manager.get_extension_icon(&extension_id)
 }
 
 #[tauri::command]

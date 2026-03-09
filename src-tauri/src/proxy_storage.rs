@@ -42,7 +42,7 @@ impl ProxyConfig {
 }
 
 pub fn get_storage_dir() -> PathBuf {
-  crate::app_dirs::proxies_dir()
+  crate::app_dirs::proxy_workers_dir()
 }
 
 pub fn save_proxy_config(config: &ProxyConfig) -> Result<(), Box<dyn std::error::Error>> {
@@ -136,4 +136,53 @@ pub fn is_process_running(pid: u32) -> bool {
     RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
   );
   system.process(sysinfo::Pid::from_u32(pid)).is_some()
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_is_process_running_detects_current_process() {
+    let pid = std::process::id();
+    assert!(
+      is_process_running(pid),
+      "is_process_running must detect the current process (PID {pid})"
+    );
+  }
+
+  #[test]
+  fn test_is_process_running_returns_false_for_dead_pid() {
+    // Spawn a short-lived child and wait for it to exit
+    let child = std::process::Command::new(if cfg!(windows) { "cmd" } else { "true" })
+      .args(if cfg!(windows) {
+        vec!["/C", "exit"]
+      } else {
+        vec![]
+      })
+      .spawn()
+      .expect("failed to spawn child");
+    let pid = child.id();
+    let mut child = child;
+    child.wait().expect("child failed");
+
+    assert!(
+      !is_process_running(pid),
+      "is_process_running must return false for a dead process (PID {pid})"
+    );
+  }
+
+  #[test]
+  fn test_is_process_running_returns_false_for_nonexistent_pid() {
+    // PID 0 is not a valid user process on any supported platform
+    assert!(
+      !is_process_running(0),
+      "is_process_running must return false for PID 0"
+    );
+    // Very high PID unlikely to exist
+    assert!(
+      !is_process_running(u32::MAX),
+      "is_process_running must return false for PID u32::MAX"
+    );
+  }
 }

@@ -164,8 +164,22 @@ impl SyncScheduler {
     let profile_manager = ProfileManager::instance();
     if let Ok(profiles) = profile_manager.list_profiles() {
       if let Some(profile) = profiles.iter().find(|p| p.id.to_string() == profile_id) {
-        return profile.process_id.is_some();
+        if profile.process_id.is_some() {
+          return true;
+        }
       }
+    }
+
+    // Check if locked by another team member (profile in use remotely)
+    if crate::team_lock::TEAM_LOCK
+      .is_locked_by_another(profile_id)
+      .await
+    {
+      log::debug!(
+        "Profile {} is locked by another team member, treating as running",
+        profile_id
+      );
+      return true;
     }
 
     false
@@ -276,17 +290,38 @@ impl SyncScheduler {
     for profile in sync_enabled_profiles {
       let profile_id = profile.id.to_string();
       let is_running = profile.process_id.is_some();
+      let is_team_locked = crate::team_lock::TEAM_LOCK
+        .is_locked_by_another(&profile_id)
+        .await;
+      let should_wait = is_running || is_team_locked;
+
+      // Track running state in the scheduler
+      if is_running {
+        self.mark_profile_running(&profile_id).await;
+      }
+
+      if should_wait {
+        log::info!(
+          "Profile '{}' is {} — will sync after it becomes available",
+          profile.name,
+          if is_running {
+            "running locally"
+          } else {
+            "locked by a team member"
+          }
+        );
+      }
 
       // Emit initial status
       let _ = events::emit(
         "profile-sync-status",
         serde_json::json!({
           "profile_id": profile_id,
-          "status": if is_running { "waiting" } else { "syncing" }
+          "status": if should_wait { "waiting" } else { "syncing" }
         }),
       );
 
-      // Queue for immediate sync (or wait if running)
+      // Queue for sync — running profiles will be deferred by the scheduler
       self.queue_profile_sync_immediate(profile_id).await;
     }
   }
@@ -497,7 +532,8 @@ impl SyncScheduler {
                 "proxy-sync-status",
                 serde_json::json!({
                   "id": proxy_id,
-                  "status": "error"
+                  "status": "error",
+                  "error": e.to_string()
                 }),
               );
             }
@@ -563,7 +599,8 @@ impl SyncScheduler {
                 "group-sync-status",
                 serde_json::json!({
                   "id": group_id,
-                  "status": "error"
+                  "status": "error",
+                  "error": e.to_string()
                 }),
               );
             }
@@ -626,7 +663,8 @@ impl SyncScheduler {
                 "vpn-sync-status",
                 serde_json::json!({
                   "id": vpn_id,
-                  "status": "error"
+                  "status": "error",
+                  "error": e.to_string()
                 }),
               );
             }

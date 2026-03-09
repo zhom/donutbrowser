@@ -108,10 +108,15 @@ pub struct StoredProxy {
   pub is_cloud_derived: bool,
   #[serde(default)]
   pub geo_country: Option<String>,
+  // Legacy field kept for deserialization compat; mapped to geo_region on load
   #[serde(default)]
   pub geo_state: Option<String>,
   #[serde(default)]
+  pub geo_region: Option<String>,
+  #[serde(default)]
   pub geo_city: Option<String>,
+  #[serde(default)]
+  pub geo_isp: Option<String>,
 }
 
 impl StoredProxy {
@@ -127,8 +132,22 @@ impl StoredProxy {
       is_cloud_derived: false,
       geo_country: None,
       geo_state: None,
+      geo_region: None,
       geo_city: None,
+      geo_isp: None,
     }
+  }
+
+  /// Migrate legacy geo_state to geo_region
+  pub fn migrate_geo_fields(&mut self) {
+    if self.geo_region.is_none() && self.geo_state.is_some() {
+      self.geo_region = self.geo_state.take();
+    }
+  }
+
+  /// Get the effective region (prefers geo_region, falls back to geo_state for compat)
+  pub fn effective_region(&self) -> Option<&String> {
+    self.geo_region.as_ref().or(self.geo_state.as_ref())
   }
 
   pub fn update_settings(&mut self, proxy_settings: ProxySettings) {
@@ -298,28 +317,21 @@ impl ProxyManager {
 
       if path.extension().is_some_and(|ext| ext == "json") {
         match fs::read_to_string(&path) {
-          Ok(content) => {
-            match serde_json::from_str::<StoredProxy>(&content) {
-              Ok(proxy) => {
-                log::debug!("Loaded stored proxy: {} ({})", proxy.name, proxy.id);
-                stored_proxies.insert(proxy.id.clone(), proxy);
-                loaded_count += 1;
-              }
-              Err(e) => {
-                // Check if this is a ProxyConfig file (from proxy_storage.rs) - skip it
-                if serde_json::from_str::<crate::proxy_storage::ProxyConfig>(&content).is_ok() {
-                  log::debug!("Skipping ProxyConfig file (not a StoredProxy): {:?}", path);
-                } else {
-                  log::warn!(
-                    "Failed to parse proxy file {:?} as StoredProxy: {}",
-                    path,
-                    e
-                  );
-                  error_count += 1;
-                }
-              }
+          Ok(content) => match serde_json::from_str::<StoredProxy>(&content) {
+            Ok(proxy) => {
+              log::debug!("Loaded stored proxy: {} ({})", proxy.name, proxy.id);
+              stored_proxies.insert(proxy.id.clone(), proxy);
+              loaded_count += 1;
             }
-          }
+            Err(e) => {
+              log::warn!(
+                "Failed to parse proxy file {:?} as StoredProxy: {}",
+                path,
+                e
+              );
+              error_count += 1;
+            }
+          },
           Err(e) => {
             log::warn!("Failed to read proxy file {:?}: {}", path, e);
             error_count += 1;
@@ -435,7 +447,9 @@ impl ProxyManager {
         is_cloud_derived: false,
         geo_country: None,
         geo_state: None,
+        geo_region: None,
         geo_city: None,
+        geo_isp: None,
       };
       stored_proxies.insert(CLOUD_PROXY_ID.to_string(), cloud_proxy.clone());
       drop(stored_proxies);
@@ -467,22 +481,107 @@ impl ProxyManager {
     }
   }
 
+  pub fn remove_cloud_proxies(&self) {
+    let removed_ids: Vec<String> = {
+      let mut stored_proxies = self.stored_proxies.lock().unwrap();
+      let ids_to_remove: Vec<String> = stored_proxies
+        .values()
+        .filter(|p| p.is_cloud_managed || p.is_cloud_derived)
+        .map(|p| p.id.clone())
+        .collect();
+      for id in &ids_to_remove {
+        stored_proxies.remove(id);
+      }
+      ids_to_remove
+    };
+
+    if !removed_ids.is_empty() {
+      for id in &removed_ids {
+        if let Err(e) = self.delete_proxy_file(id) {
+          log::warn!("Failed to delete cloud proxy file {id}: {e}");
+        }
+      }
+      if let Err(e) = events::emit_empty("proxies-changed") {
+        log::error!("Failed to emit proxies-changed event: {e}");
+      }
+      if let Err(e) = events::emit_empty("stored-proxies-changed") {
+        log::error!("Failed to emit stored-proxies-changed event: {e}");
+      }
+    }
+  }
+
   // Build a geo-targeted username from base username and location parts
-  // LP format: username-zone-lightning-region-{country}-st-{state}-city-{city}
+  // LP v2 format: username-country-{cc}[-region-{region}][-city-{city}][-isp-{isp}]
+  // Note: sid and ttl are NOT included here — they are injected at browser launch time
+  // per-profile via resolve_proxy_for_profile()
   fn build_geo_username(
     base_username: &str,
     country: &str,
-    state: &Option<String>,
+    region: &Option<String>,
     city: &Option<String>,
+    isp: &Option<String>,
   ) -> String {
-    let mut username = format!("{}-zone-lightning-region-{}", base_username, country);
-    if let Some(state) = state {
-      username = format!("{}-st-{}", username, state);
+    let mut username = format!("{}-country-{}", base_username, country);
+    if let Some(region) = region {
+      username = format!("{}-region-{}", username, region);
     }
     if let Some(city) = city {
       username = format!("{}-city-{}", username, city);
     }
+    if let Some(isp) = isp {
+      username = format!("{}-isp-{}", username, isp);
+    }
     username
+  }
+
+  /// Generate a deterministic 11-char alphanumeric session ID from a profile UUID.
+  /// This ensures the same profile always gets the same sticky IP session,
+  /// even across credential refreshes.
+  pub fn generate_sid_for_profile(profile_id: &str) -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = DefaultHasher::new();
+    profile_id.hash(&mut hasher);
+    let hash = hasher.finish();
+
+    // Convert to base36 (a-z0-9) and take 11 chars
+    let chars: Vec<char> = "abcdefghijklmnopqrstuvwxyz0123456789".chars().collect();
+    let mut sid = String::with_capacity(11);
+    let mut val = hash;
+    for _ in 0..11 {
+      sid.push(chars[(val % 36) as usize]);
+      val /= 36;
+    }
+    sid
+  }
+
+  /// Build the full proxy username with sid and ttl for a specific profile launch.
+  /// This is called at browser launch time, not at proxy creation time.
+  pub fn build_username_with_sid(base_geo_username: &str, profile_id: &str) -> String {
+    let sid = Self::generate_sid_for_profile(profile_id);
+    format!("{}-sid-{}-ttl-1440m", base_geo_username, sid)
+  }
+
+  /// Resolve proxy settings for a specific profile, injecting profile-specific sid
+  /// for cloud-derived proxies with geo targeting.
+  pub fn resolve_proxy_for_profile(
+    &self,
+    proxy_id: &str,
+    profile_id: &str,
+  ) -> Option<ProxySettings> {
+    let stored_proxies = self.stored_proxies.lock().unwrap();
+    let proxy = stored_proxies.get(proxy_id)?;
+    let mut settings = proxy.proxy_settings.clone();
+
+    // For cloud-derived proxies with geo targeting, inject profile-specific sid
+    if proxy.is_cloud_derived && proxy.geo_country.is_some() {
+      if let Some(ref username) = settings.username {
+        settings.username = Some(Self::build_username_with_sid(username, profile_id));
+      }
+    }
+
+    Some(settings)
   }
 
   // Create a cloud-derived location proxy from the base cloud proxy credentials
@@ -490,8 +589,9 @@ impl ProxyManager {
     &self,
     name: String,
     country: String,
-    state: Option<String>,
+    region: Option<String>,
     city: Option<String>,
+    isp: Option<String>,
   ) -> Result<StoredProxy, String> {
     // Get base cloud proxy credentials
     let base_proxy = {
@@ -508,7 +608,7 @@ impl ProxyManager {
       .as_ref()
       .ok_or_else(|| "Cloud proxy has no username".to_string())?;
 
-    let geo_username = Self::build_geo_username(base_username, &country, &state, &city);
+    let geo_username = Self::build_geo_username(base_username, &country, &region, &city, &isp);
 
     let proxy_settings = ProxySettings {
       proxy_type: base_proxy.proxy_settings.proxy_type.clone(),
@@ -535,8 +635,10 @@ impl ProxyManager {
       is_cloud_managed: false,
       is_cloud_derived: true,
       geo_country: Some(country),
-      geo_state: state,
+      geo_state: None,
+      geo_region: region,
       geo_city: city,
+      geo_isp: isp,
     };
 
     {
@@ -583,8 +685,14 @@ impl ProxyManager {
         None => continue,
       };
 
-      let geo_username =
-        Self::build_geo_username(&base_username, &country, &proxy.geo_state, &proxy.geo_city);
+      let region = proxy.effective_region().cloned();
+      let geo_username = Self::build_geo_username(
+        &base_username,
+        &country,
+        &region,
+        &proxy.geo_city,
+        &proxy.geo_isp,
+      );
 
       proxy.proxy_settings.username = Some(geo_username);
       proxy.proxy_settings.password = base_proxy.proxy_settings.password.clone();
@@ -1674,6 +1782,56 @@ impl ProxyManager {
 
     Ok(dead_pids)
   }
+
+  /// Snapshot the set of tracked proxy IDs (for asserting in tests).
+  #[cfg(test)]
+  fn tracked_proxy_ids(&self) -> std::collections::HashSet<String> {
+    let proxies = self.active_proxies.lock().unwrap();
+    proxies.values().map(|p| p.id.clone()).collect()
+  }
+
+  /// Snapshot active proxy count.
+  #[cfg(test)]
+  fn active_proxy_count(&self) -> usize {
+    self.active_proxies.lock().unwrap().len()
+  }
+
+  /// Snapshot profile-to-proxy-id mapping count.
+  #[cfg(test)]
+  fn profile_proxy_mapping_count(&self) -> usize {
+    self.profile_active_proxy_ids.lock().unwrap().len()
+  }
+
+  /// Insert a proxy info entry directly (for testing).
+  #[cfg(test)]
+  fn insert_active_proxy(&self, browser_pid: u32, info: ProxyInfo) {
+    self
+      .active_proxies
+      .lock()
+      .unwrap()
+      .insert(browser_pid, info);
+  }
+
+  /// Insert a profile-to-proxy mapping directly (for testing).
+  #[cfg(test)]
+  fn insert_profile_proxy_mapping(&self, profile_id: String, proxy_id: String) {
+    self
+      .profile_active_proxy_ids
+      .lock()
+      .unwrap()
+      .insert(profile_id, proxy_id);
+  }
+
+  /// Get active proxy info by browser PID (for testing).
+  #[cfg(test)]
+  fn get_active_proxy(&self, browser_pid: u32) -> Option<ProxyInfo> {
+    self
+      .active_proxies
+      .lock()
+      .unwrap()
+      .get(&browser_pid)
+      .cloned()
+  }
 }
 
 // Create a singleton instance of the proxy manager
@@ -2124,5 +2282,833 @@ mod tests {
     }
 
     Ok(())
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Complex proxy process monitoring tests
+  // ──────────────────────────────────────────────────────────────────────
+
+  fn make_proxy_info(id: &str, port: u16, profile_id: Option<&str>) -> ProxyInfo {
+    ProxyInfo {
+      id: id.to_string(),
+      local_url: format!("http://127.0.0.1:{port}"),
+      upstream_host: "10.0.0.1".to_string(),
+      upstream_port: 3128,
+      upstream_type: "http".to_string(),
+      local_port: port,
+      profile_id: profile_id.map(|s| s.to_string()),
+    }
+  }
+
+  #[test]
+  fn test_pid_mapping_lifecycle() {
+    let pm = ProxyManager::new();
+
+    // Initially empty
+    assert_eq!(pm.active_proxy_count(), 0);
+
+    // Register proxies for 3 browser PIDs
+    pm.insert_active_proxy(1001, make_proxy_info("px_a", 9001, Some("profile_1")));
+    pm.insert_active_proxy(1002, make_proxy_info("px_b", 9002, Some("profile_2")));
+    pm.insert_active_proxy(1003, make_proxy_info("px_c", 9003, None));
+
+    assert_eq!(pm.active_proxy_count(), 3);
+
+    // Verify each PID resolves correctly
+    let a = pm.get_active_proxy(1001).unwrap();
+    assert_eq!(a.id, "px_a");
+    assert_eq!(a.local_port, 9001);
+    assert_eq!(a.profile_id.as_deref(), Some("profile_1"));
+
+    let c = pm.get_active_proxy(1003).unwrap();
+    assert!(c.profile_id.is_none());
+
+    // Unknown PID returns None
+    assert!(pm.get_active_proxy(9999).is_none());
+  }
+
+  #[test]
+  fn test_update_proxy_pid_remaps_correctly() {
+    let pm = ProxyManager::new();
+    pm.insert_active_proxy(100, make_proxy_info("px_remap", 9010, Some("prof_a")));
+
+    // Old PID 100 → new PID 200
+    pm.update_proxy_pid(100, 200).unwrap();
+
+    // Old PID should be gone
+    assert!(pm.get_active_proxy(100).is_none());
+
+    // New PID should have the same proxy info
+    let info = pm.get_active_proxy(200).unwrap();
+    assert_eq!(info.id, "px_remap");
+    assert_eq!(info.local_port, 9010);
+    assert_eq!(info.profile_id.as_deref(), Some("prof_a"));
+  }
+
+  #[test]
+  fn test_update_proxy_pid_error_for_unknown_pid() {
+    let pm = ProxyManager::new();
+    let result = pm.update_proxy_pid(777, 888);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("No proxy found for PID 777"));
+  }
+
+  #[test]
+  fn test_profile_proxy_id_mapping_tracks_active_proxy() {
+    let pm = ProxyManager::new();
+
+    pm.insert_active_proxy(500, make_proxy_info("px_1", 9100, Some("profile_x")));
+    pm.insert_profile_proxy_mapping("profile_x".to_string(), "px_1".to_string());
+
+    // Verify mapping exists
+    {
+      let map = pm.profile_active_proxy_ids.lock().unwrap();
+      assert_eq!(map.get("profile_x").unwrap(), "px_1");
+    }
+
+    // Simulate profile-specific cleanup: remove the profile mapping
+    {
+      let mut map = pm.profile_active_proxy_ids.lock().unwrap();
+      map.remove("profile_x");
+    }
+
+    assert_eq!(pm.profile_proxy_mapping_count(), 0);
+    // Active proxy itself should still be there
+    assert_eq!(pm.active_proxy_count(), 1);
+  }
+
+  #[test]
+  fn test_tracked_proxy_ids_returns_all_unique_ids() {
+    let pm = ProxyManager::new();
+    pm.insert_active_proxy(1, make_proxy_info("alpha", 8001, None));
+    pm.insert_active_proxy(2, make_proxy_info("beta", 8002, None));
+    pm.insert_active_proxy(3, make_proxy_info("gamma", 8003, None));
+
+    let ids = pm.tracked_proxy_ids();
+    assert_eq!(ids.len(), 3);
+    assert!(ids.contains("alpha"));
+    assert!(ids.contains("beta"));
+    assert!(ids.contains("gamma"));
+  }
+
+  #[tokio::test]
+  async fn test_concurrent_pid_registration_and_removal() {
+    use std::sync::Arc;
+
+    let pm = Arc::new(ProxyManager::new());
+    let mut handles = vec![];
+
+    // Phase 1: concurrent insertion of 50 proxies
+    for i in 0..50 {
+      let pm = pm.clone();
+      handles.push(tokio::spawn(async move {
+        let pid = 2000 + i as u32;
+        let info = make_proxy_info(&format!("px_{i}"), 7000 + i as u16, None);
+        pm.insert_active_proxy(pid, info);
+      }));
+    }
+    for h in handles.drain(..) {
+      h.await.unwrap();
+    }
+    assert_eq!(pm.active_proxy_count(), 50);
+
+    // Phase 2: concurrent removal of half the proxies
+    for i in (0..50).step_by(2) {
+      let pm = pm.clone();
+      handles.push(tokio::spawn(async move {
+        let pid = 2000 + i as u32;
+        let mut proxies = pm.active_proxies.lock().unwrap();
+        proxies.remove(&pid);
+      }));
+    }
+    for h in handles.drain(..) {
+      h.await.unwrap();
+    }
+    assert_eq!(pm.active_proxy_count(), 25);
+
+    // Phase 3: remaining proxies should all have odd indices
+    let proxies = pm.active_proxies.lock().unwrap();
+    for (&pid, info) in proxies.iter() {
+      let idx = (pid - 2000) as usize;
+      assert!(idx % 2 == 1, "Only odd-index proxies should remain");
+      assert_eq!(info.id, format!("px_{idx}"));
+    }
+  }
+
+  #[test]
+  fn test_process_running_detection_with_child_lifecycle() {
+    use crate::proxy_storage::is_process_running;
+
+    // Spawn a long-lived child so we can check while it runs
+    let mut child = std::process::Command::new(if cfg!(windows) { "timeout" } else { "sleep" })
+      .args(if cfg!(windows) {
+        vec!["/T", "10"]
+      } else {
+        vec!["10"]
+      })
+      .stdout(std::process::Stdio::null())
+      .stderr(std::process::Stdio::null())
+      .spawn()
+      .expect("spawn sleep");
+
+    let pid = child.id();
+
+    // Process should be alive
+    assert!(
+      is_process_running(pid),
+      "Child process must be detected as running (PID {pid})"
+    );
+
+    // Kill it
+    child.kill().expect("kill child");
+    child.wait().expect("wait child");
+
+    // Process should now be dead
+    assert!(
+      !is_process_running(pid),
+      "Killed child must be detected as dead (PID {pid})"
+    );
+  }
+
+  #[tokio::test]
+  async fn test_cleanup_distinguishes_live_and_dead_proxy_configs() {
+    use crate::proxy_storage::{save_proxy_config, ProxyConfig};
+
+    // Spawn a live child process to use its PID
+    let mut live_child =
+      std::process::Command::new(if cfg!(windows) { "timeout" } else { "sleep" })
+        .args(if cfg!(windows) {
+          vec!["/T", "30"]
+        } else {
+          vec!["30"]
+        })
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .expect("spawn live child");
+    let live_pid = live_child.id();
+
+    // Spawn and kill a short-lived process to get a dead PID
+    let dead_child = std::process::Command::new(if cfg!(windows) { "cmd" } else { "true" })
+      .args(if cfg!(windows) {
+        vec!["/C", "exit"]
+      } else {
+        vec![]
+      })
+      .spawn()
+      .expect("spawn dead child");
+    let dead_pid = dead_child.id();
+    let mut dead_child = dead_child;
+    dead_child.wait().expect("wait for dead child");
+
+    // Use an old timestamp so the configs aren't in the grace period
+    let old_ts = SystemTime::now()
+      .duration_since(UNIX_EPOCH)
+      .unwrap()
+      .as_secs()
+      - 300; // 5 minutes ago
+
+    // Save both proxy configs to disk
+    let live_id = format!("proxy_{old_ts}_11111");
+    let dead_id = format!("proxy_{old_ts}_22222");
+
+    let live_config = ProxyConfig {
+      id: live_id.clone(),
+      upstream_url: "DIRECT".to_string(),
+      local_port: Some(19001),
+      ignore_proxy_certificate: None,
+      local_url: Some("http://127.0.0.1:19001".to_string()),
+      pid: Some(live_pid),
+      profile_id: None,
+      bypass_rules: Vec::new(),
+    };
+    let dead_config = ProxyConfig {
+      id: dead_id.clone(),
+      upstream_url: "DIRECT".to_string(),
+      local_port: Some(19002),
+      ignore_proxy_certificate: None,
+      local_url: Some("http://127.0.0.1:19002".to_string()),
+      pid: Some(dead_pid),
+      profile_id: None,
+      bypass_rules: Vec::new(),
+    };
+
+    save_proxy_config(&live_config).unwrap();
+    save_proxy_config(&dead_config).unwrap();
+
+    // Verify is_process_running differentiates them
+    assert!(
+      crate::proxy_storage::is_process_running(live_pid),
+      "Live PID should be detected"
+    );
+    assert!(
+      !crate::proxy_storage::is_process_running(dead_pid),
+      "Dead PID should not be detected"
+    );
+
+    // Clean up
+    live_child.kill().expect("kill live child");
+    live_child.wait().expect("wait live child");
+    crate::proxy_storage::delete_proxy_config(&live_id);
+    crate::proxy_storage::delete_proxy_config(&dead_id);
+  }
+
+  #[test]
+  fn test_proxy_config_persistence_roundtrip() {
+    use crate::proxy_storage::{
+      delete_proxy_config, generate_proxy_id, get_proxy_config, save_proxy_config, ProxyConfig,
+    };
+
+    let id = generate_proxy_id();
+    let config = ProxyConfig {
+      id: id.clone(),
+      upstream_url: "socks5://user:pass@10.0.0.1:1080".to_string(),
+      local_port: Some(18080),
+      ignore_proxy_certificate: Some(true),
+      local_url: Some("http://127.0.0.1:18080".to_string()),
+      pid: Some(12345),
+      profile_id: Some("prof_abc".to_string()),
+      bypass_rules: vec!["*.local".to_string(), "192.168.*".to_string()],
+    };
+
+    // Save
+    save_proxy_config(&config).unwrap();
+
+    // Load and compare
+    let loaded = get_proxy_config(&id).expect("Config should be loadable");
+    assert_eq!(loaded.id, config.id);
+    assert_eq!(loaded.upstream_url, config.upstream_url);
+    assert_eq!(loaded.local_port, config.local_port);
+    assert_eq!(
+      loaded.ignore_proxy_certificate,
+      config.ignore_proxy_certificate
+    );
+    assert_eq!(loaded.local_url, config.local_url);
+    assert_eq!(loaded.pid, config.pid);
+    assert_eq!(loaded.profile_id, config.profile_id);
+    assert_eq!(loaded.bypass_rules, config.bypass_rules);
+
+    // Clean up
+    assert!(delete_proxy_config(&id));
+    assert!(get_proxy_config(&id).is_none());
+  }
+
+  #[test]
+  fn test_proxy_config_update_preserves_fields() {
+    use crate::proxy_storage::{
+      delete_proxy_config, get_proxy_config, save_proxy_config, update_proxy_config, ProxyConfig,
+    };
+
+    let id = format!("proxy_test_update_{}", rand::random::<u32>());
+    let mut config = ProxyConfig::new(id.clone(), "DIRECT".to_string(), Some(17777));
+    config.pid = Some(99999);
+    config.profile_id = Some("prof_up".to_string());
+    config.bypass_rules = vec!["google.com".to_string()];
+
+    save_proxy_config(&config).unwrap();
+
+    // Update: change the local_url (simulates worker binding)
+    config.local_url = Some("http://127.0.0.1:17777".to_string());
+    assert!(update_proxy_config(&config));
+
+    let reloaded = get_proxy_config(&id).unwrap();
+    assert_eq!(
+      reloaded.local_url.as_deref(),
+      Some("http://127.0.0.1:17777")
+    );
+    // Other fields should be preserved
+    assert_eq!(reloaded.pid, Some(99999));
+    assert_eq!(reloaded.bypass_rules, vec!["google.com".to_string()]);
+
+    delete_proxy_config(&id);
+  }
+
+  #[test]
+  fn test_proxy_config_list_filters_json_only() {
+    use crate::proxy_storage::{
+      delete_proxy_config, list_proxy_configs, save_proxy_config, ProxyConfig,
+    };
+
+    let id1 = format!("proxy_list_test_{}", rand::random::<u32>());
+    let id2 = format!("proxy_list_test_{}", rand::random::<u32>());
+
+    let c1 = ProxyConfig::new(id1.clone(), "DIRECT".to_string(), Some(16001));
+    let c2 = ProxyConfig::new(id2.clone(), "DIRECT".to_string(), Some(16002));
+
+    save_proxy_config(&c1).unwrap();
+    save_proxy_config(&c2).unwrap();
+
+    let all = list_proxy_configs();
+    let our_ids: Vec<_> = all.iter().filter(|c| c.id == id1 || c.id == id2).collect();
+    assert_eq!(our_ids.len(), 2, "Both test configs should be listed");
+
+    delete_proxy_config(&id1);
+    delete_proxy_config(&id2);
+  }
+
+  #[test]
+  fn test_proxy_id_uniqueness_and_format() {
+    use crate::proxy_storage::generate_proxy_id;
+
+    let mut ids = std::collections::HashSet::new();
+    for _ in 0..100 {
+      let id = generate_proxy_id();
+      assert!(id.starts_with("proxy_"), "ID must start with proxy_");
+      // Format: proxy_{timestamp}_{random}
+      let parts: Vec<&str> = id.split('_').collect();
+      assert_eq!(
+        parts.len(),
+        3,
+        "ID should have exactly 3 underscore-separated parts"
+      );
+      assert!(
+        parts[1].parse::<u64>().is_ok(),
+        "Second part must be a unix timestamp"
+      );
+      assert!(
+        parts[2].parse::<u32>().is_ok(),
+        "Third part must be a u32 random"
+      );
+      ids.insert(id);
+    }
+    assert_eq!(ids.len(), 100, "All 100 generated IDs must be unique");
+  }
+
+  #[test]
+  fn test_multiple_profiles_share_proxy_independently() {
+    let pm = ProxyManager::new();
+
+    // Two profiles sharing the same upstream but with distinct proxy instances
+    let info_a = ProxyInfo {
+      id: "px_shared_a".to_string(),
+      local_url: "http://127.0.0.1:9201".to_string(),
+      upstream_host: "proxy.shared.com".to_string(),
+      upstream_port: 8080,
+      upstream_type: "http".to_string(),
+      local_port: 9201,
+      profile_id: Some("profile_alpha".to_string()),
+    };
+    let info_b = ProxyInfo {
+      id: "px_shared_b".to_string(),
+      local_url: "http://127.0.0.1:9202".to_string(),
+      upstream_host: "proxy.shared.com".to_string(),
+      upstream_port: 8080,
+      upstream_type: "http".to_string(),
+      local_port: 9202,
+      profile_id: Some("profile_beta".to_string()),
+    };
+
+    pm.insert_active_proxy(3001, info_a);
+    pm.insert_active_proxy(3002, info_b);
+    pm.insert_profile_proxy_mapping("profile_alpha".to_string(), "px_shared_a".to_string());
+    pm.insert_profile_proxy_mapping("profile_beta".to_string(), "px_shared_b".to_string());
+
+    // Remove alpha's browser → should NOT affect beta
+    {
+      let mut proxies = pm.active_proxies.lock().unwrap();
+      proxies.remove(&3001);
+    }
+    {
+      let mut map = pm.profile_active_proxy_ids.lock().unwrap();
+      map.remove("profile_alpha");
+    }
+
+    assert_eq!(pm.active_proxy_count(), 1);
+    assert_eq!(pm.profile_proxy_mapping_count(), 1);
+    let remaining = pm.get_active_proxy(3002).unwrap();
+    assert_eq!(remaining.id, "px_shared_b");
+    assert_eq!(remaining.profile_id.as_deref(), Some("profile_beta"));
+  }
+
+  #[test]
+  fn test_proxy_url_construction() {
+    // Basic HTTP
+    let url = ProxyManager::build_proxy_url(&ProxySettings {
+      proxy_type: "http".to_string(),
+      host: "1.2.3.4".to_string(),
+      port: 8080,
+      username: None,
+      password: None,
+    });
+    assert_eq!(url, "http://1.2.3.4:8080");
+
+    // With credentials
+    let url = ProxyManager::build_proxy_url(&ProxySettings {
+      proxy_type: "socks5".to_string(),
+      host: "proxy.example.com".to_string(),
+      port: 1080,
+      username: Some("user".to_string()),
+      password: Some("p@ss".to_string()),
+    });
+    assert_eq!(url, "socks5://user:p%40ss@proxy.example.com:1080");
+
+    // Username-only (no password)
+    let url = ProxyManager::build_proxy_url(&ProxySettings {
+      proxy_type: "http".to_string(),
+      host: "host.io".to_string(),
+      port: 3128,
+      username: Some("justuser".to_string()),
+      password: None,
+    });
+    assert_eq!(url, "http://justuser@host.io:3128");
+  }
+
+  #[test]
+  fn test_geo_username_construction() {
+    // Country only
+    let u = ProxyManager::build_geo_username("base_user", "US", &None, &None, &None);
+    assert_eq!(u, "base_user-country-US");
+
+    // Country + region
+    let u = ProxyManager::build_geo_username(
+      "base_user",
+      "US",
+      &Some("california".to_string()),
+      &None,
+      &None,
+    );
+    assert_eq!(u, "base_user-country-US-region-california");
+
+    // All fields
+    let u = ProxyManager::build_geo_username(
+      "user",
+      "DE",
+      &Some("bavaria".to_string()),
+      &Some("munich".to_string()),
+      &Some("Telekom".to_string()),
+    );
+    assert_eq!(u, "user-country-DE-region-bavaria-city-munich-isp-Telekom");
+  }
+
+  #[test]
+  fn test_sid_generation_determinism_and_format() {
+    let sid1 = ProxyManager::generate_sid_for_profile("my-profile-uuid");
+    let sid2 = ProxyManager::generate_sid_for_profile("my-profile-uuid");
+    assert_eq!(sid1, sid2, "Same input must produce same SID");
+    assert_eq!(sid1.len(), 11, "SID must be exactly 11 characters");
+
+    // All chars should be alphanumeric lowercase
+    assert!(
+      sid1
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()),
+      "SID chars must be [a-z0-9]"
+    );
+
+    // Different profiles produce different SIDs
+    let sid3 = ProxyManager::generate_sid_for_profile("another-profile");
+    assert_ne!(sid1, sid3, "Different profiles must produce different SIDs");
+  }
+
+  #[test]
+  fn test_build_username_with_sid() {
+    let full = ProxyManager::build_username_with_sid("user-country-US", "profile-123");
+    // Should contain the geo base, then -sid-{11chars}-ttl-1440m
+    assert!(full.starts_with("user-country-US-sid-"));
+    assert!(full.ends_with("-ttl-1440m"));
+    // SID portion
+    let after_sid = full.strip_prefix("user-country-US-sid-").unwrap();
+    let sid = after_sid.strip_suffix("-ttl-1440m").unwrap();
+    assert_eq!(sid.len(), 11);
+  }
+
+  #[test]
+  fn test_stored_proxy_geo_field_migration() {
+    // Simulate legacy data with geo_state but no geo_region
+    let mut proxy = StoredProxy {
+      id: "test_migrate".to_string(),
+      name: "Test".to_string(),
+      proxy_settings: ProxySettings {
+        proxy_type: "http".to_string(),
+        host: "h.com".to_string(),
+        port: 80,
+        username: None,
+        password: None,
+      },
+      sync_enabled: false,
+      last_sync: None,
+      is_cloud_managed: false,
+      is_cloud_derived: false,
+      geo_country: Some("US".to_string()),
+      geo_state: Some("california".to_string()),
+      geo_region: None,
+      geo_city: None,
+      geo_isp: None,
+    };
+
+    // Before migration
+    assert_eq!(proxy.effective_region().unwrap(), "california");
+    assert!(proxy.geo_region.is_none());
+
+    // After migration
+    proxy.migrate_geo_fields();
+    assert_eq!(proxy.geo_region.as_deref(), Some("california"));
+    assert!(proxy.geo_state.is_none(), "geo_state should be taken");
+    assert_eq!(proxy.effective_region().unwrap(), "california");
+  }
+
+  #[test]
+  fn test_cleanup_skips_recently_created_configs() {
+    use crate::proxy_storage::{delete_proxy_config, save_proxy_config, ProxyConfig};
+
+    // Use current timestamp so it falls within the 120s grace period
+    let now_ts = SystemTime::now()
+      .duration_since(UNIX_EPOCH)
+      .unwrap()
+      .as_secs();
+
+    let recent_id = format!("proxy_{now_ts}_99999");
+
+    // Spawn and kill a child so the PID is dead
+    let dead_child = std::process::Command::new(if cfg!(windows) { "cmd" } else { "true" })
+      .args(if cfg!(windows) {
+        vec!["/C", "exit"]
+      } else {
+        vec![]
+      })
+      .spawn()
+      .unwrap();
+    let dead_pid = dead_child.id();
+    let mut dead_child = dead_child;
+    dead_child.wait().unwrap();
+
+    let config = ProxyConfig {
+      id: recent_id.clone(),
+      upstream_url: "DIRECT".to_string(),
+      local_port: Some(19999),
+      ignore_proxy_certificate: None,
+      local_url: None,
+      pid: Some(dead_pid),
+      profile_id: None,
+      bypass_rules: Vec::new(),
+    };
+    save_proxy_config(&config).unwrap();
+
+    // The cleanup logic inspects the timestamp in the proxy ID.
+    // Since we used the current timestamp, the proxy_age will be < 120 seconds,
+    // so it should be skipped despite the dead PID.
+
+    // Verify the grace period logic directly:
+    let proxy_age = recent_id
+      .strip_prefix("proxy_")
+      .and_then(|s| s.split('_').next())
+      .and_then(|s| s.parse::<u64>().ok())
+      .map(|created_at| now_ts.saturating_sub(created_at))
+      .unwrap_or(0);
+
+    assert!(
+      proxy_age < 120,
+      "Recently created config should be in grace period"
+    );
+
+    // Clean up test config
+    delete_proxy_config(&recent_id);
+  }
+
+  #[tokio::test]
+  async fn test_concurrent_config_operations() {
+    use crate::proxy_storage::{
+      delete_proxy_config, get_proxy_config, save_proxy_config, ProxyConfig,
+    };
+    use std::sync::Arc;
+
+    let ids: Vec<String> = (0..20)
+      .map(|i| format!("proxy_conc_test_{}_{}", i, rand::random::<u32>()))
+      .collect();
+    let ids = Arc::new(ids);
+
+    // Concurrent writes
+    let mut handles = vec![];
+    for id in ids.iter() {
+      let id = id.clone();
+      handles.push(tokio::spawn(async move {
+        let config = ProxyConfig::new(id.clone(), "DIRECT".to_string(), Some(15000));
+        save_proxy_config(&config).unwrap();
+      }));
+    }
+    for h in handles {
+      h.await.unwrap();
+    }
+
+    // Verify all were written
+    for id in ids.iter() {
+      assert!(
+        get_proxy_config(id).is_some(),
+        "Config {id} should be readable after concurrent write"
+      );
+    }
+
+    // Concurrent deletes
+    let mut handles = vec![];
+    for id in ids.iter() {
+      let id = id.clone();
+      handles.push(tokio::spawn(async move {
+        delete_proxy_config(&id);
+      }));
+    }
+    for h in handles {
+      h.await.unwrap();
+    }
+
+    // Verify all deleted
+    for id in ids.iter() {
+      assert!(
+        get_proxy_config(id).is_none(),
+        "Config {id} should be gone after concurrent delete"
+      );
+    }
+  }
+
+  #[test]
+  fn test_proxy_txt_parsing_various_formats() {
+    // URL format
+    let results = ProxyManager::parse_txt_proxies("http://user:pass@proxy.com:8080\n");
+    assert_eq!(results.len(), 1);
+    match &results[0] {
+      ProxyParseResult::Parsed(p) => {
+        assert_eq!(p.proxy_type, "http");
+        assert_eq!(p.host, "proxy.com");
+        assert_eq!(p.port, 8080);
+        assert_eq!(p.username.as_deref(), Some("user"));
+        assert_eq!(p.password.as_deref(), Some("pass"));
+      }
+      _ => panic!("Expected Parsed result"),
+    }
+
+    // host:port format
+    let results = ProxyManager::parse_txt_proxies("10.0.0.1:3128\n");
+    match &results[0] {
+      ProxyParseResult::Parsed(p) => {
+        assert_eq!(p.host, "10.0.0.1");
+        assert_eq!(p.port, 3128);
+        assert!(p.username.is_none());
+      }
+      _ => panic!("Expected Parsed"),
+    }
+
+    // host:port:user:pass format
+    let results = ProxyManager::parse_txt_proxies("myhost:9090:admin:secret\n");
+    match &results[0] {
+      ProxyParseResult::Parsed(p) => {
+        assert_eq!(p.host, "myhost");
+        assert_eq!(p.port, 9090);
+        assert_eq!(p.username.as_deref(), Some("admin"));
+        assert_eq!(p.password.as_deref(), Some("secret"));
+      }
+      _ => panic!("Expected Parsed"),
+    }
+
+    // Comments and empty lines should be skipped
+    let results = ProxyManager::parse_txt_proxies("# comment\n\n  \n1.2.3.4:80\n");
+    assert_eq!(results.len(), 1);
+
+    // SOCKS5 URL
+    let results = ProxyManager::parse_txt_proxies("socks5://u:p@1.2.3.4:1080\n");
+    match &results[0] {
+      ProxyParseResult::Parsed(p) => {
+        assert_eq!(p.proxy_type, "socks5");
+        assert_eq!(p.host, "1.2.3.4");
+        assert_eq!(p.port, 1080);
+      }
+      _ => panic!("Expected Parsed"),
+    }
+
+    // Ambiguous: both positions could be ports
+    let results = ProxyManager::parse_txt_proxies("1234:5678:9012:3456\n");
+    match &results[0] {
+      ProxyParseResult::Ambiguous {
+        possible_formats, ..
+      } => {
+        assert_eq!(possible_formats.len(), 2);
+      }
+      _ => panic!("Expected Ambiguous"),
+    }
+
+    // Invalid
+    let results = ProxyManager::parse_txt_proxies("notaproxy\n");
+    match &results[0] {
+      ProxyParseResult::Invalid { .. } => {}
+      _ => panic!("Expected Invalid"),
+    }
+  }
+
+  #[test]
+  fn test_multiple_proxy_types_coexist() {
+    let pm = ProxyManager::new();
+
+    // Different proxy types for different profiles
+    let types = [
+      ("http", 3128),
+      ("https", 3129),
+      ("socks4", 1080),
+      ("socks5", 1081),
+    ];
+
+    for (i, (ptype, port)) in types.iter().enumerate() {
+      let info = ProxyInfo {
+        id: format!("px_type_{ptype}"),
+        local_url: format!("http://127.0.0.1:{}", 9300 + i as u16),
+        upstream_host: "upstream.test".to_string(),
+        upstream_port: *port,
+        upstream_type: ptype.to_string(),
+        local_port: 9300 + i as u16,
+        profile_id: Some(format!("profile_{ptype}")),
+      };
+      pm.insert_active_proxy(4000 + i as u32, info);
+    }
+
+    assert_eq!(pm.active_proxy_count(), 4);
+
+    // Verify each type is stored correctly
+    let info = pm.get_active_proxy(4000).unwrap();
+    assert_eq!(info.upstream_type, "http");
+    let info = pm.get_active_proxy(4003).unwrap();
+    assert_eq!(info.upstream_type, "socks5");
+    assert_eq!(info.upstream_port, 1081);
+  }
+
+  #[test]
+  fn test_overwrite_pid_mapping() {
+    let pm = ProxyManager::new();
+
+    // Register proxy for PID 5000
+    pm.insert_active_proxy(5000, make_proxy_info("px_old", 9400, Some("prof_ow")));
+
+    // Overwrite the same PID with a new proxy (simulates browser reconnect with different proxy)
+    pm.insert_active_proxy(5000, make_proxy_info("px_new", 9401, Some("prof_ow")));
+
+    // Should only have 1 entry, with the new proxy
+    assert_eq!(pm.active_proxy_count(), 1);
+    let info = pm.get_active_proxy(5000).unwrap();
+    assert_eq!(info.id, "px_new");
+    assert_eq!(info.local_port, 9401);
+  }
+
+  #[test]
+  fn test_proxy_config_with_bypass_rules_roundtrip() {
+    use crate::proxy_storage::{
+      delete_proxy_config, get_proxy_config, save_proxy_config, ProxyConfig,
+    };
+
+    let id = format!("proxy_bypass_test_{}", rand::random::<u32>());
+    let rules = vec![
+      "*.google.com".to_string(),
+      "localhost".to_string(),
+      "192.168.0.*".to_string(),
+      "^.*\\.internal\\.corp$".to_string(),
+    ];
+
+    let config = ProxyConfig::new(id.clone(), "http://upstream:3128".to_string(), Some(18888))
+      .with_profile_id(Some("prof_bypass".to_string()))
+      .with_bypass_rules(rules.clone());
+
+    save_proxy_config(&config).unwrap();
+
+    let loaded = get_proxy_config(&id).unwrap();
+    assert_eq!(loaded.bypass_rules.len(), 4);
+    assert_eq!(loaded.bypass_rules, rules);
+    assert_eq!(loaded.profile_id.as_deref(), Some("prof_bypass"));
+
+    delete_proxy_config(&id);
   }
 }

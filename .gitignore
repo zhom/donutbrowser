@@ -56,3 +56,6 @@ nodecar/nodecar-bin
 
 # env
 .env
+
+# next
+next-env.d.ts
