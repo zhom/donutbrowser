@@ -18,30 +18,12 @@ permissions:
   id-token: write
 
 jobs:
-  validate-issue:
+  analyze-issue:
     if: github.event_name == 'issues'
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 #v6.0.1
-
-      - name: Save issue body to file
-        env:
-          ISSUE_BODY: ${{ github.event.issue.body }}
-        run: printf '%s' "${ISSUE_BODY:-}" > issue_body.txt
-
-      - name: Validate issue with AI
-        id: validate
-        uses: actions/ai-inference@e09e65981758de8b2fdab13c2bfb7c7d5493b0b6 # v2.0.7
-        with:
-          prompt-file: .github/prompts/issue-validation.prompt.yml
-          input: |
-            issue_title: ${{ github.event.issue.title }}
-            issue_labels: ${{ join(github.event.issue.labels.*.name, ', ') }}
-          file_input: |
-            issue_body: ./issue_body.txt
-          max-tokens: 1024
 
       - name: Check if first-time contributor
         id: check-first-time
@@ -59,101 +41,31 @@ jobs:
             echo "is_first_time=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Parse validation result and take action
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RESPONSE_FILE: ${{ steps.validate.outputs.response-file }}
-        run: |
-          if [ -n "$RESPONSE_FILE" ] && [ -f "$RESPONSE_FILE" ]; then
-            RAW_OUTPUT=$(cat "$RESPONSE_FILE")
-          else
-            echo "::error::Response file not found: $RESPONSE_FILE"
-            exit 1
-          fi
-
-          JSON_RESULT=$(printf "%s" "$RAW_OUTPUT" | sed -n '/```json/,/```/p' | sed '1d;$d')
-          if [ -z "$JSON_RESULT" ]; then
-            JSON_RESULT="$RAW_OUTPUT"
-          fi
-
-          if ! echo "$JSON_RESULT" | jq empty 2>/dev/null; then
-            echo "::warning::Invalid JSON in AI response, using fallback"
-            JSON_RESULT='{"is_valid":true,"issue_type":"other","missing_info":[],"suggestions":[],"overall_assessment":"Unable to validate automatically"}'
-          fi
-
-          IS_VALID=$(echo "$JSON_RESULT" | jq -r '.is_valid // false')
-          ISSUE_TYPE=$(echo "$JSON_RESULT" | jq -r '.issue_type // "other"')
-          MISSING_INFO=$(echo "$JSON_RESULT" | jq -r '.missing_info[]? // empty' | sed 's/^/- /')
-          SUGGESTIONS=$(echo "$JSON_RESULT" | jq -r '.suggestions[]? // empty' | sed 's/^/- /')
-          ASSESSMENT=$(echo "$JSON_RESULT" | jq -r '.overall_assessment // "No assessment provided"')
-
-          IS_FIRST_TIME="${{ steps.check-first-time.outputs.is_first_time }}"
-          GREETING_SECTION=""
-          if [ "$IS_FIRST_TIME" = "true" ]; then
-            GREETING_SECTION="## 👋 Welcome!\n\nThank you for your first issue ❤️ If this is a feature request, please make sure it is clear what you want, why you want it, and how important it is to you. If you posted a bug report, please make sure it includes as much detail as possible.\n\n---\n\n"
-          fi
-
-          if [ "$IS_VALID" = "false" ]; then
-            {
-              printf "%b" "$GREETING_SECTION"
-              printf "## 🤖 Issue Validation\n\n"
-              printf "Thank you for submitting this issue! However, it appears that some required information might be missing to help the maintainers better understand and address your concern.\n\n"
-              printf "**Issue Type Detected:** \`%s\`\n\n" "$ISSUE_TYPE"
-              printf "**Assessment:** %s\n\n" "$ASSESSMENT"
-              printf "### 📋 Missing Information:\n%s\n\n" "$MISSING_INFO"
-              printf "### 💡 Suggestions for Improvement:\n%s\n\n" "$SUGGESTIONS"
-              printf "### 📝 How to Provide Additional Information:\n\n"
-              printf "Please edit your original issue description to include the missing information. Here are the issue templates for reference:\n\n"
-              printf -- "- **Bug Report Template:** [View Template](.github/ISSUE_TEMPLATE/01-bug-report.md)\n"
-              printf -- "- **Feature Request Template:** [View Template](.github/ISSUE_TEMPLATE/02-feature-request.md)\n\n"
-              printf "### 🔧 Quick Tips:\n"
-              printf -- "- For **bug reports**: Include step-by-step reproduction instructions, your environment details, and any error messages\n"
-              printf -- "- For **feature requests**: Describe the use case, expected behavior, and why this feature would be valuable\n"
-              printf -- "- Add **screenshots** or **logs** when applicable\n\n"
-              printf "Once you have updated the issue with the missing information, feel free to remove this comment or reply to let the maintainers know the updates have been made.\n\n"
-              printf -- "---\n*This validation was performed automatically to ensure all the information needed to help effectively is provided.*\n"
-            } > comment.md
-
-            gh issue comment ${{ github.event.issue.number }} --body-file comment.md
-            gh issue edit ${{ github.event.issue.number }} --add-label "needs-info"
-          else
-            SUGGESTIONS_SECTION=""
-            if [ -n "$SUGGESTIONS" ]; then
-              SUGGESTIONS_SECTION=$(printf "### 💡 Suggestions:\n%s\n\n" "$SUGGESTIONS")
-            fi
-
-            {
-              printf "%b" "$GREETING_SECTION"
-              printf "## 🤖 Issue Validation\n\n"
-              printf "**Issue Type Detected:** \`%s\`\n\n" "$ISSUE_TYPE"
-              printf "**Assessment:** %s\n\n" "$ASSESSMENT"
-              printf "%b" "$SUGGESTIONS_SECTION"
-              printf -- "---\n*This validation was performed automatically to help triage issues.*\n"
-            } > comment.md
-
-            gh issue comment ${{ github.event.issue.number }} --body-file comment.md
-
-            case "$ISSUE_TYPE" in
-              "bug_report")
-                gh issue edit ${{ github.event.issue.number }} --add-label "bug"
-                ;;
-              "feature_request")
-                gh issue edit ${{ github.event.issue.number }} --add-label "enhancement"
-                ;;
-            esac
-          fi
-
-      - name: Run opencode analysis
+      - name: Analyze issue
         uses: anomalyco/opencode/github@6c7d968c4423a0cd6c85099c9377a6066313fa0a #v1.2.20
         env:
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
         with:
           model: zai-coding-plan/glm-4.7
+          prompt: |
+            You are a triage bot for Donut Browser (open-source anti-detect browser, Tauri + Next.js + Rust).
 
-      - name: Cleanup
-        run: rm -f issue_body.txt comment.md
+            ${{ steps.check-first-time.outputs.is_first_time == 'true' && 'This is a first-time contributor. Start your comment with: "Thanks for opening your first issue!"' || '' }}
 
-  handle-pr:
+            Analyze this issue and post a single concise comment. Format:
+
+            1. One sentence acknowledging what the user wants.
+            2. A short **Action items** list — what specific info is missing or what the user should do next. Only include items that are actually missing. If the issue is complete, say so and skip this section.
+            3. Label the issue: add "bug" label for bug reports, "enhancement" label for feature requests.
+
+            Rules:
+            - Be brief. No filler, no generic tips, no templates.
+            - If it's a bug report, check for: reproduction steps, OS/version, error messages. Only ask for what's actually missing.
+            - If it's a feature request, check for: clear description of desired behavior, use case. Only ask for what's actually missing.
+            - If the issue already has everything needed, just acknowledge it and label it.
+            - Never exceed 6 items total.
+
+  analyze-pr:
     if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
@@ -178,109 +90,29 @@ jobs:
             echo "is_first_time=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Get PR diff
-        id: get-diff
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh pr diff ${{ github.event.pull_request.number }} > pr_diff.txt
-          head -c 10000 pr_diff.txt > pr_diff_truncated.txt
-
-      - name: Save PR body to file
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: printf '%s' "${PR_BODY:-No description provided}" > pr_body.txt
-
-      - name: Analyze PR with AI
-        id: analyze
-        uses: actions/ai-inference@e09e65981758de8b2fdab13c2bfb7c7d5493b0b6 # v2.0.7
-        with:
-          prompt-file: .github/prompts/pr-review.prompt.yml
-          input: |
-            pr_title: ${{ github.event.pull_request.title }}
-          file_input: |
-            pr_body: ./pr_body.txt
-            pr_diff: ./pr_diff_truncated.txt
-          max-tokens: 1024
-
-      - name: Post PR feedback comment
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RESPONSE_FILE: ${{ steps.analyze.outputs.response-file }}
-        run: |
-          if [ -n "$RESPONSE_FILE" ] && [ -f "$RESPONSE_FILE" ]; then
-            RAW_OUTPUT=$(cat "$RESPONSE_FILE")
-          else
-            echo "::error::Response file not found"
-            exit 1
-          fi
-
-          JSON_RESULT=$(printf "%s" "$RAW_OUTPUT" | sed -n '/```json/,/```/p' | sed '1d;$d')
-          if [ -z "$JSON_RESULT" ]; then
-            JSON_RESULT="$RAW_OUTPUT"
-          fi
-
-          if ! echo "$JSON_RESULT" | jq empty 2>/dev/null; then
-            echo "::warning::Invalid JSON in AI response, using fallback"
-            JSON_RESULT='{"summary":"Unable to analyze automatically","quality_score":"good","feedback":[],"suggestions":[],"security_notes":[]}'
-          fi
-
-          SUMMARY=$(echo "$JSON_RESULT" | jq -r '.summary // "No summary"')
-          QUALITY=$(echo "$JSON_RESULT" | jq -r '.quality_score // "good"')
-          FEEDBACK=$(echo "$JSON_RESULT" | jq -r '.feedback[]? // empty' | sed 's/^/- /')
-          SUGGESTIONS=$(echo "$JSON_RESULT" | jq -r '.suggestions[]? // empty' | sed 's/^/- /')
-          SECURITY=$(echo "$JSON_RESULT" | jq -r '.security_notes[]? // empty' | sed 's/^/- ⚠️ /')
-
-          IS_FIRST_TIME="${{ steps.check-first-time.outputs.is_first_time }}"
-
-          {
-            if [ "$IS_FIRST_TIME" = "true" ]; then
-              printf "## 👋 Welcome!\n\n"
-              printf "Thank you for your first contribution ❤️ A human will review your PR shortly. Make sure that the pipelines are green, so that the PR is considered ready for review and could be merged.\n\n"
-              printf -- "---\n\n"
-            fi
-
-            printf "## 🤖 PR Review\n\n"
-            printf "**Summary:** %s\n\n" "$SUMMARY"
-
-            case "$QUALITY" in
-              "good")
-                printf "**Status:** ✅ Looking good!\n\n"
-                ;;
-              "needs_work")
-                printf "**Status:** 🔧 Some improvements suggested\n\n"
-                ;;
-              "critical_issues")
-                printf "**Status:** ⚠️ Please address the issues below\n\n"
-                ;;
-            esac
-
-            if [ -n "$FEEDBACK" ]; then
-              printf "### 📝 Feedback:\n%s\n\n" "$FEEDBACK"
-            fi
-
-            if [ -n "$SUGGESTIONS" ]; then
-              printf "### 💡 Suggestions:\n%s\n\n" "$SUGGESTIONS"
-            fi
-
-            if [ -n "$SECURITY" ]; then
-              printf "### 🔒 Security Notes:\n%s\n\n" "$SECURITY"
-            fi
-
-            printf -- "---\n*This review was performed automatically. A human maintainer will also review your changes.*\n"
-          } > comment.md
-
-          gh pr comment ${{ github.event.pull_request.number }} --body-file comment.md
-
-      - name: Run opencode analysis
+      - name: Analyze PR
         uses: anomalyco/opencode/github@6c7d968c4423a0cd6c85099c9377a6066313fa0a #v1.2.20
         env:
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
         with:
           model: zai-coding-plan/glm-4.7
+          prompt: |
+            You are a review bot for Donut Browser (open-source anti-detect browser, Tauri + Next.js + Rust).
 
-      - name: Cleanup
-        run: rm -f pr_diff.txt pr_diff_truncated.txt pr_body.txt comment.md
+            ${{ steps.check-first-time.outputs.is_first_time == 'true' && 'This is a first-time contributor. Start your comment with: "Thanks for your first PR!"' || '' }}
+
+            Review this PR and post a single concise comment. Format:
+
+            1. One sentence summarizing what this PR does.
+            2. **Action items** — only list things that actually need to be fixed or addressed. If the PR looks good, say so and skip this section.
+
+            Rules:
+            - Be brief. No filler, no praise padding.
+            - Focus on: bugs, security issues, missing edge cases, breaking changes.
+            - If the PR touches UI text or adds new strings, remind to update translation files in src/i18n/locales/.
+            - If the PR modifies Tauri commands, remind to check the unused-commands test.
+            - Do not nitpick style or formatting — the project has automated linting.
+            - Never exceed 8 lines total.
 
   opencode-command:
     if: |
