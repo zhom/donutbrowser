@@ -342,18 +342,69 @@ impl WayfernManager {
         // Normalize the fingerprint: convert JSON string fields to proper types
         let mut normalized = Self::normalize_fingerprint(fp);
 
-        // Add default timezone/geolocation if not present
-        // Wayfern's Bayesian network generator doesn't include these fields,
-        // so we need to add sensible defaults
-        if let Some(obj) = normalized.as_object_mut() {
-          if !obj.contains_key("timezone") {
-            obj.insert("timezone".to_string(), json!("America/New_York"));
+        // Apply geolocation based on proxy IP or geoip config
+        let geoip_option = config.geoip.as_ref();
+        let should_geolocate = match geoip_option {
+          Some(serde_json::Value::Bool(false)) => false,
+          _ => true, // Default to auto-detect
+        };
+
+        if should_geolocate {
+          let geo_result = async {
+            let ip = match geoip_option {
+              Some(serde_json::Value::String(ip_str)) => ip_str.clone(),
+              _ => {
+                // Auto-detect IP, optionally through proxy
+                crate::ip_utils::fetch_public_ip(config.proxy.as_deref())
+                  .await
+                  .map_err(|e| format!("Failed to fetch public IP: {e}"))?
+              }
+            };
+
+            crate::camoufox::geolocation::get_geolocation(&ip)
+              .map_err(|e| format!("Failed to get geolocation for IP {ip}: {e}"))
           }
-          if !obj.contains_key("timezoneOffset") {
-            obj.insert("timezoneOffset".to_string(), json!(300)); // EST = UTC-5 = 300 minutes
+          .await;
+
+          match geo_result {
+            Ok(geo) => {
+              if let Some(obj) = normalized.as_object_mut() {
+                obj.insert("timezone".to_string(), json!(geo.timezone));
+                // Calculate timezone offset from IANA timezone name
+                if let Ok(tz) = geo.timezone.parse::<chrono_tz::Tz>() {
+                  use chrono::Offset;
+                  let now = chrono::Utc::now().with_timezone(&tz);
+                  let offset_seconds = now.offset().fix().local_minus_utc();
+                  let offset_minutes = -(offset_seconds / 60);
+                  obj.insert("timezoneOffset".to_string(), json!(offset_minutes));
+                }
+                obj.insert("latitude".to_string(), json!(geo.latitude));
+                obj.insert("longitude".to_string(), json!(geo.longitude));
+                let locale_str = geo.locale.as_string();
+                obj.insert("language".to_string(), json!(&locale_str));
+                obj.insert(
+                  "languages".to_string(),
+                  json!([&locale_str, &geo.locale.language]),
+                );
+              }
+              log::info!(
+                "Applied geolocation to Wayfern fingerprint: {} ({})",
+                geo.locale.as_string(),
+                geo.timezone
+              );
+            }
+            Err(e) => {
+              log::warn!("Geolocation failed, using defaults: {e}");
+              if let Some(obj) = normalized.as_object_mut() {
+                if !obj.contains_key("timezone") {
+                  obj.insert("timezone".to_string(), json!("America/New_York"));
+                }
+                if !obj.contains_key("timezoneOffset") {
+                  obj.insert("timezoneOffset".to_string(), json!(300));
+                }
+              }
+            }
           }
-          // Note: latitude/longitude are intentionally not set by default
-          // as they reveal precise location. Users should set these manually if needed.
         }
 
         normalized
@@ -567,6 +618,38 @@ impl WayfernManager {
       log::warn!("No fingerprint found in config, browser will use default fingerprint");
     }
 
+    // Set geolocation override via CDP so navigator.geolocation.getCurrentPosition() matches
+    if let Some(fingerprint_json) = &config.fingerprint {
+      if let Ok(fp) = serde_json::from_str::<serde_json::Value>(fingerprint_json) {
+        let fp_obj = if fp.get("fingerprint").is_some() {
+          fp.get("fingerprint").unwrap()
+        } else {
+          &fp
+        };
+        if let (Some(lat), Some(lng)) = (
+          fp_obj.get("latitude").and_then(|v| v.as_f64()),
+          fp_obj.get("longitude").and_then(|v| v.as_f64()),
+        ) {
+          let accuracy = fp_obj
+            .get("accuracy")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(100.0);
+          if let Some(target) = page_targets.first() {
+            if let Some(ws_url) = &target.websocket_debugger_url {
+              let _ = self
+                .send_cdp_command(
+                  ws_url,
+                  "Emulation.setGeolocationOverride",
+                  json!({ "latitude": lat, "longitude": lng, "accuracy": accuracy }),
+                )
+                .await;
+              log::info!("Set geolocation override: lat={lat}, lng={lng}");
+            }
+          }
+        }
+      }
+    }
+
     // Navigate to URL via CDP - fingerprint will be applied at navigation commit time
     if let Some(url) = url {
       log::info!("Navigating to URL via CDP: {}", url);
@@ -579,6 +662,25 @@ impl WayfernManager {
             Ok(_) => log::info!("Successfully navigated to URL: {}", url),
             Err(e) => log::error!("Failed to navigate to URL: {e}"),
           }
+        }
+      }
+    }
+
+    // Close the debugging port to prevent localhost port-scan detection.
+    // Reopen on a random high port after 5s so we can still manage the browser.
+    let reopen_port = port; // Reopen on same port for find_wayfern_by_profile recovery
+    if let Some(target) = page_targets.first() {
+      if let Some(ws_url) = &target.websocket_debugger_url {
+        match self
+          .send_cdp_command(
+            ws_url,
+            "Wayfern.closeDebuggingPort",
+            json!({ "reopenPort": reopen_port, "reopenDelayMs": 30000 }),
+          )
+          .await
+        {
+          Ok(_) => log::info!("Closed debugging port, will reopen on {reopen_port} after 30s"),
+          Err(e) => log::warn!("Failed to close debugging port: {e}"),
         }
       }
     }

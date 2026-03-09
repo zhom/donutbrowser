@@ -425,8 +425,28 @@ impl CamoufoxConfigBuilder {
   /// Build the complete Camoufox launch configuration with async geolocation support.
   /// This method should be used when geoip option is set to Auto.
   pub async fn build_async(self) -> Result<CamoufoxLaunchConfig, ConfigError> {
-    // Get proxy URL for IP detection if set
-    let proxy_url = self.proxy.as_ref().map(|p| p.server.clone());
+    // Get full proxy URL (with credentials) for IP detection
+    let proxy_url = self.proxy.as_ref().map(|p| {
+      if let (Some(user), Some(pass)) = (&p.username, &p.password) {
+        // Reconstruct URL with credentials: scheme://user:pass@host:port
+        if let Ok(mut parsed) = url::Url::parse(&p.server) {
+          let _ = parsed.set_username(user);
+          let _ = parsed.set_password(Some(pass));
+          parsed.to_string()
+        } else {
+          p.server.clone()
+        }
+      } else if let Some(user) = &p.username {
+        if let Ok(mut parsed) = url::Url::parse(&p.server) {
+          let _ = parsed.set_username(user);
+          parsed.to_string()
+        } else {
+          p.server.clone()
+        }
+      } else {
+        p.server.clone()
+      }
+    });
     let geoip_option = self.geoip.clone();
     let block_webrtc = self.block_webrtc;
 
