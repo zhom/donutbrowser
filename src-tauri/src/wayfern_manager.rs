@@ -567,7 +567,15 @@ impl WayfernManager {
       }
 
       // Denormalize fingerprint for Wayfern CDP (convert arrays/objects to JSON strings)
-      let fingerprint_for_cdp = Self::denormalize_fingerprint(fingerprint);
+      let mut fingerprint_for_cdp = Self::denormalize_fingerprint(fingerprint);
+
+      // Normalize languages: if it's a comma-separated string, convert to array
+      if let Some(obj) = fingerprint_for_cdp.as_object_mut() {
+        if let Some(serde_json::Value::String(s)) = obj.get("languages").cloned() {
+          let arr: Vec<&str> = s.split(',').map(|l| l.trim()).collect();
+          obj.insert("languages".to_string(), json!(arr));
+        }
+      }
 
       log::info!(
         "Fingerprint prepared for CDP command, fields: {:?}",
