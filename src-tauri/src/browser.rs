@@ -256,7 +256,7 @@ mod linux {
     // - Firefox/Firefox Developer on Linux often extract to: install_dir/firefox/firefox
     // - Some archives may extract directly under: install_dir/firefox or install_dir/firefox-bin
     // - For some flavors we may have: install_dir/<browser_type>/<binary>
-    let browser_subdir = install_dir.join(browser_type.as_str());
+    let _browser_subdir = install_dir.join(browser_type.as_str());
 
     // Try common firefox executable locations (nested and flat)
     let possible_executables = match browser_type {
@@ -322,7 +322,7 @@ mod linux {
     //   install_dir/<browser>/<binary>
     // However, Firefox Developer tarballs often extract to a "firefox" subfolder
     // rather than "firefox-developer". Support both layouts.
-    let browser_subdir = install_dir.join(browser_type.as_str());
+    let _browser_subdir = install_dir.join(browser_type.as_str());
 
     let possible_executables = match browser_type {
       BrowserType::Camoufox => {

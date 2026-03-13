@@ -6,7 +6,7 @@ use crate::browser::BrowserType;
 use crate::downloader::DownloadProgress;
 use crate::events;
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(target_os = "macos")]
 use std::process::Command;
 
 #[cfg(target_os = "macos")]
