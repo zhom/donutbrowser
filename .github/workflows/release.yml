@@ -264,14 +264,11 @@ jobs:
           go install github.com/ralt/repogen/cmd/repogen@latest
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
-      - name: Configure AWS CLI for Cloudflare R2
-        run: |
-          aws configure set aws_access_key_id "${{ secrets.R2_ACCESS_KEY_ID }}"
-          aws configure set aws_secret_access_key "${{ secrets.R2_SECRET_ACCESS_KEY }}"
-          aws configure set default.region auto
-
       - name: Sync existing repo metadata from R2
         env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
           R2_ENDPOINT: "https://${{ secrets.R2_ENDPOINT_URL }}"
           R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
         run: |
@@ -296,6 +293,9 @@ jobs:
 
       - name: Upload repository to R2
         env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
           R2_ENDPOINT: "https://${{ secrets.R2_ENDPOINT_URL }}"
           R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
         run: |
@@ -310,6 +310,9 @@ jobs:
 
       - name: Verify upload
         env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
           R2_ENDPOINT: "https://${{ secrets.R2_ENDPOINT_URL }}"
           R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
         run: |
