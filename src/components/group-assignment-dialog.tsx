@@ -176,7 +176,7 @@ export function GroupAssignmentDialog({
           </div>
 
           {error && (
-            <div className="p-3 text-sm text-red-600 bg-red-50 rounded-md dark:bg-red-900/20 dark:text-red-400">
+            <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md">
               {error}
             </div>
           )}

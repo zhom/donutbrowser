@@ -347,7 +347,7 @@ export function UnifiedToast(props: ToastProps) {
           <>
             {stage === "extracting" && (
               <p className="mt-1 text-xs text-muted-foreground">
-                Extracting browser files...
+                Extracting browser files... Please do not close the app.
               </p>
             )}
             {stage === "verifying" && (

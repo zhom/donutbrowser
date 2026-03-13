@@ -541,11 +541,6 @@
     "unknownError": "An unknown error occurred. Please try again."
   },
   "browser": {
-    "firefox": "Firefox",
-    "firefoxDeveloper": "Firefox Developer Edition",
-    "chromium": "Chromium",
-    "brave": "Brave",
-    "zen": "Zen Browser",
     "camoufox": "Camoufox",
     "wayfern": "Wayfern"
   },

@@ -116,7 +116,7 @@ export function PermissionDialog({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md">
         <DialogHeader className="text-center">
-          <div className="flex justify-center items-center mx-auto mb-4 w-16 h-16 bg-blue-100 rounded-full dark:bg-blue-900">
+          <div className="flex justify-center items-center mx-auto mb-4 w-16 h-16 bg-primary/15 rounded-full">
             {getPermissionIcon(permissionType)}
           </div>
           <DialogTitle className="text-xl">
@@ -129,8 +129,8 @@ export function PermissionDialog({
 
         <div className="space-y-4">
           {isCurrentPermissionGranted && (
-            <div className="p-3 bg-green-50 rounded-lg dark:bg-green-900/20">
-              <p className="text-sm text-green-800 dark:text-green-200">
+            <div className="p-3 bg-success/10 rounded-lg">
+              <p className="text-sm text-success">
                 ✅ Permission granted! Browsers launched from Donut Browser can
                 now access your {permissionType}.
               </p>
@@ -138,8 +138,8 @@ export function PermissionDialog({
           )}
 
           {!isCurrentPermissionGranted && (
-            <div className="p-3 bg-amber-50 rounded-lg dark:bg-amber-900/20">
-              <p className="text-sm text-amber-800 dark:text-amber-200">
+            <div className="p-3 bg-warning/10 rounded-lg">
+              <p className="text-sm text-warning">
                 ⚠️ Permission not granted. Click the button below to request
                 access to your {permissionType}.
               </p>

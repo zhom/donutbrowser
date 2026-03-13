@@ -75,7 +75,7 @@ export function VpnCheckButton({
           {isCurrentlyChecking ? (
             <div className="w-3 h-3 rounded-full border border-current animate-spin border-t-transparent" />
           ) : result?.is_valid ? (
-            <FiCheck className="w-3 h-3 text-green-500" />
+            <FiCheck className="w-3 h-3 text-success" />
           ) : result && !result.is_valid ? (
             <span className="text-destructive text-sm">✕</span>
           ) : (

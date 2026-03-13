@@ -170,7 +170,7 @@ export function SettingsDialog({
   const getStatusBadge = useCallback((isGranted: boolean) => {
     if (isGranted) {
       return (
-        <Badge variant="default" className="text-green-800 bg-green-100">
+        <Badge variant="default" className="text-success-foreground bg-success">
           Granted
         </Badge>
       );
@@ -1018,7 +1018,7 @@ export function SettingsDialog({
                 </div>
               ) : (
                 <div className="space-y-1">
-                  <p className="text-sm font-medium text-orange-600">
+                  <p className="text-sm font-medium text-warning">
                     Trial expired
                   </p>
                   <p className="text-xs text-muted-foreground">

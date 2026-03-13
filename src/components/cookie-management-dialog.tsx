@@ -462,8 +462,8 @@ export function CookieManagementDialog({
 
             {importResult && (
               <div className="space-y-4">
-                <div className="p-4 rounded-lg bg-green-500/10">
-                  <div className="font-medium text-green-600 dark:text-green-400">
+                <div className="p-4 rounded-lg bg-success/10">
+                  <div className="font-medium text-success">
                     Successfully imported {importResult.cookies_imported}{" "}
                     cookies ({importResult.cookies_replaced} replaced)
                   </div>

@@ -59,10 +59,10 @@ function getSyncStatusDot(
 
   switch (status) {
     case "syncing":
-      return { color: "bg-yellow-500", tooltip: "Syncing...", animate: true };
+      return { color: "bg-warning", tooltip: "Syncing...", animate: true };
     case "synced":
       return {
-        color: "bg-green-500",
+        color: "bg-success",
         tooltip: item.last_sync
           ? `Synced ${new Date(item.last_sync * 1000).toLocaleString()}`
           : "Synced",
@@ -70,18 +70,22 @@ function getSyncStatusDot(
       };
     case "waiting":
       return {
-        color: "bg-yellow-500",
+        color: "bg-warning",
         tooltip: "Waiting to sync",
         animate: false,
       };
     case "error":
       return {
-        color: "bg-red-500",
+        color: "bg-destructive",
         tooltip: errorMessage ? `Sync error: ${errorMessage}` : "Sync error",
         animate: false,
       };
     default:
-      return { color: "bg-gray-400", tooltip: "Not synced", animate: false };
+      return {
+        color: "bg-muted-foreground",
+        tooltip: "Not synced",
+        animate: false,
+      };
   }
 }
 

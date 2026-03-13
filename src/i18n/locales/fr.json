@@ -541,11 +541,6 @@
     "unknownError": "Une erreur inconnue s'est produite. Veuillez réessayer."
   },
   "browser": {
-    "firefox": "Firefox",
-    "firefoxDeveloper": "Firefox Developer Edition",
-    "chromium": "Chromium",
-    "brave": "Brave",
-    "zen": "Zen Browser",
     "camoufox": "Camoufox",
     "wayfern": "Wayfern"
   },

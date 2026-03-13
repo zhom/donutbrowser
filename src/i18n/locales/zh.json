@@ -541,11 +541,6 @@
     "unknownError": "发生未知错误。请重试。"
   },
   "browser": {
-    "firefox": "Firefox",
-    "firefoxDeveloper": "Firefox 开发者版",
-    "chromium": "Chromium",
-    "brave": "Brave",
-    "zen": "Zen Browser",
     "camoufox": "Camoufox",
     "wayfern": "Wayfern"
   },

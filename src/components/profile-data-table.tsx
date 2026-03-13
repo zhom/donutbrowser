@@ -234,21 +234,21 @@ function getProfileSyncStatusDot(
   switch (status) {
     case "syncing":
       return {
-        color: "bg-yellow-500",
+        color: "bg-warning",
         tooltip: "Syncing...",
         animate: true,
         encrypted,
       };
     case "waiting":
       return {
-        color: "bg-yellow-500",
+        color: "bg-warning",
         tooltip: "Waiting to sync",
         animate: false,
         encrypted,
       };
     case "synced":
       return {
-        color: "bg-green-500",
+        color: "bg-success",
         tooltip: profile.last_sync
           ? `Synced ${new Date(profile.last_sync * 1000).toLocaleString()}`
           : "Synced",
@@ -257,7 +257,7 @@ function getProfileSyncStatusDot(
       };
     case "error":
       return {
-        color: "bg-red-500",
+        color: "bg-destructive",
         tooltip: errorMessage ? `Sync error: ${errorMessage}` : "Sync error",
         animate: false,
         encrypted,
@@ -265,7 +265,7 @@ function getProfileSyncStatusDot(
     case "disabled":
       if (profile.last_sync) {
         return {
-          color: "bg-gray-400",
+          color: "bg-muted-foreground",
           tooltip: `Sync disabled, last sync ${formatRelativeTime(profile.last_sync)}`,
           animate: false,
           encrypted: false,

@@ -829,8 +829,8 @@ impl ExtensionManager {
   ) -> Result<(), Box<dyn std::error::Error>> {
     let group = self.get_group(group_id)?;
     let browser_type = match browser {
-      "camoufox" | "firefox" | "firefox-developer" | "zen" => "firefox",
-      "wayfern" | "chromium" | "brave" => "chromium",
+      "camoufox" => "firefox",
+      "wayfern" => "chromium",
       _ => return Err(format!("Extensions are not supported for browser '{browser}'").into()),
     };
 
@@ -871,8 +871,8 @@ impl ExtensionManager {
     }
 
     let browser_type = match profile.browser.as_str() {
-      "camoufox" | "firefox" | "firefox-developer" | "zen" => "firefox",
-      "wayfern" | "chromium" | "brave" => "chromium",
+      "camoufox" => "firefox",
+      "wayfern" => "chromium",
       _ => return Ok(Vec::new()),
     };
 

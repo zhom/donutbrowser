@@ -541,11 +541,6 @@
     "unknownError": "不明なエラーが発生しました。もう一度お試しください。"
   },
   "browser": {
-    "firefox": "Firefox",
-    "firefoxDeveloper": "Firefox Developer Edition",
-    "chromium": "Chromium",
-    "brave": "Brave",
-    "zen": "Zen Browser",
     "camoufox": "Camoufox",
     "wayfern": "Wayfern"
   },

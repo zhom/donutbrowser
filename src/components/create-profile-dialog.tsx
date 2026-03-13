@@ -67,14 +67,7 @@ const getCurrentOS = (): CamoufoxOS => {
 
 import { RippleButton } from "./ui/ripple";
 
-type BrowserTypeString =
-  | "firefox"
-  | "firefox-developer"
-  | "chromium"
-  | "brave"
-  | "zen"
-  | "camoufox"
-  | "wayfern";
+type BrowserTypeString = "camoufox" | "wayfern";
 
 interface CreateProfileDialogProps {
   isOpen: boolean;
@@ -103,24 +96,12 @@ interface BrowserOption {
 
 const browserOptions: BrowserOption[] = [
   {
-    value: "firefox",
-    label: "Firefox",
+    value: "camoufox",
+    label: "Camoufox",
   },
   {
-    value: "firefox-developer",
-    label: "Firefox Developer Edition",
-  },
-  {
-    value: "chromium",
-    label: "Chromium",
-  },
-  {
-    value: "brave",
-    label: "Brave",
-  },
-  {
-    value: "zen",
-    label: "Zen Browser",
+    value: "wayfern",
+    label: "Wayfern",
   },
 ];
 
@@ -254,23 +235,9 @@ export function CreateProfileDialog({
 
         // Only update state if this browser is still the one we're loading
         if (loadingBrowserRef.current === browser) {
-          // Filter to enforce stable-only creation, except Firefox Developer (nightly-only)
-          if (browser === "camoufox" || browser === "wayfern") {
-            const filtered: BrowserReleaseTypes = {};
-            if (rawReleaseTypes.stable)
-              filtered.stable = rawReleaseTypes.stable;
-            setReleaseTypes(filtered);
-          } else if (browser === "firefox-developer") {
-            const filtered: BrowserReleaseTypes = {};
-            if (rawReleaseTypes.nightly)
-              filtered.nightly = rawReleaseTypes.nightly;
-            setReleaseTypes(filtered);
-          } else {
-            const filtered: BrowserReleaseTypes = {};
-            if (rawReleaseTypes.stable)
-              filtered.stable = rawReleaseTypes.stable;
-            setReleaseTypes(filtered);
-          }
+          const filtered: BrowserReleaseTypes = {};
+          if (rawReleaseTypes.stable) filtered.stable = rawReleaseTypes.stable;
+          setReleaseTypes(filtered);
           setReleaseTypesError(null);
         }
       } catch (error) {
@@ -282,11 +249,7 @@ export function CreateProfileDialog({
           if (loadingBrowserRef.current === browser && downloaded.length > 0) {
             const latest = downloaded[0];
             const fallback: BrowserReleaseTypes = {};
-            if (browser === "firefox-developer") {
-              fallback.nightly = latest;
-            } else {
-              fallback.stable = latest;
-            }
+            fallback.stable = latest;
             setReleaseTypes(fallback);
             setReleaseTypesError(null);
           } else if (loadingBrowserRef.current === browser) {
@@ -351,17 +314,9 @@ export function CreateProfileDialog({
 
   // Helper function to get the best available version respecting rules
   const getBestAvailableVersion = useCallback(
-    (browserType?: string) => {
+    (_browserType?: string) => {
       if (!releaseTypes) return null;
 
-      // Firefox Developer Edition: nightly-only
-      if (browserType === "firefox-developer" && releaseTypes.nightly) {
-        return {
-          version: releaseTypes.nightly,
-          releaseType: "nightly" as const,
-        };
-      }
-      // All others: stable-only
       if (releaseTypes.stable) {
         return { version: releaseTypes.stable, releaseType: "stable" as const };
       }
@@ -379,11 +334,9 @@ export function CreateProfileDialog({
       const browserDownloaded = downloadedVersionsMap[browserType ?? ""] ?? [];
       if (browserDownloaded.length > 0) {
         const fallbackVersion = browserDownloaded[0];
-        const releaseType =
-          browserType === "firefox-developer" ? "nightly" : "stable";
         return {
           version: fallbackVersion,
-          releaseType: releaseType as "stable" | "nightly",
+          releaseType: "stable" as const,
         };
       }
       return null;
@@ -772,8 +725,8 @@ export function CreateProfileDialog({
                             {!isLoadingReleaseTypes &&
                               !releaseTypesError &&
                               !getBestAvailableVersion("wayfern") && (
-                                <div className="flex gap-3 items-center p-3 rounded-md border border-yellow-500/50 bg-yellow-500/10">
-                                  <p className="text-sm text-yellow-500">
+                                <div className="flex gap-3 items-center p-3 rounded-md border border-warning/50 bg-warning/10">
+                                  <p className="text-sm text-warning">
                                     Wayfern is not available on your platform
                                     yet.
                                   </p>
@@ -874,8 +827,8 @@ export function CreateProfileDialog({
                             {!isLoadingReleaseTypes &&
                               !releaseTypesError &&
                               !getBestAvailableVersion("camoufox") && (
-                                <div className="flex gap-3 items-center p-3 rounded-md border border-yellow-500/50 bg-yellow-500/10">
-                                  <p className="text-sm text-yellow-500">
+                                <div className="flex gap-3 items-center p-3 rounded-md border border-warning/50 bg-warning/10">
+                                  <p className="text-sm text-warning">
                                     Camoufox is not available on your platform
                                     yet.
                                   </p>
@@ -933,7 +886,7 @@ export function CreateProfileDialog({
                             )}
 
                             {crossOsUnlocked && (
-                              <Alert className="border-yellow-500/50 bg-yellow-500/10">
+                              <Alert className="border-warning/50 bg-warning/10">
                                 <AlertDescription className="text-sm">
                                   {t("createProfile.camoufoxWarning")}
                                 </AlertDescription>

@@ -106,35 +106,7 @@ impl AutoUpdater {
       // Check each profile for updates
       for profile in profiles {
         if let Some(update) = self.check_profile_update(&profile, &versions)? {
-          // Apply chromium threshold logic
-          if browser == "chromium" {
-            // For chromium, only show notifications if there's a significant version jump
-            // Compare the major version component (first number before the dot)
-            let current_major: u32 = profile
-              .version
-              .split('.')
-              .next()
-              .and_then(|s| s.parse().ok())
-              .unwrap_or(0);
-            let new_major: u32 = update
-              .new_version
-              .split('.')
-              .next()
-              .and_then(|s| s.parse().ok())
-              .unwrap_or(0);
-
-            let result = new_major.saturating_sub(current_major);
-            log::info!(
-              "Current major version: {current_major}, New major version: {new_major}, Diff: {result}"
-            );
-            if result > 0 {
-              notifications.push(update);
-            } else {
-              log::info!("Skipping chromium update notification: same major version");
-            }
-          } else {
-            notifications.push(update);
-          }
+          notifications.push(update);
         }
       }
     }

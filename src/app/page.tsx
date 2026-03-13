@@ -57,14 +57,7 @@ import type {
   WayfernConfig,
 } from "@/types";
 
-type BrowserTypeString =
-  | "firefox"
-  | "firefox-developer"
-  | "chromium"
-  | "brave"
-  | "zen"
-  | "camoufox"
-  | "wayfern";
+type BrowserTypeString = "camoufox" | "wayfern";
 
 interface PendingUrl {
   id: string;
@@ -943,37 +936,6 @@ export default function Home() {
     profiles.length,
   ]);
 
-  // Show deprecation warning for unsupported profiles (with names)
-  useEffect(() => {
-    if (profiles.length === 0) return;
-
-    const deprecatedProfiles = profiles.filter(
-      (p) => p.release_type === "nightly" && p.browser !== "firefox-developer",
-    );
-
-    if (deprecatedProfiles.length > 0) {
-      const deprecatedNames = deprecatedProfiles.map((p) => p.name).join(", ");
-
-      // Use a stable id to avoid duplicate toasts on re-renders
-      showToast({
-        id: "deprecated-profiles-warning",
-        type: "error",
-        title: "Some profiles will be deprecated soon",
-        description: `The following profiles will be deprecated soon: ${deprecatedNames}. Nightly profiles (except Firefox Developers Edition) will be removed in upcoming versions. Please check GitHub for migration instructions.`,
-        duration: 15000,
-        action: {
-          label: "Learn more",
-          onClick: () => {
-            const event = new CustomEvent("url-open-request", {
-              detail: "https://github.com/zhom/donutbrowser/discussions/66",
-            });
-            window.dispatchEvent(event);
-          },
-        },
-      });
-    }
-  }, [profiles]);
-
   // Show warning for non-wayfern/camoufox profiles (support ending March 15, 2026)
   useEffect(() => {
     if (profiles.length === 0) return;
@@ -1163,6 +1125,7 @@ export default function Home() {
         onClose={() => {
           setImportProfileDialogOpen(false);
         }}
+        crossOsUnlocked={crossOsUnlocked}
       />
 
       <ProxyManagementDialog
@@ -1329,13 +1292,14 @@ export default function Home() {
         onAccepted={checkTerms}
       />
 
-      {/* Commercial Trial Modal - shown once when trial expires */}
+      {/* Commercial Trial Modal - shown once when trial expires (skip for paid users) */}
       <CommercialTrialModal
         isOpen={
           !termsLoading &&
           termsAccepted === true &&
           trialStatus?.type === "Expired" &&
-          !trialAcknowledged
+          !trialAcknowledged &&
+          !crossOsUnlocked
         }
         onClose={checkTrialStatus}
       />

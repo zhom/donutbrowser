@@ -541,11 +541,6 @@
     "unknownError": "Ocurrió un error desconocido. Por favor intenta de nuevo."
   },
   "browser": {
-    "firefox": "Firefox",
-    "firefoxDeveloper": "Firefox Developer Edition",
-    "chromium": "Chromium",
-    "brave": "Brave",
-    "zen": "Zen Browser",
     "camoufox": "Camoufox",
     "wayfern": "Wayfern"
   },

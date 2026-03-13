@@ -56,6 +56,7 @@ pub struct CamoufoxLaunchResult {
   #[serde(alias = "profile_path")]
   pub profilePath: Option<String>,
   pub url: Option<String>,
+  pub cdp_port: Option<u16>,
 }
 
 #[derive(Debug)]
@@ -65,6 +66,7 @@ struct CamoufoxInstance {
   process_id: Option<u32>,
   profile_path: Option<String>,
   url: Option<String>,
+  cdp_port: Option<u16>,
 }
 
 struct CamoufoxManagerInner {
@@ -86,6 +88,33 @@ impl CamoufoxManager {
 
   pub fn instance() -> &'static CamoufoxManager {
     &CAMOUFOX_LAUNCHER
+  }
+
+  async fn find_free_port() -> Result<u16, Box<dyn std::error::Error + Send + Sync>> {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let port = listener.local_addr()?.port();
+    drop(listener);
+    Ok(port)
+  }
+
+  #[allow(dead_code)]
+  pub async fn get_cdp_port(&self, profile_path: &str) -> Option<u16> {
+    let inner = self.inner.lock().await;
+    let target_path = std::path::Path::new(profile_path)
+      .canonicalize()
+      .unwrap_or_else(|_| std::path::Path::new(profile_path).to_path_buf());
+
+    for instance in inner.instances.values() {
+      if let Some(path) = &instance.profile_path {
+        let instance_path = std::path::Path::new(path)
+          .canonicalize()
+          .unwrap_or_else(|_| std::path::Path::new(path).to_path_buf());
+        if instance_path == target_path {
+          return instance.cdp_port;
+        }
+      }
+    }
+    None
   }
 
   pub fn get_profiles_dir(&self) -> PathBuf {
@@ -239,6 +268,9 @@ impl CamoufoxManager {
         .to_string(),
     ];
 
+    let cdp_port = Self::find_free_port().await?;
+    args.push(format!("--remote-debugging-port={cdp_port}"));
+
     // Add URL if provided
     if let Some(url) = url {
       args.push("-new-tab".to_string());
@@ -294,6 +326,7 @@ impl CamoufoxManager {
       process_id,
       profile_path: Some(profile_path.to_string()),
       url: url.map(String::from),
+      cdp_port: Some(cdp_port),
     };
 
     let launch_result = CamoufoxLaunchResult {
@@ -301,6 +334,7 @@ impl CamoufoxManager {
       processId: process_id,
       profilePath: Some(profile_path.to_string()),
       url: url.map(String::from),
+      cdp_port: Some(cdp_port),
     };
 
     {
@@ -418,6 +452,7 @@ impl CamoufoxManager {
                   processId: instance.process_id,
                   profilePath: instance.profile_path.clone(),
                   url: instance.url.clone(),
+                  cdp_port: instance.cdp_port,
                 }));
               }
             }
@@ -428,7 +463,9 @@ impl CamoufoxManager {
 
     // If not found in in-memory instances, scan system processes
     // This handles the case where the app was restarted but Camoufox is still running
-    if let Some((pid, found_profile_path)) = self.find_camoufox_process_by_profile(&target_path) {
+    if let Some((pid, found_profile_path, cdp_port)) =
+      self.find_camoufox_process_by_profile(&target_path)
+    {
       log::info!(
         "Found running Camoufox process (PID: {}) for profile path via system scan",
         pid
@@ -444,6 +481,7 @@ impl CamoufoxManager {
           process_id: Some(pid),
           profile_path: Some(found_profile_path.clone()),
           url: None,
+          cdp_port,
         },
       );
 
@@ -452,6 +490,7 @@ impl CamoufoxManager {
         processId: Some(pid),
         profilePath: Some(found_profile_path),
         url: None,
+        cdp_port,
       }));
     }
 
@@ -462,7 +501,7 @@ impl CamoufoxManager {
   fn find_camoufox_process_by_profile(
     &self,
     target_path: &std::path::Path,
-  ) -> Option<(u32, String)> {
+  ) -> Option<(u32, String, Option<u16>)> {
     use sysinfo::{ProcessRefreshKind, RefreshKind, System};
 
     let system = System::new_with_specifics(
@@ -487,6 +526,10 @@ impl CamoufoxManager {
         continue;
       }
 
+      let mut matched = false;
+      let mut found_profile_path = None;
+      let mut cdp_port: Option<u16> = None;
+
       // Check if the command line contains our profile path
       for (i, arg) in cmd.iter().enumerate() {
         if let Some(arg_str) = arg.to_str() {
@@ -498,15 +541,27 @@ impl CamoufoxManager {
                 .unwrap_or_else(|_| std::path::Path::new(next_arg).to_path_buf());
 
               if cmd_path == target_path {
-                return Some((pid.as_u32(), next_arg.to_string()));
+                matched = true;
+                found_profile_path = Some(next_arg.to_string());
               }
             }
           }
 
           // Also check if the argument contains the profile path directly
-          if arg_str.contains(&*target_path_str) {
-            return Some((pid.as_u32(), target_path_str.to_string()));
+          if !matched && arg_str.contains(&*target_path_str) {
+            matched = true;
+            found_profile_path = Some(target_path_str.to_string());
           }
+
+          if let Some(port_val) = arg_str.strip_prefix("--remote-debugging-port=") {
+            cdp_port = port_val.parse().ok();
+          }
+        }
+      }
+
+      if matched {
+        if let Some(profile_path) = found_profile_path {
+          return Some((pid.as_u32(), profile_path, cdp_port));
         }
       }
     }

@@ -320,7 +320,7 @@ export function IntegrationsDialog({
                   <p className="text-xs text-muted-foreground">
                     Allow AI assistants like Claude Desktop to control browsers.
                     {!termsAccepted && (
-                      <span className="ml-1 text-orange-600">
+                      <span className="ml-1 text-warning">
                         (Accept Wayfern terms in Settings first)
                       </span>
                     )}

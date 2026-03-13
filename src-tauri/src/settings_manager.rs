@@ -734,11 +734,17 @@ pub async fn save_app_settings(
         .await
         .map_err(|e| format!("Failed to store API token: {e}"))?;
     } else {
-      let token = manager
-        .generate_api_token(&app_handle)
-        .await
-        .map_err(|e| format!("Failed to generate API token: {e}"))?;
-      settings.api_token = Some(token);
+      // Check if a token already exists on disk before generating a new one
+      let existing = manager.get_api_token(&app_handle).await.ok().flatten();
+      if let Some(t) = existing {
+        settings.api_token = Some(t);
+      } else {
+        let token = manager
+          .generate_api_token(&app_handle)
+          .await
+          .map_err(|e| format!("Failed to generate API token: {e}"))?;
+        settings.api_token = Some(token);
+      }
     }
   }
 
@@ -758,11 +764,17 @@ pub async fn save_app_settings(
         .await
         .map_err(|e| format!("Failed to store MCP token: {e}"))?;
     } else {
-      let token = manager
-        .generate_mcp_token(&app_handle)
-        .await
-        .map_err(|e| format!("Failed to generate MCP token: {e}"))?;
-      settings.mcp_token = Some(token);
+      // Check if a token already exists on disk before generating a new one
+      let existing = manager.get_mcp_token(&app_handle).await.ok().flatten();
+      if let Some(t) = existing {
+        settings.mcp_token = Some(t);
+      } else {
+        let token = manager
+          .generate_mcp_token(&app_handle)
+          .await
+          .map_err(|e| format!("Failed to generate MCP token: {e}"))?;
+        settings.mcp_token = Some(token);
+      }
     }
   }
 

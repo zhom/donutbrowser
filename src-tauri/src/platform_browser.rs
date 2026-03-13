@@ -5,6 +5,7 @@ use std::process::Command;
 
 // Platform-specific modules
 #[cfg(target_os = "macos")]
+#[allow(dead_code)]
 pub mod macos {
   use super::*;
   use sysinfo::{Pid, System};
@@ -468,6 +469,7 @@ end try
 }
 
 #[cfg(target_os = "windows")]
+#[allow(dead_code)]
 pub mod windows {
   use super::*;
 
@@ -680,6 +682,7 @@ pub mod windows {
 }
 
 #[cfg(target_os = "linux")]
+#[allow(dead_code)]
 pub mod linux {
   use super::*;
 

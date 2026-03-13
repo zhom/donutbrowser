@@ -17,4 +17,19 @@
 
 ## UI Theming
 
-- When modifying the UI, don't add random colors that are not controlled by `src/lib/themes.ts`
+- Never use hardcoded Tailwind color classes (e.g., `text-red-500`, `bg-green-600`, `border-yellow-400`). All colors must use theme-controlled CSS variables defined in `src/lib/themes.ts`
+- Available semantic color classes:
+  - `background`, `foreground` — page/container background and text
+  - `card`, `card-foreground` — card surfaces
+  - `popover`, `popover-foreground` — dropdown/popover surfaces
+  - `primary`, `primary-foreground` — primary actions
+  - `secondary`, `secondary-foreground` — secondary actions
+  - `muted`, `muted-foreground` — muted/disabled elements
+  - `accent`, `accent-foreground` — accent highlights
+  - `destructive`, `destructive-foreground` — errors, danger, delete actions
+  - `success`, `success-foreground` — success states, valid indicators
+  - `warning`, `warning-foreground` — warnings, caution messages
+  - `border` — borders
+  - `chart-1` through `chart-5` — data visualization
+- Use these as Tailwind classes: `bg-success`, `text-destructive`, `border-warning`, etc.
+- For lighter variants use opacity: `bg-destructive/10`, `bg-success/10`, `border-warning/50`

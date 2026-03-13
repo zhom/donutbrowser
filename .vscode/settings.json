@@ -131,6 +131,7 @@
     "ntlm",
     "numpy",
     "objc",
+    "oneshot",
     "opencode",
     "orhun",
     "orjson",

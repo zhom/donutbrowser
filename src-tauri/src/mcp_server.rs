@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use axum::{
   body::Body,
   extract::State,
@@ -833,6 +831,161 @@ impl McpServer {
           "required": ["profile_id"]
         }),
       },
+      // Browser interaction tools
+      McpTool {
+        name: "navigate".to_string(),
+        description: "Navigate a running browser profile to a URL".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the running profile"
+            },
+            "url": {
+              "type": "string",
+              "description": "The URL to navigate to"
+            }
+          },
+          "required": ["profile_id", "url"]
+        }),
+      },
+      McpTool {
+        name: "screenshot".to_string(),
+        description: "Take a screenshot of the current page in a running browser profile. Returns base64-encoded image."
+          .to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the running profile"
+            },
+            "format": {
+              "type": "string",
+              "enum": ["png", "jpeg", "webp"],
+              "description": "Image format (default: png)"
+            },
+            "quality": {
+              "type": "integer",
+              "description": "Image quality 0-100 for jpeg/webp (default: 80)"
+            },
+            "full_page": {
+              "type": "boolean",
+              "description": "Capture the full scrollable page (default: false)"
+            }
+          },
+          "required": ["profile_id"]
+        }),
+      },
+      McpTool {
+        name: "evaluate_javascript".to_string(),
+        description:
+          "Execute JavaScript in the context of the current page and return the result. Works with both static and dynamically-generated content."
+            .to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the running profile"
+            },
+            "expression": {
+              "type": "string",
+              "description": "JavaScript expression to evaluate"
+            },
+            "await_promise": {
+              "type": "boolean",
+              "description": "Whether to await the result if it's a Promise (default: false)"
+            }
+          },
+          "required": ["profile_id", "expression"]
+        }),
+      },
+      McpTool {
+        name: "click_element".to_string(),
+        description: "Click on an element identified by a CSS selector".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the running profile"
+            },
+            "selector": {
+              "type": "string",
+              "description": "CSS selector for the element to click"
+            }
+          },
+          "required": ["profile_id", "selector"]
+        }),
+      },
+      McpTool {
+        name: "type_text".to_string(),
+        description: "Focus an element by CSS selector and type text into it".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the running profile"
+            },
+            "selector": {
+              "type": "string",
+              "description": "CSS selector for the input element"
+            },
+            "text": {
+              "type": "string",
+              "description": "Text to type into the element"
+            },
+            "clear_first": {
+              "type": "boolean",
+              "description": "Clear the input before typing (default: true)"
+            }
+          },
+          "required": ["profile_id", "selector", "text"]
+        }),
+      },
+      McpTool {
+        name: "get_page_content".to_string(),
+        description:
+          "Get the content of the current page. Works with both static HTML and JavaScript-rendered content."
+            .to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the running profile"
+            },
+            "format": {
+              "type": "string",
+              "enum": ["html", "text"],
+              "description": "Content format: 'html' for full HTML, 'text' for visible text only (default: text)"
+            },
+            "selector": {
+              "type": "string",
+              "description": "Optional CSS selector to get content of a specific element instead of the whole page"
+            }
+          },
+          "required": ["profile_id"]
+        }),
+      },
+      McpTool {
+        name: "get_page_info".to_string(),
+        description: "Get metadata about the current page including URL, title, and readiness state"
+          .to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the running profile"
+            }
+          },
+          "required": ["profile_id"]
+        }),
+      },
     ]
   }
 
@@ -953,6 +1106,14 @@ impl McpServer {
       // Team lock tools
       "get_team_locks" => self.handle_get_team_locks().await,
       "get_team_lock_status" => self.handle_get_team_lock_status(&arguments).await,
+      // Browser interaction tools
+      "navigate" => self.handle_navigate(&arguments).await,
+      "screenshot" => self.handle_screenshot(&arguments).await,
+      "evaluate_javascript" => self.handle_evaluate_javascript(&arguments).await,
+      "click_element" => self.handle_click_element(&arguments).await,
+      "type_text" => self.handle_type_text(&arguments).await,
+      "get_page_content" => self.handle_get_page_content(&arguments).await,
+      "get_page_info" => self.handle_get_page_info(&arguments).await,
       _ => Err(McpError {
         code: -32602,
         message: format!("Unknown tool: {tool_name}"),
@@ -2469,6 +2630,611 @@ impl McpServer {
       }]
     }))
   }
+
+  // --- CDP utility methods for browser interaction ---
+
+  async fn get_cdp_port_for_profile(&self, profile: &BrowserProfile) -> Result<u16, McpError> {
+    let profiles_dir = ProfileManager::instance().get_profiles_dir();
+    let profile_path = profile.get_profile_data_path(&profiles_dir);
+    let profile_path_str = profile_path.to_string_lossy();
+
+    let port = if profile.browser == "wayfern" {
+      crate::wayfern_manager::WayfernManager::instance()
+        .get_cdp_port(&profile_path_str)
+        .await
+    } else if profile.browser == "camoufox" {
+      crate::camoufox_manager::CamoufoxManager::instance()
+        .get_cdp_port(&profile_path_str)
+        .await
+    } else {
+      None
+    };
+
+    port.ok_or_else(|| McpError {
+      code: -32000,
+      message: format!(
+        "No CDP connection available for profile '{}'. Make sure the browser is running.",
+        profile.name
+      ),
+    })
+  }
+
+  async fn get_cdp_ws_url(&self, port: u16) -> Result<String, McpError> {
+    let url = format!("http://127.0.0.1:{port}/json");
+    let client = reqwest::Client::new();
+    let resp = client
+      .get(&url)
+      .timeout(std::time::Duration::from_secs(5))
+      .send()
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to connect to browser CDP endpoint: {e}"),
+      })?;
+
+    let targets: Vec<serde_json::Value> = resp.json().await.map_err(|e| McpError {
+      code: -32000,
+      message: format!("Failed to parse CDP targets: {e}"),
+    })?;
+
+    targets
+      .iter()
+      .find(|t| t.get("type").and_then(|v| v.as_str()) == Some("page"))
+      .and_then(|t| t.get("webSocketDebuggerUrl"))
+      .and_then(|v| v.as_str())
+      .map(|s| s.to_string())
+      .ok_or_else(|| McpError {
+        code: -32000,
+        message: "No page target found in browser".to_string(),
+      })
+  }
+
+  async fn send_cdp(
+    &self,
+    ws_url: &str,
+    method: &str,
+    params: serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    use futures_util::sink::SinkExt;
+    use futures_util::stream::StreamExt;
+    use tokio_tungstenite::connect_async;
+    use tokio_tungstenite::tungstenite::Message;
+
+    let (mut ws_stream, _) = connect_async(ws_url).await.map_err(|e| McpError {
+      code: -32000,
+      message: format!("Failed to connect to CDP WebSocket: {e}"),
+    })?;
+
+    let command = serde_json::json!({
+      "id": 1,
+      "method": method,
+      "params": params
+    });
+
+    ws_stream
+      .send(Message::Text(command.to_string().into()))
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to send CDP command: {e}"),
+      })?;
+
+    while let Some(msg) = ws_stream.next().await {
+      let msg = msg.map_err(|e| McpError {
+        code: -32000,
+        message: format!("CDP WebSocket error: {e}"),
+      })?;
+      if let Message::Text(text) = msg {
+        let response: serde_json::Value =
+          serde_json::from_str(text.as_str()).map_err(|e| McpError {
+            code: -32000,
+            message: format!("Failed to parse CDP response: {e}"),
+          })?;
+        if response.get("id") == Some(&serde_json::json!(1)) {
+          if let Some(error) = response.get("error") {
+            return Err(McpError {
+              code: -32000,
+              message: format!("CDP error: {error}"),
+            });
+          }
+          return Ok(
+            response
+              .get("result")
+              .cloned()
+              .unwrap_or(serde_json::json!({})),
+          );
+        }
+      }
+    }
+
+    Err(McpError {
+      code: -32000,
+      message: "No response received from CDP".to_string(),
+    })
+  }
+
+  fn get_running_profile(&self, profile_id: &str) -> Result<BrowserProfile, McpError> {
+    let profiles = ProfileManager::instance()
+      .list_profiles()
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to list profiles: {e}"),
+      })?;
+
+    let profile = profiles
+      .into_iter()
+      .find(|p| p.id.to_string() == profile_id)
+      .ok_or_else(|| McpError {
+        code: -32000,
+        message: format!("Profile not found: {profile_id}"),
+      })?;
+
+    if profile.browser != "wayfern" && profile.browser != "camoufox" {
+      return Err(McpError {
+        code: -32000,
+        message: "MCP only supports Wayfern and Camoufox profiles".to_string(),
+      });
+    }
+
+    if profile.process_id.is_none() {
+      return Err(McpError {
+        code: -32000,
+        message: format!("Profile '{}' is not running", profile.name),
+      });
+    }
+
+    Ok(profile)
+  }
+
+  // --- Browser interaction handlers ---
+
+  async fn handle_navigate(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?;
+    let url = arguments
+      .get("url")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing url".to_string(),
+      })?;
+
+    let profile = self.get_running_profile(profile_id)?;
+    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
+    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+
+    self
+      .send_cdp(&ws_url, "Page.navigate", serde_json::json!({ "url": url }))
+      .await?;
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!("Navigated to {url}")
+      }]
+    }))
+  }
+
+  async fn handle_screenshot(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?;
+    let format = arguments
+      .get("format")
+      .and_then(|v| v.as_str())
+      .unwrap_or("png");
+    let quality = arguments.get("quality").and_then(|v| v.as_i64());
+    let full_page = arguments
+      .get("full_page")
+      .and_then(|v| v.as_bool())
+      .unwrap_or(false);
+
+    let profile = self.get_running_profile(profile_id)?;
+    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
+    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+
+    let mut params = serde_json::json!({ "format": format });
+
+    if let Some(q) = quality {
+      params["quality"] = serde_json::json!(q);
+    }
+
+    if full_page {
+      let layout = self
+        .send_cdp(&ws_url, "Page.getLayoutMetrics", serde_json::json!({}))
+        .await?;
+
+      if let Some(content_size) = layout.get("contentSize") {
+        params["clip"] = serde_json::json!({
+          "x": 0,
+          "y": 0,
+          "width": content_size.get("width").and_then(|v| v.as_f64()).unwrap_or(1920.0),
+          "height": content_size.get("height").and_then(|v| v.as_f64()).unwrap_or(1080.0),
+          "scale": 1
+        });
+        params["captureBeyondViewport"] = serde_json::json!(true);
+      }
+    }
+
+    let result = self
+      .send_cdp(&ws_url, "Page.captureScreenshot", params)
+      .await?;
+
+    let data = result
+      .get("data")
+      .and_then(|v| v.as_str())
+      .unwrap_or_default();
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "image",
+        "data": data,
+        "mimeType": format!("image/{format}")
+      }]
+    }))
+  }
+
+  async fn handle_evaluate_javascript(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?;
+    let expression = arguments
+      .get("expression")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing expression".to_string(),
+      })?;
+    let await_promise = arguments
+      .get("await_promise")
+      .and_then(|v| v.as_bool())
+      .unwrap_or(false);
+
+    let profile = self.get_running_profile(profile_id)?;
+    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
+    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+
+    let result = self
+      .send_cdp(
+        &ws_url,
+        "Runtime.evaluate",
+        serde_json::json!({
+          "expression": expression,
+          "returnByValue": true,
+          "awaitPromise": await_promise,
+        }),
+      )
+      .await?;
+
+    let value = if let Some(exception) = result.get("exceptionDetails") {
+      let text = exception
+        .get("text")
+        .or_else(|| {
+          exception
+            .get("exception")
+            .and_then(|e| e.get("description"))
+        })
+        .and_then(|v| v.as_str())
+        .unwrap_or("Unknown error");
+      serde_json::json!({ "error": text })
+    } else if let Some(r) = result.get("result") {
+      let val = r.get("value").cloned().unwrap_or(serde_json::json!(null));
+      serde_json::json!({ "value": val, "type": r.get("type") })
+    } else {
+      serde_json::json!({ "value": null })
+    };
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": serde_json::to_string_pretty(&value).unwrap_or_default()
+      }]
+    }))
+  }
+
+  async fn handle_click_element(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?;
+    let selector = arguments
+      .get("selector")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing selector".to_string(),
+      })?;
+
+    let profile = self.get_running_profile(profile_id)?;
+    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
+    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+
+    let selector_escaped = selector.replace('\\', "\\\\").replace('\'', "\\'");
+    let js = format!(
+      r#"(() => {{
+        const el = document.querySelector('{}');
+        if (!el) throw new Error('Element not found: {}');
+        el.scrollIntoView({{block: 'center'}});
+        el.click();
+        return true;
+      }})()"#,
+      selector_escaped, selector_escaped
+    );
+
+    let result = self
+      .send_cdp(
+        &ws_url,
+        "Runtime.evaluate",
+        serde_json::json!({
+          "expression": js,
+          "returnByValue": true,
+        }),
+      )
+      .await?;
+
+    if let Some(exception) = result.get("exceptionDetails") {
+      let msg = exception
+        .get("exception")
+        .and_then(|e| e.get("description"))
+        .or_else(|| exception.get("text"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("Click failed");
+      return Err(McpError {
+        code: -32000,
+        message: msg.to_string(),
+      });
+    }
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!("Clicked element: {selector}")
+      }]
+    }))
+  }
+
+  async fn handle_type_text(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?;
+    let selector = arguments
+      .get("selector")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing selector".to_string(),
+      })?;
+    let text = arguments
+      .get("text")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing text".to_string(),
+      })?;
+    let clear_first = arguments
+      .get("clear_first")
+      .and_then(|v| v.as_bool())
+      .unwrap_or(true);
+
+    let profile = self.get_running_profile(profile_id)?;
+    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
+    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+
+    let selector_escaped = selector.replace('\\', "\\\\").replace('\'', "\\'");
+    let focus_js = if clear_first {
+      format!(
+        r#"(() => {{
+          const el = document.querySelector('{}');
+          if (!el) throw new Error('Element not found: {}');
+          el.scrollIntoView({{block: 'center'}});
+          el.focus();
+          el.value = '';
+          el.dispatchEvent(new Event('input', {{bubbles: true}}));
+          return true;
+        }})()"#,
+        selector_escaped, selector_escaped
+      )
+    } else {
+      format!(
+        r#"(() => {{
+          const el = document.querySelector('{}');
+          if (!el) throw new Error('Element not found: {}');
+          el.scrollIntoView({{block: 'center'}});
+          el.focus();
+          return true;
+        }})()"#,
+        selector_escaped, selector_escaped
+      )
+    };
+
+    let focus_result = self
+      .send_cdp(
+        &ws_url,
+        "Runtime.evaluate",
+        serde_json::json!({
+          "expression": focus_js,
+          "returnByValue": true,
+        }),
+      )
+      .await?;
+
+    if let Some(exception) = focus_result.get("exceptionDetails") {
+      let msg = exception
+        .get("exception")
+        .and_then(|e| e.get("description"))
+        .or_else(|| exception.get("text"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("Focus failed");
+      return Err(McpError {
+        code: -32000,
+        message: msg.to_string(),
+      });
+    }
+
+    self
+      .send_cdp(
+        &ws_url,
+        "Input.insertText",
+        serde_json::json!({ "text": text }),
+      )
+      .await?;
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!("Typed text into element: {selector}")
+      }]
+    }))
+  }
+
+  async fn handle_get_page_content(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?;
+    let format = arguments
+      .get("format")
+      .and_then(|v| v.as_str())
+      .unwrap_or("text");
+    let selector = arguments.get("selector").and_then(|v| v.as_str());
+
+    let profile = self.get_running_profile(profile_id)?;
+    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
+    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+
+    let js = if let Some(sel) = selector {
+      let sel_escaped = sel.replace('\\', "\\\\").replace('\'', "\\'");
+      if format == "html" {
+        format!(
+          r#"(() => {{
+            const el = document.querySelector('{}');
+            return el ? el.outerHTML : null;
+          }})()"#,
+          sel_escaped
+        )
+      } else {
+        format!(
+          r#"(() => {{
+            const el = document.querySelector('{}');
+            return el ? el.innerText : null;
+          }})()"#,
+          sel_escaped
+        )
+      }
+    } else if format == "html" {
+      "document.documentElement.outerHTML".to_string()
+    } else {
+      "document.body.innerText".to_string()
+    };
+
+    let result = self
+      .send_cdp(
+        &ws_url,
+        "Runtime.evaluate",
+        serde_json::json!({
+          "expression": js,
+          "returnByValue": true,
+        }),
+      )
+      .await?;
+
+    let content = result
+      .get("result")
+      .and_then(|r| r.get("value"))
+      .and_then(|v| v.as_str())
+      .unwrap_or("");
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": content
+      }]
+    }))
+  }
+
+  async fn handle_get_page_info(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?;
+
+    let profile = self.get_running_profile(profile_id)?;
+    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
+    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+
+    let result = self
+      .send_cdp(
+        &ws_url,
+        "Runtime.evaluate",
+        serde_json::json!({
+          "expression": "JSON.stringify({url: location.href, title: document.title, readyState: document.readyState})",
+          "returnByValue": true,
+        }),
+      )
+      .await?;
+
+    let info_str = result
+      .get("result")
+      .and_then(|r| r.get("value"))
+      .and_then(|v| v.as_str())
+      .unwrap_or("{}");
+
+    let info: serde_json::Value = serde_json::from_str(info_str).unwrap_or(serde_json::json!({}));
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": serde_json::to_string_pretty(&info).unwrap_or_default()
+      }]
+    }))
+  }
 }
 
 lazy_static::lazy_static! {
@@ -2484,8 +3250,8 @@ mod tests {
     let server = McpServer::new();
     let tools = server.get_tools();
 
-    // Should have at least 34 tools (26 + 6 extension tools + 2 team lock tools)
-    assert!(tools.len() >= 34);
+    // Should have at least 41 tools (34 + 7 browser interaction tools)
+    assert!(tools.len() >= 41);
 
     // Check tool names
     let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
@@ -2532,6 +3298,14 @@ mod tests {
     // Team lock tools
     assert!(tool_names.contains(&"get_team_locks"));
     assert!(tool_names.contains(&"get_team_lock_status"));
+    // Browser interaction tools
+    assert!(tool_names.contains(&"navigate"));
+    assert!(tool_names.contains(&"screenshot"));
+    assert!(tool_names.contains(&"evaluate_javascript"));
+    assert!(tool_names.contains(&"click_element"));
+    assert!(tool_names.contains(&"type_text"));
+    assert!(tool_names.contains(&"get_page_content"));
+    assert!(tool_names.contains(&"get_page_info"));
   }
 
   #[test]

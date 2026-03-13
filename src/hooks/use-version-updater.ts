@@ -3,11 +3,9 @@ import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getBrowserDisplayName } from "@/lib/browser-utils";
 import {
-  dismissToast,
   showAutoUpdateToast,
   showErrorToast,
   showSuccessToast,
-  showUnifiedVersionUpdateToast,
 } from "@/lib/toast-utils";
 
 interface VersionUpdateProgress {
@@ -76,53 +74,13 @@ export function useVersionUpdater() {
 
             if (progress.status === "updating") {
               setIsUpdating(true);
-
-              // Show unified progress toast
-              const currentBrowserName = progress.current_browser
-                ? getBrowserDisplayName(progress.current_browser)
-                : undefined;
-
-              showUnifiedVersionUpdateToast("Checking for browser updates...", {
-                description: currentBrowserName
-                  ? `Fetching ${currentBrowserName} release information...`
-                  : "Initializing version check...",
-                progress: {
-                  current: progress.completed_browsers,
-                  total: progress.total_browsers,
-                  found: progress.new_versions_found,
-                  current_browser: currentBrowserName,
-                },
-                onCancel: () => dismissToast("unified-version-update"),
-              });
             } else if (progress.status === "completed") {
               setIsUpdating(false);
               setUpdateProgress(null);
-              dismissToast("unified-version-update");
-
-              if (progress.new_versions_found > 0) {
-                showSuccessToast("Browser versions updated successfully", {
-                  duration: 5000,
-                  description:
-                    "Auto-downloads will start shortly for available updates.",
-                });
-              } else {
-                showSuccessToast("No new browser versions found", {
-                  duration: 3000,
-                  description: "All browser versions are up to date",
-                });
-              }
-
-              // Refresh status
               void loadUpdateStatus();
             } else if (progress.status === "error") {
               setIsUpdating(false);
               setUpdateProgress(null);
-              dismissToast("unified-version-update");
-
-              showErrorToast("Failed to update browser versions", {
-                duration: 6000,
-                description: "Check your internet connection and try again",
-              });
             }
           },
         );

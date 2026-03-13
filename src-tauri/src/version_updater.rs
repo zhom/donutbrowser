@@ -143,12 +143,7 @@ impl VersionUpdater {
   pub async fn check_and_run_startup_update(
     &self,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Only run if an update is actually needed
-    if !Self::should_run_background_update() {
-      log::debug!("No startup version update needed");
-      return Ok(());
-    }
-
+    // Always check for updates on launch
     if let Some(ref app_handle) = self.app_handle {
       log::info!("Running startup version update...");
 

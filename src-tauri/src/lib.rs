@@ -1068,41 +1068,18 @@ pub fn run() {
         version_updater::VersionUpdater::run_background_task().await;
       });
 
-      // TODO(v0.17+): Remove this migration block after a few releases.
-      // Migrate proxy/VPN worker configs from old proxies/ dir to new proxy_workers/ cache dir.
-      // Before v0.16, ephemeral worker configs (proxy_*, vpnw_*) lived alongside persistent
-      // StoredProxy files in proxies/. Now they live in cache_dir/proxy_workers/.
+      // Auto-start MCP server if it was previously enabled
       {
-        let old_dir = crate::app_dirs::proxies_dir();
-        let new_dir = crate::app_dirs::proxy_workers_dir();
-        if old_dir.exists() {
-          if let Err(e) = std::fs::create_dir_all(&new_dir) {
-            log::error!("Failed to create proxy_workers dir: {e}");
-          } else if let Ok(entries) = std::fs::read_dir(&old_dir) {
-            for entry in entries.flatten() {
-              let path = entry.path();
-              if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if (name.starts_with("proxy_") || name.starts_with("vpnw_"))
-                  && name.ends_with(".json")
-                {
-                  let dest = new_dir.join(name);
-                  match std::fs::rename(&path, &dest) {
-                    Ok(()) => log::info!("Migrated worker config {name} to proxy_workers/"),
-                    Err(e) => {
-                      // rename fails across filesystems, fall back to copy+delete
-                      if let Ok(content) = std::fs::read(&path) {
-                        if std::fs::write(&dest, &content).is_ok() {
-                          let _ = std::fs::remove_file(&path);
-                          log::info!("Migrated worker config {name} to proxy_workers/ (copy)");
-                        }
-                      } else {
-                        log::warn!("Failed to migrate worker config {name}: {e}");
-                      }
-                    }
-                  }
-                }
+        let mcp_handle = app.handle().clone();
+        let settings_mgr = settings_manager::SettingsManager::instance();
+        if let Ok(settings) = settings_mgr.load_settings() {
+          if settings.mcp_enabled {
+            tauri::async_runtime::spawn(async move {
+              match mcp_server::McpServer::instance().start(mcp_handle).await {
+                Ok(port) => log::info!("MCP server auto-started on port {port}"),
+                Err(e) => log::warn!("Failed to auto-start MCP server: {e}"),
               }
-            }
+            });
           }
         }
       }

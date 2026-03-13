@@ -1242,10 +1242,7 @@ impl ProfileManager {
         let profile_path_match = cmd.iter().any(|s| {
           let arg = s.to_str().unwrap_or("");
           // For Firefox-based browsers, check for exact profile path match
-          if profile.browser == "firefox"
-            || profile.browser == "firefox-developer"
-            || profile.browser == "zen"
-          {
+          if profile.browser == "camoufox" {
             arg == profile_data_path_str
               || arg == format!("-profile={profile_data_path_str}")
               || (arg == "-profile"
@@ -1253,7 +1250,7 @@ impl ProfileManager {
                   .iter()
                   .any(|s2| s2.to_str().unwrap_or("") == profile_data_path_str))
           } else {
-            // For Chromium-based browsers, check for user-data-dir
+            // For Chromium-based browsers (Wayfern), check for user-data-dir
             arg.contains(&format!("--user-data-dir={profile_data_path_str}"))
               || arg == profile_data_path_str
           }
@@ -1262,7 +1259,6 @@ impl ProfileManager {
         if profile_path_match {
           is_running = true;
           found_pid = Some(pid);
-          // Found existing browser process
         }
       }
     }
@@ -1275,16 +1271,12 @@ impl ProfileManager {
           // Check if this is the right browser executable first
           let exe_name = process.name().to_string_lossy().to_lowercase();
           let is_correct_browser = match profile.browser.as_str() {
-            "firefox" => {
-              exe_name.contains("firefox")
-                && !exe_name.contains("developer")
-                && !exe_name.contains("camoufox")
+            "camoufox" => exe_name.contains("camoufox") || exe_name.contains("firefox"),
+            "wayfern" => {
+              exe_name.contains("wayfern")
+                || exe_name.contains("chromium")
+                || exe_name.contains("chrome")
             }
-            "firefox-developer" => exe_name.contains("firefox") && exe_name.contains("developer"),
-            "zen" => exe_name.contains("zen"),
-            "chromium" => exe_name.contains("chromium"),
-            "brave" => exe_name.contains("brave"),
-            // Camoufox is handled via CamoufoxManager, not PID-based checking
             _ => false,
           };
 
@@ -1300,13 +1292,6 @@ impl ProfileManager {
             let arg = s.to_str().unwrap_or("");
             // For Firefox-based browsers, check for exact profile path match
             if profile.browser == "camoufox" {
-              // Camoufox uses user_data_dir like Chromium browsers
-              arg.contains(&format!("--user-data-dir={profile_data_path_str}"))
-                || arg == profile_data_path_str
-            } else if profile.browser == "firefox"
-              || profile.browser == "firefox-developer"
-              || profile.browser == "zen"
-            {
               arg == profile_data_path_str
                 || arg == format!("-profile={profile_data_path_str}")
                 || (arg == "-profile"
@@ -1314,7 +1299,7 @@ impl ProfileManager {
                     .iter()
                     .any(|s2| s2.to_str().unwrap_or("") == profile_data_path_str))
             } else {
-              // For Chromium-based browsers, check for user-data-dir
+              // For Chromium-based browsers (Wayfern), check for user-data-dir
               arg.contains(&format!("--user-data-dir={profile_data_path_str}"))
                 || arg == profile_data_path_str
             }

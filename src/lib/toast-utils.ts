@@ -82,13 +82,10 @@ export function showToast(props: ToastProps & { id?: string }) {
         duration = 10000;
         break;
       case "download":
-        // Only keep infinite for active downloading, others get shorter durations
-        if ("stage" in props && props.stage === "downloading") {
-          duration = Number.POSITIVE_INFINITY;
-        } else if ("stage" in props && props.stage === "completed") {
+        if ("stage" in props && props.stage === "completed") {
           duration = 3000;
         } else {
-          duration = 20000;
+          duration = Number.POSITIVE_INFINITY;
         }
         break;
       case "success":

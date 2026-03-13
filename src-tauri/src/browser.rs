@@ -13,11 +13,6 @@ pub struct ProxySettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum BrowserType {
-  Chromium,
-  Firefox,
-  FirefoxDeveloper,
-  Brave,
-  Zen,
   Camoufox,
   Wayfern,
 }
@@ -25,11 +20,6 @@ pub enum BrowserType {
 impl BrowserType {
   pub fn as_str(&self) -> &'static str {
     match self {
-      BrowserType::Chromium => "chromium",
-      BrowserType::Firefox => "firefox",
-      BrowserType::FirefoxDeveloper => "firefox-developer",
-      BrowserType::Brave => "brave",
-      BrowserType::Zen => "zen",
       BrowserType::Camoufox => "camoufox",
       BrowserType::Wayfern => "wayfern",
     }
@@ -37,11 +27,6 @@ impl BrowserType {
 
   pub fn from_str(s: &str) -> Result<Self, String> {
     match s {
-      "chromium" => Ok(BrowserType::Chromium),
-      "firefox" => Ok(BrowserType::Firefox),
-      "firefox-developer" => Ok(BrowserType::FirefoxDeveloper),
-      "brave" => Ok(BrowserType::Brave),
-      "zen" => Ok(BrowserType::Zen),
       "camoufox" => Ok(BrowserType::Camoufox),
       "wayfern" => Ok(BrowserType::Wayfern),
       _ => Err(format!("Unknown browser type: {s}")),
@@ -49,6 +34,7 @@ impl BrowserType {
   }
 }
 
+#[allow(dead_code)]
 pub trait Browser: Send + Sync {
   fn get_executable_path(&self, install_dir: &Path) -> Result<PathBuf, Box<dyn std::error::Error>>;
   fn create_launch_args(
@@ -88,10 +74,7 @@ mod macos {
       .filter(|entry| {
         let binding = entry.file_name();
         let name = binding.to_string_lossy();
-        name.starts_with("firefox")
-          || name.starts_with("zen")
-          || name.starts_with("camoufox")
-          || name.contains("Browser")
+        name.starts_with("firefox") || name.starts_with("camoufox") || name.contains("Browser")
       })
       .map(|entry| entry.path())
       .collect();
@@ -200,34 +183,6 @@ mod macos {
     Ok(executable_path)
   }
 
-  pub fn get_chromium_executable_path(
-    install_dir: &Path,
-  ) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    // Find the .app directory
-    let app_path = std::fs::read_dir(install_dir)?
-      .filter_map(Result::ok)
-      .find(|entry| entry.path().extension().is_some_and(|ext| ext == "app"))
-      .ok_or("Browser app not found")?;
-
-    // Construct the browser executable path
-    let mut executable_dir = app_path.path();
-    executable_dir.push("Contents");
-    executable_dir.push("MacOS");
-
-    // Find the first executable in the MacOS directory
-    let executable_path = std::fs::read_dir(&executable_dir)?
-      .filter_map(Result::ok)
-      .find(|entry| {
-        let binding = entry.file_name();
-        let name = binding.to_string_lossy();
-        name.contains("Chromium") || name.contains("Brave") || name.contains("Google Chrome")
-      })
-      .map(|entry| entry.path())
-      .ok_or("No executable found in MacOS directory")?;
-
-    Ok(executable_path)
-  }
-
   pub fn get_wayfern_executable_path(
     install_dir: &Path,
   ) -> Result<PathBuf, Box<dyn std::error::Error>> {
@@ -281,18 +236,7 @@ mod macos {
     false
   }
 
-  pub fn is_chromium_version_downloaded(install_dir: &Path) -> bool {
-    // On macOS, check for .app files
-    if let Ok(entries) = std::fs::read_dir(install_dir) {
-      for entry in entries.flatten() {
-        if entry.path().extension().is_some_and(|ext| ext == "app") {
-          return true;
-        }
-      }
-    }
-    false
-  }
-
+  #[allow(dead_code)]
   pub fn prepare_executable(_executable_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     // On macOS, no special preparation needed
     Ok(())
@@ -316,20 +260,6 @@ mod linux {
 
     // Try common firefox executable locations (nested and flat)
     let possible_executables = match browser_type {
-      BrowserType::Firefox | BrowserType::FirefoxDeveloper => vec![
-        // Nested "firefox/firefox" or "firefox/firefox-bin"
-        install_dir.join("firefox").join("firefox"),
-        install_dir.join("firefox").join("firefox-bin"),
-        // Flat under version directory
-        install_dir.join("firefox"),
-        install_dir.join("firefox-bin"),
-        // Under a subdirectory matching the browser type
-        browser_subdir.join("firefox"),
-        browser_subdir.join("firefox-bin"),
-      ],
-      BrowserType::Zen => {
-        vec![browser_subdir.join("zen"), browser_subdir.join("zen-bin")]
-      }
       BrowserType::Camoufox => {
         vec![
           install_dir.join("camoufox-bin"),
@@ -360,36 +290,10 @@ mod linux {
     browser_type: &BrowserType,
   ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let possible_executables = match browser_type {
-      BrowserType::Chromium => vec![
-        // Direct paths (for manual installations)
-        install_dir.join("chromium"),
-        install_dir.join("chrome"),
-        install_dir.join("chromium-browser"),
-        // Subdirectory paths (for downloaded archives)
-        install_dir.join("chrome-linux").join("chrome"),
-        install_dir.join("chrome-linux").join("chromium"),
-        install_dir.join("chromium").join("chromium"),
-        install_dir.join("chromium").join("chrome"),
-        // Binary subdirectory
-        install_dir.join("bin").join("chromium"),
-        install_dir.join("bin").join("chrome"),
-      ],
-      BrowserType::Brave => vec![
-        install_dir.join("brave"),
-        install_dir.join("brave-browser"),
-        install_dir.join("brave-browser-nightly"),
-        install_dir.join("brave-browser-beta"),
-        // Subdirectory paths
-        install_dir.join("brave").join("brave"),
-        install_dir.join("brave-browser").join("brave"),
-        install_dir.join("bin").join("brave"),
-      ],
       BrowserType::Wayfern => vec![
-        // Wayfern extracts to a directory with chromium executable
         install_dir.join("chromium"),
         install_dir.join("chrome"),
         install_dir.join("wayfern"),
-        // Subdirectory paths (tar.xz may extract to a subdirectory)
         install_dir.join("wayfern").join("chromium"),
         install_dir.join("wayfern").join("chrome"),
         install_dir.join("chrome-linux").join("chrome"),
@@ -421,19 +325,6 @@ mod linux {
     let browser_subdir = install_dir.join(browser_type.as_str());
 
     let possible_executables = match browser_type {
-      BrowserType::Firefox | BrowserType::FirefoxDeveloper => {
-        vec![
-          // Preferred: executable inside a subdirectory named after the browser type
-          browser_subdir.join("firefox-bin"),
-          browser_subdir.join("firefox"),
-          // Fallback: executable inside a generic "firefox" subdirectory
-          install_dir.join("firefox").join("firefox-bin"),
-          install_dir.join("firefox").join("firefox"),
-        ]
-      }
-      BrowserType::Zen => {
-        vec![browser_subdir.join("zen"), browser_subdir.join("zen-bin")]
-      }
       BrowserType::Camoufox => {
         vec![
           install_dir.join("camoufox-bin"),
@@ -454,36 +345,10 @@ mod linux {
 
   pub fn is_chromium_version_downloaded(install_dir: &Path, browser_type: &BrowserType) -> bool {
     let possible_executables = match browser_type {
-      BrowserType::Chromium => vec![
-        // Direct paths (for manual installations)
-        install_dir.join("chromium"),
-        install_dir.join("chrome"),
-        install_dir.join("chromium-browser"),
-        // Subdirectory paths (for downloaded archives)
-        install_dir.join("chrome-linux").join("chrome"),
-        install_dir.join("chrome-linux").join("chromium"),
-        install_dir.join("chromium").join("chromium"),
-        install_dir.join("chromium").join("chrome"),
-        // Binary subdirectory
-        install_dir.join("bin").join("chromium"),
-        install_dir.join("bin").join("chrome"),
-      ],
-      BrowserType::Brave => vec![
-        install_dir.join("brave"),
-        install_dir.join("brave-browser"),
-        install_dir.join("brave-browser-nightly"),
-        install_dir.join("brave-browser-beta"),
-        // Subdirectory paths
-        install_dir.join("brave").join("brave"),
-        install_dir.join("brave-browser").join("brave"),
-        install_dir.join("bin").join("brave"),
-      ],
       BrowserType::Wayfern => vec![
-        // Wayfern extracts to a directory with chromium executable
         install_dir.join("chromium"),
         install_dir.join("chrome"),
         install_dir.join("wayfern"),
-        // Subdirectory paths
         install_dir.join("wayfern").join("chromium"),
         install_dir.join("wayfern").join("chrome"),
         install_dir.join("chrome-linux").join("chrome"),
@@ -500,6 +365,7 @@ mod linux {
     false
   }
 
+  #[allow(dead_code)]
   pub fn prepare_executable(executable_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     // On Linux, ensure the executable has proper permissions
     log::info!("Setting execute permissions for: {:?}", executable_path);
@@ -551,10 +417,7 @@ mod windows {
             .unwrap_or_default()
             .to_string_lossy()
             .to_lowercase();
-          if name.starts_with("firefox")
-            || name.starts_with("zen")
-            || name.starts_with("camoufox")
-            || name.contains("browser")
+          if name.starts_with("firefox") || name.starts_with("camoufox") || name.contains("browser")
           {
             return Ok(path);
           }
@@ -571,30 +434,11 @@ mod windows {
   ) -> Result<PathBuf, Box<dyn std::error::Error>> {
     // On Windows, look for .exe files
     let possible_paths = match browser_type {
-      BrowserType::Chromium => vec![
-        install_dir.join("chromium.exe"),
-        install_dir.join("chrome.exe"),
-        install_dir.join("chromium-browser.exe"),
-        install_dir.join("bin").join("chromium.exe"),
-        // Common archive extraction patterns
-        install_dir.join("chrome-win").join("chrome.exe"),
-        install_dir.join("chromium").join("chromium.exe"),
-        install_dir.join("chromium").join("chrome.exe"),
-      ],
-      BrowserType::Brave => vec![
-        install_dir.join("brave.exe"),
-        install_dir.join("brave-browser.exe"),
-        install_dir.join("bin").join("brave.exe"),
-        // Subdirectory patterns
-        install_dir.join("brave").join("brave.exe"),
-        install_dir.join("brave-browser").join("brave.exe"),
-      ],
       BrowserType::Wayfern => vec![
         install_dir.join("chromium.exe"),
         install_dir.join("chrome.exe"),
         install_dir.join("wayfern.exe"),
         install_dir.join("bin").join("chromium.exe"),
-        // Subdirectory patterns
         install_dir.join("wayfern").join("chromium.exe"),
         install_dir.join("wayfern").join("chrome.exe"),
         install_dir.join("chrome-win").join("chrome.exe"),
@@ -618,18 +462,14 @@ mod windows {
             .unwrap_or_default()
             .to_string_lossy()
             .to_lowercase();
-          if name.contains("chromium")
-            || name.contains("brave")
-            || name.contains("chrome")
-            || name.contains("wayfern")
-          {
+          if name.contains("chromium") || name.contains("chrome") || name.contains("wayfern") {
             return Ok(path);
           }
         }
       }
     }
 
-    Err("Chromium/Brave/Wayfern executable not found in Windows installation directory".into())
+    Err("Chromium/Wayfern executable not found in Windows installation directory".into())
   }
 
   pub fn is_firefox_version_downloaded(install_dir: &Path) -> bool {
@@ -657,10 +497,7 @@ mod windows {
             .unwrap_or_default()
             .to_string_lossy()
             .to_lowercase();
-          if name.starts_with("firefox")
-            || name.starts_with("zen")
-            || name.starts_with("camoufox")
-            || name.contains("browser")
+          if name.starts_with("firefox") || name.starts_with("camoufox") || name.contains("browser")
           {
             return true;
           }
@@ -674,30 +511,11 @@ mod windows {
   pub fn is_chromium_version_downloaded(install_dir: &Path, browser_type: &BrowserType) -> bool {
     // On Windows, check for .exe files
     let possible_executables = match browser_type {
-      BrowserType::Chromium => vec![
-        install_dir.join("chromium.exe"),
-        install_dir.join("chrome.exe"),
-        install_dir.join("chromium-browser.exe"),
-        install_dir.join("bin").join("chromium.exe"),
-        // Common archive extraction patterns
-        install_dir.join("chrome-win").join("chrome.exe"),
-        install_dir.join("chromium").join("chromium.exe"),
-        install_dir.join("chromium").join("chrome.exe"),
-      ],
-      BrowserType::Brave => vec![
-        install_dir.join("brave.exe"),
-        install_dir.join("brave-browser.exe"),
-        install_dir.join("bin").join("brave.exe"),
-        // Subdirectory patterns
-        install_dir.join("brave").join("brave.exe"),
-        install_dir.join("brave-browser").join("brave.exe"),
-      ],
       BrowserType::Wayfern => vec![
         install_dir.join("chromium.exe"),
         install_dir.join("chrome.exe"),
         install_dir.join("wayfern.exe"),
         install_dir.join("bin").join("chromium.exe"),
-        // Subdirectory patterns
         install_dir.join("wayfern").join("chromium.exe"),
         install_dir.join("wayfern").join("chrome.exe"),
         install_dir.join("chrome-win").join("chrome.exe"),
@@ -722,11 +540,7 @@ mod windows {
             .unwrap_or_default()
             .to_string_lossy()
             .to_lowercase();
-          if name.contains("chromium")
-            || name.contains("brave")
-            || name.contains("chrome")
-            || name.contains("wayfern")
-          {
+          if name.contains("chromium") || name.contains("chrome") || name.contains("wayfern") {
             return true;
           }
         }
@@ -736,233 +550,10 @@ mod windows {
     false
   }
 
+  #[allow(dead_code)]
   pub fn prepare_executable(_executable_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     // On Windows, no special preparation needed
     Ok(())
-  }
-}
-
-pub struct FirefoxBrowser {
-  browser_type: BrowserType,
-}
-
-impl FirefoxBrowser {
-  pub fn new(browser_type: BrowserType) -> Self {
-    Self { browser_type }
-  }
-}
-
-impl Browser for FirefoxBrowser {
-  fn get_executable_path(&self, install_dir: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    #[cfg(target_os = "macos")]
-    return macos::get_firefox_executable_path(install_dir);
-
-    #[cfg(target_os = "linux")]
-    return linux::get_firefox_executable_path(install_dir, &self.browser_type);
-
-    #[cfg(target_os = "windows")]
-    return windows::get_firefox_executable_path(install_dir);
-
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-    Err("Unsupported platform".into())
-  }
-
-  fn create_launch_args(
-    &self,
-    profile_path: &str,
-    _proxy_settings: Option<&ProxySettings>,
-    url: Option<String>,
-    remote_debugging_port: Option<u16>,
-    headless: bool,
-  ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    let mut args = vec!["-profile".to_string(), profile_path.to_string()];
-
-    // Add remote debugging if requested
-    if let Some(port) = remote_debugging_port {
-      args.push("--start-debugger-server".to_string());
-      args.push(port.to_string());
-    }
-
-    // Add headless mode if requested
-    if headless {
-      args.push("--headless".to_string());
-    }
-
-    // Use -no-remote when remote debugging to avoid conflicts with existing instances
-    if remote_debugging_port.is_some() {
-      args.push("-no-remote".to_string());
-    }
-
-    // Firefox-based browsers use profile directory and user.js for proxy configuration
-    if let Some(url) = url {
-      args.push(url);
-    }
-
-    Ok(args)
-  }
-
-  fn is_version_downloaded(&self, version: &str, binaries_dir: &Path) -> bool {
-    // Expected structure: binaries/<browser>/<version>
-    let browser_dir = binaries_dir.join(self.browser_type.as_str()).join(version);
-
-    log::info!("Firefox browser checking version {version} in directory: {browser_dir:?}");
-
-    if !browser_dir.exists() {
-      log::info!("Directory does not exist: {browser_dir:?}");
-      return false;
-    }
-
-    log::info!("Directory exists, checking for browser files...");
-
-    #[cfg(target_os = "macos")]
-    return macos::is_firefox_version_downloaded(&browser_dir);
-
-    #[cfg(target_os = "linux")]
-    return linux::is_firefox_version_downloaded(&browser_dir, &self.browser_type);
-
-    #[cfg(target_os = "windows")]
-    return windows::is_firefox_version_downloaded(&browser_dir);
-
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-    {
-      log::info!("Unsupported platform for browser verification");
-      false
-    }
-  }
-
-  fn prepare_executable(&self, executable_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    #[cfg(target_os = "macos")]
-    return macos::prepare_executable(executable_path);
-
-    #[cfg(target_os = "linux")]
-    return linux::prepare_executable(executable_path);
-
-    #[cfg(target_os = "windows")]
-    return windows::prepare_executable(executable_path);
-
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-    Err("Unsupported platform".into())
-  }
-}
-
-// Chromium-based browsers (Chromium, Brave)
-pub struct ChromiumBrowser {
-  #[allow(dead_code)]
-  browser_type: BrowserType,
-}
-
-impl ChromiumBrowser {
-  pub fn new(browser_type: BrowserType) -> Self {
-    Self { browser_type }
-  }
-}
-
-impl Browser for ChromiumBrowser {
-  fn get_executable_path(&self, install_dir: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    #[cfg(target_os = "macos")]
-    return macos::get_chromium_executable_path(install_dir);
-
-    #[cfg(target_os = "linux")]
-    return linux::get_chromium_executable_path(install_dir, &self.browser_type);
-
-    #[cfg(target_os = "windows")]
-    return windows::get_chromium_executable_path(install_dir, &self.browser_type);
-
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-    Err("Unsupported platform".into())
-  }
-
-  fn create_launch_args(
-    &self,
-    profile_path: &str,
-    proxy_settings: Option<&ProxySettings>,
-    url: Option<String>,
-    remote_debugging_port: Option<u16>,
-    headless: bool,
-  ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    let mut args = vec![
-      format!("--user-data-dir={}", profile_path),
-      "--no-default-browser-check".to_string(),
-      "--disable-background-mode".to_string(),
-      "--disable-component-update".to_string(),
-      "--disable-background-timer-throttling".to_string(),
-      "--crash-server-url=".to_string(),
-      "--disable-updater".to_string(),
-      // Disable quit confirmation and session restore prompts
-      "--disable-session-crashed-bubble".to_string(),
-      "--hide-crash-restore-bubble".to_string(),
-      "--disable-infobars".to_string(),
-      // Disable QUIC/HTTP3 to ensure traffic goes through HTTP proxy
-      "--disable-quic".to_string(),
-    ];
-
-    // Add remote debugging if requested
-    if let Some(port) = remote_debugging_port {
-      args.push("--remote-debugging-address=0.0.0.0".to_string());
-      args.push(format!("--remote-debugging-port={port}"));
-    }
-
-    // Add headless mode if requested
-    if headless {
-      args.push("--headless".to_string());
-    }
-
-    // Add proxy configuration if provided
-    if let Some(proxy) = proxy_settings {
-      args.push(format!(
-        "--proxy-server=http://{}:{}",
-        proxy.host, proxy.port
-      ));
-    }
-
-    if let Some(url) = url {
-      args.push(url);
-    }
-
-    Ok(args)
-  }
-
-  fn is_version_downloaded(&self, version: &str, binaries_dir: &Path) -> bool {
-    // Expected structure: binaries/<browser>/<version>
-    let browser_dir = binaries_dir.join(self.browser_type.as_str()).join(version);
-
-    log::info!("Chromium browser checking version {version} in directory: {browser_dir:?}");
-
-    if !browser_dir.exists() {
-      log::info!("Directory does not exist: {browser_dir:?}");
-      return false;
-    }
-
-    log::info!("Directory exists, checking for browser files...");
-
-    #[cfg(target_os = "macos")]
-    return macos::is_chromium_version_downloaded(&browser_dir);
-
-    #[cfg(target_os = "linux")]
-    return linux::is_chromium_version_downloaded(&browser_dir, &self.browser_type);
-
-    #[cfg(target_os = "windows")]
-    return windows::is_chromium_version_downloaded(&browser_dir, &self.browser_type);
-
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-    {
-      log::info!("Unsupported platform for browser verification");
-      false
-    }
-  }
-
-  fn prepare_executable(&self, executable_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    #[cfg(target_os = "macos")]
-    return macos::prepare_executable(executable_path);
-
-    #[cfg(target_os = "linux")]
-    return linux::prepare_executable(executable_path);
-
-    #[cfg(target_os = "windows")]
-    return windows::prepare_executable(executable_path);
-
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-    Err("Unsupported platform".into())
   }
 }
 
@@ -1175,10 +766,6 @@ impl BrowserFactory {
 
   pub fn create_browser(&self, browser_type: BrowserType) -> Box<dyn Browser> {
     match browser_type {
-      BrowserType::Firefox | BrowserType::FirefoxDeveloper | BrowserType::Zen => {
-        Box::new(FirefoxBrowser::new(browser_type))
-      }
-      BrowserType::Chromium | BrowserType::Brave => Box::new(ChromiumBrowser::new(browser_type)),
       BrowserType::Camoufox => Box::new(CamoufoxBrowser::new()),
       BrowserType::Wayfern => Box::new(WayfernBrowser::new()),
     }
@@ -1272,35 +859,10 @@ mod tests {
   #[test]
   fn test_browser_type_conversions() {
     // Test as_str
-    assert_eq!(BrowserType::Firefox.as_str(), "firefox");
-    assert_eq!(BrowserType::FirefoxDeveloper.as_str(), "firefox-developer");
-    assert_eq!(BrowserType::Chromium.as_str(), "chromium");
-    assert_eq!(BrowserType::Brave.as_str(), "brave");
-    assert_eq!(BrowserType::Zen.as_str(), "zen");
     assert_eq!(BrowserType::Camoufox.as_str(), "camoufox");
     assert_eq!(BrowserType::Wayfern.as_str(), "wayfern");
 
-    // Test from_str - use expect with descriptive messages instead of unwrap
-    assert_eq!(
-      BrowserType::from_str("firefox").expect("firefox should be valid"),
-      BrowserType::Firefox
-    );
-    assert_eq!(
-      BrowserType::from_str("firefox-developer").expect("firefox-developer should be valid"),
-      BrowserType::FirefoxDeveloper
-    );
-    assert_eq!(
-      BrowserType::from_str("chromium").expect("chromium should be valid"),
-      BrowserType::Chromium
-    );
-    assert_eq!(
-      BrowserType::from_str("brave").expect("brave should be valid"),
-      BrowserType::Brave
-    );
-    assert_eq!(
-      BrowserType::from_str("zen").expect("zen should be valid"),
-      BrowserType::Zen
-    );
+    // Test from_str
     assert_eq!(
       BrowserType::from_str("camoufox").expect("camoufox should be valid"),
       BrowserType::Camoufox
@@ -1320,25 +882,25 @@ mod tests {
     let empty_result = BrowserType::from_str("");
     assert!(empty_result.is_err(), "Empty string should return error");
 
-    let case_sensitive_result = BrowserType::from_str("Firefox");
     assert!(
-      case_sensitive_result.is_err(),
-      "Case sensitive check should fail"
+      BrowserType::from_str("firefox").is_err(),
+      "Removed browser types should return error"
+    );
+    assert!(
+      BrowserType::from_str("chromium").is_err(),
+      "Removed browser types should return error"
     );
   }
 
   #[test]
-  fn test_firefox_launch_args() {
-    // Test regular Firefox (should not use -no-remote for normal launch)
-    let browser = FirefoxBrowser::new(BrowserType::Firefox);
+  fn test_camoufox_launch_args() {
+    let browser = CamoufoxBrowser::new();
     let args = browser
       .create_launch_args("/path/to/profile", None, None, None, false)
-      .expect("Failed to create launch args for Firefox");
-    assert_eq!(args, vec!["-profile", "/path/to/profile"]);
-    assert!(
-      !args.contains(&"-no-remote".to_string()),
-      "Firefox should not use -no-remote for normal launch"
-    );
+      .expect("Failed to create launch args for Camoufox");
+    assert!(args.contains(&"-profile".to_string()));
+    assert!(args.contains(&"/path/to/profile".to_string()));
+    assert!(args.contains(&"-no-remote".to_string()));
 
     let args = browser
       .create_launch_args(
@@ -1348,40 +910,20 @@ mod tests {
         None,
         false,
       )
-      .expect("Failed to create launch args for Firefox with URL");
-    assert_eq!(
-      args,
-      vec!["-profile", "/path/to/profile", "https://example.com"]
-    );
+      .expect("Failed to create launch args for Camoufox with URL");
+    assert!(args.contains(&"https://example.com".to_string()));
 
-    // Test Firefox with remote debugging (should use -no-remote)
+    // Test with remote debugging
     let args = browser
       .create_launch_args("/path/to/profile", None, None, Some(9222), false)
-      .expect("Failed to create launch args for Firefox with remote debugging");
-    assert!(
-      args.contains(&"-no-remote".to_string()),
-      "Firefox should use -no-remote for remote debugging"
-    );
-    assert!(
-      args.contains(&"--start-debugger-server".to_string()),
-      "Firefox should include debugger server arg"
-    );
-    assert!(
-      args.contains(&"9222".to_string()),
-      "Firefox should include debugging port"
-    );
-
-    // Test Zen Browser (no special flags without remote debugging)
-    let browser = FirefoxBrowser::new(BrowserType::Zen);
-    let args = browser
-      .create_launch_args("/path/to/profile", None, None, None, false)
-      .expect("Failed to create launch args for Zen Browser");
-    assert_eq!(args, vec!["-profile", "/path/to/profile"]);
+      .expect("Failed to create launch args for Camoufox with remote debugging");
+    assert!(args.contains(&"--start-debugger-server".to_string()));
+    assert!(args.contains(&"9222".to_string()));
 
     // Test headless mode
     let args = browser
       .create_launch_args("/path/to/profile", None, None, None, true)
-      .expect("Failed to create launch args for Zen Browser headless");
+      .expect("Failed to create launch args for Camoufox headless");
     assert!(
       args.contains(&"--headless".to_string()),
       "Browser should include headless flag when requested"
@@ -1389,30 +931,27 @@ mod tests {
   }
 
   #[test]
-  fn test_chromium_launch_args() {
-    let browser = ChromiumBrowser::new(BrowserType::Chromium);
+  fn test_wayfern_launch_args() {
+    let browser = WayfernBrowser::new();
     let args = browser
       .create_launch_args("/path/to/profile", None, None, None, false)
-      .expect("Failed to create launch args for Chromium");
+      .expect("Failed to create launch args for Wayfern");
 
-    // Test that basic required arguments are present
     assert!(
       args.contains(&"--user-data-dir=/path/to/profile".to_string()),
-      "Chromium args should contain user-data-dir"
+      "Wayfern args should contain user-data-dir"
     );
     assert!(
       args.contains(&"--no-default-browser-check".to_string()),
-      "Chromium args should contain no-default-browser-check"
+      "Wayfern args should contain no-default-browser-check"
     );
-
-    // Test that automatic update disabling arguments are present
     assert!(
       args.contains(&"--disable-background-mode".to_string()),
-      "Chromium args should contain disable-background-mode"
+      "Wayfern args should contain disable-background-mode"
     );
     assert!(
       args.contains(&"--disable-component-update".to_string()),
-      "Chromium args should contain disable-component-update"
+      "Wayfern args should contain disable-component-update"
     );
 
     let args_with_url = browser
@@ -1423,13 +962,11 @@ mod tests {
         None,
         false,
       )
-      .expect("Failed to create launch args for Chromium with URL");
+      .expect("Failed to create launch args for Wayfern with URL");
     assert!(
       args_with_url.contains(&"https://example.com".to_string()),
-      "Chromium args should contain the URL"
+      "Wayfern args should contain the URL"
     );
-
-    // Verify URL is at the end
     assert_eq!(
       args_with_url.last().expect("Args should not be empty"),
       "https://example.com"
@@ -1438,23 +975,19 @@ mod tests {
     // Test remote debugging
     let args_with_debug = browser
       .create_launch_args("/path/to/profile", None, None, Some(9222), false)
-      .expect("Failed to create launch args for Chromium with remote debugging");
+      .expect("Failed to create launch args for Wayfern with remote debugging");
     assert!(
       args_with_debug.contains(&"--remote-debugging-port=9222".to_string()),
-      "Chromium args should contain remote debugging port"
-    );
-    assert!(
-      args_with_debug.contains(&"--remote-debugging-address=0.0.0.0".to_string()),
-      "Chromium args should contain remote debugging address"
+      "Wayfern args should contain remote debugging port"
     );
 
     // Test headless mode
     let args_headless = browser
       .create_launch_args("/path/to/profile", None, None, None, true)
-      .expect("Failed to create launch args for Chromium headless");
+      .expect("Failed to create launch args for Wayfern headless");
     assert!(
-      args_headless.contains(&"--headless".to_string()),
-      "Chromium args should contain headless flag when requested"
+      args_headless.contains(&"--headless=new".to_string()),
+      "Wayfern args should contain headless flag when requested"
     );
   }
 
@@ -1491,26 +1024,21 @@ mod tests {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let binaries_dir = temp_dir.path();
 
-    // Create a mock Firefox browser installation with new path structure: binaries/<browser>/<version>/
-    let browser_dir = binaries_dir.join("firefox").join("139.0");
+    // Create a mock Camoufox browser installation
+    let browser_dir = binaries_dir.join("camoufox").join("135.0.1");
     fs::create_dir_all(&browser_dir).expect("Failed to create browser directory");
 
     #[cfg(target_os = "macos")]
     {
-      // Create a mock .app directory for macOS
-      let app_dir = browser_dir.join("Firefox.app");
-      fs::create_dir_all(&app_dir).expect("Failed to create Firefox.app directory");
+      let app_dir = browser_dir.join("Camoufox.app");
+      fs::create_dir_all(&app_dir).expect("Failed to create Camoufox.app directory");
     }
 
     #[cfg(target_os = "linux")]
     {
-      // Create a mock firefox subdirectory and executable for Linux
-      let firefox_subdir = browser_dir.join("firefox");
-      fs::create_dir_all(&firefox_subdir).expect("Failed to create firefox subdirectory");
-      let executable_path = firefox_subdir.join("firefox");
+      let executable_path = browser_dir.join("camoufox");
       fs::write(&executable_path, "mock executable").expect("Failed to write mock executable");
 
-      // Set executable permissions on Linux
       use std::os::unix::fs::PermissionsExt;
       let mut permissions = executable_path
         .metadata()
@@ -1523,67 +1051,62 @@ mod tests {
 
     #[cfg(target_os = "windows")]
     {
-      // Create a mock firefox.exe for Windows
       let executable_path = browser_dir.join("firefox.exe");
       fs::write(&executable_path, "mock executable").expect("Failed to write mock executable");
     }
 
-    let browser = FirefoxBrowser::new(BrowserType::Firefox);
-    assert!(browser.is_version_downloaded("139.0", binaries_dir));
-    assert!(!browser.is_version_downloaded("140.0", binaries_dir));
+    let browser = CamoufoxBrowser::new();
+    assert!(browser.is_version_downloaded("135.0.1", binaries_dir));
+    assert!(!browser.is_version_downloaded("999.0", binaries_dir));
 
-    // Test with Chromium browser with new path structure
-    let chromium_dir = binaries_dir.join("chromium").join("1465660");
-    fs::create_dir_all(&chromium_dir).expect("Failed to create chromium directory");
+    // Test with Wayfern browser
+    let wayfern_dir = binaries_dir.join("wayfern").join("1.0.0");
+    fs::create_dir_all(&wayfern_dir).expect("Failed to create wayfern directory");
 
     #[cfg(target_os = "macos")]
     {
-      let chromium_app_dir = chromium_dir.join("Chromium.app");
-      fs::create_dir_all(chromium_app_dir.join("Contents").join("MacOS"))
+      let wayfern_app_dir = wayfern_dir.join("Chromium.app");
+      fs::create_dir_all(wayfern_app_dir.join("Contents").join("MacOS"))
         .expect("Failed to create Chromium.app structure");
 
-      // Create a mock executable
-      let executable_path = chromium_app_dir
+      let executable_path = wayfern_app_dir
         .join("Contents")
         .join("MacOS")
         .join("Chromium");
       fs::write(&executable_path, "mock executable")
-        .expect("Failed to write mock Chromium executable");
+        .expect("Failed to write mock Wayfern executable");
     }
 
     #[cfg(target_os = "linux")]
     {
-      // Create a mock chromium executable for Linux
-      let executable_path = chromium_dir.join("chromium");
+      let executable_path = wayfern_dir.join("chromium");
       fs::write(&executable_path, "mock executable")
-        .expect("Failed to write mock chromium executable");
+        .expect("Failed to write mock wayfern executable");
 
-      // Set executable permissions on Linux
       use std::os::unix::fs::PermissionsExt;
       let mut permissions = executable_path
         .metadata()
-        .expect("Failed to get chromium metadata")
+        .expect("Failed to get wayfern metadata")
         .permissions();
       permissions.set_mode(0o755);
       fs::set_permissions(&executable_path, permissions)
-        .expect("Failed to set chromium permissions");
+        .expect("Failed to set wayfern permissions");
     }
 
     #[cfg(target_os = "windows")]
     {
-      // Create a mock chromium.exe for Windows
-      let executable_path = chromium_dir.join("chromium.exe");
+      let executable_path = wayfern_dir.join("chromium.exe");
       fs::write(&executable_path, "mock executable").expect("Failed to write mock chromium.exe");
     }
 
-    let chromium_browser = ChromiumBrowser::new(BrowserType::Chromium);
+    let wayfern_browser = WayfernBrowser::new();
     assert!(
-      chromium_browser.is_version_downloaded("1465660", binaries_dir),
-      "Chromium version should be detected as downloaded"
+      wayfern_browser.is_version_downloaded("1.0.0", binaries_dir),
+      "Wayfern version should be detected as downloaded"
     );
     assert!(
-      !chromium_browser.is_version_downloaded("1465661", binaries_dir),
-      "Non-existent Chromium version should not be detected as downloaded"
+      !wayfern_browser.is_version_downloaded("9.9.9", binaries_dir),
+      "Non-existent Wayfern version should not be detected as downloaded"
     );
   }
 
@@ -1593,28 +1116,28 @@ mod tests {
     let binaries_dir = temp_dir.path();
 
     // Create browser directory but no proper executable structure
-    let browser_dir = binaries_dir.join("firefox").join("139.0");
+    let browser_dir = binaries_dir.join("camoufox").join("135.0.1");
     fs::create_dir_all(&browser_dir).expect("Failed to create browser directory");
 
     // Create some other files but no proper executable structure
     fs::write(browser_dir.join("readme.txt"), "Some content").expect("Failed to write readme file");
 
-    let browser = FirefoxBrowser::new(BrowserType::Firefox);
+    let browser = CamoufoxBrowser::new();
     assert!(
-      !browser.is_version_downloaded("139.0", binaries_dir),
-      "Firefox version should not be detected without proper executable structure"
+      !browser.is_version_downloaded("135.0.1", binaries_dir),
+      "Camoufox version should not be detected without proper executable structure"
     );
   }
 
   #[test]
   fn test_browser_type_clone_and_debug() {
-    let browser_type = BrowserType::Firefox;
+    let browser_type = BrowserType::Camoufox;
     let cloned = browser_type.clone();
     assert_eq!(browser_type, cloned);
 
     // Test Debug trait
     let debug_str = format!("{browser_type:?}");
-    assert!(debug_str.contains("Firefox"));
+    assert!(debug_str.contains("Camoufox"));
   }
 
   #[test]

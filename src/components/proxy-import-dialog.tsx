@@ -429,14 +429,14 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
             <div className="p-4 bg-muted/30 rounded-lg space-y-2">
               <div className="flex justify-between">
                 <span className="text-sm">Imported:</span>
-                <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                <span className="text-sm font-medium text-success">
                   {importResult.imported_count}
                 </span>
               </div>
               {importResult.skipped_count > 0 && (
                 <div className="flex justify-between">
                   <span className="text-sm">Skipped (duplicates):</span>
-                  <span className="text-sm font-medium text-yellow-600 dark:text-yellow-400">
+                  <span className="text-sm font-medium text-warning">
                     {importResult.skipped_count}
                   </span>
                 </div>
@@ -444,7 +444,7 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
               {importResult.errors.length > 0 && (
                 <div className="flex justify-between">
                   <span className="text-sm">Errors:</span>
-                  <span className="text-sm font-medium text-red-600 dark:text-red-400">
+                  <span className="text-sm font-medium text-destructive">
                     {importResult.errors.length}
                   </span>
                 </div>
@@ -459,7 +459,7 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
                     {importResult.errors.map((error, i) => (
                       <div
                         key={`error-${i}`}
-                        className="text-xs text-red-600 dark:text-red-400"
+                        className="text-xs text-destructive"
                       >
                         {error}
                       </div>

@@ -4,22 +4,38 @@ use std::collections::HashSet;
 use std::fs::{self, create_dir_all};
 use std::path::{Path, PathBuf};
 
-use crate::browser::BrowserType;
+use crate::camoufox_manager::CamoufoxConfig;
 use crate::downloaded_browsers_registry::DownloadedBrowsersRegistry;
+use crate::profile::types::{get_host_os, BrowserProfile, SyncMode};
 use crate::profile::ProfileManager;
+use crate::proxy_manager::PROXY_MANAGER;
+use crate::wayfern_manager::WayfernConfig;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DetectedProfile {
   pub browser: String,
+  pub mapped_browser: String,
   pub name: String,
   pub path: String,
   pub description: String,
+}
+
+fn map_browser_type(browser: &str) -> &str {
+  match browser {
+    "firefox" | "firefox-developer" | "zen" => "camoufox",
+    "chromium" | "brave" => "wayfern",
+    "camoufox" => "camoufox",
+    "wayfern" => "wayfern",
+    _ => "wayfern",
+  }
 }
 
 pub struct ProfileImporter {
   base_dirs: BaseDirs,
   downloaded_browsers_registry: &'static DownloadedBrowsersRegistry,
   profile_manager: &'static ProfileManager,
+  camoufox_manager: &'static crate::camoufox_manager::CamoufoxManager,
+  wayfern_manager: &'static crate::wayfern_manager::WayfernManager,
 }
 
 impl ProfileImporter {
@@ -28,6 +44,8 @@ impl ProfileImporter {
       base_dirs: BaseDirs::new().expect("Failed to get base directories"),
       downloaded_browsers_registry: DownloadedBrowsersRegistry::instance(),
       profile_manager: ProfileManager::instance(),
+      camoufox_manager: crate::camoufox_manager::CamoufoxManager::instance(),
+      wayfern_manager: crate::wayfern_manager::WayfernManager::instance(),
     }
   }
 
@@ -35,31 +53,18 @@ impl ProfileImporter {
     &PROFILE_IMPORTER
   }
 
-  /// Detect existing browser profiles on the system
   pub fn detect_existing_profiles(
     &self,
   ) -> Result<Vec<DetectedProfile>, Box<dyn std::error::Error>> {
     let mut detected_profiles = Vec::new();
 
-    // Detect Firefox profiles
     detected_profiles.extend(self.detect_firefox_profiles()?);
-
-    // Detect Chrome profiles
     detected_profiles.extend(self.detect_chrome_profiles()?);
-
-    // Detect Brave profiles
     detected_profiles.extend(self.detect_brave_profiles()?);
-
-    // Detect Firefox Developer Edition profiles
     detected_profiles.extend(self.detect_firefox_developer_profiles()?);
-
-    // Detect Chromium profiles
     detected_profiles.extend(self.detect_chromium_profiles()?);
-
-    // Detect Zen Browser profiles
     detected_profiles.extend(self.detect_zen_browser_profiles()?);
 
-    // Remove duplicates based on path
     let mut seen_paths = HashSet::new();
     let unique_profiles: Vec<DetectedProfile> = detected_profiles
       .into_iter()
@@ -69,7 +74,6 @@ impl ProfileImporter {
     Ok(unique_profiles)
   }
 
-  /// Detect Firefox profiles
   fn detect_firefox_profiles(&self) -> Result<Vec<DetectedProfile>, Box<dyn std::error::Error>> {
     let mut profiles = Vec::new();
 
@@ -84,12 +88,10 @@ impl ProfileImporter {
 
     #[cfg(target_os = "windows")]
     {
-      // Primary location in AppData\Roaming
       let app_data = self.base_dirs.data_dir();
       let firefox_dir = app_data.join("Mozilla/Firefox/Profiles");
       profiles.extend(self.scan_firefox_profiles_dir(&firefox_dir, "firefox")?);
 
-      // Also check AppData\Local for portable installations
       let local_app_data = self.base_dirs.data_local_dir();
       let firefox_local_dir = local_app_data.join("Mozilla/Firefox/Profiles");
       if firefox_local_dir.exists() {
@@ -106,7 +108,6 @@ impl ProfileImporter {
     Ok(profiles)
   }
 
-  /// Detect Firefox Developer Edition profiles
   fn detect_firefox_developer_profiles(
     &self,
   ) -> Result<Vec<DetectedProfile>, Box<dyn std::error::Error>> {
@@ -114,13 +115,11 @@ impl ProfileImporter {
 
     #[cfg(target_os = "macos")]
     {
-      // Firefox Developer Edition on macOS uses separate profile directories
       let firefox_dev_alt_dir = self
         .base_dirs
         .home_dir()
         .join("Library/Application Support/Firefox Developer Edition/Profiles");
 
-      // Only scan the dedicated dev edition directory if it exists, otherwise skip to avoid duplicates
       if firefox_dev_alt_dir.exists() {
         profiles.extend(self.scan_firefox_profiles_dir(&firefox_dev_alt_dir, "firefox-developer")?);
       }
@@ -129,7 +128,6 @@ impl ProfileImporter {
     #[cfg(target_os = "windows")]
     {
       let app_data = self.base_dirs.data_dir();
-      // Firefox Developer Edition on Windows typically uses separate directories
       let firefox_dev_dir = app_data.join("Mozilla/Firefox Developer Edition/Profiles");
       if firefox_dev_dir.exists() {
         profiles.extend(self.scan_firefox_profiles_dir(&firefox_dev_dir, "firefox-developer")?);
@@ -138,7 +136,6 @@ impl ProfileImporter {
 
     #[cfg(target_os = "linux")]
     {
-      // Firefox Developer Edition on Linux uses separate directories
       let firefox_dev_dir = self
         .base_dirs
         .home_dir()
@@ -151,7 +148,6 @@ impl ProfileImporter {
     Ok(profiles)
   }
 
-  /// Detect Chrome profiles
   fn detect_chrome_profiles(&self) -> Result<Vec<DetectedProfile>, Box<dyn std::error::Error>> {
     let mut profiles = Vec::new();
 
@@ -180,7 +176,6 @@ impl ProfileImporter {
     Ok(profiles)
   }
 
-  /// Detect Chromium profiles
   fn detect_chromium_profiles(&self) -> Result<Vec<DetectedProfile>, Box<dyn std::error::Error>> {
     let mut profiles = Vec::new();
 
@@ -209,7 +204,6 @@ impl ProfileImporter {
     Ok(profiles)
   }
 
-  /// Detect Brave profiles
   fn detect_brave_profiles(&self) -> Result<Vec<DetectedProfile>, Box<dyn std::error::Error>> {
     let mut profiles = Vec::new();
 
@@ -241,7 +235,6 @@ impl ProfileImporter {
     Ok(profiles)
   }
 
-  /// Detect Zen Browser profiles
   fn detect_zen_browser_profiles(
     &self,
   ) -> Result<Vec<DetectedProfile>, Box<dyn std::error::Error>> {
@@ -272,7 +265,6 @@ impl ProfileImporter {
     Ok(profiles)
   }
 
-  /// Scan Firefox-style profiles directory
   fn scan_firefox_profiles_dir(
     &self,
     profiles_dir: &Path,
@@ -284,7 +276,6 @@ impl ProfileImporter {
       return Ok(profiles);
     }
 
-    // Read profiles.ini file if it exists
     let profiles_ini = profiles_dir
       .parent()
       .unwrap_or(profiles_dir)
@@ -295,7 +286,6 @@ impl ProfileImporter {
       }
     }
 
-    // Also scan directory for any profile folders not in profiles.ini
     if let Ok(entries) = fs::read_dir(profiles_dir) {
       for entry in entries.flatten() {
         let path = entry.path();
@@ -307,11 +297,11 @@ impl ProfileImporter {
               .and_then(|n| n.to_str())
               .unwrap_or("Unknown Profile");
 
-            // Check if this profile was already found in profiles.ini
             let already_added = profiles.iter().any(|p| p.path == path.to_string_lossy());
             if !already_added {
               profiles.push(DetectedProfile {
                 browser: browser_type.to_string(),
+                mapped_browser: map_browser_type(browser_type).to_string(),
                 name: format!(
                   "{} Profile - {}",
                   self.get_browser_display_name(browser_type),
@@ -329,7 +319,6 @@ impl ProfileImporter {
     Ok(profiles)
   }
 
-  /// Parse Firefox profiles.ini file
   fn parse_firefox_profiles_ini(
     &self,
     content: &str,
@@ -346,7 +335,6 @@ impl ProfileImporter {
       let line = line.trim();
 
       if line.starts_with('[') && line.ends_with(']') {
-        // Save previous profile if complete
         if !current_section.is_empty()
           && current_section.starts_with("Profile")
           && !profile_path.is_empty()
@@ -370,6 +358,7 @@ impl ProfileImporter {
 
             profiles.push(DetectedProfile {
               browser: browser_type.to_string(),
+              mapped_browser: map_browser_type(browser_type).to_string(),
               name: display_name,
               path: full_path.to_string_lossy().to_string(),
               description: format!("Profile: {profile_name}"),
@@ -377,7 +366,6 @@ impl ProfileImporter {
           }
         }
 
-        // Start new section
         current_section = line[1..line.len() - 1].to_string();
         profile_name.clear();
         profile_path.clear();
@@ -398,7 +386,6 @@ impl ProfileImporter {
       }
     }
 
-    // Handle last profile
     if !current_section.is_empty()
       && current_section.starts_with("Profile")
       && !profile_path.is_empty()
@@ -422,6 +409,7 @@ impl ProfileImporter {
 
         profiles.push(DetectedProfile {
           browser: browser_type.to_string(),
+          mapped_browser: map_browser_type(browser_type).to_string(),
           name: display_name,
           path: full_path.to_string_lossy().to_string(),
           description: format!("Profile: {profile_name}"),
@@ -432,7 +420,6 @@ impl ProfileImporter {
     Ok(profiles)
   }
 
-  /// Scan Chrome-style profiles directory
   fn scan_chrome_profiles_dir(
     &self,
     browser_dir: &Path,
@@ -444,11 +431,11 @@ impl ProfileImporter {
       return Ok(profiles);
     }
 
-    // Check for Default profile
     let default_profile = browser_dir.join("Default");
     if default_profile.exists() && default_profile.join("Preferences").exists() {
       profiles.push(DetectedProfile {
         browser: browser_type.to_string(),
+        mapped_browser: map_browser_type(browser_type).to_string(),
         name: format!(
           "{} - Default Profile",
           self.get_browser_display_name(browser_type)
@@ -458,7 +445,6 @@ impl ProfileImporter {
       });
     }
 
-    // Check for Profile X directories
     if let Ok(entries) = fs::read_dir(browser_dir) {
       for entry in entries.flatten() {
         let path = entry.path();
@@ -466,9 +452,10 @@ impl ProfileImporter {
           let dir_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
           if dir_name.starts_with("Profile ") && path.join("Preferences").exists() {
-            let profile_number = &dir_name[8..]; // Remove "Profile " prefix
+            let profile_number = &dir_name[8..];
             profiles.push(DetectedProfile {
               browser: browser_type.to_string(),
+              mapped_browser: map_browser_type(browser_type).to_string(),
               name: format!(
                 "{} - Profile {}",
                 self.get_browser_display_name(browser_type),
@@ -485,7 +472,6 @@ impl ProfileImporter {
     Ok(profiles)
   }
 
-  /// Get browser display name
   fn get_browser_display_name(&self, browser_type: &str) -> &str {
     match browser_type {
       "firefox" => "Firefox",
@@ -493,28 +479,36 @@ impl ProfileImporter {
       "chromium" => "Chrome/Chromium",
       "brave" => "Brave",
       "zen" => "Zen Browser",
+      "camoufox" => "Camoufox",
+      "wayfern" => "Wayfern",
       _ => "Unknown Browser",
     }
   }
 
-  /// Import a profile from an existing browser profile
-  pub fn import_profile(
+  #[allow(clippy::too_many_arguments)]
+  pub async fn import_profile(
     &self,
+    app_handle: &tauri::AppHandle,
     source_path: &str,
     browser_type: &str,
     new_profile_name: &str,
+    proxy_id: Option<String>,
+    camoufox_config: Option<CamoufoxConfig>,
+    wayfern_config: Option<WayfernConfig>,
   ) -> Result<(), Box<dyn std::error::Error>> {
-    // Validate that source path exists
     let source_path = Path::new(source_path);
     if !source_path.exists() {
       return Err("Source profile path does not exist".into());
     }
 
-    // Validate browser type
-    let _browser_type = BrowserType::from_str(browser_type)
-      .map_err(|_| format!("Invalid browser type: {browser_type}"))?;
+    let mapped = map_browser_type(browser_type);
 
-    // Check if a profile with this name already exists
+    if let Some(ref pid) = proxy_id {
+      if PROXY_MANAGER.is_cloud_or_derived(pid) || pid == crate::proxy_manager::CLOUD_PROXY_ID {
+        crate::cloud_auth::CLOUD_AUTH.sync_cloud_proxy().await;
+      }
+    }
+
     let existing_profiles = self.profile_manager.list_profiles()?;
     if existing_profiles
       .iter()
@@ -523,7 +517,6 @@ impl ProfileImporter {
       return Err(format!("Profile with name '{new_profile_name}' already exists").into());
     }
 
-    // Generate UUID for new profile and create the directory structure
     let profile_id = uuid::Uuid::new_v4();
     let profiles_dir = self.profile_manager.get_profiles_dir();
     let new_profile_uuid_dir = profiles_dir.join(profile_id.to_string());
@@ -532,32 +525,227 @@ impl ProfileImporter {
     create_dir_all(&new_profile_uuid_dir)?;
     create_dir_all(&new_profile_data_dir)?;
 
-    // Copy all files from source to destination profile subdirectory
     Self::copy_directory_recursive(source_path, &new_profile_data_dir)?;
 
-    // Create the profile metadata without overwriting the imported data
-    // We need to find a suitable version for this browser type
-    let available_versions = self.get_default_version_for_browser(browser_type)?;
+    let version = self.get_default_version_for_browser(mapped)?;
 
-    let profile = crate::profile::BrowserProfile {
+    let final_camoufox_config = if mapped == "camoufox" {
+      let mut config = camoufox_config.unwrap_or_default();
+
+      if config.executable_path.is_none() {
+        let mut browser_dir = self.profile_manager.get_binaries_dir();
+        browser_dir.push(mapped);
+        browser_dir.push(&version);
+
+        #[cfg(target_os = "macos")]
+        let binary_path = browser_dir
+          .join("Camoufox.app")
+          .join("Contents")
+          .join("MacOS")
+          .join("camoufox");
+
+        #[cfg(target_os = "windows")]
+        let binary_path = browser_dir.join("camoufox.exe");
+
+        #[cfg(target_os = "linux")]
+        let binary_path = browser_dir.join("camoufox");
+
+        config.executable_path = Some(binary_path.to_string_lossy().to_string());
+      }
+
+      if let Some(ref proxy_id_val) = proxy_id {
+        if let Some(proxy_settings) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id_val) {
+          let proxy_url = if let (Some(username), Some(password)) =
+            (&proxy_settings.username, &proxy_settings.password)
+          {
+            format!(
+              "{}://{}:{}@{}:{}",
+              proxy_settings.proxy_type.to_lowercase(),
+              username,
+              password,
+              proxy_settings.host,
+              proxy_settings.port
+            )
+          } else {
+            format!(
+              "{}://{}:{}",
+              proxy_settings.proxy_type.to_lowercase(),
+              proxy_settings.host,
+              proxy_settings.port
+            )
+          };
+          config.proxy = Some(proxy_url);
+        }
+      }
+
+      if config.fingerprint.is_none() {
+        let temp_profile = BrowserProfile {
+          id: uuid::Uuid::new_v4(),
+          name: new_profile_name.to_string(),
+          browser: mapped.to_string(),
+          version: version.clone(),
+          proxy_id: proxy_id.clone(),
+          vpn_id: None,
+          process_id: None,
+          last_launch: None,
+          release_type: "stable".to_string(),
+          camoufox_config: None,
+          wayfern_config: None,
+          group_id: None,
+          tags: Vec::new(),
+          note: None,
+          sync_mode: SyncMode::Disabled,
+          encryption_salt: None,
+          last_sync: None,
+          host_os: None,
+          ephemeral: false,
+          extension_group_id: None,
+          proxy_bypass_rules: Vec::new(),
+          created_by_id: None,
+          created_by_email: None,
+        };
+
+        match self
+          .camoufox_manager
+          .generate_fingerprint_config(app_handle, &temp_profile, &config)
+          .await
+        {
+          Ok(fp) => config.fingerprint = Some(fp),
+          Err(e) => {
+            return Err(
+              format!(
+                "Failed to generate fingerprint for imported profile '{new_profile_name}': {e}"
+              )
+              .into(),
+            );
+          }
+        }
+      }
+
+      config.proxy = None;
+      Some(config)
+    } else {
+      None
+    };
+
+    let final_wayfern_config = if mapped == "wayfern" {
+      let mut config = wayfern_config.unwrap_or_default();
+
+      if config.executable_path.is_none() {
+        let mut browser_dir = self.profile_manager.get_binaries_dir();
+        browser_dir.push(mapped);
+        browser_dir.push(&version);
+
+        #[cfg(target_os = "macos")]
+        let binary_path = browser_dir
+          .join("Chromium.app")
+          .join("Contents")
+          .join("MacOS")
+          .join("Chromium");
+
+        #[cfg(target_os = "windows")]
+        let binary_path = browser_dir.join("chrome.exe");
+
+        #[cfg(target_os = "linux")]
+        let binary_path = browser_dir.join("chrome");
+
+        config.executable_path = Some(binary_path.to_string_lossy().to_string());
+      }
+
+      if let Some(ref proxy_id_val) = proxy_id {
+        if let Some(proxy_settings) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id_val) {
+          let proxy_url = if let (Some(username), Some(password)) =
+            (&proxy_settings.username, &proxy_settings.password)
+          {
+            format!(
+              "{}://{}:{}@{}:{}",
+              proxy_settings.proxy_type.to_lowercase(),
+              username,
+              password,
+              proxy_settings.host,
+              proxy_settings.port
+            )
+          } else {
+            format!(
+              "{}://{}:{}",
+              proxy_settings.proxy_type.to_lowercase(),
+              proxy_settings.host,
+              proxy_settings.port
+            )
+          };
+          config.proxy = Some(proxy_url);
+        }
+      }
+
+      if config.fingerprint.is_none() {
+        let temp_profile = BrowserProfile {
+          id: uuid::Uuid::new_v4(),
+          name: new_profile_name.to_string(),
+          browser: mapped.to_string(),
+          version: version.clone(),
+          proxy_id: proxy_id.clone(),
+          vpn_id: None,
+          process_id: None,
+          last_launch: None,
+          release_type: "stable".to_string(),
+          camoufox_config: None,
+          wayfern_config: None,
+          group_id: None,
+          tags: Vec::new(),
+          note: None,
+          sync_mode: SyncMode::Disabled,
+          encryption_salt: None,
+          last_sync: None,
+          host_os: None,
+          ephemeral: false,
+          extension_group_id: None,
+          proxy_bypass_rules: Vec::new(),
+          created_by_id: None,
+          created_by_email: None,
+        };
+
+        match self
+          .wayfern_manager
+          .generate_fingerprint_config(app_handle, &temp_profile, &config)
+          .await
+        {
+          Ok(fp) => config.fingerprint = Some(fp),
+          Err(e) => {
+            return Err(
+              format!(
+                "Failed to generate fingerprint for imported profile '{new_profile_name}': {e}"
+              )
+              .into(),
+            );
+          }
+        }
+      }
+
+      config.proxy = None;
+      Some(config)
+    } else {
+      None
+    };
+
+    let profile = BrowserProfile {
       id: profile_id,
       name: new_profile_name.to_string(),
-      browser: browser_type.to_string(),
-      version: available_versions,
-      proxy_id: None,
+      browser: mapped.to_string(),
+      version,
+      proxy_id,
       vpn_id: None,
       process_id: None,
       last_launch: None,
       release_type: "stable".to_string(),
-      camoufox_config: None,
-      wayfern_config: None,
+      camoufox_config: final_camoufox_config,
+      wayfern_config: final_wayfern_config,
       group_id: None,
       tags: Vec::new(),
       note: None,
-      sync_mode: crate::profile::types::SyncMode::Disabled,
+      sync_mode: SyncMode::Disabled,
       encryption_salt: None,
       last_sync: None,
-      host_os: Some(crate::profile::types::get_host_os()),
+      host_os: Some(get_host_os()),
       ephemeral: false,
       extension_group_id: None,
       proxy_bypass_rules: Vec::new(),
@@ -565,7 +753,6 @@ impl ProfileImporter {
       created_by_email: None,
     };
 
-    // Save the profile metadata
     self.profile_manager.save_profile(&profile)?;
 
     log::info!(
@@ -577,12 +764,10 @@ impl ProfileImporter {
     Ok(())
   }
 
-  /// Get a default version for a browser type
   fn get_default_version_for_browser(
     &self,
     browser_type: &str,
   ) -> Result<String, Box<dyn std::error::Error>> {
-    // Check if any version of the browser is downloaded
     let downloaded_versions = self
       .downloaded_browsers_registry
       .get_downloaded_versions(browser_type);
@@ -591,15 +776,16 @@ impl ProfileImporter {
       return Ok(version.clone());
     }
 
-    // If no downloaded versions found, return an error
-    Err(format!(
-      "No downloaded versions found for browser '{}'. Please download a version of {} first before importing profiles.",
-      browser_type,
-      self.get_browser_display_name(browser_type)
-    ).into())
+    Err(
+      format!(
+        "No downloaded versions found for browser '{}'. Please download a version of {} first before importing profiles.",
+        browser_type,
+        self.get_browser_display_name(browser_type)
+      )
+      .into(),
+    )
   }
 
-  /// Recursively copy directory contents
   pub fn copy_directory_recursive(
     source: &Path,
     destination: &Path,
@@ -624,7 +810,6 @@ impl ProfileImporter {
   }
 }
 
-// Tauri commands
 #[tauri::command]
 pub async fn detect_existing_profiles() -> Result<Vec<DetectedProfile>, String> {
   let importer = ProfileImporter::instance();
@@ -635,17 +820,41 @@ pub async fn detect_existing_profiles() -> Result<Vec<DetectedProfile>, String> 
 
 #[tauri::command]
 pub async fn import_browser_profile(
+  app_handle: tauri::AppHandle,
   source_path: String,
   browser_type: String,
   new_profile_name: String,
+  proxy_id: Option<String>,
+  camoufox_config: Option<CamoufoxConfig>,
+  wayfern_config: Option<WayfernConfig>,
 ) -> Result<(), String> {
+  let fingerprint_os = camoufox_config
+    .as_ref()
+    .and_then(|c| c.os.as_deref())
+    .or_else(|| wayfern_config.as_ref().and_then(|c| c.os.as_deref()));
+
+  if !crate::cloud_auth::CLOUD_AUTH
+    .is_fingerprint_os_allowed(fingerprint_os)
+    .await
+  {
+    return Err("Fingerprint OS spoofing requires an active Pro subscription".to_string());
+  }
+
   let importer = ProfileImporter::instance();
   importer
-    .import_profile(&source_path, &browser_type, &new_profile_name)
+    .import_profile(
+      &app_handle,
+      &source_path,
+      &browser_type,
+      &new_profile_name,
+      proxy_id,
+      camoufox_config,
+      wayfern_config,
+    )
+    .await
     .map_err(|e| format!("Failed to import profile: {e}"))
 }
 
-// Global singleton instance
 lazy_static::lazy_static! {
   static ref PROFILE_IMPORTER: ProfileImporter = ProfileImporter::new();
 }
@@ -658,10 +867,7 @@ mod tests {
 
   fn create_test_profile_importer() -> (ProfileImporter, TempDir) {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
-
-    // Set up a temporary home directory for testing
     env::set_var("HOME", temp_dir.path());
-
     let importer = ProfileImporter::new();
     (importer, temp_dir)
   }
@@ -669,7 +875,6 @@ mod tests {
   #[test]
   fn test_profile_importer_creation() {
     let (_importer, _temp_dir) = create_test_profile_importer();
-    // Test passes if no panic occurs
   }
 
   #[test]
@@ -694,18 +899,24 @@ mod tests {
   }
 
   #[test]
+  fn test_map_browser_type() {
+    assert_eq!(map_browser_type("firefox"), "camoufox");
+    assert_eq!(map_browser_type("firefox-developer"), "camoufox");
+    assert_eq!(map_browser_type("zen"), "camoufox");
+    assert_eq!(map_browser_type("chromium"), "wayfern");
+    assert_eq!(map_browser_type("brave"), "wayfern");
+    assert_eq!(map_browser_type("camoufox"), "camoufox");
+    assert_eq!(map_browser_type("wayfern"), "wayfern");
+    assert_eq!(map_browser_type("something_else"), "wayfern");
+  }
+
+  #[test]
   fn test_detect_existing_profiles_no_panic() {
     let (importer, _temp_dir) = create_test_profile_importer();
 
-    // This should not panic even if no browser profiles exist
     let result = importer.detect_existing_profiles();
     assert!(result.is_ok(), "detect_existing_profiles should not fail");
-
     let _profiles = result.unwrap();
-    // We can't assert specific profiles since they depend on the system
-    // but we can verify the result is a valid Vec
-    // We can't assert specific profiles since they depend on the system
-    // but we can verify the result is a valid Vec (length check is always true for Vec, but shows intent)
   }
 
   #[test]
@@ -764,12 +975,10 @@ mod tests {
   fn test_parse_firefox_profiles_ini_valid() {
     let (importer, temp_dir) = create_test_profile_importer();
 
-    // Create a mock profile directory
     let profiles_dir = temp_dir.path().join("profiles");
     let profile_dir = profiles_dir.join("test.profile");
     fs::create_dir_all(&profile_dir).expect("Should create profile directory");
 
-    // Create a prefs.js file to make it look like a valid profile
     let prefs_file = profile_dir.join("prefs.js");
     fs::write(&prefs_file, "// Firefox preferences").expect("Should create prefs.js");
 
@@ -788,31 +997,27 @@ Path=test.profile
     assert_eq!(profiles.len(), 1, "Should find one profile");
     assert_eq!(profiles[0].name, "Firefox - Test Profile");
     assert_eq!(profiles[0].browser, "firefox");
+    assert_eq!(profiles[0].mapped_browser, "camoufox");
   }
 
   #[test]
   fn test_copy_directory_recursive() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
 
-    // Create source directory structure
     let source_dir = temp_dir.path().join("source");
     let source_subdir = source_dir.join("subdir");
     fs::create_dir_all(&source_subdir).expect("Should create source directories");
 
-    // Create some test files
     let source_file1 = source_dir.join("file1.txt");
     let source_file2 = source_subdir.join("file2.txt");
     fs::write(&source_file1, "content1").expect("Should create file1");
     fs::write(&source_file2, "content2").expect("Should create file2");
 
-    // Create destination directory
     let dest_dir = temp_dir.path().join("dest");
 
-    // Copy recursively
     let result = ProfileImporter::copy_directory_recursive(&source_dir, &dest_dir);
     assert!(result.is_ok(), "Should copy directory successfully");
 
-    // Verify files were copied
     let dest_file1 = dest_dir.join("file1.txt");
     let dest_file2 = dest_dir.join("subdir").join("file2.txt");
 
@@ -830,8 +1035,7 @@ Path=test.profile
   fn test_get_default_version_for_browser_no_versions() {
     let (importer, _temp_dir) = create_test_profile_importer();
 
-    // This should fail since no versions are downloaded in test environment
-    let result = importer.get_default_version_for_browser("firefox");
+    let result = importer.get_default_version_for_browser("camoufox");
     assert!(
       result.is_err(),
       "Should fail when no versions are available"

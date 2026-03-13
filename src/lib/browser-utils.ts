@@ -15,11 +15,6 @@ import {
  */
 export function getBrowserDisplayName(browserType: string): string {
   const browserNames: Record<string, string> = {
-    firefox: "Firefox",
-    "firefox-developer": "Firefox Developer Edition",
-    zen: "Zen Browser",
-    brave: "Brave",
-    chromium: "Chromium",
     camoufox: "Camoufox",
     wayfern: "Wayfern",
   };

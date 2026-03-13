@@ -38,12 +38,7 @@ impl Extractor {
       "camoufox"
     } else if dest_dir.to_string_lossy().contains("wayfern") {
       "wayfern"
-    } else if dest_dir.to_string_lossy().contains("firefox") {
-      "firefox"
-    } else if dest_dir.to_string_lossy().contains("zen") {
-      "zen"
     } else {
-      // For other browsers, assume the structure is already correct
       return Ok(());
     };
 
@@ -739,55 +734,17 @@ impl Extractor {
     dest_dir: &Path,
     browser_type: BrowserType,
   ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    match browser_type {
-      BrowserType::Zen => {
-        // Zen installer EXE needs to be run to install
-        #[cfg(target_os = "windows")]
-        {
-          self.install_zen_windows(exe_path, dest_dir).await
-        }
-        #[cfg(not(target_os = "windows"))]
-        {
-          Err("Zen EXE installation is only supported on Windows".into())
-        }
-      }
-      _ => {
-        // For other browsers (Firefox, TOR, etc.), the EXE is typically just copied
-        let exe_name = exe_path
-          .file_name()
-          .and_then(|name| name.to_str())
-          .unwrap_or("browser.exe");
+    {
+      let _ = browser_type;
+      let exe_name = exe_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("browser.exe");
 
-        let dest_path = dest_dir.join(exe_name);
-        fs::copy(exe_path, &dest_path)?;
-        Ok(dest_path)
-      }
+      let dest_path = dest_dir.join(exe_name);
+      fs::copy(exe_path, &dest_path)?;
+      Ok(dest_path)
     }
-  }
-
-  #[cfg(target_os = "windows")]
-  async fn install_zen_windows(
-    &self,
-    installer_path: &Path,
-    dest_dir: &Path,
-  ) -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
-    // For Zen installer, we need to run it silently
-    let output = Command::new(installer_path)
-      .args(["/S", &format!("/D={}", dest_dir.display())])
-      .output()?;
-
-    if !output.status.success() {
-      return Err(
-        format!(
-          "Failed to install Zen: {}",
-          String::from_utf8_lossy(&output.stderr)
-        )
-        .into(),
-      );
-    }
-
-    // Find the installed executable
-    self.find_extracted_executable(dest_dir).await
   }
 
   fn flatten_single_directory_archive(
@@ -954,8 +911,6 @@ impl Extractor {
       "firefox.exe",
       "chrome.exe",
       "chromium.exe",
-      "zen.exe",
-      "brave.exe",
       "camoufox.exe",
       "wayfern.exe",
     ];
@@ -1023,8 +978,6 @@ impl Extractor {
             if file_name.contains("firefox")
               || file_name.contains("chrome")
               || file_name.contains("chromium")
-              || file_name.contains("zen")
-              || file_name.contains("brave")
               || file_name.contains("browser")
               || file_name.contains("camoufox")
               || file_name.contains("wayfern")
@@ -1075,31 +1028,14 @@ impl Extractor {
 
     // Enhanced list of common browser executable names
     let exe_names = [
-      // Firefox variants
+      // Firefox variants (used by Camoufox)
       "firefox",
       "firefox-bin",
-      "firefox-esr",
-      "firefox-trunk",
-      // Chrome/Chromium variants
+      // Chrome/Chromium variants (used by Wayfern)
       "chrome",
-      "google-chrome",
-      "google-chrome-stable",
-      "google-chrome-beta",
-      "google-chrome-unstable",
       "chromium",
       "chromium-browser",
       "chromium-bin",
-      // Zen Browser
-      "zen",
-      "zen-browser",
-      "zen-bin",
-      // Brave variants
-      "brave",
-      "brave-browser",
-      "brave-browser-stable",
-      "brave-browser-beta",
-      "brave-browser-dev",
-      "brave-bin",
       // Camoufox variants
       "camoufox",
       "camoufox-bin",
@@ -1130,17 +1066,12 @@ impl Extractor {
       "firefox",
       "chrome",
       "chromium",
-      "brave",
-      "zen",
       "camoufox",
       "wayfern",
       ".",
       "./",
-      "firefox",
       "Browser",
       "browser",
-      "opt/google/chrome",
-      "opt/brave.com/brave",
       "opt/camoufox",
       "usr/lib/firefox",
       "usr/lib/chromium",

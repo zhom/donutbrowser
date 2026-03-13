@@ -269,7 +269,7 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
         {isLoggedIn && user ? (
           <div className="grid gap-4 py-4">
             <div className="flex gap-2 items-center text-sm">
-              <div className="w-2 h-2 rounded-full bg-green-500" />
+              <div className="w-2 h-2 rounded-full bg-success" />
               {t("sync.cloud.connected")}
             </div>
 
@@ -530,13 +530,13 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
                   )}
                   {connectionStatus === "connected" && (
                     <div className="flex gap-2 items-center text-sm text-muted-foreground">
-                      <div className="w-2 h-2 rounded-full bg-green-500" />
+                      <div className="w-2 h-2 rounded-full bg-success" />
                       {t("sync.status.connected")}
                     </div>
                   )}
                   {connectionStatus === "error" && (
                     <div className="flex gap-2 items-center text-sm text-muted-foreground">
-                      <div className="w-2 h-2 rounded-full bg-red-500" />
+                      <div className="w-2 h-2 rounded-full bg-destructive" />
                       {t("sync.status.disconnected")}
                     </div>
                   )}

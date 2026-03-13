@@ -783,6 +783,25 @@ impl WayfernManager {
     Ok(())
   }
 
+  pub async fn get_cdp_port(&self, profile_path: &str) -> Option<u16> {
+    let inner = self.inner.lock().await;
+    let target_path = std::path::Path::new(profile_path)
+      .canonicalize()
+      .unwrap_or_else(|_| std::path::Path::new(profile_path).to_path_buf());
+
+    for instance in inner.instances.values() {
+      if let Some(path) = &instance.profile_path {
+        let instance_path = std::path::Path::new(path)
+          .canonicalize()
+          .unwrap_or_else(|_| std::path::Path::new(path).to_path_buf());
+        if instance_path == target_path {
+          return instance.cdp_port;
+        }
+      }
+    }
+    None
+  }
+
   pub async fn find_wayfern_by_profile(&self, profile_path: &str) -> Option<WayfernLaunchResult> {
     use sysinfo::{ProcessRefreshKind, RefreshKind, System};
 

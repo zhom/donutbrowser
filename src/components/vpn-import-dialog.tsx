@@ -295,13 +295,13 @@ export function VpnImportDialog({ isOpen, onClose }: VpnImportDialogProps) {
         {step === "vpn-result" && vpnImportResult && (
           <div className="space-y-4">
             <div
-              className={`p-4 rounded-lg ${vpnImportResult.success ? "bg-green-500/10" : "bg-red-500/10"}`}
+              className={`p-4 rounded-lg ${vpnImportResult.success ? "bg-success/10" : "bg-destructive/10"}`}
             >
               {vpnImportResult.success ? (
                 <div className="flex items-center gap-3">
-                  <LuShield className="w-8 h-8 text-green-600 dark:text-green-400" />
+                  <LuShield className="w-8 h-8 text-success" />
                   <div>
-                    <div className="font-medium text-green-600 dark:text-green-400">
+                    <div className="font-medium text-success">
                       VPN Imported Successfully
                     </div>
                     <div className="text-sm text-muted-foreground">
@@ -311,10 +311,10 @@ export function VpnImportDialog({ isOpen, onClose }: VpnImportDialogProps) {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <div className="font-medium text-red-600 dark:text-red-400">
+                  <div className="font-medium text-destructive">
                     Import Failed
                   </div>
-                  <div className="text-sm text-red-600 dark:text-red-400">
+                  <div className="text-sm text-destructive">
                     {vpnImportResult.error}
                   </div>
                 </div>

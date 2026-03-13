@@ -161,6 +161,7 @@ export interface DetectedProfile {
   name: string;
   path: string;
   description: string;
+  mapped_browser: string;
 }
 
 export interface BrowserReleaseTypes {
