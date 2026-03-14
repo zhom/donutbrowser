@@ -26,6 +26,7 @@ mod extension_manager;
 mod extraction;
 mod geoip_downloader;
 mod group_manager;
+mod human_typing;
 mod ip_utils;
 mod platform_browser;
 mod profile;
