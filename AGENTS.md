@@ -4,6 +4,7 @@
 
 - After making changes, run `pnpm format && pnpm lint && pnpm test` at the root of the project
 - Always run this command before finishing a task to ensure the application isn't broken
+- `pnpm lint` includes spellcheck via [typos](https://github.com/crate-ci/typos). False positives can be allowlisted in `_typos.toml`
 
 ## Code Quality
 

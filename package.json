@@ -12,9 +12,10 @@
     "test:rust": "cd src-tauri && cargo test",
     "test:rust:unit": "cd src-tauri && cargo test --lib && cargo test --test donut_proxy_integration",
     "test:sync-e2e": "node scripts/sync-test-harness.mjs",
-    "lint": "pnpm lint:js && pnpm lint:rust",
+    "lint": "pnpm lint:js && pnpm lint:rust && pnpm lint:spell",
     "lint:js": "biome check src/ && tsc --noEmit && cd donut-sync && biome check src/ && tsc --noEmit",
     "lint:rust": "cd src-tauri && cargo clippy --all-targets --all-features -- -D warnings -D clippy::all && cargo fmt --all",
+    "lint:spell": "typos .",
     "tauri": "tauri",
     "shadcn:add": "pnpm dlx shadcn@latest add",
     "prepare": "husky && husky install",
@@ -96,6 +97,9 @@
       "bash -c 'cd src-tauri && cargo fmt --all'",
       "bash -c 'cd src-tauri && cargo clippy --all-targets --all-features -- -D warnings -D clippy::all'",
       "bash -c 'cd src-tauri && cargo test --lib'"
+    ],
+    "**/*.{rs,ts,tsx,js,jsx,md}": [
+      "typos"
     ]
   }
 }
