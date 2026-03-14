@@ -3,6 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Eye, EyeOff } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -42,6 +43,7 @@ export function IntegrationsDialog({
   isOpen,
   onClose,
 }: IntegrationsDialogProps) {
+  const { t } = useTranslation();
   const [settings, setSettings] = useState<AppSettings>({
     api_enabled: false,
     api_port: 10108,
@@ -329,20 +331,7 @@ export function IntegrationsDialog({
               </div>
 
               {mcpConfig && (
-                <div className="space-y-4 p-4 rounded-md border bg-muted/40">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">
-                      Claude Desktop Configuration
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Copy this configuration to your Claude Desktop config file
-                      at{" "}
-                      <code className="bg-muted px-1 rounded">
-                        ~/.config/claude/claude_desktop_config.json
-                      </code>
-                    </p>
-                  </div>
-
+                <div className="space-y-3 p-4 rounded-md border bg-muted/40">
                   <div className="relative">
                     <pre className="p-3 text-xs font-mono rounded-md bg-background border overflow-x-auto whitespace-pre">
                       {showMcpToken
@@ -369,20 +358,9 @@ export function IntegrationsDialog({
                       />
                     </div>
                   </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">
-                      Available Tools
-                    </Label>
-                    <ul className="list-disc ml-5 space-y-0.5 text-xs text-muted-foreground">
-                      <li>list_profiles - List browser profiles</li>
-                      <li>run_profile - Launch a browser</li>
-                      <li>kill_profile - Stop a running browser</li>
-                      <li>get_profile_status - Check if browser is running</li>
-                      <li>list_groups, create_group, etc. - Manage groups</li>
-                      <li>list_proxies, create_proxy, etc. - Manage proxies</li>
-                    </ul>
-                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {t("integrations.mcpCopyHint")}
+                  </p>
                 </div>
               )}
             </TabsContent>

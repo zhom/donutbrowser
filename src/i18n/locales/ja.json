@@ -384,7 +384,8 @@
       "token": "MCPトークン",
       "config": "MCP設定",
       "copyConfig": "設定をコピー"
-    }
+    },
+    "mcpCopyHint": "MCPクライアントの設定にこれを追加して接続してください。"
   },
   "import": {
     "title": "プロファイルをインポート",

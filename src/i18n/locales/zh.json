@@ -384,7 +384,8 @@
       "token": "MCP 令牌",
       "config": "MCP 配置",
       "copyConfig": "复制配置"
-    }
+    },
+    "mcpCopyHint": "将此添加到您的MCP客户端配置中以进行连接。"
   },
   "import": {
     "title": "导入配置文件",

@@ -384,7 +384,8 @@
       "token": "Jeton MCP",
       "config": "Configuration MCP",
       "copyConfig": "Copier la configuration"
-    }
+    },
+    "mcpCopyHint": "Ajoutez ceci à la configuration de votre client MCP pour vous connecter."
   },
   "import": {
     "title": "Importer un profil",

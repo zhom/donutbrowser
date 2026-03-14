@@ -384,7 +384,8 @@
       "token": "Token MCP",
       "config": "Configuração MCP",
       "copyConfig": "Copiar Configuração"
-    }
+    },
+    "mcpCopyHint": "Adicione isso à configuração do seu cliente MCP para conectar."
   },
   "import": {
     "title": "Importar Perfil",

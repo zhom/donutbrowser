@@ -338,6 +338,101 @@ impl McpServer {
         }),
       },
       McpTool {
+        name: "create_profile".to_string(),
+        description: "Create a new browser profile".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Name for the new profile"
+            },
+            "browser": {
+              "type": "string",
+              "enum": ["wayfern", "camoufox"],
+              "description": "Browser engine to use"
+            },
+            "proxy_id": {
+              "type": "string",
+              "description": "Optional proxy UUID to assign"
+            },
+            "group_id": {
+              "type": "string",
+              "description": "Optional group UUID to assign"
+            },
+            "tags": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Optional tags for the profile"
+            }
+          },
+          "required": ["name", "browser"]
+        }),
+      },
+      McpTool {
+        name: "update_profile".to_string(),
+        description: "Update an existing browser profile's settings".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the profile to update"
+            },
+            "name": {
+              "type": "string",
+              "description": "New name for the profile"
+            },
+            "proxy_id": {
+              "type": "string",
+              "description": "Proxy UUID to assign (empty string to remove)"
+            },
+            "group_id": {
+              "type": "string",
+              "description": "Group UUID to assign (empty string to remove)"
+            },
+            "tags": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Tags for the profile (replaces existing tags)"
+            },
+            "extension_group_id": {
+              "type": "string",
+              "description": "Extension group UUID to assign (empty string to remove)"
+            },
+            "proxy_bypass_rules": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Proxy bypass rules (replaces existing rules)"
+            }
+          },
+          "required": ["profile_id"]
+        }),
+      },
+      McpTool {
+        name: "delete_profile".to_string(),
+        description: "Delete a browser profile and all its data".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the profile to delete"
+            }
+          },
+          "required": ["profile_id"]
+        }),
+      },
+      McpTool {
+        name: "list_tags".to_string(),
+        description: "List all tags used across profiles".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {},
+          "required": []
+        }),
+      },
+      McpTool {
         name: "list_proxies".to_string(),
         description: "List all configured proxies".to_string(),
         input_schema: serde_json::json!({
@@ -926,7 +1021,7 @@ impl McpServer {
       },
       McpTool {
         name: "type_text".to_string(),
-        description: "Focus an element by CSS selector and type text into it with realistic human-like typing — variable speed, natural errors, and self-corrections.".to_string(),
+        description: "Focus an element by CSS selector and type text into it. By default uses realistic human-like typing with variable speed, natural errors, and self-corrections. Only set instant=true when you are certain the target does not have bot detection (e.g. browser address bars, developer tools, internal apps) — using instant on public websites risks the profile being flagged as a bot.".to_string(),
         input_schema: serde_json::json!({
           "type": "object",
           "properties": {
@@ -946,9 +1041,13 @@ impl McpServer {
               "type": "boolean",
               "description": "Clear the input before typing (default: true)"
             },
+            "instant": {
+              "type": "boolean",
+              "description": "Paste all text at once instead of human typing. WARNING: only use on targets without bot detection — using this on public websites risks the profile being flagged."
+            },
             "wpm": {
               "type": "number",
-              "description": "Target words per minute (default: 60)"
+              "description": "Target words per minute for human typing (default: 80)"
             }
           },
           "required": ["profile_id", "selector", "text"]
@@ -1068,6 +1167,10 @@ impl McpServer {
       "get_profile" => self.handle_get_profile(&arguments).await,
       "run_profile" => self.handle_run_profile(&arguments).await,
       "kill_profile" => self.handle_kill_profile(&arguments).await,
+      "create_profile" => self.handle_create_profile(&arguments).await,
+      "update_profile" => self.handle_update_profile(&arguments).await,
+      "delete_profile" => self.handle_delete_profile(&arguments).await,
+      "list_tags" => self.handle_list_tags().await,
       "list_proxies" => self.handle_list_proxies().await,
       "get_profile_status" => self.handle_get_profile_status(&arguments).await,
       // Group management
@@ -1331,6 +1434,253 @@ impl McpServer {
       "content": [{
         "type": "text",
         "text": format!("Browser profile '{}' stopped successfully", profile.name)
+      }]
+    }))
+  }
+
+  async fn handle_create_profile(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let name = arguments
+      .get("name")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing name".to_string(),
+      })?;
+    let browser = arguments
+      .get("browser")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing browser".to_string(),
+      })?;
+
+    if browser != "wayfern" && browser != "camoufox" {
+      return Err(McpError {
+        code: -32602,
+        message: "browser must be 'wayfern' or 'camoufox'".to_string(),
+      });
+    }
+
+    let proxy_id = arguments
+      .get("proxy_id")
+      .and_then(|v| v.as_str())
+      .map(|s| s.to_string());
+    let group_id = arguments
+      .get("group_id")
+      .and_then(|v| v.as_str())
+      .map(|s| s.to_string());
+    let tags: Option<Vec<String>> = arguments.get("tags").and_then(|v| {
+      v.as_array().map(|arr| {
+        arr
+          .iter()
+          .filter_map(|item| item.as_str().map(|s| s.to_string()))
+          .collect()
+      })
+    });
+
+    // Pick the latest downloaded version for this browser
+    let registry = crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
+    let versions = registry.get_downloaded_versions(browser);
+    let version = versions.first().ok_or_else(|| McpError {
+      code: -32000,
+      message: format!("No downloaded version found for {browser}. Download it first."),
+    })?;
+
+    let inner = self.inner.lock().await;
+    let app_handle = inner.app_handle.as_ref().ok_or_else(|| McpError {
+      code: -32000,
+      message: "MCP server not properly initialized".to_string(),
+    })?;
+
+    let mut profile = ProfileManager::instance()
+      .create_profile_with_group(
+        app_handle, name, browser, version, "stable", proxy_id, None, None, None, group_id, false,
+      )
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to create profile: {e}"),
+      })?;
+
+    if let Some(tags) = tags {
+      let _ =
+        ProfileManager::instance().update_profile_tags(app_handle, &profile.name, tags.clone());
+      profile.tags = tags;
+      if let Ok(profiles) = ProfileManager::instance().list_profiles() {
+        let _ = crate::tag_manager::TAG_MANAGER
+          .lock()
+          .map(|manager| manager.rebuild_from_profiles(&profiles));
+      }
+    }
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!("Profile '{}' created (id: {})", profile.name, profile.id)
+      }]
+    }))
+  }
+
+  async fn handle_update_profile(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?;
+
+    let inner = self.inner.lock().await;
+    let app_handle = inner.app_handle.as_ref().ok_or_else(|| McpError {
+      code: -32000,
+      message: "MCP server not properly initialized".to_string(),
+    })?;
+    let pm = ProfileManager::instance();
+
+    if let Some(new_name) = arguments.get("name").and_then(|v| v.as_str()) {
+      pm.rename_profile(app_handle, profile_id, new_name)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to rename profile: {e}"),
+        })?;
+    }
+
+    if let Some(proxy_id) = arguments.get("proxy_id").and_then(|v| v.as_str()) {
+      let pid = if proxy_id.is_empty() {
+        None
+      } else {
+        Some(proxy_id.to_string())
+      };
+      pm.update_profile_proxy(app_handle.clone(), profile_id, pid)
+        .await
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update proxy: {e}"),
+        })?;
+    }
+
+    if let Some(group_id) = arguments.get("group_id").and_then(|v| v.as_str()) {
+      let gid = if group_id.is_empty() {
+        None
+      } else {
+        Some(group_id.to_string())
+      };
+      pm.assign_profiles_to_group(app_handle, vec![profile_id.to_string()], gid)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update group: {e}"),
+        })?;
+    }
+
+    if let Some(tags) = arguments.get("tags").and_then(|v| v.as_array()) {
+      let tag_list: Vec<String> = tags
+        .iter()
+        .filter_map(|item| item.as_str().map(|s| s.to_string()))
+        .collect();
+      pm.update_profile_tags(app_handle, profile_id, tag_list)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update tags: {e}"),
+        })?;
+      if let Ok(profiles) = pm.list_profiles() {
+        let _ = crate::tag_manager::TAG_MANAGER
+          .lock()
+          .map(|manager| manager.rebuild_from_profiles(&profiles));
+      }
+    }
+
+    if let Some(ext_group_id) = arguments.get("extension_group_id").and_then(|v| v.as_str()) {
+      let eid = if ext_group_id.is_empty() {
+        None
+      } else {
+        Some(ext_group_id.to_string())
+      };
+      pm.update_profile_extension_group(profile_id, eid)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update extension group: {e}"),
+        })?;
+    }
+
+    if let Some(rules) = arguments
+      .get("proxy_bypass_rules")
+      .and_then(|v| v.as_array())
+    {
+      let rule_list: Vec<String> = rules
+        .iter()
+        .filter_map(|item| item.as_str().map(|s| s.to_string()))
+        .collect();
+      pm.update_profile_proxy_bypass_rules(app_handle, profile_id, rule_list)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update proxy bypass rules: {e}"),
+        })?;
+    }
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!("Profile '{profile_id}' updated successfully")
+      }]
+    }))
+  }
+
+  async fn handle_delete_profile(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?;
+
+    let inner = self.inner.lock().await;
+    let app_handle = inner.app_handle.as_ref().ok_or_else(|| McpError {
+      code: -32000,
+      message: "MCP server not properly initialized".to_string(),
+    })?;
+
+    ProfileManager::instance()
+      .delete_profile(app_handle, profile_id)
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to delete profile: {e}"),
+      })?;
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!("Profile '{profile_id}' deleted successfully")
+      }]
+    }))
+  }
+
+  async fn handle_list_tags(&self) -> Result<serde_json::Value, McpError> {
+    let tags = crate::tag_manager::TAG_MANAGER
+      .lock()
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to access tag manager: {e}"),
+      })?
+      .get_all_tags()
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to get tags: {e}"),
+      })?;
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": serde_json::to_string_pretty(&tags).unwrap_or_default()
       }]
     }))
   }
@@ -3356,6 +3706,10 @@ impl McpServer {
       .get("clear_first")
       .and_then(|v| v.as_bool())
       .unwrap_or(true);
+    let instant = arguments
+      .get("instant")
+      .and_then(|v| v.as_bool())
+      .unwrap_or(false);
     let wpm = arguments.get("wpm").and_then(|v| v.as_f64());
 
     let profile = self.get_running_profile(profile_id)?;
@@ -3413,7 +3767,17 @@ impl McpServer {
       });
     }
 
-    self.send_human_keystrokes(&ws_url, text, wpm).await?;
+    if instant {
+      self
+        .send_cdp(
+          &ws_url,
+          "Input.insertText",
+          serde_json::json!({ "text": text }),
+        )
+        .await?;
+    } else {
+      self.send_human_keystrokes(&ws_url, text, wpm).await?;
+    }
 
     Ok(serde_json::json!({
       "content": [{

@@ -260,9 +260,7 @@ impl MarkovTyper {
     if first_error_pos < self.current.len() {
       let mut should_correct = false;
 
-      if self.last_was_backspace {
-        should_correct = true;
-      } else if self.mental_cursor_pos >= self.target.len() {
+      if self.last_was_backspace || self.mental_cursor_pos >= self.target.len() {
         should_correct = true;
       } else if !self.current.is_empty() {
         let last_char = *self.current.last().unwrap();
@@ -340,10 +338,9 @@ impl MarkovTyper {
     }
 
     let typed_char = if self.rng.random::<f64>() < current_prob_error {
-      let wrong = self
+      self
         .keyboard
-        .get_random_neighbor(char_intended, &mut self.rng);
-      wrong
+        .get_random_neighbor(char_intended, &mut self.rng)
     } else {
       char_intended
     };
