@@ -55,6 +55,10 @@ impl KeyboardLayout {
     KeyboardLayout { pos_map, grid }
   }
 
+  fn has_key(&self, ch: char) -> bool {
+    self.pos_map.contains_key(&ch.to_ascii_lowercase())
+  }
+
   fn get_neighbor_keys(&self, ch: char) -> Vec<char> {
     let ch = ch.to_ascii_lowercase();
     let (r, c) = match self.pos_map.get(&ch) {
@@ -308,11 +312,16 @@ impl MarkovTyper {
     let char_intended = self.target[self.mental_cursor_pos];
     self.fatigue_multiplier *= FATIGUE_FACTOR;
 
-    // Swap error
-    if self.mental_cursor_pos + 1 < self.target.len() {
+    // Non-QWERTY characters (CJK, Cyrillic, etc.) are composed via IME —
+    // skip error simulation entirely, just apply realistic timing.
+    let on_keyboard = self.keyboard.has_key(char_intended);
+
+    // Swap error (only for characters on the physical keyboard)
+    if on_keyboard && self.mental_cursor_pos + 1 < self.target.len() {
       let char_after = self.target[self.mental_cursor_pos + 1];
       if char_after != ' '
         && char_after != char_intended
+        && self.keyboard.has_key(char_after)
         && self.rng.random::<f64>() < PROB_SWAP_ERROR
       {
         let dt = self.calculate_keystroke_time(char_after);
@@ -327,20 +336,23 @@ impl MarkovTyper {
       }
     }
 
-    // Normal typing with possible error
-    let mut current_prob_error = PROB_ERROR;
-    if let Some(word) = self.get_current_word() {
-      match get_word_difficulty(&word) {
-        "complex" => current_prob_error *= 1.5,
-        "common" => current_prob_error *= 0.5,
-        _ => {}
+    // Normal typing with possible error (errors only for QWERTY characters)
+    let typed_char = if on_keyboard {
+      let mut current_prob_error = PROB_ERROR;
+      if let Some(word) = self.get_current_word() {
+        match get_word_difficulty(&word) {
+          "complex" => current_prob_error *= 1.5,
+          "common" => current_prob_error *= 0.5,
+          _ => {}
+        }
       }
-    }
-
-    let typed_char = if self.rng.random::<f64>() < current_prob_error {
-      self
-        .keyboard
-        .get_random_neighbor(char_intended, &mut self.rng)
+      if self.rng.random::<f64>() < current_prob_error {
+        self
+          .keyboard
+          .get_random_neighbor(char_intended, &mut self.rng)
+      } else {
+        char_intended
+      }
     } else {
       char_intended
     };
@@ -408,5 +420,73 @@ mod tests {
     let typer = MarkovTyper::new("", Some(60.0));
     let events = typer.run();
     assert!(events.is_empty());
+  }
+
+  #[test]
+  fn test_chinese_text() {
+    let input = "你好世界";
+    let typer = MarkovTyper::new(input, Some(60.0));
+    let events = typer.run();
+    let mut text = String::new();
+    for event in &events {
+      match &event.action {
+        TypingAction::Char(c) => text.push(*c),
+        TypingAction::Backspace => {
+          text.pop();
+        }
+      }
+    }
+    assert_eq!(text, input);
+  }
+
+  #[test]
+  fn test_russian_text() {
+    let input = "Привет мир";
+    let typer = MarkovTyper::new(input, Some(60.0));
+    let events = typer.run();
+    let mut text = String::new();
+    for event in &events {
+      match &event.action {
+        TypingAction::Char(c) => text.push(*c),
+        TypingAction::Backspace => {
+          text.pop();
+        }
+      }
+    }
+    assert_eq!(text, input);
+  }
+
+  #[test]
+  fn test_japanese_text() {
+    let input = "東京タワー";
+    let typer = MarkovTyper::new(input, Some(60.0));
+    let events = typer.run();
+    let mut text = String::new();
+    for event in &events {
+      match &event.action {
+        TypingAction::Char(c) => text.push(*c),
+        TypingAction::Backspace => {
+          text.pop();
+        }
+      }
+    }
+    assert_eq!(text, input);
+  }
+
+  #[test]
+  fn test_mixed_latin_and_cjk() {
+    let input = "Hello 你好 world";
+    let typer = MarkovTyper::new(input, Some(60.0));
+    let events = typer.run();
+    let mut text = String::new();
+    for event in &events {
+      match &event.action {
+        TypingAction::Char(c) => text.push(*c),
+        TypingAction::Backspace => {
+          text.pop();
+        }
+      }
+    }
+    assert_eq!(text, input);
   }
 }
