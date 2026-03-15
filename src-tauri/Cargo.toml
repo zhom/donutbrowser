@@ -30,7 +30,7 @@ path = "src/bin/donut_daemon.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
-resvg = "0.46"
+resvg = "0.47"
 
 [dependencies]
 serde_json = "1"
@@ -57,7 +57,7 @@ base64 = "0.22"
 libc = "0.2"
 async-trait = "0.1"
 futures-util = "0.3"
-zip = { version = "7", default-features = false, features = ["deflate-flate2"] }
+zip = { version = "8", default-features = false, features = ["deflate-flate2"] }
 tar = "0"
 bzip2 = "0"
 flate2 = "1"
@@ -76,7 +76,7 @@ chrono-tz = "0.10"
 axum = { version = "0.8.8", features = ["ws"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors"] }
-rand = "0.9.2"
+rand = "0.10.0"
 utoipa = { version = "5", features = ["axum_extras", "chrono"] }
 utoipa-axum = "0.2"
 argon2 = "0.5"
@@ -96,7 +96,7 @@ playwright = { git = "https://github.com/sctg-development/playwright-rust", bran
 
 # Wayfern CDP integration
 tokio-tungstenite = { version = "0.28", features = ["native-tls"] }
-rusqlite = { version = "0.38", features = ["bundled"] }
+rusqlite = { version = "0.39", features = ["bundled"] }
 serde_yaml = "0.9"
 thiserror = "2.0"
 regex-lite = "0.1"
@@ -106,7 +106,7 @@ quick-xml = { version = "0.39", features = ["serialize"] }
 
 # VPN support
 boringtun = "0.7"
-smoltcp = { version = "0.11", default-features = false, features = ["std", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-tcp", "socket-udp"] }
+smoltcp = { version = "0.12", default-features = false, features = ["std", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-tcp", "socket-udp"] }
 
 # Daemon dependencies (tray icon)
 tray-icon = "0.21"
@@ -126,7 +126,7 @@ objc2 = "0.6.3"
 objc2-app-kit = { version = "0.3.2", features = ["NSWindow", "NSApplication", "NSRunningApplication"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-winreg = "0.55"
+winreg = "0.56"
 windows = { version = "0.62", features = [
   "Win32_Foundation",
   "Win32_System_ProcessStatus",
