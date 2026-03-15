@@ -3,7 +3,7 @@ name: Issue & PR Automation
 on:
   issues:
     types: [opened]
-  pull_request:
+  pull_request_target:
     types: [opened]
   issue_comment:
     types: [created]
@@ -45,6 +45,7 @@ jobs:
         uses: anomalyco/opencode/github@d954026dd855e018302a6c0733a1dd74140931df #v1.2.26
         env:
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           model: zai-coding-plan/glm-4.7
           prompt: |
@@ -66,13 +67,14 @@ jobs:
             - Never exceed 6 items total.
 
   analyze-pr:
-    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+    if: github.event_name == 'pull_request_target' && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 #v6.0.1
         with:
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Check if first-time contributor
         id: check-first-time
@@ -94,6 +96,7 @@ jobs:
         uses: anomalyco/opencode/github@d954026dd855e018302a6c0733a1dd74140931df #v1.2.26
         env:
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           model: zai-coding-plan/glm-4.7
           prompt: |
@@ -130,5 +133,6 @@ jobs:
         uses: anomalyco/opencode/github@d954026dd855e018302a6c0733a1dd74140931df #v1.2.26
         env:
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           model: zai-coding-plan/glm-4.7
