@@ -1100,6 +1100,7 @@ export function ProfilesDataTable({
     isUpdating,
     launchingProfiles,
     stoppingProfiles,
+    crossOsUnlocked,
   );
 
   // Listen for sync status events
@@ -2016,12 +2017,13 @@ export function ProfilesDataTable({
             );
 
           const isCrossOs = isCrossOsProfile(profile);
+          const isCrossOsBlocked = isCrossOs && !meta.crossOsUnlocked;
           const isRunning =
             meta.isClient && meta.runningProfiles.has(profile.id);
           const isLaunching = meta.launchingProfiles.has(profile.id);
           const isStopping = meta.stoppingProfiles.has(profile.id);
           const isDisabled =
-            isRunning || isLaunching || isStopping || isCrossOs;
+            isRunning || isLaunching || isStopping || isCrossOsBlocked;
           const lockedEmail = meta.getProfileLockEmail(profile.id);
           const isLocked = meta.isProfileLockedByAnother(profile.id);
 
@@ -2076,12 +2078,13 @@ export function ProfilesDataTable({
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
           const isCrossOs = isCrossOsProfile(profile);
+          const isCrossOsBlocked = isCrossOs && !meta.crossOsUnlocked;
           const isRunning =
             meta.isClient && meta.runningProfiles.has(profile.id);
           const isLaunching = meta.launchingProfiles.has(profile.id);
           const isStopping = meta.stoppingProfiles.has(profile.id);
           const isDisabled =
-            isRunning || isLaunching || isStopping || isCrossOs;
+            isRunning || isLaunching || isStopping || isCrossOsBlocked;
 
           return (
             <TagsCell
@@ -2104,12 +2107,13 @@ export function ProfilesDataTable({
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
           const isCrossOs = isCrossOsProfile(profile);
+          const isCrossOsBlocked = isCrossOs && !meta.crossOsUnlocked;
           const isRunning =
             meta.isClient && meta.runningProfiles.has(profile.id);
           const isLaunching = meta.launchingProfiles.has(profile.id);
           const isStopping = meta.stoppingProfiles.has(profile.id);
           const isDisabled =
-            isRunning || isLaunching || isStopping || isCrossOs;
+            isRunning || isLaunching || isStopping || isCrossOsBlocked;
 
           return (
             <NoteCell
@@ -2130,12 +2134,13 @@ export function ProfilesDataTable({
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
           const isCrossOs = isCrossOsProfile(profile);
+          const isCrossOsBlocked = isCrossOs && !meta.crossOsUnlocked;
           const isRunning =
             meta.isClient && meta.runningProfiles.has(profile.id);
           const isLaunching = meta.launchingProfiles.has(profile.id);
           const isStopping = meta.stoppingProfiles.has(profile.id);
           const isDisabled =
-            isRunning || isLaunching || isStopping || isCrossOs;
+            isRunning || isLaunching || isStopping || isCrossOsBlocked;
 
           const hasProxyOverride = Object.hasOwn(
             meta.proxyOverrides,
