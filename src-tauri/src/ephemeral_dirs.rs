@@ -281,6 +281,7 @@ mod tests {
   }
 
   #[test]
+  #[serial_test::serial]
   fn test_ephemeral_dir_lifecycle() {
     let profile_id = uuid::Uuid::new_v4();
     let id_str = profile_id.to_string();
