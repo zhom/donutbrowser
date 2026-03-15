@@ -795,17 +795,16 @@ impl SynchronizerManager {
             ))
           }
         }
-        "wheel" => Some((
-          "Input.dispatchMouseEvent",
-          serde_json::json!({
-            "type": "mouseWheel",
-            "x": event.x.unwrap_or(0.0),
-            "y": event.y.unwrap_or(0.0),
-            "deltaX": -event.delta_x.unwrap_or(0.0),
-            "deltaY": -event.delta_y.unwrap_or(0.0),
-            "modifiers": event.modifiers.unwrap_or(0),
-          }),
-        )),
+        "wheel" => {
+          let dx = -event.delta_x.unwrap_or(0.0);
+          let dy = -event.delta_y.unwrap_or(0.0);
+          Some((
+            "Runtime.evaluate",
+            serde_json::json!({
+              "expression": format!("window.scrollBy({dx},{dy})"),
+            }),
+          ))
+        }
         _ => None,
       };
 
