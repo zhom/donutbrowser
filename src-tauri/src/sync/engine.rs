@@ -460,7 +460,9 @@ impl SyncEngine {
 
     // Try to download remote manifest
     let remote_manifest_key = format!("{}profiles/{}/manifest.json", key_prefix, profile_id);
-    let remote_manifest = self.download_manifest(&remote_manifest_key).await?;
+    let remote_manifest = self
+      .download_manifest(&remote_manifest_key, encryption_key.as_ref())
+      .await?;
 
     // Compute diff
     let diff = compute_diff(&local_manifest, remote_manifest.as_ref());
@@ -573,7 +575,12 @@ impl SyncEngine {
 
     // Upload manifest.json last for atomicity
     self
-      .upload_manifest(&profile_id, &final_manifest, &key_prefix)
+      .upload_manifest(
+        &profile_id,
+        &final_manifest,
+        encryption_key.as_ref(),
+        &key_prefix,
+      )
       .await?;
 
     // Sync completed successfully — clean up resume state
@@ -614,7 +621,11 @@ impl SyncEngine {
     Ok(())
   }
 
-  async fn download_manifest(&self, key: &str) -> SyncResult<Option<SyncManifest>> {
+  async fn download_manifest(
+    &self,
+    key: &str,
+    encryption_key: Option<&[u8; 32]>,
+  ) -> SyncResult<Option<SyncManifest>> {
     let stat = self.client.stat(key).await?;
     if !stat.exists {
       return Ok(None);
@@ -623,30 +634,58 @@ impl SyncEngine {
     let presign = self.client.presign_download(key).await?;
     let data = self.client.download_bytes(&presign.url).await?;
 
-    let manifest: SyncManifest = serde_json::from_slice(&data)
-      .map_err(|e| SyncError::SerializationError(format!("Failed to parse manifest: {e}")))?;
+    // Try parsing as plaintext JSON first (unencrypted or backwards-compatible)
+    if let Ok(manifest) = serde_json::from_slice::<SyncManifest>(&data) {
+      return Ok(Some(manifest));
+    }
 
-    Ok(Some(manifest))
+    // If plaintext parse failed and we have an encryption key, try decrypting
+    if let Some(key) = encryption_key {
+      let decrypted = encryption::decrypt_bytes(key, &data)
+        .map_err(|e| SyncError::InvalidData(format!("Failed to decrypt manifest: {e}")))?;
+      let manifest: SyncManifest = serde_json::from_slice(&decrypted).map_err(|e| {
+        SyncError::SerializationError(format!("Failed to parse decrypted manifest: {e}"))
+      })?;
+      return Ok(Some(manifest));
+    }
+
+    Err(SyncError::SerializationError(
+      "Failed to parse manifest (not valid JSON and no encryption key available)".to_string(),
+    ))
   }
 
   async fn upload_manifest(
     &self,
     profile_id: &str,
     manifest: &SyncManifest,
+    encryption_key: Option<&[u8; 32]>,
     key_prefix: &str,
   ) -> SyncResult<()> {
     let json = serde_json::to_string_pretty(manifest)
       .map_err(|e| SyncError::SerializationError(format!("Failed to serialize manifest: {e}")))?;
 
+    let upload_data = if let Some(key) = encryption_key {
+      encryption::encrypt_bytes(key, json.as_bytes())
+        .map_err(|e| SyncError::InvalidData(format!("Failed to encrypt manifest: {e}")))?
+    } else {
+      json.into_bytes()
+    };
+
+    let content_type = if encryption_key.is_some() {
+      "application/octet-stream"
+    } else {
+      "application/json"
+    };
+
     let remote_key = format!("{}profiles/{}/manifest.json", key_prefix, profile_id);
     let presign = self
       .client
-      .presign_upload(&remote_key, Some("application/json"))
+      .presign_upload(&remote_key, Some(content_type))
       .await?;
 
     self
       .client
-      .upload_bytes(&presign.url, json.as_bytes(), Some("application/json"))
+      .upload_bytes(&presign.url, &upload_data, Some(content_type))
       .await?;
 
     Ok(())
@@ -2140,16 +2179,9 @@ impl SyncEngine {
       return Ok(true);
     }
 
-    // Download manifest
-    let manifest = self.download_manifest(&manifest_key).await?;
-    let Some(manifest) = manifest else {
-      return Err(SyncError::InvalidData(
-        "Remote manifest not found".to_string(),
-      ));
-    };
-
-    // If remote manifest is encrypted, we need the E2E password
-    let encryption_key = if manifest.encrypted {
+    // Derive encryption key before downloading manifest if profile uses encrypted sync.
+    // The manifest itself may be encrypted (new behavior) or plaintext (backwards compat).
+    let encryption_key = if profile.is_encrypted_sync() {
       let password = encryption::load_e2e_password()
         .map_err(|e| SyncError::InvalidData(format!("Failed to load E2E password: {e}")))?
         .ok_or_else(|| {
@@ -2166,6 +2198,16 @@ impl SyncEngine {
       Some(key)
     } else {
       None
+    };
+
+    // Download manifest (may be encrypted for e2e profiles)
+    let manifest = self
+      .download_manifest(&manifest_key, encryption_key.as_ref())
+      .await?;
+    let Some(manifest) = manifest else {
+      return Err(SyncError::InvalidData(
+        "Remote manifest not found".to_string(),
+      ));
     };
 
     // Ensure profile directory exists
