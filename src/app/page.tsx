@@ -29,6 +29,7 @@ import { ProxyManagementDialog } from "@/components/proxy-management-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { SyncAllDialog } from "@/components/sync-all-dialog";
 import { SyncConfigDialog } from "@/components/sync-config-dialog";
+import { SyncFollowerDialog } from "@/components/sync-follower-dialog";
 import { WayfernTermsDialog } from "@/components/wayfern-terms-dialog";
 import { WindowResizeWarningDialog } from "@/components/window-resize-warning-dialog";
 import { useAppUpdateNotifications } from "@/hooks/use-app-update-notifications";
@@ -39,6 +40,7 @@ import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useProfileEvents } from "@/hooks/use-profile-events";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
+import { useSyncSessions } from "@/hooks/use-sync-session";
 import { useUpdateNotifications } from "@/hooks/use-update-notifications";
 import { useVersionUpdater } from "@/hooks/use-version-updater";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
@@ -89,6 +91,11 @@ export default function Home() {
   } = useProxyEvents();
 
   const { vpnConfigs } = useVpnEvents();
+
+  // Synchronizer sessions
+  const { getProfileSyncInfo } = useSyncSessions();
+  const [syncLeaderProfile, setSyncLeaderProfile] =
+    useState<BrowserProfile | null>(null);
 
   // Wayfern terms and commercial trial hooks
   const {
@@ -802,6 +809,7 @@ export default function Home() {
   useEffect(() => {
     let unlistenStatus: (() => void) | undefined;
     let unlistenProgress: (() => void) | undefined;
+    const profilesWithTransfer = new Set<string>();
     (async () => {
       try {
         unlistenStatus = await listen<{
@@ -815,19 +823,15 @@ export default function Home() {
           const profile = profiles.find((p) => p.id === profile_id);
           const name = profile_name || profile?.name || "Unknown";
 
-          if (status === "syncing") {
-            showToast({
-              type: "loading",
-              title: `Syncing profile '${name}'...`,
-              id: toastId,
-              duration: Number.POSITIVE_INFINITY,
-              onCancel: () => dismissToast(toastId),
-            });
-          } else if (status === "synced") {
+          if (status === "synced") {
             dismissToast(toastId);
-            showSuccessToast(`Profile '${name}' synced successfully`);
+            if (profilesWithTransfer.has(profile_id)) {
+              profilesWithTransfer.delete(profile_id);
+              showSuccessToast(`Profile '${name}' synced successfully`);
+            }
           } else if (status === "error") {
             dismissToast(toastId);
+            profilesWithTransfer.delete(profile_id);
             showErrorToast(
               `Failed to sync profile '${name}'${error ? `: ${error}` : ""}`,
             );
@@ -856,6 +860,7 @@ export default function Home() {
             payload.phase === "uploading" ||
             payload.phase === "downloading"
           ) {
+            profilesWithTransfer.add(payload.profile_id);
             showSyncProgressToast(
               name,
               {
@@ -1088,6 +1093,8 @@ export default function Home() {
             onToggleProfileSync={handleToggleProfileSync}
             crossOsUnlocked={crossOsUnlocked}
             syncUnlocked={syncUnlocked}
+            getProfileSyncInfo={getProfileSyncInfo}
+            onLaunchWithSync={(profile) => setSyncLeaderProfile(profile)}
           />
         </div>
       </main>
@@ -1318,6 +1325,14 @@ export default function Home() {
           windowResizeWarningResolver.current?.(proceed);
           windowResizeWarningResolver.current = null;
         }}
+      />
+
+      <SyncFollowerDialog
+        isOpen={syncLeaderProfile !== null}
+        onClose={() => setSyncLeaderProfile(null)}
+        leaderProfile={syncLeaderProfile}
+        allProfiles={profiles}
+        runningProfiles={runningProfiles}
       />
     </div>
   );

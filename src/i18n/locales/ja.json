@@ -184,6 +184,22 @@
       "changeFingerprint": "フィンガープリントを変更",
       "copyCookiesToProfile": "Cookieをプロファイルにコピー"
     },
+    "synchronizer": {
+      "launchWithSync": "シンクロナイザーで起動",
+      "stopLeader": "このプロフィールとすべてのフォロワーを停止",
+      "stopFollower": "{{leaderName}}のアクションを追従中",
+      "desyncedTooltip": "{{url}}で同期に失敗しました",
+      "paidFeature": "シンクロナイザーは有料機能です",
+      "wayfernOnly": "Wayfernプロフィールのみ同期可能です",
+      "selectFollowers": "フォロワープロフィールを選択",
+      "selectFollowersDesc": "リーダープロフィールのアクションを複製するプロフィールを選択してください。停止中のWayfernプロフィールのみ選択できます。",
+      "leader": "リーダー",
+      "follower": "フォロワー",
+      "startSession": "同期セッションを開始",
+      "noFollowers": "少なくとも1つのフォロワープロフィールを選択してください",
+      "flakyBadge": "FLAKY",
+      "flakyTooltip": "このプロフィールはリーダーと画面解像度が異なります。ページレイアウトが異なる可能性があり、クリックや操作が正しく動作しない場合があります。"
+    },
     "ephemeral": "一時的",
     "ephemeralDescription": "ブラウザはプロファイルデータをディスクではなくメモリに書き込むよう強制されます。ブラウザを閉じるとデータは削除されます。",
     "ephemeralBadge": "一時的",
@@ -263,6 +279,26 @@
       "https": "HTTPS",
       "socks4": "SOCKS4",
       "socks5": "SOCKS5"
+    },
+    "tabs": {
+      "regular": "通常",
+      "dynamic": "ダイナミック"
+    },
+    "dynamic": {
+      "description": "ダイナミックプロキシは、プロファイルが起動されるたびにURLから接続情報を取得します。",
+      "url": "プロキシURL",
+      "urlPlaceholder": "https://api.example.com/proxy",
+      "urlRequired": "ダイナミックプロキシのURLは必須です",
+      "format": "レスポンス形式",
+      "formatJson": "JSON",
+      "formatText": "テキスト",
+      "formatJsonHint": "JSON形式: {\"ip\": \"...\", \"port\": ..., \"username\": \"...\", \"password\": \"...\"}",
+      "formatTextHint": "テキスト形式: host:port:username:password または protocol://user:pass@host:port",
+      "testUrl": "URLをテスト",
+      "testing": "テスト中...",
+      "testSuccess": "ダイナミックプロキシは {{host}}:{{port}} に解決されました",
+      "testFailed": "プロキシの取得に失敗しました: {{error}}",
+      "fetchFailed": "ダイナミックプロキシの取得に失敗しました: {{error}}"
     },
     "check": {
       "checking": "プロキシを確認中...",

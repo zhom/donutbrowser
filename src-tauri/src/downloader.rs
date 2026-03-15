@@ -292,13 +292,6 @@ impl Downloader {
     Ok(())
   }
 
-  fn configure_camoufox_search_engine(
-    &self,
-    browser_dir: &Path,
-  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    configure_camoufox_search_engine(browser_dir)
-  }
-
   pub async fn download_browser<R: tauri::Runtime>(
     &self,
     _app_handle: &tauri::AppHandle<R>,
@@ -850,10 +843,6 @@ impl Downloader {
       {
         log::warn!("Failed to create version.json for Camoufox: {e}");
       }
-
-      if let Err(e) = self.configure_camoufox_search_engine(&browser_dir) {
-        log::warn!("Failed to configure Camoufox search engine: {e}");
-      }
     }
 
     // Emit completion
@@ -946,168 +935,6 @@ pub async fn cancel_download(browser_str: String, version: String) -> Result<(),
       "No active download found for {browser_str} {version}"
     ))
   }
-}
-
-/// Find all candidate `distribution/` directories inside the Camoufox browser dir.
-/// On macOS: `<browser_dir>/<app>.app/Contents/Resources/distribution/`
-/// On Linux: `<browser_dir>/camoufox/distribution/`
-/// On Windows: `<browser_dir>/distribution/`
-/// Also includes `<browser_dir>/distribution/` as a fallback for all platforms.
-#[allow(clippy::vec_init_then_push)]
-fn find_camoufox_distribution_dirs(browser_dir: &Path) -> Vec<std::path::PathBuf> {
-  let mut dirs = Vec::new();
-
-  #[cfg(target_os = "macos")]
-  {
-    if let Ok(entries) = std::fs::read_dir(browser_dir) {
-      for entry in entries.flatten() {
-        if entry.path().extension().is_some_and(|ext| ext == "app") {
-          dirs.push(
-            entry
-              .path()
-              .join("Contents")
-              .join("Resources")
-              .join("distribution"),
-          );
-        }
-      }
-    }
-  }
-
-  #[cfg(target_os = "linux")]
-  {
-    dirs.push(browser_dir.join("camoufox").join("distribution"));
-  }
-
-  // Fallback for all platforms
-  dirs.push(browser_dir.join("distribution"));
-
-  dirs
-}
-
-/// Set DuckDuckGo as the default search engine in Camoufox.
-/// Creates or updates distribution/policies.json with a proper DuckDuckGo engine definition.
-/// Called both at download time and at launch time to cover existing installations.
-pub fn configure_camoufox_search_engine(
-  browser_dir: &Path,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-  let distribution_dirs = find_camoufox_distribution_dirs(browser_dir);
-
-  // Find an existing policies.json, or pick the first candidate dir to create one
-  let (policies_path, mut policies) = {
-    let mut found = None;
-    for dir in &distribution_dirs {
-      let path = dir.join("policies.json");
-      if path.exists() {
-        if let Ok(content) = std::fs::read_to_string(&path) {
-          if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
-            found = Some((path, val));
-            break;
-          }
-        }
-      }
-    }
-    match found {
-      Some(f) => f,
-      None => {
-        // Pick the first candidate directory that exists (or can be created)
-        let target_dir = distribution_dirs
-          .iter()
-          .find(|d| d.parent().is_some_and(|p| p.exists()))
-          .or(distribution_dirs.first())
-          .ok_or("No suitable distribution directory found")?;
-        std::fs::create_dir_all(target_dir)?;
-        (
-          target_dir.join("policies.json"),
-          serde_json::json!({"policies": {}}),
-        )
-      }
-    }
-  };
-
-  // Check if already configured
-  let has_ddg_default = policies
-    .get("policies")
-    .and_then(|p| p.get("SearchEngines"))
-    .and_then(|se| se.get("Default"))
-    .and_then(|d| d.as_str())
-    == Some("DuckDuckGo");
-
-  let has_ddg_engine = policies
-    .get("policies")
-    .and_then(|p| p.get("SearchEngines"))
-    .and_then(|se| se.get("Add"))
-    .and_then(|a| a.as_array())
-    .is_some_and(|arr| {
-      arr
-        .iter()
-        .any(|e| e.get("Name").and_then(|n| n.as_str()) == Some("DuckDuckGo"))
-    });
-
-  if has_ddg_default && has_ddg_engine {
-    return Ok(());
-  }
-
-  let ddg_engine = serde_json::json!({
-    "Name": "DuckDuckGo",
-    "URLTemplate": "https://duckduckgo.com/?q={searchTerms}",
-    "SuggestURLTemplate": "https://duckduckgo.com/ac/?q={searchTerms}&type=list",
-    "Method": "GET",
-    "IconURL": "https://duckduckgo.com/favicon.ico",
-    "Alias": "ddg"
-  });
-
-  // Ensure policies.SearchEngines exists
-  let policies_obj = policies
-    .as_object_mut()
-    .ok_or("Invalid policies.json")?
-    .entry("policies")
-    .or_insert(serde_json::json!({}));
-  let se = policies_obj
-    .as_object_mut()
-    .ok_or("Invalid policies object")?
-    .entry("SearchEngines")
-    .or_insert(serde_json::json!({}));
-
-  if let Some(se_obj) = se.as_object_mut() {
-    // Set DuckDuckGo as default
-    se_obj.insert(
-      "Default".to_string(),
-      serde_json::Value::String("DuckDuckGo".to_string()),
-    );
-
-    // Add DuckDuckGo engine definition if not present
-    let add_arr = se_obj
-      .entry("Add")
-      .or_insert(serde_json::json!([]))
-      .as_array_mut()
-      .ok_or("SearchEngines.Add is not an array")?;
-
-    // Remove fake "None" engine
-    add_arr.retain(|entry| entry.get("Name").and_then(|n| n.as_str()) != Some("None"));
-
-    // Add DuckDuckGo if not already present
-    if !add_arr
-      .iter()
-      .any(|e| e.get("Name").and_then(|n| n.as_str()) == Some("DuckDuckGo"))
-    {
-      add_arr.push(ddg_engine);
-    }
-
-    // Ensure DuckDuckGo is not in the Remove list
-    if let Some(remove_arr) = se_obj.get_mut("Remove").and_then(|r| r.as_array_mut()) {
-      remove_arr.retain(|v| v.as_str() != Some("DuckDuckGo"));
-    }
-  }
-
-  let updated = serde_json::to_string_pretty(&policies)?;
-  std::fs::write(&policies_path, updated)?;
-  log::info!(
-    "Configured DuckDuckGo search engine in {}",
-    policies_path.display()
-  );
-
-  Ok(())
 }
 
 #[cfg(test)]

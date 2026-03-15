@@ -25,6 +25,7 @@ import {
   LuLock,
   LuPuzzle,
   LuTrash2,
+  LuTriangleAlert,
   LuUsers,
 } from "react-icons/lu";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
@@ -83,6 +84,7 @@ import type {
   LocationItem,
   ProxyCheckResult,
   StoredProxy,
+  SyncSessionInfo,
   TrafficSnapshot,
   VpnConfig,
 } from "@/types";
@@ -204,6 +206,16 @@ type TableMeta = {
   // Team locks
   isProfileLockedByAnother: (profileId: string) => boolean;
   getProfileLockEmail: (profileId: string) => string | undefined;
+
+  // Synchronizer
+  getProfileSyncInfo: (profileId: string) =>
+    | {
+        session: SyncSessionInfo;
+        isLeader: boolean;
+        failedAtUrl: string | null;
+      }
+    | undefined;
+  onLaunchWithSync: (profile: BrowserProfile) => void;
 };
 
 type SyncStatusDot = {
@@ -242,7 +254,7 @@ function getProfileSyncStatusDot(
     case "waiting":
       return {
         color: "bg-warning",
-        tooltip: "Waiting to sync",
+        tooltip: "Close the profile to sync",
         animate: false,
         encrypted,
       };
@@ -801,6 +813,14 @@ interface ProfilesDataTableProps {
   onToggleProfileSync?: (profile: BrowserProfile) => void;
   crossOsUnlocked?: boolean;
   syncUnlocked?: boolean;
+  getProfileSyncInfo?: (profileId: string) =>
+    | {
+        session: SyncSessionInfo;
+        isLeader: boolean;
+        failedAtUrl: string | null;
+      }
+    | undefined;
+  onLaunchWithSync?: (profile: BrowserProfile) => void;
 }
 
 export function ProfilesDataTable({
@@ -828,6 +848,8 @@ export function ProfilesDataTable({
   onToggleProfileSync,
   crossOsUnlocked = false,
   syncUnlocked = false,
+  getProfileSyncInfo,
+  onLaunchWithSync,
 }: ProfilesDataTableProps) {
   const { t } = useTranslation();
   const { getTableSorting, updateSorting, isLoaded } = useTableSorting();
@@ -951,8 +973,7 @@ export function ProfilesDataTable({
   // Country proxy creation state (for inline proxy creation in dropdown)
   const [countries, setCountries] = React.useState<LocationItem[]>([]);
   const [countriesLoaded, setCountriesLoaded] = React.useState(false);
-  const hasCloudProxy = storedProxies.some((p) => p.is_cloud_managed);
-  const canCreateLocationProxy = hasCloudProxy || crossOsUnlocked;
+  const canCreateLocationProxy = false;
 
   const loadCountries = React.useCallback(async () => {
     if (countriesLoaded || !canCreateLocationProxy) return;
@@ -963,7 +984,7 @@ export function ProfilesDataTable({
     } catch (e) {
       console.error("Failed to load countries:", e);
     }
-  }, [countriesLoaded, canCreateLocationProxy]);
+  }, [countriesLoaded]);
 
   // Load cached check results for proxies
   React.useEffect(() => {
@@ -1528,6 +1549,10 @@ export function ProfilesDataTable({
       isProfileLockedByAnother: isProfileLocked,
       getProfileLockEmail: (profileId: string) =>
         getLockInfo(profileId)?.lockedByEmail,
+
+      // Synchronizer
+      getProfileSyncInfo: getProfileSyncInfo ?? (() => undefined),
+      onLaunchWithSync: onLaunchWithSync ?? (() => {}),
     }),
     [
       t,
@@ -1577,11 +1602,12 @@ export function ProfilesDataTable({
       crossOsUnlocked,
       syncUnlocked,
       countries,
-      canCreateLocationProxy,
       loadCountries,
       handleCreateCountryProxy,
       isProfileLocked,
       getLockInfo,
+      getProfileSyncInfo,
+      onLaunchWithSync,
     ],
   );
 
@@ -1806,23 +1832,81 @@ export function ProfilesDataTable({
             }
           };
 
+          const syncInfo = meta.getProfileSyncInfo(profile.id);
+          const isLeader = syncInfo?.isLeader === true;
+          const isFollower = syncInfo?.isLeader === false;
+          const isDesynced = isFollower && syncInfo?.failedAtUrl != null;
+          const stopTooltip = isLeader
+            ? meta.t("profiles.synchronizer.stopLeader")
+            : isFollower
+              ? meta.t("profiles.synchronizer.stopFollower", {
+                  leaderName: syncInfo?.session.leader_profile_name ?? "",
+                })
+              : tooltipContent;
+
+          const handleStop = async () => {
+            if (isLeader && syncInfo) {
+              // Stop leader: invoke stop_sync_session which kills leader + all followers
+              try {
+                await invoke("stop_sync_session", {
+                  sessionId: syncInfo.session.id,
+                });
+              } catch (error) {
+                console.error("Failed to stop sync session:", error);
+              }
+            } else if (isFollower && syncInfo) {
+              // Stop follower: remove from session
+              try {
+                await invoke("remove_sync_follower", {
+                  sessionId: syncInfo.session.id,
+                  followerProfileId: profile.id,
+                });
+              } catch (error) {
+                console.error("Failed to remove sync follower:", error);
+              }
+            } else {
+              await handleProfileStop(profile);
+            }
+          };
+
+          const buttonVariant = isRunning
+            ? isFollower
+              ? "secondary"
+              : "destructive"
+            : "default";
+
           return (
             <div className="flex gap-2 items-center">
+              {isDesynced && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <LuTriangleAlert className="w-4 h-4 text-warning" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {meta.t("profiles.synchronizer.desyncedTooltip", {
+                      url: syncInfo?.failedAtUrl ?? "",
+                    })}
+                  </TooltipContent>
+                </Tooltip>
+              )}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="inline-flex">
                     <RippleButton
-                      variant={isRunning ? "destructive" : "default"}
+                      variant={buttonVariant}
                       size="sm"
                       disabled={!canLaunch || isLaunching || isStopping}
                       className={cn(
                         "min-w-[70px] h-7",
                         !canLaunch && "opacity-50 cursor-not-allowed",
                         canLaunch && "cursor-pointer",
+                        isFollower && "border-accent",
                       )}
                       onClick={() =>
                         isRunning
-                          ? handleProfileStop(profile)
+                          ? void handleStop()
                           : handleProfileLaunch(profile)
                       }
                     >
@@ -1838,8 +1922,10 @@ export function ProfilesDataTable({
                     </RippleButton>
                   </span>
                 </TooltipTrigger>
-                {tooltipContent && (
-                  <TooltipContent>{tooltipContent}</TooltipContent>
+                {(stopTooltip || tooltipContent) && (
+                  <TooltipContent>
+                    {isRunning ? stopTooltip : tooltipContent}
+                  </TooltipContent>
                 )}
               </Tooltip>
             </div>
@@ -2188,28 +2274,35 @@ export function ProfilesDataTable({
                             />
                             None
                           </CommandItem>
-                          {meta.storedProxies.map((proxy) => (
-                            <CommandItem
-                              key={proxy.id}
-                              value={proxy.name}
-                              onSelect={() =>
-                                void meta.handleProxySelection(
-                                  profile.id,
-                                  proxy.id,
-                                )
-                              }
-                            >
-                              <LuCheck
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  effectiveProxyId === proxy.id && !effectiveVpn
-                                    ? "opacity-100"
-                                    : "opacity-0",
-                                )}
-                              />
-                              {proxy.name}
-                            </CommandItem>
-                          ))}
+                          {meta.storedProxies
+                            .filter(
+                              (proxy: StoredProxy) =>
+                                !proxy.is_cloud_managed &&
+                                !proxy.is_cloud_derived,
+                            )
+                            .map((proxy: StoredProxy) => (
+                              <CommandItem
+                                key={proxy.id}
+                                value={proxy.name}
+                                onSelect={() =>
+                                  void meta.handleProxySelection(
+                                    profile.id,
+                                    proxy.id,
+                                  )
+                                }
+                              >
+                                <LuCheck
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    effectiveProxyId === proxy.id &&
+                                      !effectiveVpn
+                                      ? "opacity-100"
+                                      : "opacity-0",
+                                  )}
+                                />
+                                {proxy.name}
+                              </CommandItem>
+                            ))}
                         </CommandGroup>
                         {meta.vpnConfigs.length > 0 && (
                           <CommandGroup heading="VPNs">
@@ -2519,6 +2612,7 @@ export function ProfilesDataTable({
               onAssignExtensionGroup={onAssignExtensionGroup}
               onOpenBypassRules={(profile) => setBypassRulesProfile(profile)}
               onCloneProfile={onCloneProfile}
+              onLaunchWithSync={onLaunchWithSync}
               onDeleteProfile={(profile) => {
                 setProfileForInfoDialog(null);
                 setProfileToDelete(profile);

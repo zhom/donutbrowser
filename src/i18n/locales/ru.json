@@ -184,6 +184,22 @@
       "changeFingerprint": "Изменить отпечаток",
       "copyCookiesToProfile": "Копировать Cookie в профиль"
     },
+    "synchronizer": {
+      "launchWithSync": "Запустить с синхронизатором",
+      "stopLeader": "Остановить этот профиль и всех его последователей",
+      "stopFollower": "Повторяет действия {{leaderName}}",
+      "desyncedTooltip": "Синхронизация не удалась на {{url}}",
+      "paidFeature": "Синхронизатор — платная функция",
+      "wayfernOnly": "Синхронизировать можно только профили Wayfern",
+      "selectFollowers": "Выберите профили-последователи",
+      "selectFollowersDesc": "Выберите профили, которые будут повторять действия профиля-лидера. Можно выбрать только остановленные профили Wayfern.",
+      "leader": "Лидер",
+      "follower": "Последователь",
+      "startSession": "Начать сессию синхронизации",
+      "noFollowers": "Выберите хотя бы один профиль-последователь",
+      "flakyBadge": "FLAKY",
+      "flakyTooltip": "У этого профиля разрешение экрана отличается от лидера. Макет страниц может отличаться, что может привести к неправильным кликам и взаимодействиям."
+    },
     "ephemeral": "Временный",
     "ephemeralDescription": "Браузер принудительно записывает данные профиля в память вместо диска. Данные удаляются при закрытии браузера.",
     "ephemeralBadge": "Временный",
@@ -263,6 +279,26 @@
       "https": "HTTPS",
       "socks4": "SOCKS4",
       "socks5": "SOCKS5"
+    },
+    "tabs": {
+      "regular": "Обычный",
+      "dynamic": "Динамический"
+    },
+    "dynamic": {
+      "description": "Динамический прокси получает данные подключения по URL при каждом запуске профиля.",
+      "url": "URL прокси",
+      "urlPlaceholder": "https://api.example.com/proxy",
+      "urlRequired": "URL динамического прокси обязателен",
+      "format": "Формат ответа",
+      "formatJson": "JSON",
+      "formatText": "Текст",
+      "formatJsonHint": "Ожидается JSON: {\"ip\": \"...\", \"port\": ..., \"username\": \"...\", \"password\": \"...\"}",
+      "formatTextHint": "Ожидается текст вида: host:port:username:password или protocol://user:pass@host:port",
+      "testUrl": "Проверить URL",
+      "testing": "Проверка...",
+      "testSuccess": "Динамический прокси разрешён в {{host}}:{{port}}",
+      "testFailed": "Не удалось получить прокси: {{error}}",
+      "fetchFailed": "Не удалось получить динамический прокси: {{error}}"
     },
     "check": {
       "checking": "Проверка прокси...",

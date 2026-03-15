@@ -134,6 +134,8 @@ export interface StoredProxy {
   geo_region?: string;
   geo_city?: string;
   geo_isp?: string;
+  dynamic_proxy_url?: string;
+  dynamic_proxy_format?: string;
 }
 
 export interface LocationItem {
@@ -508,6 +510,20 @@ export interface WayfernLaunchResult {
   profilePath?: string;
   url?: string;
   cdp_port?: number;
+}
+
+// Synchronizer types
+export interface SyncFollowerState {
+  profile_id: string;
+  profile_name: string;
+  failed_at_url: string | null;
+}
+
+export interface SyncSessionInfo {
+  id: string;
+  leader_profile_id: string;
+  leader_profile_name: string;
+  followers: SyncFollowerState[];
 }
 
 // Traffic stats types

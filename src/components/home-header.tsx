@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FaDownload } from "react-icons/fa";
 import { FiWifi } from "react-icons/fi";
@@ -23,6 +24,148 @@ import {
 import { Input } from "./ui/input";
 import { ProBadge } from "./ui/pro-badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
+
+const CLICK_THRESHOLD = 5;
+const CLICK_WINDOW_MS = 2000;
+const GRAVITY = 2200;
+const BOUNCE_DAMPING = 0.6;
+const INITIAL_HORIZONTAL_SPEED = 350;
+const SPIN_SPEED = 720;
+const MIN_BOUNCE_VELOCITY = 60;
+const LOGO_HIDDEN_KEY = "donut-logo-hidden";
+
+function useLogoEasterEgg() {
+  const clickTimestamps = useRef<number[]>([]);
+  const [isPressed, setIsPressed] = useState(false);
+  const [wobbleKey, setWobbleKey] = useState(0);
+  const [isFalling, setIsFalling] = useState(false);
+  const [isHidden, setIsHidden] = useState(() => {
+    try {
+      return sessionStorage.getItem(LOGO_HIDDEN_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const logoRef = useRef<HTMLButtonElement>(null);
+  const animFrameRef = useRef<number>(0);
+
+  const triggerFall = useCallback(() => {
+    const el = logoRef.current;
+    if (!el || isFalling) return;
+
+    setIsFalling(true);
+
+    const rect = el.getBoundingClientRect();
+    const startX = rect.left;
+    const startY = rect.top;
+    const floorY = window.innerHeight;
+    const leftWall = 0;
+    const rightWall = window.innerWidth;
+
+    const clone = el.cloneNode(true) as HTMLElement;
+    clone.style.position = "fixed";
+    clone.style.left = `${startX}px`;
+    clone.style.top = `${startY}px`;
+    clone.style.zIndex = "9999";
+    clone.style.pointerEvents = "none";
+    clone.style.margin = "0";
+    document.body.appendChild(clone);
+
+    el.style.visibility = "hidden";
+
+    let x = 0;
+    let y = 0;
+    let vy = -500;
+    let vx = -INITIAL_HORIZONTAL_SPEED;
+    let rotation = 0;
+    let lastTime = performance.now();
+
+    const animate = (time: number) => {
+      const dt = Math.min((time - lastTime) / 1000, 0.05);
+      lastTime = time;
+
+      vy += GRAVITY * dt;
+      x += vx * dt;
+      y += vy * dt;
+      rotation += SPIN_SPEED * dt * (vx > 0 ? 1 : -1);
+
+      // Floor bounce
+      const currentBottom = startY + y + rect.height;
+      if (currentBottom >= floorY && vy > 0) {
+        y = floorY - startY - rect.height;
+        if (Math.abs(vy) > MIN_BOUNCE_VELOCITY) {
+          vy = -Math.abs(vy) * BOUNCE_DAMPING;
+        } else {
+          vy = -MIN_BOUNCE_VELOCITY * 3;
+        }
+      }
+
+      // Left wall bounce only — right wall lets it fly off screen
+      const currentLeft = startX + x;
+      if (currentLeft <= leftWall && vx < 0) {
+        x = leftWall - startX;
+        vx = Math.abs(vx) * 1.1;
+      }
+
+      clone.style.transform = `translate(${x}px, ${y}px) rotate(${rotation}deg)`;
+
+      // Only end when fully off-screen vertically (bounced out the top or flew off bottom somehow)
+      const currentTop = startY + y;
+      const offScreenRight = startX + x > rightWall + 50;
+      const offScreenBottom = currentTop > floorY + 100;
+      const offScreenTop = currentTop + rect.height < -200;
+
+      if (offScreenRight || offScreenBottom || offScreenTop) {
+        clone.remove();
+        try {
+          sessionStorage.setItem(LOGO_HIDDEN_KEY, "1");
+        } catch {
+          // ignore
+        }
+        setIsHidden(true);
+        setIsFalling(false);
+        return;
+      }
+
+      animFrameRef.current = requestAnimationFrame(animate);
+    };
+
+    animFrameRef.current = requestAnimationFrame(animate);
+  }, [isFalling]);
+
+  useEffect(() => {
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
+  }, []);
+
+  const handleClick = useCallback(() => {
+    if (isFalling || isHidden) return;
+
+    const now = Date.now();
+    clickTimestamps.current = clickTimestamps.current.filter(
+      (t) => now - t < CLICK_WINDOW_MS,
+    );
+    clickTimestamps.current.push(now);
+
+    if (clickTimestamps.current.length >= CLICK_THRESHOLD) {
+      clickTimestamps.current = [];
+      triggerFall();
+    } else {
+      setWobbleKey((k) => k + 1);
+    }
+  }, [isFalling, isHidden, triggerFall]);
+
+  return {
+    logoRef,
+    isPressed,
+    setIsPressed,
+    wobbleKey,
+    isFalling,
+    isHidden,
+    handleClick,
+  };
+}
 
 type Props = {
   onSettingsDialogOpen: (open: boolean) => void;
@@ -52,24 +195,44 @@ const HomeHeader = ({
   crossOsUnlocked = false,
 }: Props) => {
   const { t } = useTranslation();
-  const handleLogoClick = () => {
-    // Trigger the same URL handling logic as if the URL came from the system
-    const event = new CustomEvent("url-open-request", {
-      detail: "https://donutbrowser.com",
-    });
-    window.dispatchEvent(event);
-  };
+  const {
+    logoRef,
+    isPressed,
+    setIsPressed,
+    wobbleKey,
+    isFalling,
+    isHidden,
+    handleClick,
+  } = useLogoEasterEgg();
+
   return (
     <div className="flex justify-between items-center mt-6">
       <div className="flex gap-3 items-center">
-        <button
-          type="button"
-          className="p-1 cursor-pointer"
-          title="Open donutbrowser.com"
-          onClick={handleLogoClick}
-        >
-          <Logo className="w-10 h-10 transition-transform duration-300 ease-out will-change-transform hover:scale-110" />
-        </button>
+        {!isHidden ? (
+          <button
+            ref={logoRef}
+            type="button"
+            className="p-1 cursor-pointer select-none"
+            onClick={handleClick}
+            onPointerDown={() => setIsPressed(true)}
+            onPointerUp={() => setIsPressed(false)}
+            onPointerLeave={() => setIsPressed(false)}
+          >
+            <Logo
+              key={wobbleKey}
+              className={cn(
+                "w-10 h-10 transition-transform duration-300 ease-out will-change-transform hover:scale-110",
+                isPressed && "scale-90",
+                !isFalling &&
+                  !isPressed &&
+                  wobbleKey > 0 &&
+                  "animate-[wiggle_0.3s_ease-in-out]",
+              )}
+            />
+          </button>
+        ) : (
+          <div className="p-1 w-10 h-10" />
+        )}
         <CardTitle>Donut</CardTitle>
       </div>
       <div className="flex gap-2 items-center">

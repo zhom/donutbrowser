@@ -37,6 +37,7 @@ pub mod proxy_server;
 pub mod proxy_storage;
 mod settings_manager;
 pub mod sync;
+mod synchronizer;
 pub mod traffic_stats;
 mod wayfern_manager;
 mod wayfern_terms;
@@ -208,11 +209,21 @@ async fn handle_url_open(app: tauri::AppHandle, url: String) -> Result<(), Strin
 async fn create_stored_proxy(
   app_handle: tauri::AppHandle,
   name: String,
-  proxy_settings: crate::browser::ProxySettings,
+  proxy_settings: Option<crate::browser::ProxySettings>,
+  dynamic_proxy_url: Option<String>,
+  dynamic_proxy_format: Option<String>,
 ) -> Result<crate::proxy_manager::StoredProxy, String> {
-  crate::proxy_manager::PROXY_MANAGER
-    .create_stored_proxy(&app_handle, name, proxy_settings)
-    .map_err(|e| format!("Failed to create stored proxy: {e}"))
+  if let (Some(url), Some(format)) = (&dynamic_proxy_url, &dynamic_proxy_format) {
+    crate::proxy_manager::PROXY_MANAGER
+      .create_dynamic_proxy(&app_handle, name, url.clone(), format.clone())
+      .map_err(|e| format!("Failed to create dynamic proxy: {e}"))
+  } else if let Some(settings) = proxy_settings {
+    crate::proxy_manager::PROXY_MANAGER
+      .create_stored_proxy(&app_handle, name, settings)
+      .map_err(|e| format!("Failed to create stored proxy: {e}"))
+  } else {
+    Err("Either proxy_settings or dynamic proxy URL and format are required".to_string())
+  }
 }
 
 #[tauri::command]
@@ -226,10 +237,26 @@ async fn update_stored_proxy(
   proxy_id: String,
   name: Option<String>,
   proxy_settings: Option<crate::browser::ProxySettings>,
+  dynamic_proxy_url: Option<String>,
+  dynamic_proxy_format: Option<String>,
 ) -> Result<crate::proxy_manager::StoredProxy, String> {
-  crate::proxy_manager::PROXY_MANAGER
-    .update_stored_proxy(&app_handle, &proxy_id, name, proxy_settings)
-    .map_err(|e| format!("Failed to update stored proxy: {e}"))
+  // Check if this is a dynamic proxy update
+  let is_dynamic = crate::proxy_manager::PROXY_MANAGER.is_dynamic_proxy(&proxy_id);
+  if is_dynamic || dynamic_proxy_url.is_some() {
+    crate::proxy_manager::PROXY_MANAGER
+      .update_dynamic_proxy(
+        &app_handle,
+        &proxy_id,
+        name,
+        dynamic_proxy_url,
+        dynamic_proxy_format,
+      )
+      .map_err(|e| format!("Failed to update dynamic proxy: {e}"))
+  } else {
+    crate::proxy_manager::PROXY_MANAGER
+      .update_stored_proxy(&app_handle, &proxy_id, name, proxy_settings)
+      .map_err(|e| format!("Failed to update stored proxy: {e}"))
+  }
 }
 
 #[tauri::command]
@@ -242,10 +269,32 @@ async fn delete_stored_proxy(app_handle: tauri::AppHandle, proxy_id: String) -> 
 #[tauri::command]
 async fn check_proxy_validity(
   proxy_id: String,
-  proxy_settings: crate::browser::ProxySettings,
+  proxy_settings: Option<crate::browser::ProxySettings>,
 ) -> Result<crate::proxy_manager::ProxyCheckResult, String> {
+  // For dynamic proxies, fetch settings first
+  let settings = if let Some(s) = proxy_settings {
+    s
+  } else if crate::proxy_manager::PROXY_MANAGER.is_dynamic_proxy(&proxy_id) {
+    crate::proxy_manager::PROXY_MANAGER
+      .resolve_dynamic_proxy(&proxy_id)
+      .await?
+  } else {
+    crate::proxy_manager::PROXY_MANAGER
+      .get_proxy_settings_by_id(&proxy_id)
+      .ok_or_else(|| format!("Proxy '{proxy_id}' not found"))?
+  };
   crate::proxy_manager::PROXY_MANAGER
-    .check_proxy_validity(&proxy_id, &proxy_settings)
+    .check_proxy_validity(&proxy_id, &settings)
+    .await
+}
+
+#[tauri::command]
+async fn fetch_dynamic_proxy(
+  url: String,
+  format: String,
+) -> Result<crate::browser::ProxySettings, String> {
+  crate::proxy_manager::PROXY_MANAGER
+    .fetch_dynamic_proxy(&url, &format)
     .await
 }
 
@@ -1477,7 +1526,7 @@ pub fn run() {
               }
             }
             Err(e) => {
-              log::debug!("Sync not configured, skipping missing profile check: {}", e);
+              log::warn!("Sync not configured, skipping missing profile check: {}", e);
             }
           }
 
@@ -1572,6 +1621,7 @@ pub fn run() {
       update_stored_proxy,
       delete_stored_proxy,
       check_proxy_validity,
+      fetch_dynamic_proxy,
       get_cached_proxy_check,
       export_proxies,
       import_proxies_json,
@@ -1669,6 +1719,11 @@ pub fn run() {
       // Team lock commands
       team_lock::get_team_locks,
       team_lock::get_team_lock_status,
+      // Synchronizer commands
+      synchronizer::start_sync_session,
+      synchronizer::stop_sync_session,
+      synchronizer::remove_sync_follower,
+      synchronizer::get_sync_sessions,
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application")

@@ -50,7 +50,9 @@ export function ProxyCheckButton({
     try {
       const result = await invoke<ProxyCheckResult>("check_proxy_validity", {
         proxyId: proxy.id,
-        proxySettings: proxy.proxy_settings,
+        proxySettings: proxy.dynamic_proxy_url
+          ? undefined
+          : proxy.proxy_settings,
       });
       setLocalResult(result);
       onCheckComplete?.(result);

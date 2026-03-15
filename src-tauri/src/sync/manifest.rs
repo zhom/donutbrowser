@@ -408,6 +408,19 @@ pub fn compute_diff(local: &SyncManifest, remote: Option<&SyncManifest>) -> Mani
   let remote_files: HashMap<&str, &ManifestFileEntry> =
     remote.files.iter().map(|f| (f.path.as_str(), f)).collect();
 
+  // Safety: if local is empty but remote has files, always download from remote.
+  // This prevents data loss when profile data files are deleted but metadata
+  // survives — the newly generated manifest would have updated_at=NOW, which
+  // would appear "newer" and cause all remote files to be deleted.
+  if local.files.is_empty() && !remote.files.is_empty() {
+    log::info!(
+      "Local manifest is empty but remote has {} files — downloading from remote to recover",
+      remote.files.len()
+    );
+    diff.files_to_download = remote.files.clone();
+    return diff;
+  }
+
   // Compare timestamps to determine direction
   let local_updated = local.updated_at_datetime();
   let remote_updated = remote.updated_at_datetime();
@@ -737,5 +750,51 @@ mod tests {
     let serialized = serde_json::to_string(&manifest).unwrap();
     let deserialized: SyncManifest = serde_json::from_str(&serialized).unwrap();
     assert!(deserialized.encrypted);
+  }
+
+  #[test]
+  fn test_compute_diff_empty_local_downloads_from_remote() {
+    // When local has no files but remote does, always download from remote.
+    // This prevents data loss when profile data is deleted but metadata survives.
+    let local = SyncManifest {
+      version: 1,
+      profile_id: "test".to_string(),
+      generated_at: Utc::now().to_rfc3339(),
+      updated_at: Utc::now().to_rfc3339(), // NOW — appears newer than remote
+      exclude_globs: vec![],
+      files: vec![],
+      encrypted: false,
+    };
+
+    let remote = SyncManifest {
+      version: 1,
+      profile_id: "test".to_string(),
+      generated_at: "2024-01-01T00:00:00Z".to_string(),
+      updated_at: "2024-01-01T00:00:00Z".to_string(),
+      exclude_globs: vec![],
+      files: vec![
+        ManifestFileEntry {
+          path: "Cookies".to_string(),
+          size: 100,
+          mtime: 1000,
+          hash: "abc".to_string(),
+        },
+        ManifestFileEntry {
+          path: "Local State".to_string(),
+          size: 200,
+          mtime: 1000,
+          hash: "def".to_string(),
+        },
+      ],
+      encrypted: false,
+    };
+
+    let diff = compute_diff(&local, Some(&remote));
+
+    // Must download all remote files, NOT delete them
+    assert_eq!(diff.files_to_download.len(), 2);
+    assert!(diff.files_to_upload.is_empty());
+    assert!(diff.files_to_delete_remote.is_empty());
+    assert!(diff.files_to_delete_local.is_empty());
   }
 }

@@ -19,6 +19,7 @@ import {
   LuSettings,
   LuShieldCheck,
   LuTrash2,
+  LuUsers,
   LuX,
 } from "react-icons/lu";
 import { Badge } from "@/components/ui/badge";
@@ -65,6 +66,7 @@ interface ProfileInfoDialogProps {
   onOpenBypassRules?: (profile: BrowserProfile) => void;
   onCloneProfile?: (profile: BrowserProfile) => void;
   onDeleteProfile?: (profile: BrowserProfile) => void;
+  onLaunchWithSync?: (profile: BrowserProfile) => void;
   crossOsUnlocked?: boolean;
   isRunning?: boolean;
   isDisabled?: boolean;
@@ -110,6 +112,7 @@ export function ProfileInfoDialog({
   onOpenBypassRules,
   onCloneProfile,
   onDeleteProfile,
+  onLaunchWithSync,
   crossOsUnlocked = false,
   isRunning = false,
   isDisabled = false,
@@ -250,6 +253,14 @@ export function ProfileInfoDialog({
       disabled: isDisabled,
       runningBadge: isRunning,
       hidden: !isCamoufoxOrWayfern || !onConfigureCamoufox,
+    },
+    {
+      icon: <LuUsers className="w-4 h-4" />,
+      label: t("profiles.synchronizer.launchWithSync"),
+      onClick: () => handleAction(() => onLaunchWithSync?.(profile)),
+      disabled: isDisabled || isRunning || !crossOsUnlocked,
+      proBadge: !crossOsUnlocked,
+      hidden: profile.browser !== "wayfern" || !onLaunchWithSync,
     },
     {
       icon: <LuCopy className="w-4 h-4" />,

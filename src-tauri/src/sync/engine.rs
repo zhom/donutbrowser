@@ -9,7 +9,7 @@ use crate::settings_manager::SettingsManager;
 use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
@@ -47,6 +47,70 @@ fn is_critical_file(path: &str) -> bool {
   CRITICAL_FILE_PATTERNS
     .iter()
     .any(|pattern| path.contains(pattern))
+}
+
+/// Checkpoint all SQLite WAL files in a profile directory.
+///
+/// When a browser crashes or is killed, SQLite WAL files may contain
+/// uncommitted data (e.g. cookies, login data). Since WAL files are
+/// excluded from sync, we must checkpoint them into the main database
+/// files before generating the manifest to avoid data loss.
+fn checkpoint_sqlite_wal_files(profile_dir: &Path) {
+  fn find_wal_files(dir: &Path, wal_files: &mut Vec<PathBuf>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+      return;
+    };
+    for entry in entries.flatten() {
+      let path = entry.path();
+      if path.is_dir() {
+        find_wal_files(&path, wal_files);
+      } else if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+        if name.ends_with("-wal") {
+          wal_files.push(path);
+        }
+      }
+    }
+  }
+
+  let mut wal_files = Vec::new();
+  find_wal_files(profile_dir, &mut wal_files);
+
+  for wal_path in &wal_files {
+    // Only checkpoint non-empty WAL files
+    let is_non_empty = fs::metadata(wal_path).map(|m| m.len() > 0).unwrap_or(false);
+    if !is_non_empty {
+      continue;
+    }
+
+    // Derive the main database path by stripping the "-wal" suffix
+    let db_path_str = wal_path.to_string_lossy();
+    let db_path = PathBuf::from(db_path_str.strip_suffix("-wal").unwrap());
+
+    if !db_path.exists() {
+      continue;
+    }
+
+    match rusqlite::Connection::open(&db_path) {
+      Ok(conn) => match conn.pragma_update(None, "wal_checkpoint", "TRUNCATE") {
+        Ok(_) => {
+          log::info!(
+            "Checkpointed WAL for: {}",
+            db_path.file_name().unwrap_or_default().to_string_lossy()
+          );
+        }
+        Err(e) => {
+          log::warn!("Failed to checkpoint WAL for {}: {}", db_path.display(), e);
+        }
+      },
+      Err(e) => {
+        log::warn!(
+          "Failed to open DB for WAL checkpoint {}: {}",
+          db_path.display(),
+          e
+        );
+      }
+    }
+  }
 }
 
 /// Resume state persisted to disk so interrupted syncs can continue
@@ -362,6 +426,10 @@ impl SyncEngine {
       ))
     })?;
 
+    // Checkpoint any SQLite WAL files to ensure all data is in the main DB
+    // before we generate the manifest (WAL files are excluded from sync)
+    checkpoint_sqlite_wal_files(&profile_dir);
+
     // Load or create hash cache
     let cache_path = get_cache_path(&profile_dir);
     let mut hash_cache = HashCache::load(&cache_path);
@@ -488,9 +556,22 @@ impl SyncEngine {
       .upload_profile_metadata(&profile_id, profile, &key_prefix)
       .await?;
 
+    // If we recovered from an empty local state (downloaded everything from remote),
+    // regenerate the manifest from the actual files now on disk so we don't
+    // overwrite the remote manifest with an empty one.
+    let final_manifest = if local_manifest.files.is_empty() && !diff.files_to_download.is_empty() {
+      let mut new_cache = HashCache::load(&cache_path);
+      let mut regenerated = generate_manifest(&profile_id, &profile_dir, &mut new_cache)?;
+      new_cache.save(&cache_path)?;
+      regenerated.encrypted = encryption_key.is_some();
+      regenerated
+    } else {
+      let mut m = local_manifest;
+      m.encrypted = encryption_key.is_some();
+      m
+    };
+
     // Upload manifest.json last for atomicity
-    let mut final_manifest = local_manifest;
-    final_manifest.encrypted = encryption_key.is_some();
     self
       .upload_manifest(&profile_id, &final_manifest, &key_prefix)
       .await?;
@@ -2165,14 +2246,14 @@ impl SyncEngine {
   ) -> SyncResult<Vec<String>> {
     log::info!("Checking for missing synced profiles...");
 
-    // List personal profiles from S3
-    let list_response = self.client.list("profiles/").await?;
+    // List all personal profiles from S3 (paginated)
+    let all_objects = self.client.list_all("profiles/").await?;
 
     let mut downloaded: Vec<String> = Vec::new();
 
     // Extract unique profile IDs with their key prefix
     let mut profiles_to_check: HashMap<String, String> = HashMap::new();
-    for obj in list_response.objects {
+    for obj in all_objects {
       if obj.key.starts_with("profiles/") && obj.key.ends_with("/manifest.json") {
         if let Some(profile_id) = obj
           .key
@@ -2189,8 +2270,8 @@ impl SyncEngine {
       if let Some(team_id) = &auth.user.team_id {
         let team_prefix = format!("teams/{}/", team_id);
         let team_list_key = format!("{}profiles/", team_prefix);
-        if let Ok(team_list) = self.client.list(&team_list_key).await {
-          for obj in team_list.objects {
+        if let Ok(team_objects) = self.client.list_all(&team_list_key).await {
+          for obj in team_objects {
             if obj.key.starts_with("profiles/") && obj.key.ends_with("/manifest.json") {
               if let Some(profile_id) = obj
                 .key
@@ -3340,4 +3421,139 @@ pub async fn set_extension_group_sync_enabled(
   }
 
   Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_checkpoint_sqlite_wal_files() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("test.db");
+
+    // Create a SQLite database in WAL mode and insert data.
+    // Use std::mem::forget to prevent the connection destructor from running,
+    // which simulates a browser crash where WAL is not checkpointed.
+    {
+      let conn = rusqlite::Connection::open(&db_path).unwrap();
+      conn.pragma_update(None, "journal_mode", "WAL").unwrap();
+      conn.pragma_update(None, "wal_autocheckpoint", "0").unwrap();
+      conn
+        .execute(
+          "CREATE TABLE cookies (id INTEGER PRIMARY KEY, value TEXT)",
+          [],
+        )
+        .unwrap();
+      conn
+        .execute(
+          "INSERT INTO cookies (value) VALUES ('session_token_123')",
+          [],
+        )
+        .unwrap();
+      // Leak the connection to prevent auto-checkpoint on drop
+      std::mem::forget(conn);
+    }
+
+    // Verify WAL file exists and has data
+    let wal_path = temp_dir.path().join("test.db-wal");
+    assert!(wal_path.exists(), "WAL file should exist");
+    let wal_size = fs::metadata(&wal_path).unwrap().len();
+    assert!(wal_size > 0, "WAL file should be non-empty");
+
+    // Run checkpoint
+    checkpoint_sqlite_wal_files(temp_dir.path());
+
+    // After checkpoint, WAL should be truncated (empty)
+    let wal_size_after = fs::metadata(&wal_path).map(|m| m.len()).unwrap_or(0);
+    assert_eq!(
+      wal_size_after, 0,
+      "WAL should be truncated after checkpoint"
+    );
+
+    // Verify data is still accessible from the main database
+    let conn = rusqlite::Connection::open(&db_path).unwrap();
+    let value: String = conn
+      .query_row("SELECT value FROM cookies WHERE id = 1", [], |row| {
+        row.get(0)
+      })
+      .unwrap();
+    assert_eq!(value, "session_token_123");
+  }
+
+  #[test]
+  fn test_checkpoint_handles_missing_db() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+
+    // Create a WAL file without a corresponding database
+    let wal_path = temp_dir.path().join("missing.db-wal");
+    fs::write(&wal_path, b"fake wal data").unwrap();
+
+    // Should not panic
+    checkpoint_sqlite_wal_files(temp_dir.path());
+  }
+
+  #[test]
+  fn test_checkpoint_skips_empty_wal() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("test.db");
+
+    // Create a database and checkpoint immediately (WAL is empty)
+    {
+      let conn = rusqlite::Connection::open(&db_path).unwrap();
+      conn.pragma_update(None, "journal_mode", "WAL").unwrap();
+      conn
+        .execute("CREATE TABLE t (id INTEGER PRIMARY KEY)", [])
+        .unwrap();
+    }
+
+    // Create an empty WAL file
+    let wal_path = temp_dir.path().join("test.db-wal");
+    fs::write(&wal_path, b"").unwrap();
+
+    // Should skip empty WAL without error
+    checkpoint_sqlite_wal_files(temp_dir.path());
+  }
+
+  #[test]
+  fn test_checkpoint_nested_directories() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let nested_dir = temp_dir.path().join("profile").join("Default");
+    fs::create_dir_all(&nested_dir).unwrap();
+
+    let db_path = nested_dir.join("Cookies");
+
+    // Create a database with WAL data, leak connection to simulate crash
+    {
+      let conn = rusqlite::Connection::open(&db_path).unwrap();
+      conn.pragma_update(None, "journal_mode", "WAL").unwrap();
+      conn.pragma_update(None, "wal_autocheckpoint", "0").unwrap();
+      conn
+        .execute(
+          "CREATE TABLE cookies (host_key TEXT, name TEXT, value TEXT)",
+          [],
+        )
+        .unwrap();
+      conn
+        .execute(
+          "INSERT INTO cookies VALUES ('.example.com', 'session', 'abc')",
+          [],
+        )
+        .unwrap();
+      std::mem::forget(conn);
+    }
+
+    let wal_path = nested_dir.join("Cookies-wal");
+    assert!(wal_path.exists());
+
+    // Checkpoint from the top-level directory
+    checkpoint_sqlite_wal_files(temp_dir.path());
+
+    // Verify data is in the main database
+    let conn = rusqlite::Connection::open(&db_path).unwrap();
+    let count: i64 = conn
+      .query_row("SELECT COUNT(*) FROM cookies", [], |row| row.get(0))
+      .unwrap();
+    assert_eq!(count, 1);
+  }
 }

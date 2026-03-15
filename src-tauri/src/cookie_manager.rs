@@ -7,6 +7,112 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tauri::AppHandle;
 
+/// Chromium cookie encryption/decryption support.
+/// On macOS: uses "Chromium Safe Storage" key from Keychain with PBKDF2 + AES-128-CBC.
+/// On Linux: uses os_crypt_key file from profile directory with PBKDF2 + AES-128-CBC.
+mod chrome_decrypt {
+  use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
+  use std::path::Path;
+
+  type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
+  type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
+
+  const PBKDF2_ITERATIONS: u32 = 1;
+  const KEY_LEN: usize = 16; // AES-128
+  const SALT: &[u8] = b"saltysalt";
+  const IV: [u8; 16] = [b' '; 16]; // 16 spaces
+
+  fn derive_key(password: &[u8]) -> [u8; KEY_LEN] {
+    let mut key = [0u8; KEY_LEN];
+    pbkdf2::pbkdf2_hmac::<sha1::Sha1>(password, SALT, PBKDF2_ITERATIONS, &mut key);
+    key
+  }
+
+  /// Get the encryption key for Chrome cookies.
+  /// Wayfern stores os_crypt_key as a file inside the profile's user-data-dir on all platforms.
+  /// On macOS/Linux the key is a base64 string used as PBKDF2 password.
+  /// On Windows the key is raw bytes (32 bytes) used directly.
+  pub fn get_encryption_key(profile_data_path: &Path) -> Option<[u8; KEY_LEN]> {
+    let key_file = profile_data_path.join("os_crypt_key");
+    if let Ok(contents) = std::fs::read_to_string(&key_file) {
+      let contents = contents.trim();
+      if !contents.is_empty() {
+        return Some(derive_key(contents.as_bytes()));
+      }
+    }
+
+    // Fallback for macOS: try system Keychain (for profiles created before file-based keys)
+    #[cfg(target_os = "macos")]
+    {
+      let output = std::process::Command::new("security")
+        .args([
+          "find-generic-password",
+          "-w",
+          "-s",
+          "Chromium Safe Storage",
+          "-a",
+          "Chromium",
+        ])
+        .output()
+        .ok()?;
+      if output.status.success() {
+        let password = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !password.is_empty() {
+          return Some(derive_key(password.as_bytes()));
+        }
+      }
+    }
+
+    None
+  }
+
+  /// Decrypt a Chrome encrypted cookie value.
+  /// Chromium prefixes encrypted values with "v10" (macOS) or "v11" (Linux).
+  pub fn decrypt(encrypted: &[u8], key: &[u8; KEY_LEN]) -> Option<String> {
+    if encrypted.len() < 3 {
+      return None;
+    }
+    // Check for v10/v11 prefix
+    let prefix = &encrypted[..3];
+    if prefix != b"v10" && prefix != b"v11" {
+      return None;
+    }
+    let ciphertext = &encrypted[3..];
+    if ciphertext.is_empty() {
+      return Some(String::new());
+    }
+
+    let mut buf = ciphertext.to_vec();
+    let decrypted = Aes128CbcDec::new(key.into(), &IV.into())
+      .decrypt_padded_mut::<Pkcs7>(&mut buf)
+      .ok()?;
+
+    String::from_utf8(decrypted.to_vec()).ok()
+  }
+
+  /// Encrypt a cookie value in Chrome format (v10/v11 prefix + AES-128-CBC).
+  pub fn encrypt(plaintext: &str, key: &[u8; KEY_LEN]) -> Vec<u8> {
+    let pt = plaintext.as_bytes();
+    let block_size = 16usize;
+    // Allocate buffer with space for PKCS7 padding (up to one extra block)
+    let padded_len = pt.len() + (block_size - pt.len() % block_size);
+    let mut buf = vec![0u8; padded_len];
+    buf[..pt.len()].copy_from_slice(pt);
+
+    let encrypted = Aes128CbcEnc::new(key.into(), &IV.into())
+      .encrypt_padded_mut::<Pkcs7>(&mut buf, pt.len())
+      .expect("encryption buffer too small");
+
+    let mut result = Vec::with_capacity(3 + encrypted.len());
+    #[cfg(target_os = "macos")]
+    result.extend_from_slice(b"v10");
+    #[cfg(not(target_os = "macos"))]
+    result.extend_from_slice(b"v11");
+    result.extend_from_slice(encrypted);
+    result
+  }
+}
+
 /// Unified cookie representation that works across both browser types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnifiedCookie {
@@ -76,6 +182,12 @@ pub struct CookieManager;
 impl CookieManager {
   /// Windows epoch offset: seconds between 1601-01-01 and 1970-01-01
   const WINDOWS_EPOCH_DIFF: i64 = 11644473600;
+
+  /// Get the Chrome cookie encryption key for a Wayfern profile
+  fn get_chrome_encryption_key(profile: &BrowserProfile, profiles_dir: &Path) -> Option<[u8; 16]> {
+    let profile_data_path = profile.get_profile_data_path(profiles_dir);
+    chrome_decrypt::get_encryption_key(&profile_data_path)
+  }
 
   /// Get the cookie database path for a profile
   fn get_cookie_db_path(profile: &BrowserProfile, profiles_dir: &Path) -> Result<PathBuf, String> {
@@ -155,31 +267,58 @@ impl CookieManager {
     Ok(cookies)
   }
 
-  /// Read cookies from a Chrome/Wayfern profile
-  fn read_chrome_cookies(db_path: &Path) -> Result<Vec<UnifiedCookie>, String> {
+  /// Read cookies from a Chrome/Wayfern profile.
+  /// Handles encrypted cookies by decrypting encrypted_value using the profile's encryption key.
+  fn read_chrome_cookies(
+    db_path: &Path,
+    encryption_key: Option<&[u8; 16]>,
+  ) -> Result<Vec<UnifiedCookie>, String> {
     let conn = Connection::open(db_path).map_err(|e| format!("Failed to open database: {e}"))?;
 
     let mut stmt = conn
       .prepare(
         "SELECT name, value, host_key, path, expires_utc, is_secure,
-                        is_httponly, samesite, creation_utc, last_access_utc
-                 FROM cookies",
+                is_httponly, samesite, creation_utc, last_access_utc, encrypted_value
+         FROM cookies",
       )
       .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
     let cookies = stmt
       .query_map([], |row| {
+        let name: String = row.get(0)?;
+        let plaintext_value: String = row.get(1)?;
+        let domain: String = row.get(2)?;
+        let path: String = row.get(3)?;
+        let expires_utc: i64 = row.get(4)?;
+        let is_secure: i32 = row.get(5)?;
+        let is_httponly: i32 = row.get(6)?;
+        let samesite: i32 = row.get(7)?;
+        let creation_utc: i64 = row.get(8)?;
+        let last_access_utc: i64 = row.get(9)?;
+        let encrypted_value: Vec<u8> = row.get(10)?;
+
+        // Use plaintext value if available, otherwise decrypt encrypted_value
+        let value = if !plaintext_value.is_empty() {
+          plaintext_value
+        } else if !encrypted_value.is_empty() {
+          encryption_key
+            .and_then(|key| chrome_decrypt::decrypt(&encrypted_value, key))
+            .unwrap_or_default()
+        } else {
+          String::new()
+        };
+
         Ok(UnifiedCookie {
-          name: row.get(0)?,
-          value: row.get(1)?,
-          domain: row.get(2)?,
-          path: row.get(3)?,
-          expires: Self::chrome_time_to_unix(row.get(4)?),
-          is_secure: row.get::<_, i32>(5)? != 0,
-          is_http_only: row.get::<_, i32>(6)? != 0,
-          same_site: row.get(7)?,
-          creation_time: Self::chrome_time_to_unix(row.get(8)?),
-          last_accessed: Self::chrome_time_to_unix(row.get(9)?),
+          name,
+          value,
+          domain,
+          path,
+          expires: Self::chrome_time_to_unix(expires_utc),
+          is_secure: is_secure != 0,
+          is_http_only: is_httponly != 0,
+          same_site: samesite,
+          creation_time: Self::chrome_time_to_unix(creation_utc),
+          last_accessed: Self::chrome_time_to_unix(last_access_utc),
         })
       })
       .map_err(|e| format!("Failed to query cookies: {e}"))?
@@ -256,10 +395,12 @@ impl CookieManager {
     Ok((copied, replaced))
   }
 
-  /// Write cookies to a Chrome/Wayfern profile
+  /// Write cookies to a Chrome/Wayfern profile.
+  /// If an encryption key is available, stores cookies encrypted in encrypted_value.
   fn write_chrome_cookies(
     db_path: &Path,
     cookies: &[UnifiedCookie],
+    encryption_key: Option<&[u8; 16]>,
   ) -> Result<(usize, usize), String> {
     let conn = Connection::open(db_path).map_err(|e| format!("Failed to open database: {e}"))?;
 
@@ -272,6 +413,12 @@ impl CookieManager {
       .as_secs() as i64;
 
     for cookie in cookies {
+      // Prepare value/encrypted_value based on whether we have an encryption key
+      let (value_str, encrypted_bytes): (&str, Vec<u8>) = match encryption_key {
+        Some(key) => ("", chrome_decrypt::encrypt(&cookie.value, key)),
+        None => (cookie.value.as_str(), Vec::new()),
+      };
+
       let existing: Option<i64> = conn
         .query_row(
           "SELECT rowid FROM cookies WHERE host_key = ?1 AND name = ?2 AND path = ?3",
@@ -283,11 +430,12 @@ impl CookieManager {
       if existing.is_some() {
         conn
           .execute(
-            "UPDATE cookies SET value = ?1, expires_utc = ?2, is_secure = ?3,
-                     is_httponly = ?4, samesite = ?5, last_access_utc = ?6, last_update_utc = ?7
-                     WHERE host_key = ?8 AND name = ?9 AND path = ?10",
+            "UPDATE cookies SET value = ?1, encrypted_value = ?2, expires_utc = ?3, is_secure = ?4,
+                     is_httponly = ?5, samesite = ?6, last_access_utc = ?7, last_update_utc = ?8
+                     WHERE host_key = ?9 AND name = ?10 AND path = ?11",
             params![
-              &cookie.value,
+              value_str,
+              encrypted_bytes,
               Self::unix_to_chrome_time(cookie.expires),
               cookie.is_secure as i32,
               cookie.is_http_only as i32,
@@ -308,12 +456,13 @@ impl CookieManager {
                       path, expires_utc, is_secure, is_httponly, last_access_utc, has_expires,
                       is_persistent, priority, samesite, source_scheme, source_port, source_type,
                       has_cross_site_ancestor, last_update_utc)
-                     VALUES (?1, ?2, '', ?3, ?4, X'', ?5, ?6, ?7, ?8, ?9, 1, 1, 1, ?10, 2, -1, 0, 0, ?11)",
+                     VALUES (?1, ?2, '', ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 1, 1, 1, ?11, 2, -1, 0, 0, ?12)",
                     params![
                         Self::unix_to_chrome_time(cookie.creation_time),
                         &cookie.domain,
                         &cookie.name,
-                        &cookie.value,
+                        value_str,
+                        encrypted_bytes,
                         &cookie.path,
                         Self::unix_to_chrome_time(cookie.expires),
                         cookie.is_secure as i32,
@@ -348,7 +497,10 @@ impl CookieManager {
 
     let cookies = match profile.browser.as_str() {
       "camoufox" => Self::read_firefox_cookies(&db_path)?,
-      "wayfern" => Self::read_chrome_cookies(&db_path)?,
+      "wayfern" => {
+        let key = Self::get_chrome_encryption_key(profile, &profiles_dir);
+        Self::read_chrome_cookies(&db_path, key.as_ref())?
+      }
       _ => return Err(format!("Unsupported browser type: {}", profile.browser)),
     };
 
@@ -401,7 +553,10 @@ impl CookieManager {
     let source_db_path = Self::get_cookie_db_path(source, &profiles_dir)?;
     let all_cookies = match source.browser.as_str() {
       "camoufox" => Self::read_firefox_cookies(&source_db_path)?,
-      "wayfern" => Self::read_chrome_cookies(&source_db_path)?,
+      "wayfern" => {
+        let key = Self::get_chrome_encryption_key(source, &profiles_dir);
+        Self::read_chrome_cookies(&source_db_path, key.as_ref())?
+      }
       _ => return Err(format!("Unsupported browser type: {}", source.browser)),
     };
 
@@ -468,7 +623,10 @@ impl CookieManager {
 
       let write_result = match target.browser.as_str() {
         "camoufox" => Self::write_firefox_cookies(&target_db_path, &cookies_to_copy),
-        "wayfern" => Self::write_chrome_cookies(&target_db_path, &cookies_to_copy),
+        "wayfern" => {
+          let key = Self::get_chrome_encryption_key(target, &profiles_dir);
+          Self::write_chrome_cookies(&target_db_path, &cookies_to_copy, key.as_ref())
+        }
         _ => {
           results.push(CookieCopyResult {
             target_profile_id: target_id.clone(),
@@ -733,7 +891,10 @@ impl CookieManager {
 
     let write_result = match profile.browser.as_str() {
       "camoufox" => Self::write_firefox_cookies(&db_path, &cookies),
-      "wayfern" => Self::write_chrome_cookies(&db_path, &cookies),
+      "wayfern" => {
+        let key = Self::get_chrome_encryption_key(profile, &profiles_dir);
+        Self::write_chrome_cookies(&db_path, &cookies, key.as_ref())
+      }
       _ => return Err(format!("Unsupported browser type: {}", profile.browser)),
     };
 

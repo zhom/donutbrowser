@@ -111,13 +111,17 @@ struct ApiProxyResponse {
   name: String,
   #[schema(value_type = Object)]
   proxy_settings: ProxySettings,
+  dynamic_proxy_url: Option<String>,
+  dynamic_proxy_format: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
 struct CreateProxyRequest {
   name: String,
   #[schema(value_type = Object)]
-  proxy_settings: ProxySettings,
+  proxy_settings: Option<ProxySettings>,
+  dynamic_proxy_url: Option<String>,
+  dynamic_proxy_format: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -125,6 +129,8 @@ struct UpdateProxyRequest {
   name: Option<String>,
   #[schema(value_type = Object)]
   proxy_settings: Option<ProxySettings>,
+  dynamic_proxy_url: Option<String>,
+  dynamic_proxy_format: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -1028,6 +1034,8 @@ async fn get_proxies(
       .map(|p| ApiProxyResponse {
         id: p.id,
         name: p.name,
+        dynamic_proxy_url: p.dynamic_proxy_url,
+        dynamic_proxy_format: p.dynamic_proxy_format,
         proxy_settings: p.proxy_settings,
       })
       .collect(),
@@ -1061,6 +1069,8 @@ async fn get_proxy(
       id: proxy.id,
       name: proxy.name,
       proxy_settings: proxy.proxy_settings,
+      dynamic_proxy_url: proxy.dynamic_proxy_url,
+      dynamic_proxy_format: proxy.dynamic_proxy_format,
     }))
   } else {
     Err(StatusCode::NOT_FOUND)
@@ -1086,14 +1096,27 @@ async fn create_proxy(
   State(state): State<ApiServerState>,
   Json(request): Json<CreateProxyRequest>,
 ) -> Result<Json<ApiProxyResponse>, StatusCode> {
-  match PROXY_MANAGER.create_stored_proxy(
-    &state.app_handle,
-    request.name.clone(),
-    request.proxy_settings,
-  ) {
+  let result = if let (Some(url), Some(format)) =
+    (&request.dynamic_proxy_url, &request.dynamic_proxy_format)
+  {
+    PROXY_MANAGER.create_dynamic_proxy(
+      &state.app_handle,
+      request.name.clone(),
+      url.clone(),
+      format.clone(),
+    )
+  } else if let Some(settings) = request.proxy_settings {
+    PROXY_MANAGER.create_stored_proxy(&state.app_handle, request.name.clone(), settings)
+  } else {
+    return Err(StatusCode::BAD_REQUEST);
+  };
+
+  match result {
     Ok(proxy) => Ok(Json(ApiProxyResponse {
       id: proxy.id,
       name: proxy.name,
+      dynamic_proxy_url: proxy.dynamic_proxy_url,
+      dynamic_proxy_format: proxy.dynamic_proxy_format,
       proxy_settings: proxy.proxy_settings,
     })),
     Err(_) => Err(StatusCode::BAD_REQUEST),
@@ -1124,28 +1147,29 @@ async fn update_proxy(
   State(state): State<ApiServerState>,
   Json(request): Json<UpdateProxyRequest>,
 ) -> Result<Json<ApiProxyResponse>, StatusCode> {
-  let proxies = PROXY_MANAGER.get_stored_proxies();
-  if let Some(proxy) = proxies.into_iter().find(|p| p.id == id) {
-    let new_name = request.name.unwrap_or(proxy.name.clone());
-    let new_proxy_settings = request
-      .proxy_settings
-      .unwrap_or(proxy.proxy_settings.clone());
+  let is_dynamic = PROXY_MANAGER.is_dynamic_proxy(&id) || request.dynamic_proxy_url.is_some();
 
-    match PROXY_MANAGER.update_stored_proxy(
+  let result = if is_dynamic {
+    PROXY_MANAGER.update_dynamic_proxy(
       &state.app_handle,
       &id,
-      Some(new_name.clone()),
-      Some(new_proxy_settings.clone()),
-    ) {
-      Ok(_) => Ok(Json(ApiProxyResponse {
-        id,
-        name: new_name,
-        proxy_settings: new_proxy_settings,
-      })),
-      Err(_) => Err(StatusCode::BAD_REQUEST),
-    }
+      request.name,
+      request.dynamic_proxy_url,
+      request.dynamic_proxy_format,
+    )
   } else {
-    Err(StatusCode::NOT_FOUND)
+    PROXY_MANAGER.update_stored_proxy(&state.app_handle, &id, request.name, request.proxy_settings)
+  };
+
+  match result {
+    Ok(proxy) => Ok(Json(ApiProxyResponse {
+      id: proxy.id,
+      name: proxy.name,
+      dynamic_proxy_url: proxy.dynamic_proxy_url,
+      dynamic_proxy_format: proxy.dynamic_proxy_format,
+      proxy_settings: proxy.proxy_settings,
+    })),
+    Err(_) => Err(StatusCode::NOT_FOUND),
   }
 }
 
@@ -1289,6 +1313,13 @@ async fn run_profile(
   State(state): State<ApiServerState>,
   Json(request): Json<RunProfileRequest>,
 ) -> Result<Json<RunProfileResponse>, StatusCode> {
+  if !crate::cloud_auth::CLOUD_AUTH
+    .has_active_paid_subscription()
+    .await
+  {
+    return Err(StatusCode::PAYMENT_REQUIRED);
+  }
+
   let headless = request.headless.unwrap_or(false);
   let url = request.url;
 
@@ -1357,6 +1388,13 @@ async fn open_url_in_profile(
   State(state): State<ApiServerState>,
   Json(request): Json<OpenUrlRequest>,
 ) -> Result<StatusCode, StatusCode> {
+  if !crate::cloud_auth::CLOUD_AUTH
+    .has_active_paid_subscription()
+    .await
+  {
+    return Err(StatusCode::PAYMENT_REQUIRED);
+  }
+
   let browser_runner = crate::browser_runner::BrowserRunner::instance();
 
   browser_runner

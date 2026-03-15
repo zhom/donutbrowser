@@ -514,6 +514,15 @@ impl WayfernManager {
       args.push(format!("--load-extension={}", extension_paths.join(",")));
     }
 
+    // Pass wayfern token as CLI flag so the browser can gate CDP features
+    let wayfern_token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
+    if let Some(ref token) = wayfern_token {
+      args.push(format!("--wayfern-token={token}"));
+      log::info!("Wayfern token passed as CLI flag (length: {})", token.len());
+    } else {
+      log::warn!("No wayfern token available — CDP gated methods will be blocked");
+    }
+
     // Don't add URL to args - we'll navigate via CDP after setting fingerprint
     // This ensures fingerprint is applied at navigation commit time
 
@@ -670,25 +679,6 @@ impl WayfernManager {
             Ok(_) => log::info!("Successfully navigated to URL: {}", url),
             Err(e) => log::error!("Failed to navigate to URL: {e}"),
           }
-        }
-      }
-    }
-
-    // Close the debugging port to prevent localhost port-scan detection.
-    // Reopen on a random high port after 5s so we can still manage the browser.
-    let reopen_port = port; // Reopen on same port for find_wayfern_by_profile recovery
-    if let Some(target) = page_targets.first() {
-      if let Some(ws_url) = &target.websocket_debugger_url {
-        match self
-          .send_cdp_command(
-            ws_url,
-            "Wayfern.closeDebuggingPort",
-            json!({ "reopenPort": reopen_port, "reopenDelayMs": 30000 }),
-          )
-          .await
-        {
-          Ok(_) => log::info!("Closed debugging port, will reopen on {reopen_port} after 30s"),
-          Err(e) => log::warn!("Failed to close debugging port: {e}"),
         }
       }
     }

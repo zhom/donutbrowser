@@ -184,6 +184,22 @@
       "changeFingerprint": "Changer l'Empreinte",
       "copyCookiesToProfile": "Copier les Cookies vers le Profil"
     },
+    "synchronizer": {
+      "launchWithSync": "Lancer avec le synchroniseur",
+      "stopLeader": "Arrêter ce profil et tous ses suiveurs",
+      "stopFollower": "Suit les actions de {{leaderName}}",
+      "desyncedTooltip": "La synchronisation a échoué à {{url}}",
+      "paidFeature": "Le synchroniseur est une fonctionnalité payante",
+      "wayfernOnly": "Seuls les profils Wayfern peuvent être synchronisés",
+      "selectFollowers": "Sélectionner les profils suiveurs",
+      "selectFollowersDesc": "Choisissez les profils qui reproduiront les actions du profil leader. Seuls les profils Wayfern arrêtés peuvent être sélectionnés.",
+      "leader": "Leader",
+      "follower": "Suiveur",
+      "startSession": "Démarrer la session de synchronisation",
+      "noFollowers": "Sélectionnez au moins un profil suiveur",
+      "flakyBadge": "FLAKY",
+      "flakyTooltip": "Ce profil a une résolution d'écran différente de celle du leader. La mise en page des pages peut différer, ce qui peut causer des clics et interactions erronés."
+    },
     "ephemeral": "Éphémère",
     "ephemeralDescription": "Le navigateur est forcé d'écrire les données du profil en mémoire au lieu du disque. Les données sont supprimées à la fermeture du navigateur.",
     "ephemeralBadge": "Éphémère",
@@ -263,6 +279,26 @@
       "https": "HTTPS",
       "socks4": "SOCKS4",
       "socks5": "SOCKS5"
+    },
+    "tabs": {
+      "regular": "Standard",
+      "dynamic": "Dynamique"
+    },
+    "dynamic": {
+      "description": "Le proxy dynamique récupère les détails de connexion depuis une URL à chaque lancement d'un profil.",
+      "url": "URL du Proxy",
+      "urlPlaceholder": "https://api.example.com/proxy",
+      "urlRequired": "L'URL du proxy dynamique est requise",
+      "format": "Format de Réponse",
+      "formatJson": "JSON",
+      "formatText": "Texte",
+      "formatJsonHint": "Attend du JSON : {\"ip\": \"...\", \"port\": ..., \"username\": \"...\", \"password\": \"...\"}",
+      "formatTextHint": "Attend du texte comme : host:port:username:password ou protocol://user:pass@host:port",
+      "testUrl": "Tester l'URL",
+      "testing": "Test en cours...",
+      "testSuccess": "Le proxy dynamique a été résolu en {{host}}:{{port}}",
+      "testFailed": "Échec de la récupération du proxy : {{error}}",
+      "fetchFailed": "Échec de la récupération du proxy dynamique : {{error}}"
     },
     "check": {
       "checking": "Vérification du proxy...",

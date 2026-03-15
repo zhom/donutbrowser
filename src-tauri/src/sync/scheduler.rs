@@ -396,97 +396,112 @@ impl SyncScheduler {
       ready
     };
 
+    // Mark all profiles as in-flight and filter out duplicates
+    let mut to_sync = Vec::new();
     for profile_id in profiles_to_sync {
-      // Mark as in-flight to prevent duplicate syncs
-      {
-        let mut in_flight = self.in_flight_profiles.lock().await;
-        if in_flight.contains(&profile_id) {
-          log::debug!("Profile {} already in-flight, skipping", profile_id);
-          continue;
-        }
-        in_flight.insert(profile_id.clone());
-      }
-
-      log::info!("Executing queued sync for profile {}", profile_id);
-      let _ = events::emit(
-        "profile-sync-status",
-        serde_json::json!({
-          "profile_id": profile_id,
-          "status": "syncing"
-        }),
-      );
-
-      let profile_to_sync = {
-        let profile_manager = ProfileManager::instance();
-        profile_manager.list_profiles().ok().and_then(|profiles| {
-          profiles
-            .into_iter()
-            .find(|p| p.id.to_string() == profile_id && p.is_sync_enabled() && !p.is_cross_os())
-        })
-      };
-
-      let Some(profile) = profile_to_sync else {
-        // Remove from in-flight
-        let mut in_flight = self.in_flight_profiles.lock().await;
-        in_flight.remove(&profile_id);
+      let mut in_flight = self.in_flight_profiles.lock().await;
+      if in_flight.contains(&profile_id) {
+        log::debug!("Profile {} already in-flight, skipping", profile_id);
         continue;
-      };
-
-      let result = match SyncEngine::create_from_settings(app_handle).await {
-        Ok(engine) => engine.sync_profile(app_handle, &profile).await,
-        Err(e) => {
-          log::error!("Failed to create sync engine: {}", e);
-          Err(super::types::SyncError::NotConfigured)
-        }
-      };
-
-      // Remove from in-flight and check if sync just completed
-      let sync_just_completed = {
-        let mut in_flight = self.in_flight_profiles.lock().await;
-        in_flight.remove(&profile_id);
-        // If this was the last in-flight profile and there are no pending profiles, sync just completed
-        in_flight.is_empty()
-          && self.pending_profiles.lock().await.is_empty()
-          && self.pending_proxies.lock().await.is_empty()
-          && self.pending_groups.lock().await.is_empty()
-          && self.pending_vpns.lock().await.is_empty()
-          && self.pending_extensions.lock().await.is_empty()
-          && self.pending_extension_groups.lock().await.is_empty()
-      };
-
-      match result {
-        Ok(()) => {
-          log::info!("Profile {} synced successfully", profile_id);
-          let _ = events::emit(
-            "profile-sync-status",
-            serde_json::json!({
-              "profile_id": profile_id,
-              "status": "synced"
-            }),
-          );
-        }
-        Err(e) => {
-          log::error!("Failed to sync profile {}: {}", profile_id, e);
-          let _ = events::emit(
-            "profile-sync-status",
-            serde_json::json!({
-              "profile_id": profile_id,
-              "status": "error",
-              "error": e.to_string()
-            }),
-          );
-        }
       }
+      in_flight.insert(profile_id.clone());
+      to_sync.push(profile_id);
+    }
 
-      // Trigger cleanup after sync completes if this was the last profile
-      if sync_just_completed {
-        log::debug!("All profile syncs completed, triggering cleanup");
-        let registry = crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
-        if let Err(e) = registry.cleanup_unused_binaries() {
-          log::warn!("Cleanup after sync failed: {e}");
-        } else {
-          log::debug!("Cleanup after sync completed successfully");
+    // Sync all profiles in parallel
+    let mut sync_set = tokio::task::JoinSet::new();
+    for profile_id in to_sync {
+      let app = app_handle.clone();
+      let in_flight = self.in_flight_profiles.clone();
+      sync_set.spawn(async move {
+        log::info!("Executing queued sync for profile {}", profile_id);
+        let _ = events::emit(
+          "profile-sync-status",
+          serde_json::json!({
+            "profile_id": profile_id,
+            "status": "syncing"
+          }),
+        );
+
+        let profile_to_sync = {
+          let profile_manager = ProfileManager::instance();
+          profile_manager.list_profiles().ok().and_then(|profiles| {
+            profiles
+              .into_iter()
+              .find(|p| p.id.to_string() == profile_id && p.is_sync_enabled() && !p.is_cross_os())
+          })
+        };
+
+        let Some(profile) = profile_to_sync else {
+          let mut inf = in_flight.lock().await;
+          inf.remove(&profile_id);
+          return;
+        };
+
+        let result = match SyncEngine::create_from_settings(&app).await {
+          Ok(engine) => engine.sync_profile(&app, &profile).await,
+          Err(e) => {
+            log::error!("Failed to create sync engine: {}", e);
+            Err(super::types::SyncError::NotConfigured)
+          }
+        };
+
+        {
+          let mut inf = in_flight.lock().await;
+          inf.remove(&profile_id);
         }
+
+        match result {
+          Ok(()) => {
+            log::info!("Profile {} synced successfully", profile_id);
+            let _ = events::emit(
+              "profile-sync-status",
+              serde_json::json!({
+                "profile_id": profile_id,
+                "status": "synced"
+              }),
+            );
+          }
+          Err(e) => {
+            log::error!("Failed to sync profile {}: {}", profile_id, e);
+            let _ = events::emit(
+              "profile-sync-status",
+              serde_json::json!({
+                "profile_id": profile_id,
+                "status": "error",
+                "error": e.to_string()
+              }),
+            );
+          }
+        }
+      });
+    }
+
+    // Wait for all parallel syncs to finish
+    while let Some(result) = sync_set.join_next().await {
+      if let Err(e) = result {
+        log::error!("Profile sync task panicked: {e}");
+      }
+    }
+
+    // Trigger cleanup if everything is done
+    let all_done = {
+      let in_flight = self.in_flight_profiles.lock().await;
+      in_flight.is_empty()
+        && self.pending_profiles.lock().await.is_empty()
+        && self.pending_proxies.lock().await.is_empty()
+        && self.pending_groups.lock().await.is_empty()
+        && self.pending_vpns.lock().await.is_empty()
+        && self.pending_extensions.lock().await.is_empty()
+        && self.pending_extension_groups.lock().await.is_empty()
+    };
+    if all_done {
+      log::debug!("All profile syncs completed, triggering cleanup");
+      let registry = crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
+      if let Err(e) = registry.cleanup_unused_binaries() {
+        log::warn!("Cleanup after sync failed: {e}");
+      } else {
+        log::debug!("Cleanup after sync completed successfully");
       }
     }
   }

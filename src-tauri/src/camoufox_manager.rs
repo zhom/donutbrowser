@@ -685,9 +685,6 @@ impl CamoufoxManager {
       }
     }
 
-    // Write search.json.mozlz4 with default search engines (DuckDuckGo + Google)
-    write_default_search_config(&profile_path);
-
     self
       .launch_camoufox(
         &app_handle,
@@ -698,77 +695,6 @@ impl CamoufoxManager {
       )
       .await
       .map_err(|e| format!("Failed to launch Camoufox: {e}"))
-  }
-}
-
-fn write_default_search_config(profile_path: &std::path::Path) {
-  let search_file = profile_path.join("search.json.mozlz4");
-  if search_file.exists() {
-    return;
-  }
-
-  let json = serde_json::json!({
-    "version": 6,
-    "engines": [
-      {
-        "_name": "DuckDuckGo",
-        "_isAppProvided": false,
-        "_metaData": { "order": 1 },
-        "_urls": [
-          {
-            "template": "https://duckduckgo.com/?q={searchTerms}",
-            "type": "text/html",
-            "params": []
-          },
-          {
-            "template": "https://duckduckgo.com/ac/?q={searchTerms}&type=list",
-            "type": "application/x-suggestions+json",
-            "params": []
-          }
-        ],
-        "_iconURL": "https://duckduckgo.com/favicon.ico"
-      },
-      {
-        "_name": "Google",
-        "_isAppProvided": false,
-        "_metaData": { "order": 2 },
-        "_urls": [
-          {
-            "template": "https://www.google.com/search?q={searchTerms}",
-            "type": "text/html",
-            "params": []
-          },
-          {
-            "template": "https://www.google.com/complete/search?client=firefox&q={searchTerms}",
-            "type": "application/x-suggestions+json",
-            "params": []
-          }
-        ],
-        "_iconURL": "https://www.google.com/favicon.ico"
-      }
-    ],
-    "metaData": {
-      "useSavedOrder": false,
-      "defaultEngineId": "DuckDuckGo"
-    }
-  });
-
-  let json_bytes = match serde_json::to_vec(&json) {
-    Ok(bytes) => bytes,
-    Err(e) => {
-      log::warn!("Failed to serialize search config: {e}");
-      return;
-    }
-  };
-
-  let magic = b"mozLz40\0";
-  let compressed = lz4_flex::block::compress_prepend_size(&json_bytes);
-  let mut output = Vec::with_capacity(magic.len() + compressed.len());
-  output.extend_from_slice(magic);
-  output.extend_from_slice(&compressed);
-
-  if let Err(e) = std::fs::write(&search_file, &output) {
-    log::warn!("Failed to write search.json.mozlz4: {e}");
   }
 }
 

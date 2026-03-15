@@ -2,6 +2,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { LoadingButton } from "@/components/loading-button";
 import {
@@ -20,10 +21,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { StoredProxy } from "@/types";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { ProxySettings, StoredProxy } from "@/types";
 import { RippleButton } from "./ui/ripple";
 
-interface ProxyFormData {
+interface RegularFormData {
   name: string;
   proxy_type: string;
   host: string;
@@ -31,6 +33,14 @@ interface ProxyFormData {
   username: string;
   password: string;
 }
+
+interface DynamicFormData {
+  name: string;
+  url: string;
+  format: string;
+}
+
+type ProxyMode = "regular" | "dynamic";
 
 interface ProxyFormDialogProps {
   isOpen: boolean;
@@ -43,8 +53,11 @@ export function ProxyFormDialog({
   onClose,
   editingProxy,
 }: ProxyFormDialogProps) {
+  const { t } = useTranslation();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState<ProxyFormData>({
+  const [isTesting, setIsTesting] = useState(false);
+  const [mode, setMode] = useState<ProxyMode>("regular");
+  const [regularForm, setRegularForm] = useState<RegularFormData>({
     name: "",
     proxy_type: "http",
     host: "",
@@ -52,9 +65,14 @@ export function ProxyFormDialog({
     username: "",
     password: "",
   });
+  const [dynamicForm, setDynamicForm] = useState<DynamicFormData>({
+    name: "",
+    url: "",
+    format: "json",
+  });
 
   const resetForm = useCallback(() => {
-    setFormData({
+    setRegularForm({
       name: "",
       proxy_type: "http",
       host: "",
@@ -62,62 +80,134 @@ export function ProxyFormDialog({
       username: "",
       password: "",
     });
+    setDynamicForm({
+      name: "",
+      url: "",
+      format: "json",
+    });
+    setMode("regular");
   }, []);
 
-  // Load editing proxy data when dialog opens
   useEffect(() => {
     if (isOpen) {
       if (editingProxy) {
-        setFormData({
-          name: editingProxy.name,
-          proxy_type: editingProxy.proxy_settings.proxy_type,
-          host: editingProxy.proxy_settings.host,
-          port: editingProxy.proxy_settings.port,
-          username: editingProxy.proxy_settings.username || "",
-          password: editingProxy.proxy_settings.password || "",
-        });
+        if (editingProxy.dynamic_proxy_url) {
+          setMode("dynamic");
+          setDynamicForm({
+            name: editingProxy.name,
+            url: editingProxy.dynamic_proxy_url,
+            format: editingProxy.dynamic_proxy_format || "json",
+          });
+        } else {
+          setMode("regular");
+          setRegularForm({
+            name: editingProxy.name,
+            proxy_type: editingProxy.proxy_settings.proxy_type,
+            host: editingProxy.proxy_settings.host,
+            port: editingProxy.proxy_settings.port,
+            username: editingProxy.proxy_settings.username || "",
+            password: editingProxy.proxy_settings.password || "",
+          });
+        }
       } else {
         resetForm();
       }
     }
   }, [isOpen, editingProxy, resetForm]);
 
-  const handleSubmit = useCallback(async () => {
-    if (!formData.name.trim()) {
-      toast.error("Proxy name is required");
+  const handleTestDynamic = useCallback(async () => {
+    if (!dynamicForm.url.trim()) {
+      toast.error(t("proxies.dynamic.urlRequired"));
       return;
     }
+    setIsTesting(true);
+    try {
+      const settings = await invoke<ProxySettings>("fetch_dynamic_proxy", {
+        url: dynamicForm.url.trim(),
+        format: dynamicForm.format,
+      });
+      toast.success(
+        t("proxies.dynamic.testSuccess", {
+          host: settings.host,
+          port: settings.port,
+        }),
+      );
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      toast.error(t("proxies.dynamic.testFailed", { error: errorMessage }));
+    } finally {
+      setIsTesting(false);
+    }
+  }, [dynamicForm, t]);
 
-    if (!formData.host.trim() || !formData.port) {
-      toast.error("Host and port are required");
-      return;
+  const handleSubmit = useCallback(async () => {
+    if (mode === "regular") {
+      if (!regularForm.name.trim()) {
+        toast.error(t("proxies.form.nameRequired", "Proxy name is required"));
+        return;
+      }
+      if (!regularForm.host.trim() || !regularForm.port) {
+        toast.error(
+          t("proxies.form.hostPortRequired", "Host and port are required"),
+        );
+        return;
+      }
+    } else {
+      if (!dynamicForm.name.trim()) {
+        toast.error(t("proxies.form.nameRequired", "Proxy name is required"));
+        return;
+      }
+      if (!dynamicForm.url.trim()) {
+        toast.error(t("proxies.dynamic.urlRequired"));
+        return;
+      }
     }
 
     setIsSubmitting(true);
     try {
-      const proxySettings = {
-        proxy_type: formData.proxy_type,
-        host: formData.host.trim(),
-        port: formData.port,
-        username: formData.username.trim() || undefined,
-        password: formData.password.trim() || undefined,
-      };
-
       if (editingProxy) {
-        // Update existing proxy
-        await invoke("update_stored_proxy", {
-          proxyId: editingProxy.id,
-          name: formData.name.trim(),
-          proxySettings,
-        });
-        toast.success("Proxy updated successfully");
+        if (mode === "dynamic") {
+          await invoke("update_stored_proxy", {
+            proxyId: editingProxy.id,
+            name: dynamicForm.name.trim(),
+            dynamicProxyUrl: dynamicForm.url.trim(),
+            dynamicProxyFormat: dynamicForm.format,
+          });
+        } else {
+          await invoke("update_stored_proxy", {
+            proxyId: editingProxy.id,
+            name: regularForm.name.trim(),
+            proxySettings: {
+              proxy_type: regularForm.proxy_type,
+              host: regularForm.host.trim(),
+              port: regularForm.port,
+              username: regularForm.username.trim() || undefined,
+              password: regularForm.password.trim() || undefined,
+            },
+          });
+        }
+        toast.success(t("toasts.success.proxyUpdated"));
       } else {
-        // Create new proxy
-        await invoke("create_stored_proxy", {
-          name: formData.name.trim(),
-          proxySettings,
-        });
-        toast.success("Proxy created successfully");
+        if (mode === "dynamic") {
+          await invoke("create_stored_proxy", {
+            name: dynamicForm.name.trim(),
+            dynamicProxyUrl: dynamicForm.url.trim(),
+            dynamicProxyFormat: dynamicForm.format,
+          });
+        } else {
+          await invoke("create_stored_proxy", {
+            name: regularForm.name.trim(),
+            proxySettings: {
+              proxy_type: regularForm.proxy_type,
+              host: regularForm.host.trim(),
+              port: regularForm.port,
+              username: regularForm.username.trim() || undefined,
+              password: regularForm.password.trim() || undefined,
+            },
+          });
+        }
+        toast.success(t("toasts.success.proxyCreated"));
       }
 
       onClose();
@@ -129,7 +219,7 @@ export function ProxyFormDialog({
     } finally {
       setIsSubmitting(false);
     }
-  }, [formData, editingProxy, onClose]);
+  }, [mode, regularForm, dynamicForm, editingProxy, onClose, t]);
 
   const handleClose = useCallback(() => {
     if (!isSubmitting) {
@@ -137,125 +227,227 @@ export function ProxyFormDialog({
     }
   }, [isSubmitting, onClose]);
 
-  const isFormValid =
-    formData.name.trim() &&
-    formData.host.trim() &&
-    formData.port > 0 &&
-    formData.port <= 65535;
+  const isRegularValid =
+    regularForm.name.trim() &&
+    regularForm.host.trim() &&
+    regularForm.port > 0 &&
+    regularForm.port <= 65535;
+
+  const isDynamicValid = dynamicForm.name.trim() && dynamicForm.url.trim();
+
+  const isFormValid = mode === "regular" ? isRegularValid : isDynamicValid;
+
+  const isEditingDynamic = editingProxy?.dynamic_proxy_url != null;
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {editingProxy ? "Edit Proxy" : "Create New Proxy"}
+            {editingProxy ? t("proxies.edit") : t("proxies.add")}
           </DialogTitle>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
-          <div className="grid gap-2">
-            <Label htmlFor="proxy-name">Proxy Name</Label>
-            <Input
-              id="proxy-name"
-              value={formData.name}
-              onChange={(e) =>
-                setFormData({ ...formData, name: e.target.value })
-              }
-              placeholder="e.g. Office Proxy, Home VPN, etc."
-              disabled={isSubmitting}
-            />
-          </div>
+          {!editingProxy && (
+            <Tabs value={mode} onValueChange={(v) => setMode(v as ProxyMode)}>
+              <TabsList className="w-full">
+                <TabsTrigger value="regular" className="flex-1">
+                  {t("proxies.tabs.regular")}
+                </TabsTrigger>
+                <TabsTrigger value="dynamic" className="flex-1">
+                  {t("proxies.tabs.dynamic")}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          )}
 
-          <div className="grid gap-2">
-            <Label>Proxy Type</Label>
-            <Select
-              value={formData.proxy_type}
-              onValueChange={(value) =>
-                setFormData({ ...formData, proxy_type: value })
-              }
-              disabled={isSubmitting}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select proxy type" />
-              </SelectTrigger>
-              <SelectContent>
-                {["http", "https", "socks4", "socks5"].map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {type.toUpperCase()}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {editingProxy && isEditingDynamic && (
+            <p className="text-xs text-muted-foreground">
+              {t("proxies.dynamic.description")}
+            </p>
+          )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="proxy-host">Host</Label>
-              <Input
-                id="proxy-host"
-                value={formData.host}
-                onChange={(e) =>
-                  setFormData({ ...formData, host: e.target.value })
-                }
-                placeholder="e.g. 127.0.0.1"
-                disabled={isSubmitting}
-              />
-            </div>
+          {mode === "regular" ? (
+            <>
+              <div className="grid gap-2">
+                <Label htmlFor="proxy-name">{t("proxies.form.name")}</Label>
+                <Input
+                  id="proxy-name"
+                  value={regularForm.name}
+                  onChange={(e) =>
+                    setRegularForm({ ...regularForm, name: e.target.value })
+                  }
+                  placeholder="e.g. Office Proxy, Home VPN, etc."
+                  disabled={isSubmitting}
+                />
+              </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="proxy-port">Port</Label>
-              <Input
-                id="proxy-port"
-                type="number"
-                value={formData.port}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    port: parseInt(e.target.value, 10) || 0,
-                  })
-                }
-                placeholder="e.g. 8080"
-                min="1"
-                max="65535"
-                disabled={isSubmitting}
-              />
-            </div>
-          </div>
+              <div className="grid gap-2">
+                <Label>{t("proxies.form.type")}</Label>
+                <Select
+                  value={regularForm.proxy_type}
+                  onValueChange={(value) =>
+                    setRegularForm({ ...regularForm, proxy_type: value })
+                  }
+                  disabled={isSubmitting}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select proxy type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {["http", "https", "socks4", "socks5"].map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type.toUpperCase()}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="proxy-username">Username (optional)</Label>
-              <Input
-                id="proxy-username"
-                value={formData.username}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    username: e.target.value,
-                  })
-                }
-                placeholder="Proxy username"
-                disabled={isSubmitting}
-              />
-            </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="proxy-host">{t("proxies.form.host")}</Label>
+                  <Input
+                    id="proxy-host"
+                    value={regularForm.host}
+                    onChange={(e) =>
+                      setRegularForm({ ...regularForm, host: e.target.value })
+                    }
+                    placeholder={t("proxies.form.hostPlaceholder")}
+                    disabled={isSubmitting}
+                  />
+                </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="proxy-password">Password (optional)</Label>
-              <Input
-                id="proxy-password"
-                type="password"
-                value={formData.password}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    password: e.target.value,
-                  })
-                }
-                placeholder="Proxy password"
-                disabled={isSubmitting}
-              />
-            </div>
-          </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="proxy-port">{t("proxies.form.port")}</Label>
+                  <Input
+                    id="proxy-port"
+                    type="number"
+                    value={regularForm.port}
+                    onChange={(e) =>
+                      setRegularForm({
+                        ...regularForm,
+                        port: parseInt(e.target.value, 10) || 0,
+                      })
+                    }
+                    placeholder={t("proxies.form.portPlaceholder")}
+                    min="1"
+                    max="65535"
+                    disabled={isSubmitting}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="proxy-username">
+                    {t("proxies.form.username")} (
+                    {t("proxies.form.usernamePlaceholder")})
+                  </Label>
+                  <Input
+                    id="proxy-username"
+                    value={regularForm.username}
+                    onChange={(e) =>
+                      setRegularForm({
+                        ...regularForm,
+                        username: e.target.value,
+                      })
+                    }
+                    placeholder={t("proxies.form.usernamePlaceholder")}
+                    disabled={isSubmitting}
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="proxy-password">
+                    {t("proxies.form.password")} (
+                    {t("proxies.form.passwordPlaceholder")})
+                  </Label>
+                  <Input
+                    id="proxy-password"
+                    type="password"
+                    value={regularForm.password}
+                    onChange={(e) =>
+                      setRegularForm({
+                        ...regularForm,
+                        password: e.target.value,
+                      })
+                    }
+                    placeholder={t("proxies.form.passwordPlaceholder")}
+                    disabled={isSubmitting}
+                  />
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="grid gap-2">
+                <Label htmlFor="dynamic-name">{t("proxies.form.name")}</Label>
+                <Input
+                  id="dynamic-name"
+                  value={dynamicForm.name}
+                  onChange={(e) =>
+                    setDynamicForm({ ...dynamicForm, name: e.target.value })
+                  }
+                  placeholder="e.g. My Tunnel"
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="dynamic-url">{t("proxies.dynamic.url")}</Label>
+                <Input
+                  id="dynamic-url"
+                  value={dynamicForm.url}
+                  onChange={(e) =>
+                    setDynamicForm({ ...dynamicForm, url: e.target.value })
+                  }
+                  placeholder={t("proxies.dynamic.urlPlaceholder")}
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label>{t("proxies.dynamic.format")}</Label>
+                <Select
+                  value={dynamicForm.format}
+                  onValueChange={(value) =>
+                    setDynamicForm({ ...dynamicForm, format: value })
+                  }
+                  disabled={isSubmitting}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="json">
+                      {t("proxies.dynamic.formatJson")}
+                    </SelectItem>
+                    <SelectItem value="text">
+                      {t("proxies.dynamic.formatText")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {dynamicForm.format === "json"
+                    ? t("proxies.dynamic.formatJsonHint")
+                    : t("proxies.dynamic.formatTextHint")}
+                </p>
+              </div>
+
+              <RippleButton
+                variant="outline"
+                size="sm"
+                onClick={handleTestDynamic}
+                disabled={isSubmitting || isTesting || !dynamicForm.url.trim()}
+              >
+                {isTesting
+                  ? t("proxies.dynamic.testing")
+                  : t("proxies.dynamic.testUrl")}
+              </RippleButton>
+            </>
+          )}
         </div>
 
         <DialogFooter>
@@ -264,14 +456,14 @@ export function ProxyFormDialog({
             onClick={handleClose}
             disabled={isSubmitting}
           >
-            Cancel
+            {t("common.cancel", "Cancel")}
           </RippleButton>
           <LoadingButton
             isLoading={isSubmitting}
             onClick={handleSubmit}
             disabled={!isFormValid}
           >
-            {editingProxy ? "Update Proxy" : "Create Proxy"}
+            {editingProxy ? t("proxies.edit") : t("proxies.add")}
           </LoadingButton>
         </DialogFooter>
       </DialogContent>

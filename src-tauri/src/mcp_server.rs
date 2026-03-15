@@ -96,6 +96,16 @@ impl McpServer {
     self.is_running.load(Ordering::SeqCst)
   }
 
+  async fn require_paid_subscription(feature: &str) -> Result<(), McpError> {
+    if !CLOUD_AUTH.has_active_paid_subscription().await {
+      return Err(McpError {
+        code: -32000,
+        message: format!("{feature} requires an active paid subscription"),
+      });
+    }
+    Ok(())
+  }
+
   pub fn get_port(&self) -> Option<u16> {
     let port = self.port.load(Ordering::SeqCst);
     if port > 0 {
@@ -561,7 +571,7 @@ impl McpServer {
       },
       McpTool {
         name: "create_proxy".to_string(),
-        description: "Create a new proxy configuration".to_string(),
+        description: "Create a new proxy configuration. For regular proxies, provide proxy_type/host/port. For dynamic proxies, provide dynamic_proxy_url and dynamic_proxy_format instead.".to_string(),
         input_schema: serde_json::json!({
           "type": "object",
           "properties": {
@@ -572,26 +582,35 @@ impl McpServer {
             "proxy_type": {
               "type": "string",
               "enum": ["http", "https", "socks4", "socks5"],
-              "description": "The type of proxy"
+              "description": "The type of proxy (for regular proxies)"
             },
             "host": {
               "type": "string",
-              "description": "The proxy host address"
+              "description": "The proxy host address (for regular proxies)"
             },
             "port": {
               "type": "integer",
-              "description": "The proxy port number"
+              "description": "The proxy port number (for regular proxies)"
             },
             "username": {
               "type": "string",
-              "description": "Optional username for authentication"
+              "description": "Optional username for authentication (for regular proxies)"
             },
             "password": {
               "type": "string",
-              "description": "Optional password for authentication"
+              "description": "Optional password for authentication (for regular proxies)"
+            },
+            "dynamic_proxy_url": {
+              "type": "string",
+              "description": "URL to fetch proxy settings from (for dynamic proxies)"
+            },
+            "dynamic_proxy_format": {
+              "type": "string",
+              "enum": ["json", "text"],
+              "description": "Format of the dynamic proxy response: 'json' for JSON object or 'text' for text like host:port:user:pass (for dynamic proxies)"
             }
           },
-          "required": ["name", "proxy_type", "host", "port"]
+          "required": ["name"]
         }),
       },
       McpTool {
@@ -611,23 +630,32 @@ impl McpServer {
             "proxy_type": {
               "type": "string",
               "enum": ["http", "https", "socks4", "socks5"],
-              "description": "The type of proxy"
+              "description": "The type of proxy (for regular proxies)"
             },
             "host": {
               "type": "string",
-              "description": "The proxy host address"
+              "description": "The proxy host address (for regular proxies)"
             },
             "port": {
               "type": "integer",
-              "description": "The proxy port number"
+              "description": "The proxy port number (for regular proxies)"
             },
             "username": {
               "type": "string",
-              "description": "Optional username for authentication"
+              "description": "Optional username for authentication (for regular proxies)"
             },
             "password": {
               "type": "string",
-              "description": "Optional password for authentication"
+              "description": "Optional password for authentication (for regular proxies)"
+            },
+            "dynamic_proxy_url": {
+              "type": "string",
+              "description": "URL to fetch proxy settings from (for dynamic proxies)"
+            },
+            "dynamic_proxy_format": {
+              "type": "string",
+              "enum": ["json", "text"],
+              "description": "Format of the dynamic proxy response (for dynamic proxies)"
             }
           },
           "required": ["proxy_id"]
@@ -926,6 +954,66 @@ impl McpServer {
           "required": ["profile_id"]
         }),
       },
+      // Synchronizer tools
+      McpTool {
+        name: "start_sync_session".to_string(),
+        description: "Start a synchronizer session. Launches a leader profile and follower profiles, then mirrors all actions from the leader to the followers in real time. Only Wayfern profiles are supported. Requires paid subscription.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "leader_profile_id": {
+              "type": "string",
+              "description": "The UUID of the leader profile"
+            },
+            "follower_profile_ids": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "UUIDs of follower profiles"
+            }
+          },
+          "required": ["leader_profile_id", "follower_profile_ids"]
+        }),
+      },
+      McpTool {
+        name: "stop_sync_session".to_string(),
+        description: "Stop an active synchronizer session. Kills all follower profiles and the leader.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string",
+              "description": "The sync session ID"
+            }
+          },
+          "required": ["session_id"]
+        }),
+      },
+      McpTool {
+        name: "get_sync_sessions".to_string(),
+        description: "List all active synchronizer sessions.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {}
+        }),
+      },
+      McpTool {
+        name: "remove_sync_follower".to_string(),
+        description: "Remove a follower from an active synchronizer session.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string",
+              "description": "The sync session ID"
+            },
+            "follower_profile_id": {
+              "type": "string",
+              "description": "The UUID of the follower to remove"
+            }
+          },
+          "required": ["session_id", "follower_profile_id"]
+        }),
+      },
       // Browser interaction tools
       McpTool {
         name: "navigate".to_string(),
@@ -1165,7 +1253,10 @@ impl McpServer {
     match tool_name {
       "list_profiles" => self.handle_list_profiles().await,
       "get_profile" => self.handle_get_profile(&arguments).await,
-      "run_profile" => self.handle_run_profile(&arguments).await,
+      "run_profile" => {
+        Self::require_paid_subscription("Browser automation").await?;
+        self.handle_run_profile(&arguments).await
+      }
       "kill_profile" => self.handle_kill_profile(&arguments).await,
       "create_profile" => self.handle_create_profile(&arguments).await,
       "update_profile" => self.handle_update_profile(&arguments).await,
@@ -1217,14 +1308,43 @@ impl McpServer {
       // Team lock tools
       "get_team_locks" => self.handle_get_team_locks().await,
       "get_team_lock_status" => self.handle_get_team_lock_status(&arguments).await,
-      // Browser interaction tools
-      "navigate" => self.handle_navigate(&arguments).await,
-      "screenshot" => self.handle_screenshot(&arguments).await,
-      "evaluate_javascript" => self.handle_evaluate_javascript(&arguments).await,
-      "click_element" => self.handle_click_element(&arguments).await,
-      "type_text" => self.handle_type_text(&arguments).await,
-      "get_page_content" => self.handle_get_page_content(&arguments).await,
-      "get_page_info" => self.handle_get_page_info(&arguments).await,
+      // Synchronizer tools
+      "start_sync_session" => {
+        Self::require_paid_subscription("Synchronizer").await?;
+        self.handle_start_sync_session(&arguments).await
+      }
+      "stop_sync_session" => self.handle_stop_sync_session(&arguments).await,
+      "get_sync_sessions" => self.handle_get_sync_sessions().await,
+      "remove_sync_follower" => self.handle_remove_sync_follower(&arguments).await,
+      // Browser interaction tools (require paid subscription)
+      "navigate" => {
+        Self::require_paid_subscription("Browser automation").await?;
+        self.handle_navigate(&arguments).await
+      }
+      "screenshot" => {
+        Self::require_paid_subscription("Browser automation").await?;
+        self.handle_screenshot(&arguments).await
+      }
+      "evaluate_javascript" => {
+        Self::require_paid_subscription("Browser automation").await?;
+        self.handle_evaluate_javascript(&arguments).await
+      }
+      "click_element" => {
+        Self::require_paid_subscription("Browser automation").await?;
+        self.handle_click_element(&arguments).await
+      }
+      "type_text" => {
+        Self::require_paid_subscription("Browser automation").await?;
+        self.handle_type_text(&arguments).await
+      }
+      "get_page_content" => {
+        Self::require_paid_subscription("Browser automation").await?;
+        self.handle_get_page_content(&arguments).await
+      }
+      "get_page_info" => {
+        Self::require_paid_subscription("Browser automation").await?;
+        self.handle_get_page_info(&arguments).await
+      }
       _ => Err(McpError {
         code: -32602,
         message: format!("Unknown tool: {tool_name}"),
@@ -2013,59 +2133,79 @@ impl McpServer {
         message: "Missing name".to_string(),
       })?;
 
-    let proxy_type = arguments
-      .get("proxy_type")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing proxy_type".to_string(),
-      })?;
-
-    let host = arguments
-      .get("host")
-      .and_then(|v| v.as_str())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing host".to_string(),
-      })?;
-
-    let port = arguments
-      .get("port")
-      .and_then(|v| v.as_u64())
-      .ok_or_else(|| McpError {
-        code: -32602,
-        message: "Missing port".to_string(),
-      })? as u16;
-
-    let username = arguments
-      .get("username")
-      .and_then(|v| v.as_str())
-      .map(|s| s.to_string());
-    let password = arguments
-      .get("password")
-      .and_then(|v| v.as_str())
-      .map(|s| s.to_string());
-
-    let proxy_settings = ProxySettings {
-      proxy_type: proxy_type.to_string(),
-      host: host.to_string(),
-      port,
-      username,
-      password,
-    };
-
     let inner = self.inner.lock().await;
     let app_handle = inner.app_handle.as_ref().ok_or_else(|| McpError {
       code: -32000,
       message: "MCP server not properly initialized".to_string(),
     })?;
 
-    let proxy = PROXY_MANAGER
-      .create_stored_proxy(app_handle, name.to_string(), proxy_settings)
-      .map_err(|e| McpError {
-        code: -32000,
-        message: format!("Failed to create proxy: {e}"),
-      })?;
+    // Check if this is a dynamic proxy creation
+    let dynamic_url = arguments.get("dynamic_proxy_url").and_then(|v| v.as_str());
+    let dynamic_format = arguments
+      .get("dynamic_proxy_format")
+      .and_then(|v| v.as_str());
+
+    let proxy = if let (Some(url), Some(format)) = (dynamic_url, dynamic_format) {
+      PROXY_MANAGER
+        .create_dynamic_proxy(
+          app_handle,
+          name.to_string(),
+          url.to_string(),
+          format.to_string(),
+        )
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to create dynamic proxy: {e}"),
+        })?
+    } else {
+      let proxy_type = arguments
+        .get("proxy_type")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| McpError {
+          code: -32602,
+          message: "Missing proxy_type (required for regular proxies)".to_string(),
+        })?;
+
+      let host = arguments
+        .get("host")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| McpError {
+          code: -32602,
+          message: "Missing host (required for regular proxies)".to_string(),
+        })?;
+
+      let port = arguments
+        .get("port")
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| McpError {
+          code: -32602,
+          message: "Missing port (required for regular proxies)".to_string(),
+        })? as u16;
+
+      let username = arguments
+        .get("username")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+      let password = arguments
+        .get("password")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+      let proxy_settings = ProxySettings {
+        proxy_type: proxy_type.to_string(),
+        host: host.to_string(),
+        port,
+        username,
+        password,
+      };
+
+      PROXY_MANAGER
+        .create_stored_proxy(app_handle, name.to_string(), proxy_settings)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to create proxy: {e}"),
+        })?
+    };
 
     Ok(serde_json::json!({
       "content": [{
@@ -2155,12 +2295,32 @@ impl McpServer {
       message: "MCP server not properly initialized".to_string(),
     })?;
 
-    let proxy = PROXY_MANAGER
-      .update_stored_proxy(app_handle, proxy_id, name, proxy_settings)
-      .map_err(|e| McpError {
-        code: -32000,
-        message: format!("Failed to update proxy: {e}"),
-      })?;
+    // Check for dynamic proxy fields
+    let dynamic_url = arguments
+      .get("dynamic_proxy_url")
+      .and_then(|v| v.as_str())
+      .map(|s| s.to_string());
+    let dynamic_format = arguments
+      .get("dynamic_proxy_format")
+      .and_then(|v| v.as_str())
+      .map(|s| s.to_string());
+    let is_dynamic = PROXY_MANAGER.is_dynamic_proxy(proxy_id) || dynamic_url.is_some();
+
+    let proxy = if is_dynamic {
+      PROXY_MANAGER
+        .update_dynamic_proxy(app_handle, proxy_id, name, dynamic_url, dynamic_format)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update dynamic proxy: {e}"),
+        })?
+    } else {
+      PROXY_MANAGER
+        .update_stored_proxy(app_handle, proxy_id, name, proxy_settings)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update proxy: {e}"),
+        })?
+    };
 
     Ok(serde_json::json!({
       "content": [{
@@ -3030,9 +3190,8 @@ impl McpServer {
     let url = format!("http://127.0.0.1:{port}/json");
     let client = reqwest::Client::new();
 
-    // Retry connecting to CDP endpoint — Wayfern closes the debugging port
-    // briefly after launch for anti-detection and reopens it after ~30s.
-    let max_attempts = 45;
+    // Retry connecting to CDP endpoint (browser may still be starting up)
+    let max_attempts = 15;
     let mut last_err = String::new();
     for attempt in 0..max_attempts {
       if attempt > 0 {
@@ -3900,6 +4059,146 @@ impl McpServer {
       }]
     }))
   }
+
+  // --- Synchronizer handlers ---
+
+  async fn handle_start_sync_session(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let leader_id = arguments
+      .get("leader_profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing leader_profile_id".to_string(),
+      })?;
+    let follower_ids: Vec<String> = arguments
+      .get("follower_profile_ids")
+      .and_then(|v| v.as_array())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing follower_profile_ids".to_string(),
+      })?
+      .iter()
+      .filter_map(|v| v.as_str().map(|s| s.to_string()))
+      .collect();
+
+    let app = {
+      let inner = self.inner.lock().await;
+      inner.app_handle.clone().ok_or_else(|| McpError {
+        code: -32000,
+        message: "MCP server not properly initialized".to_string(),
+      })?
+    };
+
+    let info = crate::synchronizer::SynchronizerManager::instance()
+      .start_session(app, leader_id.to_string(), follower_ids)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": serde_json::to_string_pretty(&info).unwrap_or_default()
+      }]
+    }))
+  }
+
+  async fn handle_stop_sync_session(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let session_id = arguments
+      .get("session_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing session_id".to_string(),
+      })?;
+
+    let app = {
+      let inner = self.inner.lock().await;
+      inner.app_handle.clone().ok_or_else(|| McpError {
+        code: -32000,
+        message: "MCP server not properly initialized".to_string(),
+      })?
+    };
+
+    crate::synchronizer::SynchronizerManager::instance()
+      .stop_session(app, session_id)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": "Sync session stopped"
+      }]
+    }))
+  }
+
+  async fn handle_get_sync_sessions(&self) -> Result<serde_json::Value, McpError> {
+    let sessions = crate::synchronizer::SynchronizerManager::instance()
+      .get_sessions()
+      .await;
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": serde_json::to_string_pretty(&sessions).unwrap_or_default()
+      }]
+    }))
+  }
+
+  async fn handle_remove_sync_follower(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let session_id = arguments
+      .get("session_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing session_id".to_string(),
+      })?;
+    let follower_id = arguments
+      .get("follower_profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing follower_profile_id".to_string(),
+      })?;
+
+    let app = {
+      let inner = self.inner.lock().await;
+      inner.app_handle.clone().ok_or_else(|| McpError {
+        code: -32000,
+        message: "MCP server not properly initialized".to_string(),
+      })?
+    };
+
+    crate::synchronizer::SynchronizerManager::instance()
+      .remove_follower(app, session_id, follower_id)
+      .await
+      .map_err(|e| McpError {
+        code: -32000,
+        message: e,
+      })?;
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": "Follower removed from sync session"
+      }]
+    }))
+  }
 }
 
 lazy_static::lazy_static! {
@@ -3963,6 +4262,11 @@ mod tests {
     // Team lock tools
     assert!(tool_names.contains(&"get_team_locks"));
     assert!(tool_names.contains(&"get_team_lock_status"));
+    // Synchronizer tools
+    assert!(tool_names.contains(&"start_sync_session"));
+    assert!(tool_names.contains(&"stop_sync_session"));
+    assert!(tool_names.contains(&"get_sync_sessions"));
+    assert!(tool_names.contains(&"remove_sync_follower"));
     // Browser interaction tools
     assert!(tool_names.contains(&"navigate"));
     assert!(tool_names.contains(&"screenshot"));

@@ -3,7 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
-import { GoGlobe, GoPlus } from "react-icons/go";
+import { GoPlus } from "react-icons/go";
 import { LuDownload, LuPencil, LuTrash2, LuUpload } from "react-icons/lu";
 import { toast } from "sonner";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
@@ -40,8 +40,6 @@ import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import type { ProxyCheckResult, StoredProxy, VpnConfig } from "@/types";
-import { FlagIcon } from "./flag-icon";
-import { LocationProxyDialog } from "./location-proxy-dialog";
 import { ProxyCheckButton } from "./proxy-check-button";
 import { RippleButton } from "./ui/ripple";
 import { VpnCheckButton } from "./vpn-check-button";
@@ -102,7 +100,6 @@ export function ProxyManagementDialog({
   const [showProxyForm, setShowProxyForm] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
-  const [showLocationDialog, setShowLocationDialog] = useState(false);
   const [editingProxy, setEditingProxy] = useState<StoredProxy | null>(null);
   const [proxyToDelete, setProxyToDelete] = useState<StoredProxy | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -142,12 +139,10 @@ export function ProxyManagementDialog({
   const { storedProxies: rawProxies, proxyUsage, isLoading } = useProxyEvents();
   const { vpnConfigs, vpnUsage, isLoading: isLoadingVpns } = useVpnEvents();
 
-  // Filter out the base cloud-managed proxy (it's an internal indicator, not user-facing)
-  // Keep cloud-derived location proxies
+  // Filter out cloud-managed and cloud-derived proxies (cloud proxies are deprecated)
   const storedProxies = rawProxies
-    .filter((p) => !p.is_cloud_managed)
+    .filter((p) => !p.is_cloud_managed && !p.is_cloud_derived)
     .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
-  const hasCloudProxy = rawProxies.some((p) => p.is_cloud_managed);
 
   // Listen for proxy sync status events
   useEffect(() => {
@@ -412,17 +407,6 @@ export function ProxyManagementDialog({
                       </RippleButton>
                     </div>
                     <div className="flex gap-2">
-                      {hasCloudProxy && (
-                        <RippleButton
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setShowLocationDialog(true)}
-                          className="flex gap-2 items-center"
-                        >
-                          <GoGlobe className="w-4 h-4" />
-                          Location
-                        </RippleButton>
-                      )}
                       <RippleButton
                         size="sm"
                         onClick={handleCreateProxy}
@@ -462,34 +446,33 @@ export function ProxyManagementDialog({
                                 proxySyncStatus[proxy.id],
                                 proxySyncErrors[proxy.id],
                               );
-                              const isDerived = proxy.is_cloud_derived === true;
                               return (
                                 <TableRow key={proxy.id}>
                                   <TableCell className="font-medium">
                                     <div className="flex items-center gap-2">
-                                      {isDerived && proxy.geo_country && (
-                                        <FlagIcon
-                                          countryCode={proxy.geo_country}
-                                          className="shrink-0"
-                                        />
-                                      )}
-                                      {!isDerived && (
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <div
-                                              className={`w-2 h-2 rounded-full shrink-0 ${syncDot.color} ${
-                                                syncDot.animate
-                                                  ? "animate-pulse"
-                                                  : ""
-                                              }`}
-                                            />
-                                          </TooltipTrigger>
-                                          <TooltipContent>
-                                            <p>{syncDot.tooltip}</p>
-                                          </TooltipContent>
-                                        </Tooltip>
-                                      )}
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <div
+                                            className={`w-2 h-2 rounded-full shrink-0 ${syncDot.color} ${
+                                              syncDot.animate
+                                                ? "animate-pulse"
+                                                : ""
+                                            }`}
+                                          />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p>{syncDot.tooltip}</p>
+                                        </TooltipContent>
+                                      </Tooltip>
                                       {proxy.name}
+                                      {proxy.dynamic_proxy_url && (
+                                        <Badge
+                                          variant="outline"
+                                          className="text-[10px] px-1 py-0"
+                                        >
+                                          Dynamic
+                                        </Badge>
+                                      )}
                                     </div>
                                   </TableCell>
                                   <TableCell>
@@ -554,24 +537,22 @@ export function ProxyManagementDialog({
                                           }));
                                         }}
                                       />
-                                      {!isDerived && (
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              onClick={() =>
-                                                handleEditProxy(proxy)
-                                              }
-                                            >
-                                              <LuPencil className="w-4 h-4" />
-                                            </Button>
-                                          </TooltipTrigger>
-                                          <TooltipContent>
-                                            <p>Edit proxy</p>
-                                          </TooltipContent>
-                                        </Tooltip>
-                                      )}
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() =>
+                                              handleEditProxy(proxy)
+                                            }
+                                          >
+                                            <LuPencil className="w-4 h-4" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p>Edit proxy</p>
+                                        </TooltipContent>
+                                      </Tooltip>
                                       <Tooltip>
                                         <TooltipTrigger asChild>
                                           <span>
@@ -830,11 +811,6 @@ export function ProxyManagementDialog({
         isOpen={showExportDialog}
         onClose={() => setShowExportDialog(false)}
       />
-      <LocationProxyDialog
-        isOpen={showLocationDialog}
-        onClose={() => setShowLocationDialog(false)}
-      />
-
       <VpnFormDialog
         isOpen={showVpnForm}
         onClose={handleVpnFormClose}

@@ -184,6 +184,22 @@
       "changeFingerprint": "Change Fingerprint",
       "copyCookiesToProfile": "Copy Cookies to Profile"
     },
+    "synchronizer": {
+      "launchWithSync": "Launch with Synchronizer",
+      "stopLeader": "Stop this profile and all its followers",
+      "stopFollower": "Following actions of {{leaderName}}",
+      "desyncedTooltip": "Synchronization failed at {{url}}",
+      "paidFeature": "Synchronizer is a paid feature",
+      "wayfernOnly": "Only Wayfern profiles can be synchronized",
+      "selectFollowers": "Select Follower Profiles",
+      "selectFollowersDesc": "Choose profiles that will mirror the actions of the leader profile. Only stopped Wayfern profiles can be selected.",
+      "leader": "Leader",
+      "follower": "Follower",
+      "startSession": "Start Sync Session",
+      "noFollowers": "Select at least one follower profile",
+      "flakyBadge": "FLAKY",
+      "flakyTooltip": "This profile has a different screen resolution than the leader. Page layouts may differ, causing clicks and interactions to hit the wrong elements."
+    },
     "ephemeral": "Ephemeral",
     "ephemeralDescription": "The browser is forced to write profile data into memory instead of disk. Data is deleted when the browser is closed.",
     "ephemeralBadge": "Ephemeral",
@@ -263,6 +279,26 @@
       "https": "HTTPS",
       "socks4": "SOCKS4",
       "socks5": "SOCKS5"
+    },
+    "tabs": {
+      "regular": "Regular",
+      "dynamic": "Dynamic"
+    },
+    "dynamic": {
+      "description": "Dynamic proxy fetches connection details from a URL each time a profile is launched.",
+      "url": "Proxy URL",
+      "urlPlaceholder": "https://api.example.com/proxy",
+      "urlRequired": "Dynamic proxy URL is required",
+      "format": "Response Format",
+      "formatJson": "JSON",
+      "formatText": "Text",
+      "formatJsonHint": "Expects JSON: {\"ip\": \"...\", \"port\": ..., \"username\": \"...\", \"password\": \"...\"}",
+      "formatTextHint": "Expects text like: host:port:username:password or protocol://user:pass@host:port",
+      "testUrl": "Test URL",
+      "testing": "Testing...",
+      "testSuccess": "Dynamic proxy resolved to {{host}}:{{port}}",
+      "testFailed": "Failed to fetch proxy: {{error}}",
+      "fetchFailed": "Failed to fetch dynamic proxy: {{error}}"
     },
     "check": {
       "checking": "Checking proxy...",

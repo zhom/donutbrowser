@@ -1080,8 +1080,8 @@ impl CloudAuthManager {
       // Sync cloud proxy credentials
       CLOUD_AUTH.sync_cloud_proxy().await;
 
-      // Refresh wayfern token every 12 hours (72 iterations of 10-minute loop)
-      if wayfern_refresh_counter >= 72 {
+      // Refresh wayfern token every 10 hours (60 iterations of 10-minute loop)
+      if wayfern_refresh_counter >= 60 {
         wayfern_refresh_counter = 0;
         if CLOUD_AUTH.has_active_paid_subscription().await {
           if let Err(e) = CLOUD_AUTH.request_wayfern_token().await {
@@ -1390,7 +1390,7 @@ pub async fn restart_sync_service(app_handle: tauri::AppHandle) -> Result<(), St
           }
         }
         Err(e) => {
-          log::debug!("Sync not configured, skipping missing profile check: {}", e);
+          log::warn!("Sync not configured, skipping missing profile check: {}", e);
         }
       }
 

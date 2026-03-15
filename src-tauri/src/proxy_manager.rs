@@ -117,6 +117,10 @@ pub struct StoredProxy {
   pub geo_city: Option<String>,
   #[serde(default)]
   pub geo_isp: Option<String>,
+  #[serde(default)]
+  pub dynamic_proxy_url: Option<String>,
+  #[serde(default)]
+  pub dynamic_proxy_format: Option<String>,
 }
 
 impl StoredProxy {
@@ -135,7 +139,13 @@ impl StoredProxy {
       geo_region: None,
       geo_city: None,
       geo_isp: None,
+      dynamic_proxy_url: None,
+      dynamic_proxy_format: None,
     }
+  }
+
+  pub fn is_dynamic(&self) -> bool {
+    self.dynamic_proxy_url.is_some()
   }
 
   /// Migrate legacy geo_state to geo_region
@@ -450,6 +460,8 @@ impl ProxyManager {
         geo_region: None,
         geo_city: None,
         geo_isp: None,
+        dynamic_proxy_url: None,
+        dynamic_proxy_format: None,
       };
       stored_proxies.insert(CLOUD_PROXY_ID.to_string(), cloud_proxy.clone());
       drop(stored_proxies);
@@ -639,6 +651,8 @@ impl ProxyManager {
       geo_region: region,
       geo_city: city,
       geo_isp: isp,
+      dynamic_proxy_url: None,
+      dynamic_proxy_format: None,
     };
 
     {
@@ -963,6 +977,269 @@ impl ProxyManager {
   // Get cached proxy check result
   pub fn get_cached_proxy_check(&self, proxy_id: &str) -> Option<ProxyCheckResult> {
     self.load_proxy_check_cache(proxy_id)
+  }
+
+  // Check if a stored proxy is dynamic
+  pub fn is_dynamic_proxy(&self, proxy_id: &str) -> bool {
+    let stored_proxies = self.stored_proxies.lock().unwrap();
+    stored_proxies.get(proxy_id).is_some_and(|p| p.is_dynamic())
+  }
+
+  // Fetch proxy settings from a dynamic proxy URL
+  pub async fn fetch_dynamic_proxy(
+    &self,
+    url: &str,
+    format: &str,
+  ) -> Result<ProxySettings, String> {
+    let client = reqwest::Client::builder()
+      .timeout(std::time::Duration::from_secs(15))
+      .build()
+      .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
+
+    let response = client
+      .get(url)
+      .send()
+      .await
+      .map_err(|e| format!("Failed to fetch dynamic proxy: {e}"))?;
+
+    if !response.status().is_success() {
+      return Err(format!(
+        "Dynamic proxy URL returned status {}",
+        response.status()
+      ));
+    }
+
+    let body = response
+      .text()
+      .await
+      .map_err(|e| format!("Failed to read dynamic proxy response: {e}"))?;
+
+    let body = body.trim();
+    if body.is_empty() {
+      return Err("Dynamic proxy URL returned empty response".to_string());
+    }
+
+    match format {
+      "json" => Self::parse_dynamic_proxy_json(body),
+      "text" => Self::parse_dynamic_proxy_text(body),
+      _ => Err(format!("Unsupported dynamic proxy format: {format}")),
+    }
+  }
+
+  // Parse JSON format: { "ip"/"host": "...", "port": ..., "username": "...", "password": "..." }
+  fn parse_dynamic_proxy_json(body: &str) -> Result<ProxySettings, String> {
+    let json: serde_json::Value =
+      serde_json::from_str(body).map_err(|e| format!("Invalid JSON response: {e}"))?;
+
+    let obj = json
+      .as_object()
+      .ok_or_else(|| "JSON response is not an object".to_string())?;
+
+    let host = obj
+      .get("ip")
+      .or_else(|| obj.get("host"))
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| "Missing 'ip' or 'host' field in JSON response".to_string())?
+      .to_string();
+
+    let port = obj
+      .get("port")
+      .and_then(|v| {
+        v.as_u64()
+          .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+      })
+      .ok_or_else(|| "Missing or invalid 'port' field in JSON response".to_string())?
+      as u16;
+
+    let proxy_type = obj
+      .get("type")
+      .or_else(|| obj.get("proxy_type"))
+      .and_then(|v| v.as_str())
+      .unwrap_or("http")
+      .to_string();
+
+    let username = obj
+      .get("username")
+      .or_else(|| obj.get("user"))
+      .and_then(|v| v.as_str())
+      .filter(|s| !s.is_empty())
+      .map(|s| s.to_string());
+
+    let password = obj
+      .get("password")
+      .or_else(|| obj.get("pass"))
+      .and_then(|v| v.as_str())
+      .filter(|s| !s.is_empty())
+      .map(|s| s.to_string());
+
+    Ok(ProxySettings {
+      proxy_type,
+      host,
+      port,
+      username,
+      password,
+    })
+  }
+
+  // Parse text format using the same logic as proxy import
+  fn parse_dynamic_proxy_text(body: &str) -> Result<ProxySettings, String> {
+    let line = body
+      .lines()
+      .find(|l| !l.trim().is_empty())
+      .unwrap_or("")
+      .trim();
+    if line.is_empty() {
+      return Err("Empty text response".to_string());
+    }
+
+    match Self::parse_single_proxy_line(line) {
+      ProxyParseResult::Parsed(parsed) => Ok(ProxySettings {
+        proxy_type: parsed.proxy_type,
+        host: parsed.host,
+        port: parsed.port,
+        username: parsed.username,
+        password: parsed.password,
+      }),
+      ProxyParseResult::Ambiguous {
+        possible_formats, ..
+      } => Err(format!(
+        "Ambiguous proxy format. Could be: {}",
+        possible_formats.join(" or ")
+      )),
+      ProxyParseResult::Invalid { reason, .. } => {
+        Err(format!("Failed to parse proxy response: {reason}"))
+      }
+    }
+  }
+
+  // Resolve dynamic proxy: fetch from URL and return settings
+  pub async fn resolve_dynamic_proxy(&self, proxy_id: &str) -> Result<ProxySettings, String> {
+    let (url, format) = {
+      let stored_proxies = self.stored_proxies.lock().unwrap();
+      let proxy = stored_proxies
+        .get(proxy_id)
+        .ok_or_else(|| format!("Proxy '{proxy_id}' not found"))?;
+
+      match (&proxy.dynamic_proxy_url, &proxy.dynamic_proxy_format) {
+        (Some(url), Some(format)) => (url.clone(), format.clone()),
+        _ => return Err("Proxy is not a dynamic proxy".to_string()),
+      }
+    };
+
+    self.fetch_dynamic_proxy(&url, &format).await
+  }
+
+  // Create a dynamic stored proxy
+  pub fn create_dynamic_proxy(
+    &self,
+    _app_handle: &tauri::AppHandle,
+    name: String,
+    url: String,
+    format: String,
+  ) -> Result<StoredProxy, String> {
+    {
+      let stored_proxies = self.stored_proxies.lock().unwrap();
+      if stored_proxies.values().any(|p| p.name == name) {
+        return Err(format!("Proxy with name '{name}' already exists"));
+      }
+    }
+
+    let placeholder_settings = ProxySettings {
+      proxy_type: "http".to_string(),
+      host: "dynamic".to_string(),
+      port: 0,
+      username: None,
+      password: None,
+    };
+
+    let mut stored_proxy = StoredProxy::new(name, placeholder_settings);
+    stored_proxy.dynamic_proxy_url = Some(url);
+    stored_proxy.dynamic_proxy_format = Some(format);
+
+    {
+      let mut stored_proxies = self.stored_proxies.lock().unwrap();
+      stored_proxies.insert(stored_proxy.id.clone(), stored_proxy.clone());
+    }
+
+    if let Err(e) = self.save_proxy(&stored_proxy) {
+      log::warn!("Failed to save proxy: {e}");
+    }
+
+    if let Err(e) = events::emit_empty("proxies-changed") {
+      log::error!("Failed to emit proxies-changed event: {e}");
+    }
+
+    if stored_proxy.sync_enabled {
+      if let Some(scheduler) = crate::sync::get_global_scheduler() {
+        let id = stored_proxy.id.clone();
+        tauri::async_runtime::spawn(async move {
+          scheduler.queue_proxy_sync(id).await;
+        });
+      }
+    }
+
+    Ok(stored_proxy)
+  }
+
+  // Update a dynamic proxy's URL and format
+  pub fn update_dynamic_proxy(
+    &self,
+    _app_handle: &tauri::AppHandle,
+    proxy_id: &str,
+    name: Option<String>,
+    url: Option<String>,
+    format: Option<String>,
+  ) -> Result<StoredProxy, String> {
+    {
+      let stored_proxies = self.stored_proxies.lock().unwrap();
+      if !stored_proxies.contains_key(proxy_id) {
+        return Err(format!("Proxy with ID '{proxy_id}' not found"));
+      }
+      if let Some(ref new_name) = name {
+        if stored_proxies
+          .values()
+          .any(|p| p.id != proxy_id && p.name == *new_name)
+        {
+          return Err(format!("Proxy with name '{new_name}' already exists"));
+        }
+      }
+    }
+
+    let updated_proxy = {
+      let mut stored_proxies = self.stored_proxies.lock().unwrap();
+      let stored_proxy = stored_proxies.get_mut(proxy_id).unwrap();
+
+      if let Some(new_name) = name {
+        stored_proxy.update_name(new_name);
+      }
+      if let Some(new_url) = url {
+        stored_proxy.dynamic_proxy_url = Some(new_url);
+      }
+      if let Some(new_format) = format {
+        stored_proxy.dynamic_proxy_format = Some(new_format);
+      }
+
+      stored_proxy.clone()
+    };
+
+    if let Err(e) = self.save_proxy(&updated_proxy) {
+      log::warn!("Failed to save proxy: {e}");
+    }
+
+    if let Err(e) = events::emit_empty("proxies-changed") {
+      log::error!("Failed to emit proxies-changed event: {e}");
+    }
+
+    if updated_proxy.sync_enabled {
+      if let Some(scheduler) = crate::sync::get_global_scheduler() {
+        let id = updated_proxy.id.clone();
+        tauri::async_runtime::spawn(async move {
+          scheduler.queue_proxy_sync(id).await;
+        });
+      }
+    }
+
+    Ok(updated_proxy)
   }
 
   // Export all proxies as JSON
@@ -2835,6 +3112,8 @@ mod tests {
       geo_region: None,
       geo_city: None,
       geo_isp: None,
+      dynamic_proxy_url: None,
+      dynamic_proxy_format: None,
     };
 
     // Before migration

@@ -186,9 +186,7 @@ export function ProxyAssignmentDialog({
                     const proxy = storedProxies.find(
                       (p) => p.id === selectedId,
                     );
-                    return proxy
-                      ? `${proxy.name}${proxy.is_cloud_managed ? " (Included)" : ""}`
-                      : "None";
+                    return proxy ? proxy.name : "None";
                   })()}
                   <LuChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
@@ -216,28 +214,32 @@ export function ProxyAssignmentDialog({
                         />
                         None
                       </CommandItem>
-                      {storedProxies.map((proxy) => (
-                        <CommandItem
-                          key={proxy.id}
-                          value={proxy.name}
-                          onSelect={() => {
-                            handleValueChange(proxy.id);
-                            setProxyPopoverOpen(false);
-                          }}
-                        >
-                          <LuCheck
-                            className={cn(
-                              "mr-2 h-4 w-4",
-                              selectionType === "proxy" &&
-                                selectedId === proxy.id
-                                ? "opacity-100"
-                                : "opacity-0",
-                            )}
-                          />
-                          {proxy.name}
-                          {proxy.is_cloud_managed ? " (Included)" : ""}
-                        </CommandItem>
-                      ))}
+                      {storedProxies
+                        .filter(
+                          (proxy) =>
+                            !proxy.is_cloud_managed && !proxy.is_cloud_derived,
+                        )
+                        .map((proxy) => (
+                          <CommandItem
+                            key={proxy.id}
+                            value={proxy.name}
+                            onSelect={() => {
+                              handleValueChange(proxy.id);
+                              setProxyPopoverOpen(false);
+                            }}
+                          >
+                            <LuCheck
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                selectionType === "proxy" &&
+                                  selectedId === proxy.id
+                                  ? "opacity-100"
+                                  : "opacity-0",
+                              )}
+                            />
+                            {proxy.name}
+                          </CommandItem>
+                        ))}
                     </CommandGroup>
                     {vpnConfigs.length > 0 && (
                       <CommandGroup heading="VPNs">

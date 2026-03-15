@@ -184,6 +184,22 @@
       "changeFingerprint": "Alterar Impressão Digital",
       "copyCookiesToProfile": "Copiar Cookies para o Perfil"
     },
+    "synchronizer": {
+      "launchWithSync": "Iniciar com Sincronizador",
+      "stopLeader": "Parar este perfil e todos os seus seguidores",
+      "stopFollower": "Seguindo as ações de {{leaderName}}",
+      "desyncedTooltip": "A sincronização falhou em {{url}}",
+      "paidFeature": "O sincronizador é um recurso pago",
+      "wayfernOnly": "Apenas perfis Wayfern podem ser sincronizados",
+      "selectFollowers": "Selecionar perfis seguidores",
+      "selectFollowersDesc": "Escolha os perfis que replicarão as ações do perfil líder. Apenas perfis Wayfern parados podem ser selecionados.",
+      "leader": "Líder",
+      "follower": "Seguidor",
+      "startSession": "Iniciar sessão de sincronização",
+      "noFollowers": "Selecione pelo menos um perfil seguidor",
+      "flakyBadge": "FLAKY",
+      "flakyTooltip": "Este perfil tem uma resolução de tela diferente do líder. O layout das páginas pode variar, fazendo com que cliques e interações atinjam elementos errados."
+    },
     "ephemeral": "Efêmero",
     "ephemeralDescription": "O navegador é forçado a gravar os dados do perfil na memória em vez do disco. Os dados são excluídos ao fechar o navegador.",
     "ephemeralBadge": "Efêmero",
@@ -263,6 +279,26 @@
       "https": "HTTPS",
       "socks4": "SOCKS4",
       "socks5": "SOCKS5"
+    },
+    "tabs": {
+      "regular": "Regular",
+      "dynamic": "Dinâmico"
+    },
+    "dynamic": {
+      "description": "O proxy dinâmico obtém os detalhes de conexão de uma URL cada vez que um perfil é iniciado.",
+      "url": "URL do Proxy",
+      "urlPlaceholder": "https://api.example.com/proxy",
+      "urlRequired": "A URL do proxy dinâmico é obrigatória",
+      "format": "Formato de Resposta",
+      "formatJson": "JSON",
+      "formatText": "Texto",
+      "formatJsonHint": "Espera JSON: {\"ip\": \"...\", \"port\": ..., \"username\": \"...\", \"password\": \"...\"}",
+      "formatTextHint": "Espera texto como: host:port:username:password ou protocol://user:pass@host:port",
+      "testUrl": "Testar URL",
+      "testing": "Testando...",
+      "testSuccess": "O proxy dinâmico foi resolvido para {{host}}:{{port}}",
+      "testFailed": "Falha ao obter o proxy: {{error}}",
+      "fetchFailed": "Falha ao obter o proxy dinâmico: {{error}}"
     },
     "check": {
       "checking": "Verificando proxy...",

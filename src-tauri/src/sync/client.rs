@@ -127,6 +127,14 @@ impl SyncClient {
   }
 
   pub async fn list(&self, prefix: &str) -> SyncResult<ListResponse> {
+    self.list_page(prefix, None).await
+  }
+
+  async fn list_page(
+    &self,
+    prefix: &str,
+    continuation_token: Option<String>,
+  ) -> SyncResult<ListResponse> {
     let response = self
       .client
       .post(self.url("list"))
@@ -134,7 +142,7 @@ impl SyncClient {
       .json(&ListRequest {
         prefix: prefix.to_string(),
         max_keys: Some(1000),
-        continuation_token: None,
+        continuation_token,
       })
       .send()
       .await
@@ -150,6 +158,27 @@ impl SyncClient {
       .json()
       .await
       .map_err(|e| SyncError::SerializationError(e.to_string()))
+  }
+
+  /// List all objects under a prefix, paginating through all results
+  pub async fn list_all(&self, prefix: &str) -> SyncResult<Vec<ListObject>> {
+    let mut all_objects = Vec::new();
+    let mut continuation_token: Option<String> = None;
+
+    loop {
+      let response = self.list_page(prefix, continuation_token).await?;
+      all_objects.extend(response.objects);
+
+      if !response.is_truncated {
+        break;
+      }
+      continuation_token = response.next_continuation_token;
+      if continuation_token.is_none() {
+        break;
+      }
+    }
+
+    Ok(all_objects)
   }
 
   pub async fn upload_bytes(

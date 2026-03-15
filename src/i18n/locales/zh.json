@@ -184,6 +184,22 @@
       "changeFingerprint": "更改指纹",
       "copyCookiesToProfile": "复制 Cookies 到配置文件"
     },
+    "synchronizer": {
+      "launchWithSync": "使用同步器启动",
+      "stopLeader": "停止此配置文件及其所有跟随者",
+      "stopFollower": "正在跟随 {{leaderName}} 的操作",
+      "desyncedTooltip": "在 {{url}} 同步失败",
+      "paidFeature": "同步器是付费功能",
+      "wayfernOnly": "只有 Wayfern 配置文件可以同步",
+      "selectFollowers": "选择跟随者配置文件",
+      "selectFollowersDesc": "选择将复制领导者配置文件操作的配置文件。只能选择已停止的 Wayfern 配置文件。",
+      "leader": "领导者",
+      "follower": "跟随者",
+      "startSession": "开始同步会话",
+      "noFollowers": "请至少选择一个跟随者配置文件",
+      "flakyBadge": "FLAKY",
+      "flakyTooltip": "此配置文件的屏幕分辨率与领导者不同。页面布局可能不同，导致点击和交互可能命中错误的元素。"
+    },
     "ephemeral": "临时",
     "ephemeralDescription": "浏览器被强制将配置数据写入内存而非磁盘。关闭浏览器时数据将被删除。",
     "ephemeralBadge": "临时",
@@ -263,6 +279,26 @@
       "https": "HTTPS",
       "socks4": "SOCKS4",
       "socks5": "SOCKS5"
+    },
+    "tabs": {
+      "regular": "常规",
+      "dynamic": "动态"
+    },
+    "dynamic": {
+      "description": "动态代理在每次启动配置文件时从URL获取连接详情。",
+      "url": "代理URL",
+      "urlPlaceholder": "https://api.example.com/proxy",
+      "urlRequired": "动态代理URL为必填项",
+      "format": "响应格式",
+      "formatJson": "JSON",
+      "formatText": "文本",
+      "formatJsonHint": "期望 JSON: {\"ip\": \"...\", \"port\": ..., \"username\": \"...\", \"password\": \"...\"}",
+      "formatTextHint": "期望文本格式: host:port:username:password 或 protocol://user:pass@host:port",
+      "testUrl": "测试URL",
+      "testing": "测试中...",
+      "testSuccess": "动态代理已解析为 {{host}}:{{port}}",
+      "testFailed": "获取代理失败: {{error}}",
+      "fetchFailed": "获取动态代理失败: {{error}}"
     },
     "check": {
       "checking": "检查代理中...",
