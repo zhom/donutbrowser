@@ -200,7 +200,7 @@ impl SettingsManager {
   ) -> Result<String, Box<dyn std::error::Error>> {
     // Generate a secure random token (base64 encoded for URL safety)
     let token_bytes: [u8; 32] = {
-      use rand::RngCore;
+      use rand::Rng;
       let mut rng = rand::rng();
       let mut bytes = [0u8; 32];
       rng.fill_bytes(&mut bytes);
@@ -390,7 +390,7 @@ impl SettingsManager {
     app_handle: &tauri::AppHandle,
   ) -> Result<String, Box<dyn std::error::Error>> {
     let token_bytes: [u8; 32] = {
-      use rand::RngCore;
+      use rand::Rng;
       let mut rng = rand::rng();
       let mut bytes = [0u8; 32];
       rng.fill_bytes(&mut bytes);

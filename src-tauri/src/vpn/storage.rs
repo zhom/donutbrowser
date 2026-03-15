@@ -6,7 +6,7 @@ use aes_gcm::{
   Aes256Gcm, Nonce,
 };
 use chrono::Utc;
-use rand::Rng;
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;

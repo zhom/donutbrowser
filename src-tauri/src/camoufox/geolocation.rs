@@ -9,7 +9,7 @@ use directories::BaseDirs;
 use maxminddb::{geoip2, Reader};
 use quick_xml::events::Event;
 use quick_xml::Reader as XmlReader;
-use rand::Rng;
+use rand::RngExt;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::path::PathBuf;

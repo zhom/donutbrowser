@@ -2,7 +2,7 @@
 //!
 //! Samples realistic WebGL configurations based on OS-specific probability distributions.
 
-use rand::Rng;
+use rand::RngExt;
 use rusqlite::{Connection, Result as SqliteResult};
 use std::collections::HashMap;
 use std::io::Write;

@@ -2,7 +2,7 @@
 //!
 //! Converts fingerprints to Camoufox configuration format and builds launch options.
 
-use rand::Rng;
+use rand::RngExt;
 use serde_yaml;
 use std::collections::HashMap;
 use std::path::Path;

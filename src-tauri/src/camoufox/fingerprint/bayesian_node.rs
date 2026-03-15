@@ -2,7 +2,7 @@
 //!
 //! Implements weighted random sampling from conditional probability distributions.
 
-use rand::Rng;
+use rand::RngExt;
 use serde::Deserialize;
 use std::collections::HashMap;
 

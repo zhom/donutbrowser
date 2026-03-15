@@ -3391,4 +3391,197 @@ mod tests {
 
     delete_proxy_config(&id);
   }
+
+  #[test]
+  fn test_parse_dynamic_proxy_json_standard_format() {
+    let body = r#"{"ip": "1.2.3.4", "port": 8080, "username": "user1", "password": "pass1"}"#;
+    let result = ProxyManager::parse_dynamic_proxy_json(body).unwrap();
+    assert_eq!(result.host, "1.2.3.4");
+    assert_eq!(result.port, 8080);
+    assert_eq!(result.proxy_type, "http");
+    assert_eq!(result.username.as_deref(), Some("user1"));
+    assert_eq!(result.password.as_deref(), Some("pass1"));
+  }
+
+  #[test]
+  fn test_parse_dynamic_proxy_json_host_alias() {
+    let body = r#"{"host": "proxy.example.com", "port": 3128}"#;
+    let result = ProxyManager::parse_dynamic_proxy_json(body).unwrap();
+    assert_eq!(result.host, "proxy.example.com");
+    assert_eq!(result.port, 3128);
+    assert!(result.username.is_none());
+    assert!(result.password.is_none());
+  }
+
+  #[test]
+  fn test_parse_dynamic_proxy_json_user_pass_aliases() {
+    let body = r#"{"ip": "10.0.0.1", "port": 1080, "user": "u", "pass": "p"}"#;
+    let result = ProxyManager::parse_dynamic_proxy_json(body).unwrap();
+    assert_eq!(result.username.as_deref(), Some("u"));
+    assert_eq!(result.password.as_deref(), Some("p"));
+  }
+
+  #[test]
+  fn test_parse_dynamic_proxy_json_port_as_string() {
+    let body = r#"{"ip": "1.2.3.4", "port": "9090"}"#;
+    let result = ProxyManager::parse_dynamic_proxy_json(body).unwrap();
+    assert_eq!(result.port, 9090);
+  }
+
+  #[test]
+  fn test_parse_dynamic_proxy_json_with_proxy_type() {
+    let body = r#"{"ip": "1.2.3.4", "port": 1080, "type": "socks5"}"#;
+    let result = ProxyManager::parse_dynamic_proxy_json(body).unwrap();
+    assert_eq!(result.proxy_type, "socks5");
+
+    let body2 = r#"{"ip": "1.2.3.4", "port": 1080, "proxy_type": "socks4"}"#;
+    let result2 = ProxyManager::parse_dynamic_proxy_json(body2).unwrap();
+    assert_eq!(result2.proxy_type, "socks4");
+  }
+
+  #[test]
+  fn test_parse_dynamic_proxy_json_empty_credentials_treated_as_none() {
+    let body = r#"{"ip": "1.2.3.4", "port": 8080, "username": "", "password": ""}"#;
+    let result = ProxyManager::parse_dynamic_proxy_json(body).unwrap();
+    assert!(result.username.is_none());
+    assert!(result.password.is_none());
+  }
+
+  #[test]
+  fn test_parse_dynamic_proxy_json_missing_ip() {
+    let body = r#"{"port": 8080}"#;
+    let err = ProxyManager::parse_dynamic_proxy_json(body).unwrap_err();
+    assert!(err.contains("ip") || err.contains("host"));
+  }
+
+  #[test]
+  fn test_parse_dynamic_proxy_json_missing_port() {
+    let body = r#"{"ip": "1.2.3.4"}"#;
+    let err = ProxyManager::parse_dynamic_proxy_json(body).unwrap_err();
+    assert!(err.contains("port"));
+  }
+
+  #[test]
+  fn test_parse_dynamic_proxy_json_invalid_json() {
+    let err = ProxyManager::parse_dynamic_proxy_json("not json").unwrap_err();
+    assert!(err.contains("Invalid JSON"));
+  }
+
+  #[test]
+  fn test_parse_dynamic_proxy_json_not_object() {
+    let err = ProxyManager::parse_dynamic_proxy_json("[1,2,3]").unwrap_err();
+    assert!(err.contains("not an object"));
+  }
+
+  #[test]
+  fn test_parse_dynamic_proxy_text_host_port_user_pass() {
+    let body = "proxy.example.com:8080:user1:pass1";
+    let result = ProxyManager::parse_dynamic_proxy_text(body).unwrap();
+    assert_eq!(result.host, "proxy.example.com");
+    assert_eq!(result.port, 8080);
+    assert_eq!(result.username.as_deref(), Some("user1"));
+    assert_eq!(result.password.as_deref(), Some("pass1"));
+  }
+
+  #[test]
+  fn test_parse_dynamic_proxy_text_protocol_url_format() {
+    let body = "http://user:pass@proxy.example.com:3128";
+    let result = ProxyManager::parse_dynamic_proxy_text(body).unwrap();
+    assert_eq!(result.host, "proxy.example.com");
+    assert_eq!(result.port, 3128);
+    assert_eq!(result.proxy_type, "http");
+    assert_eq!(result.username.as_deref(), Some("user"));
+    assert_eq!(result.password.as_deref(), Some("pass"));
+  }
+
+  #[test]
+  fn test_parse_dynamic_proxy_text_with_whitespace() {
+    let body = "  \n  proxy.example.com:8080:user:pass  \n  ";
+    let result = ProxyManager::parse_dynamic_proxy_text(body).unwrap();
+    assert_eq!(result.host, "proxy.example.com");
+    assert_eq!(result.port, 8080);
+  }
+
+  #[test]
+  fn test_parse_dynamic_proxy_text_empty() {
+    let err = ProxyManager::parse_dynamic_proxy_text("").unwrap_err();
+    assert!(err.contains("Empty"));
+  }
+
+  #[test]
+  fn test_parse_dynamic_proxy_text_whitespace_only() {
+    let err = ProxyManager::parse_dynamic_proxy_text("   \n  \n  ").unwrap_err();
+    assert!(err.contains("Empty"));
+  }
+
+  #[test]
+  fn test_stored_proxy_is_dynamic() {
+    let mut proxy = StoredProxy::new(
+      "test".to_string(),
+      ProxySettings {
+        proxy_type: "http".to_string(),
+        host: "h.com".to_string(),
+        port: 80,
+        username: None,
+        password: None,
+      },
+    );
+    assert!(!proxy.is_dynamic());
+
+    proxy.dynamic_proxy_url = Some("https://api.example.com/proxy".to_string());
+    assert!(proxy.is_dynamic());
+  }
+
+  #[test]
+  fn test_is_dynamic_proxy_via_manager() {
+    let pm = ProxyManager::new();
+
+    let mut proxy = StoredProxy::new(
+      "DynTest".to_string(),
+      ProxySettings {
+        proxy_type: "http".to_string(),
+        host: "dynamic".to_string(),
+        port: 0,
+        username: None,
+        password: None,
+      },
+    );
+    proxy.dynamic_proxy_url = Some("https://api.example.com/proxy".to_string());
+    proxy.dynamic_proxy_format = Some("json".to_string());
+
+    let id = proxy.id.clone();
+    pm.stored_proxies.lock().unwrap().insert(id.clone(), proxy);
+
+    assert!(pm.is_dynamic_proxy(&id));
+    assert!(!pm.is_dynamic_proxy("nonexistent"));
+  }
+
+  #[tokio::test]
+  async fn test_resolve_dynamic_proxy_not_dynamic() {
+    let pm = ProxyManager::new();
+
+    let proxy = StoredProxy::new(
+      "Regular".to_string(),
+      ProxySettings {
+        proxy_type: "http".to_string(),
+        host: "1.2.3.4".to_string(),
+        port: 8080,
+        username: None,
+        password: None,
+      },
+    );
+    let id = proxy.id.clone();
+    pm.stored_proxies.lock().unwrap().insert(id.clone(), proxy);
+
+    let err = pm.resolve_dynamic_proxy(&id).await.unwrap_err();
+    assert!(err.contains("not a dynamic proxy"));
+  }
+
+  #[tokio::test]
+  async fn test_resolve_dynamic_proxy_not_found() {
+    let pm = ProxyManager::new();
+
+    let err = pm.resolve_dynamic_proxy("nonexistent").await.unwrap_err();
+    assert!(err.contains("not found"));
+  }
 }

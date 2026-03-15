@@ -73,11 +73,11 @@ struct WgRxToken {
 }
 
 impl RxToken for WgRxToken {
-  fn consume<R, F>(mut self, f: F) -> R
+  fn consume<R, F>(self, f: F) -> R
   where
-    F: FnOnce(&mut [u8]) -> R,
+    F: FnOnce(&[u8]) -> R,
   {
-    f(&mut self.data)
+    f(&self.data)
   }
 }
 
@@ -173,7 +173,7 @@ fn parse_cidr_address(addr: &str) -> Result<(IpCidr, IpAddress), VpnError> {
       ))
     }
     std::net::IpAddr::V6(v6) => {
-      let smol_ip = smoltcp::wire::Ipv6Address::from_bytes(&v6.octets());
+      let smol_ip = smoltcp::wire::Ipv6Address::from(v6.octets());
       Ok((
         IpCidr::new(IpAddress::Ipv6(smol_ip), prefix),
         IpAddress::Ipv6(smol_ip),
@@ -331,7 +331,7 @@ impl WireGuardSocks5Server {
     // Set default gateway
     match local_ip {
       IpAddress::Ipv4(v4) => {
-        let octets = v4.as_bytes();
+        let octets = v4.octets();
         let gw = Ipv4Address::new(octets[0], octets[1], octets[2], 1);
         iface
           .routes_mut()
@@ -523,7 +523,7 @@ impl WireGuardSocks5Server {
                 IpAddress::Ipv4(Ipv4Address::new(o[0], o[1], o[2], o[3]))
               }
               std::net::IpAddr::V6(v6) => {
-                IpAddress::Ipv6(smoltcp::wire::Ipv6Address::from_bytes(&v6.octets()))
+                IpAddress::Ipv6(smoltcp::wire::Ipv6Address::from(v6.octets()))
               }
             };
 

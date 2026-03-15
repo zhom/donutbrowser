@@ -1,4 +1,4 @@
-use rand::Rng;
+use rand::{Rng, RngExt};
 use std::collections::{HashMap, HashSet};
 
 const PROB_ERROR: f64 = 0.04;
@@ -117,7 +117,7 @@ fn normal_sample(rng: &mut impl Rng, mean: f64, std_dev: f64) -> f64 {
   // Box-Muller transform
   let u1: f64 = rng.random::<f64>().max(1e-10);
   let u2: f64 = rng.random::<f64>();
-  let z = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
+  let z = (-2.0_f64 * u1.ln()).sqrt() * (2.0_f64 * std::f64::consts::PI * u2).cos();
   mean + std_dev * z
 }
 
