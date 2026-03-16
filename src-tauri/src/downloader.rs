@@ -308,10 +308,38 @@ impl Downloader {
       .resolve_download_url(browser_type.clone(), version, download_info)
       .await?;
 
-    // Determine if we have a partial file to resume
+    // Check existing file size — if it matches the expected size, skip download
     let mut existing_size: u64 = 0;
     if let Ok(meta) = std::fs::metadata(&file_path) {
       existing_size = meta.len();
+    }
+
+    // Do a HEAD request to get the expected file size for skip/resume decisions
+    let head_response = self
+      .client
+      .head(&download_url)
+      .header(
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+      )
+      .send()
+      .await
+      .ok();
+
+    let expected_size = head_response.as_ref().and_then(|r| r.content_length());
+
+    // If existing file matches expected size, skip download entirely
+    if existing_size > 0 {
+      if let Some(expected) = expected_size {
+        if existing_size == expected {
+          log::info!(
+            "Archive {} already exists with correct size ({} bytes), skipping download",
+            file_path.display(),
+            existing_size
+          );
+          return Ok(file_path);
+        }
+      }
     }
 
     // Build request, add Range only if we have bytes. If the server responds with 416 (Range Not
@@ -683,11 +711,16 @@ impl Downloader {
           // Do not remove the archive here. We keep it until verification succeeds.
         }
         Err(e) => {
-          // Do not remove the archive or extracted files. Just drop the registry entry
-          // so it won't be reported as downloaded.
+          log::error!("Extraction failed for {browser_str} {version}: {e}");
+
+          // Delete the corrupt/invalid archive so a fresh download happens next time
+          if download_path.exists() {
+            log::info!("Deleting corrupt archive: {}", download_path.display());
+            let _ = std::fs::remove_file(&download_path);
+          }
+
           let _ = self.registry.remove_browser(&browser_str, &version);
           let _ = self.registry.save();
-          // Remove browser-version pair from downloading set on error
           {
             let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
             downloading.remove(&download_key);
@@ -696,6 +729,20 @@ impl Downloader {
             let mut tokens = DOWNLOAD_CANCELLATION_TOKENS.lock().unwrap();
             tokens.remove(&download_key);
           }
+
+          // Emit error stage so the UI shows a toast
+          let progress = DownloadProgress {
+            browser: browser_str.clone(),
+            version: version.clone(),
+            downloaded_bytes: 0,
+            total_bytes: None,
+            percentage: 0.0,
+            speed_bytes_per_sec: 0.0,
+            eta_seconds: None,
+            stage: "error".to_string(),
+          };
+          let _ = events::emit("download-progress", &progress);
+
           return Err(format!("Failed to extract browser: {e}").into());
         }
       }

@@ -7,7 +7,7 @@ use crate::downloader::DownloadProgress;
 use crate::events;
 
 #[cfg(target_os = "macos")]
-use std::process::Command;
+use tokio::process::Command;
 
 #[cfg(target_os = "macos")]
 use std::fs::create_dir_all;
@@ -232,17 +232,8 @@ impl Extractor {
     &self,
     file_path: &Path,
   ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    // First check file extension for DMG files since they're common on macOS
-    // and can have misleading magic numbers
-    if let Some(ext) = file_path.extension().and_then(|ext| ext.to_str()) {
-      if ext.to_lowercase() == "dmg" {
-        return Ok("dmg".to_string());
-      }
-      if ext.to_lowercase() == "msi" {
-        return Ok("msi".to_string());
-      }
-    }
-
+    // Always check magic bytes first — the file extension may be wrong
+    // (e.g. CDN serving a ZIP with .dmg extension)
     let mut file = File::open(file_path)?;
     let mut buffer = [0u8; 12]; // Read first 12 bytes for magic number detection
     file.read_exact(&mut buffer)?;
@@ -357,16 +348,20 @@ impl Extractor {
       .args([
         "attach",
         "-nobrowse",
+        "-noverify",
+        "-noautoopen",
         "-mountpoint",
         mount_point.to_str().unwrap(),
         dmg_path.to_str().unwrap(),
       ])
-      .output()?;
+      .stdin(std::process::Stdio::null())
+      .output()
+      .await?;
 
     if !output.status.success() {
       let stderr = String::from_utf8_lossy(&output.stderr);
       let stdout = String::from_utf8_lossy(&output.stdout);
-      log::info!("Failed to mount DMG. stdout: {stdout}, stderr: {stderr}");
+      log::error!("Failed to mount DMG. stdout: {stdout}, stderr: {stderr}");
 
       // Clean up mount point before returning error
       let _ = fs::remove_dir_all(&mount_point);
@@ -382,12 +377,13 @@ impl Extractor {
     let app_entry = match app_result {
       Ok(app_path) => app_path,
       Err(e) => {
-        log::info!("Failed to find .app in mount point: {e}");
+        log::error!("Failed to find .app in mount point: {e}");
 
         // Try to unmount before returning error
         let _ = Command::new("hdiutil")
           .args(["detach", "-force", mount_point.to_str().unwrap()])
-          .output();
+          .output()
+          .await;
         let _ = fs::remove_dir_all(&mount_point);
 
         return Err("No .app found after extraction".into());
@@ -407,16 +403,18 @@ impl Extractor {
         app_entry.to_str().unwrap(),
         app_path.to_str().unwrap(),
       ])
-      .output()?;
+      .output()
+      .await?;
 
     if !output.status.success() {
       let stderr = String::from_utf8_lossy(&output.stderr);
-      log::info!("Failed to copy app: {stderr}");
+      log::error!("Failed to copy app: {stderr}");
 
       // Unmount before returning error
       let _ = Command::new("hdiutil")
         .args(["detach", "-force", mount_point.to_str().unwrap()])
-        .output();
+        .output()
+        .await;
       let _ = fs::remove_dir_all(&mount_point);
 
       return Err(format!("Failed to copy app: {stderr}").into());
@@ -427,18 +425,21 @@ impl Extractor {
     // Remove quarantine attributes
     let _ = Command::new("xattr")
       .args(["-dr", "com.apple.quarantine", app_path.to_str().unwrap()])
-      .output();
+      .output()
+      .await;
 
     let _ = Command::new("xattr")
       .args(["-cr", app_path.to_str().unwrap()])
-      .output();
+      .output()
+      .await;
 
     log::info!("Removed quarantine attributes");
 
     // Unmount the DMG
     let output = Command::new("hdiutil")
       .args(["detach", mount_point.to_str().unwrap()])
-      .output()?;
+      .output()
+      .await?;
 
     if !output.status.success() {
       let stderr = String::from_utf8_lossy(&output.stderr);

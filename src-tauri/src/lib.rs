@@ -293,9 +293,17 @@ async fn fetch_dynamic_proxy(
   url: String,
   format: String,
 ) -> Result<crate::browser::ProxySettings, String> {
-  crate::proxy_manager::PROXY_MANAGER
+  let settings = crate::proxy_manager::PROXY_MANAGER
     .fetch_dynamic_proxy(&url, &format)
+    .await?;
+
+  // Validate the proxy actually works by routing through a temporary local proxy
+  crate::proxy_manager::PROXY_MANAGER
+    .check_proxy_validity("_dynamic_test", &settings)
     .await
+    .map_err(|e| format!("Proxy resolved but connection failed: {e}"))?;
+
+  Ok(settings)
 }
 
 #[tauri::command]

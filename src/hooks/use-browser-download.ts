@@ -335,6 +335,23 @@ export function useBrowserDownload() {
                 `download-${browserName.toLowerCase()}-${progress.version}`,
               );
               setDownloadProgress(null);
+            } else if (progress.stage === "error") {
+              setDownloadingBrowsers((prev) => {
+                const next = new Set(prev);
+                next.delete(progress.browser);
+                return next;
+              });
+              dismissToast(
+                `download-${browserName.toLowerCase()}-${progress.version}`,
+              );
+              setDownloadProgress(null);
+              showErrorToast(
+                `${browserName} ${progress.version}: extraction failed`,
+                {
+                  description:
+                    "The corrupt file was deleted. It will be re-downloaded on next attempt.",
+                },
+              );
             } else if (progress.stage === "completed") {
               setDownloadingBrowsers((prev) => {
                 const next = new Set(prev);

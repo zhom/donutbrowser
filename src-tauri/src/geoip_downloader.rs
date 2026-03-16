@@ -174,6 +174,13 @@ impl GeoIPDownloader {
 
     let mmdb_path = Self::get_mmdb_file_path()?;
 
+    // Always download to a temp file first, then atomically rename.
+    // This prevents corruption if the app is closed mid-download.
+    let temp_path = mmdb_path.with_extension("mmdb.downloading");
+
+    // Remove any leftover temp file from a previous interrupted download
+    let _ = fs::remove_file(&temp_path).await;
+
     // Download the file
     let response = self.client.get(&download_url).send().await?;
 
@@ -189,7 +196,7 @@ impl GeoIPDownloader {
 
     let total_size = response.content_length().unwrap_or(0);
     let mut downloaded: u64 = 0;
-    let mut file = fs::File::create(&mmdb_path).await?;
+    let mut file = fs::File::create(&temp_path).await?;
     let mut stream = response.bytes_stream();
 
     use futures_util::StreamExt;
@@ -237,6 +244,10 @@ impl GeoIPDownloader {
     }
 
     file.flush().await?;
+    drop(file);
+
+    // Atomically replace the old database with the new one
+    fs::rename(&temp_path, &mmdb_path).await?;
 
     // Write download timestamp
     let timestamp_path = Self::get_timestamp_path();
