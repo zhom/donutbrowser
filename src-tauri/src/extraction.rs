@@ -232,13 +232,21 @@ impl Extractor {
     &self,
     file_path: &Path,
   ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    // Always check magic bytes first — the file extension may be wrong
-    // (e.g. CDN serving a ZIP with .dmg extension)
+    // Check file extension first for container formats (DMG, MSI) whose internal
+    // compression makes magic bytes unreliable
+    if let Some(ext) = file_path.extension().and_then(|ext| ext.to_str()) {
+      match ext.to_lowercase().as_str() {
+        "dmg" => return Ok("dmg".to_string()),
+        "msi" => return Ok("msi".to_string()),
+        _ => {}
+      }
+    }
+
     let mut file = File::open(file_path)?;
-    let mut buffer = [0u8; 12]; // Read first 12 bytes for magic number detection
+    let mut buffer = [0u8; 12];
     file.read_exact(&mut buffer)?;
 
-    // Check magic numbers for different file types
+    // Check magic numbers for other file types
     match &buffer[0..4] {
       [0x50, 0x4B, 0x03, 0x04] | [0x50, 0x4B, 0x05, 0x06] | [0x50, 0x4B, 0x07, 0x08] => {
         return Ok("zip".to_string())
