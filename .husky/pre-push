@@ -1,0 +1,10 @@
+# Prevent pushing the 'nightly' tag — it is managed by CI
+if git rev-parse nightly >/dev/null 2>&1; then
+  LOCAL_NIGHTLY=$(git rev-parse nightly)
+  REMOTE_NIGHTLY=$(git ls-remote --tags origin refs/tags/nightly 2>/dev/null | awk '{print $1}')
+  if [ -n "$REMOTE_NIGHTLY" ] && [ "$LOCAL_NIGHTLY" != "$REMOTE_NIGHTLY" ]; then
+    echo "⚠ Skipping push of 'nightly' tag (managed by CI)"
+    # Delete the local nightly tag so --tags won't try to push it
+    git tag -d nightly >/dev/null 2>&1 || true
+  fi
+fi
