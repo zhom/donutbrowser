@@ -1049,12 +1049,21 @@ impl ProxyManager {
       .as_object()
       .ok_or_else(|| "JSON response is not an object".to_string())?;
 
-    let host = obj
+    let raw_host = obj
       .get("ip")
       .or_else(|| obj.get("host"))
       .and_then(|v| v.as_str())
-      .ok_or_else(|| "Missing 'ip' or 'host' field in JSON response".to_string())?
-      .to_string();
+      .ok_or_else(|| "Missing 'ip' or 'host' field in JSON response".to_string())?;
+
+    // Strip protocol prefix from host if present (e.g. "socks5://1.2.3.4" -> "1.2.3.4")
+    // and extract the proxy type from it if no explicit type field is provided
+    let (host, protocol_from_host) = if let Some(rest) = raw_host.strip_prefix("://") {
+      (rest.to_string(), None)
+    } else if let Some((proto, rest)) = raw_host.split_once("://") {
+      (rest.to_string(), Some(proto.to_lowercase()))
+    } else {
+      (raw_host.to_string(), None)
+    };
 
     let port = obj
       .get("port")
@@ -1070,8 +1079,9 @@ impl ProxyManager {
       .or_else(|| obj.get("proxy_type"))
       .or_else(|| obj.get("protocol"))
       .and_then(|v| v.as_str())
-      .unwrap_or("http")
-      .to_lowercase();
+      .map(|s| s.to_lowercase())
+      .or(protocol_from_host)
+      .unwrap_or_else(|| "http".to_string());
 
     let username = obj
       .get("username")
@@ -3468,6 +3478,28 @@ mod tests {
     let body2 = r#"{"ip": "1.2.3.4", "port": 8080, "protocol": "HTTP"}"#;
     let result2 = ProxyManager::parse_dynamic_proxy_json(body2).unwrap();
     assert_eq!(result2.proxy_type, "http");
+  }
+
+  #[test]
+  fn test_parse_dynamic_proxy_json_strips_protocol_from_host() {
+    // User's API returns "ip": "socks5://1.2.3.4" with protocol embedded in host
+    let body = r#"{"ip": "socks5://1.2.3.4", "port": 1080, "username": "u", "password": "p"}"#;
+    let result = ProxyManager::parse_dynamic_proxy_json(body).unwrap();
+    assert_eq!(result.host, "1.2.3.4");
+    assert_eq!(result.proxy_type, "socks5");
+    assert_eq!(result.port, 1080);
+
+    // Protocol in host should be used as proxy_type when no explicit type field
+    let body2 = r#"{"ip": "http://10.0.0.1", "port": 8080}"#;
+    let result2 = ProxyManager::parse_dynamic_proxy_json(body2).unwrap();
+    assert_eq!(result2.host, "10.0.0.1");
+    assert_eq!(result2.proxy_type, "http");
+
+    // Explicit type field takes precedence over protocol in host
+    let body3 = r#"{"ip": "http://10.0.0.1", "port": 1080, "type": "socks5"}"#;
+    let result3 = ProxyManager::parse_dynamic_proxy_json(body3).unwrap();
+    assert_eq!(result3.host, "10.0.0.1");
+    assert_eq!(result3.proxy_type, "socks5");
   }
 
   #[test]
