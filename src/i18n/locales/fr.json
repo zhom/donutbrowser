@@ -296,8 +296,8 @@
       "formatTextHint": "Attend du texte comme : host:port:username:password ou protocol://user:pass@host:port",
       "testUrl": "Tester l'URL",
       "testing": "Test en cours...",
-      "testSuccess": "Le proxy dynamique a été résolu en {{host}}:{{port}}",
-      "testFailed": "Échec de la récupération du proxy : {{error}}",
+      "testSuccess": "Proxy fonctionnel : {{host}}:{{port}}",
+      "testFailed": "Échec du test de proxy : {{error}}",
       "fetchFailed": "Échec de la récupération du proxy dynamique : {{error}}"
     },
     "check": {

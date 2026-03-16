@@ -296,8 +296,8 @@
       "formatTextHint": "期望文本格式: host:port:username:password 或 protocol://user:pass@host:port",
       "testUrl": "测试URL",
       "testing": "测试中...",
-      "testSuccess": "动态代理已解析为 {{host}}:{{port}}",
-      "testFailed": "获取代理失败: {{error}}",
+      "testSuccess": "代理正常运行: {{host}}:{{port}}",
+      "testFailed": "代理测试失败: {{error}}",
       "fetchFailed": "获取动态代理失败: {{error}}"
     },
     "check": {

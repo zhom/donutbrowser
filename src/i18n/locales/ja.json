@@ -296,8 +296,8 @@
       "formatTextHint": "テキスト形式: host:port:username:password または protocol://user:pass@host:port",
       "testUrl": "URLをテスト",
       "testing": "テスト中...",
-      "testSuccess": "ダイナミックプロキシは {{host}}:{{port}} に解決されました",
-      "testFailed": "プロキシの取得に失敗しました: {{error}}",
+      "testSuccess": "プロキシ動作中: {{host}}:{{port}}",
+      "testFailed": "プロキシテスト失敗: {{error}}",
       "fetchFailed": "ダイナミックプロキシの取得に失敗しました: {{error}}"
     },
     "check": {

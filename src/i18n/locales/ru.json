@@ -296,8 +296,8 @@
       "formatTextHint": "Ожидается текст вида: host:port:username:password или protocol://user:pass@host:port",
       "testUrl": "Проверить URL",
       "testing": "Проверка...",
-      "testSuccess": "Динамический прокси разрешён в {{host}}:{{port}}",
-      "testFailed": "Не удалось получить прокси: {{error}}",
+      "testSuccess": "Прокси работает: {{host}}:{{port}}",
+      "testFailed": "Тест прокси не пройден: {{error}}",
       "fetchFailed": "Не удалось получить динамический прокси: {{error}}"
     },
     "check": {

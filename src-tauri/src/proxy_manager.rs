@@ -928,19 +928,33 @@ impl ProxyManager {
     url
   }
 
-  // Check if a proxy is valid by making HTTP requests through it
+  // Check if a proxy is valid by routing through a temporary local donut-proxy.
+  // This tests the exact same code path the browser uses, ensuring that if the
+  // check passes, the browser connection will work too.
   pub async fn check_proxy_validity(
     &self,
     proxy_id: &str,
     proxy_settings: &ProxySettings,
   ) -> Result<ProxyCheckResult, String> {
-    let proxy_url = Self::build_proxy_url(proxy_settings);
+    let upstream_url = Self::build_proxy_url(proxy_settings);
 
-    // Fetch public IP through the proxy using shared IP utilities
-    let ip = match ip_utils::fetch_public_ip(Some(&proxy_url)).await {
+    // Start a temporary local proxy that tunnels through the upstream
+    let proxy_config = crate::proxy_runner::start_proxy_process(Some(upstream_url), None)
+      .await
+      .map_err(|e| format!("Failed to start test proxy: {e}"))?;
+
+    let local_url = format!("http://127.0.0.1:{}", proxy_config.local_port.unwrap_or(0));
+    let proxy_id_clone = proxy_config.id.clone();
+
+    // Fetch public IP through the local proxy (same path the browser uses)
+    let ip_result = ip_utils::fetch_public_ip(Some(&local_url)).await;
+
+    // Stop the temporary proxy regardless of result
+    let _ = crate::proxy_runner::stop_proxy_process(&proxy_id_clone).await;
+
+    let ip = match ip_result {
       Ok(ip) => ip,
       Err(e) => {
-        // Save failed check result
         let failed_result = ProxyCheckResult {
           ip: String::new(),
           city: None,
@@ -1054,9 +1068,10 @@ impl ProxyManager {
     let proxy_type = obj
       .get("type")
       .or_else(|| obj.get("proxy_type"))
+      .or_else(|| obj.get("protocol"))
       .and_then(|v| v.as_str())
       .unwrap_or("http")
-      .to_string();
+      .to_lowercase();
 
     let username = obj
       .get("username")
@@ -3437,6 +3452,22 @@ mod tests {
     let body2 = r#"{"ip": "1.2.3.4", "port": 1080, "proxy_type": "socks4"}"#;
     let result2 = ProxyManager::parse_dynamic_proxy_json(body2).unwrap();
     assert_eq!(result2.proxy_type, "socks4");
+
+    // "protocol" field alias
+    let body3 = r#"{"ip": "1.2.3.4", "port": 1080, "protocol": "socks5"}"#;
+    let result3 = ProxyManager::parse_dynamic_proxy_json(body3).unwrap();
+    assert_eq!(result3.proxy_type, "socks5");
+  }
+
+  #[test]
+  fn test_parse_dynamic_proxy_json_normalizes_case() {
+    let body = r#"{"ip": "1.2.3.4", "port": 1080, "type": "SOCKS5"}"#;
+    let result = ProxyManager::parse_dynamic_proxy_json(body).unwrap();
+    assert_eq!(result.proxy_type, "socks5");
+
+    let body2 = r#"{"ip": "1.2.3.4", "port": 8080, "protocol": "HTTP"}"#;
+    let result2 = ProxyManager::parse_dynamic_proxy_json(body2).unwrap();
+    assert_eq!(result2.proxy_type, "http");
   }
 
   #[test]

@@ -296,8 +296,8 @@
       "formatTextHint": "Expects text like: host:port:username:password or protocol://user:pass@host:port",
       "testUrl": "Test URL",
       "testing": "Testing...",
-      "testSuccess": "Dynamic proxy resolved to {{host}}:{{port}}",
-      "testFailed": "Failed to fetch proxy: {{error}}",
+      "testSuccess": "Proxy working: {{host}}:{{port}}",
+      "testFailed": "Proxy test failed: {{error}}",
       "fetchFailed": "Failed to fetch dynamic proxy: {{error}}"
     },
     "check": {
