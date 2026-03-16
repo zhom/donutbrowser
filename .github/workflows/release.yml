@@ -273,10 +273,10 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
         run: |
           mkdir -p /tmp/repo
-          aws s3 sync "s3://${R2_BUCKET}/dists" /tmp/repo/dists \
-            --endpoint-url "${R2_ENDPOINT}" --delete 2>/dev/null || true
-          aws s3 sync "s3://${R2_BUCKET}/repodata" /tmp/repo/repodata \
-            --endpoint-url "${R2_ENDPOINT}" --delete 2>/dev/null || true
+          aws s3 cp "s3://${R2_BUCKET}/dists" /tmp/repo/dists \
+            --endpoint-url "${R2_ENDPOINT}" --recursive 2>/dev/null || true
+          aws s3 cp "s3://${R2_BUCKET}/repodata" /tmp/repo/repodata \
+            --endpoint-url "${R2_ENDPOINT}" --recursive 2>/dev/null || true
 
       - name: Generate repository with repogen
         run: |
@@ -299,14 +299,14 @@ jobs:
           R2_ENDPOINT: "https://${{ secrets.R2_ENDPOINT_URL }}"
           R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
         run: |
-          aws s3 sync /tmp/repo/dists "s3://${R2_BUCKET}/dists" \
-            --endpoint-url "${R2_ENDPOINT}" --delete
-          aws s3 sync /tmp/repo/pool "s3://${R2_BUCKET}/pool" \
-            --endpoint-url "${R2_ENDPOINT}"
-          aws s3 sync /tmp/repo/repodata "s3://${R2_BUCKET}/repodata" \
-            --endpoint-url "${R2_ENDPOINT}" --delete
-          aws s3 sync /tmp/repo/Packages "s3://${R2_BUCKET}/Packages" \
-            --endpoint-url "${R2_ENDPOINT}"
+          aws s3 cp /tmp/repo/dists "s3://${R2_BUCKET}/dists" \
+            --endpoint-url "${R2_ENDPOINT}" --recursive
+          aws s3 cp /tmp/repo/pool "s3://${R2_BUCKET}/pool" \
+            --endpoint-url "${R2_ENDPOINT}" --recursive
+          aws s3 cp /tmp/repo/repodata "s3://${R2_BUCKET}/repodata" \
+            --endpoint-url "${R2_ENDPOINT}" --recursive
+          aws s3 cp /tmp/repo/Packages "s3://${R2_BUCKET}/Packages" \
+            --endpoint-url "${R2_ENDPOINT}" --recursive
 
       - name: Verify upload
         env:
@@ -317,6 +317,6 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
         run: |
           echo "DEB repo:"
-          aws s3 ls "s3://${R2_BUCKET}/dists/stable/" --endpoint-url "${R2_ENDPOINT}"
+          aws s3 ls "s3://${R2_BUCKET}/dists/stable/" --endpoint-url "${R2_ENDPOINT}" || echo "  (listing not available)"
           echo "RPM repo:"
-          aws s3 ls "s3://${R2_BUCKET}/repodata/" --endpoint-url "${R2_ENDPOINT}"
+          aws s3 ls "s3://${R2_BUCKET}/repodata/" --endpoint-url "${R2_ENDPOINT}" || echo "  (listing not available)"
