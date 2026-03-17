@@ -2741,17 +2741,19 @@ mod tests {
   fn test_process_running_detection_with_child_lifecycle() {
     use crate::proxy_storage::is_process_running;
 
-    // Spawn a long-lived child so we can check while it runs
-    let mut child = std::process::Command::new(if cfg!(windows) { "timeout" } else { "sleep" })
+    // Spawn a long-lived child so we can check while it runs.
+    // On Windows, `timeout` requires console input and exits immediately in
+    // non-interactive contexts, so use `ping` with a high count instead.
+    let mut child = std::process::Command::new(if cfg!(windows) { "ping" } else { "sleep" })
       .args(if cfg!(windows) {
-        vec!["/T", "10"]
+        vec!["-n", "100", "127.0.0.1"]
       } else {
         vec!["10"]
       })
       .stdout(std::process::Stdio::null())
       .stderr(std::process::Stdio::null())
       .spawn()
-      .expect("spawn sleep");
+      .expect("spawn long-lived child");
 
     let pid = child.id();
 

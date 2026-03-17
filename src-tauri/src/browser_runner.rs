@@ -2157,14 +2157,11 @@ impl BrowserRunner {
       .find(|p| p.id.to_string() == profile_id)
       .ok_or_else(|| format!("Profile '{profile_id}' not found"))?;
 
-    if profile.is_cross_os()
-      && !crate::cloud_auth::CLOUD_AUTH
-        .is_fingerprint_os_allowed(profile.host_os.as_deref())
-        .await
-    {
+    if profile.is_cross_os() {
       return Err(format!(
-        "Cannot open URL with profile '{}': cross-OS fingerprints require a paid subscription",
+        "Cannot open URL with profile '{}': this profile was created on {} and cannot be used on a different operating system",
         profile.name,
+        profile.host_os.as_deref().unwrap_or("another OS"),
       ));
     }
 
@@ -2196,14 +2193,11 @@ pub async fn launch_browser_profile(
     profile.id
   );
 
-  if profile.is_cross_os()
-    && !crate::cloud_auth::CLOUD_AUTH
-      .is_fingerprint_os_allowed(profile.host_os.as_deref())
-      .await
-  {
+  if profile.is_cross_os() {
     return Err(format!(
-      "Cannot launch profile '{}': cross-OS fingerprints require a paid subscription",
+      "Cannot launch profile '{}': this profile was created on {} and cannot be launched on a different operating system",
       profile.name,
+      profile.host_os.as_deref().unwrap_or("another OS"),
     ));
   }
 
@@ -2516,14 +2510,11 @@ pub async fn launch_browser_profile_with_debugging(
   remote_debugging_port: Option<u16>,
   headless: bool,
 ) -> Result<BrowserProfile, String> {
-  if profile.is_cross_os()
-    && !crate::cloud_auth::CLOUD_AUTH
-      .is_fingerprint_os_allowed(profile.host_os.as_deref())
-      .await
-  {
+  if profile.is_cross_os() {
     return Err(format!(
-      "Cannot launch profile '{}': cross-OS fingerprints require a paid subscription",
+      "Cannot launch profile '{}': this profile was created on {} and cannot be launched on a different operating system",
       profile.name,
+      profile.host_os.as_deref().unwrap_or("another OS"),
     ));
   }
 

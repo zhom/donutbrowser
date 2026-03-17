@@ -211,7 +211,7 @@ export function ProfileInfoDialog({
     profile.release_type.slice(1);
   const hasTags = profile.tags && profile.tags.length > 0;
   const hasNote = !!profile.note;
-  const showCrossOs = !!(profile.host_os && isCrossOsProfile(profile));
+  const showCrossOs = isCrossOsProfile(profile);
 
   type ActionItem = {
     icon: React.ReactNode;
@@ -364,10 +364,22 @@ export function ProfileInfoDialog({
                           {t("profiles.ephemeralBadge")}
                         </Badge>
                       )}
-                      {showCrossOs && profile.host_os && (
+                      {showCrossOs && (
                         <Badge variant="outline" className="text-xs gap-1">
-                          <OSIcon os={profile.host_os} />
-                          {getOSDisplayName(profile.host_os)}
+                          <OSIcon
+                            os={
+                              profile.host_os ||
+                              profile.camoufox_config?.os ||
+                              profile.wayfern_config?.os ||
+                              ""
+                            }
+                          />
+                          {getOSDisplayName(
+                            profile.host_os ||
+                              profile.camoufox_config?.os ||
+                              profile.wayfern_config?.os ||
+                              "",
+                          )}
                         </Badge>
                       )}
                     </div>

@@ -57,9 +57,17 @@ export const getCurrentOS = () => {
   return "unknown";
 };
 
-export function isCrossOsProfile(profile: { host_os?: string }): boolean {
-  if (!profile.host_os) return false;
-  return profile.host_os !== getCurrentOS();
+export function isCrossOsProfile(profile: {
+  host_os?: string;
+  camoufox_config?: { os?: string };
+  wayfern_config?: { os?: string };
+}): boolean {
+  const profileOs =
+    profile.host_os ||
+    profile.camoufox_config?.os ||
+    profile.wayfern_config?.os;
+  if (!profileOs) return false;
+  return profileOs !== getCurrentOS();
 }
 
 export function getOSDisplayName(os: string): string {

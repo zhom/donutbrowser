@@ -445,12 +445,16 @@ impl Downloader {
 
     let _ = events::emit("download-progress", &progress);
 
-    // Open file in append mode (resuming) or create new
+    // Open file in append mode (resuming) or create new.
+    // Wrap in BufWriter with a large buffer to reduce the number of disk writes,
+    // which dramatically improves download speed on Windows (NTFS + Defender overhead).
     use std::fs::OpenOptions;
-    let mut file = OpenOptions::new()
+    use std::io::Write;
+    let raw_file = OpenOptions::new()
       .create(true)
       .append(true)
       .open(&file_path)?;
+    let mut file = io::BufWriter::with_capacity(8 * 1024 * 1024, raw_file);
     let mut stream = response.bytes_stream();
 
     use futures_util::StreamExt;
@@ -463,7 +467,7 @@ impl Downloader {
         }
       }
       let chunk = chunk?;
-      io::copy(&mut chunk.as_ref(), &mut file)?;
+      file.write_all(&chunk)?;
       downloaded += chunk.len() as u64;
 
       let now = std::time::Instant::now();
@@ -509,6 +513,9 @@ impl Downloader {
         last_update = now;
       }
     }
+
+    // Flush remaining buffered data to disk
+    file.flush()?;
 
     Ok(file_path)
   }
@@ -951,6 +958,13 @@ impl Downloader {
 
     Ok(version)
   }
+}
+
+/// Check if a specific browser-version pair is currently being downloaded
+pub fn is_downloading(browser: &str, version: &str) -> bool {
+  let download_key = format!("{browser}-{version}");
+  let downloading = DOWNLOADING_BROWSERS.lock().unwrap();
+  downloading.contains(&download_key)
 }
 
 #[tauri::command]

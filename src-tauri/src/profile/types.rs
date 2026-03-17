@@ -87,11 +87,22 @@ impl BrowserProfile {
     profiles_dir.join(self.id.to_string()).join("profile")
   }
 
+  /// Resolve the OS this profile was created on. Checks `host_os` first,
+  /// then falls back to the fingerprint config's `os` field (for profiles
+  /// created before `host_os` was introduced or synced without it).
+  pub fn resolved_os(&self) -> Option<&str> {
+    self
+      .host_os
+      .as_deref()
+      .or_else(|| self.camoufox_config.as_ref().and_then(|c| c.os.as_deref()))
+      .or_else(|| self.wayfern_config.as_ref().and_then(|c| c.os.as_deref()))
+  }
+
   /// Returns true when the profile was created on a different OS than the current host.
-  /// Profiles without an `os` field (backward compat) are treated as native.
+  /// Checks `host_os` first, then falls back to the browser config's `os` field.
   pub fn is_cross_os(&self) -> bool {
-    match &self.host_os {
-      Some(host_os) => host_os != &get_host_os(),
+    match self.resolved_os() {
+      Some(os) => os != get_host_os(),
       None => false,
     }
   }

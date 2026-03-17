@@ -1035,7 +1035,9 @@ Path=test.profile
   fn test_get_default_version_for_browser_no_versions() {
     let (importer, _temp_dir) = create_test_profile_importer();
 
-    let result = importer.get_default_version_for_browser("camoufox");
+    // Use a browser name that is guaranteed to have no downloaded versions,
+    // since the global registry singleton may contain real data from the system.
+    let result = importer.get_default_version_for_browser("nonexistent_browser_xyz");
     assert!(
       result.is_err(),
       "Should fail when no versions are available"

@@ -15,7 +15,7 @@ export function useBrowserState(
   _isUpdating: (browser: string) => boolean,
   launchingProfiles: Set<string>,
   stoppingProfiles: Set<string>,
-  crossOsUnlocked = false,
+  _crossOsUnlocked = false,
 ) {
   const [isClient, setIsClient] = useState(false);
 
@@ -53,7 +53,7 @@ export function useBrowserState(
     (profile: BrowserProfile): boolean => {
       if (!isClient) return false;
 
-      if (isCrossOsProfile(profile) && !crossOsUnlocked) return false;
+      if (isCrossOsProfile(profile)) return false;
 
       const isRunning = runningProfiles.has(profile.id);
       const isLaunching = launchingProfiles.has(profile.id);
@@ -81,7 +81,6 @@ export function useBrowserState(
       isAnyInstanceRunning,
       launchingProfiles,
       stoppingProfiles,
-      crossOsUnlocked,
     ],
   );
 
@@ -158,11 +157,16 @@ export function useBrowserState(
     (profile: BrowserProfile): string => {
       if (!isClient) return "Loading...";
 
-      if (isCrossOsProfile(profile) && profile.host_os) {
-        if (!crossOsUnlocked) {
-          const osName = getOSDisplayName(profile.host_os);
-          return `This profile was created on ${osName}. A paid subscription is required to launch cross-OS profiles.`;
+      if (isCrossOsProfile(profile)) {
+        const profileOs =
+          profile.host_os ||
+          profile.camoufox_config?.os ||
+          profile.wayfern_config?.os;
+        if (profileOs) {
+          const osName = getOSDisplayName(profileOs);
+          return `This profile was created on ${osName} and cannot be launched on a different operating system.`;
         }
+        return "This profile was created on a different operating system and cannot be launched here.";
       }
 
       const isRunning = runningProfiles.has(profile.id);
@@ -197,7 +201,6 @@ export function useBrowserState(
       canLaunchProfile,
       launchingProfiles,
       stoppingProfiles,
-      crossOsUnlocked,
     ],
   );
 

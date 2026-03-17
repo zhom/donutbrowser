@@ -425,8 +425,21 @@ impl ProfileManager {
       if path.is_dir() {
         let metadata_file = path.join("metadata.json");
         if metadata_file.exists() {
-          let content = fs::read_to_string(metadata_file)?;
-          let profile: BrowserProfile = serde_json::from_str(&content)?;
+          let content = fs::read_to_string(&metadata_file)?;
+          let mut profile: BrowserProfile = serde_json::from_str(&content)?;
+
+          // Backfill host_os from browser config for profiles created before
+          // the field existed (or synced without it).
+          if profile.host_os.is_none() {
+            let inferred_os = profile.resolved_os().map(str::to_string);
+            if let Some(os) = inferred_os {
+              profile.host_os = Some(os);
+              if let Ok(json) = serde_json::to_string_pretty(&profile) {
+                let _ = fs::write(&metadata_file, json);
+              }
+            }
+          }
+
           profiles.push(profile);
         }
       }
@@ -563,6 +576,29 @@ impl ProfileManager {
       log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
 
+    Ok(())
+  }
+
+  /// Delete a profile from the local filesystem only, without triggering remote sync deletion.
+  /// Used when a profile was deleted on another device and the local copy should be cleaned up.
+  pub fn delete_profile_local_only(
+    &self,
+    profile_id: &str,
+  ) -> Result<(), Box<dyn std::error::Error>> {
+    let profiles_dir = self.get_profiles_dir();
+    let profile_dir = profiles_dir.join(profile_id);
+    if profile_dir.exists() {
+      fs::remove_dir_all(&profile_dir)?;
+      log::info!("Deleted local profile {} (tombstoned remotely)", profile_id);
+    }
+
+    if let Err(e) = crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance()
+      .cleanup_unused_binaries()
+    {
+      log::warn!("Failed to cleanup binaries after tombstone deletion: {e}");
+    }
+
+    let _ = crate::events::emit_empty("profiles-changed");
     Ok(())
   }
 

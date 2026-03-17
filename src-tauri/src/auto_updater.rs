@@ -145,6 +145,14 @@ impl AutoUpdater {
               let registry =
                 crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
 
+              // Skip if this browser-version pair is already being downloaded
+              if crate::downloader::is_downloading(&browser, &new_version) {
+                log::info!(
+                  "Browser {browser} {new_version} is already being downloaded, skipping duplicate"
+                );
+                return;
+              }
+
               if registry.is_browser_downloaded(&browser, &new_version) {
                 log::info!("Browser {browser} {new_version} already downloaded, proceeding to auto-update profiles");
 

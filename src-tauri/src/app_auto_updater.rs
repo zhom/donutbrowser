@@ -704,7 +704,8 @@ impl AppAutoUpdater {
 
     let total_size = response.content_length().unwrap_or(0);
     log::info!("Silent download size: {} bytes", total_size);
-    let mut file = fs::File::create(&file_path)?;
+    let raw_file = fs::File::create(&file_path)?;
+    let mut file = std::io::BufWriter::with_capacity(8 * 1024 * 1024, raw_file);
     let mut stream = response.bytes_stream();
 
     use futures_util::StreamExt;
@@ -712,6 +713,7 @@ impl AppAutoUpdater {
       let chunk = chunk?;
       file.write_all(&chunk)?;
     }
+    std::io::Write::flush(&mut file)?;
 
     log::info!("Silent download completed: {}", file_path.display());
     Ok(file_path)

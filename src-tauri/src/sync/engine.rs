@@ -2361,6 +2361,54 @@ impl SyncEngine {
       log::info!("No missing profiles found");
     }
 
+    // Delete local synced profiles that have a remote tombstone (deleted on another device)
+    {
+      let profile_manager = ProfileManager::instance();
+      let local_synced: Vec<(String, Option<String>)> = profile_manager
+        .list_profiles()
+        .unwrap_or_default()
+        .iter()
+        .filter(|p| p.is_sync_enabled())
+        .map(|p| (p.id.to_string(), p.created_by_id.clone()))
+        .collect();
+
+      let team_prefix = if let Some(auth) = crate::cloud_auth::CLOUD_AUTH.get_user().await {
+        auth.user.team_id.map(|tid| format!("teams/{}/", tid))
+      } else {
+        None
+      };
+
+      for (pid, created_by_id) in &local_synced {
+        // Check personal tombstone
+        let personal_tombstone = format!("tombstones/profiles/{}.json", pid);
+        let has_personal_tombstone = matches!(
+          self.client.stat(&personal_tombstone).await,
+          Ok(stat) if stat.exists
+        );
+
+        // Check team tombstone
+        let has_team_tombstone = if let (Some(tp), Some(_)) = (&team_prefix, created_by_id) {
+          let team_tombstone = format!("{}tombstones/profiles/{}.json", tp, pid);
+          matches!(
+            self.client.stat(&team_tombstone).await,
+            Ok(stat) if stat.exists
+          )
+        } else {
+          false
+        };
+
+        if has_personal_tombstone || has_team_tombstone {
+          log::info!(
+            "Profile {} has remote tombstone, deleting locally (deleted on another device)",
+            pid
+          );
+          if let Err(e) = profile_manager.delete_profile_local_only(pid) {
+            log::warn!("Failed to delete tombstoned profile {}: {}", pid, e);
+          }
+        }
+      }
+    }
+
     // Refresh metadata for local cross-OS profiles (propagate renames, tags, notes from originating device)
     let profile_manager = ProfileManager::instance();
     // Collect cross-OS profiles before async operations to avoid holding non-Send Result across await

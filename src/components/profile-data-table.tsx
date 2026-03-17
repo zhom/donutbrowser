@@ -1648,14 +1648,18 @@ export function ProfilesDataTable({
 
           // Cross-OS profiles: show OS icon when checkboxes aren't visible, show checkbox when they are
           if (isCrossOs && !meta.showCheckboxes && !isSelected) {
-            const osName = profile.host_os
-              ? getOSDisplayName(profile.host_os)
+            const resolvedOs =
+              profile.host_os ||
+              profile.camoufox_config?.os ||
+              profile.wayfern_config?.os;
+            const osName = resolvedOs
+              ? getOSDisplayName(resolvedOs)
               : "another OS";
             const crossOsTooltip = t("crossOs.viewOnly", { os: osName });
             const OsIcon =
-              profile.host_os === "macos"
+              resolvedOs === "macos"
                 ? FaApple
-                : profile.host_os === "windows"
+                : resolvedOs === "windows"
                   ? FaWindows
                   : FaLinux;
             return (
@@ -1684,8 +1688,12 @@ export function ProfilesDataTable({
 
           // Cross-OS profiles with checkboxes visible: show checkbox (selectable for bulk delete)
           if (isCrossOs && (meta.showCheckboxes || isSelected)) {
-            const osName = profile.host_os
-              ? getOSDisplayName(profile.host_os)
+            const resolvedOs =
+              profile.host_os ||
+              profile.camoufox_config?.os ||
+              profile.wayfern_config?.os;
+            const osName = resolvedOs
+              ? getOSDisplayName(resolvedOs)
               : "another OS";
             const crossOsTooltip = t("crossOs.viewOnly", { os: osName });
             return (
@@ -2017,7 +2025,7 @@ export function ProfilesDataTable({
             );
 
           const isCrossOs = isCrossOsProfile(profile);
-          const isCrossOsBlocked = isCrossOs && !meta.crossOsUnlocked;
+          const isCrossOsBlocked = isCrossOs;
           const isRunning =
             meta.isClient && meta.runningProfiles.has(profile.id);
           const isLaunching = meta.launchingProfiles.has(profile.id);
@@ -2078,7 +2086,7 @@ export function ProfilesDataTable({
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
           const isCrossOs = isCrossOsProfile(profile);
-          const isCrossOsBlocked = isCrossOs && !meta.crossOsUnlocked;
+          const isCrossOsBlocked = isCrossOs;
           const isRunning =
             meta.isClient && meta.runningProfiles.has(profile.id);
           const isLaunching = meta.launchingProfiles.has(profile.id);
@@ -2107,7 +2115,7 @@ export function ProfilesDataTable({
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
           const isCrossOs = isCrossOsProfile(profile);
-          const isCrossOsBlocked = isCrossOs && !meta.crossOsUnlocked;
+          const isCrossOsBlocked = isCrossOs;
           const isRunning =
             meta.isClient && meta.runningProfiles.has(profile.id);
           const isLaunching = meta.launchingProfiles.has(profile.id);
@@ -2134,7 +2142,7 @@ export function ProfilesDataTable({
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
           const isCrossOs = isCrossOsProfile(profile);
-          const isCrossOsBlocked = isCrossOs && !meta.crossOsUnlocked;
+          const isCrossOsBlocked = isCrossOs;
           const isRunning =
             meta.isClient && meta.runningProfiles.has(profile.id);
           const isLaunching = meta.launchingProfiles.has(profile.id);
@@ -2534,7 +2542,12 @@ export function ProfilesDataTable({
                 const rowIsCrossOs = isCrossOsProfile(row.original);
                 const crossOsTitle = rowIsCrossOs
                   ? t("crossOs.viewOnly", {
-                      os: getOSDisplayName(row.original.host_os ?? ""),
+                      os: getOSDisplayName(
+                        row.original.host_os ||
+                          row.original.camoufox_config?.os ||
+                          row.original.wayfern_config?.os ||
+                          "",
+                      ),
                     })
                   : undefined;
                 return (
