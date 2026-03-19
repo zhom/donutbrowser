@@ -907,6 +907,63 @@ impl ProxyManager {
       .map(|p| p.proxy_settings.clone())
   }
 
+  fn classify_proxy_error(raw_error: &str, settings: &ProxySettings) -> String {
+    let err = raw_error.to_lowercase();
+    let proxy_addr = format!("{}:{}", settings.host, settings.port);
+
+    if err.contains("connection refused") {
+      return format!(
+        "Connection refused by {proxy_addr}. The proxy server is not accepting connections."
+      );
+    }
+    if err.contains("connection reset") {
+      return format!(
+        "Connection reset by {proxy_addr}. The proxy server closed the connection unexpectedly."
+      );
+    }
+    if err.contains("timed out") || err.contains("deadline has elapsed") {
+      return format!("Connection to {proxy_addr} timed out. The proxy server is not responding.");
+    }
+    if err.contains("no such host") || err.contains("dns") || err.contains("resolve") {
+      return format!(
+        "Could not resolve proxy host '{}'. Check that the hostname is correct.",
+        settings.host
+      );
+    }
+    if err.contains("authentication") || err.contains("407") || err.contains("proxy auth") {
+      return format!(
+        "Proxy authentication failed for {proxy_addr}. Check your username and password."
+      );
+    }
+    if err.contains("403") || err.contains("forbidden") {
+      return format!("Access denied by {proxy_addr} (403 Forbidden).");
+    }
+    if err.contains("402") {
+      return format!(
+        "Payment required by {proxy_addr} (402). Your proxy subscription may have expired."
+      );
+    }
+    if err.contains("502") || err.contains("bad gateway") {
+      return format!(
+        "Bad gateway from {proxy_addr} (502). The upstream proxy server may be down."
+      );
+    }
+    if err.contains("503") || err.contains("service unavailable") {
+      return format!("Proxy {proxy_addr} is temporarily unavailable (503).");
+    }
+    if err.contains("socks") && err.contains("unreachable") {
+      return format!("SOCKS proxy {proxy_addr} could not reach the target. The proxy server may not have internet access.");
+    }
+    if err.contains("invalid proxy") || err.contains("unsupported proxy") {
+      return format!(
+        "Invalid proxy configuration for {proxy_addr}. Check the proxy type and address."
+      );
+    }
+
+    // Generic fallback — still show the proxy address for context
+    format!("Proxy check failed for {proxy_addr}. Could not connect through the proxy.")
+  }
+
   // Build proxy URL string from ProxySettings
   fn build_proxy_url(proxy_settings: &ProxySettings) -> String {
     let mut url = format!("{}://", proxy_settings.proxy_type);
@@ -928,9 +985,8 @@ impl ProxyManager {
     url
   }
 
-  // Check if a proxy is valid by routing through a temporary local donut-proxy.
-  // This tests the exact same code path the browser uses, ensuring that if the
-  // check passes, the browser connection will work too.
+  // Check if a proxy is valid by routing through a temporary in-process donut-proxy.
+  // This tests the same code path the browser uses (local proxy -> upstream).
   pub async fn check_proxy_validity(
     &self,
     proxy_id: &str,
@@ -938,19 +994,41 @@ impl ProxyManager {
   ) -> Result<ProxyCheckResult, String> {
     let upstream_url = Self::build_proxy_url(proxy_settings);
 
-    // Start a temporary local proxy that tunnels through the upstream
-    let proxy_config = crate::proxy_runner::start_proxy_process(Some(upstream_url), None)
+    // Bind a temporary local proxy server in-process (no child process needed)
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
       .await
-      .map_err(|e| format!("Failed to start test proxy: {e}"))?;
+      .map_err(|e| format!("Failed to bind test proxy: {e}"))?;
+    let local_port = listener
+      .local_addr()
+      .map_err(|e| format!("Failed to get local address: {e}"))?
+      .port();
 
-    let local_url = format!("http://127.0.0.1:{}", proxy_config.local_port.unwrap_or(0));
-    let proxy_id_clone = proxy_config.id.clone();
+    let upstream_for_task = upstream_url.clone();
+    let proxy_task = tokio::spawn(async move {
+      use crate::proxy_server::BypassMatcher;
+      let bypass_matcher = BypassMatcher::new(&[]);
+      let upstream = Some(upstream_for_task);
+      // Accept up to 10 connections (enough for IP check which tries multiple endpoints)
+      for _ in 0..10 {
+        let accept =
+          tokio::time::timeout(std::time::Duration::from_secs(15), listener.accept()).await;
+        match accept {
+          Ok(Ok((stream, _))) => {
+            let upstream = upstream.clone();
+            let matcher = bypass_matcher.clone();
+            tokio::spawn(async move {
+              crate::proxy_server::handle_proxy_connection(stream, upstream, matcher).await;
+            });
+          }
+          _ => break,
+        }
+      }
+    });
 
-    // Fetch public IP through the local proxy (same path the browser uses)
+    let local_url = format!("http://127.0.0.1:{local_port}");
     let ip_result = ip_utils::fetch_public_ip(Some(&local_url)).await;
 
-    // Stop the temporary proxy regardless of result
-    let _ = crate::proxy_runner::stop_proxy_process(&proxy_id_clone).await;
+    proxy_task.abort();
 
     let ip = match ip_result {
       Ok(ip) => ip,
@@ -964,7 +1042,10 @@ impl ProxyManager {
           is_valid: false,
         };
         let _ = self.save_proxy_check_cache(proxy_id, &failed_result);
-        return Err(format!("Failed to fetch public IP: {e}"));
+
+        let err_str = e.to_string();
+        let user_message = Self::classify_proxy_error(&err_str, proxy_settings);
+        return Err(user_message);
       }
     };
 

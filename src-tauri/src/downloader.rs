@@ -308,38 +308,10 @@ impl Downloader {
       .resolve_download_url(browser_type.clone(), version, download_info)
       .await?;
 
-    // Check existing file size — if it matches the expected size, skip download
+    // Determine if we have a partial file to resume
     let mut existing_size: u64 = 0;
     if let Ok(meta) = std::fs::metadata(&file_path) {
       existing_size = meta.len();
-    }
-
-    // Do a HEAD request to get the expected file size for skip/resume decisions
-    let head_response = self
-      .client
-      .head(&download_url)
-      .header(
-        "User-Agent",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
-      )
-      .send()
-      .await
-      .ok();
-
-    let expected_size = head_response.as_ref().and_then(|r| r.content_length());
-
-    // If existing file matches expected size, skip download entirely
-    if existing_size > 0 {
-      if let Some(expected) = expected_size {
-        if existing_size == expected {
-          log::info!(
-            "Archive {} already exists with correct size ({} bytes), skipping download",
-            file_path.display(),
-            existing_size
-          );
-          return Ok(file_path);
-        }
-      }
     }
 
     // Build request, add Range only if we have bytes. If the server responds with 416 (Range Not
@@ -413,6 +385,20 @@ impl Downloader {
       // Truncate existing file so we don't append duplicate bytes
       let _ = std::fs::remove_file(&file_path);
       existing_size = 0;
+    }
+
+    // If the existing file already matches the total size, skip the download
+    if existing_size > 0 {
+      if let Some(total) = total_size {
+        if existing_size >= total {
+          log::info!(
+            "Archive {} already complete ({} bytes), skipping download",
+            file_path.display(),
+            existing_size
+          );
+          return Ok(file_path);
+        }
+      }
     }
 
     let mut downloaded = existing_size;

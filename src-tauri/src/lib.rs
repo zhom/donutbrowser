@@ -297,7 +297,7 @@ async fn fetch_dynamic_proxy(
     .fetch_dynamic_proxy(&url, &format)
     .await?;
 
-  // Validate the proxy actually works by routing through a temporary local proxy
+  // Validate the proxy actually works by connecting through it
   crate::proxy_manager::PROXY_MANAGER
     .check_proxy_validity("_dynamic_test", &settings)
     .await
