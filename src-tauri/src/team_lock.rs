@@ -31,42 +31,45 @@ struct AcquireLockResponse {
   locked_by_email: Option<String>,
 }
 
-pub struct TeamLockManager {
+pub struct ProfileLockManager {
   locks: RwLock<HashMap<String, ProfileLockInfo>>,
   heartbeat_handle: Mutex<Option<JoinHandle<()>>>,
-  connected_team_id: Mutex<Option<String>>,
+  connected: Mutex<bool>,
 }
 
 lazy_static! {
-  pub static ref TEAM_LOCK: TeamLockManager = TeamLockManager::new();
+  pub static ref PROFILE_LOCK: ProfileLockManager = ProfileLockManager::new();
 }
 
-impl TeamLockManager {
+// Keep backward compatibility alias
+pub use PROFILE_LOCK as TEAM_LOCK;
+
+impl ProfileLockManager {
   fn new() -> Self {
     Self {
       locks: RwLock::new(HashMap::new()),
       heartbeat_handle: Mutex::new(None),
-      connected_team_id: Mutex::new(None),
+      connected: Mutex::new(false),
     }
   }
 
-  pub async fn connect(&self, team_id: &str) {
-    log::info!("Connecting team lock manager for team: {team_id}");
+  pub async fn connect(&self) {
+    log::info!("Connecting profile lock manager");
 
     {
-      let mut tid = self.connected_team_id.lock().await;
-      *tid = Some(team_id.to_string());
+      let mut c = self.connected.lock().await;
+      *c = true;
     }
 
-    if let Err(e) = self.fetch_initial_locks(team_id).await {
-      log::warn!("Failed to fetch initial locks: {e}");
+    if let Err(e) = self.fetch_locks().await {
+      log::warn!("Failed to fetch initial profile locks: {e}");
     }
 
     self.start_heartbeat_loop().await;
   }
 
   pub async fn disconnect(&self) {
-    log::info!("Disconnecting team lock manager");
+    log::info!("Disconnecting profile lock manager");
 
     {
       let mut handle = self.heartbeat_handle.lock().await;
@@ -81,23 +84,24 @@ impl TeamLockManager {
     }
 
     {
-      let mut tid = self.connected_team_id.lock().await;
-      *tid = None;
+      let mut c = self.connected.lock().await;
+      *c = false;
     }
   }
 
-  pub async fn acquire_lock(&self, profile_id: &str) -> Result<(), String> {
-    let team_id = self.get_team_id().await?;
-    let client = Client::new();
+  pub async fn is_connected(&self) -> bool {
+    *self.connected.lock().await
+  }
 
+  pub async fn acquire_lock(&self, profile_id: &str) -> Result<(), String> {
+    let client = Client::new();
     let access_token =
       CloudAuthManager::load_access_token()?.ok_or_else(|| "Not logged in".to_string())?;
 
-    let url = format!("{CLOUD_API_URL}/api/teams/{team_id}/locks");
+    let url = format!("{CLOUD_API_URL}/api/profile-locks/{profile_id}");
     let response = client
       .post(&url)
       .header("Authorization", format!("Bearer {access_token}"))
-      .json(&serde_json::json!({ "profileId": profile_id }))
       .send()
       .await
       .map_err(|e| format!("Failed to acquire lock: {e}"))?;
@@ -116,7 +120,7 @@ impl TeamLockManager {
     if !result.success {
       let email = result
         .locked_by_email
-        .unwrap_or_else(|| "another user".to_string());
+        .unwrap_or_else(|| "another device".to_string());
       return Err(format!("Profile is in use by {email}"));
     }
 
@@ -136,21 +140,19 @@ impl TeamLockManager {
     }
 
     let _ = crate::events::emit(
-      "team-lock-acquired",
-      serde_json::json!({ "profileId": profile_id }),
+      "profile-lock-changed",
+      serde_json::json!({ "profileId": profile_id, "action": "acquired" }),
     );
 
     Ok(())
   }
 
   pub async fn release_lock(&self, profile_id: &str) -> Result<(), String> {
-    let team_id = self.get_team_id().await?;
     let client = Client::new();
-
     let access_token =
       CloudAuthManager::load_access_token()?.ok_or_else(|| "Not logged in".to_string())?;
 
-    let url = format!("{CLOUD_API_URL}/api/teams/{team_id}/locks/{profile_id}");
+    let url = format!("{CLOUD_API_URL}/api/profile-locks/{profile_id}");
     let _ = client
       .delete(&url)
       .header("Authorization", format!("Bearer {access_token}"))
@@ -163,8 +165,8 @@ impl TeamLockManager {
     }
 
     let _ = crate::events::emit(
-      "team-lock-released",
-      serde_json::json!({ "profileId": profile_id }),
+      "profile-lock-changed",
+      serde_json::json!({ "profileId": profile_id, "action": "released" }),
     );
 
     Ok(())
@@ -190,12 +192,12 @@ impl TeamLockManager {
     false
   }
 
-  async fn fetch_initial_locks(&self, team_id: &str) -> Result<(), String> {
+  async fn fetch_locks(&self) -> Result<(), String> {
     let client = Client::new();
     let access_token =
       CloudAuthManager::load_access_token()?.ok_or_else(|| "Not logged in".to_string())?;
 
-    let url = format!("{CLOUD_API_URL}/api/teams/{team_id}/locks");
+    let url = format!("{CLOUD_API_URL}/api/profile-locks");
     let response = client
       .get(&url)
       .header("Authorization", format!("Bearer {access_token}"))
@@ -231,13 +233,13 @@ impl TeamLockManager {
       loop {
         tokio::time::sleep(std::time::Duration::from_secs(30)).await;
 
-        let team_id = match TEAM_LOCK.get_team_id().await {
-          Ok(id) => id,
-          Err(_) => break,
-        };
+        if !PROFILE_LOCK.is_connected().await {
+          break;
+        }
 
+        // Send heartbeat for each held lock
         let held_locks: Vec<String> = {
-          let locks = TEAM_LOCK.locks.read().await;
+          let locks = PROFILE_LOCK.locks.read().await;
           if let Some(user) = CLOUD_AUTH.get_user().await {
             locks
               .values()
@@ -252,7 +254,7 @@ impl TeamLockManager {
         for profile_id in held_locks {
           let client = Client::new();
           if let Ok(Some(token)) = CloudAuthManager::load_access_token() {
-            let url = format!("{CLOUD_API_URL}/api/teams/{team_id}/locks/{profile_id}/heartbeat");
+            let url = format!("{CLOUD_API_URL}/api/profile-locks/{profile_id}/heartbeat");
             let _ = client
               .post(&url)
               .header("Authorization", format!("Bearer {token}"))
@@ -262,63 +264,56 @@ impl TeamLockManager {
         }
 
         // Refresh lock state from server
-        if let Err(e) = TEAM_LOCK.fetch_initial_locks(&team_id).await {
-          log::debug!("Failed to refresh locks: {e}");
+        if let Err(e) = PROFILE_LOCK.fetch_locks().await {
+          log::debug!("Failed to refresh profile locks: {e}");
         }
       }
     });
 
     *handle = Some(h);
   }
-
-  async fn get_team_id(&self) -> Result<String, String> {
-    let tid = self.connected_team_id.lock().await;
-    tid
-      .clone()
-      .ok_or_else(|| "Not connected to a team".to_string())
-  }
 }
 
-/// Acquire team lock if profile is sync-enabled and user is on a team.
-/// Returns Ok(()) if lock acquired or not applicable, Err with message if locked by another.
+/// Acquire profile lock if profile is sync-enabled and user has a paid subscription.
 pub async fn acquire_team_lock_if_needed(
   profile: &crate::profile::BrowserProfile,
 ) -> Result<(), String> {
   if !profile.is_sync_enabled() {
     return Ok(());
   }
-  if !CLOUD_AUTH.is_on_team_plan().await {
+  if !CLOUD_AUTH.has_active_paid_subscription().await {
     return Ok(());
   }
 
-  if TEAM_LOCK
+  // Ensure lock manager is connected
+  if !PROFILE_LOCK.is_connected().await {
+    PROFILE_LOCK.connect().await;
+  }
+
+  if PROFILE_LOCK
     .is_locked_by_another(&profile.id.to_string())
     .await
   {
-    if let Some(lock) = TEAM_LOCK.get_lock_status(&profile.id.to_string()).await {
+    if let Some(lock) = PROFILE_LOCK.get_lock_status(&profile.id.to_string()).await {
       return Err(format!("Profile is in use by {}", lock.locked_by_email));
     }
-    return Err("Profile is in use by another team member".to_string());
+    return Err("Profile is in use on another device".to_string());
   }
 
-  TEAM_LOCK.acquire_lock(&profile.id.to_string()).await
+  PROFILE_LOCK.acquire_lock(&profile.id.to_string()).await
 }
 
-/// Release team lock if profile is sync-enabled and user is on a team.
-/// Logs warnings on failure but does not return errors.
+/// Release profile lock if profile is sync-enabled and user has a paid subscription.
 pub async fn release_team_lock_if_needed(profile: &crate::profile::BrowserProfile) {
   if !profile.is_sync_enabled() {
     return;
   }
-  if !CLOUD_AUTH.is_on_team_plan().await {
+  if !CLOUD_AUTH.has_active_paid_subscription().await {
     return;
   }
 
-  if let Err(e) = TEAM_LOCK.release_lock(&profile.id.to_string()).await {
-    log::warn!(
-      "Failed to release team lock for profile {}: {e}",
-      profile.id
-    );
+  if let Err(e) = PROFILE_LOCK.release_lock(&profile.id.to_string()).await {
+    log::warn!("Failed to release profile lock for {}: {e}", profile.id);
   }
 }
 
@@ -326,10 +321,10 @@ pub async fn release_team_lock_if_needed(profile: &crate::profile::BrowserProfil
 
 #[tauri::command]
 pub async fn get_team_locks() -> Result<Vec<ProfileLockInfo>, String> {
-  Ok(TEAM_LOCK.get_locks().await)
+  Ok(PROFILE_LOCK.get_locks().await)
 }
 
 #[tauri::command]
 pub async fn get_team_lock_status(profile_id: String) -> Result<Option<ProfileLockInfo>, String> {
-  Ok(TEAM_LOCK.get_lock_status(&profile_id).await)
+  Ok(PROFILE_LOCK.get_lock_status(&profile_id).await)
 }

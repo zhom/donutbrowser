@@ -591,8 +591,8 @@ impl CloudAuthManager {
     // Clear wayfern token
     self.clear_wayfern_token().await;
 
-    // Disconnect team lock manager
-    crate::team_lock::TEAM_LOCK.disconnect().await;
+    // Disconnect profile lock manager
+    crate::team_lock::PROFILE_LOCK.disconnect().await;
 
     // Try to call the logout API (best-effort)
     if let Ok(Some(access_token)) = Self::load_access_token() {
@@ -1070,10 +1070,10 @@ impl CloudAuthManager {
         log::debug!("Failed to refresh cloud profile: {e}");
       }
 
-      // Reconnect team lock manager if needed
+      // Reconnect profile lock manager if needed
       if let Some(auth_state) = CLOUD_AUTH.get_user().await {
-        if let Some(tid) = &auth_state.user.team_id {
-          crate::team_lock::TEAM_LOCK.connect(tid).await;
+        if auth_state.user.plan != "free" && !crate::team_lock::PROFILE_LOCK.is_connected().await {
+          crate::team_lock::PROFILE_LOCK.connect().await;
         }
       }
 
@@ -1137,11 +1137,9 @@ pub async fn cloud_verify_otp(
   // Sync cloud proxy after login
   CLOUD_AUTH.sync_cloud_proxy().await;
 
-  // Connect team lock manager if on a team plan
-  if state.user.team_id.is_some() {
-    if let Some(tid) = &state.user.team_id {
-      crate::team_lock::TEAM_LOCK.connect(tid).await;
-    }
+  // Connect profile lock manager for paid users
+  if state.user.plan != "free" {
+    crate::team_lock::PROFILE_LOCK.connect().await;
   }
 
   let _ = crate::events::emit_empty("cloud-auth-changed");
