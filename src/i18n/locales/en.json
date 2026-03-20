@@ -421,7 +421,8 @@
       "config": "MCP Configuration",
       "copyConfig": "Copy Configuration"
     },
-    "mcpCopyHint": "Add this to your MCP client config to connect."
+    "mcpCopyHint": "Copy and paste this into your MCP client configuration.",
+    "mcpConfigPath": "Claude Desktop: ~/Library/Application Support/Claude/claude_desktop_config.json (macOS) or %APPDATA%\\Claude\\claude_desktop_config.json (Windows)"
   },
   "import": {
     "title": "Import Profile",

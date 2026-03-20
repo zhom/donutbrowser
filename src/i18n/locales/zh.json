@@ -421,7 +421,8 @@
       "config": "MCP 配置",
       "copyConfig": "复制配置"
     },
-    "mcpCopyHint": "将此添加到您的MCP客户端配置中以进行连接。"
+    "mcpCopyHint": "将此内容复制并粘贴到您的 MCP 客户端配置中。",
+    "mcpConfigPath": "Claude Desktop: ~/Library/Application Support/Claude/claude_desktop_config.json (macOS) 或 %APPDATA%\\Claude\\claude_desktop_config.json (Windows)"
   },
   "import": {
     "title": "导入配置文件",

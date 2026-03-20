@@ -361,6 +361,9 @@ export function IntegrationsDialog({
                   <p className="text-xs text-muted-foreground">
                     {t("integrations.mcpCopyHint")}
                   </p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("integrations.mcpConfigPath")}
+                  </p>
                 </div>
               )}
             </TabsContent>

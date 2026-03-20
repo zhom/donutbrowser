@@ -4,16 +4,18 @@ use axum::{
   http::{header, Request, StatusCode},
   middleware::{self, Next},
   response::{IntoResponse, Response},
-  routing::post,
+  routing::{get, post},
   Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::Arc;
 use tauri::AppHandle;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex as AsyncMutex;
+use uuid::Uuid;
 
 use crate::browser::ProxySettings;
 use crate::cloud_auth::CLOUD_AUTH;
@@ -34,15 +36,20 @@ pub struct McpTool {
 #[allow(dead_code)]
 pub struct McpRequest {
   jsonrpc: String,
-  id: serde_json::Value,
+  id: Option<serde_json::Value>,
   method: String,
   params: Option<serde_json::Value>,
 }
 
+const PROTOCOL_VERSION: &str = "2025-03-26";
+const SERVER_NAME: &str = "donut-browser";
+const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[derive(Debug, Serialize)]
 pub struct McpResponse {
   jsonrpc: String,
-  id: serde_json::Value,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  id: Option<serde_json::Value>,
   #[serde(skip_serializing_if = "Option::is_none")]
   result: Option<serde_json::Value>,
   #[serde(skip_serializing_if = "Option::is_none")]
@@ -57,10 +64,15 @@ pub struct McpError {
 
 const DEFAULT_MCP_PORT: u16 = 51080;
 
+struct McpSession {
+  initialized: bool,
+}
+
 struct McpServerInner {
   app_handle: Option<AppHandle>,
   token: Option<String>,
   shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
+  sessions: HashMap<String, McpSession>,
 }
 
 #[derive(Clone)]
@@ -82,6 +94,7 @@ impl McpServer {
         app_handle: None,
         token: None,
         shutdown_tx: None,
+        sessions: HashMap::new(),
       })),
       is_running: AtomicBool::new(false),
       port: AtomicU16::new(0),
@@ -207,7 +220,13 @@ impl McpServer {
     shutdown_rx: tokio::sync::oneshot::Receiver<()>,
   ) {
     let app = Router::new()
-      .route("/mcp", post(Self::handle_mcp_post))
+      .route(
+        "/mcp",
+        post(Self::handle_mcp_post)
+          .get(Self::handle_mcp_get)
+          .delete(Self::handle_mcp_delete),
+      )
+      .route("/health", get(Self::handle_health))
       .layer(middleware::from_fn_with_state(
         state.clone(),
         Self::auth_middleware,
@@ -243,6 +262,11 @@ impl McpServer {
     req: Request<Body>,
     next: Next,
   ) -> Result<Response, StatusCode> {
+    // Health endpoint is public
+    if req.uri().path() == "/health" {
+      return Ok(next.run(req).await);
+    }
+
     let auth_header = req
       .headers()
       .get(header::AUTHORIZATION)
@@ -257,12 +281,114 @@ impl McpServer {
     Ok(next.run(req).await)
   }
 
-  async fn handle_mcp_post(
+  async fn handle_health() -> impl IntoResponse {
+    Json(serde_json::json!({
+      "status": "ok",
+      "server": SERVER_NAME,
+      "version": SERVER_VERSION,
+      "protocolVersion": PROTOCOL_VERSION,
+    }))
+  }
+
+  async fn handle_mcp_get() -> impl IntoResponse {
+    // We don't support server-initiated SSE streams
+    StatusCode::METHOD_NOT_ALLOWED
+  }
+
+  async fn handle_mcp_delete(
     State(state): State<McpHttpState>,
-    Json(request): Json<McpRequest>,
+    req: Request<Body>,
   ) -> impl IntoResponse {
-    let response = state.server.handle_request(request).await;
-    Json(response)
+    let session_id = req
+      .headers()
+      .get("mcp-session-id")
+      .and_then(|h| h.to_str().ok())
+      .map(|s| s.to_string());
+
+    if let Some(sid) = session_id {
+      let mut inner = state.server.inner.lock().await;
+      inner.sessions.remove(&sid);
+      log::info!("[mcp] Session terminated: {}", sid);
+    }
+
+    StatusCode::OK
+  }
+
+  async fn handle_mcp_post(State(state): State<McpHttpState>, req: Request<Body>) -> Response {
+    let session_id = req
+      .headers()
+      .get("mcp-session-id")
+      .and_then(|h| h.to_str().ok())
+      .map(|s| s.to_string());
+
+    let body_bytes = match axum::body::to_bytes(req.into_body(), 1024 * 1024).await {
+      Ok(b) => b,
+      Err(_) => {
+        return (StatusCode::BAD_REQUEST, "Invalid request body").into_response();
+      }
+    };
+
+    let request: McpRequest = match serde_json::from_slice(&body_bytes) {
+      Ok(r) => r,
+      Err(_) => {
+        return (StatusCode::BAD_REQUEST, "Invalid JSON").into_response();
+      }
+    };
+
+    let is_notification = request.id.is_none();
+    let method = request.method.clone();
+
+    // Handle initialize (no session required)
+    if method == "initialize" {
+      let response = state.server.handle_initialize(request).await;
+      match response {
+        Ok((session_id, result)) => {
+          let body = McpResponse {
+            jsonrpc: "2.0".to_string(),
+            id: Some(result.0),
+            result: Some(result.1),
+            error: None,
+          };
+          Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "application/json")
+            .header("mcp-session-id", &session_id)
+            .body(Body::from(serde_json::to_vec(&body).unwrap()))
+            .unwrap()
+        }
+        Err((id, error)) => {
+          let body = McpResponse {
+            jsonrpc: "2.0".to_string(),
+            id: Some(id),
+            result: None,
+            error: Some(error),
+          };
+          Json(body).into_response()
+        }
+      }
+    } else if is_notification {
+      // Notifications (like notifications/initialized) -> 202 Accepted
+      if method == "notifications/initialized" {
+        if let Some(sid) = &session_id {
+          let mut inner = state.server.inner.lock().await;
+          if let Some(session) = inner.sessions.get_mut(sid) {
+            session.initialized = true;
+          }
+        }
+      }
+      StatusCode::ACCEPTED.into_response()
+    } else {
+      // Validate session exists
+      if let Some(sid) = &session_id {
+        let inner = state.server.inner.lock().await;
+        if !inner.sessions.contains_key(sid) {
+          return StatusCode::NOT_FOUND.into_response();
+        }
+      }
+
+      let response = state.server.handle_request(request).await;
+      Json(response).into_response()
+    }
   }
 
   pub async fn stop(&self) -> Result<(), String> {
@@ -273,6 +399,7 @@ impl McpServer {
     let mut inner = self.inner.lock().await;
     inner.app_handle = None;
     inner.token = None;
+    inner.sessions.clear();
 
     // Send shutdown signal
     if let Some(tx) = inner.shutdown_tx.take() {
@@ -1184,11 +1311,56 @@ impl McpServer {
     ]
   }
 
+  async fn handle_initialize(
+    &self,
+    request: McpRequest,
+  ) -> Result<(String, (serde_json::Value, serde_json::Value)), (serde_json::Value, McpError)> {
+    let id = request.id.clone().unwrap_or(serde_json::Value::Null);
+
+    if !self.is_running() {
+      return Err((
+        id,
+        McpError {
+          code: -32001,
+          message: "MCP server is not running".to_string(),
+        },
+      ));
+    }
+
+    // Create session
+    let session_id = Uuid::new_v4().to_string();
+    {
+      let mut inner = self.inner.lock().await;
+      inner
+        .sessions
+        .insert(session_id.clone(), McpSession { initialized: false });
+    }
+
+    let result = serde_json::json!({
+      "protocolVersion": PROTOCOL_VERSION,
+      "capabilities": {
+        "tools": {
+          "listChanged": false
+        }
+      },
+      "serverInfo": {
+        "name": SERVER_NAME,
+        "version": SERVER_VERSION,
+      },
+      "instructions": "Donut Browser MCP server. Use tools/list to discover available browser automation tools."
+    });
+
+    log::info!("[mcp] New session initialized: {}", session_id);
+    Ok((session_id, (id, result)))
+  }
+
   pub async fn handle_request(&self, request: McpRequest) -> McpResponse {
+    let id = request.id.clone().unwrap_or(serde_json::Value::Null);
+
     if !self.is_running() {
       return McpResponse {
         jsonrpc: "2.0".to_string(),
-        id: request.id,
+        id: Some(id),
         result: None,
         error: Some(McpError {
           code: -32001,
@@ -1198,6 +1370,7 @@ impl McpServer {
     }
 
     let result = match request.method.as_str() {
+      "ping" => Ok(serde_json::json!({})),
       "tools/list" => self.handle_tools_list().await,
       "tools/call" => self.handle_tool_call(request.params).await,
       _ => Err(McpError {
@@ -1209,13 +1382,13 @@ impl McpServer {
     match result {
       Ok(value) => McpResponse {
         jsonrpc: "2.0".to_string(),
-        id: request.id,
+        id: Some(id),
         result: Some(value),
         error: None,
       },
       Err(error) => McpResponse {
         jsonrpc: "2.0".to_string(),
-        id: request.id,
+        id: Some(id),
         result: None,
         error: Some(error),
       },
