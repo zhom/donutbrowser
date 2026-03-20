@@ -985,8 +985,9 @@ impl ProxyManager {
     url
   }
 
-  // Check if a proxy is valid by routing through a temporary in-process donut-proxy.
-  // This tests the same code path the browser uses (local proxy -> upstream).
+  // Check if a proxy is valid by routing through a temporary donut-proxy process.
+  // This tests the exact same code path the browser uses.
+  // Falls back to direct reqwest check if the proxy worker fails to start.
   pub async fn check_proxy_validity(
     &self,
     proxy_id: &str,
@@ -994,41 +995,31 @@ impl ProxyManager {
   ) -> Result<ProxyCheckResult, String> {
     let upstream_url = Self::build_proxy_url(proxy_settings);
 
-    // Bind a temporary local proxy server in-process (no child process needed)
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-      .await
-      .map_err(|e| format!("Failed to bind test proxy: {e}"))?;
-    let local_port = listener
-      .local_addr()
-      .map_err(|e| format!("Failed to get local address: {e}"))?
-      .port();
+    // Try process-based check first (identical to browser launch path)
+    // Try process-based check first (identical to browser launch path).
+    // If the proxy worker fails to start (e.g. Gatekeeper, antivirus, signing
+    // restrictions), fall back to a direct reqwest check.
+    let proxy_start_result =
+      crate::proxy_runner::start_proxy_process(Some(upstream_url.clone()), None)
+        .await
+        .map_err(|e| e.to_string());
 
-    let upstream_for_task = upstream_url.clone();
-    let proxy_task = tokio::spawn(async move {
-      use crate::proxy_server::BypassMatcher;
-      let bypass_matcher = BypassMatcher::new(&[]);
-      let upstream = Some(upstream_for_task);
-      // Accept up to 10 connections (enough for IP check which tries multiple endpoints)
-      for _ in 0..10 {
-        let accept =
-          tokio::time::timeout(std::time::Duration::from_secs(15), listener.accept()).await;
-        match accept {
-          Ok(Ok((stream, _))) => {
-            let upstream = upstream.clone();
-            let matcher = bypass_matcher.clone();
-            tokio::spawn(async move {
-              crate::proxy_server::handle_proxy_connection(stream, upstream, matcher).await;
-            });
-          }
-          _ => break,
-        }
+    let ip_result = match proxy_start_result {
+      Ok(proxy_config) => {
+        let local_url = format!("http://127.0.0.1:{}", proxy_config.local_port.unwrap_or(0));
+        let config_id = proxy_config.id.clone();
+        let result = ip_utils::fetch_public_ip(Some(&local_url)).await;
+        let _ = crate::proxy_runner::stop_proxy_process(&config_id).await;
+        result
       }
-    });
-
-    let local_url = format!("http://127.0.0.1:{local_port}");
-    let ip_result = ip_utils::fetch_public_ip(Some(&local_url)).await;
-
-    proxy_task.abort();
+      Err(err_msg) => {
+        log::warn!(
+          "Proxy worker failed to start ({}), falling back to direct check",
+          err_msg
+        );
+        ip_utils::fetch_public_ip(Some(&upstream_url)).await
+      }
+    };
 
     let ip = match ip_result {
       Ok(ip) => ip,
