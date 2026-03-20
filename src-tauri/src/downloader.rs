@@ -42,7 +42,10 @@ pub struct Downloader {
 impl Downloader {
   fn new() -> Self {
     Self {
-      client: Client::new(),
+      client: Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(30))
+        .build()
+        .unwrap_or_else(|_| Client::new()),
       api_client: ApiClient::instance(),
       registry: crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance(),
       version_service: crate::browser_version_manager::BrowserVersionManager::instance(),
@@ -304,9 +307,15 @@ impl Downloader {
     let file_path = dest_path.join(&download_info.filename);
 
     // Resolve the actual download URL
+    log::info!(
+      "Resolving download URL for {} {}",
+      browser_type.as_str(),
+      version
+    );
     let download_url = self
       .resolve_download_url(browser_type.clone(), version, download_info)
       .await?;
+    log::info!("Download URL resolved: {}", download_url);
 
     // Determine if we have a partial file to resume
     let mut existing_size: u64 = 0;
@@ -329,7 +338,13 @@ impl Downloader {
         request = request.header("Range", format!("bytes={existing_size}-"));
       }
 
+      log::info!("Sending download request...");
       let first = request.send().await?;
+      log::info!(
+        "Download response received: status={}, content-length={:?}",
+        first.status(),
+        first.content_length()
+      );
 
       if first.status().as_u16() == 416 && existing_size > 0 {
         // Partial file on disk is not acceptable to the server — remove it and retry from scratch

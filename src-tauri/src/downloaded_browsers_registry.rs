@@ -1237,12 +1237,13 @@ pub async fn ensure_active_browsers_downloaded(
     // Check if any version is already downloaded
     let existing = registry.get_downloaded_versions(browser);
     if !existing.is_empty() {
-      log::debug!(
-        "Skipping {browser}: already have {} version(s) downloaded",
+      log::info!(
+        "ensure_active: Skipping {browser}: already have {} version(s) downloaded",
         existing.len()
       );
       continue;
     }
+    log::info!("ensure_active: No {browser} versions found, will download");
 
     // Get the latest release type for this browser
     let release_types = match version_manager.get_browser_release_types(browser).await {
