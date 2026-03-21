@@ -597,15 +597,35 @@ impl SyncEngine {
       let _ = self.sync_vpn(vpn_id, Some(app_handle)).await;
     }
 
-    // Update profile last_sync
-    let mut updated_profile = profile.clone();
-    updated_profile.last_sync = Some(
-      std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs(),
-    );
-    let _ = profile_manager.save_profile(&updated_profile);
+    // Download remote metadata and merge changes (name, tags, notes, etc.)
+    let remote_metadata_key = format!("{}profiles/{}/metadata.json", key_prefix, profile_id);
+    if let Ok(remote_meta) = self.download_profile_metadata(&remote_metadata_key).await {
+      let mut updated_profile = profile.clone();
+      // Merge fields that can be changed on other devices
+      updated_profile.name = remote_meta.name;
+      updated_profile.tags = remote_meta.tags;
+      updated_profile.note = remote_meta.note;
+      updated_profile.proxy_id = remote_meta.proxy_id;
+      updated_profile.vpn_id = remote_meta.vpn_id;
+      updated_profile.group_id = remote_meta.group_id;
+      updated_profile.last_sync = Some(
+        std::time::SystemTime::now()
+          .duration_since(std::time::UNIX_EPOCH)
+          .unwrap()
+          .as_secs(),
+      );
+      let _ = profile_manager.save_profile(&updated_profile);
+    } else {
+      // Fallback: just update last_sync
+      let mut updated_profile = profile.clone();
+      updated_profile.last_sync = Some(
+        std::time::SystemTime::now()
+          .duration_since(std::time::UNIX_EPOCH)
+          .unwrap()
+          .as_secs(),
+      );
+      let _ = profile_manager.save_profile(&updated_profile);
+    }
     let _ = events::emit("profiles-changed", ());
 
     let _ = events::emit(
@@ -689,6 +709,22 @@ impl SyncEngine {
       .await?;
 
     Ok(())
+  }
+
+  async fn download_profile_metadata(&self, key: &str) -> SyncResult<BrowserProfile> {
+    let stat = self.client.stat(key).await?;
+    if !stat.exists {
+      return Err(SyncError::InvalidData(
+        "Remote metadata not found".to_string(),
+      ));
+    }
+
+    let presign = self.client.presign_download(key).await?;
+    let data = self.client.download_bytes(&presign.url).await?;
+    let profile: BrowserProfile = serde_json::from_slice(&data)
+      .map_err(|e| SyncError::SerializationError(format!("Failed to parse metadata: {e}")))?;
+
+    Ok(profile)
   }
 
   async fn upload_profile_metadata(

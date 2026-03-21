@@ -233,10 +233,16 @@ impl SyncSubscription {
     let key = Self::strip_team_prefix(raw_key);
 
     let work_item = if key.starts_with("profiles/") {
-      key
-        .strip_prefix("profiles/")
-        .and_then(|s| s.strip_suffix(".tar.gz"))
-        .map(|s| SyncWorkItem::Profile(s.to_string()))
+      // Match both bundle uploads (profiles/{id}.tar.gz) and delta sync updates
+      // (profiles/{id}/manifest.json, profiles/{id}/files/*, profiles/{id}/metadata.json)
+      let profile_id = key.strip_prefix("profiles/").and_then(|rest| {
+        // profiles/{id}.tar.gz → id
+        rest
+          .strip_suffix(".tar.gz")
+          // profiles/{id}/manifest.json → id
+          .or_else(|| rest.split('/').next().filter(|s| !s.is_empty()))
+      });
+      profile_id.map(|s| SyncWorkItem::Profile(s.to_string()))
     } else if key.starts_with("proxies/") {
       key
         .strip_prefix("proxies/")

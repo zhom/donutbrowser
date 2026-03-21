@@ -153,30 +153,20 @@ impl SyncScheduler {
   }
 
   pub async fn is_profile_running(&self, profile_id: &str) -> bool {
-    // First check our internal tracking
+    // Check our internal tracking (authoritative — immediately updated by mark_profile_stopped)
     let running = self.running_profiles.lock().await;
     if running.contains(profile_id) {
       return true;
     }
     drop(running);
 
-    // Also check the actual profile state from ProfileManager
-    let profile_manager = ProfileManager::instance();
-    if let Ok(profiles) = profile_manager.list_profiles() {
-      if let Some(profile) = profiles.iter().find(|p| p.id.to_string() == profile_id) {
-        if profile.process_id.is_some() {
-          return true;
-        }
-      }
-    }
-
-    // Check if locked by another team member (profile in use remotely)
-    if crate::team_lock::TEAM_LOCK
+    // Check if locked by another device (profile in use remotely)
+    if crate::team_lock::PROFILE_LOCK
       .is_locked_by_another(profile_id)
       .await
     {
       log::debug!(
-        "Profile {} is locked by another team member, treating as running",
+        "Profile {} is locked on another device, treating as running",
         profile_id
       );
       return true;
