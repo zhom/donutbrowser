@@ -513,6 +513,11 @@ impl DownloadedBrowsersRegistry {
     browser: &str,
     version: &str,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // Never remove a directory if a download is in progress for this browser/version
+    if crate::downloader::is_downloading(browser, version) {
+      return Ok(());
+    }
+
     let binaries_dir = crate::app_dirs::binaries_dir();
 
     let version_dir = binaries_dir.join(browser).join(version);
@@ -590,6 +595,12 @@ impl DownloadedBrowsersRegistry {
           .unwrap_or("");
 
         if version_name.is_empty() || version_name.starts_with('.') {
+          continue;
+        }
+
+        // Skip if a download is in progress for this browser/version
+        if crate::downloader::is_downloading(browser_name, version_name) {
+          has_non_empty_versions = true;
           continue;
         }
 

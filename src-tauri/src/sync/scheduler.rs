@@ -467,31 +467,12 @@ impl SyncScheduler {
       });
     }
 
-    // Wait for all parallel syncs to finish
-    while let Some(result) = sync_set.join_next().await {
-      if let Err(e) = result {
-        log::error!("Profile sync task panicked: {e}");
-      }
-    }
-
-    // Trigger cleanup if everything is done
-    let all_done = {
-      let in_flight = self.in_flight_profiles.lock().await;
-      in_flight.is_empty()
-        && self.pending_profiles.lock().await.is_empty()
-        && self.pending_proxies.lock().await.is_empty()
-        && self.pending_groups.lock().await.is_empty()
-        && self.pending_vpns.lock().await.is_empty()
-        && self.pending_extensions.lock().await.is_empty()
-        && self.pending_extension_groups.lock().await.is_empty()
-    };
-    if all_done {
-      log::debug!("All profile syncs completed, triggering cleanup");
-      let registry = crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
-      if let Err(e) = registry.cleanup_unused_binaries() {
-        log::warn!("Cleanup after sync failed: {e}");
-      } else {
-        log::debug!("Cleanup after sync completed successfully");
+    // Wait for all parallel syncs to finish (only if we actually spawned any)
+    if !sync_set.is_empty() {
+      while let Some(result) = sync_set.join_next().await {
+        if let Err(e) = result {
+          log::error!("Profile sync task panicked: {e}");
+        }
       }
     }
   }
@@ -546,16 +527,6 @@ impl SyncScheduler {
         }
 
         // Check if all sync work is complete after proxies finish
-        if !self.is_sync_in_progress().await {
-          log::debug!("All syncs completed after proxy sync, triggering cleanup");
-          let registry =
-            crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
-          if let Err(e) = registry.cleanup_unused_binaries() {
-            log::warn!("Cleanup after sync failed: {e}");
-          } else {
-            log::debug!("Cleanup after sync completed successfully");
-          }
-        }
       }
       Err(e) => {
         log::error!("Failed to create sync engine: {}", e);
@@ -613,16 +584,6 @@ impl SyncScheduler {
         }
 
         // Check if all sync work is complete after groups finish
-        if !self.is_sync_in_progress().await {
-          log::debug!("All syncs completed after group sync, triggering cleanup");
-          let registry =
-            crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
-          if let Err(e) = registry.cleanup_unused_binaries() {
-            log::warn!("Cleanup after sync failed: {e}");
-          } else {
-            log::debug!("Cleanup after sync completed successfully");
-          }
-        }
       }
       Err(e) => {
         log::error!("Failed to create sync engine: {}", e);
@@ -675,17 +636,6 @@ impl SyncScheduler {
             }
           }
         }
-
-        if !self.is_sync_in_progress().await {
-          log::debug!("All syncs completed after VPN sync, triggering cleanup");
-          let registry =
-            crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
-          if let Err(e) = registry.cleanup_unused_binaries() {
-            log::warn!("Cleanup after sync failed: {e}");
-          } else {
-            log::debug!("Cleanup after sync completed successfully");
-          }
-        }
       }
       Err(e) => {
         log::error!("Failed to create sync engine: {}", e);
@@ -715,15 +665,6 @@ impl SyncScheduler {
             log::error!("Failed to sync extension {}: {}", ext_id, e);
           }
         }
-
-        if !self.is_sync_in_progress().await {
-          log::debug!("All syncs completed after extension sync, triggering cleanup");
-          let registry =
-            crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
-          if let Err(e) = registry.cleanup_unused_binaries() {
-            log::warn!("Cleanup after sync failed: {e}");
-          }
-        }
       }
       Err(e) => {
         log::error!("Failed to create sync engine: {}", e);
@@ -751,15 +692,6 @@ impl SyncScheduler {
             .await
           {
             log::error!("Failed to sync extension group {}: {}", group_id, e);
-          }
-        }
-
-        if !self.is_sync_in_progress().await {
-          log::debug!("All syncs completed after extension group sync, triggering cleanup");
-          let registry =
-            crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
-          if let Err(e) = registry.cleanup_unused_binaries() {
-            log::warn!("Cleanup after sync failed: {e}");
           }
         }
       }
