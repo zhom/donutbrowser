@@ -95,7 +95,7 @@ async-socks5 = "0.6"
 playwright = { git = "https://github.com/sctg-development/playwright-rust", branch = "master" }
 
 # Wayfern CDP integration
-tokio-tungstenite = { version = "0.28", features = ["native-tls"] }
+tokio-tungstenite = { version = "0.29", features = ["native-tls"] }
 rusqlite = { version = "0.39", features = ["bundled"] }
 serde_yaml = "0.9"
 thiserror = "2.0"
@@ -106,7 +106,7 @@ quick-xml = { version = "0.39", features = ["serialize"] }
 
 # VPN support
 boringtun = "0.7"
-smoltcp = { version = "0.12", default-features = false, features = ["std", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-tcp", "socket-udp"] }
+smoltcp = { version = "0.13", default-features = false, features = ["std", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-tcp", "socket-udp"] }
 
 # Daemon dependencies (tray icon)
 tray-icon = "0.21"
