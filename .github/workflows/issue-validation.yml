@@ -42,7 +42,7 @@ jobs:
           fi
 
       - name: Analyze issue
-        uses: anomalyco/opencode/github@d954026dd855e018302a6c0733a1dd74140931df #v1.2.26
+        uses: anomalyco/opencode/github@4ee426ba549131c4903a71dfb6259200467aca81 #v1.2.27
         env:
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -92,7 +92,7 @@ jobs:
           fi
 
       - name: Analyze PR
-        uses: anomalyco/opencode/github@d954026dd855e018302a6c0733a1dd74140931df #v1.2.26
+        uses: anomalyco/opencode/github@4ee426ba549131c4903a71dfb6259200467aca81 #v1.2.27
         env:
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -129,7 +129,7 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 #v6.0.1
 
       - name: Run opencode
-        uses: anomalyco/opencode/github@d954026dd855e018302a6c0733a1dd74140931df #v1.2.26
+        uses: anomalyco/opencode/github@4ee426ba549131c4903a71dfb6259200467aca81 #v1.2.27
         env:
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
           TOKEN: ${{ secrets.GITHUB_TOKEN }}

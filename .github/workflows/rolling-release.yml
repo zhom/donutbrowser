@@ -210,7 +210,7 @@ jobs:
           echo "Generated timestamp: ${TIMESTAMP}-${COMMIT_HASH}"
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@73fb865345c54760d875b94642314f8c0c894afa #v0.6.1
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 #v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BUILD_TAG: "nightly-${{ steps.timestamp.outputs.timestamp }}"
