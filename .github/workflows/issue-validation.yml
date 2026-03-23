@@ -14,7 +14,6 @@ permissions:
   contents: read
   issues: write
   pull-requests: write
-  models: read
   id-token: write
 
 jobs:
@@ -22,9 +21,6 @@ jobs:
     if: github.repository == 'zhom/donutbrowser' && github.event_name == 'issues'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 #v6.0.1
-
       - name: Check if first-time contributor
         id: check-first-time
         env:
@@ -41,40 +37,87 @@ jobs:
             echo "is_first_time=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Analyze issue
-        uses: anomalyco/opencode/github@4ee426ba549131c4903a71dfb6259200467aca81 #v1.2.27
+      - name: Analyze issue with AI
         env:
-          ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          model: zai-coding-plan/glm-4.7
-          prompt: |
-            You are a triage bot for Donut Browser (open-source anti-detect browser, Tauri + Next.js + Rust).
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+          IS_FIRST_TIME: ${{ steps.check-first-time.outputs.is_first_time }}
+        run: |
+          GREETING=""
+          if [ "$IS_FIRST_TIME" = "true" ]; then
+            GREETING='This is a first-time contributor. Start your comment with: "Thanks for opening your first issue!"'
+          fi
 
-            ${{ steps.check-first-time.outputs.is_first_time == 'true' && 'This is a first-time contributor. Start your comment with: "Thanks for opening your first issue!"' || '' }}
+          # Write all user content to files to avoid shell escaping issues
+          printf '%s' "$ISSUE_TITLE" > /tmp/issue-title.txt
+          printf '%s' "${ISSUE_BODY:-}" > /tmp/issue-body.txt
+          printf '%s' "$ISSUE_AUTHOR" > /tmp/issue-author.txt
+          printf '%s' "$GREETING" > /tmp/greeting.txt
 
-            Analyze this issue and post a single concise comment. Format:
+          # Build the JSON payload entirely in jq — never interpolate user content in shell
+          PAYLOAD=$(jq -n \
+            --rawfile title /tmp/issue-title.txt \
+            --rawfile body /tmp/issue-body.txt \
+            --rawfile author /tmp/issue-author.txt \
+            --rawfile greeting /tmp/greeting.txt \
+            '{
+              model: "z-ai/glm-5",
+              max_tokens: 1024,
+              messages: [
+                {
+                  role: "system",
+                  content: "You are a triage bot for Donut Browser (open-source anti-detect browser, Tauri + Next.js + Rust).\n\nAnalyze the issue and produce a single concise comment. Format:\n\n1. One sentence acknowledging what the user wants.\n2. A short **Action items** list - what specific info is missing or what the user should do next. Only include items that are actually missing. If the issue is complete, say so and skip this section.\n3. Suggest a label at the very end of your response on its own line in the exact format: Label: bug OR Label: enhancement\n\nRules:\n- Be brief. No filler, no generic tips, no templates.\n- If it is a bug report, check for: reproduction steps, OS/version, error messages. Only ask for what is actually missing.\n- If it is a feature request, check for: clear description of desired behavior, use case. Only ask for what is actually missing.\n- If the issue already has everything needed, just acknowledge it.\n- Never exceed 6 items total."
+                },
+                {
+                  role: "user",
+                  content: (
+                    (if ($greeting | length) > 0 then $greeting + "\n\n" else "" end) +
+                    "Analyze this issue:\n\nTitle: " + $title +
+                    "\nAuthor: " + $author +
+                    "\n\nBody:\n" + $body
+                  )
+                }
+              ]
+            }')
 
-            1. One sentence acknowledging what the user wants.
-            2. A short **Action items** list — what specific info is missing or what the user should do next. Only include items that are actually missing. If the issue is complete, say so and skip this section.
-            3. Label the issue: add "bug" label for bug reports, "enhancement" label for feature requests.
+          RESPONSE=$(curl -fsSL https://openrouter.ai/api/v1/chat/completions \
+            -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
 
-            Rules:
-            - Be brief. No filler, no generic tips, no templates.
-            - If it's a bug report, check for: reproduction steps, OS/version, error messages. Only ask for what's actually missing.
-            - If it's a feature request, check for: clear description of desired behavior, use case. Only ask for what's actually missing.
-            - If the issue already has everything needed, just acknowledge it and label it.
-            - Never exceed 6 items total.
+          # Extract the comment using jq — never parse AI output in shell
+          jq -r '.choices[0].message.content // empty' <<< "$RESPONSE" > /tmp/ai-comment.txt
+
+          if [ ! -s /tmp/ai-comment.txt ]; then
+            echo "::error::AI response was empty"
+            echo "Raw response:"
+            echo "$RESPONSE"
+            exit 1
+          fi
+
+      - name: Post comment and label
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          # Extract and strip the label line before posting
+          LABEL=$(grep -oP '^Label:\s*\K.*' /tmp/ai-comment.txt | tail -1 | tr '[:upper:]' '[:lower:]' | xargs)
+          sed -i '/^Label:/d' /tmp/ai-comment.txt
+
+          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file /tmp/ai-comment.txt
+
+          if [ "$LABEL" = "bug" ]; then
+            gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --add-label "bug" 2>/dev/null || true
+          elif [ "$LABEL" = "enhancement" ]; then
+            gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --add-label "enhancement" 2>/dev/null || true
+          fi
 
   analyze-pr:
     if: github.repository == 'zhom/donutbrowser' && github.event_name == 'pull_request_target' && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 #v6.0.1
-        with:
-          fetch-depth: 0
-
       - name: Check if first-time contributor
         id: check-first-time
         env:
@@ -91,30 +134,87 @@ jobs:
             echo "is_first_time=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Analyze PR
-        uses: anomalyco/opencode/github@4ee426ba549131c4903a71dfb6259200467aca81 #v1.2.27
+      - name: Analyze PR with AI
         env:
-          ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          model: zai-coding-plan/glm-4.7
-          prompt: |
-            You are a review bot for Donut Browser (open-source anti-detect browser, Tauri + Next.js + Rust).
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          IS_FIRST_TIME: ${{ steps.check-first-time.outputs.is_first_time }}
+        run: |
+          GREETING=""
+          if [ "$IS_FIRST_TIME" = "true" ]; then
+            GREETING='This is a first-time contributor. Start your comment with: "Thanks for your first PR!"'
+          fi
 
-            ${{ steps.check-first-time.outputs.is_first_time == 'true' && 'This is a first-time contributor. Start your comment with: "Thanks for your first PR!"' || '' }}
+          # Write all user content to files to avoid shell escaping issues
+          printf '%s' "$PR_TITLE" > /tmp/pr-title.txt
+          printf '%s' "${PR_BODY:-}" > /tmp/pr-body.txt
+          printf '%s' "$PR_AUTHOR" > /tmp/pr-author.txt
+          printf '%s' "$PR_BASE" > /tmp/pr-base.txt
+          printf '%s' "$PR_HEAD" > /tmp/pr-head.txt
+          printf '%s' "$GREETING" > /tmp/greeting.txt
 
-            Review this PR and post a single concise comment. Format:
+          gh api "/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" \
+            --jq '.[] | "- \(.filename) (\(.status)) +\(.additions)/-\(.deletions)"' \
+            > /tmp/pr-files.txt
 
-            1. One sentence summarizing what this PR does.
-            2. **Action items** — only list things that actually need to be fixed or addressed. If the PR looks good, say so and skip this section.
+          # Build the JSON payload entirely in jq — never interpolate user content in shell
+          PAYLOAD=$(jq -n \
+            --rawfile title /tmp/pr-title.txt \
+            --rawfile body /tmp/pr-body.txt \
+            --rawfile author /tmp/pr-author.txt \
+            --rawfile base /tmp/pr-base.txt \
+            --rawfile head /tmp/pr-head.txt \
+            --rawfile files /tmp/pr-files.txt \
+            --rawfile greeting /tmp/greeting.txt \
+            '{
+              model: "z-ai/glm-5",
+              max_tokens: 1024,
+              messages: [
+                {
+                  role: "system",
+                  content: "You are a review bot for Donut Browser (open-source anti-detect browser, Tauri + Next.js + Rust).\n\nReview this PR and produce a single concise comment. Format:\n\n1. One sentence summarizing what this PR does.\n2. **Action items** - only list things that actually need to be fixed or addressed. If the PR looks good, say so and skip this section.\n\nRules:\n- Be brief. No filler, no praise padding.\n- Focus on: bugs, security issues, missing edge cases, breaking changes.\n- If the PR touches UI text or adds new strings, remind to update translation files in src/i18n/locales/.\n- If the PR modifies Tauri commands, remind to check the unused-commands test.\n- Do not nitpick style or formatting - the project has automated linting.\n- Never exceed 8 lines total."
+                },
+                {
+                  role: "user",
+                  content: (
+                    (if ($greeting | length) > 0 then $greeting + "\n\n" else "" end) +
+                    "Review this PR:\n\nTitle: " + $title +
+                    "\nAuthor: " + $author +
+                    "\nBase: " + $base + " <- Head: " + $head +
+                    "\n\nDescription:\n" + $body +
+                    "\n\nChanged files:\n" + $files
+                  )
+                }
+              ]
+            }')
 
-            Rules:
-            - Be brief. No filler, no praise padding.
-            - Focus on: bugs, security issues, missing edge cases, breaking changes.
-            - If the PR touches UI text or adds new strings, remind to update translation files in src/i18n/locales/.
-            - If the PR modifies Tauri commands, remind to check the unused-commands test.
-            - Do not nitpick style or formatting — the project has automated linting.
-            - Never exceed 8 lines total.
+          RESPONSE=$(curl -fsSL https://openrouter.ai/api/v1/chat/completions \
+            -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+
+          # Extract the comment using jq — never parse AI output in shell
+          jq -r '.choices[0].message.content // empty' <<< "$RESPONSE" > /tmp/ai-comment.txt
+
+          if [ ! -s /tmp/ai-comment.txt ]; then
+            echo "::error::AI response was empty"
+            echo "Raw response:"
+            echo "$RESPONSE"
+            exit 1
+          fi
+
+      - name: Post comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file /tmp/ai-comment.txt
 
   opencode-command:
     if: |
