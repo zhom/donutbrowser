@@ -237,93 +237,116 @@ jobs:
 #          branch: main
 #          commit_message: "docs: update CHANGELOG.md for ${{ github.ref_name }} [skip ci]"
 
-  publish-repos:
+  # publish-repos:
+  #   if: github.repository == 'zhom/donutbrowser'
+  #   needs: [release]
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     contents: read
+  #   steps:
+  #     - name: Download Linux packages from release
+  #       env:
+  #         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #       run: |
+  #         mkdir -p /tmp/packages
+  #         gh release download "$GITHUB_REF_NAME" \
+  #           --repo "$GITHUB_REPOSITORY" \
+  #           --pattern "*.deb" \
+  #           --dir /tmp/packages
+  #         gh release download "$GITHUB_REF_NAME" \
+  #           --repo "$GITHUB_REPOSITORY" \
+  #           --pattern "*.rpm" \
+  #           --dir /tmp/packages
+  #         echo "Downloaded packages:"
+  #         ls -la /tmp/packages/
+  #
+  #     - name: Setup Go
+  #       uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 #v6.3.0
+  #       with:
+  #         go-version: "1.23"
+  #         cache: false
+  #
+  #     - name: Install repogen
+  #       run: |
+  #         go install github.com/ralt/repogen/cmd/repogen@latest
+  #         echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+  #
+  #     - name: Sync existing repo metadata from R2
+  #       env:
+  #         AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  #         AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  #         AWS_DEFAULT_REGION: auto
+  #         R2_ENDPOINT: "https://${{ secrets.R2_ENDPOINT_URL }}"
+  #         R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
+  #       run: |
+  #         mkdir -p /tmp/repo
+  #         aws s3 cp "s3://${R2_BUCKET}/dists" /tmp/repo/dists \
+  #           --endpoint-url "${R2_ENDPOINT}" --recursive 2>/dev/null || true
+  #         aws s3 cp "s3://${R2_BUCKET}/repodata" /tmp/repo/repodata \
+  #           --endpoint-url "${R2_ENDPOINT}" --recursive 2>/dev/null || true
+  #
+  #     - name: Generate repository with repogen
+  #       run: |
+  #         repogen generate \
+  #           --input-dir /tmp/packages \
+  #           --output-dir /tmp/repo \
+  #           --incremental \
+  #           --arch amd64,arm64 \
+  #           --origin "Donut Browser" \
+  #           --label "Donut Browser" \
+  #           --codename stable \
+  #           --components main \
+  #           --verbose
+  #
+  #     - name: Upload repository to R2
+  #       env:
+  #         AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  #         AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  #         AWS_DEFAULT_REGION: auto
+  #         R2_ENDPOINT: "https://${{ secrets.R2_ENDPOINT_URL }}"
+  #         R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
+  #       run: |
+  #         aws s3 cp /tmp/repo/dists "s3://${R2_BUCKET}/dists" \
+  #           --endpoint-url "${R2_ENDPOINT}" --recursive
+  #         aws s3 cp /tmp/repo/pool "s3://${R2_BUCKET}/pool" \
+  #           --endpoint-url "${R2_ENDPOINT}" --recursive
+  #         aws s3 cp /tmp/repo/repodata "s3://${R2_BUCKET}/repodata" \
+  #           --endpoint-url "${R2_ENDPOINT}" --recursive
+  #         aws s3 cp /tmp/repo/Packages "s3://${R2_BUCKET}/Packages" \
+  #           --endpoint-url "${R2_ENDPOINT}" --recursive
+  #
+  #     - name: Verify upload
+  #       env:
+  #         AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  #         AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  #         AWS_DEFAULT_REGION: auto
+  #         R2_ENDPOINT: "https://${{ secrets.R2_ENDPOINT_URL }}"
+  #         R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
+  #       run: |
+  #         echo "DEB repo:"
+  #         aws s3 ls "s3://${R2_BUCKET}/dists/stable/" --endpoint-url "${R2_ENDPOINT}" || echo "  (listing not available)"
+  #         echo "RPM repo:"
+  #         aws s3 ls "s3://${R2_BUCKET}/repodata/" --endpoint-url "${R2_ENDPOINT}" || echo "  (listing not available)"
+
+  notify-discord:
     if: github.repository == 'zhom/donutbrowser'
     needs: [release]
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
-      - name: Download Linux packages from release
+      - name: Send Discord notification
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_STABLE_WEBHOOK_URL }}
         run: |
-          mkdir -p /tmp/packages
-          gh release download "$GITHUB_REF_NAME" \
-            --repo "$GITHUB_REPOSITORY" \
-            --pattern "*.deb" \
-            --dir /tmp/packages
-          gh release download "$GITHUB_REF_NAME" \
-            --repo "$GITHUB_REPOSITORY" \
-            --pattern "*.rpm" \
-            --dir /tmp/packages
-          echo "Downloaded packages:"
-          ls -la /tmp/packages/
+          VERSION="${GITHUB_REF_NAME}"
+          RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${VERSION}"
 
-      - name: Setup Go
-        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 #v6.3.0
-        with:
-          go-version: "1.23"
-          cache: false
-
-      - name: Install repogen
-        run: |
-          go install github.com/ralt/repogen/cmd/repogen@latest
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-
-      - name: Sync existing repo metadata from R2
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: auto
-          R2_ENDPOINT: "https://${{ secrets.R2_ENDPOINT_URL }}"
-          R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
-        run: |
-          mkdir -p /tmp/repo
-          aws s3 cp "s3://${R2_BUCKET}/dists" /tmp/repo/dists \
-            --endpoint-url "${R2_ENDPOINT}" --recursive 2>/dev/null || true
-          aws s3 cp "s3://${R2_BUCKET}/repodata" /tmp/repo/repodata \
-            --endpoint-url "${R2_ENDPOINT}" --recursive 2>/dev/null || true
-
-      - name: Generate repository with repogen
-        run: |
-          repogen generate \
-            --input-dir /tmp/packages \
-            --output-dir /tmp/repo \
-            --incremental \
-            --arch amd64,arm64 \
-            --origin "Donut Browser" \
-            --label "Donut Browser" \
-            --codename stable \
-            --components main \
-            --verbose
-
-      - name: Upload repository to R2
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: auto
-          R2_ENDPOINT: "https://${{ secrets.R2_ENDPOINT_URL }}"
-          R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
-        run: |
-          aws s3 cp /tmp/repo/dists "s3://${R2_BUCKET}/dists" \
-            --endpoint-url "${R2_ENDPOINT}" --recursive
-          aws s3 cp /tmp/repo/pool "s3://${R2_BUCKET}/pool" \
-            --endpoint-url "${R2_ENDPOINT}" --recursive
-          aws s3 cp /tmp/repo/repodata "s3://${R2_BUCKET}/repodata" \
-            --endpoint-url "${R2_ENDPOINT}" --recursive
-          aws s3 cp /tmp/repo/Packages "s3://${R2_BUCKET}/Packages" \
-            --endpoint-url "${R2_ENDPOINT}" --recursive
-
-      - name: Verify upload
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: auto
-          R2_ENDPOINT: "https://${{ secrets.R2_ENDPOINT_URL }}"
-          R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
-        run: |
-          echo "DEB repo:"
-          aws s3 ls "s3://${R2_BUCKET}/dists/stable/" --endpoint-url "${R2_ENDPOINT}" || echo "  (listing not available)"
-          echo "RPM repo:"
-          aws s3 ls "s3://${R2_BUCKET}/repodata/" --endpoint-url "${R2_ENDPOINT}" || echo "  (listing not available)"
+          curl -fsSL -H "Content-Type: application/json" \
+            -d "{
+              \"embeds\": [{
+                \"title\": \"Donut Browser ${VERSION} Released\",
+                \"url\": \"${RELEASE_URL}\",
+                \"description\": \"A new stable release of Donut Browser is available.\",
+                \"color\": 5814783
+              }]
+            }" \
+            "$DISCORD_WEBHOOK_URL"

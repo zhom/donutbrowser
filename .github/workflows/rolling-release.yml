@@ -293,3 +293,26 @@ jobs:
             --title "Donut Browser Nightly" \
             --notes "Automatically updated nightly build from the latest main branch.\n\nCommit: ${GITHUB_SHA}" \
             --prerelease
+
+  notify-discord:
+    if: github.repository == 'zhom/donutbrowser'
+    needs: [update-nightly-release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Discord notification
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_NIGHTLY_WEBHOOK_URL }}
+        run: |
+          COMMIT_SHORT=$(echo "${GITHUB_SHA}" | cut -c1-7)
+          RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/nightly"
+
+          curl -fsSL -H "Content-Type: application/json" \
+            -d "{
+              \"embeds\": [{
+                \"title\": \"Donut Browser Nightly Updated\",
+                \"url\": \"${RELEASE_URL}\",
+                \"description\": \"A new nightly build is available (${COMMIT_SHORT}).\",
+                \"color\": 16752128
+              }]
+            }" \
+            "$DISCORD_WEBHOOK_URL"
