@@ -20,8 +20,11 @@
   <a href="https://app.fossa.com/projects/git%2Bgithub.com%2Fzhom%2Fdonutbrowser?ref=badge_shield&issueType=security" alt="FOSSA Status">
     <img src="https://app.fossa.com/api/projects/git%2Bgithub.com%2Fzhom%2Fdonutbrowser.svg?type=shield&issueType=security"/>
   </a>
-  <a style="text-decoration: none;" href="https://github.com/zhom/donutbrowser/stargazers" target="_blank">
-    <img src="https://img.shields.io/github/stars/zhom/donutbrowser?style=social" alt="GitHub stars">
+  <a style="text-decoration: none;" href="https://github.com/zhom/donutbrowser/network/members" target="_blank">
+    <img src="https://img.shields.io/github/forks/zhom/donutbrowser?style=social" alt="GitHub forks">
+  </a>
+  <a style="text-decoration: none;" href="https://github.com/zhom/donutbrowser/releases" target="_blank">
+    <img src="https://img.shields.io/github/downloads/zhom/donutbrowser/total" alt="Downloads">
   </a>
 </p>
 
