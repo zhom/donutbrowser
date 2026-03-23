@@ -178,6 +178,7 @@
     "quic",
     "ralt",
     "ramdisk",
+    "rawfile",
     "repodata",
     "repogen",
     "reportingpolicy",
