@@ -36,7 +36,6 @@ pub const DEFAULT_EXCLUDE_PATTERNS: &[&str] = &[
   "**/storage/temporary/**",
   "**/crashes/**",
   "**/minidumps/**",
-  "*.log",
   "*.tmp",
   "**/LOG",
   "**/LOG.old",

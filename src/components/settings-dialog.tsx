@@ -134,12 +134,11 @@ export function SettingsDialog({
   } = usePermissions();
   const { trialStatus } = useCommercialTrial();
   const { user: cloudUser } = useCloudAuth();
+  // Encryption is available to everyone except team members who aren't owners
   const canUseEncryption =
-    cloudUser != null &&
-    cloudUser.plan !== "free" &&
-    (cloudUser.subscriptionStatus === "active" ||
-      cloudUser.planPeriod === "lifetime") &&
-    (cloudUser.plan !== "team" || cloudUser.teamRole === "owner");
+    cloudUser == null ||
+    cloudUser.plan !== "team" ||
+    cloudUser.teamRole === "owner";
   const {
     currentLanguage,
     changeLanguage,

@@ -41,10 +41,11 @@ export function ProfileSyncDialog({
     cloudUser.plan !== "free" &&
     (cloudUser.subscriptionStatus === "active" ||
       cloudUser.planPeriod === "lifetime");
+  // Encryption available to everyone except team members who aren't owners
   const canUseEncryption =
-    isCloudSyncEligible &&
-    cloudUser != null &&
-    (cloudUser.plan !== "team" || cloudUser.teamRole === "owner");
+    cloudUser == null ||
+    cloudUser.plan !== "team" ||
+    cloudUser.teamRole === "owner";
   const [isSaving, setIsSaving] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMode, setSyncMode] = useState<SyncMode>(
