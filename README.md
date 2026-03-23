@@ -36,14 +36,26 @@
 - Automatic updates for browsers
 - Set Donut Browser as your default browser to control in which profile to open links
 
-## Download
+## Install
 
-> For Linux, .deb and .rpm packages are available as well as standalone .AppImage files.
+### macOS
 
-The app can be downloaded from the [releases page](https://github.com/zhom/donutbrowser/releases/latest).
+```bash
+brew install --cask donut
+```
+
+### Linux
+
+```bash
+curl -fsSL https://donutbrowser.com/install.sh | sh
+```
+
+This sets up the package repository and installs Donut Browser via your system package manager. Supports Debian/Ubuntu, Fedora/RHEL, and openSUSE.
+
+Standalone `.AppImage` files are also available on the [releases page](https://github.com/zhom/donutbrowser/releases/latest).
 
 <details>
-<summary>Troubleshooting AppImage on Linux</summary>
+<summary>Troubleshooting AppImage</summary>
 
 If the AppImage segfaults on launch, install **libfuse2** (`sudo apt install libfuse2` / `yay -S libfuse2` / `sudo dnf install fuse-libs`), or bypass FUSE entirely:
 
@@ -55,11 +67,9 @@ If that gives an EGL display error, try adding `WEBKIT_DISABLE_DMABUF_RENDERER=1
 
 </details>
 
-<!-- ## Supported Platforms
+### Windows
 
-- ✅ **macOS** (Apple Silicon)
-- ✅ **Linux** (x64)
-- ✅ **Windows** (x64) -->
+Download the installer from the [releases page](https://github.com/zhom/donutbrowser/releases/latest).
 
 ## Development
 
@@ -77,7 +87,7 @@ Donut Browser supports syncing profiles, proxies, and groups across devices via 
 
 ## Community
 
-Have questions or want to contribute? The team would love to hear from you!
+Have questions or want to contribute? I'd love to hear from you!
 
 - **Issues**: [GitHub Issues](https://github.com/zhom/donutbrowser/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/zhom/donutbrowser/discussions)
@@ -126,7 +136,7 @@ Have questions or want to contribute? The team would love to hear from you!
 
 ## Contact
 
-Have an urgent question or want to report a security vulnerability? Send an email to [contact@donutbrowser.com](mailto:contact@donutbrowser.com) and the team will get back to you as fast as possible.
+Have an urgent question or want to report a security vulnerability? Send an email to [contact@donutbrowser.com](mailto:contact@donutbrowser.com) and I'll get back to you as fast as possible.
 
 ## License
 
