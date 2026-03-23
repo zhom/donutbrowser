@@ -233,9 +233,15 @@ impl WayfernManager {
       .arg("--disable-background-mode")
       .arg("--use-mock-keychain")
       .arg("--password-store=basic")
-      .arg("--disable-features=DialMediaRouteProvider")
-      .stdout(Stdio::null())
-      .stderr(Stdio::null());
+      .arg("--disable-features=DialMediaRouteProvider");
+
+    #[cfg(target_os = "linux")]
+    cmd
+      .arg("--no-sandbox")
+      .arg("--disable-setuid-sandbox")
+      .arg("--disable-dev-shm-usage");
+
+    cmd.stdout(Stdio::null()).stderr(Stdio::null());
 
     let child = cmd.spawn()?;
     let child_id = child.id();
@@ -548,6 +554,13 @@ impl WayfernManager {
       "--use-mock-keychain".to_string(),
       "--password-store=basic".to_string(),
     ];
+
+    #[cfg(target_os = "linux")]
+    {
+      args.push("--no-sandbox".to_string());
+      args.push("--disable-setuid-sandbox".to_string());
+      args.push("--disable-dev-shm-usage".to_string());
+    }
 
     if let Some(proxy) = proxy_url {
       args.push(format!("--proxy-server={proxy}"));

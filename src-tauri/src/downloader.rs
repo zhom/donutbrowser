@@ -323,9 +323,10 @@ impl Downloader {
       existing_size = meta.len();
     }
 
-    // Build request, add Range only if we have bytes. If the server responds with 416 (Range Not
-    // Satisfiable), delete the partial file and retry once without the Range header.
-    let response = {
+    // Build request with retry logic for transient network errors.
+    let max_retries = 3u32;
+    let mut response: Option<reqwest::Response> = None;
+    for attempt in 0..=max_retries {
       let mut request = self
         .client
         .get(&download_url)
@@ -338,33 +339,43 @@ impl Downloader {
         request = request.header("Range", format!("bytes={existing_size}-"));
       }
 
-      log::info!("Sending download request...");
-      let first = request.send().await?;
-      log::info!(
-        "Download response received: status={}, content-length={:?}",
-        first.status(),
-        first.content_length()
-      );
-
-      if first.status().as_u16() == 416 && existing_size > 0 {
-        // Partial file on disk is not acceptable to the server — remove it and retry from scratch
-        let _ = std::fs::remove_file(&file_path);
-        existing_size = 0;
-
-        let retry = self
-          .client
-          .get(&download_url)
-          .header(
-            "User-Agent",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
-          )
-          .send()
-          .await?;
-        retry
-      } else {
-        first
+      log::info!("Sending download request (attempt {})...", attempt + 1);
+      match request.send().await {
+        Ok(resp) => {
+          log::info!(
+            "Download response received: status={}, content-length={:?}",
+            resp.status(),
+            resp.content_length()
+          );
+          if resp.status().as_u16() == 416 && existing_size > 0 {
+            let _ = std::fs::remove_file(&file_path);
+            existing_size = 0;
+            log::warn!("Download returned 416, retrying without Range header");
+            continue;
+          }
+          response = Some(resp);
+          break;
+        }
+        Err(e) => {
+          let is_retryable = e.is_connect() || e.is_timeout() || e.is_request();
+          if is_retryable && attempt < max_retries {
+            let delay = 2u64.pow(attempt);
+            log::warn!(
+              "Download attempt {} failed ({}), retrying in {}s...",
+              attempt + 1,
+              e,
+              delay
+            );
+            tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
+          } else {
+            return Err(format!("Download failed after {} attempts: {}", attempt + 1, e).into());
+          }
+        }
       }
-    };
+    }
+    let response = response.ok_or_else(|| -> Box<dyn std::error::Error + Send + Sync> {
+      "Download failed: no response received".into()
+    })?;
 
     // Check if the response is successful (200 OK or 206 Partial Content)
     if !(response.status().is_success() || response.status().as_u16() == 206) {
