@@ -123,6 +123,13 @@ Have questions or want to contribute? I'd love to hear from you!
                 </a>
             </td>
             <td align="center">
+                <a href="https://github.com/drunkod">
+                    <img src="https://avatars.githubusercontent.com/u/9677471?v=4" width="100;" alt="drunkod"/>
+                    <br />
+                    <sub><b>drunkod</b></sub>
+                </a>
+            </td>
+            <td align="center">
                 <a href="https://github.com/JorySeverijnse">
                     <img src="https://avatars.githubusercontent.com/u/117462355?v=4" width="100;" alt="JorySeverijnse"/>
                     <br />
