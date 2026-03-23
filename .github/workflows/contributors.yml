@@ -14,6 +14,7 @@ permissions:
 
 jobs:
   contrib-readme-job:
+    if: github.repository == 'zhom/donutbrowser'
     runs-on: ubuntu-latest
     name: Automatically update the contributors list in the README
     permissions:

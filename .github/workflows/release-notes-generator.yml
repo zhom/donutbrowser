@@ -13,7 +13,7 @@ permissions:
 jobs:
   generate-release-notes:
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v')
+    if: github.repository == 'zhom/donutbrowser' && github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v')
 
     steps:
       - name: Checkout repository

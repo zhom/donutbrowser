@@ -12,7 +12,7 @@ permissions:
 jobs:
   security-scan:
     name: Security Vulnerability Scan
-    if: ${{ github.actor == 'dependabot[bot]' }}
+    if: github.repository == 'zhom/donutbrowser' && github.actor == 'dependabot[bot]'
     uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@c5996e0193a3df57d695c1b8a1dec2a4c62e8730" # v2.3.3
     with:
       scan-args: |-
@@ -28,7 +28,7 @@ jobs:
 
   lint-js:
     name: Lint JavaScript/TypeScript
-    if: ${{ github.actor == 'dependabot[bot]' }}
+    if: github.repository == 'zhom/donutbrowser' && github.actor == 'dependabot[bot]'
     uses: ./.github/workflows/lint-js.yml
     secrets: inherit
     permissions:
@@ -36,7 +36,7 @@ jobs:
 
   lint-rust:
     name: Lint Rust
-    if: ${{ github.actor == 'dependabot[bot]' }}
+    if: github.repository == 'zhom/donutbrowser' && github.actor == 'dependabot[bot]'
     uses: ./.github/workflows/lint-rs.yml
     secrets: inherit
     permissions:
@@ -44,7 +44,7 @@ jobs:
 
   codeql:
     name: CodeQL
-    if: ${{ github.actor == 'dependabot[bot]' }}
+    if: github.repository == 'zhom/donutbrowser' && github.actor == 'dependabot[bot]'
     uses: ./.github/workflows/codeql.yml
     secrets: inherit
     permissions:
@@ -55,7 +55,7 @@ jobs:
 
   spellcheck:
     name: Spell Check
-    if: ${{ github.actor == 'dependabot[bot]' }}
+    if: github.repository == 'zhom/donutbrowser' && github.actor == 'dependabot[bot]'
     uses: ./.github/workflows/spellcheck.yml
     secrets: inherit
     permissions:
@@ -63,7 +63,7 @@ jobs:
 
   dependabot-automerge:
     name: Dependabot Automerge
-    if: ${{ github.actor == 'dependabot[bot]' }}
+    if: github.repository == 'zhom/donutbrowser' && github.actor == 'dependabot[bot]'
     needs: [security-scan, lint-js, lint-rust, codeql, spellcheck]
     runs-on: ubuntu-latest
     steps:
