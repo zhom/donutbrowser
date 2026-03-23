@@ -10,7 +10,7 @@ use tauri::AppHandle;
 /// Chromium cookie encryption/decryption support.
 /// On macOS: uses "Chromium Safe Storage" key from Keychain with PBKDF2 + AES-128-CBC.
 /// On Linux: uses os_crypt_key file from profile directory with PBKDF2 + AES-128-CBC.
-mod chrome_decrypt {
+pub mod chrome_decrypt {
   use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, BlockEncryptMut, KeyIvInit};
   use std::path::Path;
 

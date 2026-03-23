@@ -1091,12 +1091,6 @@ lazy_static::lazy_static! {
 
 #[tauri::command]
 pub async fn list_extensions() -> Result<Vec<Extension>, String> {
-  if !crate::cloud_auth::CLOUD_AUTH
-    .has_active_paid_subscription()
-    .await
-  {
-    return Err("Extension management requires an active Pro subscription".to_string());
-  }
   let mgr = EXTENSION_MANAGER.lock().unwrap();
   mgr
     .list_extensions()
@@ -1115,12 +1109,6 @@ pub async fn add_extension(
   file_name: String,
   file_data: Vec<u8>,
 ) -> Result<Extension, String> {
-  if !crate::cloud_auth::CLOUD_AUTH
-    .has_active_paid_subscription()
-    .await
-  {
-    return Err("Extension management requires an active Pro subscription".to_string());
-  }
   let mgr = EXTENSION_MANAGER.lock().unwrap();
   mgr
     .add_extension(name, file_name, file_data)
@@ -1134,12 +1122,6 @@ pub async fn update_extension(
   file_name: Option<String>,
   file_data: Option<Vec<u8>>,
 ) -> Result<Extension, String> {
-  if !crate::cloud_auth::CLOUD_AUTH
-    .has_active_paid_subscription()
-    .await
-  {
-    return Err("Extension management requires an active Pro subscription".to_string());
-  }
   let mgr = EXTENSION_MANAGER.lock().unwrap();
   mgr
     .update_extension(&extension_id, name, file_name, file_data)
@@ -1151,12 +1133,6 @@ pub async fn delete_extension(
   app_handle: tauri::AppHandle,
   extension_id: String,
 ) -> Result<(), String> {
-  if !crate::cloud_auth::CLOUD_AUTH
-    .has_active_paid_subscription()
-    .await
-  {
-    return Err("Extension management requires an active Pro subscription".to_string());
-  }
   let mgr = EXTENSION_MANAGER.lock().unwrap();
   mgr
     .delete_extension(&app_handle, &extension_id)
@@ -1165,12 +1141,6 @@ pub async fn delete_extension(
 
 #[tauri::command]
 pub async fn list_extension_groups() -> Result<Vec<ExtensionGroup>, String> {
-  if !crate::cloud_auth::CLOUD_AUTH
-    .has_active_paid_subscription()
-    .await
-  {
-    return Err("Extension management requires an active Pro subscription".to_string());
-  }
   let mgr = EXTENSION_MANAGER.lock().unwrap();
   mgr
     .list_groups()
@@ -1179,12 +1149,6 @@ pub async fn list_extension_groups() -> Result<Vec<ExtensionGroup>, String> {
 
 #[tauri::command]
 pub async fn create_extension_group(name: String) -> Result<ExtensionGroup, String> {
-  if !crate::cloud_auth::CLOUD_AUTH
-    .has_active_paid_subscription()
-    .await
-  {
-    return Err("Extension management requires an active Pro subscription".to_string());
-  }
   let mgr = EXTENSION_MANAGER.lock().unwrap();
   mgr
     .create_group(name)
@@ -1197,12 +1161,6 @@ pub async fn update_extension_group(
   name: Option<String>,
   extension_ids: Option<Vec<String>>,
 ) -> Result<ExtensionGroup, String> {
-  if !crate::cloud_auth::CLOUD_AUTH
-    .has_active_paid_subscription()
-    .await
-  {
-    return Err("Extension management requires an active Pro subscription".to_string());
-  }
   let mgr = EXTENSION_MANAGER.lock().unwrap();
   mgr
     .update_group(&group_id, name, extension_ids)
@@ -1214,12 +1172,6 @@ pub async fn delete_extension_group(
   app_handle: tauri::AppHandle,
   group_id: String,
 ) -> Result<(), String> {
-  if !crate::cloud_auth::CLOUD_AUTH
-    .has_active_paid_subscription()
-    .await
-  {
-    return Err("Extension management requires an active Pro subscription".to_string());
-  }
   let mgr = EXTENSION_MANAGER.lock().unwrap();
   mgr
     .delete_group(&app_handle, &group_id)
@@ -1231,12 +1183,6 @@ pub async fn add_extension_to_group(
   group_id: String,
   extension_id: String,
 ) -> Result<ExtensionGroup, String> {
-  if !crate::cloud_auth::CLOUD_AUTH
-    .has_active_paid_subscription()
-    .await
-  {
-    return Err("Extension management requires an active Pro subscription".to_string());
-  }
   let mgr = EXTENSION_MANAGER.lock().unwrap();
   mgr
     .add_extension_to_group(&group_id, &extension_id)
@@ -1248,12 +1194,6 @@ pub async fn remove_extension_from_group(
   group_id: String,
   extension_id: String,
 ) -> Result<ExtensionGroup, String> {
-  if !crate::cloud_auth::CLOUD_AUTH
-    .has_active_paid_subscription()
-    .await
-  {
-    return Err("Extension management requires an active Pro subscription".to_string());
-  }
   let mgr = EXTENSION_MANAGER.lock().unwrap();
   mgr
     .remove_extension_from_group(&group_id, &extension_id)
@@ -1265,13 +1205,6 @@ pub async fn assign_extension_group_to_profile(
   profile_id: String,
   extension_group_id: Option<String>,
 ) -> Result<crate::profile::BrowserProfile, String> {
-  if !crate::cloud_auth::CLOUD_AUTH
-    .has_active_paid_subscription()
-    .await
-  {
-    return Err("Extension management requires an active Pro subscription".to_string());
-  }
-
   // Validate compatibility if assigning a group
   if let Some(ref group_id) = extension_group_id {
     let profile_manager = crate::profile::ProfileManager::instance();

@@ -22,7 +22,6 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { Input } from "./ui/input";
-import { ProBadge } from "./ui/pro-badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 const CLICK_THRESHOLD = 5;
@@ -301,15 +300,12 @@ const HomeHeader = ({
               {t("header.menu.groups")}
             </DropdownMenuItem>
             <DropdownMenuItem
-              disabled={!crossOsUnlocked}
-              className={cn(!crossOsUnlocked && "opacity-50")}
               onClick={() => {
                 onExtensionManagementDialogOpen(true);
               }}
             >
               <LuPuzzle className="mr-2 w-4 h-4" />
               {t("header.menu.extensions")}
-              {!crossOsUnlocked && <ProBadge className="ml-auto" />}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => {
