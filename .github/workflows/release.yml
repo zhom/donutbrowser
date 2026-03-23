@@ -231,102 +231,115 @@ jobs:
           security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
           rm -f $RUNNER_TEMP/build_certificate.p12 || true
 
-#      - name: Commit CHANGELOG.md
-#        uses: stefanzweifel/git-auto-commit-action@778341af668090896ca464160c2def5d1d1a3eb0 #v6.0.1
-#        with:
-#          branch: main
-#          commit_message: "docs: update CHANGELOG.md for ${{ github.ref_name }} [skip ci]"
+  changelog:
+    if: github.repository == 'zhom/donutbrowser'
+    needs: [release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 #v6.0.1
+        with:
+          ref: main
+          fetch-depth: 0
 
-  # publish-repos:
-  #   if: github.repository == 'zhom/donutbrowser'
-  #   needs: [release]
-  #   runs-on: ubuntu-latest
-  #   permissions:
-  #     contents: read
-  #   steps:
-  #     - name: Download Linux packages from release
-  #       env:
-  #         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  #       run: |
-  #         mkdir -p /tmp/packages
-  #         gh release download "$GITHUB_REF_NAME" \
-  #           --repo "$GITHUB_REPOSITORY" \
-  #           --pattern "*.deb" \
-  #           --dir /tmp/packages
-  #         gh release download "$GITHUB_REF_NAME" \
-  #           --repo "$GITHUB_REPOSITORY" \
-  #           --pattern "*.rpm" \
-  #           --dir /tmp/packages
-  #         echo "Downloaded packages:"
-  #         ls -la /tmp/packages/
-  #
-  #     - name: Setup Go
-  #       uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 #v6.3.0
-  #       with:
-  #         go-version: "1.23"
-  #         cache: false
-  #
-  #     - name: Install repogen
-  #       run: |
-  #         go install github.com/ralt/repogen/cmd/repogen@latest
-  #         echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-  #
-  #     - name: Sync existing repo metadata from R2
-  #       env:
-  #         AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-  #         AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-  #         AWS_DEFAULT_REGION: auto
-  #         R2_ENDPOINT: "https://${{ secrets.R2_ENDPOINT_URL }}"
-  #         R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
-  #       run: |
-  #         mkdir -p /tmp/repo
-  #         aws s3 cp "s3://${R2_BUCKET}/dists" /tmp/repo/dists \
-  #           --endpoint-url "${R2_ENDPOINT}" --recursive 2>/dev/null || true
-  #         aws s3 cp "s3://${R2_BUCKET}/repodata" /tmp/repo/repodata \
-  #           --endpoint-url "${R2_ENDPOINT}" --recursive 2>/dev/null || true
-  #
-  #     - name: Generate repository with repogen
-  #       run: |
-  #         repogen generate \
-  #           --input-dir /tmp/packages \
-  #           --output-dir /tmp/repo \
-  #           --incremental \
-  #           --arch amd64,arm64 \
-  #           --origin "Donut Browser" \
-  #           --label "Donut Browser" \
-  #           --codename stable \
-  #           --components main \
-  #           --verbose
-  #
-  #     - name: Upload repository to R2
-  #       env:
-  #         AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-  #         AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-  #         AWS_DEFAULT_REGION: auto
-  #         R2_ENDPOINT: "https://${{ secrets.R2_ENDPOINT_URL }}"
-  #         R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
-  #       run: |
-  #         aws s3 cp /tmp/repo/dists "s3://${R2_BUCKET}/dists" \
-  #           --endpoint-url "${R2_ENDPOINT}" --recursive
-  #         aws s3 cp /tmp/repo/pool "s3://${R2_BUCKET}/pool" \
-  #           --endpoint-url "${R2_ENDPOINT}" --recursive
-  #         aws s3 cp /tmp/repo/repodata "s3://${R2_BUCKET}/repodata" \
-  #           --endpoint-url "${R2_ENDPOINT}" --recursive
-  #         aws s3 cp /tmp/repo/Packages "s3://${R2_BUCKET}/Packages" \
-  #           --endpoint-url "${R2_ENDPOINT}" --recursive
-  #
-  #     - name: Verify upload
-  #       env:
-  #         AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-  #         AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-  #         AWS_DEFAULT_REGION: auto
-  #         R2_ENDPOINT: "https://${{ secrets.R2_ENDPOINT_URL }}"
-  #         R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
-  #       run: |
-  #         echo "DEB repo:"
-  #         aws s3 ls "s3://${R2_BUCKET}/dists/stable/" --endpoint-url "${R2_ENDPOINT}" || echo "  (listing not available)"
-  #         echo "RPM repo:"
-  #         aws s3 ls "s3://${R2_BUCKET}/repodata/" --endpoint-url "${R2_ENDPOINT}" || echo "  (listing not available)"
+      - name: Generate changelog
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          PREV_TAG=$(git tag --sort=-version:refname \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | grep -v "^${TAG}$" \
+            | head -n 1)
+
+          if [ -z "$PREV_TAG" ]; then
+            PREV_TAG=$(git rev-list --max-parents=0 HEAD)
+          fi
+
+          echo "Generating changelog: ${PREV_TAG}..${TAG}"
+
+          features=""
+          fixes=""
+          refactors=""
+          perf=""
+          docs=""
+          maintenance=""
+          other=""
+
+          strip_prefix() { echo "$1" | sed -E 's/^[a-z]+(\([^)]*\))?: //'; }
+
+          while IFS= read -r msg; do
+            [ -z "$msg" ] && continue
+            case "$msg" in
+              feat\(*\):*|feat:*)
+                features="${features}- $(strip_prefix "$msg")"$'\n' ;;
+              fix\(*\):*|fix:*)
+                fixes="${fixes}- $(strip_prefix "$msg")"$'\n' ;;
+              refactor\(*\):*|refactor:*)
+                refactors="${refactors}- $(strip_prefix "$msg")"$'\n' ;;
+              perf\(*\):*|perf:*)
+                perf="${perf}- $(strip_prefix "$msg")"$'\n' ;;
+              docs\(*\):*|docs:*)
+                docs="${docs}- $(strip_prefix "$msg")"$'\n' ;;
+              build*|ci*|chore*|test*)
+                maintenance="${maintenance}- ${msg}"$'\n' ;;
+              *)
+                other="${other}- ${msg}"$'\n' ;;
+            esac
+          done < <(git log --pretty=format:"%s" "${PREV_TAG}..${TAG}" --no-merges)
+
+          {
+            echo "## ${TAG} ($(date -u +%Y-%m-%d))"
+            echo ""
+            [ -n "$features" ]    && printf "### Features\n\n%s\n" "$features"
+            [ -n "$fixes" ]       && printf "### Bug Fixes\n\n%s\n" "$fixes"
+            [ -n "$refactors" ]   && printf "### Refactoring\n\n%s\n" "$refactors"
+            [ -n "$perf" ]        && printf "### Performance\n\n%s\n" "$perf"
+            [ -n "$docs" ]        && printf "### Documentation\n\n%s\n" "$docs"
+            [ -n "$maintenance" ] && printf "### Maintenance\n\n%s\n" "$maintenance"
+            [ -n "$other" ]       && printf "### Other\n\n%s\n" "$other"
+          } > /tmp/release-changelog.md
+
+          echo "Generated changelog:"
+          cat /tmp/release-changelog.md
+
+      - name: Update CHANGELOG.md
+        run: |
+          if [ -f CHANGELOG.md ]; then
+            # Insert new entry after the "# Changelog" header (first 2 lines)
+            {
+              head -n 2 CHANGELOG.md
+              echo ""
+              cat /tmp/release-changelog.md
+              tail -n +3 CHANGELOG.md
+            } > CHANGELOG.tmp
+            mv CHANGELOG.tmp CHANGELOG.md
+          else
+            {
+              echo "# Changelog"
+              echo ""
+              cat /tmp/release-changelog.md
+            } > CHANGELOG.md
+          fi
+
+      - name: Commit CHANGELOG.md
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          if git diff --cached --quiet; then
+            echo "No changelog changes to commit"
+          else
+            git commit -m "docs: update CHANGELOG.md for ${{ github.ref_name }} [skip ci]"
+            git push origin main
+          fi
+
+      - name: Update release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release edit "$TAG" --notes-file /tmp/release-changelog.md
 
   notify-discord:
     if: github.repository == 'zhom/donutbrowser'

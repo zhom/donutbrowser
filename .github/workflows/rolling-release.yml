@@ -257,6 +257,56 @@ jobs:
           COMMIT_HASH=$(echo "${GITHUB_SHA}" | cut -c1-7)
           echo "nightly_tag=nightly-${TIMESTAMP}-${COMMIT_HASH}" >> $GITHUB_OUTPUT
 
+      - name: Generate nightly changelog
+        id: nightly-changelog
+        run: |
+          LAST_STABLE=$(git tag --sort=-version:refname \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | head -n 1)
+
+          if [ -z "$LAST_STABLE" ]; then
+            LAST_STABLE=$(git rev-list --max-parents=0 HEAD)
+          fi
+
+          COMMIT_SHORT=$(echo "${GITHUB_SHA}" | cut -c1-7)
+          {
+            echo "**Nightly build from main branch**"
+            echo ""
+            echo "Commit: ${GITHUB_SHA}"
+            echo "Changes since ${LAST_STABLE}:"
+            echo ""
+          } > /tmp/nightly-notes.md
+
+          strip_prefix() { echo "$1" | sed -E 's/^[a-z]+(\([^)]*\))?: //'; }
+
+          features=""
+          fixes=""
+          refactors=""
+          other=""
+
+          while IFS= read -r msg; do
+            [ -z "$msg" ] && continue
+            case "$msg" in
+              feat\(*\):*|feat:*)
+                features="${features}- $(strip_prefix "$msg")"$'\n' ;;
+              fix\(*\):*|fix:*)
+                fixes="${fixes}- $(strip_prefix "$msg")"$'\n' ;;
+              refactor\(*\):*|refactor:*)
+                refactors="${refactors}- $(strip_prefix "$msg")"$'\n' ;;
+              build*|ci*|chore*|test*|docs*|perf*)
+                ;; # skip maintenance commits from nightly notes
+              *)
+                other="${other}- ${msg}"$'\n' ;;
+            esac
+          done < <(git log --pretty=format:"%s" "${LAST_STABLE}..HEAD" --no-merges)
+
+          {
+            [ -n "$features" ]  && printf "### Features\n\n%s\n" "$features"
+            [ -n "$fixes" ]     && printf "### Bug Fixes\n\n%s\n" "$fixes"
+            [ -n "$refactors" ] && printf "### Refactoring\n\n%s\n" "$refactors"
+            [ -n "$other" ]     && printf "### Other\n\n%s\n" "$other"
+          } >> /tmp/nightly-notes.md
+
       - name: Update rolling nightly release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -291,7 +341,7 @@ jobs:
             "$ASSETS_DIR"/Donut_aarch64.app.tar.gz \
             "$ASSETS_DIR"/Donut_x64.app.tar.gz \
             --title "Donut Browser Nightly" \
-            --notes "Automatically updated nightly build from the latest main branch.\n\nCommit: ${GITHUB_SHA}" \
+            --notes-file /tmp/nightly-notes.md \
             --prerelease
 
   notify-discord:
