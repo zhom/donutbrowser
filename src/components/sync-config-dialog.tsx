@@ -67,7 +67,9 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
   const [isVerifying, setIsVerifying] = useState(false);
 
   const [activeTab, setActiveTab] = useState<string>("cloud");
-  const [liveProxyUsage, setLiveProxyUsage] = useState<ProxyUsage | null>(null);
+  const [_liveProxyUsage, setLiveProxyUsage] = useState<ProxyUsage | null>(
+    null,
+  );
 
   const [connectionStatus, setConnectionStatus] = useState<
     "unknown" | "testing" | "connected" | "error"
@@ -300,40 +302,6 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
                   })}
                 </span>
               </div>
-              {liveProxyUsage && (
-                <>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">
-                      Recurring Proxy Bandwidth
-                    </span>
-                    <span>
-                      {Math.max(
-                        0,
-                        liveProxyUsage.recurring_limit_mb -
-                          liveProxyUsage.used_mb,
-                      )}{" "}
-                      / {liveProxyUsage.recurring_limit_mb} MB remaining
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">
-                      Extra Proxy Bandwidth
-                    </span>
-                    <span>
-                      {Math.max(
-                        0,
-                        liveProxyUsage.remaining_mb -
-                          Math.max(
-                            0,
-                            liveProxyUsage.recurring_limit_mb -
-                              liveProxyUsage.used_mb,
-                          ),
-                      )}{" "}
-                      / {liveProxyUsage.extra_limit_mb} MB remaining
-                    </span>
-                  </div>
-                </>
-              )}
               {user.teamName && (
                 <>
                   <div className="flex justify-between">

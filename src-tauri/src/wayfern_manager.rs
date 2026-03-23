@@ -37,8 +37,6 @@ pub struct WayfernConfig {
   pub block_webrtc: Option<bool>,
   #[serde(default)]
   pub block_webgl: Option<bool>,
-  #[serde(default)]
-  pub executable_path: Option<String>,
   #[serde(default, skip_serializing)]
   pub proxy: Option<String>,
 }
@@ -212,21 +210,9 @@ impl WayfernManager {
     profile: &BrowserProfile,
     config: &WayfernConfig,
   ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    let executable_path = if let Some(path) = &config.executable_path {
-      let p = PathBuf::from(path);
-      if p.exists() {
-        p
-      } else {
-        log::warn!("Stored Wayfern executable path does not exist: {path}, falling back to dynamic resolution");
-        BrowserRunner::instance()
-          .get_browser_executable_path(profile)
-          .map_err(|e| format!("Failed to get Wayfern executable path: {e}"))?
-      }
-    } else {
-      BrowserRunner::instance()
-        .get_browser_executable_path(profile)
-        .map_err(|e| format!("Failed to get Wayfern executable path: {e}"))?
-    };
+    let executable_path = BrowserRunner::instance()
+      .get_browser_executable_path(profile)
+      .map_err(|e| format!("Failed to get Wayfern executable path: {e}"))?;
 
     let port = Self::find_free_port().await?;
     log::info!("Launching headless Wayfern on port {port} for fingerprint generation");
@@ -456,27 +442,93 @@ impl WayfernManager {
     extension_paths: &[String],
     remote_debugging_port: Option<u16>,
   ) -> Result<WayfernLaunchResult, Box<dyn std::error::Error + Send + Sync>> {
-    let executable_path = if let Some(path) = &config.executable_path {
-      let p = PathBuf::from(path);
-      if p.exists() {
-        p
-      } else {
-        log::warn!("Stored Wayfern executable path does not exist: {path}, falling back to dynamic resolution");
-        BrowserRunner::instance()
-          .get_browser_executable_path(profile)
-          .map_err(|e| format!("Failed to get Wayfern executable path: {e}"))?
-      }
-    } else {
-      BrowserRunner::instance()
-        .get_browser_executable_path(profile)
-        .map_err(|e| format!("Failed to get Wayfern executable path: {e}"))?
-    };
+    let executable_path = BrowserRunner::instance()
+      .get_browser_executable_path(profile)
+      .map_err(|e| format!("Failed to get Wayfern executable path: {e}"))?;
 
     let port = match remote_debugging_port {
       Some(p) => p,
       None => Self::find_free_port().await?,
     };
     log::info!("Launching Wayfern on CDP port {port}");
+
+    // Diagnostic: verify critical profile files and test cookie decryption
+    {
+      let profile_path_buf = std::path::PathBuf::from(profile_path);
+      let key_path = profile_path_buf.join("os_crypt_key");
+      let cookies_path = profile_path_buf.join("Default").join("Cookies");
+
+      if key_path.exists() {
+        let key_text = std::fs::read_to_string(&key_path).unwrap_or_default();
+        log::info!(
+          "Pre-launch: os_crypt_key present ({} bytes, content: '{}')",
+          key_text.len(),
+          key_text.trim()
+        );
+      } else {
+        log::warn!("Pre-launch: os_crypt_key NOT FOUND");
+      }
+
+      if cookies_path.exists() {
+        // Try to open Cookies DB and check if encrypted cookies can be decrypted
+        if let Ok(conn) = rusqlite::Connection::open_with_flags(
+          &cookies_path,
+          rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        ) {
+          let cookie_count: i64 = conn
+            .query_row(
+              "SELECT COUNT(*) FROM cookies WHERE length(encrypted_value) > 0",
+              [],
+              |r| r.get(0),
+            )
+            .unwrap_or(0);
+          let total_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM cookies", [], |r| r.get(0))
+            .unwrap_or(0);
+          log::info!(
+            "Pre-launch: Cookies DB has {} total cookies, {} encrypted",
+            total_count,
+            cookie_count
+          );
+
+          // Try decrypting one cookie using the cookie_manager
+          if let Some(encryption_key) =
+            crate::cookie_manager::chrome_decrypt::get_encryption_key(&profile_path_buf)
+          {
+            if let Ok(mut stmt) = conn.prepare(
+              "SELECT name, host_key, encrypted_value FROM cookies WHERE length(encrypted_value) > 0 LIMIT 1",
+            ) {
+              if let Ok(mut rows) = stmt.query([]) {
+                if let Ok(Some(row)) = rows.next() {
+                  let name: String = row.get(0).unwrap_or_default();
+                  let host: String = row.get(1).unwrap_or_default();
+                  let encrypted: Vec<u8> = row.get(2).unwrap_or_default();
+                  let decrypted =
+                    crate::cookie_manager::chrome_decrypt::decrypt(
+                      &encrypted,
+                      &encryption_key,
+                    );
+                  match decrypted {
+                    Some(val) => log::info!(
+                      "Pre-launch: Cookie decryption SUCCEEDED for '{}' (host: {}, decrypted {} bytes)",
+                      name, host, val.len()
+                    ),
+                    None => log::error!(
+                      "Pre-launch: Cookie decryption FAILED for '{}' (host: {}, encrypted {} bytes)",
+                      name, host, encrypted.len()
+                    ),
+                  }
+                }
+              }
+            }
+          } else {
+            log::error!("Pre-launch: Failed to derive encryption key from os_crypt_key");
+          }
+        }
+      } else {
+        log::warn!("Pre-launch: Cookies NOT FOUND");
+      }
+    }
 
     let mut args = vec![
       format!("--remote-debugging-port={port}"),
@@ -492,7 +544,6 @@ impl WayfernManager {
       "--disable-session-crashed-bubble".to_string(),
       "--hide-crash-restore-bubble".to_string(),
       "--disable-infobars".to_string(),
-      "--disable-quic".to_string(),
       "--disable-features=DialMediaRouteProvider".to_string(),
       "--use-mock-keychain".to_string(),
       "--password-store=basic".to_string(),

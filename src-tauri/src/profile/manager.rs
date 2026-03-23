@@ -94,29 +94,6 @@ impl ProfileManager {
         crate::camoufox_manager::CamoufoxConfig::default()
       });
 
-      // Always ensure executable_path is set to the user's binary location
-      if config.executable_path.is_none() {
-        let mut browser_dir = self.get_binaries_dir();
-        browser_dir.push(browser);
-        browser_dir.push(version);
-
-        #[cfg(target_os = "macos")]
-        let binary_path = browser_dir
-          .join("Camoufox.app")
-          .join("Contents")
-          .join("MacOS")
-          .join("camoufox");
-
-        #[cfg(target_os = "windows")]
-        let binary_path = browser_dir.join("camoufox.exe");
-
-        #[cfg(target_os = "linux")]
-        let binary_path = browser_dir.join("camoufox");
-
-        config.executable_path = Some(binary_path.to_string_lossy().to_string());
-        log::info!("Set Camoufox executable path: {:?}", config.executable_path);
-      }
-
       // Pass upstream proxy information to config for fingerprint generation
       if let Some(proxy_id_ref) = &proxy_id {
         if let Some(proxy_settings) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id_ref) {
@@ -219,28 +196,6 @@ impl ProfileManager {
       });
 
       // Always ensure executable_path is set to the user's binary location
-      if config.executable_path.is_none() {
-        let mut browser_dir = self.get_binaries_dir();
-        browser_dir.push(browser);
-        browser_dir.push(version);
-
-        #[cfg(target_os = "macos")]
-        let binary_path = browser_dir
-          .join("Chromium.app")
-          .join("Contents")
-          .join("MacOS")
-          .join("Chromium");
-
-        #[cfg(target_os = "windows")]
-        let binary_path = browser_dir.join("chrome.exe");
-
-        #[cfg(target_os = "linux")]
-        let binary_path = browser_dir.join("chrome");
-
-        config.executable_path = Some(binary_path.to_string_lossy().to_string());
-        log::info!("Set Wayfern executable path: {:?}", config.executable_path);
-      }
-
       // Pass upstream proxy information to config for fingerprint generation
       if let Some(proxy_id_ref) = &proxy_id {
         if let Some(proxy_settings) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id_ref) {

@@ -264,7 +264,7 @@ impl SyncScheduler {
 
     let sync_enabled_profiles: Vec<_> = profiles
       .into_iter()
-      .filter(|p| p.is_sync_enabled() && !p.is_cross_os())
+      .filter(|p| p.is_sync_enabled())
       .collect();
 
     if sync_enabled_profiles.is_empty() {
@@ -418,7 +418,7 @@ impl SyncScheduler {
           profile_manager.list_profiles().ok().and_then(|profiles| {
             profiles
               .into_iter()
-              .find(|p| p.id.to_string() == profile_id && p.is_sync_enabled() && !p.is_cross_os())
+              .find(|p| p.id.to_string() == profile_id && p.is_sync_enabled())
           })
         };
 

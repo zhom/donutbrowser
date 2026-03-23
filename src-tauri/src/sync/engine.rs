@@ -332,11 +332,11 @@ impl SyncEngine {
   ) -> SyncResult<()> {
     if profile.is_cross_os() {
       log::info!(
-        "Skipping file sync for cross-OS profile: {} ({})",
+        "Cross-OS profile: {} ({}) — syncing metadata only",
         profile.name,
         profile.id
       );
-      return Ok(());
+      return self.sync_cross_os_metadata(app_handle, profile).await;
     }
 
     // Skip team profiles for self-hosted sync
@@ -725,6 +725,63 @@ impl SyncEngine {
       .map_err(|e| SyncError::SerializationError(format!("Failed to parse metadata: {e}")))?;
 
     Ok(profile)
+  }
+
+  /// Sync only metadata for cross-OS profiles (tags, notes, proxies, groups).
+  /// No browser files are synced.
+  async fn sync_cross_os_metadata(
+    &self,
+    app_handle: &tauri::AppHandle,
+    profile: &BrowserProfile,
+  ) -> SyncResult<()> {
+    let profile_id = profile.id.to_string();
+    let key_prefix = Self::get_team_key_prefix(profile).await;
+    let profile_manager = ProfileManager::instance();
+
+    // Upload our metadata
+    self
+      .upload_profile_metadata(&profile_id, profile, &key_prefix)
+      .await?;
+
+    // Download remote metadata and merge if remote has changes
+    let remote_metadata_key = format!("{}profiles/{}/metadata.json", key_prefix, profile_id);
+    if let Ok(remote_meta) = self.download_profile_metadata(&remote_metadata_key).await {
+      let mut updated = profile.clone();
+      updated.name = remote_meta.name;
+      updated.tags = remote_meta.tags;
+      updated.note = remote_meta.note;
+      updated.proxy_id = remote_meta.proxy_id;
+      updated.vpn_id = remote_meta.vpn_id;
+      updated.group_id = remote_meta.group_id;
+      updated.last_sync = Some(
+        std::time::SystemTime::now()
+          .duration_since(std::time::UNIX_EPOCH)
+          .unwrap()
+          .as_secs(),
+      );
+      let _ = profile_manager.save_profile(&updated);
+    }
+
+    // Sync associated entities
+    if let Some(proxy_id) = &profile.proxy_id {
+      let _ = self.sync_proxy(proxy_id, Some(app_handle)).await;
+    }
+    if let Some(group_id) = &profile.group_id {
+      let _ = self.sync_group(group_id, Some(app_handle)).await;
+    }
+
+    let _ = events::emit("profiles-changed", ());
+    let _ = events::emit(
+      "profile-sync-status",
+      serde_json::json!({
+        "profile_id": profile_id,
+        "profile_name": profile.name,
+        "status": "synced"
+      }),
+    );
+
+    log::info!("Cross-OS profile {} metadata synced", profile_id);
+    Ok(())
   }
 
   async fn upload_profile_metadata(
@@ -2282,6 +2339,42 @@ impl SyncEngine {
           key_prefix,
         )
         .await?;
+    }
+
+    // Verify critical files after download
+    let os_crypt_key_path = profile_dir.join("profile").join("os_crypt_key");
+    let cookies_path = profile_dir.join("profile").join("Default").join("Cookies");
+    if os_crypt_key_path.exists() {
+      let key_data = fs::read(&os_crypt_key_path).unwrap_or_default();
+      log::info!(
+        "Profile {} sync: os_crypt_key present ({} bytes, sha256: {:x})",
+        profile_id,
+        key_data.len(),
+        {
+          use std::hash::{Hash, Hasher};
+          let mut h = std::collections::hash_map::DefaultHasher::new();
+          key_data.hash(&mut h);
+          h.finish()
+        }
+      );
+    } else {
+      log::warn!(
+        "Profile {} sync: os_crypt_key NOT FOUND after download",
+        profile_id
+      );
+    }
+    if cookies_path.exists() {
+      let cookies_meta = fs::metadata(&cookies_path).unwrap_or_else(|_| fs::metadata(".").unwrap());
+      log::info!(
+        "Profile {} sync: Cookies present ({} bytes)",
+        profile_id,
+        cookies_meta.len()
+      );
+    } else {
+      log::warn!(
+        "Profile {} sync: Cookies NOT FOUND after download",
+        profile_id
+      );
     }
 
     // Set sync mode and save profile

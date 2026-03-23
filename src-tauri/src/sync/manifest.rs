@@ -13,7 +13,6 @@ use super::types::{SyncError, SyncResult};
 /// Patterns use `**/` prefix to match at any directory depth, since the sync
 /// engine scans from `profiles/{uuid}/` which contains `profile/Default/...`.
 pub const DEFAULT_EXCLUDE_PATTERNS: &[&str] = &[
-  // Chromium caches (re-downloadable / re-generated)
   "**/Cache/**",
   "**/Code Cache/**",
   "**/GPUCache/**",
@@ -23,7 +22,6 @@ pub const DEFAULT_EXCLUDE_PATTERNS: &[&str] = &[
   "**/DawnGraphiteCache/**",
   "**/Service Worker/CacheStorage/**",
   "**/Service Worker/ScriptCache/**",
-  // Chromium transient / volatile data
   "**/Session Storage/**",
   "**/blob_storage/**",
   "**/Crashpad/**",
@@ -32,14 +30,12 @@ pub const DEFAULT_EXCLUDE_PATTERNS: &[&str] = &[
   "**/optimization_guide_model_store/**",
   "**/Safe Browsing/**",
   "**/component_crx_cache/**",
-  // Firefox/Camoufox caches (re-downloadable / re-generated)
   "**/cache2/**",
   "**/startupCache/**",
   "**/safebrowsing/**",
   "**/storage/temporary/**",
   "**/crashes/**",
   "**/minidumps/**",
-  // Common volatile files
   "*.log",
   "*.tmp",
   "**/LOG",
@@ -47,6 +43,14 @@ pub const DEFAULT_EXCLUDE_PATTERNS: &[&str] = &[
   "**/LOCK",
   "**/*-journal",
   "**/*-wal",
+  "**/SingletonLock",
+  "**/SingletonSocket",
+  "**/SingletonCookie",
+  "**/Secure Preferences",
+  "**/GraphiteDawnCache/**",
+  "**/DawnWebGPUCache/**",
+  "**/BrowserMetrics*",
+  "**/.DS_Store",
   ".donut-sync/**",
 ];
 
