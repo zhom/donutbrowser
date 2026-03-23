@@ -266,9 +266,8 @@ export function ProfileInfoDialog({
       icon: <LuCopy className="w-4 h-4" />,
       label: t("profiles.actions.copyCookiesToProfile"),
       onClick: () => handleAction(() => onCopyCookiesToProfile?.(profile)),
-      disabled: isDisabled || !crossOsUnlocked,
-      proBadge: !crossOsUnlocked,
-      runningBadge: isRunning && crossOsUnlocked,
+      disabled: isDisabled,
+      runningBadge: isRunning,
       hidden:
         !isCamoufoxOrWayfern ||
         profile.ephemeral === true ||
@@ -278,9 +277,8 @@ export function ProfileInfoDialog({
       icon: <LuCookie className="w-4 h-4" />,
       label: t("profileInfo.actions.manageCookies"),
       onClick: () => handleAction(() => onOpenCookieManagement?.(profile)),
-      disabled: isDisabled || !crossOsUnlocked,
-      proBadge: !crossOsUnlocked,
-      runningBadge: isRunning && crossOsUnlocked,
+      disabled: isDisabled,
+      runningBadge: isRunning,
       hidden:
         !isCamoufoxOrWayfern ||
         profile.ephemeral === true ||

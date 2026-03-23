@@ -21,7 +21,6 @@ pub struct CamoufoxConfig {
   pub block_images: Option<bool>,
   pub block_webrtc: Option<bool>,
   pub block_webgl: Option<bool>,
-  pub executable_path: Option<String>,
   pub fingerprint: Option<String>, // JSON string of the complete fingerprint config
   pub randomize_fingerprint_on_launch: Option<bool>, // Generate new fingerprint on every launch
   pub os: Option<String>, // Operating system for fingerprint generation: "windows", "macos", or "linux"
@@ -39,7 +38,6 @@ impl Default for CamoufoxConfig {
       block_images: None,
       block_webrtc: None,
       block_webgl: None,
-      executable_path: None,
       fingerprint: None,
       randomize_fingerprint_on_launch: None,
       os: None,
@@ -129,21 +127,9 @@ impl CamoufoxManager {
     config: &CamoufoxConfig,
   ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     // Get executable path
-    let executable_path = if let Some(path) = &config.executable_path {
-      let p = PathBuf::from(path);
-      if p.exists() {
-        p
-      } else {
-        log::warn!("Stored Camoufox executable path does not exist: {path}, falling back to dynamic resolution");
-        BrowserRunner::instance()
-          .get_browser_executable_path(profile)
-          .map_err(|e| format!("Failed to get Camoufox executable path: {e}"))?
-      }
-    } else {
-      BrowserRunner::instance()
-        .get_browser_executable_path(profile)
-        .map_err(|e| format!("Failed to get Camoufox executable path: {e}"))?
-    };
+    let executable_path = BrowserRunner::instance()
+      .get_browser_executable_path(profile)
+      .map_err(|e| format!("Failed to get Camoufox executable path: {e}"))?;
 
     // Build the config using CamoufoxConfigBuilder
     let mut builder = CamoufoxConfigBuilder::new()
@@ -230,21 +216,9 @@ impl CamoufoxManager {
     };
 
     // Get executable path
-    let executable_path = if let Some(path) = &config.executable_path {
-      let p = PathBuf::from(path);
-      if p.exists() {
-        p
-      } else {
-        log::warn!("Stored Camoufox executable path does not exist: {path}, falling back to dynamic resolution");
-        BrowserRunner::instance()
-          .get_browser_executable_path(profile)
-          .map_err(|e| format!("Failed to get Camoufox executable path: {e}"))?
-      }
-    } else {
-      BrowserRunner::instance()
-        .get_browser_executable_path(profile)
-        .map_err(|e| format!("Failed to get Camoufox executable path: {e}"))?
-    };
+    let executable_path = BrowserRunner::instance()
+      .get_browser_executable_path(profile)
+      .map_err(|e| format!("Failed to get Camoufox executable path: {e}"))?;
 
     // Parse the fingerprint config JSON
     let fingerprint_config: HashMap<String, serde_json::Value> =

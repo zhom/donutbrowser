@@ -207,6 +207,20 @@ impl Extractor {
 
     match extraction_result {
       Ok(path) => {
+        // Remove quarantine attributes on macOS to prevent
+        // "app was prevented from modifying data" prompts
+        #[cfg(target_os = "macos")]
+        {
+          let _ = tokio::process::Command::new("xattr")
+            .args([
+              "-dr",
+              "com.apple.quarantine",
+              dest_dir.to_str().unwrap_or("."),
+            ])
+            .output()
+            .await;
+        }
+
         log::info!(
           "Successfully extracted {} {} to: {}",
           browser_type.as_str(),

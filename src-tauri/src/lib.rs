@@ -356,12 +356,6 @@ async fn copy_profile_cookies(
   app_handle: tauri::AppHandle,
   request: cookie_manager::CookieCopyRequest,
 ) -> Result<Vec<cookie_manager::CookieCopyResult>, String> {
-  if !crate::cloud_auth::CLOUD_AUTH
-    .has_active_paid_subscription()
-    .await
-  {
-    return Err("Cookie copying requires an active Pro subscription".to_string());
-  }
   let target_ids = request.target_profile_ids.clone();
   let results = cookie_manager::CookieManager::copy_cookies(&app_handle, request).await?;
 
@@ -397,12 +391,6 @@ async fn import_cookies_from_file(
   profile_id: String,
   content: String,
 ) -> Result<cookie_manager::CookieImportResult, String> {
-  if !crate::cloud_auth::CLOUD_AUTH
-    .has_active_paid_subscription()
-    .await
-  {
-    return Err("Cookie import requires an active Pro subscription".to_string());
-  }
   let result =
     cookie_manager::CookieManager::import_cookies(&app_handle, &profile_id, &content).await?;
 
@@ -426,12 +414,6 @@ async fn import_cookies_from_file(
 
 #[tauri::command]
 async fn export_profile_cookies(profile_id: String, format: String) -> Result<String, String> {
-  if !crate::cloud_auth::CLOUD_AUTH
-    .has_active_paid_subscription()
-    .await
-  {
-    return Err("Cookie export requires an active Pro subscription".to_string());
-  }
   cookie_manager::CookieManager::export_cookies(&profile_id, &format)
 }
 

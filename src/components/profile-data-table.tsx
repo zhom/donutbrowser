@@ -1802,8 +1802,11 @@ export function ProfilesDataTable({
           const isLaunching = meta.launchingProfiles.has(profile.id);
           const isStopping = meta.stoppingProfiles.has(profile.id);
           const isLockedByAnother = meta.isProfileLockedByAnother(profile.id);
+          const isSyncing = meta.syncStatuses[profile.id]?.status === "syncing";
           const canLaunch =
-            meta.browserState.canLaunchProfile(profile) && !isLockedByAnother;
+            meta.browserState.canLaunchProfile(profile) &&
+            !isLockedByAnother &&
+            !isSyncing;
           const lockEmail = meta.getProfileLockEmail(profile.id);
           const tooltipContent = isLockedByAnother
             ? meta.t("sync.team.cannotLaunchLocked", { email: lockEmail })
@@ -1831,13 +1834,14 @@ export function ProfilesDataTable({
             );
             try {
               await meta.onLaunchProfile(profile);
-            } catch (error) {
+            } finally {
+              // Always clear launching state — the running state is tracked
+              // separately via profile-running-changed events
               meta.setLaunchingProfiles((prev: Set<string>) => {
                 const next = new Set(prev);
                 next.delete(profile.id);
                 return next;
               });
-              throw error;
             }
           };
 
@@ -2665,40 +2669,20 @@ export function ProfilesDataTable({
         )}
         {onBulkExtensionGroupAssignment && (
           <DataTableActionBarAction
-            tooltip={
-              crossOsUnlocked
-                ? "Assign Extension Group"
-                : "Assign Extension Group (Pro)"
-            }
+            tooltip="Assign Extension Group"
             onClick={onBulkExtensionGroupAssignment}
             size="icon"
-            disabled={!crossOsUnlocked}
           >
-            <span className="relative">
-              <LuPuzzle />
-              {!crossOsUnlocked && (
-                <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 text-[6px] font-bold leading-none bg-primary text-primary-foreground px-0.5 rounded-sm">
-                  PRO
-                </span>
-              )}
-            </span>
+            <LuPuzzle />
           </DataTableActionBarAction>
         )}
         {onBulkCopyCookies && (
           <DataTableActionBarAction
-            tooltip={crossOsUnlocked ? "Copy Cookies" : "Copy Cookies (Pro)"}
+            tooltip="Copy Cookies"
             onClick={onBulkCopyCookies}
             size="icon"
-            disabled={!crossOsUnlocked}
           >
-            <span className="relative">
-              <LuCookie />
-              {!crossOsUnlocked && (
-                <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 text-[6px] font-bold leading-none bg-primary text-primary-foreground px-0.5 rounded-sm">
-                  PRO
-                </span>
-              )}
-            </span>
+            <LuCookie />
           </DataTableActionBarAction>
         )}
         {onBulkDelete && (

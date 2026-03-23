@@ -532,27 +532,6 @@ impl ProfileImporter {
     let final_camoufox_config = if mapped == "camoufox" {
       let mut config = camoufox_config.unwrap_or_default();
 
-      if config.executable_path.is_none() {
-        let mut browser_dir = self.profile_manager.get_binaries_dir();
-        browser_dir.push(mapped);
-        browser_dir.push(&version);
-
-        #[cfg(target_os = "macos")]
-        let binary_path = browser_dir
-          .join("Camoufox.app")
-          .join("Contents")
-          .join("MacOS")
-          .join("camoufox");
-
-        #[cfg(target_os = "windows")]
-        let binary_path = browser_dir.join("camoufox.exe");
-
-        #[cfg(target_os = "linux")]
-        let binary_path = browser_dir.join("camoufox");
-
-        config.executable_path = Some(binary_path.to_string_lossy().to_string());
-      }
-
       if let Some(ref proxy_id_val) = proxy_id {
         if let Some(proxy_settings) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id_val) {
           let proxy_url = if let (Some(username), Some(password)) =
@@ -630,27 +609,6 @@ impl ProfileImporter {
 
     let final_wayfern_config = if mapped == "wayfern" {
       let mut config = wayfern_config.unwrap_or_default();
-
-      if config.executable_path.is_none() {
-        let mut browser_dir = self.profile_manager.get_binaries_dir();
-        browser_dir.push(mapped);
-        browser_dir.push(&version);
-
-        #[cfg(target_os = "macos")]
-        let binary_path = browser_dir
-          .join("Chromium.app")
-          .join("Contents")
-          .join("MacOS")
-          .join("Chromium");
-
-        #[cfg(target_os = "windows")]
-        let binary_path = browser_dir.join("chrome.exe");
-
-        #[cfg(target_os = "linux")]
-        let binary_path = browser_dir.join("chrome");
-
-        config.executable_path = Some(binary_path.to_string_lossy().to_string());
-      }
 
       if let Some(ref proxy_id_val) = proxy_id {
         if let Some(proxy_settings) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id_val) {

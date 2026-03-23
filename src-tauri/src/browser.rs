@@ -689,7 +689,6 @@ impl Browser for WayfernBrowser {
       "--disable-session-crashed-bubble".to_string(),
       "--hide-crash-restore-bubble".to_string(),
       "--disable-infobars".to_string(),
-      "--disable-quic".to_string(),
       // Wayfern-specific args for automation
       "--disable-features=DialMediaRouteProvider".to_string(),
       "--use-mock-keychain".to_string(),
@@ -1165,6 +1164,67 @@ mod tests {
     );
     assert_eq!(deserialized.host, proxy.host, "Host should match");
     assert_eq!(deserialized.port, proxy.port, "Port should match");
+  }
+
+  #[test]
+  fn test_wayfern_config_has_no_executable_path() {
+    // Verify WayfernConfig does not store executable_path
+    let config = crate::wayfern_manager::WayfernConfig::default();
+    let json = serde_json::to_value(&config).unwrap();
+    assert!(
+      json.get("executable_path").is_none(),
+      "WayfernConfig should not have executable_path field"
+    );
+  }
+
+  #[test]
+  fn test_camoufox_config_has_no_executable_path() {
+    // Verify CamoufoxConfig does not store executable_path
+    let config = crate::camoufox_manager::CamoufoxConfig::default();
+    let json = serde_json::to_value(&config).unwrap();
+    assert!(
+      json.get("executable_path").is_none(),
+      "CamoufoxConfig should not have executable_path field"
+    );
+  }
+
+  #[test]
+  fn test_profile_data_path_is_dynamic() {
+    use crate::profile::BrowserProfile;
+    let profiles_dir = std::path::PathBuf::from("/fake/profiles");
+    let profile = BrowserProfile {
+      id: uuid::Uuid::parse_str("12345678-1234-1234-1234-123456789abc").unwrap(),
+      name: "test".to_string(),
+      browser: "wayfern".to_string(),
+      version: "1.0.0".to_string(),
+      proxy_id: None,
+      vpn_id: None,
+      process_id: None,
+      last_launch: None,
+      release_type: "stable".to_string(),
+      camoufox_config: None,
+      wayfern_config: None,
+      group_id: None,
+      tags: Vec::new(),
+      note: None,
+      sync_mode: crate::profile::types::SyncMode::Disabled,
+      encryption_salt: None,
+      last_sync: None,
+      host_os: None,
+      ephemeral: false,
+      extension_group_id: None,
+      proxy_bypass_rules: Vec::new(),
+      created_by_id: None,
+      created_by_email: None,
+    };
+
+    let path = profile.get_profile_data_path(&profiles_dir);
+    assert_eq!(
+      path,
+      profiles_dir
+        .join("12345678-1234-1234-1234-123456789abc")
+        .join("profile")
+    );
   }
 }
 
