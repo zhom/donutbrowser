@@ -1,0 +1,49 @@
+name: Flake Test
+
+on:
+  pull_request:
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - ".github/workflows/flake-test.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - ".github/workflows/flake-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  flake:
+    name: validate-flake
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 #v6.0.1
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Evaluate flake outputs
+        run: nix flake show --all-systems
+
+      - name: Check setup app is exposed
+        run: nix eval .#apps.x86_64-linux.setup.program --raw
+
+      - name: Run flake setup app
+        env:
+          CI: "true"
+        run: nix run .#setup
+
+      - name: Run flake info app
+        run: nix run .#info
