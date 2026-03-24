@@ -305,6 +305,7 @@ jobs:
             [ -n "$fixes" ]     && printf "### Bug Fixes\n\n%s\n" "$fixes"
             [ -n "$refactors" ] && printf "### Refactoring\n\n%s\n" "$refactors"
             [ -n "$other" ]     && printf "### Other\n\n%s\n" "$other"
+            true
           } >> /tmp/nightly-notes.md
 
       - name: Update rolling nightly release
