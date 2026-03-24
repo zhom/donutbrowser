@@ -47,6 +47,7 @@ mod commercial_license;
 mod cookie_manager;
 pub mod daemon;
 pub mod daemon_client;
+#[allow(dead_code)]
 mod daemon_spawn;
 pub mod daemon_ws;
 pub mod events;
@@ -474,7 +475,6 @@ fn get_mcp_server_status() -> bool {
 struct McpConfig {
   port: u16,
   token: String,
-  config_json: String,
 }
 
 #[tauri::command]
@@ -495,23 +495,283 @@ async fn get_mcp_config(app_handle: tauri::AppHandle) -> Result<Option<McpConfig
     .map_err(|e| format!("Failed to get MCP token: {e}"))?
     .ok_or("MCP token not found")?;
 
-  let config_json = serde_json::json!({
-    "mcpServers": {
-      "donut-browser": {
-        "url": format!("http://127.0.0.1:{}/mcp", port),
-        "headers": {
-          "Authorization": format!("Bearer {}", token)
-        }
+  Ok(Some(McpConfig { port, token }))
+}
+
+fn claude_desktop_extension_dir() -> Option<std::path::PathBuf> {
+  #[cfg(target_os = "macos")]
+  {
+    dirs::home_dir().map(|h| {
+      h.join("Library")
+        .join("Application Support")
+        .join("Claude")
+        .join("Claude Extensions")
+        .join("local.mcpb.donut-browser.donut-browser")
+    })
+  }
+  #[cfg(target_os = "windows")]
+  {
+    std::env::var("APPDATA").ok().map(|appdata| {
+      std::path::PathBuf::from(appdata)
+        .join("Claude")
+        .join("Claude Extensions")
+        .join("local.mcpb.donut-browser.donut-browser")
+    })
+  }
+  #[cfg(target_os = "linux")]
+  {
+    dirs::config_dir().map(|c| {
+      c.join("Claude")
+        .join("Claude Extensions")
+        .join("local.mcpb.donut-browser.donut-browser")
+    })
+  }
+}
+
+#[tauri::command]
+fn is_mcp_in_claude_desktop() -> Result<bool, String> {
+  let dir = claude_desktop_extension_dir().ok_or("Unsupported platform")?;
+  Ok(dir.join("manifest.json").exists())
+}
+
+#[tauri::command]
+async fn add_mcp_to_claude_desktop(app_handle: tauri::AppHandle) -> Result<(), String> {
+  let mcp_server = mcp_server::McpServer::instance();
+  let port = mcp_server.get_port().ok_or("MCP server is not running")?;
+
+  let settings_manager = settings_manager::SettingsManager::instance();
+  let token = settings_manager
+    .get_mcp_token(&app_handle)
+    .await
+    .map_err(|e| format!("Failed to get MCP token: {e}"))?
+    .ok_or("MCP token not found")?;
+
+  let ext_dir = claude_desktop_extension_dir().ok_or("Unsupported platform")?;
+  let server_dir = ext_dir.join("server");
+  std::fs::create_dir_all(&server_dir)
+    .map_err(|e| format!("Failed to create extension directory: {e}"))?;
+
+  let mcp_url = format!("http://127.0.0.1:{port}/mcp/{token}");
+
+  let manifest = serde_json::json!({
+    "manifest_version": "0.3",
+    "name": "donut-browser",
+    "display_name": "Donut Browser",
+    "version": env!("CARGO_PKG_VERSION"),
+    "description": "Control Donut Browser profiles, proxies, and automation via MCP",
+    "author": { "name": "Donut Browser" },
+    "tools_generated": true,
+    "server": {
+      "type": "node",
+      "entry_point": "server/index.js",
+      "mcp_config": {
+        "command": "node",
+        "args": ["${__dirname}/server/index.js"],
+        "env": {}
+      }
+    },
+    "license": "AGPL-3.0"
+  });
+  std::fs::write(
+    ext_dir.join("manifest.json"),
+    serde_json::to_string_pretty(&manifest)
+      .map_err(|e| format!("Failed to serialize manifest: {e}"))?,
+  )
+  .map_err(|e| format!("Failed to write manifest: {e}"))?;
+
+  let bridge_js = format!(
+    r#"#!/usr/bin/env node
+const http = require("http");
+const readline = require("readline");
+const MCP_URL = "{mcp_url}";
+let sid = null;
+function post(line) {{
+  return new Promise((resolve, reject) => {{
+    const u = new URL(MCP_URL);
+    const o = {{
+      hostname: u.hostname, port: u.port, path: u.pathname, method: "POST",
+      headers: {{ "Content-Type": "application/json", Accept: "application/json" }},
+    }};
+    if (sid) o.headers["mcp-session-id"] = sid;
+    const r = http.request(o, (res) => {{
+      const s = res.headers["mcp-session-id"];
+      if (s) sid = s;
+      let b = "";
+      res.on("data", (c) => (b += c));
+      res.on("end", () => resolve(b));
+    }});
+    r.on("error", reject);
+    r.write(line);
+    r.end();
+  }});
+}}
+const rl = readline.createInterface({{ input: process.stdin, crlfDelay: Infinity }});
+rl.on("line", (line) => {{
+  if (!line.trim()) return;
+  let notif = false;
+  try {{ notif = JSON.parse(line).id == null; }} catch {{}}
+  post(line).then((b) => {{
+    if (!notif && b.trim()) process.stdout.write(b.trim() + "\n");
+  }}).catch((e) => {{
+    if (!notif) process.stdout.write(JSON.stringify({{
+      jsonrpc: "2.0", id: null, error: {{ code: -32000, message: "HTTP error: " + e.message }}
+    }}) + "\n");
+  }});
+}});
+rl.on("close", () => setTimeout(() => process.exit(0), 500));
+"#
+  );
+  std::fs::write(server_dir.join("index.js"), bridge_js)
+    .map_err(|e| format!("Failed to write bridge script: {e}"))?;
+
+  // Update the extensions-installations.json registry so Claude Desktop picks it up
+  update_claude_extensions_registry("local.mcpb.donut-browser.donut-browser", Some(manifest))?;
+
+  Ok(())
+}
+
+#[tauri::command]
+fn remove_mcp_from_claude_desktop() -> Result<(), String> {
+  let ext_dir = claude_desktop_extension_dir().ok_or("Unsupported platform")?;
+  if ext_dir.exists() {
+    std::fs::remove_dir_all(&ext_dir).map_err(|e| format!("Failed to remove extension: {e}"))?;
+  }
+  update_claude_extensions_registry("local.mcpb.donut-browser.donut-browser", None)?;
+  Ok(())
+}
+
+fn update_claude_extensions_registry(
+  ext_id: &str,
+  manifest: Option<serde_json::Value>,
+) -> Result<(), String> {
+  let registry_path = claude_desktop_extension_dir()
+    .ok_or("Unsupported platform")?
+    .parent()
+    .and_then(|p| p.parent())
+    .map(|p| p.join("extensions-installations.json"))
+    .ok_or("Failed to resolve registry path")?;
+
+  let mut registry: serde_json::Value = if registry_path.exists() {
+    let content = std::fs::read_to_string(&registry_path)
+      .map_err(|e| format!("Failed to read registry: {e}"))?;
+    serde_json::from_str(&content).unwrap_or(serde_json::json!({"extensions": {}}))
+  } else {
+    serde_json::json!({"extensions": {}})
+  };
+
+  if registry.get("extensions").is_none() {
+    registry["extensions"] = serde_json::json!({});
+  }
+
+  match manifest {
+    Some(m) => {
+      registry["extensions"][ext_id] = serde_json::json!({
+        "id": ext_id,
+        "version": m.get("version").and_then(|v| v.as_str()).unwrap_or("0.0.0"),
+        "hash": "",
+        "installedAt": chrono::Utc::now().to_rfc3339(),
+        "manifest": m,
+        "signatureInfo": { "status": "unsigned" },
+        "source": "local"
+      });
+    }
+    None => {
+      if let Some(exts) = registry
+        .get_mut("extensions")
+        .and_then(|e| e.as_object_mut())
+      {
+        exts.remove(ext_id);
       }
     }
-  })
-  .to_string();
+  }
 
-  Ok(Some(McpConfig {
-    port,
-    token,
-    config_json,
-  }))
+  let output =
+    serde_json::to_string(&registry).map_err(|e| format!("Failed to serialize registry: {e}"))?;
+  let tmp = registry_path.with_extension("json.tmp");
+  std::fs::write(&tmp, &output).map_err(|e| format!("Failed to write registry: {e}"))?;
+  std::fs::rename(&tmp, &registry_path).map_err(|e| format!("Failed to save registry: {e}"))?;
+  Ok(())
+}
+
+fn find_claude_cli() -> Option<std::path::PathBuf> {
+  let mut candidates: Vec<std::path::PathBuf> = vec![
+    std::path::PathBuf::from("/usr/local/bin/claude"),
+    std::path::PathBuf::from("/opt/homebrew/bin/claude"),
+  ];
+  if let Some(home) = dirs::home_dir() {
+    candidates.insert(0, home.join(".local/bin/claude"));
+    candidates.push(home.join(".claude/local/claude"));
+  }
+  #[cfg(windows)]
+  if let Ok(appdata) = std::env::var("APPDATA") {
+    candidates.insert(
+      0,
+      std::path::PathBuf::from(appdata).join("Claude/claude.exe"),
+    );
+  }
+  for p in &candidates {
+    if p.exists() {
+      return Some(p.clone());
+    }
+  }
+  None
+}
+
+#[tauri::command]
+fn is_mcp_in_claude_code() -> Result<bool, String> {
+  let cli = find_claude_cli().ok_or("Claude Code CLI not found")?;
+  let output = std::process::Command::new(&cli)
+    .args(["mcp", "list"])
+    .output()
+    .map_err(|e| format!("Failed to run claude: {e}"))?;
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  Ok(stdout.contains("donut-browser"))
+}
+
+#[tauri::command]
+async fn add_mcp_to_claude_code(app_handle: tauri::AppHandle) -> Result<(), String> {
+  let cli = find_claude_cli().ok_or("Claude Code CLI not found")?;
+
+  let mcp_server = mcp_server::McpServer::instance();
+  let port = mcp_server.get_port().ok_or("MCP server is not running")?;
+
+  let settings_manager = settings_manager::SettingsManager::instance();
+  let token = settings_manager
+    .get_mcp_token(&app_handle)
+    .await
+    .map_err(|e| format!("Failed to get MCP token: {e}"))?
+    .ok_or("MCP token not found")?;
+
+  let url = format!("http://127.0.0.1:{port}/mcp/{token}");
+
+  let _ = std::process::Command::new(&cli)
+    .args(["mcp", "remove", "donut-browser"])
+    .output();
+
+  let output = std::process::Command::new(&cli)
+    .args(["mcp", "add", "--transport", "http", "donut-browser", &url])
+    .output()
+    .map_err(|e| format!("Failed to run claude: {e}"))?;
+
+  if !output.status.success() {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    return Err(format!("Failed to add MCP to Claude Code: {stderr}"));
+  }
+  Ok(())
+}
+
+#[tauri::command]
+fn remove_mcp_from_claude_code() -> Result<(), String> {
+  let cli = find_claude_cli().ok_or("Claude Code CLI not found")?;
+  let output = std::process::Command::new(&cli)
+    .args(["mcp", "remove", "donut-browser"])
+    .output()
+    .map_err(|e| format!("Failed to run claude: {e}"))?;
+  if !output.status.success() {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    return Err(format!("Failed to remove MCP from Claude Code: {stderr}"));
+  }
+  Ok(())
 }
 
 #[tauri::command]
@@ -965,38 +1225,13 @@ pub fn run() {
         mgr.ensure_icons_extracted();
       }
 
-      // Start the daemon for tray icon
-      if let Err(e) = daemon_spawn::ensure_daemon_running() {
-        log::warn!("Failed to start daemon: {e}");
-      }
-
-      // Register this GUI's PID in daemon state so the daemon can kill us directly
-      daemon_spawn::register_gui_pid();
-
-      // Monitor daemon health - quit GUI if daemon dies
-      tauri::async_runtime::spawn(async move {
-        // Give the daemon time to fully start
-        tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(1));
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-        loop {
-          interval.tick().await;
-
-          let is_running = tokio::task::spawn_blocking(daemon_spawn::is_daemon_running)
-            .await
-            .unwrap_or(false);
-
-          if !is_running {
-            log::warn!("Daemon is no longer running, quitting GUI immediately");
-            // Use process::exit for immediate termination. Tauri's exit()
-            // triggers a slow graceful shutdown that can take over a minute
-            // waiting for async tasks (sync, version updater, etc.) to finish.
-            std::process::exit(0);
-          }
+      // Daemon (tray icon) is currently disabled — clean up any existing autostart
+      if daemon::autostart::is_autostart_enabled() {
+        log::info!("Removing daemon autostart (daemon is disabled)");
+        if let Err(e) = daemon::autostart::disable_autostart() {
+          log::warn!("Failed to remove daemon autostart: {e}");
         }
-      });
+      }
 
       // Create the main window programmatically
       #[allow(unused_variables)]
@@ -1403,12 +1638,8 @@ pub fn run() {
                     if is_running {
                       scheduler.mark_profile_running(&profile_id).await;
                     } else {
+                      // Sync was queued at launch; mark_profile_stopped triggers it
                       scheduler.mark_profile_stopped(&profile_id).await;
-                      // Queue sync after profile stops (if sync is enabled)
-                      if profile.is_sync_enabled() {
-                        log::info!("Profile '{}' stopped, queuing sync", profile.name);
-                        scheduler.queue_profile_sync(profile_id.clone()).await;
-                      }
                     }
                   }
 
@@ -1679,6 +1910,12 @@ pub fn run() {
       stop_mcp_server,
       get_mcp_server_status,
       get_mcp_config,
+      is_mcp_in_claude_desktop,
+      add_mcp_to_claude_desktop,
+      remove_mcp_from_claude_desktop,
+      is_mcp_in_claude_code,
+      add_mcp_to_claude_code,
+      remove_mcp_from_claude_code,
       // VPN commands
       import_vpn_config,
       list_vpn_configs,

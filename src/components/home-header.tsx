@@ -177,7 +177,6 @@ type Props = {
   onExtensionManagementDialogOpen: (open: boolean) => void;
   searchQuery: string;
   onSearchQueryChange: (query: string) => void;
-  crossOsUnlocked?: boolean;
 };
 
 const HomeHeader = ({
@@ -191,7 +190,6 @@ const HomeHeader = ({
   onExtensionManagementDialogOpen,
   searchQuery,
   onSearchQueryChange,
-  crossOsUnlocked = false,
 }: Props) => {
   const { t } = useTranslation();
   const {

@@ -417,12 +417,24 @@
       "enabled": "MCP 已启用",
       "disabled": "MCP 已禁用",
       "port": "端口",
-      "token": "MCP 令牌",
+      "token": "认证令牌",
+      "tokenCopied": "令牌已复制",
+      "url": "MCP 服务器 URL",
+      "urlCopied": "URL 已复制",
+      "claudeDesktopTitle": "Claude Desktop",
+      "claudeDesktopHint": "自动配置 claude_desktop_config.json",
+      "addToClaudeDesktop": "添加到 Claude Desktop",
+      "removeFromClaudeDesktop": "从 Claude Desktop 移除",
+      "addedToClaudeDesktop": "已添加到 Claude Desktop。请重启 Claude Desktop 并在设置中启用扩展。",
+      "removedFromClaudeDesktop": "已从 Claude Desktop 配置移除。请重启 Claude Desktop。",
+      "claudeCodeTitle": "Claude Code",
+      "addToClaudeCode": "添加到 Claude Code",
+      "removeFromClaudeCode": "从 Claude Code 移除",
+      "addedToClaudeCode": "已添加到 Claude Code",
+      "removedFromClaudeCode": "已从 Claude Code 移除",
       "config": "MCP 配置",
       "copyConfig": "复制配置"
-    },
-    "mcpCopyHint": "将此内容复制并粘贴到您的 MCP 客户端配置中。",
-    "mcpConfigPath": "Claude Desktop: ~/Library/Application Support/Claude/claude_desktop_config.json (macOS) 或 %APPDATA%\\Claude\\claude_desktop_config.json (Windows)"
+    }
   },
   "import": {
     "title": "导入配置文件",

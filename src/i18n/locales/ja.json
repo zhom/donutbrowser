@@ -417,12 +417,24 @@
       "enabled": "MCP有効",
       "disabled": "MCP無効",
       "port": "ポート",
-      "token": "MCPトークン",
+      "token": "認証トークン",
+      "tokenCopied": "トークンをコピーしました",
+      "url": "MCPサーバーURL",
+      "urlCopied": "URLをコピーしました",
+      "claudeDesktopTitle": "Claude Desktop",
+      "claudeDesktopHint": "claude_desktop_config.json を自動的に設定します",
+      "addToClaudeDesktop": "Claude Desktop に追加",
+      "removeFromClaudeDesktop": "Claude Desktop から削除",
+      "addedToClaudeDesktop": "Claude Desktop に追加しました。Claude Desktop を再起動し、設定で拡張機能を有効にしてください。",
+      "removedFromClaudeDesktop": "Claude Desktop の設定から削除しました。Claude Desktop を再起動してください。",
+      "claudeCodeTitle": "Claude Code",
+      "addToClaudeCode": "Claude Code に追加",
+      "removeFromClaudeCode": "Claude Code から削除",
+      "addedToClaudeCode": "Claude Code に追加しました",
+      "removedFromClaudeCode": "Claude Code から削除しました",
       "config": "MCP設定",
       "copyConfig": "設定をコピー"
-    },
-    "mcpCopyHint": "MCPクライアントの設定にコピーして貼り付けてください。",
-    "mcpConfigPath": "Claude Desktop: ~/Library/Application Support/Claude/claude_desktop_config.json (macOS) または %APPDATA%\\Claude\\claude_desktop_config.json (Windows)"
+    }
   },
   "import": {
     "title": "プロファイルをインポート",

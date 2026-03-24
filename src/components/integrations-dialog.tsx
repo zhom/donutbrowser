@@ -31,7 +31,6 @@ interface AppSettings {
 interface McpConfig {
   port: number;
   token: string;
-  config_json: string;
 }
 
 interface IntegrationsDialogProps {
@@ -59,6 +58,8 @@ export function IntegrationsDialog({
   const [showMcpToken, setShowMcpToken] = useState(false);
   const [isApiStarting, setIsApiStarting] = useState(false);
   const [isMcpStarting, setIsMcpStarting] = useState(false);
+  const [mcpInClaudeDesktop, setMcpInClaudeDesktop] = useState(false);
+  const [mcpInClaudeCode, setMcpInClaudeCode] = useState(false);
 
   const { termsAccepted } = useWayfernTerms();
 
@@ -98,12 +99,32 @@ export function IntegrationsDialog({
     }
   }, []);
 
+  const loadClaudeDesktopStatus = useCallback(async () => {
+    try {
+      const exists = await invoke<boolean>("is_mcp_in_claude_desktop");
+      setMcpInClaudeDesktop(exists);
+    } catch {
+      // Not critical
+    }
+  }, []);
+
+  const loadClaudeCodeStatus = useCallback(async () => {
+    try {
+      const exists = await invoke<boolean>("is_mcp_in_claude_code");
+      setMcpInClaudeCode(exists);
+    } catch {
+      // Claude CLI may not be installed
+    }
+  }, []);
+
   useEffect(() => {
     if (isOpen) {
       loadSettings();
       loadApiServerStatus();
       loadMcpConfig();
       loadMcpServerStatus();
+      loadClaudeDesktopStatus();
+      loadClaudeCodeStatus();
     }
   }, [
     isOpen,
@@ -111,6 +132,8 @@ export function IntegrationsDialog({
     loadApiServerStatus,
     loadMcpConfig,
     loadMcpServerStatus,
+    loadClaudeDesktopStatus,
+    loadClaudeCodeStatus,
   ]);
 
   const handleApiToggle = async (enabled: boolean) => {
@@ -175,44 +198,8 @@ export function IntegrationsDialog({
     }
   };
 
-  const obfuscateToken = (token: string) =>
+  const _obfuscateToken = (token: string) =>
     "•".repeat(Math.min(token.length, 32));
-
-  const getFormattedMcpConfig = () => {
-    if (!mcpConfig) return "";
-    return JSON.stringify(
-      {
-        mcpServers: {
-          "donut-browser": {
-            url: `http://127.0.0.1:${mcpConfig.port}/mcp`,
-            headers: {
-              Authorization: `Bearer ${mcpConfig.token}`,
-            },
-          },
-        },
-      },
-      null,
-      2,
-    );
-  };
-
-  const getObfuscatedMcpConfig = () => {
-    if (!mcpConfig) return "";
-    return JSON.stringify(
-      {
-        mcpServers: {
-          "donut-browser": {
-            url: `http://127.0.0.1:${mcpConfig.port}/mcp`,
-            headers: {
-              Authorization: `Bearer ${obfuscateToken(mcpConfig.token)}`,
-            },
-          },
-        },
-      },
-      null,
-      2,
-    );
-  };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -331,39 +318,129 @@ export function IntegrationsDialog({
               </div>
 
               {mcpConfig && (
-                <div className="space-y-3 p-4 rounded-md border bg-muted/40">
-                  <div className="relative">
-                    <pre className="p-3 text-xs font-mono rounded-md bg-background border overflow-x-auto whitespace-pre">
-                      {showMcpToken
-                        ? getFormattedMcpConfig()
-                        : getObfuscatedMcpConfig()}
-                    </pre>
-                    <div className="absolute top-2 right-2 flex items-center space-x-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0"
-                        onClick={() => setShowMcpToken(!showMcpToken)}
-                      >
-                        {showMcpToken ? (
-                          <EyeOff className="h-3.5 w-3.5" />
-                        ) : (
-                          <Eye className="h-3.5 w-3.5" />
-                        )}
-                      </Button>
+                <div className="space-y-4 p-4 rounded-md border bg-muted/40">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">
+                      {t("integrations.mcp.url")}
+                    </Label>
+                    <div className="flex items-center space-x-2">
+                      <div className="relative flex-1">
+                        <Input
+                          type={showMcpToken ? "text" : "password"}
+                          value={`http://127.0.0.1:${mcpConfig.port}/mcp/${mcpConfig.token}`}
+                          readOnly
+                          className="font-mono text-xs pr-10"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                          onClick={() => setShowMcpToken(!showMcpToken)}
+                        >
+                          {showMcpToken ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
                       <CopyToClipboard
-                        text={getFormattedMcpConfig()}
-                        successMessage="Configuration copied"
+                        text={`http://127.0.0.1:${mcpConfig.port}/mcp/${mcpConfig.token}`}
+                        successMessage={t("integrations.mcp.urlCopied")}
                       />
                     </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {t("integrations.mcpCopyHint")}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {t("integrations.mcpConfigPath")}
-                  </p>
+
+                  <div className="space-y-2 pt-1 border-t">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      {t("integrations.mcp.claudeDesktopTitle")}
+                    </p>
+                    {mcpInClaudeDesktop ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={async () => {
+                          try {
+                            await invoke("remove_mcp_from_claude_desktop");
+                            setMcpInClaudeDesktop(false);
+                            showSuccessToast(
+                              t("integrations.mcp.removedFromClaudeDesktop"),
+                            );
+                          } catch (e) {
+                            showErrorToast(String(e));
+                          }
+                        }}
+                      >
+                        {t("integrations.mcp.removeFromClaudeDesktop")}
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={async () => {
+                          try {
+                            await invoke("add_mcp_to_claude_desktop");
+                            setMcpInClaudeDesktop(true);
+                            showSuccessToast(
+                              t("integrations.mcp.addedToClaudeDesktop"),
+                            );
+                          } catch (e) {
+                            showErrorToast(String(e));
+                          }
+                        }}
+                      >
+                        {t("integrations.mcp.addToClaudeDesktop")}
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="space-y-2 pt-1 border-t">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      {t("integrations.mcp.claudeCodeTitle")}
+                    </p>
+                    {mcpInClaudeCode ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={async () => {
+                          try {
+                            await invoke("remove_mcp_from_claude_code");
+                            setMcpInClaudeCode(false);
+                            showSuccessToast(
+                              t("integrations.mcp.removedFromClaudeCode"),
+                            );
+                          } catch (e) {
+                            showErrorToast(String(e));
+                          }
+                        }}
+                      >
+                        {t("integrations.mcp.removeFromClaudeCode")}
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={async () => {
+                          try {
+                            await invoke("add_mcp_to_claude_code");
+                            setMcpInClaudeCode(true);
+                            showSuccessToast(
+                              t("integrations.mcp.addedToClaudeCode"),
+                            );
+                          } catch (e) {
+                            showErrorToast(String(e));
+                          }
+                        }}
+                      >
+                        {t("integrations.mcp.addToClaudeCode")}
+                      </Button>
+                    )}
+                  </div>
                 </div>
               )}
             </TabsContent>

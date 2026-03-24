@@ -417,12 +417,24 @@
       "enabled": "MCP Ativado",
       "disabled": "MCP Desativado",
       "port": "Porta",
-      "token": "Token MCP",
+      "token": "Token de autenticação",
+      "tokenCopied": "Token copiado",
+      "url": "URL do servidor MCP",
+      "urlCopied": "URL copiada",
+      "claudeDesktopTitle": "Claude Desktop",
+      "claudeDesktopHint": "Configura claude_desktop_config.json automaticamente",
+      "addToClaudeDesktop": "Adicionar ao Claude Desktop",
+      "removeFromClaudeDesktop": "Remover do Claude Desktop",
+      "addedToClaudeDesktop": "Adicionado ao Claude Desktop. Reinicie o Claude Desktop e ative a extensão em Configurações.",
+      "removedFromClaudeDesktop": "Removido da configuração do Claude Desktop. Reinicie o Claude Desktop.",
+      "claudeCodeTitle": "Claude Code",
+      "addToClaudeCode": "Adicionar ao Claude Code",
+      "removeFromClaudeCode": "Remover do Claude Code",
+      "addedToClaudeCode": "Adicionado ao Claude Code",
+      "removedFromClaudeCode": "Removido do Claude Code",
       "config": "Configuração MCP",
       "copyConfig": "Copiar Configuração"
-    },
-    "mcpCopyHint": "Copie e cole isso na configuração do seu cliente MCP.",
-    "mcpConfigPath": "Claude Desktop: ~/Library/Application Support/Claude/claude_desktop_config.json (macOS) ou %APPDATA%\\Claude\\claude_desktop_config.json (Windows)"
+    }
   },
   "import": {
     "title": "Importar Perfil",

@@ -1056,7 +1056,6 @@ export default function Home() {
             onExtensionManagementDialogOpen={setExtensionManagementDialogOpen}
             searchQuery={searchQuery}
             onSearchQueryChange={setSearchQuery}
-            crossOsUnlocked={crossOsUnlocked}
           />
         </div>
         <div className="w-full mt-2.5">

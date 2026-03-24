@@ -41,7 +41,7 @@ pub struct McpRequest {
   params: Option<serde_json::Value>,
 }
 
-const PROTOCOL_VERSION: &str = "2025-03-26";
+const PROTOCOL_VERSION: &str = "2025-11-25";
 const SERVER_NAME: &str = "donut-browser";
 const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -202,7 +202,6 @@ impl McpServer {
       return Ok(preferred);
     }
 
-    // Try random ports in 51000-51999 range
     for _ in 0..10 {
       let port = 51000 + (rand::random::<u16>() % 1000);
       let addr = SocketAddr::from(([127, 0, 0, 1], port));
@@ -221,6 +220,12 @@ impl McpServer {
   ) {
     let app = Router::new()
       .route(
+        "/mcp/{token}",
+        post(Self::handle_mcp_post)
+          .get(Self::handle_mcp_get)
+          .delete(Self::handle_mcp_delete),
+      )
+      .route(
         "/mcp",
         post(Self::handle_mcp_post)
           .get(Self::handle_mcp_get)
@@ -234,26 +239,26 @@ impl McpServer {
       .with_state(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    let listener = match TcpListener::bind(addr).await {
-      Ok(l) => l,
-      Err(e) => {
-        log::error!("[mcp] Failed to bind to port {}: {}", port, e);
-        return;
+
+    let server = async {
+      match TcpListener::bind(addr).await {
+        Ok(listener) => {
+          log::info!("[mcp] Server listening on http://127.0.0.1:{}/mcp", port);
+          if let Err(e) = axum::serve(listener, app).await {
+            log::error!("[mcp] Server error: {}", e);
+          }
+        }
+        Err(e) => {
+          log::error!("[mcp] Failed to bind on port {}: {}", port, e);
+        }
       }
     };
 
-    log::info!(
-      "[mcp] HTTP server listening on http://127.0.0.1:{}/mcp",
-      port
-    );
-
-    let server = axum::serve(listener, app).with_graceful_shutdown(async {
-      let _ = shutdown_rx.await;
-      log::info!("[mcp] HTTP server shutting down");
-    });
-
-    if let Err(e) = server.await {
-      log::error!("[mcp] HTTP server error: {}", e);
+    tokio::select! {
+      _ = server => {},
+      _ = shutdown_rx => {
+        log::info!("[mcp] Server shutting down");
+      },
     }
   }
 
@@ -262,19 +267,28 @@ impl McpServer {
     req: Request<Body>,
     next: Next,
   ) -> Result<Response, StatusCode> {
-    // Health endpoint is public
-    if req.uri().path() == "/health" {
+    let path = req.uri().path();
+
+    if path == "/health" {
       return Ok(next.run(req).await);
     }
 
-    let auth_header = req
+    // Check token from URL path: /mcp/{token}
+    let path_token = path
+      .strip_prefix("/mcp/")
+      .filter(|t| !t.is_empty() && !t.contains('/'));
+
+    // Check token from Authorization header
+    let header_token = req
       .headers()
       .get(header::AUTHORIZATION)
-      .and_then(|h| h.to_str().ok());
+      .and_then(|h| h.to_str().ok())
+      .and_then(|h| h.strip_prefix("Bearer "));
 
-    let token = auth_header.and_then(|h| h.strip_prefix("Bearer "));
+    let valid =
+      path_token == Some(state.token.as_str()) || header_token == Some(state.token.as_str());
 
-    if token != Some(&state.token) {
+    if !valid {
       return Err(StatusCode::UNAUTHORIZED);
     }
 

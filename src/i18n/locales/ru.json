@@ -417,12 +417,24 @@
       "enabled": "MCP включён",
       "disabled": "MCP выключен",
       "port": "Порт",
-      "token": "MCP токен",
+      "token": "Токен аутентификации",
+      "tokenCopied": "Токен скопирован",
+      "url": "URL MCP сервера",
+      "urlCopied": "URL скопирован",
+      "claudeDesktopTitle": "Claude Desktop",
+      "claudeDesktopHint": "Автоматически настраивает claude_desktop_config.json",
+      "addToClaudeDesktop": "Добавить в Claude Desktop",
+      "removeFromClaudeDesktop": "Удалить из Claude Desktop",
+      "addedToClaudeDesktop": "Добавлено в Claude Desktop. Перезапустите Claude Desktop и включите расширение в Настройках.",
+      "removedFromClaudeDesktop": "Удалено из конфигурации Claude Desktop. Перезапустите Claude Desktop.",
+      "claudeCodeTitle": "Claude Code",
+      "addToClaudeCode": "Добавить в Claude Code",
+      "removeFromClaudeCode": "Удалить из Claude Code",
+      "addedToClaudeCode": "Добавлено в Claude Code",
+      "removedFromClaudeCode": "Удалено из Claude Code",
       "config": "Конфигурация MCP",
       "copyConfig": "Копировать конфигурацию"
-    },
-    "mcpCopyHint": "Скопируйте и вставьте это в конфигурацию вашего MCP-клиента.",
-    "mcpConfigPath": "Claude Desktop: ~/Library/Application Support/Claude/claude_desktop_config.json (macOS) или %APPDATA%\\Claude\\claude_desktop_config.json (Windows)"
+    }
   },
   "import": {
     "title": "Импорт профиля",
