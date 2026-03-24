@@ -345,6 +345,14 @@ jobs:
             --notes-file /tmp/nightly-notes.md \
             --prerelease
 
+  deploy-website:
+    if: github.repository == 'zhom/donutbrowser'
+    needs: [update-nightly-release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Cloudflare Pages deployment
+        run: curl -fsSL -X POST "${{ secrets.CLOUDFLARE_WEB_DEPLOYMENT_HOOK }}"
+
   notify-discord:
     if: github.repository == 'zhom/donutbrowser'
     needs: [update-nightly-release]

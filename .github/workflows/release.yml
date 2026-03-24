@@ -423,6 +423,14 @@ jobs:
             }" \
             "$DISCORD_WEBHOOK_URL"
 
+  deploy-website:
+    if: github.repository == 'zhom/donutbrowser'
+    needs: [release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Cloudflare Pages deployment
+        run: curl -fsSL -X POST "${{ secrets.CLOUDFLARE_WEB_DEPLOYMENT_HOOK }}"
+
   docker:
     if: github.repository == 'zhom/donutbrowser'
     needs: [release]
