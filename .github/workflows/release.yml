@@ -237,6 +237,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 #v6.0.1
         with:
@@ -368,16 +369,28 @@ jobs:
             /<!-- install-links-end -->/!d
           }' README.md
 
-      - name: Commit release docs
+      - name: Create release docs PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
         run: |
+          VERSION="${TAG#v}"
+          BRANCH="docs/release-${VERSION}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
           git add CHANGELOG.md README.md
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "docs: update CHANGELOG.md and README.md for ${{ github.ref_name }} [skip ci]"
-            git push origin main
+            git commit -m "docs: update CHANGELOG.md and README.md for ${TAG} [skip ci]"
+            git push origin "$BRANCH"
+            gh pr create \
+              --title "docs: release notes for ${TAG}" \
+              --body "Automated update of CHANGELOG.md and README.md download links for ${TAG}." \
+              --base main \
+              --head "$BRANCH"
+            gh pr merge "$BRANCH" --auto --squash
           fi
 
       - name: Update release notes
@@ -410,6 +423,14 @@ jobs:
             }" \
             "$DISCORD_WEBHOOK_URL"
 
+  docker:
+    if: github.repository == 'zhom/donutbrowser'
+    needs: [release]
+    uses: ./.github/workflows/docker-sync.yml
+    with:
+      tag: ${{ github.ref_name }}
+    secrets: inherit
+
   update-flake:
     if: github.repository == 'zhom/donutbrowser'
     needs: [release]
@@ -435,19 +456,13 @@ jobs:
 
           echo "Downloading x86_64 AppImage..."
           curl -fsSL -o /tmp/amd64.AppImage "$AMD64_URL" || { echo "x86_64 AppImage not found"; exit 1; }
-          AMD64_HASH=$(nix-hash --type sha256 --base32 --flat /tmp/amd64.AppImage 2>/dev/null || sha256sum /tmp/amd64.AppImage | awk '{print $1}')
 
           echo "Downloading aarch64 AppImage..."
           curl -fsSL -o /tmp/aarch64.AppImage "$AARCH64_URL" || { echo "aarch64 AppImage not found"; exit 1; }
-          AARCH64_HASH=$(nix-hash --type sha256 --base32 --flat /tmp/aarch64.AppImage 2>/dev/null || sha256sum /tmp/aarch64.AppImage | awk '{print $1}')
 
-          # Convert to SRI format (sha256-<base64>) if we got hex
-          if echo "$AMD64_HASH" | grep -qE '^[0-9a-f]{64}$'; then
-            AMD64_HASH="sha256-$(echo "$AMD64_HASH" | xxd -r -p | base64 | tr -d '\n')"
-          fi
-          if echo "$AARCH64_HASH" | grep -qE '^[0-9a-f]{64}$'; then
-            AARCH64_HASH="sha256-$(echo "$AARCH64_HASH" | xxd -r -p | base64 | tr -d '\n')"
-          fi
+          # Compute SRI hashes (sha256-<base64>)
+          AMD64_HASH="sha256-$(sha256sum /tmp/amd64.AppImage | awk '{print $1}' | xxd -r -p | base64 | tr -d '\n')"
+          AARCH64_HASH="sha256-$(sha256sum /tmp/aarch64.AppImage | awk '{print $1}' | xxd -r -p | base64 | tr -d '\n')"
 
           echo "AMD64_HASH=${AMD64_HASH}" >> "$GITHUB_ENV"
           echo "AARCH64_HASH=${AARCH64_HASH}" >> "$GITHUB_ENV"

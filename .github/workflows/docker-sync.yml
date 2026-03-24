@@ -1,12 +1,16 @@
 name: Build and Push donut-sync Docker Image
 
 on:
-  release:
-    types: [published]
   push:
     branches: [main]
     paths:
       - "donut-sync/**"
+  workflow_call:
+    inputs:
+      tag:
+        description: "Docker tag (e.g., v1.0.0)"
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       tag:
@@ -41,19 +45,17 @@ jobs:
         id: tags
         run: |
           TAGS=""
+          INPUT_TAG="${{ inputs.tag }}"
 
-          if [ "${{ github.event_name }}" = "release" ]; then
-            # Stable release: tag with version and latest
-            VERSION="${{ github.event.release.tag_name }}"
-            TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}"
+          if [ -n "$INPUT_TAG" ]; then
+            # Called from release workflow or manual dispatch
+            TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${INPUT_TAG}"
             TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
           elif [ "${{ github.event_name }}" = "push" ]; then
             # Push to main (nightly): tag with nightly and commit SHA
             SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
             TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:nightly"
             TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:nightly-${SHORT_SHA}"
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.tag }}"
           fi
 
           echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
