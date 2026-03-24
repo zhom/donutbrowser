@@ -1,4 +1,5 @@
 // Daemon Spawn - Start the daemon from the GUI
+// Currently disabled; will be re-enabled in the future
 
 use serde::Deserialize;
 use std::fs;

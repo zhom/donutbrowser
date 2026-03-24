@@ -178,10 +178,8 @@ impl SettingsManager {
   }
 
   pub fn should_show_launch_on_login_prompt(&self) -> Result<bool, Box<dyn std::error::Error>> {
-    let settings = self.load_settings()?;
-    // Show if: user has NOT declined AND autostart is NOT enabled
-    let autostart_enabled = crate::daemon::autostart::is_autostart_enabled();
-    Ok(!settings.launch_on_login_declined && !autostart_enabled)
+    // Daemon is currently disabled, never show this prompt
+    Ok(false)
   }
 
   pub fn decline_launch_on_login(&self) -> Result<(), Box<dyn std::error::Error>> {
