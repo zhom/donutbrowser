@@ -7,8 +7,8 @@ use std::io::{BufReader, Read};
 use std::path::Path;
 use std::time::SystemTime;
 
-use crate::profile::types::BrowserProfile;
 use super::types::{SyncError, SyncResult};
+use crate::profile::types::BrowserProfile;
 
 /// Default exclude patterns for volatile browser profile files.
 /// Patterns use `**/` prefix to match at any directory depth, since the sync
@@ -638,7 +638,12 @@ mod tests {
     fs::write(profile_dir.join("profile/Crashpad/report"), "exclude").unwrap();
 
     // metadata.json at root
-    fs::write(profile_dir.join("metadata.json"), "keep").unwrap();
+    let profile = BrowserProfile::default();
+    fs::write(
+      profile_dir.join("metadata.json"),
+      serde_json::to_string(&profile).unwrap(),
+    )
+    .unwrap();
 
     let mut cache = HashCache::default();
     let manifest = generate_manifest("test-profile", &profile_dir, &mut cache).unwrap();
@@ -867,8 +872,7 @@ mod tests {
     fs::write(&metadata_path, serde_json::to_string(&profile).unwrap()).unwrap();
 
     let mut cache = HashCache::default();
-    let manifest1 =
-      generate_manifest(&profile_id.to_string(), &profile_dir, &mut cache).unwrap();
+    let manifest1 = generate_manifest(&profile_id.to_string(), &profile_dir, &mut cache).unwrap();
     let hash1 = manifest1
       .files
       .iter()
@@ -888,8 +892,7 @@ mod tests {
 
     fs::write(&metadata_path, serde_json::to_string(&profile2).unwrap()).unwrap();
 
-    let manifest2 =
-      generate_manifest(&profile_id.to_string(), &profile_dir, &mut cache).unwrap();
+    let manifest2 = generate_manifest(&profile_id.to_string(), &profile_dir, &mut cache).unwrap();
     let hash2 = manifest2
       .files
       .iter()
@@ -899,7 +902,10 @@ mod tests {
       .clone();
 
     // Hash should be identical because volatile fields are sanitized
-    assert_eq!(hash1, hash2, "Metadata hash should be stable across last_sync/process_id updates");
+    assert_eq!(
+      hash1, hash2,
+      "Metadata hash should be stable across last_sync/process_id updates"
+    );
 
     // Change a non-volatile field
     let profile3 = BrowserProfile {
@@ -911,8 +917,7 @@ mod tests {
 
     fs::write(&metadata_path, serde_json::to_string(&profile3).unwrap()).unwrap();
 
-    let manifest3 =
-      generate_manifest(&profile_id.to_string(), &profile_dir, &mut cache).unwrap();
+    let manifest3 = generate_manifest(&profile_id.to_string(), &profile_dir, &mut cache).unwrap();
     let hash3 = manifest3
       .files
       .iter()
@@ -922,6 +927,9 @@ mod tests {
       .clone();
 
     // Hash should be different because name changed
-    assert_ne!(hash1, hash3, "Metadata hash should change when non-volatile fields change");
+    assert_ne!(
+      hash1, hash3,
+      "Metadata hash should change when non-volatile fields change"
+    );
   }
 }

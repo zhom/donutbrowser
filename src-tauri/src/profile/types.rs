@@ -21,7 +21,7 @@ pub enum SyncMode {
   Encrypted,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct BrowserProfile {
   pub id: uuid::Uuid,
   pub name: String,
