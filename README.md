@@ -50,21 +50,39 @@
 
 ## Install
 
+<!-- install-links-start -->
+
 ### macOS
+
+| | Apple Silicon | Intel |
+|---|---|---|
+| **DMG** | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.17.6/Donut_0.17.6_aarch64.dmg) | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.17.6/Donut_0.17.6_x64.dmg) |
+
+Or install via Homebrew:
 
 ```bash
 brew install --cask donut
 ```
 
+### Windows
+
+[Download Windows Installer (x64)](https://github.com/zhom/donutbrowser/releases/download/v0.17.6/Donut_0.17.6_x64-setup.exe)
+
 ### Linux
+
+| Format | x86_64 | ARM64 |
+|---|---|---|
+| **deb** | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.17.6/Donut_0.17.6_amd64.deb) | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.17.6/Donut_0.17.6_arm64.deb) |
+| **rpm** | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.17.6/Donut-0.17.6-1.x86_64.rpm) | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.17.6/Donut-0.17.6-1.aarch64.rpm) |
+| **AppImage** | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.17.6/Donut_0.17.6_amd64.AppImage) | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.17.6/Donut_0.17.6_aarch64.AppImage) |
+
+<!-- install-links-end -->
+
+Or install via package manager:
 
 ```bash
 curl -fsSL https://donutbrowser.com/install.sh | sh
 ```
-
-This sets up the package repository and installs Donut Browser via your system package manager. Supports Debian/Ubuntu, Fedora/RHEL, and openSUSE.
-
-Standalone `.AppImage` files are also available on the [releases page](https://github.com/zhom/donutbrowser/releases/latest).
 
 <details>
 <summary>Troubleshooting AppImage</summary>
@@ -79,13 +97,7 @@ If that gives an EGL display error, try adding `WEBKIT_DISABLE_DMABUF_RENDERER=1
 
 </details>
 
-### Windows
-
-Download the installer from the [releases page](https://github.com/zhom/donutbrowser/releases/latest).
-
 ### Nix
-
-A [Nix flake](flake.nix) is included for development and running release builds on Linux:
 
 ```bash
 nix run github:zhom/donutbrowser#release-start
