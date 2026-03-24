@@ -21,6 +21,9 @@ jobs:
     if: github.repository == 'zhom/donutbrowser' && github.event_name == 'issues'
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 #v6.0.1
+
       - name: Check if first-time contributor
         id: check-first-time
         env:
@@ -37,6 +40,67 @@ jobs:
             echo "is_first_time=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Build repo context and find related files
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          # Read project guidelines (contains repo structure)
+          cp CLAUDE.md /tmp/repo-context.txt
+
+          printf '%s' "$ISSUE_TITLE" > /tmp/issue-title.txt
+          printf '%s' "${ISSUE_BODY:-}" > /tmp/issue-body.txt
+
+          # List all source files for the AI to pick from
+          find . -type f \( -name "*.rs" -o -name "*.ts" -o -name "*.tsx" \) \
+            ! -path "*/node_modules/*" ! -path "*/target/*" ! -path "*/.next/*" ! -path "*/dist/*" \
+            ! -path "*/.git/*" ! -path "*/gen/*" ! -path "*/data/*" \
+            | sed 's|^\./||' | sort > /tmp/all-source-files.txt
+
+      - name: Select relevant files with AI
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          PAYLOAD=$(jq -n \
+            --rawfile title /tmp/issue-title.txt \
+            --rawfile body /tmp/issue-body.txt \
+            --rawfile files /tmp/all-source-files.txt \
+            '{
+              model: "anthropic/claude-opus-4.6",
+              messages: [
+                {
+                  role: "system",
+                  content: "You are a file selector for Donut Browser (Tauri + Next.js + Rust anti-detect browser). Given an issue and a list of source files, output ONLY the 10 most likely relevant file paths, one per line. No explanations, no numbering, just paths."
+                },
+                {
+                  role: "user",
+                  content: ("Issue: " + $title + "\n\n" + $body + "\n\nFiles:\n" + $files)
+                }
+              ]
+            }')
+
+          RESPONSE=$(curl -fsSL https://openrouter.ai/api/v1/chat/completions \
+            -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+
+          jq -r '.choices[0].message.content // empty' <<< "$RESPONSE" > /tmp/selected-files.txt
+
+          # Read the selected files in full (skip binary files)
+          echo "" > /tmp/file-contents.txt
+          while IFS= read -r filepath; do
+            filepath=$(echo "$filepath" | xargs)
+            [ -z "$filepath" ] && continue
+            if [ -f "$filepath" ] && file --mime "$filepath" | grep -q "text/"; then
+              echo "=== $filepath ===" >> /tmp/file-contents.txt
+              cat "$filepath" >> /tmp/file-contents.txt
+              echo "" >> /tmp/file-contents.txt
+            fi
+          done < /tmp/selected-files.txt
+
+          # Cap total context at 100KB
+          head -c 100000 /tmp/file-contents.txt > /tmp/file-context.txt
+
       - name: Analyze issue with AI
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
@@ -50,25 +114,24 @@ jobs:
             GREETING='This is a first-time contributor. Start your comment with: "Thanks for opening your first issue!"'
           fi
 
-          # Write all user content to files to avoid shell escaping issues
           printf '%s' "$ISSUE_TITLE" > /tmp/issue-title.txt
           printf '%s' "${ISSUE_BODY:-}" > /tmp/issue-body.txt
           printf '%s' "$ISSUE_AUTHOR" > /tmp/issue-author.txt
           printf '%s' "$GREETING" > /tmp/greeting.txt
 
-          # Build the JSON payload entirely in jq — never interpolate user content in shell
           PAYLOAD=$(jq -n \
             --rawfile title /tmp/issue-title.txt \
             --rawfile body /tmp/issue-body.txt \
             --rawfile author /tmp/issue-author.txt \
             --rawfile greeting /tmp/greeting.txt \
+            --rawfile repo_context /tmp/repo-context.txt \
+            --rawfile context /tmp/file-context.txt \
             '{
-              model: "z-ai/glm-5",
-              max_tokens: 1024,
+              model: "anthropic/claude-opus-4.6",
               messages: [
                 {
                   role: "system",
-                  content: "You are a triage bot for Donut Browser (open-source anti-detect browser, Tauri + Next.js + Rust).\n\nAnalyze the issue and produce a single concise comment. Format:\n\n1. One sentence acknowledging what the user wants.\n2. A short **Action items** list - what specific info is missing or what the user should do next. Only include items that are actually missing. If the issue is complete, say so and skip this section.\n3. Suggest a label at the very end of your response on its own line in the exact format: Label: bug OR Label: enhancement\n\nRules:\n- Be brief. No filler, no generic tips, no templates.\n- If it is a bug report, check for: reproduction steps, OS/version, error messages. Only ask for what is actually missing.\n- If it is a feature request, check for: clear description of desired behavior, use case. Only ask for what is actually missing.\n- If the issue already has everything needed, just acknowledge it.\n- Never exceed 6 items total."
+                  content: ("You are a triage bot for Donut Browser, an open-source anti-detect browser (Tauri desktop app: Rust backend + Next.js frontend).\n\nProject guidelines and structure:\n" + $repo_context + "\n\nYou have access to relevant source files for context. Use them to give specific, actionable advice.\n\nAnalyze the issue and produce a single comment. Format:\n\n1. One sentence acknowledging the issue.\n2. **Possible cause** - Based on the source code, briefly explain what might be going wrong and which files are involved. Be specific (mention file names, function names, line ranges if possible).\n3. **Action items** - What specific info is missing or what the user should try. Only include items that are actually missing.\n   - For bug reports: if logs are needed, tell the user EXACTLY how to get them:\n     - macOS app logs: `~/Library/Logs/Donut Browser/`\n     - Linux app logs: `~/.local/share/DonutBrowser/logs/`\n     - Windows app logs: `%APPDATA%\\DonutBrowser\\logs\\`\n     - Sync server logs: `docker logs <container>` or check the server console\n     - Provide a ready-to-run shell command when possible.\n   - For self-hosted sync issues: check if the user is using the latest Docker image (`docker pull donutbrowser/donut-sync:latest`).\n4. Suggest a label: `Label: bug` or `Label: enhancement` on its own line.\n\nRules:\n- Be brief but specific. Reference actual code when possible.\n- If the issue already has everything needed, just acknowledge it and point to the likely cause.\n- Never exceed 15 lines.")
                 },
                 {
                   role: "user",
@@ -76,7 +139,8 @@ jobs:
                     (if ($greeting | length) > 0 then $greeting + "\n\n" else "" end) +
                     "Analyze this issue:\n\nTitle: " + $title +
                     "\nAuthor: " + $author +
-                    "\n\nBody:\n" + $body
+                    "\n\nBody:\n" + $body +
+                    "\n\nRelevant source files:\n" + $context
                   )
                 }
               ]
@@ -87,7 +151,6 @@ jobs:
             -H "Content-Type: application/json" \
             -d "$PAYLOAD")
 
-          # Extract the comment using jq — never parse AI output in shell
           jq -r '.choices[0].message.content // empty' <<< "$RESPONSE" > /tmp/ai-comment.txt
 
           if [ ! -s /tmp/ai-comment.txt ]; then
@@ -102,7 +165,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          # Extract and strip the label line before posting
           LABEL=$(grep -oP '^Label:\s*\K.*' /tmp/ai-comment.txt | tail -1 | tr '[:upper:]' '[:lower:]' | xargs)
           sed -i '/^Label:/d' /tmp/ai-comment.txt
 
@@ -118,6 +180,9 @@ jobs:
     if: github.repository == 'zhom/donutbrowser' && github.event_name == 'pull_request_target' && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 #v6.0.1
+
       - name: Check if first-time contributor
         id: check-first-time
         env:
@@ -133,6 +198,40 @@ jobs:
           else
             echo "is_first_time=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Gather PR context
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # Get changed files list
+          gh api "/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" \
+            --jq '.[] | "- \(.filename) (\(.status)) +\(.additions)/-\(.deletions)"' \
+            > /tmp/pr-files.txt
+
+          # Get the actual diff
+          gh api "/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" \
+            --header "Accept: application/vnd.github.diff" \
+            > /tmp/pr-diff-full.txt 2>/dev/null || true
+          head -c 20000 /tmp/pr-diff-full.txt > /tmp/pr-diff.txt
+
+          # Get CONTRIBUTING.md and README.md for context
+          cat CONTRIBUTING.md > /tmp/contributing.txt 2>/dev/null || echo "Not found" > /tmp/contributing.txt
+          head -50 README.md > /tmp/readme.txt 2>/dev/null || echo "Not found" > /tmp/readme.txt
+
+          # Read project guidelines (contains repo structure)
+          cp CLAUDE.md /tmp/repo-context.txt
+
+          # Read full contents of all changed files (skip binary)
+          echo "" > /tmp/related-file-contents.txt
+          gh api "/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --jq '.[].filename' | while IFS= read -r filepath; do
+            if [ -f "$filepath" ] && file --mime "$filepath" | grep -q "text/"; then
+              echo "=== $filepath (full file) ===" >> /tmp/related-file-contents.txt
+              cat "$filepath" >> /tmp/related-file-contents.txt
+              echo "" >> /tmp/related-file-contents.txt
+            fi
+          done
+          head -c 100000 /tmp/related-file-contents.txt > /tmp/pr-file-context.txt
 
       - name: Analyze PR with AI
         env:
@@ -151,7 +250,6 @@ jobs:
             GREETING='This is a first-time contributor. Start your comment with: "Thanks for your first PR!"'
           fi
 
-          # Write all user content to files to avoid shell escaping issues
           printf '%s' "$PR_TITLE" > /tmp/pr-title.txt
           printf '%s' "${PR_BODY:-}" > /tmp/pr-body.txt
           printf '%s' "$PR_AUTHOR" > /tmp/pr-author.txt
@@ -159,11 +257,6 @@ jobs:
           printf '%s' "$PR_HEAD" > /tmp/pr-head.txt
           printf '%s' "$GREETING" > /tmp/greeting.txt
 
-          gh api "/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" \
-            --jq '.[] | "- \(.filename) (\(.status)) +\(.additions)/-\(.deletions)"' \
-            > /tmp/pr-files.txt
-
-          # Build the JSON payload entirely in jq — never interpolate user content in shell
           PAYLOAD=$(jq -n \
             --rawfile title /tmp/pr-title.txt \
             --rawfile body /tmp/pr-body.txt \
@@ -171,14 +264,17 @@ jobs:
             --rawfile base /tmp/pr-base.txt \
             --rawfile head /tmp/pr-head.txt \
             --rawfile files /tmp/pr-files.txt \
+            --rawfile diff /tmp/pr-diff.txt \
             --rawfile greeting /tmp/greeting.txt \
+            --rawfile repo_context /tmp/repo-context.txt \
+            --rawfile contributing /tmp/contributing.txt \
+            --rawfile file_context /tmp/pr-file-context.txt \
             '{
-              model: "z-ai/glm-5",
-              max_tokens: 1024,
+              model: "anthropic/claude-opus-4.6",
               messages: [
                 {
                   role: "system",
-                  content: "You are a review bot for Donut Browser (open-source anti-detect browser, Tauri + Next.js + Rust).\n\nReview this PR and produce a single concise comment. Format:\n\n1. One sentence summarizing what this PR does.\n2. **Action items** - only list things that actually need to be fixed or addressed. If the PR looks good, say so and skip this section.\n\nRules:\n- Be brief. No filler, no praise padding.\n- Focus on: bugs, security issues, missing edge cases, breaking changes.\n- If the PR touches UI text or adds new strings, remind to update translation files in src/i18n/locales/.\n- If the PR modifies Tauri commands, remind to check the unused-commands test.\n- Do not nitpick style or formatting - the project has automated linting.\n- Never exceed 8 lines total."
+                  content: ("You are a code review bot for Donut Browser, an open-source anti-detect browser (Tauri desktop app: Rust backend + Next.js frontend).\n\nProject guidelines and structure:\n" + $repo_context + "\n\nContributing guidelines:\n" + $contributing + "\n\nYou have access to the full changed files and the diff. Use them to give a substantive review.\n\nReview this PR and produce a single comment. Format:\n\n1. One sentence summarizing what this PR does and whether the approach is sound.\n2. **Code review** - Specific observations about the actual code changes. Mention file names and what you see in the diff. Look for:\n   - Bugs or logic errors in the changed code\n   - Security issues (SQL injection, path traversal, XSS, command injection)\n   - Missing error handling or edge cases\n   - Breaking changes to existing APIs or behavior\n   - If UI text was added/changed, check if all 7 translation files (en, es, fr, ja, pt, ru, zh) in src/i18n/locales/ were updated\n   - If Tauri commands were added/removed, the unused-commands test in lib.rs needs updating\n3. **Suggestions** - Concrete improvements if any. Skip if the PR looks good.\n\nRules:\n- Be substantive. Review the actual diff, not just the description.\n- Do NOT nitpick formatting or style — the project has automated linting (biome + clippy + rustfmt).\n- Do NOT just summarize the PR description back to the user — they wrote it, they know what it says.\n- If the PR is good, say so briefly.\n- Never exceed 20 lines.")
                 },
                 {
                   role: "user",
@@ -188,7 +284,9 @@ jobs:
                     "\nAuthor: " + $author +
                     "\nBase: " + $base + " <- Head: " + $head +
                     "\n\nDescription:\n" + $body +
-                    "\n\nChanged files:\n" + $files
+                    "\n\nChanged files:\n" + $files +
+                    "\n\nDiff:\n" + $diff +
+                    "\n\nFull file contents:\n" + $file_context
                   )
                 }
               ]
@@ -199,7 +297,6 @@ jobs:
             -H "Content-Type: application/json" \
             -d "$PAYLOAD")
 
-          # Extract the comment using jq — never parse AI output in shell
           jq -r '.choices[0].message.content // empty' <<< "$RESPONSE" > /tmp/ai-comment.txt
 
           if [ ! -s /tmp/ai-comment.txt ]; then
