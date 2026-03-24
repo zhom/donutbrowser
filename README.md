@@ -45,8 +45,7 @@
 - **Default browser** — set Donut as your default browser and choose which profile opens each link
 - **Cloud sync** — sync profiles, proxies, and groups across devices (self-hostable)
 - **E2E encryption** — optional end-to-end encrypted sync with a password only you know
-- **Zero telemetry** — no tracking, no fingerprinting of your device, fully auditable open source code
-- **Cross-platform** — macOS, Linux, and Windows
+- **Zero telemetry** — no tracking or device fingerprinting
 
 ## Install
 
