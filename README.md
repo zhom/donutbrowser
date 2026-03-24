@@ -1,7 +1,9 @@
 <div align="center">
   <img src="assets/logo.png" alt="Donut Browser Logo" width="150">
   <h1>Donut Browser</h1>
-  <strong>A powerful anti-detect browser that puts you in control of your browsing experience. 🍩</strong>
+  <strong>Open Source Anti-Detect Browser</strong>
+  <br>
+  <a href="https://donutbrowser.com">donutbrowser.com</a>
 </div>
 <br>
 
@@ -32,12 +34,19 @@
 
 ## Features
 
-- Create unlimited number of local browser profiles completely isolated from each other
-- Safely use multiple accounts on one device by using anti-detect browser profiles, powered by [Camoufox](https://camoufox.com)
-- Proxy support with basic auth for all browsers
-- Import profiles from your existing browsers
-- Automatic updates for browsers
-- Set Donut Browser as your default browser to control in which profile to open links
+- **Unlimited browser profiles** — each fully isolated with its own fingerprint, cookies, extensions, and data
+- **Chromium & Firefox engines** — Chromium powered by [Wayfern](https://wayfern.com), Firefox powered by [Camoufox](https://camoufox.com), both with advanced fingerprint spoofing
+- **Proxy support** — HTTP, HTTPS, SOCKS4, SOCKS5 per profile, with dynamic proxy URLs
+- **VPN support** — WireGuard and OpenVPN configs per profile
+- **Local API & MCP** — REST API and [Model Context Protocol](https://modelcontextprotocol.io) server for integration with Claude, automation tools, and custom workflows
+- **Profile groups** — organize profiles and apply bulk settings
+- **Import profiles** — migrate from Chrome, Firefox, Edge, Brave, or other Chromium browsers
+- **Cookie & extension management** — import/export cookies, manage extensions per profile
+- **Default browser** — set Donut as your default browser and choose which profile opens each link
+- **Cloud sync** — sync profiles, proxies, and groups across devices (self-hostable)
+- **E2E encryption** — optional end-to-end encrypted sync with a password only you know
+- **Zero telemetry** — no tracking, no fingerprinting of your device, fully auditable open source code
+- **Cross-platform** — macOS, Linux, and Windows
 
 ## Install
 
@@ -74,23 +83,23 @@ If that gives an EGL display error, try adding `WEBKIT_DISABLE_DMABUF_RENDERER=1
 
 Download the installer from the [releases page](https://github.com/zhom/donutbrowser/releases/latest).
 
-## Development
+### Nix
 
-### Contributing
+A [Nix flake](flake.nix) is included for development and running release builds on Linux:
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Issues
-
-If you face any problems while using the application, please [open an issue](https://github.com/zhom/donutbrowser/issues).
+```bash
+nix run github:zhom/donutbrowser#release-start
+```
 
 ## Self-Hosting Sync
 
 Donut Browser supports syncing profiles, proxies, and groups across devices via a self-hosted sync server. See the [Self-Hosting Guide](docs/self-hosting-donut-sync.md) for Docker-based setup instructions.
 
-## Community
+## Development
 
-Have questions or want to contribute? I'd love to hear from you!
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Community
 
 - **Issues**: [GitHub Issues](https://github.com/zhom/donutbrowser/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/zhom/donutbrowser/discussions)
@@ -146,7 +155,7 @@ Have questions or want to contribute? I'd love to hear from you!
 
 ## Contact
 
-Have an urgent question or want to report a security vulnerability? Send an email to [contact@donutbrowser.com](mailto:contact@donutbrowser.com) and I'll get back to you as fast as possible.
+Have an urgent question or want to report a security vulnerability? Send an email to [contact@donutbrowser.com](mailto:contact@donutbrowser.com).
 
 ## License
 
