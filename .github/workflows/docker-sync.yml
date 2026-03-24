@@ -1,0 +1,71 @@
+name: Build and Push donut-sync Docker Image
+
+on:
+  release:
+    types: [published]
+  push:
+    branches: [main]
+    paths:
+      - "donut-sync/**"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Docker tag (e.g., v1.0.0, latest)"
+        required: true
+        default: "latest"
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: donutbrowser/donut-sync
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 #v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f #v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 #v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Determine tags
+        id: tags
+        run: |
+          TAGS=""
+
+          if [ "${{ github.event_name }}" = "release" ]; then
+            # Stable release: tag with version and latest
+            VERSION="${{ github.event.release.tag_name }}"
+            TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}"
+            TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            # Push to main (nightly): tag with nightly and commit SHA
+            SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+            TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:nightly"
+            TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:nightly-${SHORT_SHA}"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.tag }}"
+          fi
+
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+          echo "Tags: ${TAGS}"
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 #v6
+        with:
+          context: .
+          file: ./donut-sync/Dockerfile
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
