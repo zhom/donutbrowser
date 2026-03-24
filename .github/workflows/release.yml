@@ -322,15 +322,61 @@ jobs:
             } > CHANGELOG.md
           fi
 
-      - name: Commit CHANGELOG.md
+      - name: Update README download links
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="${TAG#v}"
+          BASE="https://github.com/zhom/donutbrowser/releases/download/${TAG}"
+
+          # Generate the new install section between markers
+          cat > /tmp/install-links.md << LINKS
+          ### macOS
+
+          | | Apple Silicon | Intel |
+          |---|---|---|
+          | **DMG** | [Download](${BASE}/Donut_${VERSION}_aarch64.dmg) | [Download](${BASE}/Donut_${VERSION}_x64.dmg) |
+
+          Or install via Homebrew:
+
+          \`\`\`bash
+          brew install --cask donut
+          \`\`\`
+
+          ### Windows
+
+          [Download Windows Installer (x64)](${BASE}/Donut_${VERSION}_x64-setup.exe)
+
+          ### Linux
+
+          | Format | x86_64 | ARM64 |
+          |---|---|---|
+          | **deb** | [Download](${BASE}/Donut_${VERSION}_amd64.deb) | [Download](${BASE}/Donut_${VERSION}_arm64.deb) |
+          | **rpm** | [Download](${BASE}/Donut-${VERSION}-1.x86_64.rpm) | [Download](${BASE}/Donut-${VERSION}-1.aarch64.rpm) |
+          | **AppImage** | [Download](${BASE}/Donut_${VERSION}_amd64.AppImage) | [Download](${BASE}/Donut_${VERSION}_aarch64.AppImage) |
+          LINKS
+
+          # Strip leading whitespace from heredoc
+          sed -i 's/^          //' /tmp/install-links.md
+
+          # Replace content between markers in README
+          sed -i '/<!-- install-links-start -->/,/<!-- install-links-end -->/{
+            /<!-- install-links-start -->/{
+              p
+              r /tmp/install-links.md
+            }
+            /<!-- install-links-end -->/!d
+          }' README.md
+
+      - name: Commit release docs
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md
+          git add CHANGELOG.md README.md
           if git diff --cached --quiet; then
-            echo "No changelog changes to commit"
+            echo "No changes to commit"
           else
-            git commit -m "docs: update CHANGELOG.md for ${{ github.ref_name }} [skip ci]"
+            git commit -m "docs: update CHANGELOG.md and README.md for ${{ github.ref_name }} [skip ci]"
             git push origin main
           fi
 
