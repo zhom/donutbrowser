@@ -2204,11 +2204,13 @@ pub async fn launch_browser_profile(
   // Team lock check: if profile is sync-enabled and user is on a team, acquire lock
   crate::team_lock::acquire_team_lock_if_needed(&profile).await?;
 
-  // Notify sync scheduler that profile is now running
+  // Notify sync scheduler that profile is now running and queue sync for when it stops
   if let Some(scheduler) = crate::sync::get_global_scheduler() {
-    scheduler
-      .mark_profile_running(&profile.id.to_string())
-      .await;
+    let pid = profile.id.to_string();
+    scheduler.mark_profile_running(&pid).await;
+    if profile.is_sync_enabled() {
+      scheduler.queue_profile_sync(pid).await;
+    }
   }
 
   let browser_runner = BrowserRunner::instance();
@@ -2421,14 +2423,11 @@ pub async fn kill_browser_profile(
       // Release team lock if applicable
       crate::team_lock::release_team_lock_if_needed(&profile).await;
 
-      // Notify sync scheduler that profile stopped and queue sync
+      // Notify sync scheduler that profile stopped (sync was queued at launch)
       if let Some(scheduler) = crate::sync::get_global_scheduler() {
-        let pid = profile.id.to_string();
-        scheduler.mark_profile_stopped(&pid).await;
-        if profile.is_sync_enabled() {
-          log::info!("Profile '{}' killed, queuing sync", profile.name);
-          scheduler.queue_profile_sync(pid).await;
-        }
+        scheduler
+          .mark_profile_stopped(&profile.id.to_string())
+          .await;
       }
 
       // Auto-update non-running profiles and cleanup unused binaries
