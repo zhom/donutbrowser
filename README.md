@@ -50,12 +50,11 @@
 ## Install
 
 <!-- install-links-start -->
-
 ### macOS
 
 | | Apple Silicon | Intel |
 |---|---|---|
-| **DMG** | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.17.6/Donut_0.17.6_aarch64.dmg) | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.17.6/Donut_0.17.6_x64.dmg) |
+| **DMG** | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.18.1/Donut_0.18.1_aarch64.dmg) | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.18.1/Donut_0.18.1_x64.dmg) |
 
 Or install via Homebrew:
 
@@ -65,16 +64,15 @@ brew install --cask donut
 
 ### Windows
 
-[Download Windows Installer (x64)](https://github.com/zhom/donutbrowser/releases/download/v0.17.6/Donut_0.17.6_x64-setup.exe)
+[Download Windows Installer (x64)](https://github.com/zhom/donutbrowser/releases/download/v0.18.1/Donut_0.18.1_x64-setup.exe)
 
 ### Linux
 
 | Format | x86_64 | ARM64 |
 |---|---|---|
-| **deb** | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.17.6/Donut_0.17.6_amd64.deb) | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.17.6/Donut_0.17.6_arm64.deb) |
-| **rpm** | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.17.6/Donut-0.17.6-1.x86_64.rpm) | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.17.6/Donut-0.17.6-1.aarch64.rpm) |
-| **AppImage** | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.17.6/Donut_0.17.6_amd64.AppImage) | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.17.6/Donut_0.17.6_aarch64.AppImage) |
-
+| **deb** | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.18.1/Donut_0.18.1_amd64.deb) | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.18.1/Donut_0.18.1_arm64.deb) |
+| **rpm** | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.18.1/Donut-0.18.1-1.x86_64.rpm) | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.18.1/Donut-0.18.1-1.aarch64.rpm) |
+| **AppImage** | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.18.1/Donut_0.18.1_amd64.AppImage) | [Download](https://github.com/zhom/donutbrowser/releases/download/v0.18.1/Donut_0.18.1_aarch64.AppImage) |
 <!-- install-links-end -->
 
 Or install via package manager:
