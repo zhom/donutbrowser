@@ -363,3 +363,88 @@ jobs:
               }]
             }" \
             "$DISCORD_WEBHOOK_URL"
+
+  update-flake:
+    if: github.repository == 'zhom/donutbrowser'
+    needs: [release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 #v6.0.1
+        with:
+          ref: main
+
+      - name: Compute AppImage hashes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="${TAG#v}"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+
+          AMD64_URL="https://github.com/zhom/donutbrowser/releases/download/${TAG}/Donut_${VERSION}_amd64.AppImage"
+          AARCH64_URL="https://github.com/zhom/donutbrowser/releases/download/${TAG}/Donut_${VERSION}_aarch64.AppImage"
+
+          echo "Downloading x86_64 AppImage..."
+          curl -fsSL -o /tmp/amd64.AppImage "$AMD64_URL" || { echo "x86_64 AppImage not found"; exit 1; }
+          AMD64_HASH=$(nix-hash --type sha256 --base32 --flat /tmp/amd64.AppImage 2>/dev/null || sha256sum /tmp/amd64.AppImage | awk '{print $1}')
+
+          echo "Downloading aarch64 AppImage..."
+          curl -fsSL -o /tmp/aarch64.AppImage "$AARCH64_URL" || { echo "aarch64 AppImage not found"; exit 1; }
+          AARCH64_HASH=$(nix-hash --type sha256 --base32 --flat /tmp/aarch64.AppImage 2>/dev/null || sha256sum /tmp/aarch64.AppImage | awk '{print $1}')
+
+          # Convert to SRI format (sha256-<base64>) if we got hex
+          if echo "$AMD64_HASH" | grep -qE '^[0-9a-f]{64}$'; then
+            AMD64_HASH="sha256-$(echo "$AMD64_HASH" | xxd -r -p | base64 | tr -d '\n')"
+          fi
+          if echo "$AARCH64_HASH" | grep -qE '^[0-9a-f]{64}$'; then
+            AARCH64_HASH="sha256-$(echo "$AARCH64_HASH" | xxd -r -p | base64 | tr -d '\n')"
+          fi
+
+          echo "AMD64_HASH=${AMD64_HASH}" >> "$GITHUB_ENV"
+          echo "AARCH64_HASH=${AARCH64_HASH}" >> "$GITHUB_ENV"
+          echo "AMD64_URL=${AMD64_URL}" >> "$GITHUB_ENV"
+          echo "AARCH64_URL=${AARCH64_URL}" >> "$GITHUB_ENV"
+
+          echo "x86_64 hash: ${AMD64_HASH}"
+          echo "aarch64 hash: ${AARCH64_HASH}"
+
+      - name: Update flake.nix
+        run: |
+          # Update releaseVersion
+          sed -i "s/releaseVersion = \"[^\"]*\"/releaseVersion = \"${VERSION}\"/" flake.nix
+
+          # Update x86_64 URL and hash
+          sed -i "s|url = \"https://github.com/zhom/donutbrowser/releases/download/v[^\"]*_amd64.AppImage\"|url = \"${AMD64_URL}\"|" flake.nix
+          sed -i "/amd64.AppImage/{ n; s|hash = \"[^\"]*\"|hash = \"${AMD64_HASH}\"|; }" flake.nix
+
+          # Update aarch64 URL and hash
+          sed -i "s|url = \"https://github.com/zhom/donutbrowser/releases/download/v[^\"]*_aarch64.AppImage\"|url = \"${AARCH64_URL}\"|" flake.nix
+          sed -i "/aarch64.AppImage/{ n; s|hash = \"[^\"]*\"|hash = \"${AARCH64_HASH}\"|; }" flake.nix
+
+          echo "Updated flake.nix:"
+          grep -n "releaseVersion\|AppImage\|hash = " flake.nix
+
+      - name: Create pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="chore/update-flake-${VERSION}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add flake.nix
+          if git diff --cached --quiet; then
+            echo "No flake changes needed"
+            exit 0
+          fi
+          git commit -m "chore: update flake.nix for v${VERSION} [skip ci]"
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "chore: update flake.nix for v${VERSION}" \
+            --body "Automated update of flake.nix with new AppImage hashes for v${VERSION}." \
+            --base main \
+            --head "$BRANCH"
+          gh pr merge "$BRANCH" --auto --squash
