@@ -261,7 +261,7 @@ jobs:
         id: nightly-changelog
         run: |
           LAST_STABLE=$(git tag --sort=-version:refname \
-            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+\$" \
             | head -n 1)
 
           if [ -z "$LAST_STABLE" ]; then
