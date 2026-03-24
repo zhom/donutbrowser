@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & Discussion
+    url: https://github.com/zhom/donutbrowser/discussions
+    about: Ask questions or discuss ideas here instead of opening an issue.
