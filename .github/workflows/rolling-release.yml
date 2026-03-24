@@ -364,14 +364,24 @@ jobs:
         run: |
           COMMIT_SHORT=$(echo "${GITHUB_SHA}" | cut -c1-7)
           RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/nightly"
+          COMMIT_URL="https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}"
 
-          curl -fsSL -H "Content-Type: application/json" \
-            -d "{
-              \"embeds\": [{
-                \"title\": \"Donut Browser Nightly Updated\",
-                \"url\": \"${RELEASE_URL}\",
-                \"description\": \"A new nightly build is available (${COMMIT_SHORT}).\",
-                \"color\": 16752128
+          PAYLOAD=$(jq -n \
+            --arg title "Donut Browser Nightly (${COMMIT_SHORT})" \
+            --arg url "$RELEASE_URL" \
+            --arg commit_url "$COMMIT_URL" \
+            --arg commit_short "$COMMIT_SHORT" \
+            '{
+              embeds: [{
+                title: $title,
+                url: $url,
+                color: 16752128,
+                fields: [
+                  { name: "Commit", value: ("[" + $commit_short + "](" + $commit_url + ")"), inline: true },
+                  { name: "Download", value: ("[Nightly Release](" + $url + ")"), inline: true }
+                ],
+                footer: { text: "donutbrowser.com" }
               }]
-            }" \
-            "$DISCORD_WEBHOOK_URL"
+            }')
+
+          curl -fsSL -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK_URL"

@@ -390,7 +390,7 @@ jobs:
               --body "Automated update of CHANGELOG.md and README.md download links for ${TAG}." \
               --base main \
               --head "$BRANCH"
-            gh pr merge "$BRANCH" --auto --squash
+            gh pr merge "$BRANCH" --squash --admin
           fi
 
       - name: Update release notes
@@ -402,26 +402,82 @@ jobs:
 
   notify-discord:
     if: github.repository == 'zhom/donutbrowser'
-    needs: [release]
+    needs: [release, changelog]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 #v6.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Generate changelog summary
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          PREV_TAG=$(git tag --sort=-version:refname \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | grep -v "^${TAG}$" \
+            | head -n 1)
+          if [ -z "$PREV_TAG" ]; then
+            PREV_TAG=$(git rev-list --max-parents=0 HEAD)
+          fi
+
+          strip_prefix() { echo "$1" | sed -E 's/^[a-z]+(\([^)]*\))?: //'; }
+
+          CHANGES=""
+          while IFS= read -r msg; do
+            [ -z "$msg" ] && continue
+            case "$msg" in
+              feat\(*\):*|feat:*)   CHANGES="${CHANGES}• $(strip_prefix "$msg")\n" ;;
+              fix\(*\):*|fix:*)     CHANGES="${CHANGES}• $(strip_prefix "$msg")\n" ;;
+              refactor\(*\):*|refactor:*) CHANGES="${CHANGES}• $(strip_prefix "$msg")\n" ;;
+              perf\(*\):*|perf:*)   CHANGES="${CHANGES}• $(strip_prefix "$msg")\n" ;;
+            esac
+          done < <(git log --pretty=format:"%s" "${PREV_TAG}..${TAG}" --no-merges)
+
+          # Truncate to fit Discord embed (max 4096 chars)
+          if [ ${#CHANGES} -gt 3900 ]; then
+            CHANGES="${CHANGES:0:3900}\n..."
+          fi
+
+          if [ -z "$CHANGES" ]; then
+            CHANGES="See the full changelog on GitHub."
+          fi
+
+          printf '%s' "$CHANGES" > /tmp/discord-changes.txt
+
       - name: Send Discord notification
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_STABLE_WEBHOOK_URL }}
+          TAG: ${{ github.ref_name }}
         run: |
-          VERSION="${GITHUB_REF_NAME}"
+          VERSION="${TAG}"
           RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${VERSION}"
+          CHANGES=$(cat /tmp/discord-changes.txt)
 
-          curl -fsSL -H "Content-Type: application/json" \
-            -d "{
-              \"embeds\": [{
-                \"title\": \"Donut Browser ${VERSION} Released\",
-                \"url\": \"${RELEASE_URL}\",
-                \"description\": \"A new stable release of Donut Browser is available.\",
-                \"color\": 5814783
+          # Build JSON with jq to handle escaping
+          PAYLOAD=$(jq -n \
+            --arg title "Donut Browser ${VERSION} Released" \
+            --arg url "$RELEASE_URL" \
+            --arg changes "$CHANGES" \
+            --arg dl_mac_arm "https://github.com/'"${GITHUB_REPOSITORY}"'/releases/download/'"${VERSION}"'/Donut_'"${VERSION#v}"'_aarch64.dmg" \
+            --arg dl_mac_intel "https://github.com/'"${GITHUB_REPOSITORY}"'/releases/download/'"${VERSION}"'/Donut_'"${VERSION#v}"'_x64.dmg" \
+            --arg dl_win "https://github.com/'"${GITHUB_REPOSITORY}"'/releases/download/'"${VERSION}"'/Donut_'"${VERSION#v}"'_x64-setup.exe" \
+            --arg dl_linux "https://github.com/'"${GITHUB_REPOSITORY}"'/releases/download/'"${VERSION}"'/Donut_'"${VERSION#v}"'_amd64.AppImage" \
+            '{
+              embeds: [{
+                title: $title,
+                url: $url,
+                description: $changes,
+                color: 5814783,
+                fields: [
+                  { name: "Download", value: ("[macOS (Apple Silicon)](" + $dl_mac_arm + ") · [macOS (Intel)](" + $dl_mac_intel + ")\n[Windows x64](" + $dl_win + ") · [Linux x64](" + $dl_linux + ")"), inline: false }
+                ],
+                footer: { text: "donutbrowser.com" }
               }]
-            }" \
-            "$DISCORD_WEBHOOK_URL"
+            }')
+
+          curl -fsSL -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK_URL"
 
   deploy-website:
     if: github.repository == 'zhom/donutbrowser'
@@ -516,4 +572,4 @@ jobs:
             --body "Automated update of flake.nix with new AppImage hashes for v${VERSION}." \
             --base main \
             --head "$BRANCH"
-          gh pr merge "$BRANCH" --auto --squash
+          gh pr merge "$BRANCH" --squash --admin
