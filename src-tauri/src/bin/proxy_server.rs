@@ -476,6 +476,9 @@ async fn main() {
       .expect("url is required")
       .clone();
 
+    // Suppress debug logging for bridge mode — stderr noise confuses MCP clients
+    log::set_max_level(log::LevelFilter::Warn);
+
     // stdio↔HTTP MCP bridge: translates stdio JSON-RPC to Streamable HTTP transport
     let client = reqwest::Client::new();
     let stdin = tokio::io::stdin();
