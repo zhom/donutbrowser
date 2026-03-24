@@ -1,5 +1,53 @@
 # Project Guidelines
 
+> **IMPORTANT**: CLAUDE.md and AGENTS.md must always be identical. If you update one, update the other.
+> After significant changes (new modules, renamed files, new directories), re-evaluate the Repository Structure below and update it if needed.
+
+## Repository Structure
+
+```
+donutbrowser/
+├── src/                              # Next.js frontend
+│   ├── app/                          # App router (page.tsx, layout.tsx)
+│   ├── components/                   # 50+ React components (dialogs, tables, UI)
+│   ├── hooks/                        # Event-driven React hooks
+│   ├── i18n/locales/                 # Translations (en, es, fr, ja, pt, ru, zh)
+│   ├── lib/                          # Utilities (themes, toast, browser-utils)
+│   └── types.ts                      # Shared TypeScript interfaces
+├── src-tauri/                        # Rust backend (Tauri)
+│   ├── src/
+│   │   ├── lib.rs                    # Tauri command registration (100+ commands)
+│   │   ├── browser_runner.rs         # Profile launch/kill orchestration
+│   │   ├── browser.rs               # Browser trait & launch logic
+│   │   ├── profile/                  # Profile CRUD (manager.rs, types.rs)
+│   │   ├── proxy_manager.rs         # Proxy lifecycle & connection testing
+│   │   ├── proxy_server.rs          # Local proxy binary (donut-proxy)
+│   │   ├── proxy_storage.rs         # Proxy config persistence (JSON files)
+│   │   ├── api_server.rs            # REST API (utoipa + axum)
+│   │   ├── mcp_server.rs            # MCP protocol server
+│   │   ├── sync/                    # Cloud sync (engine, encryption, manifest, scheduler)
+│   │   ├── vpn/                     # WireGuard & OpenVPN tunnels
+│   │   ├── camoufox/                # Camoufox fingerprint engine (Bayesian network)
+│   │   ├── wayfern_manager.rs       # Wayfern (Chromium) browser management
+│   │   ├── camoufox_manager.rs      # Camoufox (Firefox) browser management
+│   │   ├── downloader.rs           # Browser binary downloader
+│   │   ├── extraction.rs           # Archive extraction (zip, tar, dmg, msi)
+│   │   ├── settings_manager.rs     # App settings persistence
+│   │   ├── cookie_manager.rs       # Cookie import/export
+│   │   ├── extension_manager.rs    # Browser extension management
+│   │   ├── group_manager.rs        # Profile group management
+│   │   ├── synchronizer.rs         # Real-time profile synchronizer
+│   │   ├── daemon/                 # Background daemon + tray icon (currently disabled)
+│   │   └── cloud_auth.rs           # Cloud authentication
+│   ├── tests/                      # Integration tests
+│   └── Cargo.toml                  # Rust dependencies
+├── donut-sync/                     # NestJS sync server (self-hostable)
+│   └── src/                        # Controllers, services, auth, S3 sync
+├── docs/                           # Documentation (self-hosting guide)
+├── flake.nix                       # Nix development environment
+└── .github/workflows/              # CI/CD pipelines
+```
+
 ## Testing and Quality
 
 - After making changes, run `pnpm format && pnpm lint && pnpm test` at the root of the project
