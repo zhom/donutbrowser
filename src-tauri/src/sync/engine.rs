@@ -793,6 +793,7 @@ impl SyncEngine {
     let mut sanitized = profile.clone();
     sanitized.process_id = None;
     sanitized.last_launch = None;
+    sanitized.last_sync = None; // Avoid triggering sync loop on timestamp change
 
     let json = serde_json::to_string_pretty(&sanitized)
       .map_err(|e| SyncError::SerializationError(format!("Failed to serialize profile: {e}")))?;

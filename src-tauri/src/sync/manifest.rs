@@ -8,6 +8,7 @@ use std::path::Path;
 use std::time::SystemTime;
 
 use super::types::{SyncError, SyncResult};
+use crate::profile::types::BrowserProfile;
 
 /// Default exclude patterns for volatile browser profile files.
 /// Patterns use `**/` prefix to match at any directory depth, since the sync
@@ -209,6 +210,39 @@ fn hash_file(path: &Path) -> Result<Option<String>, SyncError> {
   Ok(Some(hasher.finalize().to_hex().to_string()))
 }
 
+/// Compute blake3 hash of metadata.json after sanitizing volatile fields.
+/// This prevents infinite sync loops where updating last_sync triggers a new sync.
+fn hash_sanitized_metadata(path: &Path) -> Result<Option<String>, SyncError> {
+  let content = match fs::read_to_string(path) {
+    Ok(c) => c,
+    Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+    Err(e) => {
+      return Err(SyncError::IoError(format!(
+        "Failed to read metadata at {}: {e}",
+        path.display()
+      )));
+    }
+  };
+
+  let mut profile: BrowserProfile = serde_json::from_str(&content).map_err(|e| {
+    SyncError::SerializationError(format!("Failed to parse metadata for hashing: {e}"))
+  })?;
+
+  // Sanitize volatile fields that should not trigger a re-sync
+  profile.last_sync = None;
+  profile.process_id = None;
+  profile.last_launch = None;
+
+  let sanitized_json = serde_json::to_string(&profile).map_err(|e| {
+    SyncError::SerializationError(format!("Failed to serialize sanitized metadata: {e}"))
+  })?;
+
+  let mut hasher = blake3::Hasher::new();
+  hasher.update(sanitized_json.as_bytes());
+
+  Ok(Some(hasher.finalize().to_hex().to_string()))
+}
+
 /// Get mtime as unix timestamp
 /// Returns None if the file doesn't exist (was deleted)
 fn get_mtime(path: &Path) -> Result<Option<i64>, SyncError> {
@@ -324,7 +358,19 @@ pub fn generate_manifest(
         *max_mtime = (*max_mtime).max(mtime);
 
         // Check cache for existing hash
-        let hash = if let Some(cached_hash) = cache.get(&relative_path, size, mtime) {
+        let hash = if relative_path == "metadata.json" {
+          // Special case: sanitize metadata.json before hashing to prevent sync loops
+          match hash_sanitized_metadata(&path)? {
+            Some(computed_hash) => computed_hash,
+            None => {
+              log::debug!(
+                "File disappeared during manifest generation, skipping: {}",
+                path.display()
+              );
+              continue;
+            }
+          }
+        } else if let Some(cached_hash) = cache.get(&relative_path, size, mtime) {
           cached_hash.to_string()
         } else {
           match hash_file(&path)? {
@@ -592,7 +638,12 @@ mod tests {
     fs::write(profile_dir.join("profile/Crashpad/report"), "exclude").unwrap();
 
     // metadata.json at root
-    fs::write(profile_dir.join("metadata.json"), "keep").unwrap();
+    let profile = BrowserProfile::default();
+    fs::write(
+      profile_dir.join("metadata.json"),
+      serde_json::to_string(&profile).unwrap(),
+    )
+    .unwrap();
 
     let mut cache = HashCache::default();
     let manifest = generate_manifest("test-profile", &profile_dir, &mut cache).unwrap();
@@ -799,5 +850,86 @@ mod tests {
     assert!(diff.files_to_upload.is_empty());
     assert!(diff.files_to_delete_remote.is_empty());
     assert!(diff.files_to_delete_local.is_empty());
+  }
+
+  #[test]
+  fn test_generate_manifest_sanitizes_metadata() {
+    let temp_dir = TempDir::new().unwrap();
+    let profile_dir = temp_dir.path().join("profile");
+    fs::create_dir_all(&profile_dir).unwrap();
+
+    let profile_id = uuid::Uuid::new_v4();
+    let metadata_path = profile_dir.join("metadata.json");
+
+    let profile = BrowserProfile {
+      id: profile_id,
+      name: "test-profile".to_string(),
+      last_sync: Some(100),
+      process_id: Some(1234),
+      ..Default::default()
+    };
+
+    fs::write(&metadata_path, serde_json::to_string(&profile).unwrap()).unwrap();
+
+    let mut cache = HashCache::default();
+    let manifest1 = generate_manifest(&profile_id.to_string(), &profile_dir, &mut cache).unwrap();
+    let hash1 = manifest1
+      .files
+      .iter()
+      .find(|f| f.path == "metadata.json")
+      .unwrap()
+      .hash
+      .clone();
+
+    // Update volatile fields
+    let profile2 = BrowserProfile {
+      id: profile_id,
+      name: "test-profile".to_string(),
+      last_sync: Some(200),
+      process_id: Some(5678),
+      ..Default::default()
+    };
+
+    fs::write(&metadata_path, serde_json::to_string(&profile2).unwrap()).unwrap();
+
+    let manifest2 = generate_manifest(&profile_id.to_string(), &profile_dir, &mut cache).unwrap();
+    let hash2 = manifest2
+      .files
+      .iter()
+      .find(|f| f.path == "metadata.json")
+      .unwrap()
+      .hash
+      .clone();
+
+    // Hash should be identical because volatile fields are sanitized
+    assert_eq!(
+      hash1, hash2,
+      "Metadata hash should be stable across last_sync/process_id updates"
+    );
+
+    // Change a non-volatile field
+    let profile3 = BrowserProfile {
+      id: profile_id,
+      name: "changed-name".to_string(),
+      last_sync: Some(200),
+      ..Default::default()
+    };
+
+    fs::write(&metadata_path, serde_json::to_string(&profile3).unwrap()).unwrap();
+
+    let manifest3 = generate_manifest(&profile_id.to_string(), &profile_dir, &mut cache).unwrap();
+    let hash3 = manifest3
+      .files
+      .iter()
+      .find(|f| f.path == "metadata.json")
+      .unwrap()
+      .hash
+      .clone();
+
+    // Hash should be different because name changed
+    assert_ne!(
+      hash1, hash3,
+      "Metadata hash should change when non-volatile fields change"
+    );
   }
 }
