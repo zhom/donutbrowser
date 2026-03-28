@@ -82,7 +82,9 @@ export function useDebounce<T>(value: T, delay?: number): T {
   const [debouncedValue, setDebouncedValue] = React.useState<T>(value);
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedValue(value), delay || 500);
+    const timer = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay ?? 500);
 
     return () => {
       clearTimeout(timer);
@@ -104,11 +106,11 @@ function transToGroupOption(options: Option[], groupBy?: string) {
 
   const groupOption: GroupOption = {};
   options.forEach((option) => {
-    const key = (option[groupBy] as string) || "";
+    const key = (option[groupBy] as string) ?? "";
     if (!groupOption[key]) {
       groupOption[key] = [option];
     } else {
-      groupOption[key]?.push(option);
+      groupOption[key].push(option);
     }
   });
   return groupOption;
@@ -197,12 +199,12 @@ const MultipleSelector = React.forwardRef<
     const [open, setOpen] = React.useState(false);
     const [isLoading, setIsLoading] = React.useState(false);
 
-    const [selected, setSelected] = React.useState<Option[]>(value || []);
+    const [selected, setSelected] = React.useState<Option[]>(value ?? []);
     const [options, setOptions] = React.useState<GroupOption>(
       transToGroupOption(arrayDefaultOptions, groupBy),
     );
     const [inputValue, setInputValue] = React.useState("");
-    const debouncedSearchTerm = useDebounce(inputValue, delay || 500);
+    const debouncedSearchTerm = useDebounce(inputValue, delay ?? 500);
 
     React.useImperativeHandle(
       ref,
@@ -231,7 +233,7 @@ const MultipleSelector = React.forwardRef<
             if (input.value === "" && selected.length > 0) {
               const lastSelectOption = selected[selected.length - 1];
               // If last item is fixed, we should not remove it.
-              if (!lastSelectOption?.fixed) {
+              if (!lastSelectOption.fixed) {
                 // biome-ignore lint/style/noNonNullAssertion: false positive
                 handleUnselect(selected.at(-1)!);
               }
@@ -267,7 +269,7 @@ const MultipleSelector = React.forwardRef<
       const doSearch = async () => {
         setIsLoading(true);
         const res = await onSearch?.(debouncedSearchTerm);
-        setOptions(transToGroupOption(res || [], groupBy));
+        setOptions(transToGroupOption(res ?? [], groupBy));
         setIsLoading(false);
       };
 
@@ -414,14 +416,14 @@ const MultipleSelector = React.forwardRef<
                     badgeClassName,
                   )}
                   data-fixed={option.fixed}
-                  data-disabled={disabled || undefined}
+                  data-disabled={disabled ?? undefined}
                 >
                   {option.label ?? option.value}
                   <button
                     type="button"
                     className={cn(
                       "cursor-pointer ml-1 rounded-full outline-none ring-offset-background focus:ring-2 focus:ring-ring focus:ring-offset-2",
-                      (disabled || option.fixed) && "hidden",
+                      (disabled ?? option.fixed) && "hidden",
                     )}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
@@ -432,7 +434,9 @@ const MultipleSelector = React.forwardRef<
                       e.preventDefault();
                       e.stopPropagation();
                     }}
-                    onClick={() => handleUnselect(option)}
+                    onClick={() => {
+                      handleUnselect(option);
+                    }}
                   >
                     <LuX className="w-3 h-3 text-muted-foreground hover:text-foreground" />
                   </button>
@@ -490,7 +494,7 @@ const MultipleSelector = React.forwardRef<
               onFocus={(event) => {
                 setOpen(true);
                 if (triggerSearchOnFocus && onSearch) {
-                  onSearch(debouncedSearchTerm);
+                  void onSearch(debouncedSearchTerm);
                 }
                 inputProps?.onFocus?.(event);
               }}

@@ -32,7 +32,7 @@ export function useWayfernTerms(): UseWayfernTermsReturn {
   }, []);
 
   useEffect(() => {
-    checkTerms();
+    void checkTerms();
   }, [checkTerms]);
 
   return {

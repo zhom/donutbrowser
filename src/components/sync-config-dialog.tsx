@@ -67,9 +67,7 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
   const [isVerifying, setIsVerifying] = useState(false);
 
   const [activeTab, setActiveTab] = useState<string>("cloud");
-  const [_liveProxyUsage, setLiveProxyUsage] = useState<ProxyUsage | null>(
-    null,
-  );
+  const [, setLiveProxyUsage] = useState<ProxyUsage | null>(null);
 
   const [connectionStatus, setConnectionStatus] = useState<
     "unknown" | "testing" | "connected" | "error"
@@ -91,8 +89,8 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
     setIsLoading(true);
     try {
       const settings = await invoke<SyncSettings>("get_sync_settings");
-      setServerUrl(settings.sync_server_url || "");
-      setToken(settings.sync_token || "");
+      setServerUrl(settings.sync_server_url ?? "");
+      setToken(settings.sync_token ?? "");
       if (settings.sync_server_url && settings.sync_token) {
         void testConnection(settings.sync_server_url);
       }
@@ -110,9 +108,11 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
       setCodeSent(false);
       setOtpCode("");
       setEmail("");
-      invoke<ProxyUsage | null>("cloud_get_proxy_usage")
+      void invoke<ProxyUsage | null>("cloud_get_proxy_usage")
         .then(setLiveProxyUsage)
-        .catch(() => setLiveProxyUsage(null));
+        .catch(() => {
+          setLiveProxyUsage(null);
+        });
     }
   }, [isOpen, loadSettings]);
 
@@ -342,7 +342,7 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
               <Button
                 variant="outline"
                 className="flex-1"
-                onClick={handleCloudLogout}
+                onClick={() => void handleCloudLogout()}
               >
                 {t("sync.cloud.logout")}
               </Button>
@@ -388,7 +388,9 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
                         type="email"
                         placeholder={t("sync.cloud.emailPlaceholder")}
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        onChange={(e) => {
+                          setEmail(e.target.value);
+                        }}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" && !codeSent) {
                             void handleSendCode();
@@ -396,7 +398,7 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
                         }}
                       />
                       <LoadingButton
-                        onClick={handleSendCode}
+                        onClick={() => void handleSendCode()}
                         isLoading={isSendingCode}
                         disabled={!email || codeSent}
                         variant="outline"
@@ -415,7 +417,9 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
                         id="cloud-otp"
                         placeholder={t("sync.cloud.codePlaceholder")}
                         value={otpCode}
-                        onChange={(e) => setOtpCode(e.target.value)}
+                        onChange={(e) => {
+                          setOtpCode(e.target.value);
+                        }}
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
                             void handleVerifyOtp();
@@ -423,7 +427,7 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
                         }}
                       />
                       <LoadingButton
-                        onClick={handleVerifyOtp}
+                        onClick={() => void handleVerifyOtp()}
                         isLoading={isVerifying}
                         disabled={!otpCode}
                         className="w-full"
@@ -453,7 +457,9 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
                       id="sync-server-url"
                       placeholder={t("sync.serverUrlPlaceholder")}
                       value={serverUrl}
-                      onChange={(e) => setServerUrl(e.target.value)}
+                      onChange={(e) => {
+                        setServerUrl(e.target.value);
+                      }}
                     />
                   </div>
 
@@ -465,14 +471,18 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
                         type={showToken ? "text" : "password"}
                         placeholder={t("sync.tokenPlaceholder")}
                         value={token}
-                        onChange={(e) => setToken(e.target.value)}
+                        onChange={(e) => {
+                          setToken(e.target.value);
+                        }}
                         className="pr-10"
                       />
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <button
                             type="button"
-                            onClick={() => setShowToken(!showToken)}
+                            onClick={() => {
+                              setShowToken(!showToken);
+                            }}
                             className="absolute right-3 top-1/2 p-1 rounded-sm transition-colors transform -translate-y-1/2 hover:bg-accent"
                             aria-label={showToken ? "Hide token" : "Show token"}
                           >
@@ -515,7 +525,7 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
                 {hasConfig && (
                   <Button
                     variant="outline"
-                    onClick={handleDisconnect}
+                    onClick={() => void handleDisconnect()}
                     disabled={isSaving}
                   >
                     Disconnect
@@ -523,13 +533,13 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
                 )}
                 <Button
                   variant="outline"
-                  onClick={handleTestConnection}
+                  onClick={() => void handleTestConnection()}
                   disabled={isTesting || !serverUrl}
                 >
                   {isTesting ? "Testing..." : "Test Connection"}
                 </Button>
                 <LoadingButton
-                  onClick={handleSave}
+                  onClick={() => void handleSave()}
                   isLoading={isSaving}
                   disabled={!serverUrl || !token}
                 >

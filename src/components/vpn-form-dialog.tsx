@@ -273,7 +273,9 @@ export function VpnFormDialog({
                 <Label>VPN Type</Label>
                 <Select
                   value={vpnType}
-                  onValueChange={(value) => setVpnType(value as VpnType)}
+                  onValueChange={(value) => {
+                    setVpnType(value as VpnType);
+                  }}
                   disabled={isSubmitting}
                 >
                   <SelectTrigger className="w-full">
@@ -294,7 +296,9 @@ export function VpnFormDialog({
                   <Input
                     id="wg-name"
                     value={wireGuardForm.name}
-                    onChange={(e) => updateWireGuard("name", e.target.value)}
+                    onChange={(e) => {
+                      updateWireGuard("name", e.target.value);
+                    }}
                     placeholder="e.g. Home WireGuard"
                     disabled={isSubmitting}
                   />
@@ -307,9 +311,9 @@ export function VpnFormDialog({
                       <Input
                         id="wg-private-key"
                         value={wireGuardForm.privateKey}
-                        onChange={(e) =>
-                          updateWireGuard("privateKey", e.target.value)
-                        }
+                        onChange={(e) => {
+                          updateWireGuard("privateKey", e.target.value);
+                        }}
                         placeholder="Base64-encoded private key"
                         disabled={isSubmitting}
                       />
@@ -320,9 +324,9 @@ export function VpnFormDialog({
                       <Input
                         id="wg-address"
                         value={wireGuardForm.address}
-                        onChange={(e) =>
-                          updateWireGuard("address", e.target.value)
-                        }
+                        onChange={(e) => {
+                          updateWireGuard("address", e.target.value);
+                        }}
                         placeholder="e.g. 10.0.0.2/24"
                         disabled={isSubmitting}
                       />
@@ -334,9 +338,9 @@ export function VpnFormDialog({
                         <Input
                           id="wg-dns"
                           value={wireGuardForm.dns}
-                          onChange={(e) =>
-                            updateWireGuard("dns", e.target.value)
-                          }
+                          onChange={(e) => {
+                            updateWireGuard("dns", e.target.value);
+                          }}
                           placeholder="e.g. 1.1.1.1"
                           disabled={isSubmitting}
                         />
@@ -348,9 +352,9 @@ export function VpnFormDialog({
                           id="wg-mtu"
                           type="number"
                           value={wireGuardForm.mtu}
-                          onChange={(e) =>
-                            updateWireGuard("mtu", e.target.value)
-                          }
+                          onChange={(e) => {
+                            updateWireGuard("mtu", e.target.value);
+                          }}
                           placeholder="e.g. 1420"
                           disabled={isSubmitting}
                         />
@@ -364,9 +368,9 @@ export function VpnFormDialog({
                       <Input
                         id="wg-peer-public-key"
                         value={wireGuardForm.peerPublicKey}
-                        onChange={(e) =>
-                          updateWireGuard("peerPublicKey", e.target.value)
-                        }
+                        onChange={(e) => {
+                          updateWireGuard("peerPublicKey", e.target.value);
+                        }}
                         placeholder="Base64-encoded peer public key"
                         disabled={isSubmitting}
                       />
@@ -377,9 +381,9 @@ export function VpnFormDialog({
                       <Input
                         id="wg-peer-endpoint"
                         value={wireGuardForm.peerEndpoint}
-                        onChange={(e) =>
-                          updateWireGuard("peerEndpoint", e.target.value)
-                        }
+                        onChange={(e) => {
+                          updateWireGuard("peerEndpoint", e.target.value);
+                        }}
                         placeholder="e.g. vpn.example.com:51820"
                         disabled={isSubmitting}
                       />
@@ -390,9 +394,9 @@ export function VpnFormDialog({
                       <Input
                         id="wg-allowed-ips"
                         value={wireGuardForm.allowedIps}
-                        onChange={(e) =>
-                          updateWireGuard("allowedIps", e.target.value)
-                        }
+                        onChange={(e) => {
+                          updateWireGuard("allowedIps", e.target.value);
+                        }}
                         placeholder="e.g. 0.0.0.0/0, ::/0"
                         disabled={isSubmitting}
                       />
@@ -407,12 +411,12 @@ export function VpnFormDialog({
                           id="wg-keepalive"
                           type="number"
                           value={wireGuardForm.persistentKeepalive}
-                          onChange={(e) =>
+                          onChange={(e) => {
                             updateWireGuard(
                               "persistentKeepalive",
                               e.target.value,
-                            )
-                          }
+                            );
+                          }}
                           placeholder="e.g. 25"
                           disabled={isSubmitting}
                         />
@@ -425,9 +429,9 @@ export function VpnFormDialog({
                         <Input
                           id="wg-preshared-key"
                           value={wireGuardForm.presharedKey}
-                          onChange={(e) =>
-                            updateWireGuard("presharedKey", e.target.value)
-                          }
+                          onChange={(e) => {
+                            updateWireGuard("presharedKey", e.target.value);
+                          }}
                           placeholder="Base64-encoded preshared key"
                           disabled={isSubmitting}
                         />
@@ -445,7 +449,9 @@ export function VpnFormDialog({
                   <Input
                     id="ovpn-name"
                     value={openVpnForm.name}
-                    onChange={(e) => updateOpenVpn("name", e.target.value)}
+                    onChange={(e) => {
+                      updateOpenVpn("name", e.target.value);
+                    }}
                     placeholder="e.g. Work OpenVPN"
                     disabled={isSubmitting}
                   />
@@ -457,9 +463,9 @@ export function VpnFormDialog({
                     <Textarea
                       id="ovpn-config"
                       value={openVpnForm.rawConfig}
-                      onChange={(e) =>
-                        updateOpenVpn("rawConfig", e.target.value)
-                      }
+                      onChange={(e) => {
+                        updateOpenVpn("rawConfig", e.target.value);
+                      }}
                       placeholder="Paste your .ovpn file content here..."
                       className="min-h-[200px] font-mono text-xs"
                       disabled={isSubmitting}

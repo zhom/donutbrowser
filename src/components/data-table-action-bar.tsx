@@ -40,7 +40,9 @@ function DataTableActionBar<TData>({
       }
     }
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
   }, [table]);
 
   const portalContainer =

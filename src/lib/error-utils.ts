@@ -25,7 +25,7 @@ export function showCleanErrorToast(error: unknown, prefix?: string) {
   const message = prefix ? `${prefix}: ${rootError}` : rootError;
 
   // Import dynamically to avoid circular dependencies
-  import("./toast-utils").then(({ showErrorToast }) => {
+  void import("./toast-utils").then(({ showErrorToast }) => {
     showErrorToast(message);
   });
 }

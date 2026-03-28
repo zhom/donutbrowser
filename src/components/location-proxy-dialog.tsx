@@ -62,13 +62,17 @@ export function LocationProxyDialog({
   useEffect(() => {
     if (!isOpen) return;
     setIsLoadingCountries(true);
-    invoke<LocationItem[]>("cloud_get_countries")
-      .then((data) => setCountries(data))
+    void invoke<LocationItem[]>("cloud_get_countries")
+      .then((data) => {
+        setCountries(data);
+      })
       .catch((err) => {
         console.error("Failed to fetch countries:", err);
         toast.error("Failed to load countries");
       })
-      .finally(() => setIsLoadingCountries(false));
+      .finally(() => {
+        setIsLoadingCountries(false);
+      });
   }, [isOpen]);
 
   // Fetch regions when country changes
@@ -83,10 +87,18 @@ export function LocationProxyDialog({
     setSelectedIsp("");
     setCities([]);
     setIsps([]);
-    invoke<LocationItem[]>("cloud_get_regions", { country: selectedCountry })
-      .then((data) => setRegions(data))
-      .catch((err) => console.error("Failed to fetch regions:", err))
-      .finally(() => setIsLoadingRegions(false));
+    void invoke<LocationItem[]>("cloud_get_regions", {
+      country: selectedCountry,
+    })
+      .then((data) => {
+        setRegions(data);
+      })
+      .catch((err) => {
+        console.error("Failed to fetch regions:", err);
+      })
+      .finally(() => {
+        setIsLoadingRegions(false);
+      });
   }, [selectedCountry]);
 
   // Fetch cities when country or region changes (cities can be loaded without region)
@@ -103,10 +115,16 @@ export function LocationProxyDialog({
     if (selectedRegion) {
       args.region = selectedRegion;
     }
-    invoke<LocationItem[]>("cloud_get_cities", args)
-      .then((data) => setCities(data))
-      .catch((err) => console.error("Failed to fetch cities:", err))
-      .finally(() => setIsLoadingCities(false));
+    void invoke<LocationItem[]>("cloud_get_cities", args)
+      .then((data) => {
+        setCities(data);
+      })
+      .catch((err) => {
+        console.error("Failed to fetch cities:", err);
+      })
+      .finally(() => {
+        setIsLoadingCities(false);
+      });
   }, [selectedCountry, selectedRegion]);
 
   // Fetch ISPs when country/region/city changes
@@ -122,10 +140,16 @@ export function LocationProxyDialog({
     };
     if (selectedRegion) args.region = selectedRegion;
     if (selectedCity) args.city = selectedCity;
-    invoke<LocationItem[]>("cloud_get_isps", args)
-      .then((data) => setIsps(data))
-      .catch((err) => console.error("Failed to fetch ISPs:", err))
-      .finally(() => setIsLoadingIsps(false));
+    void invoke<LocationItem[]>("cloud_get_isps", args)
+      .then((data) => {
+        setIsps(data);
+      })
+      .catch((err) => {
+        console.error("Failed to fetch ISPs:", err);
+      })
+      .finally(() => {
+        setIsLoadingIsps(false);
+      });
   }, [selectedCountry, selectedRegion, selectedCity]);
 
   // Auto-generate name from selections
@@ -302,7 +326,9 @@ export function LocationProxyDialog({
             <Label>Name</Label>
             <Input
               value={proxyName}
-              onChange={(e) => setProxyName(e.target.value)}
+              onChange={(e) => {
+                setProxyName(e.target.value);
+              }}
               placeholder="Proxy name"
             />
           </div>

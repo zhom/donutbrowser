@@ -280,7 +280,7 @@ export default function Home() {
   const [processingUrls, setProcessingUrls] = useState<Set<string>>(new Set());
 
   const handleUrlOpen = useCallback(
-    async (url: string) => {
+    (url: string) => {
       // Prevent duplicate processing of the same URL
       if (processingUrls.has(url)) {
         console.log("URL already being processed:", url);
@@ -372,7 +372,7 @@ export default function Home() {
     }
   }, [proxiesError]);
 
-  const checkAllPermissions = useCallback(async () => {
+  const checkAllPermissions = useCallback(() => {
     try {
       // Wait for permissions to be initialized before checking
       if (!isInitialized) {
@@ -529,7 +529,7 @@ export default function Home() {
             camoufoxConfig: profileData.camoufoxConfig,
             wayfernConfig: profileData.wayfernConfig,
             groupId:
-              profileData.groupId ||
+              profileData.groupId ??
               (selectedGroupId !== "default" ? selectedGroupId : undefined),
             ephemeral: profileData.ephemeral,
           },
@@ -764,13 +764,13 @@ export default function Home() {
     setCookieManagementDialogOpen(true);
   }, []);
 
-  const handleGroupAssignmentComplete = useCallback(async () => {
+  const handleGroupAssignmentComplete = useCallback(() => {
     // No need to manually reload - useProfileEvents will handle the update
     setGroupAssignmentDialogOpen(false);
     setSelectedProfilesForGroup([]);
   }, []);
 
-  const handleProxyAssignmentComplete = useCallback(async () => {
+  const handleProxyAssignmentComplete = useCallback(() => {
     // No need to manually reload - useProfileEvents will handle the update
     setProxyAssignmentDialogOpen(false);
     setSelectedProfilesForProxy([]);
@@ -810,7 +810,7 @@ export default function Home() {
     let unlistenStatus: (() => void) | undefined;
     let unlistenProgress: (() => void) | undefined;
     const profilesWithTransfer = new Set<string>();
-    (async () => {
+    void (async () => {
       try {
         unlistenStatus = await listen<{
           profile_id: string;
@@ -898,7 +898,7 @@ export default function Home() {
     };
 
     let cleanup: (() => void) | undefined;
-    setupListeners().then((cleanupFn) => {
+    void setupListeners().then((cleanupFn) => {
       cleanup = cleanupFn;
     });
 
@@ -1093,7 +1093,9 @@ export default function Home() {
             crossOsUnlocked={crossOsUnlocked}
             syncUnlocked={syncUnlocked}
             getProfileSyncInfo={getProfileSyncInfo}
-            onLaunchWithSync={(profile) => setSyncLeaderProfile(profile)}
+            onLaunchWithSync={(profile) => {
+              setSyncLeaderProfile(profile);
+            }}
           />
         </div>
       </main>
@@ -1167,7 +1169,9 @@ export default function Home() {
 
       <CloneProfileDialog
         isOpen={!!cloneProfile}
-        onClose={() => setCloneProfile(null)}
+        onClose={() => {
+          setCloneProfile(null);
+        }}
         profile={cloneProfile}
       />
 
@@ -1197,7 +1201,9 @@ export default function Home() {
 
       <ExtensionManagementDialog
         isOpen={extensionManagementDialogOpen}
-        onClose={() => setExtensionManagementDialogOpen(false)}
+        onClose={() => {
+          setExtensionManagementDialogOpen(false);
+        }}
         limitedMode={!crossOsUnlocked}
       />
 
@@ -1242,7 +1248,9 @@ export default function Home() {
         selectedProfiles={selectedProfilesForCookies}
         profiles={profiles}
         runningProfiles={runningProfiles}
-        onCopyComplete={() => setSelectedProfilesForCookies([])}
+        onCopyComplete={() => {
+          setSelectedProfilesForCookies([]);
+        }}
       />
 
       <CookieManagementDialog
@@ -1256,7 +1264,9 @@ export default function Home() {
 
       <DeleteConfirmationDialog
         isOpen={showBulkDeleteConfirmation}
-        onClose={() => setShowBulkDeleteConfirmation(false)}
+        onClose={() => {
+          setShowBulkDeleteConfirmation(false);
+        }}
         onConfirm={confirmBulkDelete}
         title="Delete Selected Profiles"
         description={`This action cannot be undone. This will permanently delete ${selectedProfiles.length} profile${selectedProfiles.length !== 1 ? "s" : ""} and all associated data.`}
@@ -1279,7 +1289,9 @@ export default function Home() {
 
       <SyncAllDialog
         isOpen={syncAllDialogOpen}
-        onClose={() => setSyncAllDialogOpen(false)}
+        onClose={() => {
+          setSyncAllDialogOpen(false);
+        }}
       />
 
       <ProfileSyncDialog
@@ -1289,7 +1301,9 @@ export default function Home() {
           setCurrentProfileForSync(null);
         }}
         profile={currentProfileForSync}
-        onSyncConfigOpen={() => setSyncConfigDialogOpen(true)}
+        onSyncConfigOpen={() => {
+          setSyncConfigDialogOpen(true);
+        }}
       />
 
       {/* Wayfern Terms and Conditions Dialog - shown if terms not accepted */}
@@ -1313,7 +1327,9 @@ export default function Home() {
       {/* Launch on Login Dialog - shown on every startup until enabled or declined */}
       <LaunchOnLoginDialog
         isOpen={launchOnLoginDialogOpen}
-        onClose={() => setLaunchOnLoginDialogOpen(false)}
+        onClose={() => {
+          setLaunchOnLoginDialogOpen(false);
+        }}
       />
 
       <WindowResizeWarningDialog
@@ -1328,7 +1344,9 @@ export default function Home() {
 
       <SyncFollowerDialog
         isOpen={syncLeaderProfile !== null}
-        onClose={() => setSyncLeaderProfile(null)}
+        onClose={() => {
+          setSyncLeaderProfile(null);
+        }}
         leaderProfile={syncLeaderProfile}
         allProfiles={profiles}
         runningProfiles={runningProfiles}

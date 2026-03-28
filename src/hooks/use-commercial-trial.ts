@@ -43,11 +43,15 @@ export function useCommercialTrial(): UseCommercialTrialReturn {
   }, []);
 
   useEffect(() => {
-    checkTrialStatus();
+    void checkTrialStatus();
 
     // Check trial status every minute to update the countdown
-    const interval = setInterval(checkTrialStatus, 60000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => {
+      void checkTrialStatus();
+    }, 60000);
+    return () => {
+      clearInterval(interval);
+    };
   }, [checkTrialStatus]);
 
   return {

@@ -172,11 +172,13 @@ export function CreateProfileDialog({
 
   useEffect(() => {
     if (isOpen) {
-      invoke<{ id: string; name: string; extension_ids: string[] }[]>(
+      void invoke<{ id: string; name: string; extension_ids: string[] }[]>(
         "list_extension_groups",
       )
         .then(setExtensionGroups)
-        .catch(() => setExtensionGroups([]));
+        .catch(() => {
+          setExtensionGroups([]);
+        });
     }
   }, [isOpen]);
   const [releaseTypes, setReleaseTypes] = useState<BrowserReleaseTypes>();
@@ -553,7 +555,9 @@ export function CreateProfileDialog({
                       <div className="space-y-3 pt-8">
                         {/* Wayfern (Chromium) - First */}
                         <Button
-                          onClick={() => handleBrowserSelect("wayfern")}
+                          onClick={() => {
+                            handleBrowserSelect("wayfern");
+                          }}
                           className="flex gap-3 justify-start items-center p-4 w-full h-16 border-2 transition-colors hover:border-primary/50"
                           variant="outline"
                         >
@@ -577,7 +581,9 @@ export function CreateProfileDialog({
 
                         {/* Camoufox (Firefox) - Second */}
                         <Button
-                          onClick={() => handleBrowserSelect("camoufox")}
+                          onClick={() => {
+                            handleBrowserSelect("camoufox");
+                          }}
                           className="flex gap-3 justify-start items-center p-4 w-full h-16 border-2 transition-colors hover:border-primary/50"
                           variant="outline"
                         >
@@ -620,9 +626,9 @@ export function CreateProfileDialog({
                             return (
                               <Button
                                 key={browser.value}
-                                onClick={() =>
-                                  handleBrowserSelect(browser.value)
-                                }
+                                onClick={() => {
+                                  handleBrowserSelect(browser.value);
+                                }}
                                 className="flex gap-3 justify-start items-center p-4 w-full h-16 border-2 transition-colors hover:border-primary/50"
                                 variant="outline"
                               >
@@ -657,7 +663,9 @@ export function CreateProfileDialog({
                           <Input
                             id="profile-name"
                             value={profileName}
-                            onChange={(e) => setProfileName(e.target.value)}
+                            onChange={(e) => {
+                              setProfileName(e.target.value);
+                            }}
                             onKeyDown={(e) => {
                               if (
                                 e.key === "Enter" &&
@@ -677,9 +685,9 @@ export function CreateProfileDialog({
                             <Checkbox
                               id="ephemeral"
                               checked={ephemeral}
-                              onCheckedChange={(checked) =>
-                                setEphemeral(checked === true)
-                              }
+                              onCheckedChange={(checked) => {
+                                setEphemeral(checked === true);
+                              }}
                             />
                             <Label htmlFor="ephemeral" className="font-medium">
                               {t("profiles.ephemeral")}
@@ -1014,7 +1022,9 @@ export function CreateProfileDialog({
                             <RippleButton
                               size="sm"
                               variant="outline"
-                              onClick={() => setShowProxyForm(true)}
+                              onClick={() => {
+                                setShowProxyForm(true);
+                              }}
                               className="px-2 h-7 text-xs"
                             >
                               <GoPlus className="mr-1 w-3 h-3" /> Add Proxy
@@ -1154,11 +1164,11 @@ export function CreateProfileDialog({
                             <Label>{t("extensions.extensionGroup")}</Label>
                             <Select
                               value={selectedExtensionGroupId || "none"}
-                              onValueChange={(val) =>
+                              onValueChange={(val) => {
                                 setSelectedExtensionGroupId(
                                   val === "none" ? undefined : val,
-                                )
-                              }
+                                );
+                              }}
                             >
                               <SelectTrigger>
                                 <SelectValue
@@ -1190,7 +1200,9 @@ export function CreateProfileDialog({
                           <Input
                             id="profile-name"
                             value={profileName}
-                            onChange={(e) => setProfileName(e.target.value)}
+                            onChange={(e) => {
+                              setProfileName(e.target.value);
+                            }}
                             onKeyDown={(e) => {
                               if (
                                 e.key === "Enter" &&
@@ -1305,7 +1317,9 @@ export function CreateProfileDialog({
                             <RippleButton
                               size="sm"
                               variant="outline"
-                              onClick={() => setShowProxyForm(true)}
+                              onClick={() => {
+                                setShowProxyForm(true);
+                              }}
                               className="px-2 h-7 text-xs"
                             >
                               <GoPlus className="mr-1 w-3 h-3" /> Add Proxy
@@ -1470,7 +1484,9 @@ export function CreateProfileDialog({
       </DialogContent>
       <ProxyFormDialog
         isOpen={showProxyForm}
-        onClose={() => setShowProxyForm(false)}
+        onClose={() => {
+          setShowProxyForm(false);
+        }}
       />
     </Dialog>
   );

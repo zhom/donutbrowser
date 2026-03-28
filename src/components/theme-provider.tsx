@@ -94,7 +94,9 @@ export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
       };
 
       // Apply after a short delay to ensure CSS has loaded
-      setTimeout(reapplyCustomTheme, 100);
+      setTimeout(() => {
+        void reapplyCustomTheme();
+      }, 100);
     }
   }, [isLoading, _mounted]);
 

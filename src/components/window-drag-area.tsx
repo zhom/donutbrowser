@@ -93,7 +93,9 @@ export function WindowDragArea() {
       <div className="flex items-center h-full">
         <button
           type="button"
-          onClick={handleMinimize}
+          onClick={() => {
+            void handleMinimize();
+          }}
           className="flex items-center justify-center w-12 h-full hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
         >
           <svg
@@ -109,7 +111,9 @@ export function WindowDragArea() {
         </button>
         <button
           type="button"
-          onClick={handleClose}
+          onClick={() => {
+            void handleClose();
+          }}
           className="flex items-center justify-center w-12 h-full hover:bg-destructive/90 transition-colors text-muted-foreground hover:text-destructive-foreground"
         >
           <svg

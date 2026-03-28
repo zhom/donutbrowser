@@ -50,12 +50,12 @@ interface CookieCopyDialogProps {
   onCopyComplete?: () => void;
 }
 
-type SelectionState = {
+interface SelectionState {
   [domain: string]: {
     allSelected: boolean;
     cookies: Set<string>;
   };
-};
+}
 
 export function CookieCopyDialog({
   isOpen,
@@ -109,7 +109,7 @@ export function CookieCopyDialog({
       const domainSelection = selection[domain];
       if (domainSelection.allSelected) {
         const domainData = cookieData?.domains.find((d) => d.domain === domain);
-        count += domainData?.cookie_count || 0;
+        count += domainData?.cookie_count ?? 0;
       } else {
         count += domainSelection.cookies.size;
       }
@@ -148,7 +148,7 @@ export function CookieCopyDialog({
     (domain: string, cookies: UnifiedCookie[]) => {
       setSelection((prev) => {
         const current = prev[domain];
-        const allSelected = current?.allSelected || false;
+        const allSelected = current.allSelected || false;
 
         if (allSelected) {
           const newSelection = { ...prev };
@@ -412,7 +412,9 @@ export function CookieCopyDialog({
                 <Input
                   placeholder="Search domains or cookies..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                  }}
                   className="pl-8"
                 />
               </div>
@@ -501,8 +503,8 @@ function DomainRow({
   onToggleExpand,
 }: DomainRowProps) {
   const domainSelection = selection[domain.domain];
-  const isAllSelected = domainSelection?.allSelected || false;
-  const selectedCount = domainSelection?.cookies.size || 0;
+  const isAllSelected = domainSelection.allSelected || false;
+  const selectedCount = domainSelection.cookies.size || 0;
   const isPartial =
     selectedCount > 0 && selectedCount < domain.cookie_count && !isAllSelected;
 
@@ -511,13 +513,17 @@ function DomainRow({
       <div className="flex items-center gap-2 p-2 hover:bg-accent/50 rounded">
         <Checkbox
           checked={isAllSelected || isPartial}
-          onCheckedChange={() => onToggleDomain(domain.domain, domain.cookies)}
+          onCheckedChange={() => {
+            onToggleDomain(domain.domain, domain.cookies);
+          }}
           className={isPartial ? "opacity-70" : ""}
         />
         <button
           type="button"
           className="flex items-center gap-1 flex-1 text-left bg-transparent border-none cursor-pointer"
-          onClick={() => onToggleExpand(domain.domain)}
+          onClick={() => {
+            onToggleExpand(domain.domain);
+          }}
         >
           {isExpanded ? (
             <LuChevronDown className="w-4 h-4" />
@@ -534,7 +540,7 @@ function DomainRow({
         <div className="ml-8 pl-2 border-l space-y-1">
           {domain.cookies.map((cookie) => {
             const isSelected =
-              domainSelection?.cookies.has(cookie.name) || false;
+              domainSelection.cookies.has(cookie.name) || false;
             return (
               <div
                 key={`${domain.domain}-${cookie.name}`}
@@ -542,13 +548,13 @@ function DomainRow({
               >
                 <Checkbox
                   checked={isSelected || isAllSelected}
-                  onCheckedChange={() =>
+                  onCheckedChange={() => {
                     onToggleCookie(
                       domain.domain,
                       cookie.name,
                       domain.cookie_count,
-                    )
-                  }
+                    );
+                  }}
                 />
                 <span className="truncate">{cookie.name}</span>
               </div>

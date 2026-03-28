@@ -45,7 +45,7 @@ export function CopyToClipboard({
     <Button
       variant={variant}
       size={size}
-      className={`relative ${className || ""}`}
+      className={`relative ${className ?? ""}`}
       onClick={copyToClipboard}
       aria-label={copied ? "Copied" : "Copy to clipboard"}
     >

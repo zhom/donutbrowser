@@ -105,8 +105,8 @@ export function ProxyFormDialog({
             proxy_type: editingProxy.proxy_settings.proxy_type,
             host: editingProxy.proxy_settings.host,
             port: editingProxy.proxy_settings.port,
-            username: editingProxy.proxy_settings.username || "",
-            password: editingProxy.proxy_settings.password || "",
+            username: editingProxy.proxy_settings.username ?? "",
+            password: editingProxy.proxy_settings.password ?? "",
           });
         }
       } else {
@@ -250,7 +250,12 @@ export function ProxyFormDialog({
 
         <div className="grid gap-4 py-4">
           {!editingProxy && (
-            <Tabs value={mode} onValueChange={(v) => setMode(v as ProxyMode)}>
+            <Tabs
+              value={mode}
+              onValueChange={(v) => {
+                setMode(v as ProxyMode);
+              }}
+            >
               <TabsList className="w-full">
                 <TabsTrigger value="regular" className="flex-1">
                   {t("proxies.tabs.regular")}
@@ -275,9 +280,9 @@ export function ProxyFormDialog({
                 <Input
                   id="proxy-name"
                   value={regularForm.name}
-                  onChange={(e) =>
-                    setRegularForm({ ...regularForm, name: e.target.value })
-                  }
+                  onChange={(e) => {
+                    setRegularForm({ ...regularForm, name: e.target.value });
+                  }}
                   placeholder="e.g. Office Proxy, Home VPN, etc."
                   disabled={isSubmitting}
                 />
@@ -287,9 +292,9 @@ export function ProxyFormDialog({
                 <Label>{t("proxies.form.type")}</Label>
                 <Select
                   value={regularForm.proxy_type}
-                  onValueChange={(value) =>
-                    setRegularForm({ ...regularForm, proxy_type: value })
-                  }
+                  onValueChange={(value) => {
+                    setRegularForm({ ...regularForm, proxy_type: value });
+                  }}
                   disabled={isSubmitting}
                 >
                   <SelectTrigger>
@@ -311,9 +316,9 @@ export function ProxyFormDialog({
                   <Input
                     id="proxy-host"
                     value={regularForm.host}
-                    onChange={(e) =>
-                      setRegularForm({ ...regularForm, host: e.target.value })
-                    }
+                    onChange={(e) => {
+                      setRegularForm({ ...regularForm, host: e.target.value });
+                    }}
                     placeholder={t("proxies.form.hostPlaceholder")}
                     disabled={isSubmitting}
                   />
@@ -325,12 +330,12 @@ export function ProxyFormDialog({
                     id="proxy-port"
                     type="number"
                     value={regularForm.port}
-                    onChange={(e) =>
+                    onChange={(e) => {
                       setRegularForm({
                         ...regularForm,
                         port: parseInt(e.target.value, 10) || 0,
-                      })
-                    }
+                      });
+                    }}
                     placeholder={t("proxies.form.portPlaceholder")}
                     min="1"
                     max="65535"
@@ -348,12 +353,12 @@ export function ProxyFormDialog({
                   <Input
                     id="proxy-username"
                     value={regularForm.username}
-                    onChange={(e) =>
+                    onChange={(e) => {
                       setRegularForm({
                         ...regularForm,
                         username: e.target.value,
-                      })
-                    }
+                      });
+                    }}
                     placeholder={t("proxies.form.usernamePlaceholder")}
                     disabled={isSubmitting}
                   />
@@ -368,12 +373,12 @@ export function ProxyFormDialog({
                     id="proxy-password"
                     type="password"
                     value={regularForm.password}
-                    onChange={(e) =>
+                    onChange={(e) => {
                       setRegularForm({
                         ...regularForm,
                         password: e.target.value,
-                      })
-                    }
+                      });
+                    }}
                     placeholder={t("proxies.form.passwordPlaceholder")}
                     disabled={isSubmitting}
                   />
@@ -387,9 +392,9 @@ export function ProxyFormDialog({
                 <Input
                   id="dynamic-name"
                   value={dynamicForm.name}
-                  onChange={(e) =>
-                    setDynamicForm({ ...dynamicForm, name: e.target.value })
-                  }
+                  onChange={(e) => {
+                    setDynamicForm({ ...dynamicForm, name: e.target.value });
+                  }}
                   placeholder="e.g. My Tunnel"
                   disabled={isSubmitting}
                 />
@@ -400,9 +405,9 @@ export function ProxyFormDialog({
                 <Input
                   id="dynamic-url"
                   value={dynamicForm.url}
-                  onChange={(e) =>
-                    setDynamicForm({ ...dynamicForm, url: e.target.value })
-                  }
+                  onChange={(e) => {
+                    setDynamicForm({ ...dynamicForm, url: e.target.value });
+                  }}
                   placeholder={t("proxies.dynamic.urlPlaceholder")}
                   disabled={isSubmitting}
                 />
@@ -412,9 +417,9 @@ export function ProxyFormDialog({
                 <Label>{t("proxies.dynamic.format")}</Label>
                 <Select
                   value={dynamicForm.format}
-                  onValueChange={(value) =>
-                    setDynamicForm({ ...dynamicForm, format: value })
-                  }
+                  onValueChange={(value) => {
+                    setDynamicForm({ ...dynamicForm, format: value });
+                  }}
                   disabled={isSubmitting}
                 >
                   <SelectTrigger>

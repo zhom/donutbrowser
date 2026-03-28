@@ -156,21 +156,21 @@ export function SyncFollowerDialog({
                         <div
                           key={profile.id}
                           className="flex items-center gap-3 p-2 rounded-md hover:bg-accent cursor-pointer"
-                          onClick={() =>
+                          onClick={() => {
                             handleToggle(
                               profile.id,
                               !selectedIds.has(profile.id),
-                            )
-                          }
+                            );
+                          }}
                           onKeyDown={() => {}}
                           role="button"
                           tabIndex={0}
                         >
                           <Checkbox
                             checked={selectedIds.has(profile.id)}
-                            onCheckedChange={(checked) =>
-                              handleToggle(profile.id, checked === true)
-                            }
+                            onCheckedChange={(checked) => {
+                              handleToggle(profile.id, checked === true);
+                            }}
                           />
                           <span className="text-sm truncate flex-1">
                             {profile.name}
@@ -203,7 +203,9 @@ export function SyncFollowerDialog({
         <DialogFooter>
           <RippleButton
             variant="outline"
-            onClick={() => handleOpenChange(false)}
+            onClick={() => {
+              handleOpenChange(false);
+            }}
           >
             {t("common.buttons.cancel")}
           </RippleButton>

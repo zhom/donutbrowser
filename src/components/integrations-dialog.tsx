@@ -53,7 +53,7 @@ export function IntegrationsDialog({
   });
   const [apiServerPort, setApiServerPort] = useState<number | null>(null);
   const [mcpConfig, setMcpConfig] = useState<McpConfig | null>(null);
-  const [_mcpRunning, setMcpRunning] = useState(false);
+  const [, setMcpRunning] = useState(false);
   const [showApiToken, setShowApiToken] = useState(false);
   const [showMcpToken, setShowMcpToken] = useState(false);
   const [isApiStarting, setIsApiStarting] = useState(false);
@@ -119,12 +119,12 @@ export function IntegrationsDialog({
 
   useEffect(() => {
     if (isOpen) {
-      loadSettings();
-      loadApiServerStatus();
-      loadMcpConfig();
-      loadMcpServerStatus();
-      loadClaudeDesktopStatus();
-      loadClaudeCodeStatus();
+      void loadSettings();
+      void loadApiServerStatus();
+      void loadMcpConfig();
+      void loadMcpServerStatus();
+      void loadClaudeDesktopStatus();
+      void loadClaudeCodeStatus();
     }
   }, [
     isOpen,
@@ -177,7 +177,7 @@ export function IntegrationsDialog({
           settings: { ...settings, mcp_enabled: true, mcp_port: port },
         });
         setSettings(next);
-        loadMcpConfig();
+        void loadMcpConfig();
         showSuccessToast(`MCP server started on port ${port}`);
       } else {
         await invoke("stop_mcp_server");
@@ -198,11 +198,13 @@ export function IntegrationsDialog({
     }
   };
 
-  const _obfuscateToken = (token: string) =>
-    "•".repeat(Math.min(token.length, 32));
-
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
       <DialogContent className="max-w-xl max-h-[80vh] my-8 flex flex-col">
         <DialogHeader className="shrink-0">
           <DialogTitle>Integrations</DialogTitle>
@@ -221,7 +223,7 @@ export function IntegrationsDialog({
                   id="api-enabled"
                   checked={apiServerPort !== null}
                   disabled={isApiStarting}
-                  onCheckedChange={handleApiToggle}
+                  onCheckedChange={(checked) => void handleApiToggle(!!checked)}
                 />
                 <div className="grid gap-1.5 leading-none">
                   <Label
@@ -269,7 +271,9 @@ export function IntegrationsDialog({
                           variant="ghost"
                           size="sm"
                           className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                          onClick={() => setShowApiToken(!showApiToken)}
+                          onClick={() => {
+                            setShowApiToken(!showApiToken);
+                          }}
                         >
                           {showApiToken ? (
                             <EyeOff className="h-4 w-4" />
@@ -297,7 +301,7 @@ export function IntegrationsDialog({
                   id="mcp-enabled"
                   checked={settings.mcp_enabled && mcpConfig !== null}
                   disabled={!termsAccepted || isMcpStarting}
-                  onCheckedChange={handleMcpToggle}
+                  onCheckedChange={(checked) => void handleMcpToggle(!!checked)}
                 />
                 <div className="grid gap-1.5 leading-none">
                   <Label
@@ -336,7 +340,9 @@ export function IntegrationsDialog({
                           variant="ghost"
                           size="sm"
                           className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                          onClick={() => setShowMcpToken(!showMcpToken)}
+                          onClick={() => {
+                            setShowMcpToken(!showMcpToken);
+                          }}
                         >
                           {showMcpToken ? (
                             <EyeOff className="h-4 w-4" />

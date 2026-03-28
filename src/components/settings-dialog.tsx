@@ -209,7 +209,7 @@ export function SettingsDialog({
       if (merged.theme === "custom" && merged.custom_theme) {
         const matchingTheme = getThemeByColors(merged.custom_theme);
         setCustomThemeState({
-          selectedThemeId: matchingTheme?.id || null,
+          selectedThemeId: matchingTheme?.id ?? null,
           colors: merged.custom_theme,
         });
       } else if (merged.theme === "custom") {
@@ -235,9 +235,9 @@ export function SettingsDialog({
 
   const applyCustomTheme = useCallback((vars: Record<string, string>) => {
     const root = document.documentElement;
-    Object.entries(vars).forEach(([k, v]) =>
-      root.style.setProperty(k, v, "important"),
-    );
+    Object.entries(vars).forEach(([k, v]) => {
+      root.style.setProperty(k, v, "important");
+    });
   }, []);
 
   const clearCustomTheme = useCallback(() => {
@@ -247,7 +247,7 @@ export function SettingsDialog({
     );
   }, []);
 
-  const loadPermissions = useCallback(async () => {
+  const loadPermissions = useCallback(() => {
     setIsLoadingPermissions(true);
     try {
       if (!isMacOS) {
@@ -388,10 +388,12 @@ export function SettingsDialog({
             THEME_VARIABLES.forEach(({ key }) =>
               root.style.removeProperty(key as string),
             );
-            Object.entries(customThemeState.colors).forEach(([k, v]) =>
-              root.style.setProperty(k, v, "important"),
-            );
-          } catch {}
+            Object.entries(customThemeState.colors).forEach(([k, v]) => {
+              root.style.setProperty(k, v, "important");
+            });
+          } catch {
+            /* empty */
+          }
         }
       } else {
         try {
@@ -399,7 +401,9 @@ export function SettingsDialog({
           THEME_VARIABLES.forEach(({ key }) =>
             root.style.removeProperty(key as string),
           );
-        } catch {}
+        } catch {
+          /* empty */
+        }
       }
 
       // Save language if changed
@@ -458,7 +462,7 @@ export function SettingsDialog({
     if (originalSettings.theme === "custom" && originalSettings.custom_theme) {
       const matchingTheme = getThemeByColors(originalSettings.custom_theme);
       setCustomThemeState({
-        selectedThemeId: matchingTheme?.id || null,
+        selectedThemeId: matchingTheme?.id ?? null,
         colors: originalSettings.custom_theme,
       });
     }
@@ -481,8 +485,12 @@ export function SettingsDialog({
 
   useEffect(() => {
     if (isOpen) {
-      loadSettings().catch(console.error);
-      checkDefaultBrowserStatus().catch(console.error);
+      loadSettings().catch((err: unknown) => {
+        console.error(err);
+      });
+      checkDefaultBrowserStatus().catch((err: unknown) => {
+        console.error(err);
+      });
 
       // Check if we're on macOS
       const userAgent = navigator.userAgent;
@@ -492,12 +500,14 @@ export function SettingsDialog({
       setIsLinux(isLin);
 
       if (isMac) {
-        loadPermissions().catch(console.error);
+        loadPermissions();
       }
 
       // Set up interval to check default browser status
       const intervalId = setInterval(() => {
-        checkDefaultBrowserStatus().catch(console.error);
+        checkDefaultBrowserStatus().catch((err: unknown) => {
+          console.error(err);
+        });
       }, 500); // Check every 500ms
 
       // Cleanup interval on component unmount or dialog close
@@ -612,7 +622,7 @@ export function SettingsDialog({
                     Theme Preset
                   </Label>
                   <Select
-                    value={customThemeState.selectedThemeId || "custom"}
+                    value={customThemeState.selectedThemeId ?? "custom"}
                     onValueChange={(value) => {
                       if (value === "custom") {
                         setCustomThemeState((prev) => ({
@@ -648,7 +658,7 @@ export function SettingsDialog({
                 <div className="grid grid-cols-4 gap-3">
                   {THEME_VARIABLES.map(({ key, label }) => {
                     const colorValue =
-                      customThemeState.colors[key] || "#000000";
+                      customThemeState.colors[key] ?? "#000000";
                     return (
                       <div
                         key={key}
@@ -683,7 +693,7 @@ export function SettingsDialog({
                                   getThemeByColors(newColors);
 
                                 setCustomThemeState({
-                                  selectedThemeId: matchingTheme?.id || null,
+                                  selectedThemeId: matchingTheme?.id ?? null,
                                   colors: newColors,
                                 });
                               }}
@@ -723,8 +733,10 @@ export function SettingsDialog({
                 Interface Language
               </Label>
               <Select
-                value={selectedLanguage || "system"}
-                onValueChange={(value) => setSelectedLanguage(value)}
+                value={selectedLanguage ?? "system"}
+                onValueChange={(value) => {
+                  setSelectedLanguage(value);
+                }}
                 disabled={isLanguageLoading}
               >
                 <SelectTrigger id="language-select">
@@ -758,7 +770,9 @@ export function SettingsDialog({
             <LoadingButton
               isLoading={isSettingDefault}
               onClick={() => {
-                handleSetDefaultBrowser().catch(console.error);
+                handleSetDefaultBrowser().catch((err: unknown) => {
+                  console.error(err);
+                });
               }}
               disabled={isDefaultBrowser}
               variant={isDefaultBrowser ? "outline" : "default"}
@@ -818,7 +832,9 @@ export function SettingsDialog({
                             onClick={() => {
                               handleRequestPermission(
                                 permission.permission_type,
-                              ).catch(console.error);
+                              ).catch((err: unknown) => {
+                                console.error(err);
+                              });
                             }}
                           >
                             Grant
@@ -1037,10 +1053,10 @@ export function SettingsDialog({
               <div className="flex items-start space-x-3 p-3 rounded-lg border">
                 <Checkbox
                   id="disable-auto-updates"
-                  checked={settings.disable_auto_updates || false}
-                  onCheckedChange={(checked) =>
-                    updateSetting("disable_auto_updates", checked as boolean)
-                  }
+                  checked={settings.disable_auto_updates ?? false}
+                  onCheckedChange={(checked) => {
+                    updateSetting("disable_auto_updates", checked as boolean);
+                  }}
                 />
                 <div className="space-y-1">
                   <Label
@@ -1059,7 +1075,9 @@ export function SettingsDialog({
             <LoadingButton
               isLoading={isClearingCache}
               onClick={() => {
-                handleClearCache().catch(console.error);
+                handleClearCache().catch((err: unknown) => {
+                  console.error(err);
+                });
               }}
               variant="outline"
               className="w-full"
@@ -1082,7 +1100,9 @@ export function SettingsDialog({
           <LoadingButton
             isLoading={isSaving}
             onClick={() => {
-              handleSave().catch(console.error);
+              handleSave().catch((err: unknown) => {
+                console.error(err);
+              });
             }}
             disabled={isLoading || !hasChanges}
           >

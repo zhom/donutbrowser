@@ -169,7 +169,9 @@ export function useProfileEvents(): UseProfileEventsReturn {
       void syncRunningStates();
     }, 30000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+    };
   }, [profiles]);
 
   return {

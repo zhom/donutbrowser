@@ -131,7 +131,7 @@ export function ProfileInfoDialog({
       setGroupName(null);
       return;
     }
-    (async () => {
+    void (async () => {
       try {
         const groups = await invoke<ProfileGroup[]>("get_groups");
         const group = groups.find((g) => g.id === profile.group_id);
@@ -195,7 +195,9 @@ export function ProfileInfoDialog({
     try {
       await navigator.clipboard.writeText(profile.id);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
     } catch {
       // ignore
     }
@@ -213,7 +215,7 @@ export function ProfileInfoDialog({
   const hasNote = !!profile.note;
   const showCrossOs = isCrossOsProfile(profile);
 
-  type ActionItem = {
+  interface ActionItem {
     icon: React.ReactNode;
     label: string;
     onClick: () => void;
@@ -222,34 +224,41 @@ export function ProfileInfoDialog({
     proBadge?: boolean;
     runningBadge?: boolean;
     hidden?: boolean;
-  };
+  }
 
   const actions: ActionItem[] = [
     {
       icon: <LuGlobe className="w-4 h-4" />,
       label: t("profiles.actions.viewNetwork"),
-      onClick: () => handleAction(() => onOpenTrafficDialog?.(profile.id)),
+      onClick: () => {
+        handleAction(() => onOpenTrafficDialog?.(profile.id));
+      },
       disabled: isCrossOs,
     },
     {
       icon: <LuRefreshCw className="w-4 h-4" />,
       label: t("profiles.actions.syncSettings"),
-      onClick: () => handleAction(() => onOpenProfileSyncDialog?.(profile)),
+      onClick: () => {
+        handleAction(() => onOpenProfileSyncDialog?.(profile));
+      },
       disabled: isCrossOs,
       hidden: profile.ephemeral === true,
     },
     {
       icon: <LuGroup className="w-4 h-4" />,
       label: t("profiles.actions.assignToGroup"),
-      onClick: () =>
-        handleAction(() => onAssignProfilesToGroup?.([profile.id])),
+      onClick: () => {
+        handleAction(() => onAssignProfilesToGroup?.([profile.id]));
+      },
       disabled: isDisabled,
       runningBadge: isRunning,
     },
     {
       icon: <LuFingerprint className="w-4 h-4" />,
       label: t("profiles.actions.changeFingerprint"),
-      onClick: () => handleAction(() => onConfigureCamoufox?.(profile)),
+      onClick: () => {
+        handleAction(() => onConfigureCamoufox?.(profile));
+      },
       disabled: isDisabled,
       runningBadge: isRunning,
       hidden: !isCamoufoxOrWayfern || !onConfigureCamoufox,
@@ -257,7 +266,9 @@ export function ProfileInfoDialog({
     {
       icon: <LuUsers className="w-4 h-4" />,
       label: t("profiles.synchronizer.launchWithSync"),
-      onClick: () => handleAction(() => onLaunchWithSync?.(profile)),
+      onClick: () => {
+        handleAction(() => onLaunchWithSync?.(profile));
+      },
       disabled: isDisabled || isRunning || !crossOsUnlocked,
       proBadge: !crossOsUnlocked,
       hidden: profile.browser !== "wayfern" || !onLaunchWithSync,
@@ -265,7 +276,9 @@ export function ProfileInfoDialog({
     {
       icon: <LuCopy className="w-4 h-4" />,
       label: t("profiles.actions.copyCookiesToProfile"),
-      onClick: () => handleAction(() => onCopyCookiesToProfile?.(profile)),
+      onClick: () => {
+        handleAction(() => onCopyCookiesToProfile?.(profile));
+      },
       disabled: isDisabled,
       runningBadge: isRunning,
       hidden:
@@ -276,7 +289,9 @@ export function ProfileInfoDialog({
     {
       icon: <LuCookie className="w-4 h-4" />,
       label: t("profileInfo.actions.manageCookies"),
-      onClick: () => handleAction(() => onOpenCookieManagement?.(profile)),
+      onClick: () => {
+        handleAction(() => onOpenCookieManagement?.(profile));
+      },
       disabled: isDisabled,
       runningBadge: isRunning,
       hidden:
@@ -287,7 +302,9 @@ export function ProfileInfoDialog({
     {
       icon: <LuSettings className="w-4 h-4" />,
       label: t("profiles.actions.clone"),
-      onClick: () => handleAction(() => onCloneProfile?.(profile)),
+      onClick: () => {
+        handleAction(() => onCloneProfile?.(profile));
+      },
       disabled: isDisabled,
       runningBadge: isRunning,
       hidden: profile.ephemeral === true,
@@ -295,7 +312,9 @@ export function ProfileInfoDialog({
     {
       icon: <LuPuzzle className="w-4 h-4" />,
       label: t("profileInfo.actions.assignExtensionGroup"),
-      onClick: () => handleAction(() => onAssignExtensionGroup?.([profile.id])),
+      onClick: () => {
+        handleAction(() => onAssignExtensionGroup?.([profile.id]));
+      },
       disabled: isDisabled || !crossOsUnlocked,
       proBadge: !crossOsUnlocked,
       runningBadge: isRunning && crossOsUnlocked,
@@ -304,12 +323,16 @@ export function ProfileInfoDialog({
     {
       icon: <LuShieldCheck className="w-4 h-4" />,
       label: t("profileInfo.network.bypassRulesTitle"),
-      onClick: () => handleAction(() => onOpenBypassRules?.(profile)),
+      onClick: () => {
+        handleAction(() => onOpenBypassRules?.(profile));
+      },
     },
     {
       icon: <LuTrash2 className="w-4 h-4" />,
       label: t("profiles.actions.delete"),
-      onClick: () => handleAction(() => onDeleteProfile?.(profile)),
+      onClick: () => {
+        handleAction(() => onDeleteProfile?.(profile));
+      },
       disabled: isDeleteDisabled,
       destructive: true,
     },
@@ -318,7 +341,12 @@ export function ProfileInfoDialog({
   const visibleActions = actions.filter((a) => !a.hidden);
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{t("profileInfo.title")}</DialogTitle>
@@ -443,7 +471,7 @@ export function ProfileInfoDialog({
                   >
                     {syncMode === "Disabled"
                       ? t("sync.mode.disabled")
-                      : syncStatus?.status === "syncing"
+                      : syncStatus.status === "syncing"
                         ? t("common.status.syncing")
                         : t("common.status.synced")}
                   </Badge>
@@ -585,7 +613,12 @@ export function ProfileBypassRulesDialog({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
       <DialogContent className="sm:max-w-lg max-h-[80vh] flex flex-col">
         <DialogHeader className="shrink-0">
           <DialogTitle>{t("profileInfo.network.bypassRulesTitle")}</DialogTitle>
@@ -598,7 +631,9 @@ export function ProfileBypassRulesDialog({
             <div className="flex gap-2">
               <Input
                 value={newRule}
-                onChange={(e) => setNewRule(e.target.value)}
+                onChange={(e) => {
+                  setNewRule(e.target.value);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleAddRule();
                 }}
@@ -628,7 +663,9 @@ export function ProfileBypassRulesDialog({
                     <span className="font-mono text-xs truncate">{rule}</span>
                     <button
                       type="button"
-                      onClick={() => handleRemoveRule(rule)}
+                      onClick={() => {
+                        handleRemoveRule(rule);
+                      }}
                       className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
                     >
                       <LuX className="w-3.5 h-3.5" />

@@ -389,7 +389,9 @@ export function ProxyManagementDialog({
                       <RippleButton
                         size="sm"
                         variant="outline"
-                        onClick={() => setShowImportDialog(true)}
+                        onClick={() => {
+                          setShowImportDialog(true);
+                        }}
                         className="flex gap-2 items-center"
                       >
                         <LuUpload className="w-4 h-4" />
@@ -398,7 +400,9 @@ export function ProxyManagementDialog({
                       <RippleButton
                         size="sm"
                         variant="outline"
-                        onClick={() => setShowExportDialog(true)}
+                        onClick={() => {
+                          setShowExportDialog(true);
+                        }}
                         className="flex gap-2 items-center"
                         disabled={storedProxies.length === 0}
                       >
@@ -487,7 +491,7 @@ export function ProxyManagementDialog({
                                           <Checkbox
                                             checked={proxy.sync_enabled}
                                             onCheckedChange={() =>
-                                              handleToggleSync(proxy)
+                                              void handleToggleSync(proxy)
                                             }
                                             disabled={
                                               isTogglingSync[proxy.id] ||
@@ -542,9 +546,9 @@ export function ProxyManagementDialog({
                                           <Button
                                             variant="ghost"
                                             size="sm"
-                                            onClick={() =>
-                                              handleEditProxy(proxy)
-                                            }
+                                            onClick={() => {
+                                              handleEditProxy(proxy);
+                                            }}
                                           >
                                             <LuPencil className="w-4 h-4" />
                                           </Button>
@@ -559,9 +563,9 @@ export function ProxyManagementDialog({
                                             <Button
                                               variant="ghost"
                                               size="sm"
-                                              onClick={() =>
-                                                handleDeleteProxy(proxy)
-                                              }
+                                              onClick={() => {
+                                                handleDeleteProxy(proxy);
+                                              }}
                                               disabled={
                                                 (proxyUsage[proxy.id] ?? 0) > 0
                                               }
@@ -604,7 +608,9 @@ export function ProxyManagementDialog({
                       <RippleButton
                         size="sm"
                         variant="outline"
-                        onClick={() => setShowVpnImportDialog(true)}
+                        onClick={() => {
+                          setShowVpnImportDialog(true);
+                        }}
                         className="flex gap-2 items-center"
                       >
                         <LuUpload className="w-4 h-4" />
@@ -690,7 +696,7 @@ export function ProxyManagementDialog({
                                           <Checkbox
                                             checked={vpn.sync_enabled}
                                             onCheckedChange={() =>
-                                              handleToggleVpnSync(vpn)
+                                              void handleToggleVpnSync(vpn)
                                             }
                                             disabled={
                                               isTogglingVpnSync[vpn.id] ||
@@ -728,7 +734,9 @@ export function ProxyManagementDialog({
                                           <Button
                                             variant="ghost"
                                             size="sm"
-                                            onClick={() => handleEditVpn(vpn)}
+                                            onClick={() => {
+                                              handleEditVpn(vpn);
+                                            }}
                                           >
                                             <LuPencil className="w-4 h-4" />
                                           </Button>
@@ -743,9 +751,9 @@ export function ProxyManagementDialog({
                                             <Button
                                               variant="ghost"
                                               size="sm"
-                                              onClick={() =>
-                                                handleDeleteVpn(vpn)
-                                              }
+                                              onClick={() => {
+                                                handleDeleteVpn(vpn);
+                                              }}
                                               disabled={
                                                 (vpnUsage[vpn.id] ?? 0) > 0
                                               }
@@ -796,7 +804,9 @@ export function ProxyManagementDialog({
       />
       <DeleteConfirmationDialog
         isOpen={proxyToDelete !== null}
-        onClose={() => setProxyToDelete(null)}
+        onClose={() => {
+          setProxyToDelete(null);
+        }}
         onConfirm={handleConfirmDelete}
         title="Delete Proxy"
         description={`This action cannot be undone. This will permanently delete the proxy "${proxyToDelete?.name ?? ""}".`}
@@ -805,11 +815,15 @@ export function ProxyManagementDialog({
       />
       <ProxyImportDialog
         isOpen={showImportDialog}
-        onClose={() => setShowImportDialog(false)}
+        onClose={() => {
+          setShowImportDialog(false);
+        }}
       />
       <ProxyExportDialog
         isOpen={showExportDialog}
-        onClose={() => setShowExportDialog(false)}
+        onClose={() => {
+          setShowExportDialog(false);
+        }}
       />
       <VpnFormDialog
         isOpen={showVpnForm}
@@ -818,7 +832,9 @@ export function ProxyManagementDialog({
       />
       <DeleteConfirmationDialog
         isOpen={vpnToDelete !== null}
-        onClose={() => setVpnToDelete(null)}
+        onClose={() => {
+          setVpnToDelete(null);
+        }}
         onConfirm={handleConfirmDeleteVpn}
         title="Delete VPN"
         description={`This action cannot be undone. This will permanently delete the VPN "${vpnToDelete?.name ?? ""}".`}
@@ -827,7 +843,9 @@ export function ProxyManagementDialog({
       />
       <VpnImportDialog
         isOpen={showVpnImportDialog}
-        onClose={() => setShowVpnImportDialog(false)}
+        onClose={() => {
+          setShowVpnImportDialog(false);
+        }}
       />
     </>
   );

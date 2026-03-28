@@ -63,9 +63,15 @@ export function WindowResizeWarningDialog({
     <Dialog open={isOpen}>
       <DialogContent
         className="sm:max-w-sm"
-        onEscapeKeyDown={(e) => e.preventDefault()}
-        onPointerDownOutside={(e) => e.preventDefault()}
-        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => {
+          e.preventDefault();
+        }}
+        onPointerDownOutside={(e) => {
+          e.preventDefault();
+        }}
+        onInteractOutside={(e) => {
+          e.preventDefault();
+        }}
       >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
@@ -77,7 +83,9 @@ export function WindowResizeWarningDialog({
           <Checkbox
             id="dont-show-again"
             checked={dontShowAgain}
-            onCheckedChange={(checked) => setDontShowAgain(checked === true)}
+            onCheckedChange={(checked) => {
+              setDontShowAgain(checked === true);
+            }}
           />
           <Label htmlFor="dont-show-again" className="text-sm">
             {t("warnings.dontShowAgain")}

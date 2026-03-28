@@ -120,7 +120,7 @@ export function usePermissions(): UsePermissionsReturn {
 
   // Initialize platform detection and start interval checking
   useEffect(() => {
-    const initializePlatform = async () => {
+    const initializePlatform = () => {
       try {
         // Detect platform - on macOS we need permissions, on others we don't
         const userAgent = navigator.userAgent;
@@ -142,7 +142,7 @@ export function usePermissions(): UsePermissionsReturn {
       }
     };
 
-    initializePlatform().catch(console.error);
+    initializePlatform();
   }, []);
 
   // Set up interval checking when platform is determined

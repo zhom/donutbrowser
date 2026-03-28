@@ -17,4 +17,5 @@ COPY --from=builder /build/node_modules/ node_modules/
 ENV NODE_ENV=production
 EXPOSE 12342
 
+USER node
 CMD ["node", "dist/main"]

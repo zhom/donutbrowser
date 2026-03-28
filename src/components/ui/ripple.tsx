@@ -50,11 +50,11 @@ const rippleVariants = cva("absolute rounded-full size-5 pointer-events-none", {
   },
 });
 
-type Ripple = {
+interface Ripple {
   id: number;
   x: number;
   y: number;
-};
+}
 
 type RippleButtonProps = HTMLMotionProps<"button"> & {
   children: React.ReactNode;

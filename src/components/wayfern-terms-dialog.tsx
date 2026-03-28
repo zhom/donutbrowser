@@ -45,9 +45,15 @@ export function WayfernTermsDialog({
     <Dialog open={isOpen}>
       <DialogContent
         className="sm:max-w-lg"
-        onEscapeKeyDown={(e) => e.preventDefault()}
-        onPointerDownOutside={(e) => e.preventDefault()}
-        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => {
+          e.preventDefault();
+        }}
+        onPointerDownOutside={(e) => {
+          e.preventDefault();
+        }}
+        onInteractOutside={(e) => {
+          e.preventDefault();
+        }}
       >
         <DialogHeader>
           <DialogTitle>Wayfern Terms and Conditions</DialogTitle>

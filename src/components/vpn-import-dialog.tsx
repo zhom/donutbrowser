@@ -276,7 +276,9 @@ export function VpnImportDialog({ isOpen, onClose }: VpnImportDialogProps) {
                 id="vpn-name"
                 placeholder="My VPN"
                 value={vpnName}
-                onChange={(e) => setVpnName(e.target.value)}
+                onChange={(e) => {
+                  setVpnName(e.target.value);
+                }}
               />
             </div>
 

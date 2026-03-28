@@ -80,7 +80,9 @@ export function CreateGroupDialog({
               id="group-name"
               placeholder="Enter group name..."
               value={groupName}
-              onChange={(e) => setGroupName(e.target.value)}
+              onChange={(e) => {
+                setGroupName(e.target.value);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && groupName.trim()) {
                   void handleCreate();

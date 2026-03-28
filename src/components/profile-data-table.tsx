@@ -102,7 +102,7 @@ import { RippleButton } from "./ui/ripple";
 
 // Stable table meta type to pass volatile state/handlers into TanStack Table without
 // causing column definitions to be recreated on every render.
-type TableMeta = {
+interface TableMeta {
   t: (key: string, options?: Record<string, unknown>) => string;
   selectedProfiles: string[];
   selectableCount: number;
@@ -216,7 +216,7 @@ type TableMeta = {
       }
     | undefined;
   onLaunchWithSync: (profile: BrowserProfile) => void;
-};
+}
 
 type SyncStatusDot = {
   color: string;
@@ -436,7 +436,9 @@ const TagsCell = React.memo<{
         }
       };
       document.addEventListener("mousedown", handleClick);
-      return () => document.removeEventListener("mousedown", handleClick);
+      return () => {
+        document.removeEventListener("mousedown", handleClick);
+      };
     }, [openTagsEditorFor, profile.id, setOpenTagsEditorFor]);
 
     React.useEffect(() => {
@@ -444,7 +446,7 @@ const TagsCell = React.memo<{
         // Focus the inner input of MultipleSelector on open
         const inputEl = editorRef.current.querySelector("input");
         if (inputEl) {
-          (inputEl as HTMLInputElement).focus();
+          inputEl.focus();
         }
       }
     }, [openTagsEditorFor, profile.id]);
@@ -537,8 +539,12 @@ const TagsCell = React.memo<{
               onKeyDown: (e) => {
                 if (e.key === "Escape") setOpenTagsEditorFor(null);
               },
-              onFocus: () => setIsFocused(true),
-              onBlur: () => setIsFocused(false),
+              onFocus: () => {
+                setIsFocused(true);
+              },
+              onBlur: () => {
+                setIsFocused(false);
+              },
             }}
           />
         </div>
@@ -569,8 +575,12 @@ const NonHoverableTooltip = React.memo<{
       <Tooltip open={isOpen} onOpenChange={setIsOpen}>
         <TooltipTrigger
           asChild
-          onMouseEnter={() => setIsOpen(true)}
-          onMouseLeave={() => setIsOpen(false)}
+          onMouseEnter={() => {
+            setIsOpen(true);
+          }}
+          onMouseLeave={() => {
+            setIsOpen(false);
+          }}
         >
           {children}
         </TooltipTrigger>
@@ -578,8 +588,12 @@ const NonHoverableTooltip = React.memo<{
           sideOffset={sideOffset}
           alignOffset={alignOffset}
           arrowOffset={horizontalOffset}
-          onPointerEnter={(e) => e.preventDefault()}
-          onPointerLeave={() => setIsOpen(false)}
+          onPointerEnter={(e) => {
+            e.preventDefault();
+          }}
+          onPointerLeave={() => {
+            setIsOpen(false);
+          }}
           className="pointer-events-none"
           style={
             horizontalOffset !== 0
@@ -623,7 +637,7 @@ const NoteCell = React.memo<{
 
     const onNoteChange = React.useCallback(
       async (newNote: string | null) => {
-        const trimmedNote = newNote?.trim() || null;
+        const trimmedNote = newNote?.trim() ?? null;
         setNoteOverrides((prev) => ({ ...prev, [profile.id]: trimmedNote }));
         try {
           await invoke<BrowserProfile>("update_profile_note", {
@@ -639,12 +653,12 @@ const NoteCell = React.memo<{
 
     const editorRef = React.useRef<HTMLDivElement | null>(null);
     const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
-    const [noteValue, setNoteValue] = React.useState(effectiveNote || "");
+    const [noteValue, setNoteValue] = React.useState(effectiveNote ?? "");
 
     // Update local state when effective note changes (from outside)
     React.useEffect(() => {
       if (openNoteEditorFor !== profile.id) {
-        setNoteValue(effectiveNote || "");
+        setNoteValue(effectiveNote ?? "");
       }
     }, [effectiveNote, openNoteEditorFor, profile.id]);
 
@@ -678,13 +692,15 @@ const NoteCell = React.memo<{
           target &&
           !editorRef.current.contains(target)
         ) {
-          const currentValue = textareaRef.current?.value || "";
+          const currentValue = textareaRef.current?.value ?? "";
           void onNoteChange(currentValue);
           setOpenNoteEditorFor(null);
         }
       };
       document.addEventListener("mousedown", handleClick);
-      return () => document.removeEventListener("mousedown", handleClick);
+      return () => {
+        document.removeEventListener("mousedown", handleClick);
+      };
     }, [openNoteEditorFor, profile.id, setOpenNoteEditorFor, onNoteChange]);
 
     React.useEffect(() => {
@@ -696,7 +712,7 @@ const NoteCell = React.memo<{
       }
     }, [openNoteEditorFor, profile.id]);
 
-    const displayNote = effectiveNote || "";
+    const displayNote = effectiveNote ?? "";
     const trimmedNote =
       displayNote.length > 12 ? `${displayNote.slice(0, 12)}...` : displayNote;
     const showTooltip = displayNote.length > 12 || displayNote.length > 0;
@@ -716,7 +732,7 @@ const NoteCell = React.memo<{
                 )}
                 onClick={() => {
                   if (!isDisabled) {
-                    setNoteValue(effectiveNote || "");
+                    setNoteValue(effectiveNote ?? "");
                     setOpenNoteEditorFor(profile.id);
                   }
                 }}
@@ -734,7 +750,7 @@ const NoteCell = React.memo<{
             {showTooltip && (
               <TooltipContent className="max-w-[320px]">
                 <p className="whitespace-pre-wrap wrap-break-word">
-                  {effectiveNote || "No Note"}
+                  {effectiveNote ?? "No Note"}
                 </p>
               </TooltipContent>
             )}
@@ -760,7 +776,7 @@ const NoteCell = React.memo<{
             onChange={handleTextareaChange}
             onKeyDown={(e) => {
               if (e.key === "Escape") {
-                setNoteValue(effectiveNote || "");
+                setNoteValue(effectiveNote ?? "");
                 setOpenNoteEditorFor(null);
               } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                 void onNoteChange(noteValue);
@@ -1100,14 +1116,13 @@ export function ProfilesDataTable({
     isUpdating,
     launchingProfiles,
     stoppingProfiles,
-    crossOsUnlocked,
   );
 
   // Listen for sync status events
   React.useEffect(() => {
     if (!browserState.isClient) return;
     let unlisten: (() => void) | undefined;
-    (async () => {
+    void (async () => {
       try {
         unlisten = await listen<{
           profile_id: string;
@@ -1168,8 +1183,12 @@ export function ProfilesDataTable({
     };
 
     void fetchTrafficSnapshots();
-    const interval = setInterval(fetchTrafficSnapshots, 1000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => {
+      void fetchTrafficSnapshots();
+    }, 1000);
+    return () => {
+      clearInterval(interval);
+    };
   }, [browserState.isClient, runningCount, runningProfileIds]);
 
   // Clean up snapshots for profiles that are no longer running
@@ -1625,7 +1644,9 @@ export function ProfilesDataTable({
                   meta.selectedProfiles.length === meta.selectableCount &&
                   meta.selectableCount !== 0
                 }
-                onCheckedChange={(value) => meta.handleToggleAll(!!value)}
+                onCheckedChange={(value) => {
+                  meta.handleToggleAll(!!value);
+                }}
                 aria-label="Select all"
                 className="cursor-pointer"
               />
@@ -1669,7 +1690,9 @@ export function ProfilesDataTable({
                     <button
                       type="button"
                       className="flex justify-center items-center p-0 border-none cursor-pointer"
-                      onClick={() => meta.handleIconClick(profile.id)}
+                      onClick={() => {
+                        meta.handleIconClick(profile.id);
+                      }}
                       aria-label="Select profile"
                     >
                       <span className="w-4 h-4 group">
@@ -1705,9 +1728,9 @@ export function ProfilesDataTable({
                 <span className="flex justify-center items-center w-4 h-4">
                   <Checkbox
                     checked={isSelected}
-                    onCheckedChange={(value) =>
-                      meta.handleCheckboxChange(profile.id, !!value)
-                    }
+                    onCheckedChange={(value) => {
+                      meta.handleCheckboxChange(profile.id, !!value);
+                    }}
                     aria-label="Select row"
                     className="w-4 h-4"
                   />
@@ -1753,9 +1776,9 @@ export function ProfilesDataTable({
                 <span className="flex justify-center items-center w-4 h-4">
                   <Checkbox
                     checked={isSelected}
-                    onCheckedChange={(value) =>
-                      meta.handleCheckboxChange(profile.id, !!value)
-                    }
+                    onCheckedChange={(value) => {
+                      meta.handleCheckboxChange(profile.id, !!value);
+                    }}
                     aria-label="Select row"
                     className="w-4 h-4"
                   />
@@ -1774,7 +1797,9 @@ export function ProfilesDataTable({
                 <button
                   type="button"
                   className="flex justify-center items-center p-0 border-none cursor-pointer"
-                  onClick={() => meta.handleIconClick(profile.id)}
+                  onClick={() => {
+                    meta.handleIconClick(profile.id);
+                  }}
                   aria-label="Select profile"
                 >
                   <span className="w-4 h-4 group">
@@ -1920,7 +1945,7 @@ export function ProfilesDataTable({
                       onClick={() =>
                         isRunning
                           ? void handleStop()
-                          : handleProfileLaunch(profile)
+                          : void handleProfileLaunch(profile)
                       }
                     >
                       {isLaunching || isStopping ? (
@@ -1951,9 +1976,9 @@ export function ProfilesDataTable({
           return (
             <Button
               variant="ghost"
-              onClick={() =>
-                column.toggleSorting(column.getIsSorted() === "asc")
-              }
+              onClick={() => {
+                column.toggleSorting(column.getIsSorted() === "asc");
+              }}
               className="justify-start p-0 h-auto font-semibold text-left cursor-pointer"
             >
               Name
@@ -2102,10 +2127,10 @@ export function ProfilesDataTable({
             <TagsCell
               profile={profile}
               isDisabled={isDisabled}
-              tagsOverrides={meta.tagsOverrides || {}}
-              allTags={meta.allTags || []}
+              tagsOverrides={meta.tagsOverrides ?? {}}
+              allTags={meta.allTags ?? []}
               setAllTags={meta.setAllTags}
-              openTagsEditorFor={meta.openTagsEditorFor || null}
+              openTagsEditorFor={meta.openTagsEditorFor ?? null}
               setOpenTagsEditorFor={meta.setOpenTagsEditorFor}
               setTagsOverrides={meta.setTagsOverrides}
             />
@@ -2131,8 +2156,8 @@ export function ProfilesDataTable({
             <NoteCell
               profile={profile}
               isDisabled={isDisabled}
-              noteOverrides={meta.noteOverrides || {}}
-              openNoteEditorFor={meta.openNoteEditorFor || null}
+              noteOverrides={meta.noteOverrides ?? {}}
+              openNoteEditorFor={meta.openNoteEditorFor ?? null}
               setOpenNoteEditorFor={meta.setOpenNoteEditorFor}
               setNoteOverrides={meta.setNoteOverrides}
             />
@@ -2196,12 +2221,12 @@ export function ProfilesDataTable({
               ? [...snapshot.recent_bandwidth]
               : [];
             const currentBandwidth =
-              (snapshot?.current_bytes_sent || 0) +
-              (snapshot?.current_bytes_received || 0);
+              (snapshot?.current_bytes_sent ?? 0) +
+              (snapshot?.current_bytes_received ?? 0);
 
             return (
               <BandwidthMiniChart
-                key={`${profile.id}-${snapshot?.last_update || 0}-${bandwidthData.length}`}
+                key={`${profile.id}-${snapshot?.last_update ?? 0}-${bandwidthData.length}`}
                 data={bandwidthData}
                 currentBandwidth={currentBandwidth}
                 onClick={() => meta.onOpenTrafficDialog?.(profile.id)}
@@ -2213,9 +2238,9 @@ export function ProfilesDataTable({
             <div className="flex gap-2 items-center">
               <Popover
                 open={isSelectorOpen}
-                onOpenChange={(open) =>
-                  meta.setOpenProxySelectorFor(open ? profile.id : null)
-                }
+                onOpenChange={(open) => {
+                  meta.setOpenProxySelectorFor(open ? profile.id : null);
+                }}
               >
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -2468,7 +2493,9 @@ export function ProfilesDataTable({
                 variant="ghost"
                 className="p-0 w-8 h-8"
                 disabled={!meta.isClient}
-                onClick={() => setProfileForInfoDialog(profile)}
+                onClick={() => {
+                  setProfileForInfoDialog(profile);
+                }}
               >
                 <span className="sr-only">Profile info</span>
                 <LuInfo className="w-4 h-4" />
@@ -2598,7 +2625,9 @@ export function ProfilesDataTable({
       </ScrollArea>
       <DeleteConfirmationDialog
         isOpen={profileToDelete !== null}
-        onClose={() => setProfileToDelete(null)}
+        onClose={() => {
+          setProfileToDelete(null);
+        }}
         onConfirm={handleDelete}
         title="Delete Profile"
         description={`This action cannot be undone. This will permanently delete the profile "${profileToDelete?.name}" and all its associated data.`}
@@ -2618,7 +2647,9 @@ export function ProfilesDataTable({
           return (
             <ProfileInfoDialog
               isOpen={profileForInfoDialog !== null}
-              onClose={() => setProfileForInfoDialog(null)}
+              onClose={() => {
+                setProfileForInfoDialog(null);
+              }}
               profile={infoProfile}
               storedProxies={storedProxies}
               vpnConfigs={vpnConfigs}
@@ -2632,7 +2663,9 @@ export function ProfilesDataTable({
               onCopyCookiesToProfile={onCopyCookiesToProfile}
               onOpenCookieManagement={onOpenCookieManagement}
               onAssignExtensionGroup={onAssignExtensionGroup}
-              onOpenBypassRules={(profile) => setBypassRulesProfile(profile)}
+              onOpenBypassRules={(profile) => {
+                setBypassRulesProfile(profile);
+              }}
               onCloneProfile={onCloneProfile}
               onLaunchWithSync={onLaunchWithSync}
               onDeleteProfile={(profile) => {
@@ -2700,14 +2733,18 @@ export function ProfilesDataTable({
       {trafficDialogProfile && (
         <TrafficDetailsDialog
           isOpen={trafficDialogProfile !== null}
-          onClose={() => setTrafficDialogProfile(null)}
+          onClose={() => {
+            setTrafficDialogProfile(null);
+          }}
           profileId={trafficDialogProfile.id}
           profileName={trafficDialogProfile.name}
         />
       )}
       <ProfileBypassRulesDialog
         isOpen={bypassRulesProfile !== null}
-        onClose={() => setBypassRulesProfile(null)}
+        onClose={() => {
+          setBypassRulesProfile(null);
+        }}
         profileId={bypassRulesProfile?.id ?? null}
         initialRules={bypassRulesProfile?.proxy_bypass_rules ?? []}
       />

@@ -148,9 +148,9 @@ export function DeleteGroupDialog({
                     <Label>What should happen to these profiles?</Label>
                     <RadioGroup
                       value={deleteAction}
-                      onValueChange={(value) =>
-                        setDeleteAction(value as "move" | "delete")
-                      }
+                      onValueChange={(value) => {
+                        setDeleteAction(value as "move" | "delete");
+                      }}
                     >
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="move" id="move" />

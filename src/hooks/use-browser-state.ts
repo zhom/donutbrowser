@@ -15,7 +15,6 @@ export function useBrowserState(
   _isUpdating: (browser: string) => boolean,
   launchingProfiles: Set<string>,
   stoppingProfiles: Set<string>,
-  _crossOsUnlocked = false,
 ) {
   const [isClient, setIsClient] = useState(false);
 

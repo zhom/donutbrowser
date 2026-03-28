@@ -137,7 +137,7 @@ export function ExtensionGroupAssignmentDialog({
               </div>
             ) : (
               <Select
-                value={selectedGroupId || "none"}
+                value={selectedGroupId ?? "none"}
                 onValueChange={(value) => {
                   setSelectedGroupId(value === "none" ? null : value);
                 }}

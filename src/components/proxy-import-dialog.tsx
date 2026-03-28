@@ -69,7 +69,7 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
   }, []);
 
   const processContent = useCallback(
-    async (content: string, isJson: boolean, _filename: string = "") => {
+    async (content: string, isJson: boolean, _filename = "") => {
       try {
         if (isJson) {
           setIsImporting(true);
@@ -180,7 +180,7 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
   useEffect(() => {
     if (!isOpen || step !== "dropzone") return;
 
-    const handlePaste = async (e: ClipboardEvent) => {
+    const handlePaste = (e: ClipboardEvent) => {
       const text = e.clipboardData?.getData("text");
       if (text) {
         // Try to detect if it's JSON
@@ -189,7 +189,7 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
           (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
           (trimmed.startsWith("[") && trimmed.endsWith("]"));
         // Use "pasted.txt" as filename to trigger content-based detection
-        await processContent(text, isJson, "pasted.txt");
+        void processContent(text, isJson, "pasted.txt");
       }
     };
 
@@ -339,7 +339,9 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
                 id="name-prefix"
                 placeholder="Imported"
                 value={namePrefix}
-                onChange={(e) => setNamePrefix(e.target.value)}
+                onChange={(e) => {
+                  setNamePrefix(e.target.value);
+                }}
               />
               <p className="text-xs text-muted-foreground">
                 Proxies will be named &quot;{namePrefix || "Imported"} Proxy
@@ -408,9 +410,9 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
                             type="radio"
                             name={`format-${i}`}
                             checked={proxy.selectedFormat === format}
-                            onChange={() =>
-                              handleAmbiguousFormatSelect(i, format)
-                            }
+                            onChange={() => {
+                              handleAmbiguousFormatSelect(i, format);
+                            }}
                             className="accent-primary"
                           />
                           <span className="text-xs">{format}</span>

@@ -108,7 +108,9 @@ function ObjectEditor({
       <Label>{title}</Label>
       <Textarea
         value={jsonString}
-        onChange={(e) => handleChange(e.target.value)}
+        onChange={(e) => {
+          handleChange(e.target.value);
+        }}
         placeholder={`Enter ${title} as JSON`}
         className="font-mono text-sm"
         rows={6}
@@ -267,7 +269,9 @@ export function SharedCamoufoxConfigForm({
         </div>
         <Select
           value={selectedOS}
-          onValueChange={(value: CamoufoxOS) => onConfigChange("os", value)}
+          onValueChange={(value: CamoufoxOS) => {
+            onConfigChange("os", value);
+          }}
           disabled={readOnly}
         >
           <SelectTrigger>
@@ -301,10 +305,10 @@ export function SharedCamoufoxConfigForm({
         <div className="flex items-center space-x-2">
           <Checkbox
             id="randomize-fingerprint"
-            checked={config.randomize_fingerprint_on_launch || false}
-            onCheckedChange={(checked) =>
-              onConfigChange("randomize_fingerprint_on_launch", checked)
-            }
+            checked={config.randomize_fingerprint_on_launch ?? false}
+            onCheckedChange={(checked) => {
+              onConfigChange("randomize_fingerprint_on_launch", checked);
+            }}
             disabled={readOnly}
           />
           <Label htmlFor="randomize-fingerprint" className="font-medium">
@@ -365,10 +369,10 @@ export function SharedCamoufoxConfigForm({
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="block-images"
-                    checked={config.block_images || false}
-                    onCheckedChange={(checked) =>
-                      onConfigChange("block_images", checked)
-                    }
+                    checked={config.block_images ?? false}
+                    onCheckedChange={(checked) => {
+                      onConfigChange("block_images", checked);
+                    }}
                   />
                   <Label htmlFor="block-images">
                     {t("fingerprint.blockImages")}
@@ -377,10 +381,10 @@ export function SharedCamoufoxConfigForm({
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="block-webrtc"
-                    checked={config.block_webrtc || false}
-                    onCheckedChange={(checked) =>
-                      onConfigChange("block_webrtc", checked)
-                    }
+                    checked={config.block_webrtc ?? false}
+                    onCheckedChange={(checked) => {
+                      onConfigChange("block_webrtc", checked);
+                    }}
                   />
                   <Label htmlFor="block-webrtc">
                     {t("fingerprint.blockWebRTC")}
@@ -389,10 +393,10 @@ export function SharedCamoufoxConfigForm({
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="block-webgl"
-                    checked={config.block_webgl || false}
-                    onCheckedChange={(checked) =>
-                      onConfigChange("block_webgl", checked)
-                    }
+                    checked={config.block_webgl ?? false}
+                    onCheckedChange={(checked) => {
+                      onConfigChange("block_webgl", checked);
+                    }}
                   />
                   <Label htmlFor="block-webgl">
                     {t("fingerprint.blockWebGL")}
@@ -410,13 +414,13 @@ export function SharedCamoufoxConfigForm({
                 <Label htmlFor="user-agent">{t("fingerprint.userAgent")}</Label>
                 <Input
                   id="user-agent"
-                  value={fingerprintConfig["navigator.userAgent"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["navigator.userAgent"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "navigator.userAgent",
                       e.target.value || undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="Mozilla/5.0..."
                 />
               </div>
@@ -424,13 +428,13 @@ export function SharedCamoufoxConfigForm({
                 <Label htmlFor="platform">{t("fingerprint.platform")}</Label>
                 <Input
                   id="platform"
-                  value={fingerprintConfig["navigator.platform"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["navigator.platform"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "navigator.platform",
                       e.target.value || undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., MacIntel, Win32"
                 />
               </div>
@@ -440,13 +444,13 @@ export function SharedCamoufoxConfigForm({
                 </Label>
                 <Input
                   id="app-version"
-                  value={fingerprintConfig["navigator.appVersion"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["navigator.appVersion"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "navigator.appVersion",
                       e.target.value || undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 5.0 (Macintosh)"
                 />
               </div>
@@ -454,13 +458,13 @@ export function SharedCamoufoxConfigForm({
                 <Label htmlFor="oscpu">{t("fingerprint.osCpu")}</Label>
                 <Input
                   id="oscpu"
-                  value={fingerprintConfig["navigator.oscpu"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["navigator.oscpu"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "navigator.oscpu",
                       e.target.value || undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., Intel Mac OS X 10.15"
                 />
               </div>
@@ -472,14 +476,14 @@ export function SharedCamoufoxConfigForm({
                   id="hardware-concurrency"
                   type="number"
                   value={
-                    fingerprintConfig["navigator.hardwareConcurrency"] || ""
+                    fingerprintConfig["navigator.hardwareConcurrency"] ?? ""
                   }
-                  onChange={(e) =>
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "navigator.hardwareConcurrency",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 8"
                 />
               </div>
@@ -490,13 +494,13 @@ export function SharedCamoufoxConfigForm({
                 <Input
                   id="max-touch-points"
                   type="number"
-                  value={fingerprintConfig["navigator.maxTouchPoints"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["navigator.maxTouchPoints"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "navigator.maxTouchPoints",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 0"
                 />
               </div>
@@ -505,13 +509,13 @@ export function SharedCamoufoxConfigForm({
                   {t("fingerprint.doNotTrack")}
                 </Label>
                 <Select
-                  value={fingerprintConfig["navigator.doNotTrack"] || ""}
-                  onValueChange={(value) =>
+                  value={fingerprintConfig["navigator.doNotTrack"] ?? ""}
+                  onValueChange={(value) => {
                     updateFingerprintConfig(
                       "navigator.doNotTrack",
                       value || undefined,
-                    )
-                  }
+                    );
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue
@@ -535,13 +539,13 @@ export function SharedCamoufoxConfigForm({
                 <Label htmlFor="language">{t("fingerprint.language")}</Label>
                 <Input
                   id="language"
-                  value={fingerprintConfig["navigator.language"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["navigator.language"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "navigator.language",
                       e.target.value || undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., en-US"
                 />
               </div>
@@ -559,13 +563,13 @@ export function SharedCamoufoxConfigForm({
                 <Input
                   id="screen-width"
                   type="number"
-                  value={fingerprintConfig["screen.width"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["screen.width"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "screen.width",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 1920"
                 />
               </div>
@@ -576,13 +580,13 @@ export function SharedCamoufoxConfigForm({
                 <Input
                   id="screen-height"
                   type="number"
-                  value={fingerprintConfig["screen.height"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["screen.height"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "screen.height",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 1080"
                 />
               </div>
@@ -593,13 +597,13 @@ export function SharedCamoufoxConfigForm({
                 <Input
                   id="avail-width"
                   type="number"
-                  value={fingerprintConfig["screen.availWidth"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["screen.availWidth"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "screen.availWidth",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 1920"
                 />
               </div>
@@ -610,13 +614,13 @@ export function SharedCamoufoxConfigForm({
                 <Input
                   id="avail-height"
                   type="number"
-                  value={fingerprintConfig["screen.availHeight"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["screen.availHeight"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "screen.availHeight",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 1055"
                 />
               </div>
@@ -627,13 +631,13 @@ export function SharedCamoufoxConfigForm({
                 <Input
                   id="color-depth"
                   type="number"
-                  value={fingerprintConfig["screen.colorDepth"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["screen.colorDepth"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "screen.colorDepth",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 30"
                 />
               </div>
@@ -644,13 +648,13 @@ export function SharedCamoufoxConfigForm({
                 <Input
                   id="pixel-depth"
                   type="number"
-                  value={fingerprintConfig["screen.pixelDepth"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["screen.pixelDepth"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "screen.pixelDepth",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 30"
                 />
               </div>
@@ -668,13 +672,13 @@ export function SharedCamoufoxConfigForm({
                 <Input
                   id="outer-width"
                   type="number"
-                  value={fingerprintConfig["window.outerWidth"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["window.outerWidth"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "window.outerWidth",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 1512"
                 />
               </div>
@@ -685,13 +689,13 @@ export function SharedCamoufoxConfigForm({
                 <Input
                   id="outer-height"
                   type="number"
-                  value={fingerprintConfig["window.outerHeight"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["window.outerHeight"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "window.outerHeight",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 886"
                 />
               </div>
@@ -702,13 +706,13 @@ export function SharedCamoufoxConfigForm({
                 <Input
                   id="inner-width"
                   type="number"
-                  value={fingerprintConfig["window.innerWidth"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["window.innerWidth"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "window.innerWidth",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 1512"
                 />
               </div>
@@ -719,13 +723,13 @@ export function SharedCamoufoxConfigForm({
                 <Input
                   id="inner-height"
                   type="number"
-                  value={fingerprintConfig["window.innerHeight"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["window.innerHeight"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "window.innerHeight",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 886"
                 />
               </div>
@@ -734,13 +738,13 @@ export function SharedCamoufoxConfigForm({
                 <Input
                   id="screen-x"
                   type="number"
-                  value={fingerprintConfig["window.screenX"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["window.screenX"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "window.screenX",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 0"
                 />
               </div>
@@ -749,13 +753,13 @@ export function SharedCamoufoxConfigForm({
                 <Input
                   id="screen-y"
                   type="number"
-                  value={fingerprintConfig["window.screenY"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["window.screenY"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "window.screenY",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 0"
                 />
               </div>
@@ -772,13 +776,13 @@ export function SharedCamoufoxConfigForm({
                   id="latitude"
                   type="number"
                   step="any"
-                  value={fingerprintConfig["geolocation:latitude"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["geolocation:latitude"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "geolocation:latitude",
                       e.target.value ? parseFloat(e.target.value) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 41.0019"
                 />
               </div>
@@ -788,13 +792,13 @@ export function SharedCamoufoxConfigForm({
                   id="longitude"
                   type="number"
                   step="any"
-                  value={fingerprintConfig["geolocation:longitude"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["geolocation:longitude"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "geolocation:longitude",
                       e.target.value ? parseFloat(e.target.value) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 28.9645"
                 />
               </div>
@@ -803,13 +807,13 @@ export function SharedCamoufoxConfigForm({
                 <Input
                   id="timezone"
                   type="text"
-                  value={fingerprintConfig.timezone || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.timezone ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "timezone",
                       e.target.value || undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., America/New_York"
                 />
               </div>
@@ -826,13 +830,13 @@ export function SharedCamoufoxConfigForm({
                 </Label>
                 <Input
                   id="locale-language"
-                  value={fingerprintConfig["locale:language"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["locale:language"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "locale:language",
                       e.target.value || undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., tr"
                 />
               </div>
@@ -840,13 +844,13 @@ export function SharedCamoufoxConfigForm({
                 <Label htmlFor="locale-region">{t("fingerprint.region")}</Label>
                 <Input
                   id="locale-region"
-                  value={fingerprintConfig["locale:region"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["locale:region"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "locale:region",
                       e.target.value || undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., TR"
                 />
               </div>
@@ -854,13 +858,13 @@ export function SharedCamoufoxConfigForm({
                 <Label htmlFor="locale-script">{t("fingerprint.script")}</Label>
                 <Input
                   id="locale-script"
-                  value={fingerprintConfig["locale:script"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["locale:script"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "locale:script",
                       e.target.value || undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., Latn"
                 />
               </div>
@@ -877,13 +881,13 @@ export function SharedCamoufoxConfigForm({
                 </Label>
                 <Input
                   id="webgl-vendor"
-                  value={fingerprintConfig["webGl:vendor"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["webGl:vendor"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "webGl:vendor",
                       e.target.value || undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., Mesa"
                 />
               </div>
@@ -893,13 +897,13 @@ export function SharedCamoufoxConfigForm({
                 </Label>
                 <Input
                   id="webgl-renderer"
-                  value={fingerprintConfig["webGl:renderer"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["webGl:renderer"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "webGl:renderer",
                       e.target.value || undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., llvmpipe, or similar"
                 />
               </div>
@@ -915,9 +919,9 @@ export function SharedCamoufoxConfigForm({
                   unknown
                 >) || {}
               }
-              onChange={(value) =>
-                updateFingerprintConfig("webGl:parameters", value)
-              }
+              onChange={(value) => {
+                updateFingerprintConfig("webGl:parameters", value);
+              }}
               title={t("fingerprint.webglParameters")}
               readOnly={readOnly}
             />
@@ -932,9 +936,9 @@ export function SharedCamoufoxConfigForm({
                   unknown
                 >) || {}
               }
-              onChange={(value) =>
-                updateFingerprintConfig("webGl2:parameters", value)
-              }
+              onChange={(value) => {
+                updateFingerprintConfig("webGl2:parameters", value);
+              }}
               title={t("fingerprint.webgl2Parameters")}
               readOnly={readOnly}
             />
@@ -949,9 +953,9 @@ export function SharedCamoufoxConfigForm({
                   unknown
                 >) || {}
               }
-              onChange={(value) =>
-                updateFingerprintConfig("webGl:shaderPrecisionFormats", value)
-              }
+              onChange={(value) => {
+                updateFingerprintConfig("webGl:shaderPrecisionFormats", value);
+              }}
               title={t("fingerprint.webglShaderPrecisionFormats")}
               readOnly={readOnly}
             />
@@ -966,9 +970,9 @@ export function SharedCamoufoxConfigForm({
                   unknown
                 >) || {}
               }
-              onChange={(value) =>
-                updateFingerprintConfig("webGl2:shaderPrecisionFormats", value)
-              }
+              onChange={(value) => {
+                updateFingerprintConfig("webGl2:shaderPrecisionFormats", value);
+              }}
               title={t("fingerprint.webgl2ShaderPrecisionFormats")}
               readOnly={readOnly}
             />
@@ -1000,12 +1004,12 @@ export function SharedCamoufoxConfigForm({
                   value: font,
                 }));
               })()}
-              onChange={(selected: Option[]) =>
+              onChange={(selected: Option[]) => {
                 updateFingerprintConfig(
                   "fonts",
                   selected.map((s: Option) => s.value),
-                )
-              }
+                );
+              }}
               placeholder="Add fonts..."
               creatable
             />
@@ -1019,10 +1023,10 @@ export function SharedCamoufoxConfigForm({
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="battery-charging"
-                    checked={fingerprintConfig["battery:charging"] || false}
-                    onCheckedChange={(checked) =>
-                      updateFingerprintConfig("battery:charging", checked)
-                    }
+                    checked={fingerprintConfig["battery:charging"] ?? false}
+                    onCheckedChange={(checked) => {
+                      updateFingerprintConfig("battery:charging", checked);
+                    }}
                   />
                   <Label htmlFor="battery-charging">
                     {t("fingerprint.charging")}
@@ -1037,13 +1041,13 @@ export function SharedCamoufoxConfigForm({
                   id="charging-time"
                   type="number"
                   step="any"
-                  value={fingerprintConfig["battery:chargingTime"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["battery:chargingTime"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "battery:chargingTime",
                       e.target.value ? parseFloat(e.target.value) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 0"
                 />
               </div>
@@ -1055,13 +1059,13 @@ export function SharedCamoufoxConfigForm({
                   id="discharging-time"
                   type="number"
                   step="any"
-                  value={fingerprintConfig["battery:dischargingTime"] || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig["battery:dischargingTime"] ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "battery:dischargingTime",
                       e.target.value ? parseFloat(e.target.value) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 0"
                 />
               </div>
@@ -1132,9 +1136,9 @@ export function SharedCamoufoxConfigForm({
               <Label>{t("fingerprint.osLabel")}</Label>
               <Select
                 value={selectedOS}
-                onValueChange={(value: CamoufoxOS) =>
-                  onConfigChange("os", value)
-                }
+                onValueChange={(value: CamoufoxOS) => {
+                  onConfigChange("os", value);
+                }}
                 disabled={readOnly}
               >
                 <SelectTrigger>
@@ -1170,10 +1174,10 @@ export function SharedCamoufoxConfigForm({
               <div className="flex items-center space-x-2">
                 <Checkbox
                   id="randomize-fingerprint-auto"
-                  checked={config.randomize_fingerprint_on_launch || false}
-                  onCheckedChange={(checked) =>
-                    onConfigChange("randomize_fingerprint_on_launch", checked)
-                  }
+                  checked={config.randomize_fingerprint_on_launch ?? false}
+                  onCheckedChange={(checked) => {
+                    onConfigChange("randomize_fingerprint_on_launch", checked);
+                  }}
                   disabled={readOnly}
                 />
                 <Label
@@ -1222,15 +1226,15 @@ export function SharedCamoufoxConfigForm({
                     <Input
                       id="screen-max-width"
                       type="number"
-                      value={config.screen_max_width || ""}
-                      onChange={(e) =>
+                      value={config.screen_max_width ?? ""}
+                      onChange={(e) => {
                         onConfigChange(
                           "screen_max_width",
                           e.target.value
                             ? parseInt(e.target.value, 10)
                             : undefined,
-                        )
-                      }
+                        );
+                      }}
                       placeholder="e.g., 1920"
                     />
                   </div>
@@ -1241,15 +1245,15 @@ export function SharedCamoufoxConfigForm({
                     <Input
                       id="screen-max-height"
                       type="number"
-                      value={config.screen_max_height || ""}
-                      onChange={(e) =>
+                      value={config.screen_max_height ?? ""}
+                      onChange={(e) => {
                         onConfigChange(
                           "screen_max_height",
                           e.target.value
                             ? parseInt(e.target.value, 10)
                             : undefined,
-                        )
-                      }
+                        );
+                      }}
                       placeholder="e.g., 1080"
                     />
                   </div>
@@ -1260,15 +1264,15 @@ export function SharedCamoufoxConfigForm({
                     <Input
                       id="screen-min-width"
                       type="number"
-                      value={config.screen_min_width || ""}
-                      onChange={(e) =>
+                      value={config.screen_min_width ?? ""}
+                      onChange={(e) => {
                         onConfigChange(
                           "screen_min_width",
                           e.target.value
                             ? parseInt(e.target.value, 10)
                             : undefined,
-                        )
-                      }
+                        );
+                      }}
                       placeholder="e.g., 800"
                     />
                   </div>
@@ -1279,15 +1283,15 @@ export function SharedCamoufoxConfigForm({
                     <Input
                       id="screen-min-height"
                       type="number"
-                      value={config.screen_min_height || ""}
-                      onChange={(e) =>
+                      value={config.screen_min_height ?? ""}
+                      onChange={(e) => {
                         onConfigChange(
                           "screen_min_height",
                           e.target.value
                             ? parseInt(e.target.value, 10)
                             : undefined,
-                        )
-                      }
+                        );
+                      }}
                       placeholder="e.g., 600"
                     />
                   </div>

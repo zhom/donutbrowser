@@ -214,7 +214,9 @@ export const ColorPickerSelection = memo(
     );
 
     useEffect(() => {
-      const handlePointerUp = () => setIsDragging(false);
+      const handlePointerUp = () => {
+        setIsDragging(false);
+      };
 
       if (isDragging) {
         window.addEventListener("pointermove", handlePointerMove);
@@ -268,7 +270,9 @@ export const ColorPickerHue = ({
     <Slider.Root
       className={cn("flex relative w-full h-4 touch-none", className)}
       max={360}
-      onValueChange={([hue]) => setHue(hue)}
+      onValueChange={([hue]) => {
+        setHue(hue);
+      }}
       step={1}
       value={[hue]}
       {...props}
@@ -293,7 +297,9 @@ export const ColorPickerAlpha = ({
     <Slider.Root
       className={cn("flex relative w-full h-4 touch-none", className)}
       max={100}
-      onValueChange={([alpha]) => setAlpha(alpha)}
+      onValueChange={([alpha]) => {
+        setAlpha(alpha);
+      }}
       step={1}
       value={[alpha]}
       {...props}

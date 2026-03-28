@@ -69,7 +69,12 @@ export function CloneProfileDialog({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t("profileInfo.clone.title")}</DialogTitle>
@@ -80,7 +85,9 @@ export function CloneProfileDialog({
         <Input
           ref={inputRef}
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            setName(e.target.value);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") void handleClone();
           }}

@@ -246,7 +246,9 @@ export function GroupManagementDialog({
               <Label>Groups</Label>
               <RippleButton
                 size="sm"
-                onClick={() => setCreateDialogOpen(true)}
+                onClick={() => {
+                  setCreateDialogOpen(true);
+                }}
                 className="flex gap-2 items-center"
               >
                 <GoPlus className="w-4 h-4" />
@@ -350,7 +352,9 @@ export function GroupManagementDialog({
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      onClick={() => handleEditGroup(group)}
+                                      onClick={() => {
+                                        handleEditGroup(group);
+                                      }}
                                     >
                                       <LuPencil className="w-4 h-4" />
                                     </Button>
@@ -364,7 +368,9 @@ export function GroupManagementDialog({
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      onClick={() => handleDeleteGroup(group)}
+                                      onClick={() => {
+                                        handleDeleteGroup(group);
+                                      }}
                                     >
                                       <LuTrash2 className="w-4 h-4" />
                                     </Button>
@@ -395,20 +401,26 @@ export function GroupManagementDialog({
 
       <CreateGroupDialog
         isOpen={createDialogOpen}
-        onClose={() => setCreateDialogOpen(false)}
+        onClose={() => {
+          setCreateDialogOpen(false);
+        }}
         onGroupCreated={handleGroupCreated}
       />
 
       <EditGroupDialog
         isOpen={editDialogOpen}
-        onClose={() => setEditDialogOpen(false)}
+        onClose={() => {
+          setEditDialogOpen(false);
+        }}
         group={selectedGroup}
         onGroupUpdated={handleGroupUpdated}
       />
 
       <DeleteGroupDialog
         isOpen={deleteDialogOpen}
-        onClose={() => setDeleteDialogOpen(false)}
+        onClose={() => {
+          setDeleteDialogOpen(false);
+        }}
         group={selectedGroup}
         onGroupDeleted={handleGroupDeleted}
       />

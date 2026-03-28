@@ -166,7 +166,7 @@ function useLogoEasterEgg() {
   };
 }
 
-type Props = {
+interface Props {
   onSettingsDialogOpen: (open: boolean) => void;
   onProxyManagementDialogOpen: (open: boolean) => void;
   onGroupManagementDialogOpen: (open: boolean) => void;
@@ -177,7 +177,7 @@ type Props = {
   onExtensionManagementDialogOpen: (open: boolean) => void;
   searchQuery: string;
   onSearchQueryChange: (query: string) => void;
-};
+}
 
 const HomeHeader = ({
   onSettingsDialogOpen,
@@ -211,9 +211,15 @@ const HomeHeader = ({
             type="button"
             className="p-1 cursor-pointer select-none"
             onClick={handleClick}
-            onPointerDown={() => setIsPressed(true)}
-            onPointerUp={() => setIsPressed(false)}
-            onPointerLeave={() => setIsPressed(false)}
+            onPointerDown={() => {
+              setIsPressed(true);
+            }}
+            onPointerUp={() => {
+              setIsPressed(false);
+            }}
+            onPointerLeave={() => {
+              setIsPressed(false);
+            }}
           >
             <Logo
               key={wobbleKey}
@@ -238,14 +244,18 @@ const HomeHeader = ({
             type="text"
             placeholder={t("header.searchPlaceholder")}
             value={searchQuery}
-            onChange={(e) => onSearchQueryChange(e.target.value)}
+            onChange={(e) => {
+              onSearchQueryChange(e.target.value);
+            }}
             className="pr-8 pl-10 w-48"
           />
           <LuSearch className="absolute left-3 top-1/2 w-4 h-4 transform -translate-y-1/2 text-muted-foreground" />
           {searchQuery && (
             <button
               type="button"
-              onClick={() => onSearchQueryChange("")}
+              onClick={() => {
+                onSearchQueryChange("");
+              }}
               className="absolute right-2 top-1/2 p-1 rounded-sm transition-colors transform -translate-y-1/2 hover:bg-accent"
               aria-label={t("header.clearSearch")}
             >

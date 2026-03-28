@@ -314,9 +314,9 @@ export function useBrowserDownload() {
                     invoke("cancel_download", {
                       browserStr: progress.browser,
                       version: progress.version,
-                    }).catch((err) =>
-                      console.error("Failed to cancel download:", err),
-                    );
+                    }).catch((err) => {
+                      console.error("Failed to cancel download:", err);
+                    });
                     dismissToast(toastId);
                   },
                 },

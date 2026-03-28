@@ -46,12 +46,6 @@ export function BandwidthMiniChart({
     return result;
   }, [data]);
 
-  // Find max value for scaling
-  const _maxBandwidth = React.useMemo(() => {
-    const max = Math.max(...chartData.map((d) => d.bandwidth), 1);
-    return max;
-  }, [chartData]);
-
   // Use external bandwidth if provided, otherwise calculate from last data point
   const currentBandwidth =
     externalBandwidth ?? chartData[chartData.length - 1]?.bandwidth ?? 0;

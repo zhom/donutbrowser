@@ -244,7 +244,12 @@ export function TrafficDetailsDialog({
   }, [stats]);
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>
@@ -265,7 +270,9 @@ export function TrafficDetailsDialog({
                 <h3 className="text-sm font-medium">Bandwidth Over Time</h3>
                 <Select
                   value={timePeriod}
-                  onValueChange={(v) => setTimePeriod(v as TimePeriod)}
+                  onValueChange={(v) => {
+                    setTimePeriod(v as TimePeriod);
+                  }}
                 >
                   <SelectTrigger className="w-[120px] h-8">
                     <SelectValue placeholder="Time period" />
@@ -400,7 +407,7 @@ export function TrafficDetailsDialog({
                   Sent ({timePeriod === "all" ? "total" : timePeriod})
                 </p>
                 <p className="text-lg font-semibold text-chart-1">
-                  {formatBytes(stats?.period_bytes_sent || 0)}
+                  {formatBytes(stats?.period_bytes_sent ?? 0)}
                 </p>
               </div>
               <div className="bg-muted/50 rounded-lg p-3">
@@ -408,7 +415,7 @@ export function TrafficDetailsDialog({
                   Received ({timePeriod === "all" ? "total" : timePeriod})
                 </p>
                 <p className="text-lg font-semibold text-chart-2">
-                  {formatBytes(stats?.period_bytes_received || 0)}
+                  {formatBytes(stats?.period_bytes_received ?? 0)}
                 </p>
               </div>
               <div className="bg-muted/50 rounded-lg p-3">
@@ -416,7 +423,7 @@ export function TrafficDetailsDialog({
                   Requests ({timePeriod === "all" ? "total" : timePeriod})
                 </p>
                 <p className="text-lg font-semibold">
-                  {(stats?.period_requests || 0).toLocaleString()}
+                  {(stats?.period_requests ?? 0).toLocaleString()}
                 </p>
               </div>
             </div>
@@ -426,13 +433,13 @@ export function TrafficDetailsDialog({
               <div>
                 <span className="font-medium">All-time traffic:</span>{" "}
                 {formatBytes(
-                  (stats?.total_bytes_sent || 0) +
-                    (stats?.total_bytes_received || 0),
+                  (stats?.total_bytes_sent ?? 0) +
+                    (stats?.total_bytes_received ?? 0),
                 )}
               </div>
               <div>
                 <span className="font-medium">All-time requests:</span>{" "}
-                {stats?.total_requests?.toLocaleString() || 0}
+                {stats?.total_requests?.toLocaleString() ?? 0}
               </div>
             </div>
 

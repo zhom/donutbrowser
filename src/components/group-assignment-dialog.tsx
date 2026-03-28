@@ -144,7 +144,9 @@ export function GroupAssignmentDialog({
                 size="sm"
                 variant="outline"
                 className="h-7 px-2 text-xs"
-                onClick={() => setCreateDialogOpen(true)}
+                onClick={() => {
+                  setCreateDialogOpen(true);
+                }}
               >
                 <GoPlus className="mr-1 w-3 h-3" /> Create Group
               </RippleButton>
@@ -201,7 +203,9 @@ export function GroupAssignmentDialog({
       </DialogContent>
       <CreateGroupDialog
         isOpen={createDialogOpen}
-        onClose={() => setCreateDialogOpen(false)}
+        onClose={() => {
+          setCreateDialogOpen(false);
+        }}
         onGroupCreated={(group) => {
           setGroups((prev) => [...prev, group]);
           setSelectedGroupId(group.id);

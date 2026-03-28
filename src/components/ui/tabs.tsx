@@ -20,10 +20,10 @@ import { useControlledState } from "@/hooks/use-controlled-state";
 import { getStrictContext } from "@/lib/get-strict-context";
 import { cn } from "@/lib/utils";
 
-type TabsContextType = {
+interface TabsContextType {
   value: string | undefined;
   setValue: TabsProps["onValueChange"];
-};
+}
 
 const [TabsProvider, useTabs] =
   getStrictContext<TabsContextType>("TabsContext");

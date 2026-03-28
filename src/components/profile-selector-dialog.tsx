@@ -51,7 +51,7 @@ export function ProfileSelectorDialog({
   const { profiles, runningProfiles: hookRunningProfiles } = useProfileEvents();
 
   // Use external runningProfiles if provided, otherwise use hook's runningProfiles
-  const runningProfiles = externalRunningProfiles || hookRunningProfiles;
+  const runningProfiles = externalRunningProfiles ?? hookRunningProfiles;
 
   const { storedProxies } = useProxyEvents();
 
@@ -60,9 +60,7 @@ export function ProfileSelectorDialog({
   const [launchingProfiles, setLaunchingProfiles] = useState<Set<string>>(
     new Set(),
   );
-  const [stoppingProfiles, _setStoppingProfiles] = useState<Set<string>>(
-    new Set(),
-  );
+  const [stoppingProfiles] = useState<Set<string>>(new Set());
 
   // Use shared browser state hook
   const browserState = useBrowserState(

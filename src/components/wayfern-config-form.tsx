@@ -193,7 +193,9 @@ export function WayfernConfigForm({
         </div>
         <Select
           value={selectedOS}
-          onValueChange={(value: WayfernOS) => onConfigChange("os", value)}
+          onValueChange={(value: WayfernOS) => {
+            onConfigChange("os", value);
+          }}
           disabled={readOnly}
         >
           <SelectTrigger>
@@ -229,10 +231,10 @@ export function WayfernConfigForm({
         <div className="flex items-center space-x-2">
           <Checkbox
             id="randomize-fingerprint"
-            checked={config.randomize_fingerprint_on_launch || false}
-            onCheckedChange={(checked) =>
-              onConfigChange("randomize_fingerprint_on_launch", checked)
-            }
+            checked={config.randomize_fingerprint_on_launch ?? false}
+            onCheckedChange={(checked) => {
+              onConfigChange("randomize_fingerprint_on_launch", checked);
+            }}
             disabled={readOnly}
           />
           <Label htmlFor="randomize-fingerprint" className="font-medium">
@@ -293,13 +295,13 @@ export function WayfernConfigForm({
                 <Label htmlFor="user-agent">{t("fingerprint.userAgent")}</Label>
                 <Input
                   id="user-agent"
-                  value={fingerprintConfig.userAgent || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.userAgent ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "userAgent",
                       e.target.value || undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="Mozilla/5.0..."
                 />
               </div>
@@ -307,13 +309,13 @@ export function WayfernConfigForm({
                 <Label htmlFor="platform">{t("fingerprint.platform")}</Label>
                 <Input
                   id="platform"
-                  value={fingerprintConfig.platform || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.platform ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "platform",
                       e.target.value || undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., Win32, MacIntel, Linux x86_64"
                 />
               </div>
@@ -323,13 +325,13 @@ export function WayfernConfigForm({
                 </Label>
                 <Input
                   id="platform-version"
-                  value={fingerprintConfig.platformVersion || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.platformVersion ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "platformVersion",
                       e.target.value || undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 10.0.0"
                 />
               </div>
@@ -337,13 +339,13 @@ export function WayfernConfigForm({
                 <Label htmlFor="brand">{t("fingerprint.brand")}</Label>
                 <Input
                   id="brand"
-                  value={fingerprintConfig.brand || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.brand ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "brand",
                       e.target.value || undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., Google Chrome"
                 />
               </div>
@@ -353,13 +355,13 @@ export function WayfernConfigForm({
                 </Label>
                 <Input
                   id="brand-version"
-                  value={fingerprintConfig.brandVersion || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.brandVersion ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "brandVersion",
                       e.target.value || undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 143"
                 />
               </div>
@@ -377,13 +379,13 @@ export function WayfernConfigForm({
                 <Input
                   id="hardware-concurrency"
                   type="number"
-                  value={fingerprintConfig.hardwareConcurrency || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.hardwareConcurrency ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "hardwareConcurrency",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 8"
                 />
               </div>
@@ -394,13 +396,13 @@ export function WayfernConfigForm({
                 <Input
                   id="max-touch-points"
                   type="number"
-                  value={fingerprintConfig.maxTouchPoints || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.maxTouchPoints ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "maxTouchPoints",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 0"
                 />
               </div>
@@ -411,13 +413,13 @@ export function WayfernConfigForm({
                 <Input
                   id="device-memory"
                   type="number"
-                  value={fingerprintConfig.deviceMemory || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.deviceMemory ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "deviceMemory",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 8"
                 />
               </div>
@@ -435,13 +437,13 @@ export function WayfernConfigForm({
                 <Input
                   id="screen-width"
                   type="number"
-                  value={fingerprintConfig.screenWidth || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.screenWidth ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "screenWidth",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 1920"
                 />
               </div>
@@ -452,13 +454,13 @@ export function WayfernConfigForm({
                 <Input
                   id="screen-height"
                   type="number"
-                  value={fingerprintConfig.screenHeight || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.screenHeight ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "screenHeight",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 1080"
                 />
               </div>
@@ -470,13 +472,13 @@ export function WayfernConfigForm({
                   id="device-pixel-ratio"
                   type="number"
                   step="0.1"
-                  value={fingerprintConfig.devicePixelRatio || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.devicePixelRatio ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "devicePixelRatio",
                       e.target.value ? parseFloat(e.target.value) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 1.0"
                 />
               </div>
@@ -487,13 +489,13 @@ export function WayfernConfigForm({
                 <Input
                   id="screen-avail-width"
                   type="number"
-                  value={fingerprintConfig.screenAvailWidth || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.screenAvailWidth ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "screenAvailWidth",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 1920"
                 />
               </div>
@@ -504,13 +506,13 @@ export function WayfernConfigForm({
                 <Input
                   id="screen-avail-height"
                   type="number"
-                  value={fingerprintConfig.screenAvailHeight || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.screenAvailHeight ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "screenAvailHeight",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 1040"
                 />
               </div>
@@ -521,13 +523,13 @@ export function WayfernConfigForm({
                 <Input
                   id="screen-color-depth"
                   type="number"
-                  value={fingerprintConfig.screenColorDepth || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.screenColorDepth ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "screenColorDepth",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 24"
                 />
               </div>
@@ -545,13 +547,13 @@ export function WayfernConfigForm({
                 <Input
                   id="window-outer-width"
                   type="number"
-                  value={fingerprintConfig.windowOuterWidth || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.windowOuterWidth ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "windowOuterWidth",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 1920"
                 />
               </div>
@@ -562,13 +564,13 @@ export function WayfernConfigForm({
                 <Input
                   id="window-outer-height"
                   type="number"
-                  value={fingerprintConfig.windowOuterHeight || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.windowOuterHeight ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "windowOuterHeight",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 1040"
                 />
               </div>
@@ -579,13 +581,13 @@ export function WayfernConfigForm({
                 <Input
                   id="window-inner-width"
                   type="number"
-                  value={fingerprintConfig.windowInnerWidth || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.windowInnerWidth ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "windowInnerWidth",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 1920"
                 />
               </div>
@@ -596,13 +598,13 @@ export function WayfernConfigForm({
                 <Input
                   id="window-inner-height"
                   type="number"
-                  value={fingerprintConfig.windowInnerHeight || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.windowInnerHeight ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "windowInnerHeight",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 940"
                 />
               </div>
@@ -611,13 +613,13 @@ export function WayfernConfigForm({
                 <Input
                   id="screen-x"
                   type="number"
-                  value={fingerprintConfig.screenX || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.screenX ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "screenX",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 0"
                 />
               </div>
@@ -626,13 +628,13 @@ export function WayfernConfigForm({
                 <Input
                   id="screen-y"
                   type="number"
-                  value={fingerprintConfig.screenY || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.screenY ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "screenY",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 0"
                 />
               </div>
@@ -649,13 +651,13 @@ export function WayfernConfigForm({
                 </Label>
                 <Input
                   id="language"
-                  value={fingerprintConfig.language || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.language ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "language",
                       e.target.value || undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., en-US"
                 />
               </div>
@@ -690,10 +692,10 @@ export function WayfernConfigForm({
                   {t("fingerprint.doNotTrack")}
                 </Label>
                 <Select
-                  value={fingerprintConfig.doNotTrack || ""}
-                  onValueChange={(value) =>
-                    updateFingerprintConfig("doNotTrack", value || undefined)
-                  }
+                  value={fingerprintConfig.doNotTrack ?? ""}
+                  onValueChange={(value) => {
+                    updateFingerprintConfig("doNotTrack", value || undefined);
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue
@@ -729,13 +731,13 @@ export function WayfernConfigForm({
                 </Label>
                 <Input
                   id="timezone"
-                  value={fingerprintConfig.timezone || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.timezone ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "timezone",
                       e.target.value || undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., America/New_York"
                 />
               </div>
@@ -747,12 +749,12 @@ export function WayfernConfigForm({
                   id="timezone-offset"
                   type="number"
                   value={fingerprintConfig.timezoneOffset ?? ""}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "timezoneOffset",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 300 for EST (UTC-5)"
                 />
               </div>
@@ -762,13 +764,13 @@ export function WayfernConfigForm({
                   id="latitude"
                   type="number"
                   step="any"
-                  value={fingerprintConfig.latitude || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.latitude ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "latitude",
                       e.target.value ? parseFloat(e.target.value) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 40.7128"
                 />
               </div>
@@ -778,13 +780,13 @@ export function WayfernConfigForm({
                   id="longitude"
                   type="number"
                   step="any"
-                  value={fingerprintConfig.longitude || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.longitude ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "longitude",
                       e.target.value ? parseFloat(e.target.value) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., -74.0060"
                 />
               </div>
@@ -793,13 +795,13 @@ export function WayfernConfigForm({
                 <Input
                   id="accuracy"
                   type="number"
-                  value={fingerprintConfig.accuracy || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.accuracy ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "accuracy",
                       e.target.value ? parseFloat(e.target.value) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 100"
                 />
               </div>
@@ -816,13 +818,13 @@ export function WayfernConfigForm({
                 </Label>
                 <Input
                   id="webgl-vendor"
-                  value={fingerprintConfig.webglVendor || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.webglVendor ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "webglVendor",
                       e.target.value || undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., Intel"
                 />
               </div>
@@ -832,13 +834,13 @@ export function WayfernConfigForm({
                 </Label>
                 <Input
                   id="webgl-renderer"
-                  value={fingerprintConfig.webglRenderer || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.webglRenderer ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "webglRenderer",
                       e.target.value || undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., Intel(R) HD Graphics"
                 />
               </div>
@@ -849,13 +851,13 @@ export function WayfernConfigForm({
           <div className="space-y-3">
             <Label>{t("fingerprint.webglParametersJson")}</Label>
             <Textarea
-              value={fingerprintConfig.webglParameters || ""}
-              onChange={(e) =>
+              value={fingerprintConfig.webglParameters ?? ""}
+              onChange={(e) => {
                 updateFingerprintConfig(
                   "webglParameters",
                   e.target.value || undefined,
-                )
-              }
+                );
+              }}
               placeholder='{"7936": "Intel", "7937": "Intel(R) HD Graphics"}'
               className="font-mono text-sm"
               rows={4}
@@ -871,13 +873,13 @@ export function WayfernConfigForm({
               </Label>
               <Input
                 id="canvas-noise-seed"
-                value={fingerprintConfig.canvasNoiseSeed || ""}
-                onChange={(e) =>
+                value={fingerprintConfig.canvasNoiseSeed ?? ""}
+                onChange={(e) => {
                   updateFingerprintConfig(
                     "canvasNoiseSeed",
                     e.target.value || undefined,
-                  )
-                }
+                  );
+                }}
                 placeholder="Enter a seed string for canvas fingerprint"
               />
               <p className="text-sm text-muted-foreground">
@@ -890,10 +892,10 @@ export function WayfernConfigForm({
           <div className="space-y-3">
             <Label>{t("fingerprint.fontsJson")}</Label>
             <Textarea
-              value={fingerprintConfig.fonts || ""}
-              onChange={(e) =>
-                updateFingerprintConfig("fonts", e.target.value || undefined)
-              }
+              value={fingerprintConfig.fonts ?? ""}
+              onChange={(e) => {
+                updateFingerprintConfig("fonts", e.target.value || undefined);
+              }}
               placeholder='["Arial", "Verdana", "Times New Roman"]'
               className="font-mono text-sm"
               rows={3}
@@ -911,13 +913,13 @@ export function WayfernConfigForm({
                 <Input
                   id="audio-sample-rate"
                   type="number"
-                  value={fingerprintConfig.audioSampleRate || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.audioSampleRate ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "audioSampleRate",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 48000"
                 />
               </div>
@@ -928,13 +930,13 @@ export function WayfernConfigForm({
                 <Input
                   id="audio-max-channel-count"
                   type="number"
-                  value={fingerprintConfig.audioMaxChannelCount || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.audioMaxChannelCount ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "audioMaxChannelCount",
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 2"
                 />
               </div>
@@ -949,13 +951,13 @@ export function WayfernConfigForm({
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="battery-charging"
-                    checked={fingerprintConfig.batteryCharging || false}
-                    onCheckedChange={(checked) =>
+                    checked={fingerprintConfig.batteryCharging ?? false}
+                    onCheckedChange={(checked) => {
                       updateFingerprintConfig(
                         "batteryCharging",
                         checked || undefined,
-                      )
-                    }
+                      );
+                    }}
                   />
                   <Label htmlFor="battery-charging">
                     {t("fingerprint.charging")}
@@ -972,13 +974,13 @@ export function WayfernConfigForm({
                   step="0.01"
                   min="0"
                   max="1"
-                  value={fingerprintConfig.batteryLevel || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.batteryLevel ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "batteryLevel",
                       e.target.value ? parseFloat(e.target.value) : undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 0.85"
                 />
               </div>
@@ -993,13 +995,13 @@ export function WayfernConfigForm({
                 <Label htmlFor="vendor">{t("fingerprint.vendor")}</Label>
                 <Input
                   id="vendor"
-                  value={fingerprintConfig.vendor || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.vendor ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "vendor",
                       e.target.value || undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., Google Inc."
                 />
               </div>
@@ -1007,13 +1009,13 @@ export function WayfernConfigForm({
                 <Label htmlFor="vendor-sub">{t("fingerprint.vendorSub")}</Label>
                 <Input
                   id="vendor-sub"
-                  value={fingerprintConfig.vendorSub || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.vendorSub ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "vendorSub",
                       e.target.value || undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder=""
                 />
               </div>
@@ -1023,13 +1025,13 @@ export function WayfernConfigForm({
                 </Label>
                 <Input
                   id="product-sub"
-                  value={fingerprintConfig.productSub || ""}
-                  onChange={(e) =>
+                  value={fingerprintConfig.productSub ?? ""}
+                  onChange={(e) => {
                     updateFingerprintConfig(
                       "productSub",
                       e.target.value || undefined,
-                    )
-                  }
+                    );
+                  }}
                   placeholder="e.g., 20030107"
                 />
               </div>
@@ -1082,9 +1084,9 @@ export function WayfernConfigForm({
               <Label>{t("fingerprint.osLabel")}</Label>
               <Select
                 value={selectedOS}
-                onValueChange={(value: WayfernOS) =>
-                  onConfigChange("os", value)
-                }
+                onValueChange={(value: WayfernOS) => {
+                  onConfigChange("os", value);
+                }}
                 disabled={readOnly}
               >
                 <SelectTrigger>
@@ -1128,10 +1130,10 @@ export function WayfernConfigForm({
               <div className="flex items-center space-x-2">
                 <Checkbox
                   id="randomize-fingerprint-auto"
-                  checked={config.randomize_fingerprint_on_launch || false}
-                  onCheckedChange={(checked) =>
-                    onConfigChange("randomize_fingerprint_on_launch", checked)
-                  }
+                  checked={config.randomize_fingerprint_on_launch ?? false}
+                  onCheckedChange={(checked) => {
+                    onConfigChange("randomize_fingerprint_on_launch", checked);
+                  }}
                   disabled={readOnly}
                 />
                 <Label
@@ -1180,15 +1182,15 @@ export function WayfernConfigForm({
                     <Input
                       id="screen-max-width"
                       type="number"
-                      value={config.screen_max_width || ""}
-                      onChange={(e) =>
+                      value={config.screen_max_width ?? ""}
+                      onChange={(e) => {
                         onConfigChange(
                           "screen_max_width",
                           e.target.value
                             ? parseInt(e.target.value, 10)
                             : undefined,
-                        )
-                      }
+                        );
+                      }}
                       placeholder="e.g., 1920"
                     />
                   </div>
@@ -1199,15 +1201,15 @@ export function WayfernConfigForm({
                     <Input
                       id="screen-max-height"
                       type="number"
-                      value={config.screen_max_height || ""}
-                      onChange={(e) =>
+                      value={config.screen_max_height ?? ""}
+                      onChange={(e) => {
                         onConfigChange(
                           "screen_max_height",
                           e.target.value
                             ? parseInt(e.target.value, 10)
                             : undefined,
-                        )
-                      }
+                        );
+                      }}
                       placeholder="e.g., 1080"
                     />
                   </div>
@@ -1218,15 +1220,15 @@ export function WayfernConfigForm({
                     <Input
                       id="screen-min-width"
                       type="number"
-                      value={config.screen_min_width || ""}
-                      onChange={(e) =>
+                      value={config.screen_min_width ?? ""}
+                      onChange={(e) => {
                         onConfigChange(
                           "screen_min_width",
                           e.target.value
                             ? parseInt(e.target.value, 10)
                             : undefined,
-                        )
-                      }
+                        );
+                      }}
                       placeholder="e.g., 800"
                     />
                   </div>
@@ -1237,15 +1239,15 @@ export function WayfernConfigForm({
                     <Input
                       id="screen-min-height"
                       type="number"
-                      value={config.screen_min_height || ""}
-                      onChange={(e) =>
+                      value={config.screen_min_height ?? ""}
+                      onChange={(e) => {
                         onConfigChange(
                           "screen_min_height",
                           e.target.value
                             ? parseInt(e.target.value, 10)
                             : undefined,
-                        )
-                      }
+                        );
+                      }}
                       placeholder="e.g., 600"
                     />
                   </div>

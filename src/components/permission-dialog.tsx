@@ -156,7 +156,9 @@ export function PermissionDialog({
             <LoadingButton
               isLoading={isRequesting}
               onClick={() => {
-                handleRequestPermission().catch(console.error);
+                handleRequestPermission().catch((err: unknown) => {
+                  console.error(err);
+                });
               }}
               className="min-w-24"
             >

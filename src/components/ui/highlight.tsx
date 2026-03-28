@@ -7,12 +7,12 @@ import { cn } from "@/lib/utils";
 
 type HighlightMode = "children" | "parent";
 
-type Bounds = {
+interface Bounds {
   top: number;
   left: number;
   width: number;
   height: number;
-};
+}
 
 const DEFAULT_BOUNDS_OFFSET: Bounds = {
   top: 0,
@@ -21,7 +21,7 @@ const DEFAULT_BOUNDS_OFFSET: Bounds = {
   height: 0,
 };
 
-type HighlightContextType<T extends string> = {
+interface HighlightContextType<T extends string> {
   as?: keyof HTMLElementTagNameMap;
   mode: HighlightMode;
   activeValue: T | null;
@@ -40,10 +40,9 @@ type HighlightContextType<T extends string> = {
   enabled?: boolean;
   exitDelay?: number;
   forceUpdateBounds?: boolean;
-};
+}
 
 const HighlightContext = React.createContext<
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   HighlightContextType<any> | undefined
 >(undefined);
 
@@ -55,7 +54,7 @@ function useHighlight<T extends string>(): HighlightContextType<T> {
   return context as unknown as HighlightContextType<T>;
 }
 
-type BaseHighlightProps<T extends React.ElementType = "div"> = {
+interface BaseHighlightProps<T extends React.ElementType = "div"> {
   as?: T;
   ref?: React.Ref<HTMLDivElement>;
   mode?: HighlightMode;
@@ -70,13 +69,13 @@ type BaseHighlightProps<T extends React.ElementType = "div"> = {
   disabled?: boolean;
   enabled?: boolean;
   exitDelay?: number;
-};
+}
 
-type ParentModeHighlightProps = {
+interface ParentModeHighlightProps {
   boundsOffset?: Partial<Bounds>;
   containerClassName?: string;
   forceUpdateBounds?: boolean;
-};
+}
 
 type ControlledParentModeHighlightProps<T extends React.ElementType = "div"> =
   BaseHighlightProps<T> &
@@ -142,7 +141,7 @@ function Highlight<T extends React.ElementType = "div">({
   const localRef = React.useRef<HTMLDivElement>(null);
   React.useImperativeHandle(ref, () => localRef.current as HTMLDivElement);
 
-  const propsBoundsOffset = (props as ParentModeHighlightProps)?.boundsOffset;
+  const propsBoundsOffset = (props as ParentModeHighlightProps).boundsOffset;
   const boundsOffset = propsBoundsOffset ?? DEFAULT_BOUNDS_OFFSET;
   const boundsOffsetTop = boundsOffset.top ?? 0;
   const boundsOffsetLeft = boundsOffset.left ?? 0;
@@ -249,7 +248,9 @@ function Highlight<T extends React.ElementType = "div">({
     };
 
     container.addEventListener("scroll", onScroll, { passive: true });
-    return () => container.removeEventListener("scroll", onScroll);
+    return () => {
+      container.removeEventListener("scroll", onScroll);
+    };
   }, [mode, activeValue]);
 
   const render = (children: React.ReactNode) => {
@@ -259,7 +260,7 @@ function Highlight<T extends React.ElementType = "div">({
           ref={localRef}
           data-slot="motion-highlight-container"
           style={{ position: "relative", zIndex: 1 }}
-          className={(props as ParentModeHighlightProps)?.containerClassName}
+          className={(props as ParentModeHighlightProps).containerClassName}
         >
           <AnimatePresence initial={false} mode="wait">
             {boundsState && (
@@ -320,7 +321,7 @@ function Highlight<T extends React.ElementType = "div">({
         activeClassName: activeClassNameState,
         setActiveClassName: setActiveClassNameState,
         forceUpdateBounds: (props as ParentModeHighlightProps)
-          ?.forceUpdateBounds,
+          .forceUpdateBounds,
       }}
     >
       {enabled
@@ -328,7 +329,7 @@ function Highlight<T extends React.ElementType = "div">({
           ? render(children)
           : render(
               React.Children.map(children, (child, index) => (
-                <HighlightItem key={index} className={props?.itemsClassName}>
+                <HighlightItem key={index} className={props.itemsClassName}>
                   {child}
                 </HighlightItem>
               )),
@@ -466,7 +467,10 @@ function HighlightItem<T extends React.ElementType>({
       setActiveClassName(activeClassName ?? "");
     } else if (!activeValue) clearBounds();
 
-    if (shouldUpdateBounds) return () => cancelAnimationFrame(rafId);
+    if (shouldUpdateBounds)
+      return () => {
+        cancelAnimationFrame(rafId);
+      };
   }, [
     mode,
     isActive,

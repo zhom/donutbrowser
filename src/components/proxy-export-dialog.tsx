@@ -53,7 +53,9 @@ export function ProxyExportDialog({ isOpen, onClose }: ProxyExportDialogProps) {
       await navigator.clipboard.writeText(exportContent);
       setCopied(true);
       toast.success("Copied to clipboard");
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
     } catch (error) {
       console.error("Failed to copy to clipboard:", error);
       toast.error("Failed to copy to clipboard");
@@ -99,7 +101,9 @@ export function ProxyExportDialog({ isOpen, onClose }: ProxyExportDialogProps) {
             <Label>Export Format</Label>
             <RadioGroup
               value={format}
-              onValueChange={(value) => setFormat(value as "json" | "txt")}
+              onValueChange={(value) => {
+                setFormat(value as "json" | "txt");
+              }}
               className="flex gap-4"
             >
               <div className="flex items-center space-x-2">

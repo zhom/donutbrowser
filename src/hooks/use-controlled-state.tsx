@@ -5,7 +5,6 @@ interface CommonControlledStateProps<T> {
   defaultValue?: T;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useControlledState<T, Rest extends any[] = []>(
   props: CommonControlledStateProps<T> & {
     onChange?: (value: T, ...args: Rest) => void;
@@ -14,7 +13,7 @@ export function useControlledState<T, Rest extends any[] = []>(
   const { value, defaultValue, onChange } = props;
 
   const [state, setInternalState] = React.useState<T>(
-    value !== undefined ? value : (defaultValue as T),
+    value ?? (defaultValue as T),
   );
 
   React.useEffect(() => {

@@ -197,9 +197,7 @@ export function ExtensionManagementDialog({
 
   useEffect(() => {
     if (isOpen) {
-      void loadData().then(() => {
-        // Icons will be loaded after extensions are set
-      });
+      void loadData();
     }
   }, [isOpen, loadData]);
 
@@ -562,7 +560,9 @@ export function ExtensionManagementDialog({
                         ? "border-primary text-foreground"
                         : "border-transparent text-muted-foreground hover:text-foreground"
                     }`}
-                    onClick={() => setActiveTab("extensions")}
+                    onClick={() => {
+                      setActiveTab("extensions");
+                    }}
                     disabled={limitedMode}
                   >
                     {t("extensions.extensionsTab")}
@@ -574,7 +574,9 @@ export function ExtensionManagementDialog({
                         ? "border-primary text-foreground"
                         : "border-transparent text-muted-foreground hover:text-foreground"
                     }`}
-                    onClick={() => setActiveTab("groups")}
+                    onClick={() => {
+                      setActiveTab("groups");
+                    }}
                     disabled={limitedMode}
                   >
                     {t("extensions.groupsTab")}
@@ -627,13 +629,15 @@ export function ExtensionManagementDialog({
                         <div className="flex gap-2">
                           <Input
                             value={extensionName}
-                            onChange={(e) => setExtensionName(e.target.value)}
+                            onChange={(e) => {
+                              setExtensionName(e.target.value);
+                            }}
                             placeholder={t("extensions.namePlaceholder")}
                             className="flex-1"
                           />
                           <RippleButton
                             size="sm"
-                            onClick={handleUpload}
+                            onClick={() => void handleUpload()}
                             disabled={isUploading || !extensionName.trim()}
                           >
                             {isUploading
@@ -705,7 +709,7 @@ export function ExtensionManagementDialog({
                                     <Checkbox
                                       checked={ext.sync_enabled}
                                       onCheckedChange={() =>
-                                        handleToggleExtSync(ext)
+                                        void handleToggleExtSync(ext)
                                       }
                                       disabled={isTogglingExtSync[ext.id]}
                                     />
@@ -745,7 +749,9 @@ export function ExtensionManagementDialog({
                                       variant="ghost"
                                       size="sm"
                                       className="h-7 w-7 p-0"
-                                      onClick={() => setExtensionToDelete(ext)}
+                                      onClick={() => {
+                                        setExtensionToDelete(ext);
+                                      }}
                                     >
                                       <LuTrash2 className="w-3.5 h-3.5" />
                                     </Button>
@@ -769,7 +775,9 @@ export function ExtensionManagementDialog({
                       <Label>{t("extensions.groupsTab")}</Label>
                       <RippleButton
                         size="sm"
-                        onClick={() => setShowCreateGroup(true)}
+                        onClick={() => {
+                          setShowCreateGroup(true);
+                        }}
                         className="flex gap-2 items-center"
                         disabled={limitedMode}
                       >
@@ -783,7 +791,9 @@ export function ExtensionManagementDialog({
                       <div className="flex gap-2 items-center">
                         <Input
                           value={newGroupName}
-                          onChange={(e) => setNewGroupName(e.target.value)}
+                          onChange={(e) => {
+                            setNewGroupName(e.target.value);
+                          }}
                           placeholder={t("extensions.groupNamePlaceholder")}
                           className="flex-1"
                           onKeyDown={(e) => {
@@ -792,7 +802,7 @@ export function ExtensionManagementDialog({
                         />
                         <RippleButton
                           size="sm"
-                          onClick={handleCreateGroup}
+                          onClick={() => void handleCreateGroup()}
                           disabled={!newGroupName.trim()}
                         >
                           {t("common.buttons.create")}
@@ -902,7 +912,7 @@ export function ExtensionManagementDialog({
                                     <Checkbox
                                       checked={group.sync_enabled}
                                       onCheckedChange={() =>
-                                        handleToggleGroupSync(group)
+                                        void handleToggleGroupSync(group)
                                       }
                                       disabled={isTogglingGroupSync[group.id]}
                                     />
@@ -943,7 +953,9 @@ export function ExtensionManagementDialog({
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      onClick={() => setGroupToDelete(group)}
+                                      onClick={() => {
+                                        setGroupToDelete(group);
+                                      }}
                                     >
                                       <LuTrash2 className="w-4 h-4" />
                                     </Button>
@@ -996,7 +1008,9 @@ export function ExtensionManagementDialog({
               <Label>{t("common.labels.name")}</Label>
               <Input
                 value={editGroupName}
-                onChange={(e) => setEditGroupName(e.target.value)}
+                onChange={(e) => {
+                  setEditGroupName(e.target.value);
+                }}
                 placeholder={t("extensions.groupNamePlaceholder")}
               />
             </div>
@@ -1007,9 +1021,9 @@ export function ExtensionManagementDialog({
                 <Label>{t("extensions.addToGroup")}</Label>
                 <Select
                   value=""
-                  onValueChange={(extId) =>
-                    setEditGroupExtensionIds((prev) => [...prev, extId])
-                  }
+                  onValueChange={(extId) => {
+                    setEditGroupExtensionIds((prev) => [...prev, extId]);
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder={t("extensions.addToGroup")} />
@@ -1055,11 +1069,11 @@ export function ExtensionManagementDialog({
                           variant="ghost"
                           size="sm"
                           className="h-6 w-6 p-0 shrink-0"
-                          onClick={() =>
+                          onClick={() => {
                             setEditGroupExtensionIds((prev) =>
                               prev.filter((id) => id !== extId),
-                            )
-                          }
+                            );
+                          }}
                         >
                           <LuTrash2 className="w-3 h-3" />
                         </Button>
@@ -1083,7 +1097,7 @@ export function ExtensionManagementDialog({
               {t("common.buttons.cancel")}
             </Button>
             <RippleButton
-              onClick={handleSaveGroupEdits}
+              onClick={() => void handleSaveGroupEdits()}
               disabled={!editGroupName.trim()}
             >
               {t("common.buttons.save")}
@@ -1117,7 +1131,9 @@ export function ExtensionManagementDialog({
                 <Label>{t("common.labels.name")}</Label>
                 <Input
                   value={editExtensionName}
-                  onChange={(e) => setEditExtensionName(e.target.value)}
+                  onChange={(e) => {
+                    setEditExtensionName(e.target.value);
+                  }}
                   placeholder={t("extensions.namePlaceholder")}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") void handleUpdateExtension();
@@ -1239,7 +1255,7 @@ export function ExtensionManagementDialog({
               {t("common.buttons.cancel")}
             </Button>
             <RippleButton
-              onClick={handleUpdateExtension}
+              onClick={() => void handleUpdateExtension()}
               disabled={!editExtensionName.trim()}
             >
               {t("common.buttons.save")}
@@ -1251,7 +1267,9 @@ export function ExtensionManagementDialog({
       {/* Delete extension confirmation */}
       <DeleteConfirmationDialog
         isOpen={extensionToDelete !== null}
-        onClose={() => setExtensionToDelete(null)}
+        onClose={() => {
+          setExtensionToDelete(null);
+        }}
         onConfirm={handleDeleteExtension}
         title={t("extensions.deleteConfirmTitle")}
         description={t("extensions.deleteConfirmDescription", {
@@ -1263,7 +1281,9 @@ export function ExtensionManagementDialog({
       {/* Delete group confirmation */}
       <DeleteConfirmationDialog
         isOpen={groupToDelete !== null}
-        onClose={() => setGroupToDelete(null)}
+        onClose={() => {
+          setGroupToDelete(null);
+        }}
         onConfirm={handleDeleteGroup}
         title={t("extensions.deleteGroupConfirmTitle")}
         description={t("extensions.deleteGroupConfirmDescription", {
