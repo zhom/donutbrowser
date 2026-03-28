@@ -524,7 +524,29 @@
       "selectedCount_plural": "{{count}} cookies selecionados"
     },
     "success": "Cookies copiados com sucesso",
-    "error": "Falha ao copiar cookies"
+    "error": "Falha ao copiar cookies",
+    "management": {
+      "title": "Gerenciamento de Cookies",
+      "menuItem": "Gerenciamento de Cookies"
+    },
+    "import": {
+      "title": "Importar Cookies",
+      "description": "Importar cookies de um arquivo no formato Netscape ou JSON.",
+      "selectFile": "Escolher Arquivo",
+      "preview": "{{count}} cookies encontrados",
+      "success": "{{imported}} cookies importados com sucesso ({{replaced}} substituídos)",
+      "error": "Falha ao importar cookies",
+      "proFeature": "A importação de cookies é um recurso Pro"
+    },
+    "export": {
+      "title": "Exportar Cookies",
+      "description": "Exportar cookies deste perfil.",
+      "formatLabel": "Formato",
+      "netscape": "Netscape TXT",
+      "json": "JSON",
+      "success": "Cookies exportados com sucesso",
+      "error": "Falha ao exportar cookies"
+    }
   },
   "toasts": {
     "success": {
@@ -723,30 +745,6 @@
     "viewOnly": "Este perfil foi criado em {{os}} e não é compatível com este sistema",
     "cannotLaunch": "Este perfil foi criado em {{os}} e não é compatível com este sistema",
     "cannotModify": "Não é possível modificar as configurações de sincronização de um perfil de outro sistema operacional"
-  },
-  "cookies": {
-    "management": {
-      "title": "Gerenciamento de Cookies",
-      "menuItem": "Gerenciamento de Cookies"
-    },
-    "import": {
-      "title": "Importar Cookies",
-      "description": "Importar cookies de um arquivo no formato Netscape ou JSON.",
-      "selectFile": "Escolher Arquivo",
-      "preview": "{{count}} cookies encontrados",
-      "success": "{{imported}} cookies importados com sucesso ({{replaced}} substituídos)",
-      "error": "Falha ao importar cookies",
-      "proFeature": "A importação de cookies é um recurso Pro"
-    },
-    "export": {
-      "title": "Exportar Cookies",
-      "description": "Exportar cookies deste perfil.",
-      "formatLabel": "Formato",
-      "netscape": "Netscape TXT",
-      "json": "JSON",
-      "success": "Cookies exportados com sucesso",
-      "error": "Falha ao exportar cookies"
-    }
   },
   "profileInfo": {
     "title": "Detalhes do Perfil",

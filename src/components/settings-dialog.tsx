@@ -242,9 +242,9 @@ export function SettingsDialog({
 
   const clearCustomTheme = useCallback(() => {
     const root = document.documentElement;
-    THEME_VARIABLES.forEach(({ key }) =>
-      root.style.removeProperty(key as string),
-    );
+    THEME_VARIABLES.forEach(({ key }) => {
+      root.style.removeProperty(key as string);
+    });
   }, []);
 
   const loadPermissions = useCallback(() => {
@@ -378,16 +378,13 @@ export function SettingsDialog({
 
       // Apply or clear custom variables only on Save
       if (settings.theme === "custom") {
-        if (
-          customThemeState.colors &&
-          Object.keys(customThemeState.colors).length > 0
-        ) {
+        if (Object.keys(customThemeState.colors).length > 0) {
           try {
             const root = document.documentElement;
             // Clear any previous custom vars first
-            THEME_VARIABLES.forEach(({ key }) =>
-              root.style.removeProperty(key as string),
-            );
+            THEME_VARIABLES.forEach(({ key }) => {
+              root.style.removeProperty(key as string);
+            });
             Object.entries(customThemeState.colors).forEach(([k, v]) => {
               root.style.setProperty(k, v, "important");
             });
@@ -398,9 +395,9 @@ export function SettingsDialog({
       } else {
         try {
           const root = document.documentElement;
-          THEME_VARIABLES.forEach(({ key }) =>
-            root.style.removeProperty(key as string),
-          );
+          THEME_VARIABLES.forEach(({ key }) => {
+            root.style.removeProperty(key as string);
+          });
         } catch {
           /* empty */
         }

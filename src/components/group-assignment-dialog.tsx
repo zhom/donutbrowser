@@ -157,7 +157,7 @@ export function GroupAssignmentDialog({
               </div>
             ) : (
               <Select
-                value={selectedGroupId || "default"}
+                value={selectedGroupId ?? "default"}
                 onValueChange={(value) => {
                   setSelectedGroupId(value === "default" ? null : value);
                 }}

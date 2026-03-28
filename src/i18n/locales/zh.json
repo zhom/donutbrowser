@@ -524,7 +524,29 @@
       "selectedCount_plural": "已选择 {{count}} 个 cookies"
     },
     "success": "Cookies 复制成功",
-    "error": "复制 cookies 失败"
+    "error": "复制 cookies 失败",
+    "management": {
+      "title": "Cookie 管理",
+      "menuItem": "Cookie 管理"
+    },
+    "import": {
+      "title": "导入 Cookies",
+      "description": "从 Netscape 或 JSON 格式文件导入 Cookies。",
+      "selectFile": "选择文件",
+      "preview": "找到 {{count}} 个 Cookies",
+      "success": "成功导入 {{imported}} 个 Cookies（替换了 {{replaced}} 个）",
+      "error": "导入 Cookies 失败",
+      "proFeature": "导入 Cookies 是 Pro 功能"
+    },
+    "export": {
+      "title": "导出 Cookies",
+      "description": "从此配置文件导出 Cookies。",
+      "formatLabel": "格式",
+      "netscape": "Netscape TXT",
+      "json": "JSON",
+      "success": "Cookies 导出成功",
+      "error": "导出 Cookies 失败"
+    }
   },
   "toasts": {
     "success": {
@@ -723,30 +745,6 @@
     "viewOnly": "此配置文件在 {{os}} 上创建，不受此系统支持",
     "cannotLaunch": "此配置文件在 {{os}} 上创建，不受此系统支持",
     "cannotModify": "无法修改跨操作系统配置文件的同步设置"
-  },
-  "cookies": {
-    "management": {
-      "title": "Cookie 管理",
-      "menuItem": "Cookie 管理"
-    },
-    "import": {
-      "title": "导入 Cookies",
-      "description": "从 Netscape 或 JSON 格式文件导入 Cookies。",
-      "selectFile": "选择文件",
-      "preview": "找到 {{count}} 个 Cookies",
-      "success": "成功导入 {{imported}} 个 Cookies（替换了 {{replaced}} 个）",
-      "error": "导入 Cookies 失败",
-      "proFeature": "导入 Cookies 是 Pro 功能"
-    },
-    "export": {
-      "title": "导出 Cookies",
-      "description": "从此配置文件导出 Cookies。",
-      "formatLabel": "格式",
-      "netscape": "Netscape TXT",
-      "json": "JSON",
-      "success": "Cookies 导出成功",
-      "error": "导出 Cookies 失败"
-    }
   },
   "profileInfo": {
     "title": "配置文件详情",

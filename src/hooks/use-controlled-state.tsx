@@ -5,7 +5,7 @@ interface CommonControlledStateProps<T> {
   defaultValue?: T;
 }
 
-export function useControlledState<T, Rest extends any[] = []>(
+export function useControlledState<T, Rest extends unknown[] = []>(
   props: CommonControlledStateProps<T> & {
     onChange?: (value: T, ...args: Rest) => void;
   },

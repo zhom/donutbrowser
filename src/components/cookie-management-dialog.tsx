@@ -45,12 +45,13 @@ interface CookieManagementDialogProps {
   initialTab?: "import" | "export";
 }
 
-interface SelectionState {
-  [domain: string]: {
+type SelectionState = Record<
+  string,
+  {
     allSelected: boolean;
     cookies: Set<string>;
-  };
-}
+  }
+>;
 
 const countCookies = (content: string): number => {
   const trimmed = content.trim();
@@ -329,7 +330,7 @@ export function CookieManagementDialog({
   const toggleCookie = useCallback(
     (domain: string, cookieName: string, totalCookies: number) => {
       setExportSelection((prev) => {
-        const current = prev[domain] || {
+        const current = prev[domain] ?? {
           allSelected: false,
           cookies: new Set<string>(),
         };
@@ -591,8 +592,8 @@ function ExportDomainRow({
   onToggleExpand,
 }: ExportDomainRowProps) {
   const domainSelection = selection[domain.domain];
-  const isAllSelected = domainSelection.allSelected || false;
-  const selectedCount = domainSelection.cookies.size || 0;
+  const isAllSelected = domainSelection.allSelected;
+  const selectedCount = domainSelection.cookies.size;
   const isPartial =
     selectedCount > 0 && selectedCount < domain.cookie_count && !isAllSelected;
 
@@ -627,8 +628,7 @@ function ExportDomainRow({
       {isExpanded && (
         <div className="ml-7 pl-2 border-l space-y-0.5">
           {domain.cookies.map((cookie) => {
-            const isSelected =
-              domainSelection.cookies.has(cookie.name) || false;
+            const isSelected = domainSelection.cookies.has(cookie.name);
             return (
               <div
                 key={`${domain.domain}-${cookie.name}`}

@@ -672,7 +672,7 @@ export function CreateProfileDialog({
                                 !isCreateDisabled &&
                                 !isCreating
                               ) {
-                                handleCreate();
+                                void handleCreate();
                               }
                             }}
                             placeholder="Enter profile name"
@@ -754,7 +754,9 @@ export function CreateProfileDialog({
                                     })()}
                                   </p>
                                   <LoadingButton
-                                    onClick={() => handleDownload("wayfern")}
+                                    onClick={() => {
+                                      void handleDownload("wayfern");
+                                    }}
                                     isLoading={isBrowserCurrentlyDownloading(
                                       "wayfern",
                                     )}
@@ -856,7 +858,9 @@ export function CreateProfileDialog({
                                     })()}
                                   </p>
                                   <LoadingButton
-                                    onClick={() => handleDownload("camoufox")}
+                                    onClick={() => {
+                                      void handleDownload("camoufox");
+                                    }}
                                     isLoading={isBrowserCurrentlyDownloading(
                                       "camoufox",
                                     )}
@@ -963,9 +967,9 @@ export function CreateProfileDialog({
                                         })()}
                                       </p>
                                       <LoadingButton
-                                        onClick={() =>
-                                          handleDownload(selectedBrowser)
-                                        }
+                                        onClick={() => {
+                                          void handleDownload(selectedBrowser);
+                                        }}
                                         isLoading={isBrowserCurrentlyDownloading(
                                           selectedBrowser,
                                         )}
@@ -1163,7 +1167,7 @@ export function CreateProfileDialog({
                           <div className="space-y-2">
                             <Label>{t("extensions.extensionGroup")}</Label>
                             <Select
-                              value={selectedExtensionGroupId || "none"}
+                              value={selectedExtensionGroupId ?? "none"}
                               onValueChange={(val) => {
                                 setSelectedExtensionGroupId(
                                   val === "none" ? undefined : val,
@@ -1209,7 +1213,7 @@ export function CreateProfileDialog({
                                 !isCreateDisabled &&
                                 !isCreating
                               ) {
-                                handleCreate();
+                                void handleCreate();
                               }
                             }}
                             placeholder="Enter profile name"
@@ -1263,9 +1267,9 @@ export function CreateProfileDialog({
                                       })()}
                                     </p>
                                     <LoadingButton
-                                      onClick={() =>
-                                        handleDownload(selectedBrowser)
-                                      }
+                                      onClick={() => {
+                                        void handleDownload(selectedBrowser);
+                                      }}
                                       isLoading={isBrowserCurrentlyDownloading(
                                         selectedBrowser,
                                       )}

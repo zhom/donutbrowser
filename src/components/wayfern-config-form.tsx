@@ -84,7 +84,7 @@ export function WayfernConfigForm({
     try {
       const configJson = JSON.stringify(config);
       const result = await invoke<string>("generate_sample_fingerprint", {
-        browser: profileBrowser || "wayfern",
+        browser: profileBrowser ?? "wayfern",
         version: profileVersion,
         configJson,
       });

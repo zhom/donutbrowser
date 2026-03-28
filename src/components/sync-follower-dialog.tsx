@@ -162,7 +162,9 @@ export function SyncFollowerDialog({
                               !selectedIds.has(profile.id),
                             );
                           }}
-                          onKeyDown={() => {}}
+                          onKeyDown={() => {
+                            /* empty */
+                          }}
                           role="button"
                           tabIndex={0}
                         >

@@ -367,7 +367,9 @@ export function useBrowserDownload() {
                     ? loadDownloadedVersions("camoufox")
                     : Promise.resolve([]),
                 ]);
-              } catch {}
+              } catch {
+                /* empty */
+              }
               showDownloadToast(browserName, progress.version, "completed");
               setDownloadProgress(null);
             }

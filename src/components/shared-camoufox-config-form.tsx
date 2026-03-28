@@ -77,7 +77,7 @@ function ObjectEditor({
   const [jsonString, setJsonString] = useState("");
 
   useEffect(() => {
-    setJsonString(JSON.stringify(value || {}, null, 2));
+    setJsonString(JSON.stringify(value ?? {}, null, 2));
   }, [value]);
 
   const handleChange = (newValue: string) => {
@@ -144,7 +144,7 @@ export function SharedCamoufoxConfigForm({
 
   const handleGenerateFingerprint = async () => {
     if (!profileVersion) return;
-    const browser = profileBrowser || browserType || "camoufox";
+    const browser = profileBrowser ?? browserType ?? "camoufox";
     setIsGeneratingFingerprint(true);
     try {
       const configJson = JSON.stringify(config);
@@ -917,7 +917,7 @@ export function SharedCamoufoxConfigForm({
                 (fingerprintConfig["webGl:parameters"] as Record<
                   string,
                   unknown
-                >) || {}
+                >) ?? {}
               }
               onChange={(value) => {
                 updateFingerprintConfig("webGl:parameters", value);
@@ -934,7 +934,7 @@ export function SharedCamoufoxConfigForm({
                 (fingerprintConfig["webGl2:parameters"] as Record<
                   string,
                   unknown
-                >) || {}
+                >) ?? {}
               }
               onChange={(value) => {
                 updateFingerprintConfig("webGl2:parameters", value);
@@ -951,7 +951,7 @@ export function SharedCamoufoxConfigForm({
                 (fingerprintConfig["webGl:shaderPrecisionFormats"] as Record<
                   string,
                   unknown
-                >) || {}
+                >) ?? {}
               }
               onChange={(value) => {
                 updateFingerprintConfig("webGl:shaderPrecisionFormats", value);
@@ -968,7 +968,7 @@ export function SharedCamoufoxConfigForm({
                 (fingerprintConfig["webGl2:shaderPrecisionFormats"] as Record<
                   string,
                   unknown
-                >) || {}
+                >) ?? {}
               }
               onChange={(value) => {
                 updateFingerprintConfig("webGl2:shaderPrecisionFormats", value);

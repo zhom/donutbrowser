@@ -19,9 +19,7 @@ export interface Option {
   /** Group the options by providing key. */
   [key: string]: string | boolean | undefined;
 }
-interface GroupOption {
-  [key: string]: Option[];
-}
+type GroupOption = Record<string, Option[]>;
 
 interface MultipleSelectorProps {
   value?: Option[];
@@ -259,7 +257,7 @@ const MultipleSelector = React.forwardRef<
       if (!arrayOptions || onSearch) {
         return;
       }
-      const newOption = transToGroupOption(arrayOptions || [], groupBy);
+      const newOption = transToGroupOption(arrayOptions, groupBy);
       if (JSON.stringify(newOption) !== JSON.stringify(options)) {
         setOptions(newOption);
       }

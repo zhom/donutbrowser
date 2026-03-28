@@ -17,7 +17,7 @@ export function useProxyEvents() {
   // Load proxy usage (how many profiles are using each proxy)
   const loadProxyUsage = useCallback(async () => {
     try {
-      const profiles = await invoke<Array<{ proxy_id?: string }>>(
+      const profiles = await invoke<{ proxy_id?: string }[]>(
         "list_browser_profiles",
       );
       const counts: Record<string, number> = {};

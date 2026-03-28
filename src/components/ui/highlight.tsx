@@ -43,7 +43,7 @@ interface HighlightContextType<T extends string> {
 }
 
 const HighlightContext = React.createContext<
-  HighlightContextType<any> | undefined
+  HighlightContextType<string> | undefined
 >(undefined);
 
 function useHighlight<T extends string>(): HighlightContextType<T> {
@@ -419,7 +419,7 @@ function HighlightItem<T extends React.ElementType>({
   const Component = as ?? "div";
   const element = children as React.ReactElement<ExtendedChildProps>;
   const childValue =
-    id ?? value ?? element.props?.["data-value"] ?? element.props?.id ?? itemId;
+    id ?? value ?? element.props["data-value"] ?? element.props.id ?? itemId;
   const isActive = activeValue === childValue;
   const isDisabled = disabled === undefined ? contextDisabled : disabled;
   const itemTransition = transition ?? contextTransition;

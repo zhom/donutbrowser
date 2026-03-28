@@ -38,7 +38,7 @@ export class AuthGuard implements CanActivate {
     // Try SYNC_TOKEN first (self-hosted mode)
     const expectedToken = this.configService.get<string>("SYNC_TOKEN");
     if (expectedToken && token === expectedToken) {
-      (request as any).user = {
+      (request as unknown as Record<string, unknown>).user = {
         mode: "self-hosted",
         prefix: "",
         teamPrefix: null,
@@ -55,7 +55,7 @@ export class AuthGuard implements CanActivate {
           algorithms: ["RS256"],
         }) as jwt.JwtPayload;
 
-        (request as any).user = {
+        (request as unknown as Record<string, unknown>).user = {
           mode: "cloud",
           prefix: decoded.prefix || `users/${decoded.sub}/`,
           teamPrefix: decoded.teamPrefix || null,

@@ -147,7 +147,7 @@ export function ProfileInfoDialog({
       setExtensionGroupName(null);
       return;
     }
-    (async () => {
+    void (async () => {
       try {
         const group = await invoke<{ name: string } | null>(
           "get_extension_group_for_profile",

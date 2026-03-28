@@ -524,7 +524,29 @@
       "selectedCount_plural": "{{count}} 個のCookieを選択"
     },
     "success": "Cookieが正常にコピーされました",
-    "error": "Cookieのコピーに失敗しました"
+    "error": "Cookieのコピーに失敗しました",
+    "management": {
+      "title": "Cookie管理",
+      "menuItem": "Cookie管理"
+    },
+    "import": {
+      "title": "Cookieのインポート",
+      "description": "NetscapeまたはJSON形式のファイルからCookieをインポートします。",
+      "selectFile": "ファイルを選択",
+      "preview": "{{count}}件のCookieが見つかりました",
+      "success": "{{imported}}件のCookieをインポートしました（{{replaced}}件を置換）",
+      "error": "Cookieのインポートに失敗しました",
+      "proFeature": "Cookieのインポートはプロ機能です"
+    },
+    "export": {
+      "title": "Cookieのエクスポート",
+      "description": "このプロファイルからCookieをエクスポートします。",
+      "formatLabel": "形式",
+      "netscape": "Netscape TXT",
+      "json": "JSON",
+      "success": "Cookieのエクスポートに成功しました",
+      "error": "Cookieのエクスポートに失敗しました"
+    }
   },
   "toasts": {
     "success": {
@@ -723,30 +745,6 @@
     "viewOnly": "このプロファイルは{{os}}で作成されたもので、このシステムではサポートされていません",
     "cannotLaunch": "このプロファイルは{{os}}で作成されたもので、このシステムではサポートされていません",
     "cannotModify": "他のOSのプロファイルの同期設定は変更できません"
-  },
-  "cookies": {
-    "management": {
-      "title": "Cookie管理",
-      "menuItem": "Cookie管理"
-    },
-    "import": {
-      "title": "Cookieのインポート",
-      "description": "NetscapeまたはJSON形式のファイルからCookieをインポートします。",
-      "selectFile": "ファイルを選択",
-      "preview": "{{count}}件のCookieが見つかりました",
-      "success": "{{imported}}件のCookieをインポートしました（{{replaced}}件を置換）",
-      "error": "Cookieのインポートに失敗しました",
-      "proFeature": "Cookieのインポートはプロ機能です"
-    },
-    "export": {
-      "title": "Cookieのエクスポート",
-      "description": "このプロファイルからCookieをエクスポートします。",
-      "formatLabel": "形式",
-      "netscape": "Netscape TXT",
-      "json": "JSON",
-      "success": "Cookieのエクスポートに成功しました",
-      "error": "Cookieのエクスポートに失敗しました"
-    }
   },
   "profileInfo": {
     "title": "プロフィール詳細",

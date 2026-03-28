@@ -524,7 +524,29 @@
       "selectedCount_plural": "{{count}} cookies sélectionnés"
     },
     "success": "Cookies copiés avec succès",
-    "error": "Échec de la copie des cookies"
+    "error": "Échec de la copie des cookies",
+    "management": {
+      "title": "Gestion des Cookies",
+      "menuItem": "Gestion des Cookies"
+    },
+    "import": {
+      "title": "Importer des Cookies",
+      "description": "Importer des cookies depuis un fichier au format Netscape ou JSON.",
+      "selectFile": "Choisir un Fichier",
+      "preview": "{{count}} cookies trouvés",
+      "success": "{{imported}} cookies importés avec succès ({{replaced}} remplacés)",
+      "error": "Échec de l'importation des cookies",
+      "proFeature": "L'importation de cookies est une fonctionnalité Pro"
+    },
+    "export": {
+      "title": "Exporter les Cookies",
+      "description": "Exporter les cookies de ce profil.",
+      "formatLabel": "Format",
+      "netscape": "Netscape TXT",
+      "json": "JSON",
+      "success": "Cookies exportés avec succès",
+      "error": "Échec de l'exportation des cookies"
+    }
   },
   "toasts": {
     "success": {
@@ -723,30 +745,6 @@
     "viewOnly": "Ce profil a été créé sur {{os}} et n'est pas pris en charge sur ce système",
     "cannotLaunch": "Ce profil a été créé sur {{os}} et n'est pas pris en charge sur ce système",
     "cannotModify": "Impossible de modifier les paramètres de synchronisation d'un profil d'un autre système d'exploitation"
-  },
-  "cookies": {
-    "management": {
-      "title": "Gestion des Cookies",
-      "menuItem": "Gestion des Cookies"
-    },
-    "import": {
-      "title": "Importer des Cookies",
-      "description": "Importer des cookies depuis un fichier au format Netscape ou JSON.",
-      "selectFile": "Choisir un Fichier",
-      "preview": "{{count}} cookies trouvés",
-      "success": "{{imported}} cookies importés avec succès ({{replaced}} remplacés)",
-      "error": "Échec de l'importation des cookies",
-      "proFeature": "L'importation de cookies est une fonctionnalité Pro"
-    },
-    "export": {
-      "title": "Exporter les Cookies",
-      "description": "Exporter les cookies de ce profil.",
-      "formatLabel": "Format",
-      "netscape": "Netscape TXT",
-      "json": "JSON",
-      "success": "Cookies exportés avec succès",
-      "error": "Échec de l'exportation des cookies"
-    }
   },
   "profileInfo": {
     "title": "Détails du Profil",

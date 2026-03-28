@@ -524,7 +524,29 @@
       "selectedCount_plural": "Выбрано {{count}} cookie"
     },
     "success": "Cookie успешно скопированы",
-    "error": "Ошибка копирования cookie"
+    "error": "Ошибка копирования cookie",
+    "management": {
+      "title": "Управление Cookies",
+      "menuItem": "Управление Cookies"
+    },
+    "import": {
+      "title": "Импорт Cookies",
+      "description": "Импорт cookies из файла в формате Netscape или JSON.",
+      "selectFile": "Выбрать файл",
+      "preview": "Найдено {{count}} cookies",
+      "success": "Успешно импортировано {{imported}} cookies ({{replaced}} заменено)",
+      "error": "Ошибка импорта cookies",
+      "proFeature": "Импорт cookies — функция Pro"
+    },
+    "export": {
+      "title": "Экспорт Cookies",
+      "description": "Экспорт cookies из этого профиля.",
+      "formatLabel": "Формат",
+      "netscape": "Netscape TXT",
+      "json": "JSON",
+      "success": "Cookies успешно экспортированы",
+      "error": "Ошибка экспорта cookies"
+    }
   },
   "toasts": {
     "success": {
@@ -723,30 +745,6 @@
     "viewOnly": "Этот профиль был создан на {{os}} и не поддерживается в этой системе",
     "cannotLaunch": "Этот профиль был создан на {{os}} и не поддерживается в этой системе",
     "cannotModify": "Невозможно изменить настройки синхронизации профиля другой ОС"
-  },
-  "cookies": {
-    "management": {
-      "title": "Управление Cookies",
-      "menuItem": "Управление Cookies"
-    },
-    "import": {
-      "title": "Импорт Cookies",
-      "description": "Импорт cookies из файла в формате Netscape или JSON.",
-      "selectFile": "Выбрать файл",
-      "preview": "Найдено {{count}} cookies",
-      "success": "Успешно импортировано {{imported}} cookies ({{replaced}} заменено)",
-      "error": "Ошибка импорта cookies",
-      "proFeature": "Импорт cookies — функция Pro"
-    },
-    "export": {
-      "title": "Экспорт Cookies",
-      "description": "Экспорт cookies из этого профиля.",
-      "formatLabel": "Формат",
-      "netscape": "Netscape TXT",
-      "json": "JSON",
-      "success": "Cookies успешно экспортированы",
-      "error": "Ошибка экспорта cookies"
-    }
   },
   "profileInfo": {
     "title": "Детали профиля",

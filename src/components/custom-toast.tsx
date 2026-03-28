@@ -363,15 +363,17 @@ export function UnifiedToast(props: ToastProps) {
           </>
         )}
         {action &&
-          "onClick" in (action as any) &&
-          "label" in (action as any) && (
+          "onClick" in (action as { onClick?: () => void; label?: string }) &&
+          "label" in (action as { onClick?: () => void; label?: string }) && (
             <div className="mt-2 w-full">
               <RippleButton
                 size="sm"
                 className="ml-auto"
-                onClick={(action as any).onClick}
+                onClick={
+                  (action as { onClick: () => void; label: string }).onClick
+                }
               >
-                {(action as any).label}
+                {(action as { onClick: () => void; label: string }).label}
               </RippleButton>
             </div>
           )}

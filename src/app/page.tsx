@@ -324,7 +324,7 @@ export default function Home() {
       const currentUrl = await getCurrent();
       if (currentUrl && currentUrl.length > 0) {
         console.log("Startup URL detected:", currentUrl[0]);
-        void handleUrlOpen(currentUrl[0]);
+        handleUrlOpen(currentUrl[0]);
       }
     } catch (error) {
       console.error("Failed to check current URL:", error);
@@ -413,13 +413,13 @@ export default function Home() {
       // Listen for URL open events from the deep link handler (when app is already running)
       await listen<string>("url-open-request", (event) => {
         console.log("Received URL open request:", event.payload);
-        void handleUrlOpen(event.payload);
+        handleUrlOpen(event.payload);
       });
 
       // Listen for show profile selector events
       await listen<string>("show-profile-selector", (event) => {
         console.log("Received show profile selector request:", event.payload);
-        void handleUrlOpen(event.payload);
+        handleUrlOpen(event.payload);
       });
 
       // Listen for show create profile dialog events
@@ -437,7 +437,7 @@ export default function Home() {
       // Listen for custom logo click events
       const handleLogoUrlEvent = (event: CustomEvent) => {
         console.log("Received logo URL event:", event.detail);
-        void handleUrlOpen(event.detail);
+        handleUrlOpen(event.detail);
       };
 
       window.addEventListener(
@@ -995,7 +995,7 @@ export default function Home() {
   // Check permissions when they are initialized
   useEffect(() => {
     if (isInitialized) {
-      void checkAllPermissions();
+      checkAllPermissions();
     }
   }, [isInitialized, checkAllPermissions]);
 

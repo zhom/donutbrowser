@@ -173,7 +173,9 @@ export function TrafficDetailsDialog({
     };
 
     void fetchStats();
-    const interval = setInterval(fetchStats, 2000);
+    const interval = setInterval(() => {
+      void fetchStats();
+    }, 2000);
 
     return () => {
       clearInterval(interval);

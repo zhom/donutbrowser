@@ -27,6 +27,7 @@ Or enter the dev shell: `nix develop`
 ### Manual Setup
 
 Requirements:
+
 - Node.js (see `.node-version`)
 - pnpm
 - Rust + Cargo (latest stable)
@@ -47,6 +48,7 @@ pnpm format && pnpm lint && pnpm test
 ```
 
 This runs:
+
 - **Biome** — JS/TS linting and formatting
 - **Clippy + rustfmt** — Rust linting and formatting
 - **typos** — Spellcheck (allowlist in `_typos.toml`)

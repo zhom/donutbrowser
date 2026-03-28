@@ -341,13 +341,13 @@ export interface CamoufoxFingerprintConfig {
   "canvas:aaCapOffset"?: boolean;
 
   // Voices
-  voices?: Array<{
+  voices?: {
     isLocalService?: boolean;
     isDefault?: boolean;
     voiceURI?: string;
     name?: string;
     lang?: string;
-  }>;
+  }[];
   "voices:blockIfNotDefined"?: boolean;
   "voices:fakeCompletion"?: boolean;
   "voices:fakeCompletion:charsPerSecond"?: number;

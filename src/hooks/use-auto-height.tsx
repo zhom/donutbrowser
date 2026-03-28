@@ -22,18 +22,15 @@ export function useAutoHeight<T extends HTMLElement = HTMLDivElement>(
     const el = ref.current;
     if (!el) return 0;
 
-    const base = el.getBoundingClientRect().height ?? 0;
+    const base = el.getBoundingClientRect().height;
 
     let extra = 0;
 
     if (options.includeParentBox && el.parentElement) {
       const cs = getComputedStyle(el.parentElement);
-      const paddingY =
-        (parseFloat(cs.paddingTop ?? "0") ?? 0) +
-        (parseFloat(cs.paddingBottom ?? "0") ?? 0);
+      const paddingY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
       const borderY =
-        (parseFloat(cs.borderTopWidth ?? "0") ?? 0) +
-        (parseFloat(cs.borderBottomWidth ?? "0") ?? 0);
+        parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
       const isBorderBox = cs.boxSizing === "border-box";
       if (isBorderBox) {
         extra += paddingY + borderY;
@@ -42,20 +39,16 @@ export function useAutoHeight<T extends HTMLElement = HTMLDivElement>(
 
     if (options.includeSelfBox) {
       const cs = getComputedStyle(el);
-      const paddingY =
-        (parseFloat(cs.paddingTop ?? "0") ?? 0) +
-        (parseFloat(cs.paddingBottom ?? "0") ?? 0);
+      const paddingY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
       const borderY =
-        (parseFloat(cs.borderTopWidth ?? "0") ?? 0) +
-        (parseFloat(cs.borderBottomWidth ?? "0") ?? 0);
+        parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
       const isBorderBox = cs.boxSizing === "border-box";
       if (isBorderBox) {
         extra += paddingY + borderY;
       }
     }
 
-    const dpr =
-      typeof window !== "undefined" ? (window.devicePixelRatio ?? 1) : 1;
+    const dpr = typeof window !== "undefined" ? window.devicePixelRatio : 1;
     const total = Math.ceil((base + extra) * dpr) / dpr;
 
     return total;

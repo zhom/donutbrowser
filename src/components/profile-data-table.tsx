@@ -218,12 +218,12 @@ interface TableMeta {
   onLaunchWithSync: (profile: BrowserProfile) => void;
 }
 
-type SyncStatusDot = {
+interface SyncStatusDot {
   color: string;
   tooltip: string;
   animate: boolean;
   encrypted: boolean;
-};
+}
 
 function getProfileSyncStatusDot(
   profile: BrowserProfile,
@@ -1215,7 +1215,7 @@ export function ProfilesDataTable({
   React.useEffect(() => {
     if (!browserState.isClient) return;
     let unlisten: (() => void) | undefined;
-    (async () => {
+    void (async () => {
       try {
         unlisten = await listen<{ id: string; is_running: boolean }>(
           "profile-running-changed",
@@ -1540,7 +1540,11 @@ export function ProfilesDataTable({
 
       // Overflow actions
       onAssignProfilesToGroup,
-      onCloneProfile,
+      onCloneProfile: onCloneProfile
+        ? (profile: BrowserProfile) => {
+            void onCloneProfile(profile);
+          }
+        : undefined,
       onConfigureCamoufox,
       onCopyCookiesToProfile,
       onOpenCookieManagement,
@@ -1572,7 +1576,11 @@ export function ProfilesDataTable({
 
       // Synchronizer
       getProfileSyncInfo: getProfileSyncInfo ?? (() => undefined),
-      onLaunchWithSync: onLaunchWithSync ?? (() => {}),
+      onLaunchWithSync:
+        onLaunchWithSync ??
+        (() => {
+          /* empty */
+        }),
     }),
     [
       t,

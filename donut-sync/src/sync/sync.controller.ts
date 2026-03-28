@@ -39,7 +39,7 @@ export class SyncController {
   constructor(private readonly syncService: SyncService) {}
 
   private getUserContext(req: Request): UserContext {
-    return (req as any).user as UserContext;
+    return (req as unknown as Record<string, unknown>).user as UserContext;
   }
 
   @Post("stat")

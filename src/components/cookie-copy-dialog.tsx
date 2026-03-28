@@ -50,12 +50,13 @@ interface CookieCopyDialogProps {
   onCopyComplete?: () => void;
 }
 
-interface SelectionState {
-  [domain: string]: {
+type SelectionState = Record<
+  string,
+  {
     allSelected: boolean;
     cookies: Set<string>;
-  };
-}
+  }
+>;
 
 export function CookieCopyDialog({
   isOpen,
@@ -148,7 +149,7 @@ export function CookieCopyDialog({
     (domain: string, cookies: UnifiedCookie[]) => {
       setSelection((prev) => {
         const current = prev[domain];
-        const allSelected = current.allSelected || false;
+        const allSelected = current.allSelected;
 
         if (allSelected) {
           const newSelection = { ...prev };
@@ -171,7 +172,7 @@ export function CookieCopyDialog({
   const toggleCookie = useCallback(
     (domain: string, cookieName: string, totalCookies: number) => {
       setSelection((prev) => {
-        const current = prev[domain] || {
+        const current = prev[domain] ?? {
           allSelected: false,
           cookies: new Set<string>(),
         };
@@ -503,8 +504,8 @@ function DomainRow({
   onToggleExpand,
 }: DomainRowProps) {
   const domainSelection = selection[domain.domain];
-  const isAllSelected = domainSelection.allSelected || false;
-  const selectedCount = domainSelection.cookies.size || 0;
+  const isAllSelected = domainSelection.allSelected;
+  const selectedCount = domainSelection.cookies.size;
   const isPartial =
     selectedCount > 0 && selectedCount < domain.cookie_count && !isAllSelected;
 
@@ -539,8 +540,7 @@ function DomainRow({
       {isExpanded && (
         <div className="ml-8 pl-2 border-l space-y-1">
           {domain.cookies.map((cookie) => {
-            const isSelected =
-              domainSelection.cookies.has(cookie.name) || false;
+            const isSelected = domainSelection.cookies.has(cookie.name);
             return (
               <div
                 key={`${domain.domain}-${cookie.name}`}

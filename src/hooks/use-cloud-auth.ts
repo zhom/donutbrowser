@@ -50,7 +50,7 @@ export function useCloudAuth(): UseCloudAuthReturn {
     };
   }, [loadUser]);
 
-  const requestOtp = useCallback(async (email: string): Promise<string> => {
+  const requestOtp = useCallback((email: string): Promise<string> => {
     return invoke<string>("cloud_request_otp", { email });
   }, []);
 

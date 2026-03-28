@@ -46,7 +46,7 @@ function DataTableActionBar<TData>({
   }, [table]);
 
   const portalContainer =
-    portalContainerProp ?? (mounted ? globalThis.document?.body : null);
+    portalContainerProp ?? (mounted ? globalThis.document.body : null);
 
   if (!portalContainer) return null;
 

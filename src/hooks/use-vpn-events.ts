@@ -16,7 +16,7 @@ export function useVpnEvents() {
 
   const loadVpnUsage = useCallback(async () => {
     try {
-      const profiles = await invoke<Array<{ vpn_id?: string }>>(
+      const profiles = await invoke<{ vpn_id?: string }[]>(
         "list_browser_profiles",
       );
       const counts: Record<string, number> = {};

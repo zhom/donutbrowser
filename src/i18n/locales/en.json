@@ -524,7 +524,29 @@
       "selectedCount_plural": "{{count}} cookies selected"
     },
     "success": "Cookies copied successfully",
-    "error": "Failed to copy cookies"
+    "error": "Failed to copy cookies",
+    "management": {
+      "title": "Cookie Management",
+      "menuItem": "Cookie Management"
+    },
+    "import": {
+      "title": "Import Cookies",
+      "description": "Import cookies from a Netscape or JSON format file.",
+      "selectFile": "Choose File",
+      "preview": "{{count}} cookies found",
+      "success": "Successfully imported {{imported}} cookies ({{replaced}} replaced)",
+      "error": "Failed to import cookies",
+      "proFeature": "Cookie import is a Pro feature"
+    },
+    "export": {
+      "title": "Export Cookies",
+      "description": "Export cookies from this profile.",
+      "formatLabel": "Format",
+      "netscape": "Netscape TXT",
+      "json": "JSON",
+      "success": "Cookies exported successfully",
+      "error": "Failed to export cookies"
+    }
   },
   "toasts": {
     "success": {
@@ -723,30 +745,6 @@
     "viewOnly": "This profile was created on {{os}} and is not supported on this system",
     "cannotLaunch": "This profile was created on {{os}} and is not supported on this system",
     "cannotModify": "Cannot modify sync settings for a cross-OS profile"
-  },
-  "cookies": {
-    "management": {
-      "title": "Cookie Management",
-      "menuItem": "Cookie Management"
-    },
-    "import": {
-      "title": "Import Cookies",
-      "description": "Import cookies from a Netscape or JSON format file.",
-      "selectFile": "Choose File",
-      "preview": "{{count}} cookies found",
-      "success": "Successfully imported {{imported}} cookies ({{replaced}} replaced)",
-      "error": "Failed to import cookies",
-      "proFeature": "Cookie import is a Pro feature"
-    },
-    "export": {
-      "title": "Export Cookies",
-      "description": "Export cookies from this profile.",
-      "formatLabel": "Format",
-      "netscape": "Netscape TXT",
-      "json": "JSON",
-      "success": "Cookies exported successfully",
-      "error": "Failed to export cookies"
-    }
   },
   "profileInfo": {
     "title": "Profile Details",
