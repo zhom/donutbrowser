@@ -13,7 +13,7 @@ jobs:
   security-scan:
     name: Security Vulnerability Scan
     if: github.repository == 'zhom/donutbrowser' && github.actor == 'dependabot[bot]'
-    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@c5996e0193a3df57d695c1b8a1dec2a4c62e8730" # v2.3.3
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@c51854704019a247608d928f370c98740469d4b5" # v2.3.5
     with:
       scan-args: |-
         -r
@@ -69,7 +69,7 @@ jobs:
     steps:
       - name: Dependabot metadata
         id: metadata
-        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a #v2.5.0
+        uses: dependabot/fetch-metadata@ffa630c65fa7e0ecfa0625b5ceda64399aea1b36 #v3.0.0
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
       - name: Enable auto-merge for minor and patch updates
