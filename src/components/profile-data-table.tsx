@@ -1250,7 +1250,7 @@ export function ProfilesDataTable({
   React.useEffect(() => {
     if (!browserState.isClient) return;
     let unlisten: (() => void) | undefined;
-    (async () => {
+    void (async () => {
       try {
         unlisten = await listen("stored-proxies-changed", () => {
           // Also refresh tags on profile updates
@@ -1881,12 +1881,12 @@ export function ProfilesDataTable({
           const syncInfo = meta.getProfileSyncInfo(profile.id);
           const isLeader = syncInfo?.isLeader === true;
           const isFollower = syncInfo?.isLeader === false;
-          const isDesynced = isFollower && syncInfo?.failedAtUrl != null;
+          const isDesynced = isFollower && syncInfo.failedAtUrl != null;
           const stopTooltip = isLeader
             ? meta.t("profiles.synchronizer.stopLeader")
             : isFollower
               ? meta.t("profiles.synchronizer.stopFollower", {
-                  leaderName: syncInfo?.session.leader_profile_name ?? "",
+                  leaderName: syncInfo.session.leader_profile_name ?? "",
                 })
               : tooltipContent;
 

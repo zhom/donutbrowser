@@ -75,7 +75,6 @@ export interface MultipleSelectorRef {
   input: HTMLInputElement;
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
 export function useDebounce<T>(value: T, delay?: number): T {
   const [debouncedValue, setDebouncedValue] = React.useState<T>(value);
 
@@ -284,7 +283,6 @@ const MultipleSelector = React.forwardRef<
       };
 
       void exec();
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [debouncedSearchTerm, groupBy, open, triggerSearchOnFocus, onSearch]);
 
     const CreatableItem = () => {
