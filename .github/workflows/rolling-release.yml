@@ -242,7 +242,7 @@ jobs:
           PORTABLE_DIR="Donut-Portable"
           mkdir -p "$PORTABLE_DIR"
 
-          cp "src-tauri/target/${{ matrix.target }}/release/Donut.exe" "$PORTABLE_DIR/"
+          cp "src-tauri/target/${{ matrix.target }}/release/donutbrowser.exe" "$PORTABLE_DIR/Donut.exe"
           cp "src-tauri/target/${{ matrix.target }}/release/donut-proxy.exe" "$PORTABLE_DIR/"
           cp "src-tauri/target/${{ matrix.target }}/release/donut-daemon.exe" "$PORTABLE_DIR/"
 

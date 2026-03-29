@@ -236,7 +236,7 @@ jobs:
           mkdir -p "$PORTABLE_DIR"
 
           # Copy main executable
-          cp "src-tauri/target/${{ matrix.target }}/release/Donut.exe" "$PORTABLE_DIR/"
+          cp "src-tauri/target/${{ matrix.target }}/release/donutbrowser.exe" "$PORTABLE_DIR/Donut.exe"
 
           # Copy sidecar binaries
           cp "src-tauri/target/${{ matrix.target }}/release/donut-proxy.exe" "$PORTABLE_DIR/"
