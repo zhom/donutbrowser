@@ -773,36 +773,38 @@ export function SettingsDialog({
             </p>
           </div>
 
-          {/* Default Browser Section */}
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <Label className="text-base font-medium">Default Browser</Label>
-              <Badge variant={isDefaultBrowser ? "default" : "secondary"}>
-                {isDefaultBrowser ? "Active" : "Inactive"}
-              </Badge>
+          {/* Default Browser Section - hidden in portable mode */}
+          {!systemInfo?.portable && (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <Label className="text-base font-medium">Default Browser</Label>
+                <Badge variant={isDefaultBrowser ? "default" : "secondary"}>
+                  {isDefaultBrowser ? "Active" : "Inactive"}
+                </Badge>
+              </div>
+
+              <LoadingButton
+                isLoading={isSettingDefault}
+                onClick={() => {
+                  handleSetDefaultBrowser().catch((err: unknown) => {
+                    console.error(err);
+                  });
+                }}
+                disabled={isDefaultBrowser}
+                variant={isDefaultBrowser ? "outline" : "default"}
+                className="w-full"
+              >
+                {isDefaultBrowser
+                  ? "Already Default Browser"
+                  : "Set as Default Browser"}
+              </LoadingButton>
+
+              <p className="text-xs text-muted-foreground">
+                When set as default, Donut Browser will handle web links and
+                allow you to choose which profile to use.
+              </p>
             </div>
-
-            <LoadingButton
-              isLoading={isSettingDefault}
-              onClick={() => {
-                handleSetDefaultBrowser().catch((err: unknown) => {
-                  console.error(err);
-                });
-              }}
-              disabled={isDefaultBrowser}
-              variant={isDefaultBrowser ? "outline" : "default"}
-              className="w-full"
-            >
-              {isDefaultBrowser
-                ? "Already Default Browser"
-                : "Set as Default Browser"}
-            </LoadingButton>
-
-            <p className="text-xs text-muted-foreground">
-              When set as default, Donut Browser will handle web links and allow
-              you to choose which profile to use.
-            </p>
-          </div>
+          )}
 
           {/* Permissions Section - Only show on macOS */}
           {isMacOS && (
