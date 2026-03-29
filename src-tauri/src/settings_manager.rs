@@ -945,6 +945,40 @@ pub fn get_system_language() -> String {
     .unwrap_or_else(|| "en".to_string())
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct SystemInfo {
+  pub app_version: String,
+  pub os: String,
+  pub arch: String,
+}
+
+#[tauri::command]
+pub fn get_system_info() -> SystemInfo {
+  let os = if cfg!(target_os = "macos") {
+    "macOS"
+  } else if cfg!(target_os = "windows") {
+    "Windows"
+  } else if cfg!(target_os = "linux") {
+    "Linux"
+  } else {
+    "Unknown"
+  };
+
+  let arch = if cfg!(target_arch = "x86_64") {
+    "x86_64"
+  } else if cfg!(target_arch = "aarch64") {
+    "aarch64"
+  } else {
+    "unknown"
+  };
+
+  SystemInfo {
+    app_version: crate::app_auto_updater::AppAutoUpdater::get_current_version(),
+    os: os.to_string(),
+    arch: arch.to_string(),
+  }
+}
+
 // Global singleton instance
 lazy_static::lazy_static! {
   static ref SETTINGS_MANAGER: SettingsManager = SettingsManager::new();

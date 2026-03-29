@@ -85,7 +85,7 @@ use downloader::{cancel_download, download_browser};
 
 use settings_manager::{
   decline_launch_on_login, dismiss_window_resize_warning, enable_launch_on_login, get_app_settings,
-  get_sync_settings, get_system_language, get_table_sorting_settings,
+  get_sync_settings, get_system_info, get_system_language, get_table_sorting_settings,
   get_window_resize_warning_dismissed, save_app_settings, save_sync_settings,
   save_table_sorting_settings, should_show_launch_on_login_prompt,
 };
@@ -1816,6 +1816,7 @@ pub fn run() {
       get_table_sorting_settings,
       save_table_sorting_settings,
       get_system_language,
+      get_system_info,
       dismiss_window_resize_warning,
       get_window_resize_warning_dismissed,
       clear_all_version_cache_and_refetch,

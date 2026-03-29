@@ -124,6 +124,11 @@ export function SettingsDialog({
   const [e2ePasswordConfirm, setE2ePasswordConfirm] = useState("");
   const [e2eError, setE2eError] = useState("");
   const [isSavingE2e, setIsSavingE2e] = useState(false);
+  const [systemInfo, setSystemInfo] = useState<{
+    app_version: string;
+    os: string;
+    arch: string;
+  } | null>(null);
 
   const { t } = useTranslation();
   const { setTheme } = useTheme();
@@ -225,6 +230,17 @@ export function SettingsDialog({
         setHasE2ePassword(hasPassword);
       } catch {
         setHasE2ePassword(false);
+      }
+      // Load system info
+      try {
+        const info = await invoke<{
+          app_version: string;
+          os: string;
+          arch: string;
+        }>("get_system_info");
+        setSystemInfo(info);
+      } catch {
+        setSystemInfo(null);
       }
     } catch (error) {
       console.error("Failed to load settings:", error);
@@ -1088,6 +1104,15 @@ export function SettingsDialog({
               version information for all browsers.
             </p>
           </div>
+
+          {/* System Info */}
+          {systemInfo && (
+            <div className="pt-2 border-t">
+              <p className="text-xs text-muted-foreground font-mono whitespace-pre-line select-all">
+                {`Donut Browser ${systemInfo.app_version}\n${systemInfo.os} ${systemInfo.arch}`}
+              </p>
+            </div>
+          )}
         </div>
 
         <DialogFooter className="shrink-0">
