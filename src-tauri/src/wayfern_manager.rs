@@ -136,8 +136,10 @@ impl WayfernManager {
     port: u16,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let url = format!("http://127.0.0.1:{port}/json/version");
-    let max_attempts = 50;
-    let delay = Duration::from_millis(100);
+    // On first launch, macOS Gatekeeper verifies the binary which can take 30+ seconds.
+    // Use a generous timeout (60s) to handle this.
+    let max_attempts = 120;
+    let delay = Duration::from_millis(500);
 
     for attempt in 0..max_attempts {
       match self.http_client.get(&url).send().await {
