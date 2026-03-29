@@ -313,6 +313,7 @@ mod tests {
   }
 
   #[test]
+  #[serial_test::serial]
   fn test_recover_ephemeral_dirs() {
     let base = get_ephemeral_base_dir().unwrap();
     let test_id = uuid::Uuid::new_v4().to_string();
