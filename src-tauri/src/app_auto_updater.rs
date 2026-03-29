@@ -1604,6 +1604,10 @@ rm "{}"
 
 #[tauri::command]
 pub async fn check_for_app_updates() -> Result<Option<AppUpdateInfo>, String> {
+  if crate::app_dirs::is_portable() {
+    log::info!("App auto-updates disabled in portable mode");
+    return Ok(None);
+  }
   // The disable_auto_updates setting controls app self-updates only
   let disabled = crate::settings_manager::SettingsManager::instance()
     .load_settings()

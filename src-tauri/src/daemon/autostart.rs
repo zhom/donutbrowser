@@ -340,6 +340,9 @@ pub fn is_autostart_enabled() -> bool {
 }
 
 pub fn get_data_dir() -> Option<PathBuf> {
+  if crate::app_dirs::is_portable() {
+    return Some(crate::app_dirs::data_dir());
+  }
   if let Some(proj_dirs) = ProjectDirs::from("com", "donutbrowser", "Donut Browser") {
     Some(proj_dirs.data_dir().to_path_buf())
   } else {

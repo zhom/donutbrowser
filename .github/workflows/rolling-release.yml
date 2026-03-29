@@ -235,6 +235,34 @@ jobs:
           prerelease: true
           args: ${{ matrix.args }}
 
+      - name: Create portable Windows ZIP
+        if: matrix.platform == 'windows-latest'
+        shell: bash
+        run: |
+          PORTABLE_DIR="Donut-Portable"
+          mkdir -p "$PORTABLE_DIR"
+
+          cp "src-tauri/target/${{ matrix.target }}/release/Donut.exe" "$PORTABLE_DIR/"
+          cp "src-tauri/target/${{ matrix.target }}/release/donut-proxy.exe" "$PORTABLE_DIR/"
+          cp "src-tauri/target/${{ matrix.target }}/release/donut-daemon.exe" "$PORTABLE_DIR/"
+
+          if [ -f "src-tauri/target/${{ matrix.target }}/release/WebView2Loader.dll" ]; then
+            cp "src-tauri/target/${{ matrix.target }}/release/WebView2Loader.dll" "$PORTABLE_DIR/"
+          fi
+
+          touch "$PORTABLE_DIR/.portable"
+
+          7z a "Donut_x64-portable.zip" "$PORTABLE_DIR"
+
+      - name: Upload portable ZIP to release
+        if: matrix.platform == 'windows-latest'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NIGHTLY_TAG: "nightly-${{ steps.timestamp.outputs.timestamp }}"
+        run: |
+          gh release upload "$NIGHTLY_TAG" "Donut_x64-portable.zip" --clobber
+
       - name: Clean up Apple certificate
         if: matrix.platform == 'macos-latest' && always()
         run: |

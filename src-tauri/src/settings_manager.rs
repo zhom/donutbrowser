@@ -950,6 +950,7 @@ pub struct SystemInfo {
   pub app_version: String,
   pub os: String,
   pub arch: String,
+  pub portable: bool,
 }
 
 #[tauri::command]
@@ -976,6 +977,7 @@ pub fn get_system_info() -> SystemInfo {
     app_version: crate::app_auto_updater::AppAutoUpdater::get_current_version(),
     os: os.to_string(),
     arch: arch.to_string(),
+    portable: crate::app_dirs::is_portable(),
   }
 }
 

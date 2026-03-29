@@ -3,9 +3,27 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 
 static BASE_DIRS: OnceLock<BaseDirs> = OnceLock::new();
+static PORTABLE_DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
 
 fn base_dirs() -> &'static BaseDirs {
   BASE_DIRS.get_or_init(|| BaseDirs::new().expect("Failed to get base directories"))
+}
+
+/// Returns the portable base directory if a `.portable` marker exists next to the executable.
+fn portable_dir() -> Option<&'static PathBuf> {
+  PORTABLE_DIR
+    .get_or_init(|| {
+      std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|p| p.to_path_buf()))
+        .filter(|dir| dir.join(".portable").exists())
+    })
+    .as_ref()
+}
+
+/// Returns true if the app is running in portable mode.
+pub fn is_portable() -> bool {
+  portable_dir().is_some()
 }
 
 pub fn app_name() -> &'static str {
@@ -28,6 +46,10 @@ pub fn data_dir() -> PathBuf {
     return PathBuf::from(dir);
   }
 
+  if let Some(dir) = portable_dir() {
+    return dir.join("data");
+  }
+
   base_dirs().data_local_dir().join(app_name())
 }
 
@@ -41,6 +63,10 @@ pub fn cache_dir() -> PathBuf {
 
   if let Ok(dir) = std::env::var("DONUTBROWSER_CACHE_DIR") {
     return PathBuf::from(dir);
+  }
+
+  if let Some(dir) = portable_dir() {
+    return dir.join("cache");
   }
 
   base_dirs().cache_dir().join(app_name())
