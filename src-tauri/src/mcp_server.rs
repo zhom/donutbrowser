@@ -26,6 +26,7 @@ use crate::settings_manager::SettingsManager;
 use crate::wayfern_terms::WayfernTermsManager;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct McpTool {
   pub name: String,
   pub description: String,
