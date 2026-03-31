@@ -858,5 +858,22 @@
     "cookieImportLocked": "Импорт cookies — функция Pro",
     "cookieExportLocked": "Экспорт cookies — функция Pro",
     "cookieManagementLocked": "Управление cookies — функция Pro"
+  },
+  "dnsBlocklist": {
+    "title": "Список блокировки DNS",
+    "none": "Нет",
+    "light": "Light",
+    "normal": "Normal",
+    "pro": "Pro",
+    "proPlus": "Pro++",
+    "ultimate": "Ultimate",
+    "settingsDescription": "Списки блокировки DNS блокируют рекламу, трекеры и вредоносные домены на уровне прокси. Списки автоматически обновляются каждые 12 часов.",
+    "manageLists": "Управление списками блокировки DNS",
+    "refreshAll": "Обновить все списки",
+    "refreshFailed": "Не удалось обновить списки блокировки DNS",
+    "domains": "доменов",
+    "fresh": "Актуальный",
+    "stale": "Устаревший",
+    "notCached": "Не кэшировано"
   }
 }

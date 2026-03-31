@@ -50,6 +50,7 @@ impl ProfileManager {
     wayfern_config: Option<WayfernConfig>,
     group_id: Option<String>,
     ephemeral: bool,
+    dns_blocklist: Option<String>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
     if proxy_id.is_some() && vpn_id.is_some() {
       return Err("Cannot set both proxy_id and vpn_id".into());
@@ -158,6 +159,7 @@ impl ProfileManager {
           proxy_bypass_rules: Vec::new(),
           created_by_id: None,
           created_by_email: None,
+          dns_blocklist: None,
         };
 
         match self
@@ -257,6 +259,7 @@ impl ProfileManager {
           proxy_bypass_rules: Vec::new(),
           created_by_id: None,
           created_by_email: None,
+          dns_blocklist: None,
         };
 
         match self
@@ -310,6 +313,7 @@ impl ProfileManager {
       proxy_bypass_rules: Vec::new(),
       created_by_id: None,
       created_by_email: None,
+      dns_blocklist,
     };
 
     // Save profile info
@@ -760,6 +764,30 @@ impl ProfileManager {
     Ok(profile)
   }
 
+  pub fn update_profile_dns_blocklist(
+    &self,
+    profile_id: &str,
+    dns_blocklist: Option<String>,
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+    let profile_uuid =
+      uuid::Uuid::parse_str(profile_id).map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
+    let profiles = self.list_profiles()?;
+    let mut profile = profiles
+      .into_iter()
+      .find(|p| p.id == profile_uuid)
+      .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
+
+    profile.dns_blocklist = dns_blocklist;
+
+    self.save_profile(&profile)?;
+
+    if let Err(e) = events::emit_empty("profiles-changed") {
+      log::warn!("Warning: Failed to emit profiles-changed event: {e}");
+    }
+
+    Ok(profile)
+  }
+
   pub fn delete_multiple_profiles(
     &self,
     app_handle: &tauri::AppHandle,
@@ -902,6 +930,7 @@ impl ProfileManager {
       proxy_bypass_rules: source.proxy_bypass_rules,
       created_by_id: None,
       created_by_email: None,
+      dns_blocklist: source.dns_blocklist,
     };
 
     self.save_profile(&new_profile)?;
@@ -1957,6 +1986,7 @@ pub async fn create_browser_profile_with_group(
   wayfern_config: Option<WayfernConfig>,
   group_id: Option<String>,
   ephemeral: bool,
+  dns_blocklist: Option<String>,
 ) -> Result<BrowserProfile, String> {
   let profile_manager = ProfileManager::instance();
   profile_manager
@@ -1972,6 +2002,7 @@ pub async fn create_browser_profile_with_group(
       wayfern_config,
       group_id,
       ephemeral,
+      dns_blocklist,
     )
     .await
     .map_err(|e| format!("Failed to create profile: {e}"))
@@ -2048,6 +2079,17 @@ pub fn update_profile_proxy_bypass_rules(
 }
 
 #[tauri::command]
+pub fn update_profile_dns_blocklist(
+  profile_id: String,
+  dns_blocklist: Option<String>,
+) -> Result<BrowserProfile, String> {
+  let profile_manager = ProfileManager::instance();
+  profile_manager
+    .update_profile_dns_blocklist(&profile_id, dns_blocklist)
+    .map_err(|e| format!("Failed to update DNS blocklist: {e}"))
+}
+
+#[tauri::command]
 pub async fn check_browser_status(
   app_handle: tauri::AppHandle,
   profile: BrowserProfile,
@@ -2085,6 +2127,7 @@ pub async fn create_browser_profile_new(
   wayfern_config: Option<WayfernConfig>,
   group_id: Option<String>,
   ephemeral: Option<bool>,
+  dns_blocklist: Option<String>,
 ) -> Result<BrowserProfile, String> {
   let fingerprint_os = camoufox_config
     .as_ref()
@@ -2112,6 +2155,7 @@ pub async fn create_browser_profile_new(
     wayfern_config,
     group_id,
     ephemeral.unwrap_or(false),
+    dns_blocklist,
   )
   .await
 }

@@ -699,6 +699,7 @@ mod tests {
       proxy_bypass_rules: Vec::new(),
       created_by_id: None,
       created_by_email: None,
+      dns_blocklist: None,
     }
   }
 

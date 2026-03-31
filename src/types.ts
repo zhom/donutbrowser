@@ -35,6 +35,7 @@ export interface BrowserProfile {
   proxy_bypass_rules?: string[];
   created_by_id?: string;
   created_by_email?: string;
+  dns_blocklist?: string;
 }
 
 export interface Extension {

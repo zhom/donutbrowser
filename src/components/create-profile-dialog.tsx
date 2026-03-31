@@ -84,6 +84,7 @@ interface CreateProfileDialogProps {
     groupId?: string;
     extensionGroupId?: string;
     ephemeral?: boolean;
+    dnsBlocklist?: string;
   }) => Promise<void>;
   selectedGroupId?: string;
   crossOsUnlocked?: boolean;
@@ -124,6 +125,7 @@ export function CreateProfileDialog({
     useState<BrowserTypeString | null>(null);
   const [selectedProxyId, setSelectedProxyId] = useState<string>();
   const [proxyPopoverOpen, setProxyPopoverOpen] = useState(false);
+  const [dnsBlocklist, setDnsBlocklist] = useState<string>("");
 
   // Camoufox anti-detect states
   const [camoufoxConfig, setCamoufoxConfig] = useState<CamoufoxConfig>(() => ({
@@ -395,6 +397,7 @@ export function CreateProfileDialog({
               selectedGroupId !== "default" ? selectedGroupId : undefined,
             extensionGroupId: selectedExtensionGroupId,
             ephemeral,
+            dnsBlocklist: dnsBlocklist || undefined,
           });
         } else {
           // Default to Camoufox
@@ -420,6 +423,7 @@ export function CreateProfileDialog({
               selectedGroupId !== "default" ? selectedGroupId : undefined,
             extensionGroupId: selectedExtensionGroupId,
             ephemeral,
+            dnsBlocklist: dnsBlocklist || undefined,
           });
         }
       } else {
@@ -443,6 +447,7 @@ export function CreateProfileDialog({
           releaseType: bestVersion.releaseType,
           proxyId: selectedProxyId,
           groupId: selectedGroupId !== "default" ? selectedGroupId : undefined,
+          dnsBlocklist: dnsBlocklist || undefined,
         });
       }
 
@@ -1160,6 +1165,43 @@ export function CreateProfileDialog({
                               this profile's traffic.
                             </div>
                           )}
+                        </div>
+
+                        {/* DNS Blocklist */}
+                        <div className="space-y-2">
+                          <Label>{t("dnsBlocklist.title")}</Label>
+                          <Select
+                            value={dnsBlocklist || "none"}
+                            onValueChange={(val) => {
+                              setDnsBlocklist(val === "none" ? "" : val);
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue
+                                placeholder={t("dnsBlocklist.none")}
+                              />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">
+                                {t("dnsBlocklist.none")}
+                              </SelectItem>
+                              <SelectItem value="light">
+                                {t("dnsBlocklist.light")}
+                              </SelectItem>
+                              <SelectItem value="normal">
+                                {t("dnsBlocklist.normal")}
+                              </SelectItem>
+                              <SelectItem value="pro">
+                                {t("dnsBlocklist.pro")}
+                              </SelectItem>
+                              <SelectItem value="pro_plus">
+                                {t("dnsBlocklist.proPlus")}
+                              </SelectItem>
+                              <SelectItem value="ultimate">
+                                {t("dnsBlocklist.ultimate")}
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
 
                         {/* Extension Group */}

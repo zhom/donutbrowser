@@ -14,6 +14,8 @@ pub struct ProxyConfig {
   pub profile_id: Option<String>,
   #[serde(default)]
   pub bypass_rules: Vec<String>,
+  #[serde(default)]
+  pub blocklist_file: Option<String>,
 }
 
 impl ProxyConfig {
@@ -27,6 +29,7 @@ impl ProxyConfig {
       pid: None,
       profile_id: None,
       bypass_rules: Vec::new(),
+      blocklist_file: None,
     }
   }
 
@@ -37,6 +40,11 @@ impl ProxyConfig {
 
   pub fn with_bypass_rules(mut self, bypass_rules: Vec<String>) -> Self {
     self.bypass_rules = bypass_rules;
+    self
+  }
+
+  pub fn with_blocklist_file(mut self, blocklist_file: Option<String>) -> Self {
+    self.blocklist_file = blocklist_file;
     self
   }
 }

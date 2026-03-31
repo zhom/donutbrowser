@@ -65,6 +65,8 @@ pub struct BrowserProfile {
   pub created_by_id: Option<String>,
   #[serde(default)]
   pub created_by_email: Option<String>,
+  #[serde(default)]
+  pub dns_blocklist: Option<String>,
 }
 
 pub fn default_release_type() -> String {

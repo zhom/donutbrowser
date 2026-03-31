@@ -1010,6 +1010,36 @@ impl McpServer {
         }),
       },
       McpTool {
+        name: "update_profile_dns_blocklist".to_string(),
+        description:
+          "Update the DNS blocklist level for a profile. Blocks ads, trackers, and malware domains at the proxy level."
+            .to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the profile to update"
+            },
+            "level": {
+              "type": "string",
+              "enum": ["none", "light", "normal", "pro", "pro_plus", "ultimate"],
+              "description": "DNS blocklist level. 'none' disables blocking."
+            }
+          },
+          "required": ["profile_id", "level"]
+        }),
+      },
+      McpTool {
+        name: "get_dns_blocklist_status".to_string(),
+        description: "Get the cache status of all DNS blocklist tiers including entry counts and freshness.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {},
+          "required": []
+        }),
+      },
+      McpTool {
         name: "list_extensions".to_string(),
         description: "List all managed browser extensions. Requires Pro subscription.".to_string(),
         input_schema: serde_json::json!({
@@ -1482,6 +1512,9 @@ impl McpServer {
           .handle_update_profile_proxy_bypass_rules(&arguments)
           .await
       }
+      // DNS blocklist management
+      "update_profile_dns_blocklist" => self.handle_update_profile_dns_blocklist(&arguments).await,
+      "get_dns_blocklist_status" => self.handle_get_dns_blocklist_status().await,
       // Extension management
       "list_extensions" => self.handle_list_extensions().await,
       "list_extension_groups" => self.handle_list_extension_groups().await,
@@ -1806,6 +1839,7 @@ impl McpServer {
     let mut profile = ProfileManager::instance()
       .create_profile_with_group(
         app_handle, name, browser, version, "stable", proxy_id, None, None, None, group_id, false,
+        None,
       )
       .await
       .map_err(|e| McpError {
@@ -3115,6 +3149,61 @@ impl McpServer {
           profile.name,
           rules.len()
         )
+      }]
+    }))
+  }
+
+  async fn handle_update_profile_dns_blocklist(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?;
+
+    let level = arguments
+      .get("level")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing level".to_string(),
+      })?;
+
+    let dns_blocklist = if level == "none" {
+      None
+    } else {
+      Some(level.to_string())
+    };
+
+    let profile = ProfileManager::instance()
+      .update_profile_dns_blocklist(profile_id, dns_blocklist)
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to update DNS blocklist: {e}"),
+      })?;
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!(
+          "DNS blocklist updated for profile '{}': {}",
+          profile.name,
+          level
+        )
+      }]
+    }))
+  }
+
+  async fn handle_get_dns_blocklist_status(&self) -> Result<serde_json::Value, McpError> {
+    let statuses = crate::dns_blocklist::BlocklistManager::get_cache_status();
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": serde_json::to_string_pretty(&statuses).unwrap_or_default()
       }]
     }))
   }

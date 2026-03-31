@@ -858,5 +858,22 @@
     "cookieImportLocked": "Cookie import is a Pro feature",
     "cookieExportLocked": "Cookie export is a Pro feature",
     "cookieManagementLocked": "Cookie management is a Pro feature"
+  },
+  "dnsBlocklist": {
+    "title": "DNS Blocklist",
+    "none": "None",
+    "light": "Light",
+    "normal": "Normal",
+    "pro": "Pro",
+    "proPlus": "Pro++",
+    "ultimate": "Ultimate",
+    "settingsDescription": "DNS blocklists block ads, trackers, and malware domains at the proxy level. Lists are automatically refreshed every 12 hours.",
+    "manageLists": "Manage DNS Blocklists",
+    "refreshAll": "Refresh All Lists",
+    "refreshFailed": "Failed to refresh DNS blocklists",
+    "domains": "domains",
+    "fresh": "Fresh",
+    "stale": "Stale",
+    "notCached": "Not cached"
   }
 }

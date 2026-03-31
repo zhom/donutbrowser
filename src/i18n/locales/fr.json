@@ -858,5 +858,22 @@
     "cookieImportLocked": "L'importation de cookies est une fonctionnalité Pro",
     "cookieExportLocked": "L'exportation de cookies est une fonctionnalité Pro",
     "cookieManagementLocked": "La gestion des cookies est une fonctionnalité Pro"
+  },
+  "dnsBlocklist": {
+    "title": "Liste de blocage DNS",
+    "none": "Aucun",
+    "light": "Light",
+    "normal": "Normal",
+    "pro": "Pro",
+    "proPlus": "Pro++",
+    "ultimate": "Ultimate",
+    "settingsDescription": "Les listes de blocage DNS bloquent les publicités, les traqueurs et les domaines malveillants au niveau du proxy. Les listes sont automatiquement rafraîchies toutes les 12 heures.",
+    "manageLists": "Gérer les listes de blocage DNS",
+    "refreshAll": "Rafraîchir toutes les listes",
+    "refreshFailed": "Échec du rafraîchissement des listes de blocage DNS",
+    "domains": "domaines",
+    "fresh": "À jour",
+    "stale": "Obsolète",
+    "notCached": "Non mis en cache"
   }
 }

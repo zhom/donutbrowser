@@ -152,6 +152,11 @@ async fn main() {
               Arg::new("bypass-rules")
                 .long("bypass-rules")
                 .help("JSON array of bypass rules (hostnames, IPs, or regex patterns)"),
+            )
+            .arg(
+              Arg::new("blocklist-file")
+                .long("blocklist-file")
+                .help("Path to DNS blocklist file (one domain per line)"),
             ),
         )
         .subcommand(
@@ -235,8 +240,17 @@ async fn main() {
         .get_one::<String>("bypass-rules")
         .and_then(|s| serde_json::from_str(s).ok())
         .unwrap_or_default();
+      let blocklist_file = start_matches.get_one::<String>("blocklist-file").cloned();
 
-      match start_proxy_process_with_profile(upstream_url, port, profile_id, bypass_rules).await {
+      match start_proxy_process_with_profile(
+        upstream_url,
+        port,
+        profile_id,
+        bypass_rules,
+        blocklist_file,
+      )
+      .await
+      {
         Ok(config) => {
           // Output the configuration as JSON for the Rust side to parse
           // Use println! here because this needs to go to stdout for parsing

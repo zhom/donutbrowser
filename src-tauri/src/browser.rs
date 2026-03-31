@@ -1216,6 +1216,7 @@ mod tests {
       proxy_bypass_rules: Vec::new(),
       created_by_id: None,
       created_by_email: None,
+      dns_blocklist: None,
     };
 
     let path = profile.get_profile_data_path(&profiles_dir);

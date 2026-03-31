@@ -611,6 +611,7 @@ async fn create_profile(
       wayfern_config,
       request.group_id.clone(),
       false,
+      None,
     )
     .await
   {

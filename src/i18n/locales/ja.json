@@ -858,5 +858,22 @@
     "cookieImportLocked": "Cookieのインポートはプロ機能です",
     "cookieExportLocked": "Cookieのエクスポートはプロ機能です",
     "cookieManagementLocked": "Cookie管理はプロ機能です"
+  },
+  "dnsBlocklist": {
+    "title": "DNSブロックリスト",
+    "none": "なし",
+    "light": "Light",
+    "normal": "Normal",
+    "pro": "Pro",
+    "proPlus": "Pro++",
+    "ultimate": "Ultimate",
+    "settingsDescription": "DNSブロックリストは、プロキシレベルで広告、トラッカー、マルウェアドメインをブロックします。リストは12時間ごとに自動的に更新されます。",
+    "manageLists": "DNSブロックリストを管理",
+    "refreshAll": "すべてのリストを更新",
+    "refreshFailed": "DNSブロックリストの更新に失敗しました",
+    "domains": "ドメイン",
+    "fresh": "最新",
+    "stale": "期限切れ",
+    "notCached": "キャッシュなし"
   }
 }

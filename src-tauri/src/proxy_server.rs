@@ -7,6 +7,7 @@ use hyper::service::service_fn;
 use hyper::{Method, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
 use regex_lite::Regex;
+use std::collections::HashSet;
 use std::convert::Infallible;
 use std::io;
 use std::net::SocketAddr;
@@ -48,6 +49,58 @@ impl BypassMatcher {
       CompiledRule::Regex(re) => re.is_match(host),
       CompiledRule::Exact(exact) => host == exact,
     })
+  }
+}
+
+#[derive(Clone)]
+pub struct BlocklistMatcher {
+  domains: Arc<HashSet<String>>,
+}
+
+impl Default for BlocklistMatcher {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
+impl BlocklistMatcher {
+  pub fn new() -> Self {
+    Self {
+      domains: Arc::new(HashSet::new()),
+    }
+  }
+
+  pub fn from_file(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    let content = std::fs::read_to_string(path)?;
+    let domains: HashSet<String> = content
+      .lines()
+      .filter(|line| !line.starts_with('#') && !line.trim().is_empty())
+      .map(|line| line.trim().to_lowercase())
+      .collect();
+    log::info!("[blocklist] Loaded {} domains from {}", domains.len(), path);
+    Ok(Self {
+      domains: Arc::new(domains),
+    })
+  }
+
+  pub fn is_blocked(&self, host: &str) -> bool {
+    if self.domains.is_empty() {
+      return false;
+    }
+    let host_lower = host.to_lowercase();
+    // Exact match
+    if self.domains.contains(host_lower.as_str()) {
+      return true;
+    }
+    // Suffix matching: check parent domains (like uBlock)
+    let mut start = 0;
+    while let Some(dot_pos) = host_lower[start..].find('.') {
+      start += dot_pos + 1;
+      if self.domains.contains(&host_lower[start..]) {
+        return true;
+      }
+    }
+    false
   }
 }
 
@@ -167,20 +220,22 @@ async fn handle_request(
   req: Request<hyper::body::Incoming>,
   upstream_url: Option<String>,
   bypass_matcher: BypassMatcher,
+  blocklist_matcher: BlocklistMatcher,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
   // Handle CONNECT method for HTTPS tunneling
   if req.method() == Method::CONNECT {
-    return handle_connect(req, upstream_url, bypass_matcher).await;
+    return handle_connect(req, upstream_url, bypass_matcher, blocklist_matcher).await;
   }
 
   // Handle regular HTTP requests
-  handle_http(req, upstream_url, bypass_matcher).await
+  handle_http(req, upstream_url, bypass_matcher, blocklist_matcher).await
 }
 
 async fn handle_connect(
   req: Request<hyper::body::Incoming>,
   upstream_url: Option<String>,
   bypass_matcher: BypassMatcher,
+  blocklist_matcher: BlocklistMatcher,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
   let authority = req.uri().authority().cloned();
 
@@ -195,6 +250,14 @@ async fn handle_connect(
     } else {
       (&target_addr[..], 443)
     };
+
+    // Block if domain is in the DNS blocklist (before any connection)
+    if blocklist_matcher.is_blocked(target_host) {
+      log::debug!("[blocklist] Blocked CONNECT to {}", target_host);
+      let mut response = Response::new(Full::new(Bytes::from("Blocked by DNS blocklist")));
+      *response.status_mut() = StatusCode::FORBIDDEN;
+      return Ok(response);
+    }
 
     // If no upstream proxy, or bypass rule matches, connect directly
     if upstream_url.is_none()
@@ -711,6 +774,7 @@ async fn handle_http(
   req: Request<hyper::body::Incoming>,
   upstream_url: Option<String>,
   bypass_matcher: BypassMatcher,
+  blocklist_matcher: BlocklistMatcher,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
   // Extract domain for traffic tracking
   let domain = req
@@ -718,6 +782,14 @@ async fn handle_http(
     .host()
     .map(|h| h.to_string())
     .unwrap_or_else(|| "unknown".to_string());
+
+  // Block if domain is in the DNS blocklist (before any connection)
+  if blocklist_matcher.is_blocked(&domain) {
+    log::debug!("[blocklist] Blocked HTTP request to {}", domain);
+    let mut response = Response::new(Full::new(Bytes::from("Blocked by DNS blocklist")));
+    *response.status_mut() = StatusCode::FORBIDDEN;
+    return Ok(response);
+  }
 
   log::error!(
     "DEBUG: Handling HTTP request: {} {} (host: {:?})",
@@ -888,6 +960,7 @@ pub async fn handle_proxy_connection(
   mut stream: tokio::net::TcpStream,
   upstream_url: Option<String>,
   bypass_matcher: BypassMatcher,
+  blocklist_matcher: BlocklistMatcher,
 ) {
   let _ = stream.set_nodelay(true);
 
@@ -942,8 +1015,14 @@ pub async fn handle_proxy_connection(
           }
         }
 
-        let _ =
-          handle_connect_from_buffer(stream, full_request, upstream_url, bypass_matcher).await;
+        let _ = handle_connect_from_buffer(
+          stream,
+          full_request,
+          upstream_url,
+          bypass_matcher,
+          blocklist_matcher,
+        )
+        .await;
         return;
       }
 
@@ -955,8 +1034,14 @@ pub async fn handle_proxy_connection(
         inner: stream,
       };
       let io = TokioIo::new(prepended_reader);
-      let service =
-        service_fn(move |req| handle_request(req, upstream_url.clone(), bypass_matcher.clone()));
+      let service = service_fn(move |req| {
+        handle_request(
+          req,
+          upstream_url.clone(),
+          bypass_matcher.clone(),
+          blocklist_matcher.clone(),
+        )
+      });
 
       let _ = http1::Builder::new().serve_connection(io, service).await;
     }
@@ -1128,6 +1213,17 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
   });
 
   let bypass_matcher = BypassMatcher::new(&config.bypass_rules);
+  let blocklist_matcher = if let Some(ref path) = config.blocklist_file {
+    match BlocklistMatcher::from_file(path) {
+      Ok(m) => m,
+      Err(e) => {
+        log::error!("[blocklist] Failed to load from {}: {}", path, e);
+        BlocklistMatcher::new()
+      }
+    }
+  } else {
+    BlocklistMatcher::new()
+  };
 
   // Keep the runtime alive with an infinite loop
   // This ensures the process doesn't exit even if there are no active connections
@@ -1136,8 +1232,9 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
       Ok((stream, _peer_addr)) => {
         let upstream = upstream_url.clone();
         let matcher = bypass_matcher.clone();
+        let blocker = blocklist_matcher.clone();
         tokio::task::spawn(async move {
-          handle_proxy_connection(stream, upstream, matcher).await;
+          handle_proxy_connection(stream, upstream, matcher, blocker).await;
         });
       }
       Err(e) => {
@@ -1155,6 +1252,7 @@ async fn handle_connect_from_buffer(
   request_buffer: Vec<u8>,
   upstream_url: Option<String>,
   bypass_matcher: BypassMatcher,
+  blocklist_matcher: BlocklistMatcher,
 ) -> Result<(), Box<dyn std::error::Error>> {
   // Parse the CONNECT request from the buffer
   let request_str = String::from_utf8_lossy(&request_buffer);
@@ -1184,6 +1282,15 @@ async fn handle_connect_from_buffer(
   } else {
     (target, 443)
   };
+
+  // Block if domain is in the DNS blocklist (before any connection)
+  if blocklist_matcher.is_blocked(target_host) {
+    log::debug!("[blocklist] Blocked CONNECT tunnel to {}", target_host);
+    let _ = client_stream
+      .write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 24\r\n\r\nBlocked by DNS blocklist")
+      .await;
+    return Ok(());
+  }
 
   // Record domain access in traffic tracker
   let domain = target_host.to_string();
@@ -1361,4 +1468,107 @@ async fn handle_connect_from_buffer(
   }
 
   Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::io::Write;
+
+  #[test]
+  fn test_blocklist_exact_match() {
+    let mut matcher = BlocklistMatcher::new();
+    let mut domains = HashSet::new();
+    domains.insert("example.com".to_string());
+    domains.insert("tracker.net".to_string());
+    matcher.domains = Arc::new(domains);
+
+    assert!(matcher.is_blocked("example.com"));
+    assert!(matcher.is_blocked("tracker.net"));
+    assert!(!matcher.is_blocked("safe.com"));
+  }
+
+  #[test]
+  fn test_blocklist_subdomain_match() {
+    let mut matcher = BlocklistMatcher::new();
+    let mut domains = HashSet::new();
+    domains.insert("example.com".to_string());
+    matcher.domains = Arc::new(domains);
+
+    assert!(matcher.is_blocked("foo.example.com"));
+    assert!(matcher.is_blocked("bar.baz.example.com"));
+    assert!(matcher.is_blocked("a.b.c.example.com"));
+  }
+
+  #[test]
+  fn test_blocklist_no_false_positives() {
+    let mut matcher = BlocklistMatcher::new();
+    let mut domains = HashSet::new();
+    domains.insert("example.com".to_string());
+    matcher.domains = Arc::new(domains);
+
+    // "notexample.com" should NOT match "example.com"
+    assert!(!matcher.is_blocked("notexample.com"));
+    assert!(!matcher.is_blocked("myexample.com"));
+    // But subdomain should
+    assert!(matcher.is_blocked("sub.example.com"));
+  }
+
+  #[test]
+  fn test_blocklist_empty_blocks_nothing() {
+    let matcher = BlocklistMatcher::new();
+    assert!(!matcher.is_blocked("anything.com"));
+    assert!(!matcher.is_blocked("example.com"));
+  }
+
+  #[test]
+  fn test_blocklist_case_insensitive() {
+    let mut matcher = BlocklistMatcher::new();
+    let mut domains = HashSet::new();
+    domains.insert("example.com".to_string());
+    matcher.domains = Arc::new(domains);
+
+    assert!(matcher.is_blocked("EXAMPLE.COM"));
+    assert!(matcher.is_blocked("Example.Com"));
+    assert!(matcher.is_blocked("FOO.EXAMPLE.COM"));
+  }
+
+  #[test]
+  fn test_blocklist_from_file() {
+    let mut tmpfile = tempfile::NamedTempFile::new().unwrap();
+    writeln!(tmpfile, "# This is a comment").unwrap();
+    writeln!(tmpfile).unwrap();
+    writeln!(tmpfile, "tracker.example.com").unwrap();
+    writeln!(tmpfile, "ads.network.com").unwrap();
+    writeln!(tmpfile, "# Another comment").unwrap();
+    writeln!(tmpfile, "malware.site").unwrap();
+    tmpfile.flush().unwrap();
+
+    let matcher = BlocklistMatcher::from_file(tmpfile.path().to_str().unwrap()).unwrap();
+
+    assert!(matcher.is_blocked("tracker.example.com"));
+    assert!(matcher.is_blocked("ads.network.com"));
+    assert!(matcher.is_blocked("malware.site"));
+    assert!(matcher.is_blocked("sub.malware.site"));
+    assert!(!matcher.is_blocked("safe.com"));
+    // Comments and empty lines should be skipped: 3 domains loaded
+    assert_eq!(matcher.domains.len(), 3);
+  }
+
+  #[test]
+  fn test_blocklist_comments_skipped() {
+    let mut tmpfile = tempfile::NamedTempFile::new().unwrap();
+    writeln!(tmpfile, "# Title: HaGeZi's Light DNS Blocklist").unwrap();
+    writeln!(tmpfile, "# Description: test").unwrap();
+    writeln!(tmpfile, "# Version: 2026.0330.0928.01").unwrap();
+    writeln!(tmpfile).unwrap();
+    writeln!(tmpfile, "domain1.com").unwrap();
+    writeln!(tmpfile, "domain2.com").unwrap();
+    tmpfile.flush().unwrap();
+
+    let matcher = BlocklistMatcher::from_file(tmpfile.path().to_str().unwrap()).unwrap();
+    assert_eq!(matcher.domains.len(), 2);
+    assert!(matcher.is_blocked("domain1.com"));
+    assert!(matcher.is_blocked("domain2.com"));
+  }
 }

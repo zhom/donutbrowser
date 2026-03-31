@@ -31,6 +31,7 @@ import {
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
 import {
   ProfileBypassRulesDialog,
+  ProfileDnsBlocklistDialog,
   ProfileInfoDialog,
 } from "@/components/profile-info-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -933,6 +934,8 @@ export function ProfilesDataTable({
   const [profileForInfoDialog, setProfileForInfoDialog] =
     React.useState<BrowserProfile | null>(null);
   const [bypassRulesProfile, setBypassRulesProfile] =
+    React.useState<BrowserProfile | null>(null);
+  const [dnsBlocklistProfile, setDnsBlocklistProfile] =
     React.useState<BrowserProfile | null>(null);
   const [launchingProfiles, setLaunchingProfiles] = React.useState<Set<string>>(
     new Set(),
@@ -2674,6 +2677,9 @@ export function ProfilesDataTable({
               onOpenBypassRules={(profile) => {
                 setBypassRulesProfile(profile);
               }}
+              onOpenDnsBlocklist={(profile) => {
+                setDnsBlocklistProfile(profile);
+              }}
               onCloneProfile={onCloneProfile}
               onLaunchWithSync={onLaunchWithSync}
               onDeleteProfile={(profile) => {
@@ -2755,6 +2761,14 @@ export function ProfilesDataTable({
         }}
         profileId={bypassRulesProfile?.id ?? null}
         initialRules={bypassRulesProfile?.proxy_bypass_rules ?? []}
+      />
+      <ProfileDnsBlocklistDialog
+        isOpen={dnsBlocklistProfile !== null}
+        onClose={() => {
+          setDnsBlocklistProfile(null);
+        }}
+        profileId={dnsBlocklistProfile?.id ?? null}
+        currentLevel={dnsBlocklistProfile?.dns_blocklist ?? null}
       />
     </>
   );

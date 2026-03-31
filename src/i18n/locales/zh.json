@@ -858,5 +858,22 @@
     "cookieImportLocked": "Cookie 导入是 Pro 功能",
     "cookieExportLocked": "Cookie 导出是 Pro 功能",
     "cookieManagementLocked": "Cookie 管理是 Pro 功能"
+  },
+  "dnsBlocklist": {
+    "title": "DNS 拦截列表",
+    "none": "无",
+    "light": "Light",
+    "normal": "Normal",
+    "pro": "Pro",
+    "proPlus": "Pro++",
+    "ultimate": "Ultimate",
+    "settingsDescription": "DNS 拦截列表在代理级别拦截广告、跟踪器和恶意软件域名。列表每 12 小时自动刷新一次。",
+    "manageLists": "管理 DNS 拦截列表",
+    "refreshAll": "刷新所有列表",
+    "refreshFailed": "刷新 DNS 拦截列表失败",
+    "domains": "个域名",
+    "fresh": "最新",
+    "stale": "过期",
+    "notCached": "未缓存"
   }
 }

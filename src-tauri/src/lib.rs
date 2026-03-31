@@ -19,6 +19,7 @@ mod browser_version_manager;
 pub mod camoufox;
 mod camoufox_manager;
 mod default_browser;
+pub mod dns_blocklist;
 mod downloaded_browsers_registry;
 mod downloader;
 mod ephemeral_dirs;
@@ -65,9 +66,9 @@ use browser_runner::{
 
 use profile::manager::{
   check_browser_status, clone_profile, create_browser_profile_new, delete_profile,
-  list_browser_profiles, rename_profile, update_camoufox_config, update_profile_note,
-  update_profile_proxy, update_profile_proxy_bypass_rules, update_profile_tags, update_profile_vpn,
-  update_wayfern_config,
+  list_browser_profiles, rename_profile, update_camoufox_config, update_profile_dns_blocklist,
+  update_profile_note, update_profile_proxy, update_profile_proxy_bypass_rules,
+  update_profile_tags, update_profile_vpn, update_wayfern_config,
 };
 
 use browser_version_manager::{
@@ -1132,6 +1133,7 @@ async fn generate_sample_fingerprint(
     proxy_bypass_rules: Vec::new(),
     created_by_id: None,
     created_by_email: None,
+    dns_blocklist: None,
   };
 
   if browser == "camoufox" {
@@ -1459,6 +1461,17 @@ pub fn run() {
           } else {
             log::debug!("Periodic cleanup completed successfully");
           }
+        }
+      });
+
+      // DNS blocklist refresh task (every 12 hours)
+      tauri::async_runtime::spawn(async move {
+        let manager = dns_blocklist::BlocklistManager::instance();
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(43200));
+        interval.tick().await; // Skip the immediate first tick
+        loop {
+          interval.tick().await;
+          manager.refresh_all_stale().await;
         }
       });
 
@@ -1805,6 +1818,7 @@ pub fn run() {
       update_profile_tags,
       update_profile_note,
       update_profile_proxy_bypass_rules,
+      update_profile_dns_blocklist,
       check_browser_status,
       kill_browser_profile,
       rename_profile,
@@ -1952,6 +1966,9 @@ pub fn run() {
       synchronizer::stop_sync_session,
       synchronizer::remove_sync_follower,
       synchronizer::get_sync_sessions,
+      // DNS blocklist commands
+      dns_blocklist::get_dns_blocklist_cache_status,
+      dns_blocklist::refresh_dns_blocklists,
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application")

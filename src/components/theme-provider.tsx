@@ -1,7 +1,13 @@
 "use client";
 
-import { ThemeProvider } from "next-themes";
-import { useEffect, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { applyThemeColors, clearThemeColors } from "@/lib/themes";
 
 interface AppSettings {
@@ -10,43 +16,62 @@ interface AppSettings {
   custom_theme?: Record<string, string>;
 }
 
+interface ThemeContextValue {
+  theme: string;
+  setTheme: (theme: string) => void;
+}
+
+const ThemeContext = createContext<ThemeContextValue>({
+  theme: "system",
+  setTheme: () => {},
+});
+
+export function useTheme() {
+  return useContext(ThemeContext);
+}
+
 interface CustomThemeProviderProps {
   children: React.ReactNode;
 }
 
+function resolveSystemTheme(): "light" | "dark" {
+  if (typeof window === "undefined") return "dark";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
+
+function applyClassToHtml(theme: string) {
+  const resolved = theme === "system" ? resolveSystemTheme() : theme;
+  const root = document.documentElement;
+  root.classList.remove("light", "dark");
+  root.classList.add(resolved);
+}
+
 export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
-  const [defaultTheme, setDefaultTheme] = useState<string>("system");
-  const [_mounted, setMounted] = useState(false);
+  const [theme, setThemeState] = useState("system");
 
-  useEffect(() => {
-    setMounted(true);
+  const setTheme = useCallback((newTheme: string) => {
+    setThemeState(newTheme);
+    if (newTheme === "custom") {
+      applyClassToHtml("dark");
+    } else {
+      applyClassToHtml(newTheme);
+    }
   }, []);
 
+  // Load initial theme from Tauri settings
   useEffect(() => {
     const loadTheme = async () => {
       try {
-        // Lazy import to avoid pulling Tauri API on SSR
         const { invoke } = await import("@tauri-apps/api/core");
         const settings = await invoke<AppSettings>("get_app_settings");
         const themeValue = settings?.theme ?? "system";
 
-        console.log("[theme-provider] Loaded settings:", {
-          theme: themeValue,
-          hasCustomTheme: !!settings?.custom_theme,
-          customThemeKeys: settings?.custom_theme
-            ? Object.keys(settings.custom_theme).length
-            : 0,
-        });
-
-        if (
-          themeValue === "light" ||
-          themeValue === "dark" ||
-          themeValue === "system"
-        ) {
-          setDefaultTheme(themeValue);
-        } else if (themeValue === "custom") {
-          setDefaultTheme("dark");
+        if (themeValue === "custom") {
+          setThemeState("custom");
+          applyClassToHtml("dark");
           if (
             settings.custom_theme &&
             Object.keys(settings.custom_theme).length > 0
@@ -57,16 +82,22 @@ export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
               console.warn("Failed to apply custom theme variables:", error);
             }
           }
+        } else if (
+          themeValue === "light" ||
+          themeValue === "dark" ||
+          themeValue === "system"
+        ) {
+          setThemeState(themeValue);
+          applyClassToHtml(themeValue);
         } else {
-          setDefaultTheme("system");
+          applyClassToHtml("system");
         }
       } catch (error) {
-        // Failed to load settings; fall back to system (handled by next-themes)
         console.warn(
           "Failed to load theme settings; defaulting to system:",
           error,
         );
-        setDefaultTheme("system");
+        applyClassToHtml("system");
       } finally {
         setIsLoading(false);
       }
@@ -75,44 +106,44 @@ export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
     void loadTheme();
   }, []);
 
-  // Additional effect to ensure custom theme is applied after mount
+  // Re-apply custom theme after mount
   useEffect(() => {
-    if (!isLoading && _mounted) {
+    if (!isLoading && theme === "custom") {
       const reapplyCustomTheme = async () => {
         try {
           const { invoke } = await import("@tauri-apps/api/core");
           const settings = await invoke<AppSettings>("get_app_settings");
-
           if (settings?.theme === "custom" && settings.custom_theme) {
             applyThemeColors(settings.custom_theme);
-          } else {
-            clearThemeColors();
           }
         } catch (error) {
           console.warn("Failed to reapply custom theme:", error);
         }
       };
-
-      // Apply after a short delay to ensure CSS has loaded
       setTimeout(() => {
         void reapplyCustomTheme();
       }, 100);
+    } else if (!isLoading) {
+      clearThemeColors();
     }
-  }, [isLoading, _mounted]);
+  }, [isLoading, theme]);
+
+  // Listen for system theme changes when in "system" mode
+  useEffect(() => {
+    if (theme !== "system") return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = () => applyClassToHtml("system");
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, [theme]);
+
+  const value = useMemo(() => ({ theme, setTheme }), [theme, setTheme]);
 
   if (isLoading) {
-    // Keep UI simple during initial settings load to avoid flicker
     return null;
   }
 
   return (
-    <ThemeProvider
-      attribute="class"
-      defaultTheme={defaultTheme}
-      enableSystem={true}
-      disableTransitionOnChange={false}
-    >
-      {children}
-    </ThemeProvider>
+    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
   );
 }

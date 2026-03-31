@@ -582,6 +582,7 @@ impl ProfileImporter {
           proxy_bypass_rules: Vec::new(),
           created_by_id: None,
           created_by_email: None,
+          dns_blocklist: None,
         };
 
         match self
@@ -660,6 +661,7 @@ impl ProfileImporter {
           proxy_bypass_rules: Vec::new(),
           created_by_id: None,
           created_by_email: None,
+          dns_blocklist: None,
         };
 
         match self
@@ -709,6 +711,7 @@ impl ProfileImporter {
       proxy_bypass_rules: Vec::new(),
       created_by_id: None,
       created_by_email: None,
+      dns_blocklist: None,
     };
 
     self.profile_manager.save_profile(&profile)?;
