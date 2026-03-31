@@ -637,7 +637,15 @@ export function ProfileDnsBlocklistDialog({
           <DialogTitle>{t("dnsBlocklist.title")}</DialogTitle>
         </DialogHeader>
         <p className="text-xs text-muted-foreground">
-          {t("dnsBlocklist.settingsDescription")}
+          {t("dnsBlocklist.settingsDescription")}{" "}
+          <a
+            href="https://github.com/hagezi/dns-blocklists"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline"
+          >
+            {t("common.buttons.moreInfo")}
+          </a>
         </p>
         <div className="space-y-1">
           {options.map((option) => (
@@ -660,7 +668,7 @@ export function ProfileDnsBlocklistDialog({
           disabled={isSaving || level === (currentLevel ?? "")}
           className="w-full"
         >
-          {t("common.save", "Save")}
+          {t("common.buttons.save")}
         </Button>
       </DialogContent>
     </Dialog>

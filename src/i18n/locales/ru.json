@@ -27,7 +27,8 @@
       "export": "Экспорт",
       "refresh": "Обновить",
       "loading": "Загрузка...",
-      "saveSettings": "Сохранить настройки"
+      "saveSettings": "Сохранить настройки",
+      "moreInfo": "Подробнее"
     },
     "status": {
       "active": "Активен",

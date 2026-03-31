@@ -27,7 +27,8 @@
       "export": "Exportar",
       "refresh": "Actualizar",
       "loading": "Cargando...",
-      "saveSettings": "Guardar Configuración"
+      "saveSettings": "Guardar Configuración",
+      "moreInfo": "Más información"
     },
     "status": {
       "active": "Activo",

@@ -27,7 +27,8 @@
       "export": "导出",
       "refresh": "刷新",
       "loading": "加载中...",
-      "saveSettings": "保存设置"
+      "saveSettings": "保存设置",
+      "moreInfo": "了解更多"
     },
     "status": {
       "active": "活跃",
