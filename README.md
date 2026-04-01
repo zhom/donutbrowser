@@ -16,9 +16,6 @@
   <a style="text-decoration: none;" href="https://github.com/zhom/donutbrowser/blob/main/LICENSE" target="_blank">
     <img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License">
   </a>
-  <a href="https://app.codacy.com/gh/zhom/donutbrowser/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade">
-    <img src="https://app.codacy.com/project/badge/Grade/b9c9beafc92d4bc8bc7c5b42c6c4ba81" alt="Codacy Grade"/>
-  </a>
   <a href="https://app.fossa.com/projects/git%2Bgithub.com%2Fzhom%2Fdonutbrowser?ref=badge_shield&issueType=security" alt="FOSSA Status">
     <img src="https://app.fossa.com/api/projects/git%2Bgithub.com%2Fzhom%2Fdonutbrowser.svg?type=shield&issueType=security" alt="FOSSA Security Status"/>
   </a>
