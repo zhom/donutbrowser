@@ -384,7 +384,8 @@
       "logout": "Log Out",
       "logoutConfirm": "Are you sure you want to log out? Cloud sync will stop.",
       "loginSuccess": "Successfully logged in!",
-      "logoutSuccess": "Successfully logged out."
+      "logoutSuccess": "Successfully logged out.",
+      "loadingCaptcha": "Loading captcha..."
     },
     "team": {
       "title": "Team",

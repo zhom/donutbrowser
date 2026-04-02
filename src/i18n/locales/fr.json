@@ -384,7 +384,8 @@
       "logout": "Se Déconnecter",
       "logoutConfirm": "Êtes-vous sûr de vouloir vous déconnecter ? La synchronisation cloud sera arrêtée.",
       "loginSuccess": "Connexion réussie !",
-      "logoutSuccess": "Déconnexion réussie."
+      "logoutSuccess": "Déconnexion réussie.",
+      "loadingCaptcha": "Chargement du captcha..."
     },
     "team": {
       "title": "Équipe",

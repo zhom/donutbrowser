@@ -362,12 +362,12 @@ impl CloudAuthManager {
 
   // --- API methods ---
 
-  pub async fn request_otp(&self, email: &str) -> Result<String, String> {
+  pub async fn request_otp(&self, email: &str, captcha_token: &str) -> Result<String, String> {
     let url = format!("{CLOUD_API_URL}/api/auth/otp/request");
     let response = self
       .client
       .post(&url)
-      .json(&serde_json::json!({ "email": email }))
+      .json(&serde_json::json!({ "email": email, "captchaToken": captcha_token }))
       .send()
       .await
       .map_err(|e| format!("Failed to request OTP: {e}"))?;
@@ -1100,8 +1100,8 @@ impl CloudAuthManager {
 // --- Tauri commands ---
 
 #[tauri::command]
-pub async fn cloud_request_otp(email: String) -> Result<String, String> {
-  CLOUD_AUTH.request_otp(&email).await
+pub async fn cloud_request_otp(email: String, captcha_token: String) -> Result<String, String> {
+  CLOUD_AUTH.request_otp(&email, &captcha_token).await
 }
 
 #[tauri::command]

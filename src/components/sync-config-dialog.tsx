@@ -1,7 +1,7 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LuEye, LuEyeOff } from "react-icons/lu";
 import { LoadingButton } from "@/components/loading-button";
@@ -26,6 +26,33 @@ import {
 import { useCloudAuth } from "@/hooks/use-cloud-auth";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import type { SyncSettings } from "@/types";
+
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE ?? "";
+
+interface TurnstileWindow extends Window {
+  turnstile?: {
+    render: (
+      container: string | HTMLElement,
+      options: {
+        sitekey: string;
+        callback: (token: string) => void;
+        "expired-callback": () => void;
+        "error-callback": () => void;
+        theme: "light" | "dark" | "auto";
+      },
+    ) => string;
+    remove: (widgetId: string) => void;
+  };
+}
+
+// RFC 5322 compliant email regex (emailregex.com)
+// eslint-disable-next-line no-control-regex
+const EMAIL_REGEX =
+  /(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21-\x5a\x53-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])+)\])/;
+
+function isValidEmail(email: string): boolean {
+  return EMAIL_REGEX.test(email);
+}
 
 interface SyncConfigDialogProps {
   isOpen: boolean;
@@ -66,6 +93,13 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
   const [isSendingCode, setIsSendingCode] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
 
+  // Turnstile captcha state
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [isCaptchaLoading, setIsCaptchaLoading] = useState(false);
+  const captchaContainerRef = useRef<HTMLDivElement>(null);
+  const turnstileWidgetIdRef = useRef<string | null>(null);
+  const turnstileScriptLoadedRef = useRef(false);
+
   const [activeTab, setActiveTab] = useState<string>("cloud");
   const [, setLiveProxyUsage] = useState<ProxyUsage | null>(null);
 
@@ -101,6 +135,111 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
     }
   }, [testConnection]);
 
+  const removeTurnstileWidget = useCallback(() => {
+    const win = window as TurnstileWindow;
+    if (turnstileWidgetIdRef.current && win.turnstile) {
+      win.turnstile.remove(turnstileWidgetIdRef.current);
+      turnstileWidgetIdRef.current = null;
+    }
+  }, []);
+
+  const renderTurnstile = useCallback(() => {
+    const win = window as TurnstileWindow;
+    if (!win.turnstile || !captchaContainerRef.current) return;
+
+    removeTurnstileWidget();
+    captchaContainerRef.current.innerHTML = "";
+
+    const widgetId = win.turnstile.render(captchaContainerRef.current, {
+      sitekey: TURNSTILE_SITE_KEY,
+      callback: (token: string) => {
+        setCaptchaToken(token);
+        setIsCaptchaLoading(false);
+      },
+      "expired-callback": () => {
+        setCaptchaToken(null);
+      },
+      "error-callback": () => {
+        setCaptchaToken(null);
+        setIsCaptchaLoading(false);
+      },
+      theme: "auto",
+    });
+    turnstileWidgetIdRef.current = widgetId;
+  }, [removeTurnstileWidget]);
+
+  const loadTurnstileScript = useCallback((): Promise<void> => {
+    return new Promise((resolve) => {
+      const win = window as TurnstileWindow;
+      if (win.turnstile) {
+        turnstileScriptLoadedRef.current = true;
+        resolve();
+        return;
+      }
+
+      if (turnstileScriptLoadedRef.current) {
+        const check = setInterval(() => {
+          if ((window as TurnstileWindow).turnstile) {
+            clearInterval(check);
+            resolve();
+          }
+        }, 100);
+        return;
+      }
+
+      const existing = document.querySelector(
+        'script[src*="challenges.cloudflare.com/turnstile"]',
+      );
+      if (existing) {
+        const check = setInterval(() => {
+          if ((window as TurnstileWindow).turnstile) {
+            clearInterval(check);
+            turnstileScriptLoadedRef.current = true;
+            resolve();
+          }
+        }, 100);
+        return;
+      }
+
+      turnstileScriptLoadedRef.current = true;
+      const script = document.createElement("script");
+      script.src =
+        "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      script.async = true;
+      script.defer = true;
+      script.onload = () => {
+        const check = setInterval(() => {
+          if ((window as TurnstileWindow).turnstile) {
+            clearInterval(check);
+            resolve();
+          }
+        }, 100);
+      };
+      document.head.appendChild(script);
+    });
+  }, []);
+
+  useEffect(() => {
+    const emailValid = isValidEmail(email);
+    if (emailValid && !codeSent && TURNSTILE_SITE_KEY) {
+      setIsCaptchaLoading(true);
+      setCaptchaToken(null);
+      void loadTurnstileScript().then(() => {
+        renderTurnstile();
+      });
+    } else {
+      removeTurnstileWidget();
+      setCaptchaToken(null);
+      setIsCaptchaLoading(false);
+    }
+  }, [
+    email,
+    codeSent,
+    loadTurnstileScript,
+    renderTurnstile,
+    removeTurnstileWidget,
+  ]);
+
   useEffect(() => {
     if (isOpen) {
       setConnectionStatus("unknown");
@@ -108,13 +247,19 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
       setCodeSent(false);
       setOtpCode("");
       setEmail("");
+      setCaptchaToken(null);
+      setIsCaptchaLoading(false);
+      removeTurnstileWidget();
       void invoke<ProxyUsage | null>("cloud_get_proxy_usage")
         .then(setLiveProxyUsage)
         .catch(() => {
           setLiveProxyUsage(null);
         });
     }
-  }, [isOpen, loadSettings]);
+    return () => {
+      removeTurnstileWidget();
+    };
+  }, [isOpen, loadSettings, removeTurnstileWidget]);
 
   // Auto-select the appropriate tab based on connection state
   useEffect(() => {
@@ -201,11 +346,13 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
   }, []);
 
   const handleSendCode = useCallback(async () => {
-    if (!email) return;
+    if (!email || !captchaToken) return;
     setIsSendingCode(true);
     try {
-      await requestOtp(email);
+      await requestOtp(email, captchaToken);
       setCodeSent(true);
+      removeTurnstileWidget();
+      setCaptchaToken(null);
       showSuccessToast(t("sync.cloud.codeSent"));
     } catch (error) {
       console.error("Failed to send OTP:", error);
@@ -213,7 +360,7 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
     } finally {
       setIsSendingCode(false);
     }
-  }, [email, requestOtp, t]);
+  }, [email, captchaToken, requestOtp, removeTurnstileWidget, t]);
 
   const handleVerifyOtp = useCallback(async () => {
     if (!email || !otpCode) return;
@@ -392,7 +539,7 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
                           setEmail(e.target.value);
                         }}
                         onKeyDown={(e) => {
-                          if (e.key === "Enter" && !codeSent) {
+                          if (e.key === "Enter" && !codeSent && captchaToken) {
                             void handleSendCode();
                           }
                         }}
@@ -400,12 +547,24 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
                       <LoadingButton
                         onClick={() => void handleSendCode()}
                         isLoading={isSendingCode}
-                        disabled={!email || codeSent}
+                        disabled={!email || codeSent || !captchaToken}
                         variant="outline"
                       >
                         {t("sync.cloud.sendCode")}
                       </LoadingButton>
                     </div>
+
+                    {!codeSent && isValidEmail(email) && TURNSTILE_SITE_KEY && (
+                      <div className="mt-2">
+                        {isCaptchaLoading && (
+                          <div className="flex items-center gap-2 py-3 text-sm text-muted-foreground">
+                            <div className="w-4 h-4 rounded-full border-2 border-current animate-spin border-t-transparent" />
+                            {t("sync.cloud.loadingCaptcha")}
+                          </div>
+                        )}
+                        <div ref={captchaContainerRef} />
+                      </div>
+                    )}
                   </div>
 
                   {codeSent && (

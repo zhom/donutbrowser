@@ -384,7 +384,8 @@
       "logout": "Cerrar Sesión",
       "logoutConfirm": "¿Estás seguro de que deseas cerrar sesión? La sincronización en la nube se detendrá.",
       "loginSuccess": "¡Sesión iniciada exitosamente!",
-      "logoutSuccess": "Sesión cerrada exitosamente."
+      "logoutSuccess": "Sesión cerrada exitosamente.",
+      "loadingCaptcha": "Cargando captcha..."
     },
     "team": {
       "title": "Equipo",

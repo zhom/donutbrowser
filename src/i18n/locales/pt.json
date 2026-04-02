@@ -384,7 +384,8 @@
       "logout": "Sair",
       "logoutConfirm": "Tem certeza de que deseja sair? A sincronização na nuvem será interrompida.",
       "loginSuccess": "Login realizado com sucesso!",
-      "logoutSuccess": "Logout realizado com sucesso."
+      "logoutSuccess": "Logout realizado com sucesso.",
+      "loadingCaptcha": "Carregando captcha..."
     },
     "team": {
       "title": "Equipe",

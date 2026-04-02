@@ -384,7 +384,8 @@
       "logout": "ログアウト",
       "logoutConfirm": "ログアウトしてもよろしいですか？クラウド同期が停止します。",
       "loginSuccess": "ログインに成功しました！",
-      "logoutSuccess": "ログアウトしました。"
+      "logoutSuccess": "ログアウトしました。",
+      "loadingCaptcha": "キャプチャを読み込み中..."
     },
     "team": {
       "title": "チーム",

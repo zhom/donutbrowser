@@ -384,7 +384,8 @@
       "logout": "退出登录",
       "logoutConfirm": "您确定要退出登录吗？云同步将会停止。",
       "loginSuccess": "登录成功！",
-      "logoutSuccess": "已成功退出登录。"
+      "logoutSuccess": "已成功退出登录。",
+      "loadingCaptcha": "正在加载验证码..."
     },
     "team": {
       "title": "团队",
