@@ -1,0 +1,199 @@
+name: Publish Linux Repos
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v0.18.1). Leave empty for latest."
+        required: false
+        type: string
+  workflow_run:
+    workflows: ["Release"]
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+jobs:
+  publish-repos:
+    if: >
+      github.repository == 'zhom/donutbrowser' &&
+      (github.event_name == 'workflow_dispatch' ||
+       github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine release tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          if [[ -n "${INPUT_TAG:-}" ]]; then
+            echo "tag=${INPUT_TAG}" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            # The Release workflow is triggered by a tag push (v*),
+            # so head_branch is the tag name
+            echo "tag=${{ github.event.workflow_run.head_branch }}" >> "$GITHUB_OUTPUT"
+          else
+            TAG=$(gh release view --repo "${{ github.repository }}" --json tagName -q .tagName)
+            echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev createrepo-c
+
+      - name: Download packages from GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          mkdir -p /tmp/packages
+          gh release download "$TAG" \
+            --repo "${{ github.repository }}" \
+            --pattern "*.deb" \
+            --dir /tmp/packages
+          gh release download "$TAG" \
+            --repo "${{ github.repository }}" \
+            --pattern "*.rpm" \
+            --dir /tmp/packages
+          echo "Downloaded packages:"
+          ls -lh /tmp/packages/
+
+      - name: Build DEB repository
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT_URL }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
+        run: |
+          DEB_DIR="/tmp/repo/deb"
+          mkdir -p "$DEB_DIR/pool/main"
+          mkdir -p "$DEB_DIR/dists/stable/main/binary-amd64"
+          mkdir -p "$DEB_DIR/dists/stable/main/binary-arm64"
+
+          # Sync existing pool from R2 (incremental)
+          aws s3 sync "s3://${R2_BUCKET}/deb/pool" "$DEB_DIR/pool" \
+            --endpoint-url "$R2_ENDPOINT" 2>/dev/null || true
+
+          # Copy new .deb files into pool
+          cp /tmp/packages/*.deb "$DEB_DIR/pool/main/" 2>/dev/null || true
+
+          # Generate Packages and Packages.gz for each arch
+          for arch in amd64 arm64; do
+            BINARY_DIR="$DEB_DIR/dists/stable/main/binary-${arch}"
+            (cd "$DEB_DIR" && dpkg-scanpackages --arch "$arch" pool/main) \
+              > "$BINARY_DIR/Packages"
+            gzip -9c "$BINARY_DIR/Packages" > "$BINARY_DIR/Packages.gz"
+            echo "  $arch: $(grep -c '^Package:' "$BINARY_DIR/Packages" 2>/dev/null || echo 0) package(s)"
+          done
+
+          # Generate Release file
+          {
+            echo "Origin: Donut Browser"
+            echo "Label: Donut Browser"
+            echo "Suite: stable"
+            echo "Codename: stable"
+            echo "Architectures: amd64 arm64"
+            echo "Components: main"
+            echo "Date: $(date -u '+%a, %d %b %Y %H:%M:%S UTC')"
+            echo "MD5Sum:"
+            for arch in amd64 arm64; do
+              for file in "main/binary-${arch}/Packages" "main/binary-${arch}/Packages.gz"; do
+                filepath="$DEB_DIR/dists/stable/$file"
+                if [[ -f "$filepath" ]]; then
+                  size=$(wc -c < "$filepath")
+                  md5=$(md5sum "$filepath" | awk '{print $1}')
+                  printf " %s %8d %s\n" "$md5" "$size" "$file"
+                fi
+              done
+            done
+            echo "SHA256:"
+            for arch in amd64 arm64; do
+              for file in "main/binary-${arch}/Packages" "main/binary-${arch}/Packages.gz"; do
+                filepath="$DEB_DIR/dists/stable/$file"
+                if [[ -f "$filepath" ]]; then
+                  size=$(wc -c < "$filepath")
+                  sha256=$(sha256sum "$filepath" | awk '{print $1}')
+                  printf " %s %8d %s\n" "$sha256" "$size" "$file"
+                fi
+              done
+            done
+          } > "$DEB_DIR/dists/stable/Release"
+
+          echo "DEB Release file created."
+
+      - name: Build RPM repository
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT_URL }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
+        run: |
+          RPM_DIR="/tmp/repo/rpm"
+          mkdir -p "$RPM_DIR/x86_64"
+          mkdir -p "$RPM_DIR/aarch64"
+
+          # Sync existing RPMs from R2 (incremental)
+          aws s3 sync "s3://${R2_BUCKET}/rpm/x86_64" "$RPM_DIR/x86_64" \
+            --endpoint-url "$R2_ENDPOINT" --exclude "repodata/*" 2>/dev/null || true
+          aws s3 sync "s3://${R2_BUCKET}/rpm/aarch64" "$RPM_DIR/aarch64" \
+            --endpoint-url "$R2_ENDPOINT" --exclude "repodata/*" 2>/dev/null || true
+
+          # Copy new .rpm files into arch directories
+          for rpm in /tmp/packages/*.rpm; do
+            [[ -f "$rpm" ]] || continue
+            filename=$(basename "$rpm")
+            if [[ "$filename" == *x86_64* ]]; then
+              cp "$rpm" "$RPM_DIR/x86_64/"
+            elif [[ "$filename" == *aarch64* ]]; then
+              cp "$rpm" "$RPM_DIR/aarch64/"
+            fi
+          done
+
+          # Generate repodata
+          createrepo_c --update "$RPM_DIR"
+          echo "RPM repodata created."
+
+      - name: Upload to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT_URL }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
+        run: |
+          echo "Uploading DEB repository..."
+          aws s3 sync /tmp/repo/deb/dists "s3://${R2_BUCKET}/deb/dists" \
+            --endpoint-url "$R2_ENDPOINT" --delete
+          aws s3 sync /tmp/repo/deb/pool "s3://${R2_BUCKET}/deb/pool" \
+            --endpoint-url "$R2_ENDPOINT"
+
+          echo "Uploading RPM repository..."
+          aws s3 sync /tmp/repo/rpm "s3://${R2_BUCKET}/rpm" \
+            --endpoint-url "$R2_ENDPOINT"
+
+      - name: Verify upload
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT_URL }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          echo "Published repos for $TAG"
+          echo ""
+          echo "DEB dists/stable/:"
+          aws s3 ls "s3://${R2_BUCKET}/deb/dists/stable/" \
+            --endpoint-url "$R2_ENDPOINT" 2>/dev/null || echo "  (empty)"
+          echo "DEB pool/main/:"
+          aws s3 ls "s3://${R2_BUCKET}/deb/pool/main/" \
+            --endpoint-url "$R2_ENDPOINT" 2>/dev/null || echo "  (empty)"
+          echo "RPM repodata/:"
+          aws s3 ls "s3://${R2_BUCKET}/rpm/repodata/" \
+            --endpoint-url "$R2_ENDPOINT" 2>/dev/null || echo "  (empty)"
