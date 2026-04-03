@@ -44,7 +44,9 @@ export function AppUpdateToast({
             <span className="text-sm font-semibold text-foreground">
               {updateReady
                 ? "Update ready, restart to apply"
-                : "Manual download required"}
+                : updateInfo.repo_update
+                  ? "Update available via package manager"
+                  : "Manual download required"}
             </span>
             <div className="text-xs text-muted-foreground">
               {updateInfo.current_version} → {updateInfo.new_version}
@@ -72,6 +74,7 @@ export function AppUpdateToast({
               Restart Now
             </RippleButton>
           ) : (
+            !updateInfo.repo_update &&
             updateInfo.manual_update_required && (
               <RippleButton
                 onClick={handleViewRelease}

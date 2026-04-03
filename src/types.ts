@@ -181,6 +181,7 @@ export interface AppUpdateInfo {
   published_at: string;
   manual_update_required: boolean;
   release_page_url?: string;
+  repo_update: boolean;
 }
 
 export interface AppUpdateProgress {

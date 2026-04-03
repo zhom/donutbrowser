@@ -109,6 +109,8 @@ pub struct AppUpdateInfo {
   pub published_at: String,
   pub manual_update_required: bool,
   pub release_page_url: Option<String>,
+  /// True when a system package manager repo is configured (apt/dnf/zypper)
+  pub repo_update: bool,
 }
 
 pub struct AppAutoUpdater {
@@ -212,11 +214,12 @@ impl AppAutoUpdater {
       // Find the appropriate asset for current platform
       let download_url = self.get_download_url_for_platform(&latest_release.assets);
 
-      // On Linux, we show the update notification even if auto-update is disabled
-      // Users can manually download from the release page
+      // On Linux, when a package repo is configured, notify users to update via
+      // their package manager instead of auto-downloading from GitHub.
       #[cfg(target_os = "linux")]
       {
-        let manual_update_required = download_url.is_none();
+        let repo_update = self.is_repo_configured();
+        let manual_update_required = download_url.is_none() || repo_update;
         let update_info = AppUpdateInfo {
           current_version,
           new_version: latest_release.tag_name.clone(),
@@ -226,13 +229,15 @@ impl AppAutoUpdater {
           published_at: latest_release.published_at.clone(),
           manual_update_required,
           release_page_url: Some(release_page_url),
+          repo_update,
         };
 
         log::info!(
-          "Update info prepared: {} -> {} (manual_update_required: {})",
+          "Update info prepared: {} -> {} (manual_update_required: {}, repo_update: {})",
           update_info.current_version,
           update_info.new_version,
-          update_info.manual_update_required
+          update_info.manual_update_required,
+          update_info.repo_update
         );
         return Ok(Some(update_info));
       }
@@ -249,6 +254,7 @@ impl AppAutoUpdater {
             published_at: latest_release.published_at.clone(),
             manual_update_required: false,
             release_page_url: Some(release_page_url),
+            repo_update: false,
           };
 
           log::info!(
@@ -453,6 +459,30 @@ impl AppAutoUpdater {
 
     log::info!("Could not determine installation method");
     LinuxInstallationMethod::Unknown
+  }
+
+  /// Check if the APT repository is configured
+  #[cfg(target_os = "linux")]
+  fn is_deb_repo_configured() -> bool {
+    Path::new("/etc/apt/sources.list.d/donutbrowser.list").exists()
+  }
+
+  /// Check if an RPM repository is configured (yum/dnf or zypper)
+  #[cfg(target_os = "linux")]
+  fn is_rpm_repo_configured() -> bool {
+    Path::new("/etc/yum.repos.d/donutbrowser.repo").exists()
+      || Path::new("/etc/zypp/repos.d/donutbrowser.repo").exists()
+  }
+
+  /// Check if a system package manager repo is configured for this installation.
+  #[cfg(target_os = "linux")]
+  fn is_repo_configured(&self) -> bool {
+    let installation_method = self.detect_linux_installation_method();
+    match installation_method {
+      LinuxInstallationMethod::Deb => Self::is_deb_repo_configured(),
+      LinuxInstallationMethod::Rpm => Self::is_rpm_repo_configured(),
+      _ => false,
+    }
   }
 
   /// Get the appropriate download URL for the current platform
@@ -2004,6 +2034,15 @@ mod tests {
       }
       // If url is None, it means AppImage was detected and auto-updates are disabled
     }
+  }
+
+  #[test]
+  #[cfg(target_os = "linux")]
+  fn test_repo_detection_returns_bool() {
+    // These just verify the functions run without panicking.
+    // Actual values depend on the host system configuration.
+    let _deb = AppAutoUpdater::is_deb_repo_configured();
+    let _rpm = AppAutoUpdater::is_rpm_repo_configured();
   }
 }
 
