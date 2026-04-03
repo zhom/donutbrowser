@@ -1,3 +1,4 @@
+use crate::proxy_runner::find_sidecar_executable;
 use crate::proxy_storage::is_process_running;
 use crate::vpn_worker_storage::{
   delete_vpn_worker_config, find_vpn_worker_by_vpn_id, generate_vpn_worker_id,
@@ -5,12 +6,124 @@ use crate::vpn_worker_storage::{
 };
 use std::process::Stdio;
 
+const VPN_WORKER_POLL_INTERVAL_MS: u64 = 100;
+const VPN_WORKER_STARTUP_TIMEOUT_MS: u64 = 10_000;
+const OPENVPN_WORKER_STARTUP_TIMEOUT_MS: u64 = 100_000;
+
+async fn vpn_worker_accepting_connections(config: &VpnWorkerConfig) -> bool {
+  let Some(port) = config.local_port else {
+    return false;
+  };
+
+  if config
+    .local_url
+    .as_ref()
+    .is_none_or(|local_url| local_url.is_empty())
+  {
+    return false;
+  }
+
+  matches!(
+    tokio::time::timeout(
+      tokio::time::Duration::from_millis(VPN_WORKER_POLL_INTERVAL_MS),
+      tokio::net::TcpStream::connect(("127.0.0.1", port)),
+    )
+    .await,
+    Ok(Ok(_))
+  )
+}
+
+fn worker_log_path(id: &str) -> std::path::PathBuf {
+  std::env::temp_dir().join(format!("donut-vpn-{}.log", id))
+}
+
+fn read_worker_log(id: &str) -> String {
+  std::fs::read_to_string(worker_log_path(id)).unwrap_or_else(|_| "No log available".to_string())
+}
+
+async fn wait_for_vpn_worker_ready(
+  id: &str,
+  vpn_type: &str,
+) -> Result<VpnWorkerConfig, Box<dyn std::error::Error>> {
+  let startup_timeout = if vpn_type == "openvpn" {
+    tokio::time::Duration::from_millis(OPENVPN_WORKER_STARTUP_TIMEOUT_MS)
+  } else {
+    tokio::time::Duration::from_millis(VPN_WORKER_STARTUP_TIMEOUT_MS)
+  };
+  let startup_deadline = tokio::time::Instant::now() + startup_timeout;
+
+  tokio::time::sleep(tokio::time::Duration::from_millis(
+    VPN_WORKER_POLL_INTERVAL_MS,
+  ))
+  .await;
+
+  let mut attempts = 0u32;
+
+  loop {
+    tokio::time::sleep(tokio::time::Duration::from_millis(
+      VPN_WORKER_POLL_INTERVAL_MS,
+    ))
+    .await;
+
+    if let Some(updated_config) = get_vpn_worker_config(id) {
+      let process_running = updated_config.pid.map(is_process_running).unwrap_or(false);
+
+      if !process_running && attempts > 2 {
+        let log_output = read_worker_log(id);
+        delete_vpn_worker_config(id);
+        return Err(format!("VPN worker process crashed. Log output:\n{}", log_output).into());
+      }
+
+      if vpn_worker_accepting_connections(&updated_config).await {
+        return Ok(updated_config);
+      }
+    }
+
+    attempts += 1;
+    if tokio::time::Instant::now() >= startup_deadline {
+      if let Some(config) = get_vpn_worker_config(id) {
+        let process_running = config.pid.map(is_process_running).unwrap_or(false);
+        let log_output = read_worker_log(id);
+        delete_vpn_worker_config(id);
+        return Err(
+          format!(
+            "VPN worker failed to start within {:.1}s. pid={:?}, process_running={}, local_url={:?}\n\nVPN worker log:\n{}",
+            startup_timeout.as_secs_f32(),
+            config.pid,
+            process_running,
+            config.local_url,
+            log_output
+          )
+          .into(),
+        );
+      }
+
+      delete_vpn_worker_config(id);
+      return Err("VPN worker config not found after spawn".into());
+    }
+  }
+}
+
 pub async fn start_vpn_worker(vpn_id: &str) -> Result<VpnWorkerConfig, Box<dyn std::error::Error>> {
+  for config in list_vpn_worker_configs() {
+    if let Some(pid) = config.pid {
+      if !is_process_running(pid) {
+        delete_vpn_worker_config(&config.id);
+      }
+    } else {
+      delete_vpn_worker_config(&config.id);
+    }
+  }
+
   // Check if a VPN worker for this vpn_id already exists and is running
   if let Some(existing) = find_vpn_worker_by_vpn_id(vpn_id) {
     if let Some(pid) = existing.pid {
       if is_process_running(pid) {
-        return Ok(existing);
+        if vpn_worker_accepting_connections(&existing).await {
+          return Ok(existing);
+        }
+
+        return wait_for_vpn_worker_ready(&existing.id, &existing.vpn_type).await;
       }
     }
     // Worker config exists but process is dead, clean up
@@ -63,7 +176,7 @@ pub async fn start_vpn_worker(vpn_id: &str) -> Result<VpnWorkerConfig, Box<dyn s
   save_vpn_worker_config(&config)?;
 
   // Spawn detached VPN worker process
-  let exe = std::env::current_exe()?;
+  let exe = find_sidecar_executable("donut-proxy")?;
 
   #[cfg(unix)]
   {
@@ -149,50 +262,7 @@ pub async fn start_vpn_worker(vpn_id: &str) -> Result<VpnWorkerConfig, Box<dyn s
     drop(child);
   }
 
-  // Wait for the worker to update config with local_url
-  tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-
-  let mut attempts = 0;
-  let max_attempts = 100; // 10 seconds max
-
-  loop {
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-
-    if let Some(updated_config) = get_vpn_worker_config(&id) {
-      if let Some(ref local_url) = updated_config.local_url {
-        if !local_url.is_empty() {
-          if let Some(port) = updated_config.local_port {
-            if let Ok(Ok(_)) = tokio::time::timeout(
-              tokio::time::Duration::from_millis(100),
-              tokio::net::TcpStream::connect(("127.0.0.1", port)),
-            )
-            .await
-            {
-              return Ok(updated_config);
-            }
-          }
-        }
-      }
-    }
-
-    attempts += 1;
-    if attempts >= max_attempts {
-      if let Some(config) = get_vpn_worker_config(&id) {
-        let process_running = config.pid.map(is_process_running).unwrap_or(false);
-        // Clean up on failure
-        delete_vpn_worker_config(&id);
-        return Err(
-          format!(
-            "VPN worker failed to start in time. pid={:?}, process_running={}, local_url={:?}",
-            config.pid, process_running, config.local_url
-          )
-          .into(),
-        );
-      }
-      delete_vpn_worker_config(&id);
-      return Err("VPN worker config not found after spawn".into());
-    }
-  }
+  wait_for_vpn_worker_ready(&id, vpn_type_str).await
 }
 
 pub async fn stop_vpn_worker(id: &str) -> Result<bool, Box<dyn std::error::Error>> {

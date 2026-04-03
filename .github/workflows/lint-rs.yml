@@ -67,7 +67,7 @@ jobs:
         if: matrix.os == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+          sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev openvpn
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
@@ -116,6 +116,16 @@ jobs:
       - name: Run Rust unit tests
         run: cargo test --lib && cargo test --test donut_proxy_integration && cargo test --test vpn_integration
         working-directory: src-tauri
+
+      - name: Run OpenVPN e2e test (Ubuntu only)
+        if: matrix.os == 'ubuntu-22.04'
+        shell: bash
+        working-directory: src-tauri
+        env:
+          DONUTBROWSER_RUN_OPENVPN_E2E: "1"
+        run: |
+          sudo --preserve-env=PATH,CARGO_HOME,RUSTUP_HOME,DONUTBROWSER_RUN_OPENVPN_E2E \
+            cargo test --test vpn_integration test_openvpn_traffic_flows_through_donut_proxy -- --nocapture
 
       - name: Run Rust sync e2e tests
         run: node scripts/sync-test-harness.mjs

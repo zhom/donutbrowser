@@ -794,6 +794,16 @@
       "button": "Clonar"
     }
   },
+  "vpnForm": {
+    "dependencies": {
+      "openVpnMissingTitle": "OpenVPN não está instalado",
+      "openVpnMissingDescription": "Você pode salvar esta configuração, mas o Donut Browser não poderá se conectar até que o OpenVPN esteja instalado neste dispositivo.",
+      "openVpnAdapterMissingTitle": "O adaptador do OpenVPN está ausente",
+      "openVpnAdapterMissingDescription": "O OpenVPN está instalado, mas nenhum adaptador TAP/Wintun/ovpn-dco foi encontrado. Repare ou reinstale o OpenVPN antes de se conectar no Windows.",
+      "openVpnCheckFailedTitle": "Não foi possível verificar a instalação do OpenVPN",
+      "openVpnCheckFailedDescription": "O Donut Browser não conseguiu inspecionar a instalação local do OpenVPN. Repare ou reinstale o OpenVPN antes de se conectar no Windows."
+    }
+  },
   "extensions": {
     "title": "Extensões",
     "description": "Gerencie extensões de navegador e grupos de extensões para seus perfis.",

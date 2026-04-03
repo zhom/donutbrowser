@@ -813,6 +813,42 @@ async fn download_geoip_database(app_handle: tauri::AppHandle) -> Result<(), Str
 }
 
 // VPN commands
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VpnDependencyStatus {
+  is_available: bool,
+  requires_external_install: bool,
+  missing_binary: bool,
+  missing_windows_adapter: bool,
+  dependency_check_failed: bool,
+}
+
+#[tauri::command]
+async fn get_vpn_dependency_status(vpn_type: vpn::VpnType) -> Result<VpnDependencyStatus, String> {
+  match vpn_type {
+    vpn::VpnType::WireGuard => Ok(VpnDependencyStatus {
+      is_available: true,
+      requires_external_install: false,
+      missing_binary: false,
+      missing_windows_adapter: false,
+      dependency_check_failed: false,
+    }),
+    vpn::VpnType::OpenVPN => {
+      let status = crate::vpn::openvpn_socks5::OpenVpnSocks5Server::dependency_status();
+      let is_available =
+        status.binary_found && !status.missing_windows_adapter && !status.dependency_check_failed;
+
+      Ok(VpnDependencyStatus {
+        is_available,
+        requires_external_install: true,
+        missing_binary: !status.binary_found,
+        missing_windows_adapter: status.missing_windows_adapter,
+        dependency_check_failed: status.dependency_check_failed,
+      })
+    }
+  }
+}
+
 #[tauri::command]
 async fn import_vpn_config(
   content: String,
@@ -986,45 +1022,81 @@ async fn check_vpn_validity(
     .unwrap_or_default()
     .as_secs();
 
-  // Start a temporary VPN worker to send real traffic
+  let had_existing_worker = vpn_worker_storage::find_vpn_worker_by_vpn_id(&vpn_id).is_some();
+
   let vpn_worker = vpn_worker_runner::start_vpn_worker(&vpn_id)
     .await
     .map_err(|e| format!("Failed to start VPN worker: {e}"))?;
 
-  let socks_url = format!("socks5://127.0.0.1:{}", vpn_worker.local_port.unwrap_or(0));
+  let socks_url = format!(
+    "socks5://127.0.0.1:{}",
+    vpn_worker.local_port.unwrap_or_default()
+  );
 
-  // Fetch public IP through the VPN SOCKS5 proxy
-  let result = match ip_utils::fetch_public_ip(Some(&socks_url)).await {
-    Ok(ip) => {
-      let (city, country, country_code) =
-        crate::proxy_manager::ProxyManager::get_ip_geolocation(&ip)
-          .await
-          .unwrap_or_default();
-
-      crate::proxy_manager::ProxyCheckResult {
-        ip,
-        city,
-        country,
-        country_code,
-        timestamp: now,
-        is_valid: true,
+  let local_proxy = crate::proxy_runner::start_proxy_process(Some(socks_url), None)
+    .await
+    .map_err(|error| error.to_string());
+  let local_proxy = match local_proxy {
+    Ok(proxy) => proxy,
+    Err(error_message) => {
+      if !had_existing_worker {
+        let _ = vpn_worker_runner::stop_vpn_worker(&vpn_worker.id).await;
       }
-    }
-    Err(e) => {
-      log::warn!("VPN check failed to fetch public IP: {e}");
-      crate::proxy_manager::ProxyCheckResult {
-        ip: String::new(),
-        city: None,
-        country: None,
-        country_code: None,
-        timestamp: now,
-        is_valid: false,
-      }
+      return Err(format!("Failed to start validation proxy: {error_message}"));
     }
   };
 
-  // Stop the temporary VPN worker
-  let _ = vpn_worker_runner::stop_vpn_worker(&vpn_worker.id).await;
+  let local_proxy_url = format!(
+    "http://127.0.0.1:{}",
+    local_proxy.local_port.unwrap_or_default()
+  );
+
+  let mut result = None;
+  for attempt in 0..3 {
+    if attempt > 0 {
+      tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+
+    match ip_utils::fetch_public_ip(Some(&local_proxy_url)).await {
+      Ok(ip) => {
+        let (city, country, country_code) =
+          crate::proxy_manager::ProxyManager::get_ip_geolocation(&ip)
+            .await
+            .unwrap_or_default();
+
+        result = Some(crate::proxy_manager::ProxyCheckResult {
+          ip,
+          city,
+          country,
+          country_code,
+          timestamp: now,
+          is_valid: true,
+        });
+        break;
+      }
+      Err(error) => {
+        log::warn!(
+          "VPN validation attempt {} failed to fetch public IP through donut-proxy: {}",
+          attempt + 1,
+          error
+        );
+      }
+    }
+  }
+
+  let _ = crate::proxy_runner::stop_proxy_process(&local_proxy.id).await;
+  if !had_existing_worker {
+    let _ = vpn_worker_runner::stop_vpn_worker(&vpn_worker.id).await;
+  }
+
+  let result = result.unwrap_or(crate::proxy_manager::ProxyCheckResult {
+    ip: String::new(),
+    city: None,
+    country: None,
+    country_code: None,
+    timestamp: now,
+    is_valid: false,
+  });
 
   Ok(result)
 }
@@ -1932,6 +2004,7 @@ pub fn run() {
       add_mcp_to_claude_code,
       remove_mcp_from_claude_code,
       // VPN commands
+      get_vpn_dependency_status,
       import_vpn_config,
       list_vpn_configs,
       get_vpn_config,

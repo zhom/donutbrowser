@@ -10,7 +10,7 @@
     "start": "next start",
     "test": "pnpm test:rust:unit && pnpm test:sync-e2e",
     "test:rust": "cd src-tauri && cargo test",
-    "test:rust:unit": "cd src-tauri && cargo test --lib && cargo test --test donut_proxy_integration",
+    "test:rust:unit": "cd src-tauri && cargo test --lib && cargo test --test donut_proxy_integration && cargo test --test vpn_integration",
     "test:sync-e2e": "node scripts/sync-test-harness.mjs",
     "lint": "pnpm lint:js && pnpm lint:rust && pnpm lint:spell",
     "lint:js": "biome check src/ && tsc --noEmit && cd donut-sync && biome check src/ && tsc --noEmit",

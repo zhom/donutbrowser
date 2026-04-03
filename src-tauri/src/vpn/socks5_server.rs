@@ -370,6 +370,8 @@ impl WireGuardSocks5Server {
       smol_handle: SocketHandle,
       tcp_stream: TcpStream,
       socks_done: bool,
+      connecting: bool,
+      greeting_done: bool,
       read_buf: Vec<u8>,
       dest_addr: Option<SocketAddr>,
     }
@@ -391,6 +393,8 @@ impl WireGuardSocks5Server {
           smol_handle: handle,
           tcp_stream: stream,
           socks_done: false,
+          connecting: false,
+          greeting_done: false,
           read_buf: Vec::new(),
           dest_addr: None,
         });
@@ -409,7 +413,30 @@ impl WireGuardSocks5Server {
       // Process each connection
       let mut completed = Vec::new();
       for (idx, conn) in connections.iter_mut().enumerate() {
-        if !conn.socks_done {
+        if conn.connecting {
+          let socket = sockets.get_mut::<TcpSocket>(conn.smol_handle);
+          if socket.may_send() {
+            let _ = conn.tcp_stream.try_write(&[
+              0x05,
+              0x00,
+              0x00,
+              0x01,
+              127,
+              0,
+              0,
+              1,
+              (actual_port >> 8) as u8,
+              (actual_port & 0xff) as u8,
+            ]);
+            conn.connecting = false;
+            conn.socks_done = true;
+          } else if !socket.is_open() {
+            let _ = conn
+              .tcp_stream
+              .try_write(&[0x05, 0x05, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
+            completed.push(idx);
+          }
+        } else if !conn.socks_done {
           // Handle SOCKS5 handshake
           let mut buf = [0u8; 512];
           match conn.tcp_stream.try_read(&mut buf) {
@@ -427,19 +454,26 @@ impl WireGuardSocks5Server {
             }
           }
 
-          if conn.dest_addr.is_none() && conn.read_buf.len() >= 3 {
+          if !conn.greeting_done && conn.read_buf.len() >= 3 {
             // SOCKS5 greeting: version, nmethods, methods
             if conn.read_buf[0] != 0x05 {
               completed.push(idx);
               continue;
             }
-            // Reply: no auth required
-            let _ = conn.tcp_stream.try_write(&[0x05, 0x00]);
             let nmethods = conn.read_buf[1] as usize;
+            if conn.read_buf.len() < 2 + nmethods {
+              continue;
+            }
+            // Reply: no auth required
+            if conn.tcp_stream.try_write(&[0x05, 0x00]).is_err() {
+              completed.push(idx);
+              continue;
+            }
             conn.read_buf.drain(..2 + nmethods);
+            conn.greeting_done = true;
           }
 
-          if conn.dest_addr.is_none() && conn.read_buf.len() >= 10 {
+          if conn.greeting_done && conn.dest_addr.is_none() && conn.read_buf.len() >= 10 {
             // SOCKS5 connect request
             if conn.read_buf[0] != 0x05 || conn.read_buf[1] != 0x01 {
               completed.push(idx);
@@ -539,20 +573,7 @@ impl WireGuardSocks5Server {
               continue;
             }
 
-            // Send SOCKS5 success reply
-            let _ = conn.tcp_stream.try_write(&[
-              0x05,
-              0x00,
-              0x00,
-              0x01,
-              127,
-              0,
-              0,
-              1,
-              (actual_port >> 8) as u8,
-              (actual_port & 0xff) as u8,
-            ]);
-            conn.socks_done = true;
+            conn.connecting = true;
           }
         } else {
           // Data relay between SOCKS5 client and smoltcp socket

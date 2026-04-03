@@ -2,10 +2,159 @@ use crate::proxy_storage::{
   delete_proxy_config, generate_proxy_id, get_proxy_config, is_process_running, list_proxy_configs,
   save_proxy_config, ProxyConfig,
 };
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 lazy_static::lazy_static! {
   static ref PROXY_PROCESSES: std::sync::Mutex<std::collections::HashMap<String, u32>> =
     std::sync::Mutex::new(std::collections::HashMap::new());
+}
+
+fn target_binary_name(base_name: &str) -> Option<String> {
+  let target = std::env::var("TARGET").ok()?;
+
+  #[cfg(windows)]
+  {
+    Some(format!("{base_name}-{target}.exe"))
+  }
+
+  #[cfg(not(windows))]
+  {
+    Some(format!("{base_name}-{target}"))
+  }
+}
+
+fn unsuffixed_binary_name(base_name: &str) -> String {
+  #[cfg(windows)]
+  {
+    match base_name {
+      "donut-proxy" => "donut-proxy.exe".to_string(),
+      "donut-daemon" => "donut-daemon.exe".to_string(),
+      _ => String::new(),
+    }
+  }
+
+  #[cfg(not(windows))]
+  {
+    base_name.to_string()
+  }
+}
+
+fn binary_matches_prefix(path: &Path, base_name: &str) -> bool {
+  let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+    return false;
+  };
+
+  #[cfg(windows)]
+  {
+    file_name.starts_with(&format!("{base_name}-")) && file_name.ends_with(".exe")
+  }
+
+  #[cfg(not(windows))]
+  {
+    file_name.starts_with(&format!("{base_name}-"))
+  }
+}
+
+fn push_candidate_dir(dirs: &mut Vec<PathBuf>, dir: Option<PathBuf>) {
+  if let Some(dir) = dir {
+    if !dirs.iter().any(|existing| existing == &dir) {
+      dirs.push(dir);
+    }
+  }
+}
+
+pub(crate) fn find_sidecar_executable(
+  base_name: &str,
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
+  let current_exe = std::env::current_exe()?;
+  let current_dir = current_exe
+    .parent()
+    .ok_or("Failed to get parent directory of current executable")?;
+
+  if current_exe
+    .file_stem()
+    .and_then(|stem| stem.to_str())
+    .is_some_and(|stem| stem == base_name)
+  {
+    return Ok(current_exe);
+  }
+
+  let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+  let mut search_dirs = Vec::new();
+
+  push_candidate_dir(&mut search_dirs, Some(current_dir.to_path_buf()));
+  push_candidate_dir(
+    &mut search_dirs,
+    current_dir.parent().map(std::path::Path::to_path_buf),
+  );
+  push_candidate_dir(
+    &mut search_dirs,
+    current_dir
+      .parent()
+      .and_then(|parent| parent.parent())
+      .map(Path::to_path_buf),
+  );
+  push_candidate_dir(&mut search_dirs, Some(current_dir.join("binaries")));
+  push_candidate_dir(
+    &mut search_dirs,
+    current_dir.parent().map(|parent| parent.join("binaries")),
+  );
+  push_candidate_dir(
+    &mut search_dirs,
+    current_dir
+      .parent()
+      .and_then(|parent| parent.parent())
+      .map(|parent| parent.join("binaries")),
+  );
+  push_candidate_dir(&mut search_dirs, Some(manifest_dir.join("binaries")));
+  push_candidate_dir(
+    &mut search_dirs,
+    Some(manifest_dir.join("target").join("debug")),
+  );
+  push_candidate_dir(
+    &mut search_dirs,
+    Some(manifest_dir.join("target").join("release")),
+  );
+
+  let mut exact_names = vec![unsuffixed_binary_name(base_name)];
+  if let Some(target_name) = target_binary_name(base_name) {
+    exact_names.push(target_name);
+  }
+
+  for dir in &search_dirs {
+    for name in &exact_names {
+      if name.is_empty() {
+        continue;
+      }
+
+      let candidate = dir.join(name);
+      if candidate.exists() {
+        return Ok(candidate);
+      }
+    }
+
+    if let Ok(entries) = std::fs::read_dir(dir) {
+      for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_file() && binary_matches_prefix(&path, base_name) {
+          return Ok(path);
+        }
+      }
+    }
+  }
+
+  Err(
+    format!(
+      "Failed to locate '{}' executable. Searched in: {}",
+      base_name,
+      search_dirs
+        .iter()
+        .map(|dir| dir.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
+    )
+    .into(),
+  )
 }
 
 pub async fn start_proxy_process(
@@ -47,7 +196,7 @@ pub async fn start_proxy_process_with_profile(
 
   // Spawn proxy worker process in the background using std::process::Command
   // This ensures proper process detachment on Unix systems
-  let exe = std::env::current_exe()?;
+  let exe = find_sidecar_executable("donut-proxy")?;
 
   #[cfg(unix)]
   {

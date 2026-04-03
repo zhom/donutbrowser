@@ -3,8 +3,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { LoadingButton } from "@/components/loading-button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Dialog,
   DialogContent,
@@ -51,6 +53,14 @@ interface OpenVpnFormData {
   rawConfig: string;
 }
 
+interface VpnDependencyStatus {
+  isAvailable: boolean;
+  requiresExternalInstall: boolean;
+  missingBinary: boolean;
+  missingWindowsAdapter: boolean;
+  dependencyCheckFailed: boolean;
+}
+
 const defaultWireGuardForm: WireGuardFormData = {
   name: "",
   privateKey: "",
@@ -92,12 +102,15 @@ export function VpnFormDialog({
   onClose,
   editingVpn,
 }: VpnFormDialogProps) {
+  const { t } = useTranslation();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [vpnType, setVpnType] = useState<VpnType>("WireGuard");
   const [wireGuardForm, setWireGuardForm] =
     useState<WireGuardFormData>(defaultWireGuardForm);
   const [openVpnForm, setOpenVpnForm] =
     useState<OpenVpnFormData>(defaultOpenVpnForm);
+  const [vpnDependencyStatus, setVpnDependencyStatus] =
+    useState<VpnDependencyStatus | null>(null);
 
   const resetForms = useCallback(() => {
     setVpnType("WireGuard");
@@ -119,6 +132,32 @@ export function VpnFormDialog({
       }
     }
   }, [isOpen, editingVpn, resetForms]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setVpnDependencyStatus(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    void invoke<VpnDependencyStatus>("get_vpn_dependency_status", { vpnType })
+      .then((status) => {
+        if (!cancelled) {
+          setVpnDependencyStatus(status);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to load VPN dependency status:", error);
+        if (!cancelled) {
+          setVpnDependencyStatus(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, vpnType]);
 
   const handleClose = useCallback(() => {
     if (!isSubmitting) {
@@ -258,6 +297,36 @@ export function VpnFormDialog({
       ? "Enter your WireGuard interface and peer details."
       : "Paste your .ovpn configuration file content.";
 
+  let dependencyWarningTitle: string | null = null;
+  let dependencyWarningDescription: string | null = null;
+
+  if (
+    vpnType === "OpenVPN" &&
+    vpnDependencyStatus?.requiresExternalInstall &&
+    !vpnDependencyStatus.isAvailable
+  ) {
+    if (vpnDependencyStatus.missingBinary) {
+      dependencyWarningTitle = t("vpnForm.dependencies.openVpnMissingTitle");
+      dependencyWarningDescription = t(
+        "vpnForm.dependencies.openVpnMissingDescription",
+      );
+    } else if (vpnDependencyStatus.missingWindowsAdapter) {
+      dependencyWarningTitle = t(
+        "vpnForm.dependencies.openVpnAdapterMissingTitle",
+      );
+      dependencyWarningDescription = t(
+        "vpnForm.dependencies.openVpnAdapterMissingDescription",
+      );
+    } else if (vpnDependencyStatus.dependencyCheckFailed) {
+      dependencyWarningTitle = t(
+        "vpnForm.dependencies.openVpnCheckFailedTitle",
+      );
+      dependencyWarningDescription = t(
+        "vpnForm.dependencies.openVpnCheckFailedDescription",
+      );
+    }
+  }
+
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-lg">
@@ -268,6 +337,17 @@ export function VpnFormDialog({
 
         <ScrollArea className="max-h-[60vh] pr-4">
           <div className="grid gap-4 py-2">
+            {dependencyWarningTitle && dependencyWarningDescription && (
+              <Alert className="border-warning/50 bg-warning/10">
+                <AlertTitle className="text-warning">
+                  {dependencyWarningTitle}
+                </AlertTitle>
+                <AlertDescription className="text-warning">
+                  {dependencyWarningDescription}
+                </AlertDescription>
+              </Alert>
+            )}
+
             {!editingVpn && (
               <div className="grid gap-2">
                 <Label>VPN Type</Label>

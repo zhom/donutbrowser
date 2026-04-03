@@ -16,10 +16,19 @@ const WIREGUARD_IMAGE: &str = "linuxserver/wireguard:latest";
 const OPENVPN_IMAGE: &str = "kylemanna/openvpn:latest";
 const WG_CONTAINER: &str = "donut-wg-test";
 const OVPN_CONTAINER: &str = "donut-ovpn-test";
+const OVPN_VOLUME: &str = "donut-ovpn-test-data";
 
 /// Check if running in CI environment
 pub fn is_ci() -> bool {
   std::env::var("CI").is_ok() || std::env::var("GITHUB_ACTIONS").is_ok()
+}
+
+fn has_external_wireguard_service() -> bool {
+  std::env::var("VPN_TEST_WG_HOST").is_ok()
+}
+
+fn has_external_openvpn_service() -> bool {
+  std::env::var("VPN_TEST_OVPN_HOST").is_ok()
 }
 
 /// Check if Docker is available
@@ -33,13 +42,9 @@ pub fn is_docker_available() -> bool {
 
 /// Start a WireGuard test server and return client config
 pub async fn start_wireguard_server() -> Result<WireGuardTestConfig, String> {
-  if is_ci() {
-    // In CI, use the service container configured in workflow
+  if has_external_wireguard_service() {
     let host = std::env::var("VPN_TEST_WG_HOST").unwrap_or_else(|_| "localhost".into());
     let port = std::env::var("VPN_TEST_WG_PORT").unwrap_or_else(|_| "51820".into());
-
-    // Wait for service to be ready
-    wait_for_service(&host, port.parse().unwrap_or(51820)).await?;
 
     return get_ci_wireguard_config(&host, &port);
   }
@@ -71,6 +76,8 @@ pub async fn start_wireguard_server() -> Result<WireGuardTestConfig, String> {
       "SERVERPORT=51820",
       "-e",
       "PEERDNS=auto",
+      "-e",
+      "INTERNAL_SUBNET=10.64.0.0",
       WIREGUARD_IMAGE,
     ])
     .output()
@@ -105,13 +112,9 @@ pub async fn start_wireguard_server() -> Result<WireGuardTestConfig, String> {
 
 /// Start an OpenVPN test server and return client config
 pub async fn start_openvpn_server() -> Result<OpenVpnTestConfig, String> {
-  if is_ci() {
-    // In CI, use the service container configured in workflow
+  if has_external_openvpn_service() {
     let host = std::env::var("VPN_TEST_OVPN_HOST").unwrap_or_else(|_| "localhost".into());
     let port = std::env::var("VPN_TEST_OVPN_PORT").unwrap_or_else(|_| "1194".into());
-
-    // Wait for service to be ready
-    wait_for_service(&host, port.parse().unwrap_or(1194)).await?;
 
     return get_ci_openvpn_config(&host, &port);
   }
@@ -125,9 +128,139 @@ pub async fn start_openvpn_server() -> Result<OpenVpnTestConfig, String> {
     .args(["rm", "-f", OVPN_CONTAINER])
     .output();
 
-  // For OpenVPN, we need to initialize PKI first, which is complex
-  // For simplicity in tests, we'll use a pre-configured test config
-  Err("OpenVPN container setup requires pre-configured PKI. Use test fixtures instead.".to_string())
+  let _ = Command::new("docker")
+    .args(["volume", "rm", "-f", OVPN_VOLUME])
+    .output();
+
+  let create_volume = Command::new("docker")
+    .args(["volume", "create", OVPN_VOLUME])
+    .output()
+    .map_err(|e| format!("Failed to create OpenVPN test volume: {e}"))?;
+  if !create_volume.status.success() {
+    return Err(format!(
+      "Failed to create OpenVPN test volume: {}",
+      String::from_utf8_lossy(&create_volume.stderr)
+    ));
+  }
+
+  let genconfig = Command::new("docker")
+    .args([
+      "run",
+      "--rm",
+      "-v",
+      &format!("{OVPN_VOLUME}:/etc/openvpn"),
+      "-e",
+      "EASYRSA_BATCH=1",
+      OPENVPN_IMAGE,
+      "ovpn_genconfig",
+      "-u",
+      "udp://127.0.0.1",
+      "-s",
+      "10.9.0.0/24",
+    ])
+    .output()
+    .map_err(|e| format!("Failed to generate OpenVPN config: {e}"))?;
+  if !genconfig.status.success() {
+    return Err(format!(
+      "OpenVPN config generation failed: {}",
+      String::from_utf8_lossy(&genconfig.stderr)
+    ));
+  }
+
+  let init_pki = Command::new("docker")
+    .args([
+      "run",
+      "--rm",
+      "-v",
+      &format!("{OVPN_VOLUME}:/etc/openvpn"),
+      "-e",
+      "EASYRSA_BATCH=1",
+      OPENVPN_IMAGE,
+      "ovpn_initpki",
+      "nopass",
+    ])
+    .output()
+    .map_err(|e| format!("Failed to initialize OpenVPN PKI: {e}"))?;
+  if !init_pki.status.success() {
+    return Err(format!(
+      "OpenVPN PKI initialization failed: {}",
+      String::from_utf8_lossy(&init_pki.stderr)
+    ));
+  }
+
+  let build_client = Command::new("docker")
+    .args([
+      "run",
+      "--rm",
+      "-v",
+      &format!("{OVPN_VOLUME}:/etc/openvpn"),
+      "-e",
+      "EASYRSA_BATCH=1",
+      OPENVPN_IMAGE,
+      "easyrsa",
+      "build-client-full",
+      "donut-test-client",
+      "nopass",
+    ])
+    .output()
+    .map_err(|e| format!("Failed to build OpenVPN client certificate: {e}"))?;
+  if !build_client.status.success() {
+    return Err(format!(
+      "OpenVPN client certificate build failed: {}",
+      String::from_utf8_lossy(&build_client.stderr)
+    ));
+  }
+
+  let start_server = Command::new("docker")
+    .args([
+      "run",
+      "-d",
+      "--name",
+      OVPN_CONTAINER,
+      "--cap-add=NET_ADMIN",
+      "-p",
+      "1194:1194/udp",
+      "-v",
+      &format!("{OVPN_VOLUME}:/etc/openvpn"),
+      OPENVPN_IMAGE,
+    ])
+    .output()
+    .map_err(|e| format!("Failed to start OpenVPN container: {e}"))?;
+  if !start_server.status.success() {
+    return Err(format!(
+      "OpenVPN container start failed: {}",
+      String::from_utf8_lossy(&start_server.stderr)
+    ));
+  }
+
+  sleep(Duration::from_secs(10)).await;
+
+  let client_config = Command::new("docker")
+    .args([
+      "run",
+      "--rm",
+      "-v",
+      &format!("{OVPN_VOLUME}:/etc/openvpn"),
+      OPENVPN_IMAGE,
+      "ovpn_getclient",
+      "donut-test-client",
+    ])
+    .output()
+    .map_err(|e| format!("Failed to fetch OpenVPN client config: {e}"))?;
+  if !client_config.status.success() {
+    return Err(format!(
+      "Failed to read OpenVPN client config: {}",
+      String::from_utf8_lossy(&client_config.stderr)
+    ));
+  }
+
+  let raw_config = String::from_utf8_lossy(&client_config.stdout).to_string();
+  Ok(OpenVpnTestConfig {
+    raw_config,
+    remote_host: "127.0.0.1".to_string(),
+    remote_port: 1194,
+    protocol: "udp".to_string(),
+  })
 }
 
 /// Stop all VPN test servers
@@ -135,21 +268,9 @@ pub async fn stop_vpn_servers() {
   let _ = Command::new("docker")
     .args(["rm", "-f", WG_CONTAINER, OVPN_CONTAINER])
     .output();
-}
-
-/// Wait for a network service to be ready
-async fn wait_for_service(host: &str, port: u16) -> Result<(), String> {
-  let timeout = Duration::from_secs(30);
-  let start = std::time::Instant::now();
-
-  while start.elapsed() < timeout {
-    if std::net::TcpStream::connect(format!("{host}:{port}")).is_ok() {
-      return Ok(());
-    }
-    sleep(Duration::from_millis(500)).await;
-  }
-
-  Err(format!("Timeout waiting for service at {host}:{port}"))
+  let _ = Command::new("docker")
+    .args(["volume", "rm", "-f", OVPN_VOLUME])
+    .output();
 }
 
 /// WireGuard test configuration
@@ -160,6 +281,7 @@ pub struct WireGuardTestConfig {
   pub peer_public_key: String,
   pub peer_endpoint: String,
   pub allowed_ips: Vec<String>,
+  pub preshared_key: Option<String>,
 }
 
 /// OpenVPN test configuration
@@ -178,6 +300,7 @@ fn parse_wireguard_test_config(content: &str) -> Result<WireGuardTestConfig, Str
   let mut peer_public_key = String::new();
   let mut peer_endpoint = String::new();
   let mut allowed_ips = vec!["0.0.0.0/0".to_string()];
+  let mut preshared_key = None;
   let mut current_section = "";
 
   for line in content.lines() {
@@ -205,6 +328,7 @@ fn parse_wireguard_test_config(content: &str) -> Result<WireGuardTestConfig, Str
         ("interface", "DNS") => dns = Some(value.to_string()),
         ("peer", "PublicKey") => peer_public_key = value.to_string(),
         ("peer", "Endpoint") => peer_endpoint = value.to_string(),
+        ("peer", "PresharedKey") => preshared_key = Some(value.to_string()),
         ("peer", "AllowedIPs") => {
           allowed_ips = value.split(',').map(|s| s.trim().to_string()).collect();
         }
@@ -230,12 +354,21 @@ fn parse_wireguard_test_config(content: &str) -> Result<WireGuardTestConfig, Str
     peer_public_key,
     peer_endpoint,
     allowed_ips,
+    preshared_key,
   })
 }
 
 /// Get WireGuard config from CI environment
 fn get_ci_wireguard_config(host: &str, port: &str) -> Result<WireGuardTestConfig, String> {
-  // In CI, use environment variables or test fixtures
+  if std::env::var("VPN_TEST_WG_PRIVATE_KEY").is_err()
+    || std::env::var("VPN_TEST_WG_PUBLIC_KEY").is_err()
+  {
+    return Err(
+      "External WireGuard test service is configured, but VPN_TEST_WG_PRIVATE_KEY and VPN_TEST_WG_PUBLIC_KEY are missing"
+        .to_string(),
+    );
+  }
+
   let private_key =
     std::env::var("VPN_TEST_WG_PRIVATE_KEY").unwrap_or_else(|_| "test-private-key".to_string());
   let public_key =
@@ -248,11 +381,21 @@ fn get_ci_wireguard_config(host: &str, port: &str) -> Result<WireGuardTestConfig
     peer_public_key: public_key,
     peer_endpoint: format!("{host}:{port}"),
     allowed_ips: vec!["0.0.0.0/0".to_string()],
+    preshared_key: std::env::var("VPN_TEST_WG_PRESHARED_KEY").ok(),
   })
 }
 
 /// Get OpenVPN config from CI environment
 fn get_ci_openvpn_config(host: &str, port: &str) -> Result<OpenVpnTestConfig, String> {
+  if let Ok(raw_config) = std::env::var("VPN_TEST_OVPN_RAW_CONFIG") {
+    return Ok(OpenVpnTestConfig {
+      raw_config,
+      remote_host: host.to_string(),
+      remote_port: port.parse().unwrap_or(1194),
+      protocol: "udp".to_string(),
+    });
+  }
+
   let raw_config = format!(
     r#"
 client
