@@ -124,8 +124,9 @@ jobs:
         env:
           DONUTBROWSER_RUN_OPENVPN_E2E: "1"
         run: |
-          sudo --preserve-env=PATH,CARGO_HOME,RUSTUP_HOME,DONUTBROWSER_RUN_OPENVPN_E2E \
-            cargo test --test vpn_integration test_openvpn_traffic_flows_through_donut_proxy -- --nocapture
+          CARGO_BIN="$(command -v cargo)"
+          sudo --preserve-env=CARGO_HOME,RUSTUP_HOME,DONUTBROWSER_RUN_OPENVPN_E2E \
+            "${CARGO_BIN}" test --test vpn_integration test_openvpn_traffic_flows_through_donut_proxy -- --nocapture
 
       - name: Run Rust sync e2e tests
         run: node scripts/sync-test-harness.mjs
