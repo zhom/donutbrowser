@@ -170,6 +170,7 @@ impl OpenVpnSocks5Server {
 
     #[cfg(not(windows))]
     {
+      let _ = openvpn_bin;
       OpenVpnDependencyStatus {
         binary_found: true,
         missing_windows_adapter: false,
