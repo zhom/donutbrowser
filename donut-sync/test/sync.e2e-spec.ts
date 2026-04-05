@@ -1,3 +1,5 @@
+import type { Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { INestApplication } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
@@ -6,6 +8,11 @@ import { App } from "supertest/types";
 import { AppController } from "./../src/app.controller.js";
 import { AppService } from "./../src/app.service.js";
 import { SyncModule } from "./../src/sync/sync.module.js";
+import {
+  configureTestEnv,
+  TEST_SYNC_TOKEN,
+  waitForTestS3,
+} from "./test-env.js";
 
 interface PresignResponse {
   url: string;
@@ -29,26 +36,12 @@ interface StatResponse {
   lastModified?: string;
 }
 
-interface SSEError {
-  code?: string;
-  timeout?: boolean;
-  response?: { status: number };
-}
-
-const TEST_TOKEN = "test-sync-token";
-
 describe("SyncController (e2e)", () => {
   let app: INestApplication<App>;
 
   beforeAll(async () => {
-    process.env.SYNC_TOKEN = TEST_TOKEN;
-    process.env.S3_ENDPOINT =
-      process.env.S3_ENDPOINT || "http://localhost:8987";
-    process.env.S3_ACCESS_KEY_ID = process.env.S3_ACCESS_KEY_ID || "minioadmin";
-    process.env.S3_SECRET_ACCESS_KEY =
-      process.env.S3_SECRET_ACCESS_KEY || "minioadmin";
-    process.env.S3_BUCKET = "donut-sync-test";
-    process.env.S3_FORCE_PATH_STYLE = "true";
+    configureTestEnv();
+    await waitForTestS3();
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
@@ -62,7 +55,7 @@ describe("SyncController (e2e)", () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    await app.init();
+    await app.listen(0);
   });
 
   afterAll(async () => {
@@ -88,7 +81,7 @@ describe("SyncController (e2e)", () => {
     it("should accept requests with valid token", () => {
       return request(app.getHttpServer())
         .post("/v1/objects/stat")
-        .set("Authorization", `Bearer ${TEST_TOKEN}`)
+        .set("Authorization", `Bearer ${TEST_SYNC_TOKEN}`)
         .send({ key: "nonexistent-key" })
         .expect(200)
         .expect({ exists: false });
@@ -99,7 +92,7 @@ describe("SyncController (e2e)", () => {
     it("should return exists: false for non-existent key", () => {
       return request(app.getHttpServer())
         .post("/v1/objects/stat")
-        .set("Authorization", `Bearer ${TEST_TOKEN}`)
+        .set("Authorization", `Bearer ${TEST_SYNC_TOKEN}`)
         .send({ key: "does-not-exist" })
         .expect(200)
         .expect({ exists: false });
@@ -110,7 +103,7 @@ describe("SyncController (e2e)", () => {
     it("should return a presigned upload URL", async () => {
       const response = await request(app.getHttpServer())
         .post("/v1/objects/presign-upload")
-        .set("Authorization", `Bearer ${TEST_TOKEN}`)
+        .set("Authorization", `Bearer ${TEST_SYNC_TOKEN}`)
         .send({ key: "test/upload-key.txt", contentType: "text/plain" })
         .expect(200);
 
@@ -125,7 +118,7 @@ describe("SyncController (e2e)", () => {
     it("should return a presigned download URL", async () => {
       const response = await request(app.getHttpServer())
         .post("/v1/objects/presign-download")
-        .set("Authorization", `Bearer ${TEST_TOKEN}`)
+        .set("Authorization", `Bearer ${TEST_SYNC_TOKEN}`)
         .send({ key: "test/download-key.txt" })
         .expect(200);
 
@@ -140,7 +133,7 @@ describe("SyncController (e2e)", () => {
     it("should list objects with prefix", async () => {
       const response = await request(app.getHttpServer())
         .post("/v1/objects/list")
-        .set("Authorization", `Bearer ${TEST_TOKEN}`)
+        .set("Authorization", `Bearer ${TEST_SYNC_TOKEN}`)
         .send({ prefix: "profiles/" })
         .expect(200);
 
@@ -155,7 +148,7 @@ describe("SyncController (e2e)", () => {
     it("should delete object and create tombstone", async () => {
       const response = await request(app.getHttpServer())
         .post("/v1/objects/delete")
-        .set("Authorization", `Bearer ${TEST_TOKEN}`)
+        .set("Authorization", `Bearer ${TEST_SYNC_TOKEN}`)
         .send({
           key: "test/to-delete.txt",
           tombstoneKey: "tombstones/test/to-delete.json",
@@ -176,7 +169,7 @@ describe("SyncController (e2e)", () => {
     it("should complete full upload/download cycle with presigned URLs", async () => {
       const uploadResponse = await request(app.getHttpServer())
         .post("/v1/objects/presign-upload")
-        .set("Authorization", `Bearer ${TEST_TOKEN}`)
+        .set("Authorization", `Bearer ${TEST_SYNC_TOKEN}`)
         .send({ key: testKey, contentType: "text/plain" })
         .expect(200);
 
@@ -192,7 +185,7 @@ describe("SyncController (e2e)", () => {
 
       const statResponse = await request(app.getHttpServer())
         .post("/v1/objects/stat")
-        .set("Authorization", `Bearer ${TEST_TOKEN}`)
+        .set("Authorization", `Bearer ${TEST_SYNC_TOKEN}`)
         .send({ key: testKey })
         .expect(200);
 
@@ -202,7 +195,7 @@ describe("SyncController (e2e)", () => {
 
       const downloadResponse = await request(app.getHttpServer())
         .post("/v1/objects/presign-download")
-        .set("Authorization", `Bearer ${TEST_TOKEN}`)
+        .set("Authorization", `Bearer ${TEST_SYNC_TOKEN}`)
         .send({ key: testKey })
         .expect(200);
 
@@ -215,13 +208,13 @@ describe("SyncController (e2e)", () => {
 
       await request(app.getHttpServer())
         .post("/v1/objects/delete")
-        .set("Authorization", `Bearer ${TEST_TOKEN}`)
+        .set("Authorization", `Bearer ${TEST_SYNC_TOKEN}`)
         .send({ key: testKey })
         .expect(200);
 
       const finalStatResponse = await request(app.getHttpServer())
         .post("/v1/objects/stat")
-        .set("Authorization", `Bearer ${TEST_TOKEN}`)
+        .set("Authorization", `Bearer ${TEST_SYNC_TOKEN}`)
         .send({ key: testKey })
         .expect(200);
 
@@ -238,20 +231,28 @@ describe("SyncController (e2e)", () => {
     });
 
     it("should return SSE stream with valid token", async () => {
-      const response = await request(app.getHttpServer())
-        .get("/v1/objects/subscribe")
-        .set("Authorization", `Bearer ${TEST_TOKEN}`)
-        .set("Accept", "text/event-stream")
-        .buffer(true)
-        .timeout(3000)
-        .catch((err: SSEError) => {
-          if (err.code === "ECONNABORTED" || err.timeout) {
-            return err.response ?? { status: 200 };
-          }
-          throw err;
-        });
+      const address = (
+        app.getHttpServer() as Server
+      ).address() as AddressInfo | null;
+      if (!address || typeof address === "string") {
+        throw new Error("Expected app to be listening on a TCP port");
+      }
+
+      const response = await fetch(
+        `http://127.0.0.1:${address.port}/v1/objects/subscribe`,
+        {
+          headers: {
+            Accept: "text/event-stream",
+            Authorization: `Bearer ${TEST_SYNC_TOKEN}`,
+          },
+        },
+      );
 
       expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toContain(
+        "text/event-stream",
+      );
+      await response.body?.cancel();
     });
   });
 });

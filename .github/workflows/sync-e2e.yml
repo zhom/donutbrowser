@@ -85,7 +85,7 @@ jobs:
 
           # Wait for MinIO to be ready
           for i in {1..30}; do
-            if curl -sf http://localhost:8987/minio/health/live; then
+            if curl -sf http://127.0.0.1:8987/minio/health/live; then
               echo "MinIO is ready"
               break
             fi
@@ -111,7 +111,7 @@ jobs:
         working-directory: donut-sync
         env:
           SYNC_TOKEN: test-sync-token
-          S3_ENDPOINT: http://localhost:8987
+          S3_ENDPOINT: http://127.0.0.1:8987
           S3_ACCESS_KEY_ID: minioadmin
           S3_SECRET_ACCESS_KEY: minioadmin
           S3_BUCKET: donut-sync-test

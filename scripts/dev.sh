@@ -81,7 +81,7 @@ echo -e "${YELLOW}Waiting for MinIO to be healthy...${NC}"
 MAX_RETRIES=30
 RETRY_COUNT=0
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-  if curl -sf http://localhost:8987/minio/health/live > /dev/null 2>&1; then
+  if curl -sf http://127.0.0.1:8987/minio/health/live > /dev/null 2>&1; then
     echo -e "${GREEN}MinIO is ready!${NC}"
     break
   fi
