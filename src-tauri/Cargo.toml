@@ -84,7 +84,7 @@ aes-gcm = "0.10"
 aes = "0.8"
 cbc = "0.1"
 pbkdf2 = "0.12"
-sha1 = "0.10"
+sha1 = "0.11"
 hyper = { version = "1.8", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
 http-body-util = "0.1"
@@ -109,7 +109,7 @@ boringtun = "0.7"
 smoltcp = { version = "0.13", default-features = false, features = ["std", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-tcp", "socket-udp"] }
 
 # Daemon dependencies (tray icon)
-tray-icon = "0.21"
+tray-icon = "0.22"
 muda = "0.17"
 tao = "0.35"
 image = "0.25"
