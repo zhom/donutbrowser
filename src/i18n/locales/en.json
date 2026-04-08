@@ -183,7 +183,8 @@
       "syncSettings": "Sync Settings",
       "assignToGroup": "Assign to Group",
       "changeFingerprint": "Change Fingerprint",
-      "copyCookiesToProfile": "Copy Cookies to Profile"
+      "copyCookiesToProfile": "Copy Cookies to Profile",
+      "launchHook": "Launch Hook URL"
     },
     "synchronizer": {
       "launchWithSync": "Launch with Synchronizer",
@@ -789,7 +790,9 @@
       "ruleTypes": "Supports hostnames, IP addresses, and regex patterns."
     },
     "launchHook": {
+      "title": "Launch Hook URL",
       "label": "Launch Hook URL",
+      "description": "Donut Browser will POST to this URL whenever the profile is launched.",
       "placeholder": "https://example.com/hooks/profile-launch"
     },
     "actions": {

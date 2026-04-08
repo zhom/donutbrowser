@@ -77,11 +77,16 @@ export function CookieCopyDialog({
   );
   const [error, setError] = useState<string | null>(null);
 
+  // Never offer a selected profile as a source — you can't copy a profile's
+  // cookies onto itself, and including it here would leave the user in a
+  // dead-end state (source picked = target list empty = copy button disabled).
   const eligibleSourceProfiles = useMemo(() => {
     return profiles.filter(
-      (p) => p.browser === "wayfern" || p.browser === "camoufox",
+      (p) =>
+        !selectedProfiles.includes(p.id) &&
+        (p.browser === "wayfern" || p.browser === "camoufox"),
     );
-  }, [profiles]);
+  }, [profiles, selectedProfiles]);
 
   const targetProfiles = useMemo(() => {
     return profiles.filter(
@@ -148,22 +153,21 @@ export function CookieCopyDialog({
   const toggleDomain = useCallback(
     (domain: string, cookies: UnifiedCookie[]) => {
       setSelection((prev) => {
-        const current = prev[domain];
-        const allSelected = current.allSelected;
-
-        if (allSelected) {
+        // `prev[domain]` is `undefined` for any domain not yet interacted with
+        // and after the user fully deselects it (toggleCookie deletes the
+        // entry on empty). Treat missing as "not selected".
+        if (prev[domain]?.allSelected) {
           const newSelection = { ...prev };
           delete newSelection[domain];
           return newSelection;
-        } else {
-          return {
-            ...prev,
-            [domain]: {
-              allSelected: true,
-              cookies: new Set(cookies.map((c) => c.name)),
-            },
-          };
         }
+        return {
+          ...prev,
+          [domain]: {
+            allSelected: true,
+            cookies: new Set(cookies.map((c) => c.name)),
+          },
+        };
       });
     },
     [],
@@ -503,9 +507,13 @@ function DomainRow({
   onToggleCookie,
   onToggleExpand,
 }: DomainRowProps) {
+  // `selection[domain.domain]` is `undefined` for domains the user hasn't
+  // touched yet (initial state after loading cookies is `{}`) and for any
+  // domain the user fully deselected (toggleCookie deletes the entry on
+  // empty). Default to "no cookies selected" instead of crashing.
   const domainSelection = selection[domain.domain];
-  const isAllSelected = domainSelection.allSelected;
-  const selectedCount = domainSelection.cookies.size;
+  const isAllSelected = domainSelection?.allSelected ?? false;
+  const selectedCount = domainSelection?.cookies.size ?? 0;
   const isPartial =
     selectedCount > 0 && selectedCount < domain.cookie_count && !isAllSelected;
 
@@ -540,7 +548,8 @@ function DomainRow({
       {isExpanded && (
         <div className="ml-8 pl-2 border-l space-y-1">
           {domain.cookies.map((cookie) => {
-            const isSelected = domainSelection.cookies.has(cookie.name);
+            const isSelected =
+              domainSelection?.cookies.has(cookie.name) ?? false;
             return (
               <div
                 key={`${domain.domain}-${cookie.name}`}

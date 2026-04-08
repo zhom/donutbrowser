@@ -183,7 +183,8 @@
       "syncSettings": "Настройки синхронизации",
       "assignToGroup": "Назначить группе",
       "changeFingerprint": "Изменить отпечаток",
-      "copyCookiesToProfile": "Копировать Cookie в профиль"
+      "copyCookiesToProfile": "Копировать Cookie в профиль",
+      "launchHook": "URL хука запуска"
     },
     "synchronizer": {
       "launchWithSync": "Запустить с синхронизатором",
@@ -789,7 +790,9 @@
       "ruleTypes": "Поддерживает имена хостов, IP-адреса и шаблоны регулярных выражений."
     },
     "launchHook": {
+      "title": "URL хука запуска",
       "label": "URL хука запуска",
+      "description": "Donut Browser будет отправлять POST-запрос на этот URL при каждом запуске профиля.",
       "placeholder": "https://example.com/hooks/profile-launch"
     },
     "actions": {

@@ -183,7 +183,8 @@
       "syncSettings": "同期設定",
       "assignToGroup": "グループに割り当て",
       "changeFingerprint": "フィンガープリントを変更",
-      "copyCookiesToProfile": "Cookieをプロファイルにコピー"
+      "copyCookiesToProfile": "Cookieをプロファイルにコピー",
+      "launchHook": "起動フックURL"
     },
     "synchronizer": {
       "launchWithSync": "シンクロナイザーで起動",
@@ -789,7 +790,9 @@
       "ruleTypes": "ホスト名、IPアドレス、正規表現パターンをサポートしています。"
     },
     "launchHook": {
+      "title": "起動フックURL",
       "label": "起動フックURL",
+      "description": "プロファイルが起動されるたびに、Donut BrowserはこのURLにPOSTリクエストを送信します。",
       "placeholder": "https://example.com/hooks/profile-launch"
     },
     "actions": {

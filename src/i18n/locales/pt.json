@@ -183,7 +183,8 @@
       "syncSettings": "Configurações de Sincronização",
       "assignToGroup": "Atribuir ao Grupo",
       "changeFingerprint": "Alterar Impressão Digital",
-      "copyCookiesToProfile": "Copiar Cookies para o Perfil"
+      "copyCookiesToProfile": "Copiar Cookies para o Perfil",
+      "launchHook": "URL do hook de inicialização"
     },
     "synchronizer": {
       "launchWithSync": "Iniciar com Sincronizador",
@@ -789,7 +790,9 @@
       "ruleTypes": "Suporta nomes de host, endereços IP e padrões regex."
     },
     "launchHook": {
+      "title": "URL do hook de inicialização",
       "label": "URL do hook de inicialização",
+      "description": "O Donut Browser enviará uma requisição POST para esta URL sempre que o perfil for iniciado.",
       "placeholder": "https://example.com/hooks/profile-launch"
     },
     "actions": {

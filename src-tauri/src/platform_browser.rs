@@ -89,96 +89,17 @@ pub mod macos {
       }
     }
 
-    // Fallback: Use AppleScript
-    let escaped_url = url
-      .replace("\"", "\\\"")
-      .replace("\\", "\\\\")
-      .replace("'", "\\'");
-
-    let script = format!(
-      r#"
-try
-  tell application "System Events"
-    -- Find the exact process by PID
-    set targetProcess to (first application process whose unix id is {pid})
-    
-    -- Verify the process exists
-    if not (exists targetProcess) then
-      error "No process found with PID {pid}"
-    end if
-    
-    -- Get the process name for verification
-    set processName to name of targetProcess
-    
-    -- Bring the process to the front first
-    set frontmost of targetProcess to true
-    delay 1.0
-    
-    -- Check if the process has any visible windows
-    set windowList to windows of targetProcess
-    set hasVisibleWindow to false
-    repeat with w in windowList
-      if visible of w is true then
-        set hasVisibleWindow to true
-        exit repeat
-      end if
-    end repeat
-    
-    if not hasVisibleWindow then
-      -- No visible windows, create a new one
-      tell targetProcess
-        keystroke "n" using command down
-        delay 2.0
-      end tell
-    end if
-    
-    -- Ensure the process is frontmost again
-    set frontmost of targetProcess to true
-    delay 0.5
-    
-    -- Focus on the address bar and open URL
-    tell targetProcess
-      -- Open a new tab
-      keystroke "t" using command down
-      delay 1.5
-      
-      -- Focus address bar (Cmd+L)
-      keystroke "l" using command down
-      delay 0.5
-      
-      -- Type the URL
-      keystroke "{escaped_url}"
-      delay 0.5
-      
-      -- Press Enter to navigate
-      keystroke return
-    end tell
-    
-    return "Successfully opened URL in " & processName & " (PID: {pid})"
-  end tell
-on error errMsg number errNum
-  return "AppleScript failed: " & errMsg & " (Error " & errNum & ")"
-end try
-      "#
-    );
-
-    log::info!("Executing AppleScript fallback for Firefox-based browser (PID: {pid})...");
-    let output = Command::new("osascript").args(["-e", &script]).output()?;
-
-    if !output.status.success() {
-      let error_msg = String::from_utf8_lossy(&output.stderr);
-      log::info!("AppleScript failed: {error_msg}");
-      return Err(
-        format!(
-          "Both Firefox remote command and AppleScript failed. AppleScript error: {error_msg}"
-        )
-        .into(),
-      );
-    } else {
-      log::info!("AppleScript succeeded");
-    }
-
-    Ok(())
+    // The Firefox `-new-tab` remote command failed. We intentionally do NOT
+    // fall back to an AppleScript `System Events` keystroke path: that would
+    // send Apple Events to another application and trigger the macOS TCC
+    // "<Donut> wants control of <Browser>" / "prevented from modifying other
+    // apps" prompts. Donut must never touch other apps on the user's Mac.
+    Err(
+      format!(
+        "Firefox remote command failed for PID {pid}; cannot open URL in existing window without touching other apps"
+      )
+      .into(),
+    )
   }
 
   pub async fn kill_browser_process_impl(
@@ -378,93 +299,18 @@ end try
       }
     }
 
-    // Fallback to AppleScript
-    let escaped_url = url
-      .replace("\"", "\\\"")
-      .replace("\\", "\\\\")
-      .replace("'", "\\'");
-
-    let script = format!(
-      r#"
-try
-  tell application "System Events"
-    -- Find the exact process by PID
-    set targetProcess to (first application process whose unix id is {pid})
-    
-    -- Verify the process exists
-    if not (exists targetProcess) then
-      error "No process found with PID {pid}"
-    end if
-    
-    -- Get the process name for verification
-    set processName to name of targetProcess
-    
-    -- Bring the process to the front first
-    set frontmost of targetProcess to true
-    delay 1.0
-    
-    -- Check if the process has any visible windows
-    set windowList to windows of targetProcess
-    set hasVisibleWindow to false
-    repeat with w in windowList
-      if visible of w is true then
-        set hasVisibleWindow to true
-        exit repeat
-      end if
-    end repeat
-    
-    if not hasVisibleWindow then
-      -- No visible windows, create a new one
-      tell targetProcess
-        keystroke "n" using command down
-        delay 2.0
-      end tell
-    end if
-    
-    -- Ensure the process is frontmost again
-    set frontmost of targetProcess to true
-    delay 0.5
-    
-    -- Focus on the address bar and open URL
-    tell targetProcess
-      -- Open a new tab
-      keystroke "t" using command down
-      delay 1.5
-      
-      -- Focus address bar (Cmd+L)
-      keystroke "l" using command down
-      delay 0.5
-      
-      -- Type the URL
-      keystroke "{escaped_url}"
-      delay 0.5
-      
-      -- Press Enter to navigate
-      keystroke return
-    end tell
-    
-    return "Successfully opened URL in " & processName & " (PID: {pid})"
-  end tell
-on error errMsg number errNum
-  return "AppleScript failed: " & errMsg & " (Error " & errNum & ")"
-end try
-      "#
-    );
-
-    log::info!("Executing AppleScript for Chromium-based browser (PID: {pid})...");
-    let output = Command::new("osascript").args(["-e", &script]).output()?;
-
-    if !output.status.success() {
-      let error_msg = String::from_utf8_lossy(&output.stderr);
-      log::info!("AppleScript failed: {error_msg}");
-      return Err(
-        format!("Failed to open URL in existing Chromium-based browser: {error_msg}").into(),
-      );
-    } else {
-      log::info!("AppleScript succeeded");
-    }
-
-    Ok(())
+    // The Chromium `--user-data-dir=<path> <url>` remote command failed.
+    // We intentionally do NOT fall back to an AppleScript `System Events`
+    // keystroke path: that would send Apple Events to another application
+    // and trigger the macOS TCC "<Donut> wants control of <Browser>" /
+    // "prevented from modifying other apps" prompts. Donut must never touch
+    // other apps on the user's Mac.
+    Err(
+      format!(
+        "Chromium remote command failed for PID {pid}; cannot open URL in existing window without touching other apps"
+      )
+      .into(),
+    )
   }
 }
 

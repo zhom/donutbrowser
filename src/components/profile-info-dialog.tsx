@@ -13,6 +13,7 @@ import {
   LuFingerprint,
   LuGlobe,
   LuGroup,
+  LuLink,
   LuPlus,
   LuPuzzle,
   LuRefreshCw,
@@ -66,6 +67,7 @@ interface ProfileInfoDialogProps {
   onAssignExtensionGroup?: (profileIds: string[]) => void;
   onOpenBypassRules?: (profile: BrowserProfile) => void;
   onOpenDnsBlocklist?: (profile: BrowserProfile) => void;
+  onOpenLaunchHook?: (profile: BrowserProfile) => void;
   onCloneProfile?: (profile: BrowserProfile) => void;
   onDeleteProfile?: (profile: BrowserProfile) => void;
   onLaunchWithSync?: (profile: BrowserProfile) => void;
@@ -113,6 +115,7 @@ export function ProfileInfoDialog({
   onAssignExtensionGroup,
   onOpenBypassRules,
   onOpenDnsBlocklist,
+  onOpenLaunchHook,
   onCloneProfile,
   onDeleteProfile,
   onLaunchWithSync,
@@ -128,8 +131,6 @@ export function ProfileInfoDialog({
   const [extensionGroupName, setExtensionGroupName] = React.useState<
     string | null
   >(null);
-  const [launchHookValue, setLaunchHookValue] = React.useState("");
-  const [isSavingLaunchHook, setIsSavingLaunchHook] = React.useState(false);
 
   React.useEffect(() => {
     if (!isOpen || !profile?.group_id) {
@@ -170,12 +171,6 @@ export function ProfileInfoDialog({
       setCopied(false);
     }
   }, [isOpen]);
-
-  React.useEffect(() => {
-    if (isOpen) {
-      setLaunchHookValue(profile?.launch_hook ?? "");
-    }
-  }, [isOpen, profile?.launch_hook]);
 
   if (!profile) return null;
 
@@ -225,23 +220,14 @@ export function ProfileInfoDialog({
   const hasTags = profile.tags && profile.tags.length > 0;
   const hasNote = !!profile.note;
   const showCrossOs = isCrossOsProfile(profile);
-  const trimmedLaunchHook = launchHookValue.trim();
-  const savedLaunchHook = profile.launch_hook ?? "";
 
-  const handleSaveLaunchHook = async () => {
-    setIsSavingLaunchHook(true);
-    try {
-      await invoke("update_profile_launch_hook", {
-        profileId: profile.id,
-        launchHook: trimmedLaunchHook || null,
-      });
-    } catch (error) {
-      console.error("Failed to update launch hook:", error);
-    } finally {
-      setIsSavingLaunchHook(false);
-    }
-  };
-
+  // Items in the settings tab `actions` list MUST only open another dialog
+  // (or trigger a navigation/action that closes this one). Do NOT put inline
+  // settings UI — inputs, toggles, save buttons — directly in this dialog's
+  // settings tab. Each setting belongs in its own focused dialog (see
+  // `ProfileLaunchHookDialog`, `ProfileBypassRulesDialog`,
+  // `ProfileDnsBlocklistDialog` for the pattern). The settings tab is purely
+  // a navigation hub.
   interface ActionItem {
     icon: React.ReactNode;
     label: string;
@@ -359,6 +345,14 @@ export function ProfileInfoDialog({
       onClick: () => {
         handleAction(() => onOpenDnsBlocklist?.(profile));
       },
+    },
+    {
+      icon: <LuLink className="w-4 h-4" />,
+      label: t("profiles.actions.launchHook"),
+      onClick: () => {
+        handleAction(() => onOpenLaunchHook?.(profile));
+      },
+      hidden: !onOpenLaunchHook,
     },
     {
       icon: <LuTrash2 className="w-4 h-4" />,
@@ -575,31 +569,6 @@ export function ProfileInfoDialog({
           <TabsContent value="settings">
             <div className="overflow-y-auto max-h-[calc(80vh-12rem)]">
               <div className="flex flex-col gap-3 py-1">
-                <div className="rounded-md bg-muted/50 border px-3 py-3">
-                  <p className="text-xs text-muted-foreground">
-                    {t("profileInfo.launchHook.label")}
-                  </p>
-                  <div className="flex gap-2 mt-2">
-                    <Input
-                      value={launchHookValue}
-                      onChange={(e) => {
-                        setLaunchHookValue(e.target.value);
-                      }}
-                      placeholder={t("profileInfo.launchHook.placeholder")}
-                      disabled={isSavingLaunchHook}
-                    />
-                    <Button
-                      onClick={() => void handleSaveLaunchHook()}
-                      disabled={
-                        isSavingLaunchHook ||
-                        trimmedLaunchHook === savedLaunchHook
-                      }
-                    >
-                      {t("common.buttons.save")}
-                    </Button>
-                  </div>
-                </div>
-
                 <div className="flex flex-col">
                   {visibleActions.map((action) => (
                     <button
@@ -634,6 +603,80 @@ export function ProfileInfoDialog({
             </div>
           </TabsContent>
         </Tabs>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface ProfileLaunchHookDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  profileId: string | null;
+  currentLaunchHook: string | null;
+}
+
+export function ProfileLaunchHookDialog({
+  isOpen,
+  onClose,
+  profileId,
+  currentLaunchHook,
+}: ProfileLaunchHookDialogProps) {
+  const { t } = useTranslation();
+  const [value, setValue] = React.useState(currentLaunchHook ?? "");
+  const [isSaving, setIsSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setValue(currentLaunchHook ?? "");
+    }
+  }, [isOpen, currentLaunchHook]);
+
+  const trimmed = value.trim();
+  const saved = currentLaunchHook ?? "";
+  const isDirty = trimmed !== saved;
+
+  const handleSave = async () => {
+    if (!profileId) return;
+    setIsSaving(true);
+    try {
+      await invoke("update_profile_launch_hook", {
+        profileId,
+        launchHook: trimmed || null,
+      });
+      onClose();
+    } catch (err) {
+      console.error("Failed to update launch hook:", err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t("profileInfo.launchHook.title")}</DialogTitle>
+        </DialogHeader>
+        <p className="text-xs text-muted-foreground">
+          {t("profileInfo.launchHook.description")}
+        </p>
+        <Input
+          value={value}
+          onChange={(e) => {
+            setValue(e.target.value);
+          }}
+          placeholder={t("profileInfo.launchHook.placeholder")}
+          disabled={isSaving}
+        />
+        <DialogFooter>
+          <Button
+            onClick={() => void handleSave()}
+            disabled={isSaving || !isDirty}
+            className="w-full"
+          >
+            {t("common.buttons.save")}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

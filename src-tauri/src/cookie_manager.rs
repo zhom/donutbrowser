@@ -13,14 +13,25 @@ use tauri::AppHandle;
 /// `encrypted_value` is empty, regardless of what other cookies store.
 pub mod chrome_decrypt {
   use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, KeyIvInit};
+  use sha2::{Digest, Sha256};
   use std::path::Path;
 
   type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
 
+  /// PBKDF2 iteration count for deriving the AES key from the password stored
+  /// in `os_crypt_key`. Must match Chromium's `OSCryptImpl` on each platform:
+  /// macOS uses 1003 iterations, Linux uses 1. Getting this wrong produces a
+  /// different AES key → silent decryption failure → empty cookie values.
+  /// See `components/os_crypt/sync/os_crypt_{mac.mm,linux.cc}` in Chromium.
+  #[cfg(target_os = "macos")]
+  const PBKDF2_ITERATIONS: u32 = 1003;
+  #[cfg(not(target_os = "macos"))]
   const PBKDF2_ITERATIONS: u32 = 1;
+
   const KEY_LEN: usize = 16; // AES-128
   const SALT: &[u8] = b"saltysalt";
   const IV: [u8; 16] = [b' '; 16]; // 16 spaces
+  const HOST_HASH_LEN: usize = 32; // SHA-256 output length
 
   fn derive_key(password: &[u8]) -> [u8; KEY_LEN] {
     let mut key = [0u8; KEY_LEN];
@@ -29,49 +40,43 @@ pub mod chrome_decrypt {
   }
 
   /// Get the encryption key for Chrome cookies.
-  /// Wayfern stores os_crypt_key as a file inside the profile's user-data-dir on all platforms.
-  /// On macOS/Linux the key is a base64 string used as PBKDF2 password.
+  ///
+  /// Wayfern stores `os_crypt_key` as a plain file inside the profile's
+  /// user-data-dir on all platforms (see the wayfern patches for
+  /// `os_crypt_mac.mm` and `os_crypt_linux.cc`). The file contains a
+  /// base64-encoded 128-bit random value that is used as the PBKDF2
+  /// password — not as the raw AES key — matching Chromium's
+  /// `OSCryptImpl::DeriveKey` flow.
+  ///
+  /// If the file is missing we return `None`. We must NEVER fall back to the
+  /// real macOS Keychain or any other system credential store. Wayfern
+  /// profiles are fully self-contained and reaching into another app's entry
+  /// would trigger the macOS "confidential information stored in …" prompt
+  /// and the "prevented from modifying other apps" warning.
   pub fn get_encryption_key(profile_data_path: &Path) -> Option<[u8; KEY_LEN]> {
     let key_file = profile_data_path.join("os_crypt_key");
-    if let Ok(contents) = std::fs::read_to_string(&key_file) {
-      let contents = contents.trim();
-      if !contents.is_empty() {
-        return Some(derive_key(contents.as_bytes()));
-      }
+    // Read as raw bytes and do NOT trim — Chromium's `ReadFileToString`
+    // passes the exact file contents to `Pbkdf2(file_contents)`. Any
+    // normalisation we do here would produce a different derived key.
+    let contents = std::fs::read(&key_file).ok()?;
+    if contents.is_empty() {
+      return None;
     }
-
-    // Fallback for macOS: try system Keychain (for profiles created before file-based keys)
-    #[cfg(target_os = "macos")]
-    {
-      let output = std::process::Command::new("security")
-        .args([
-          "find-generic-password",
-          "-w",
-          "-s",
-          "Chromium Safe Storage",
-          "-a",
-          "Chromium",
-        ])
-        .output()
-        .ok()?;
-      if output.status.success() {
-        let password = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if !password.is_empty() {
-          return Some(derive_key(password.as_bytes()));
-        }
-      }
-    }
-
-    None
+    Some(derive_key(&contents))
   }
 
   /// Decrypt a Chrome encrypted cookie value.
-  /// Chromium prefixes encrypted values with "v10" (macOS) or "v11" (Linux).
-  pub fn decrypt(encrypted: &[u8], key: &[u8; KEY_LEN]) -> Option<String> {
+  ///
+  /// Chromium prefixes encrypted values with "v10" / "v11" and, since ~M100,
+  /// prepends `SHA-256(host_key)` to the plaintext before encryption as an
+  /// integrity check. After decryption we verify and strip those 32 bytes
+  /// when present. Passing `host_key` is required to do that verification —
+  /// without it we'd return 32 bytes of hash noise plus the actual value,
+  /// which is not valid UTF-8 and gets thrown away.
+  pub fn decrypt(encrypted: &[u8], host_key: &str, key: &[u8; KEY_LEN]) -> Option<String> {
     if encrypted.len() < 3 {
       return None;
     }
-    // Check for v10/v11 prefix
     let prefix = &encrypted[..3];
     if prefix != b"v10" && prefix != b"v11" {
       return None;
@@ -85,6 +90,16 @@ pub mod chrome_decrypt {
     let decrypted = Aes128CbcDec::new(key.into(), &IV.into())
       .decrypt_padded_mut::<Pkcs7>(&mut buf)
       .ok()?;
+
+    // Strip the SHA-256(host_key) integrity prefix if present. Older cookies
+    // (pre-M100) didn't have this prefix, so we fall back to the raw bytes
+    // when the first 32 bytes don't match the expected hash.
+    if decrypted.len() >= HOST_HASH_LEN {
+      let expected: [u8; HOST_HASH_LEN] = Sha256::digest(host_key.as_bytes()).into();
+      if decrypted[..HOST_HASH_LEN] == expected {
+        return String::from_utf8(decrypted[HOST_HASH_LEN..].to_vec()).ok();
+      }
+    }
 
     String::from_utf8(decrypted.to_vec()).ok()
   }
@@ -166,7 +181,7 @@ impl CookieManager {
     chrome_decrypt::get_encryption_key(&profile_data_path)
   }
 
-  /// Get the cookie database path for a profile
+  /// Get the cookie database path for a profile (read-side: errors if missing).
   fn get_cookie_db_path(profile: &BrowserProfile, profiles_dir: &Path) -> Result<PathBuf, String> {
     let profile_data_path = profile.get_profile_data_path(profiles_dir);
 
@@ -192,6 +207,122 @@ impl CookieManager {
         profile.browser
       )),
     }
+  }
+
+  /// Get the cookie database path for a profile, creating an empty
+  /// browser-compatible database if it doesn't exist yet. Use this for write
+  /// paths (copy / import) so we can populate the cookie store of a profile
+  /// that has never been launched.
+  fn ensure_cookie_db_path(
+    profile: &BrowserProfile,
+    profiles_dir: &Path,
+  ) -> Result<PathBuf, String> {
+    let profile_data_path = profile.get_profile_data_path(profiles_dir);
+
+    match profile.browser.as_str() {
+      "wayfern" => {
+        let path = profile_data_path.join("Default").join("Cookies");
+        if !path.exists() {
+          Self::create_empty_chrome_cookies_db(&path)?;
+        }
+        Ok(path)
+      }
+      "camoufox" => {
+        let path = profile_data_path.join("cookies.sqlite");
+        if !path.exists() {
+          Self::create_empty_firefox_cookies_db(&path)?;
+        }
+        Ok(path)
+      }
+      _ => Err(format!(
+        "Unsupported browser type for cookie operations: {}",
+        profile.browser
+      )),
+    }
+  }
+
+  /// Create an empty Chromium-format Cookies SQLite database at `path`.
+  ///
+  /// Schema matches what recent Chromium versions write on first launch:
+  /// the `cookies` table, the `meta` table with version info, and the
+  /// `host_key/top_frame_site_key/name/path` unique index. Chromium's cookie
+  /// store migration code will upgrade this forward when Wayfern first
+  /// launches the profile.
+  fn create_empty_chrome_cookies_db(path: &Path) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+      std::fs::create_dir_all(parent)
+        .map_err(|e| format!("Failed to create cookie directory: {e}"))?;
+    }
+    let conn =
+      Connection::open(path).map_err(|e| format!("Failed to create cookie database: {e}"))?;
+    conn
+      .execute_batch(
+        "CREATE TABLE cookies(
+          creation_utc INTEGER NOT NULL,
+          host_key TEXT NOT NULL,
+          top_frame_site_key TEXT NOT NULL,
+          name TEXT NOT NULL,
+          value TEXT NOT NULL,
+          encrypted_value BLOB NOT NULL DEFAULT '',
+          path TEXT NOT NULL,
+          expires_utc INTEGER NOT NULL,
+          is_secure INTEGER NOT NULL,
+          is_httponly INTEGER NOT NULL,
+          last_access_utc INTEGER NOT NULL,
+          has_expires INTEGER NOT NULL DEFAULT 1,
+          is_persistent INTEGER NOT NULL DEFAULT 1,
+          priority INTEGER NOT NULL DEFAULT 1,
+          samesite INTEGER NOT NULL DEFAULT -1,
+          source_scheme INTEGER NOT NULL DEFAULT 0,
+          source_port INTEGER NOT NULL DEFAULT -1,
+          last_update_utc INTEGER NOT NULL DEFAULT 0,
+          source_type INTEGER NOT NULL DEFAULT 0,
+          has_cross_site_ancestor INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE UNIQUE INDEX cookies_unique_index
+          ON cookies(host_key, top_frame_site_key, name, path);
+        CREATE TABLE meta(
+          key LONGVARCHAR NOT NULL UNIQUE PRIMARY KEY,
+          value LONGVARCHAR
+        );
+        INSERT INTO meta VALUES('version', '23');
+        INSERT INTO meta VALUES('last_compatible_version', '23');",
+      )
+      .map_err(|e| format!("Failed to initialize cookie database schema: {e}"))?;
+    Ok(())
+  }
+
+  /// Create an empty Firefox-format cookies.sqlite database at `path`.
+  fn create_empty_firefox_cookies_db(path: &Path) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+      std::fs::create_dir_all(parent)
+        .map_err(|e| format!("Failed to create cookie directory: {e}"))?;
+    }
+    let conn =
+      Connection::open(path).map_err(|e| format!("Failed to create cookie database: {e}"))?;
+    conn
+      .execute_batch(
+        "CREATE TABLE moz_cookies (
+          id INTEGER PRIMARY KEY,
+          originAttributes TEXT NOT NULL DEFAULT '',
+          name TEXT,
+          value TEXT,
+          host TEXT,
+          path TEXT,
+          expiry INTEGER,
+          lastAccessed INTEGER,
+          creationTime INTEGER,
+          isSecure INTEGER,
+          isHttpOnly INTEGER,
+          inBrowserElement INTEGER DEFAULT 0,
+          sameSite INTEGER DEFAULT 0,
+          rawSameSite INTEGER DEFAULT 0,
+          schemeMap INTEGER DEFAULT 0,
+          CONSTRAINT moz_uniqueid UNIQUE (name, host, path, originAttributes)
+        );",
+      )
+      .map_err(|e| format!("Failed to initialize cookie database schema: {e}"))?;
+    Ok(())
   }
 
   /// Convert Chrome timestamp (Windows epoch, microseconds) to Unix timestamp (seconds)
@@ -274,12 +405,14 @@ impl CookieManager {
         let last_access_utc: i64 = row.get(9)?;
         let encrypted_value: Vec<u8> = row.get(10)?;
 
-        // Use plaintext value if available, otherwise decrypt encrypted_value
+        // Use plaintext value if available, otherwise decrypt encrypted_value.
+        // Decryption needs the host_key (domain) to verify and strip the
+        // SHA-256 integrity prefix Chromium prepends before encryption.
         let value = if !plaintext_value.is_empty() {
           plaintext_value
         } else if !encrypted_value.is_empty() {
           encryption_key
-            .and_then(|key| chrome_decrypt::decrypt(&encrypted_value, key))
+            .and_then(|key| chrome_decrypt::decrypt(&encrypted_value, &domain, key))
             .unwrap_or_default()
         } else {
           String::new()
@@ -627,7 +760,9 @@ impl CookieManager {
         continue;
       }
 
-      let target_db_path = match Self::get_cookie_db_path(target, &profiles_dir) {
+      // Target may be a brand-new profile that has never been launched, so
+      // its Cookies DB file doesn't exist yet. Create an empty one on demand.
+      let target_db_path = match Self::ensure_cookie_db_path(target, &profiles_dir) {
         Ok(p) => p,
         Err(e) => {
           results.push(CookieCopyResult {
@@ -903,7 +1038,8 @@ impl CookieManager {
       return Err("No valid cookies found in the file".to_string());
     }
 
-    let db_path = Self::get_cookie_db_path(profile, &profiles_dir)?;
+    // Profile may have never been launched yet — create an empty DB on demand.
+    let db_path = Self::ensure_cookie_db_path(profile, &profiles_dir)?;
 
     let write_result = match profile.browser.as_str() {
       "camoufox" => Self::write_firefox_cookies(&db_path, &cookies),
@@ -1536,5 +1672,160 @@ mod tests {
 
     let _ = std::fs::remove_file(&ff_db);
     let _ = std::fs::remove_file(&chrome_db);
+  }
+
+  /// Regression: decrypting a real v10-encrypted Chromium cookie with the
+  /// correct PBKDF2 iterations and the `SHA-256(host_key)` integrity-prefix
+  /// strip. Captured from a real Wayfern profile:
+  ///   host_key = ".github.com"
+  ///   name     = "_octo"
+  ///   password = "OSfgzI5GUqy/pK4ANrYugw=="   (contents of os_crypt_key)
+  ///   value    = "GH1.1.2077424036.1774792325"
+  ///
+  /// If PBKDF2 iterations or the host-hash prefix handling ever regress,
+  /// this test fails and we instantly know why all copied cookies end up
+  /// with empty values — which is exactly the bug that shipped and made
+  /// issue-265-style silent failures reappear.
+  #[test]
+  #[cfg(target_os = "macos")]
+  fn test_decrypt_v10_cookie_with_real_vector() {
+    let profile_dir =
+      std::env::temp_dir().join(format!("donut_decrypt_vector_{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&profile_dir).unwrap();
+    std::fs::write(
+      profile_dir.join("os_crypt_key"),
+      b"OSfgzI5GUqy/pK4ANrYugw==",
+    )
+    .unwrap();
+
+    let key = chrome_decrypt::get_encryption_key(&profile_dir)
+      .expect("should derive key from os_crypt_key file");
+
+    let encrypted_hex = "76313077ad5b27e78f685a6ccc7b92a8a242e279e54b8d2ba8e55b433ca7e2421bec52369e29a57b593c02c839f50962245da3ed8617dce142fff67778950a271d2c07";
+    let encrypted: Vec<u8> = (0..encrypted_hex.len())
+      .step_by(2)
+      .map(|i| u8::from_str_radix(&encrypted_hex[i..i + 2], 16).unwrap())
+      .collect();
+
+    let decrypted = chrome_decrypt::decrypt(&encrypted, ".github.com", &key)
+      .expect("decryption must succeed with correct key and host");
+    assert_eq!(decrypted, "GH1.1.2077424036.1774792325");
+
+    let _ = std::fs::remove_dir_all(&profile_dir);
+  }
+
+  /// Sanity: decrypting with the wrong host_key (hash mismatch) must not
+  /// return a half-garbage value — it should fall back to the full
+  /// decrypted bytes, which for a modern cookie includes the 32-byte hash
+  /// prefix and therefore won't be valid UTF-8 → `None`.
+  #[test]
+  #[cfg(target_os = "macos")]
+  fn test_decrypt_with_wrong_host_returns_none_or_raw() {
+    let profile_dir =
+      std::env::temp_dir().join(format!("donut_decrypt_wrong_host_{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&profile_dir).unwrap();
+    std::fs::write(
+      profile_dir.join("os_crypt_key"),
+      b"OSfgzI5GUqy/pK4ANrYugw==",
+    )
+    .unwrap();
+
+    let key = chrome_decrypt::get_encryption_key(&profile_dir).unwrap();
+    let encrypted_hex = "76313077ad5b27e78f685a6ccc7b92a8a242e279e54b8d2ba8e55b433ca7e2421bec52369e29a57b593c02c839f50962245da3ed8617dce142fff67778950a271d2c07";
+    let encrypted: Vec<u8> = (0..encrypted_hex.len())
+      .step_by(2)
+      .map(|i| u8::from_str_radix(&encrypted_hex[i..i + 2], 16).unwrap())
+      .collect();
+
+    // Wrong host: the prefix won't match, so we fall through to
+    // `String::from_utf8(full_decrypted)` which fails on the binary hash
+    // bytes and returns `None`. Either way, we must NOT return the real
+    // value "GH1.1.2077424036.1774792325".
+    let result = chrome_decrypt::decrypt(&encrypted, ".facebook.com", &key);
+    assert!(
+      result.as_deref() != Some("GH1.1.2077424036.1774792325"),
+      "decrypt must not return the real cookie value when host_key is wrong"
+    );
+
+    let _ = std::fs::remove_dir_all(&profile_dir);
+  }
+
+  /// Regression: a brand-new Wayfern profile has no `Default/Cookies` file
+  /// yet (Chromium only writes it on first launch). Copying/importing into
+  /// such a profile must create the file on demand.
+  #[test]
+  fn test_create_empty_chrome_cookies_db_then_write() {
+    let dir = std::env::temp_dir().join(format!("donut_empty_chrome_{}", uuid::Uuid::new_v4()));
+    let db_path = dir.join("Default").join("Cookies");
+    assert!(!db_path.exists());
+
+    CookieManager::create_empty_chrome_cookies_db(&db_path).unwrap();
+    assert!(db_path.exists());
+
+    // Round-trip: write a cookie into the freshly created DB, read it back.
+    let cookies = vec![UnifiedCookie {
+      name: "auth".to_string(),
+      value: "token123".to_string(),
+      domain: ".example.com".to_string(),
+      path: "/".to_string(),
+      expires: 1900000000,
+      is_secure: true,
+      is_http_only: true,
+      same_site: 0,
+      creation_time: 1700000000,
+      last_accessed: 1700000000,
+    }];
+    let (inserted, replaced) = CookieManager::write_chrome_cookies(&db_path, &cookies).unwrap();
+    assert_eq!(inserted, 1);
+    assert_eq!(replaced, 0);
+
+    let read = CookieManager::read_chrome_cookies(&db_path, None).unwrap();
+    assert_eq!(read.len(), 1);
+    assert_eq!(read[0].value, "token123");
+
+    // Schema sanity: `meta` table with version row exists so Chromium's
+    // cookie store migration code can upgrade this on first launch.
+    let conn = Connection::open(&db_path).unwrap();
+    let version: String = conn
+      .query_row("SELECT value FROM meta WHERE key = 'version'", [], |row| {
+        row.get(0)
+      })
+      .unwrap();
+    assert!(!version.is_empty());
+
+    let _ = std::fs::remove_dir_all(&dir);
+  }
+
+  /// Same regression, Firefox side: a fresh Camoufox profile has no
+  /// `cookies.sqlite` until the browser launches.
+  #[test]
+  fn test_create_empty_firefox_cookies_db_then_write() {
+    let dir = std::env::temp_dir().join(format!("donut_empty_ff_{}", uuid::Uuid::new_v4()));
+    let db_path = dir.join("cookies.sqlite");
+    assert!(!db_path.exists());
+
+    CookieManager::create_empty_firefox_cookies_db(&db_path).unwrap();
+    assert!(db_path.exists());
+
+    let cookies = vec![UnifiedCookie {
+      name: "sid".to_string(),
+      value: "ff-session".to_string(),
+      domain: ".example.org".to_string(),
+      path: "/".to_string(),
+      expires: 1900000000,
+      is_secure: true,
+      is_http_only: false,
+      same_site: 1,
+      creation_time: 1700000000,
+      last_accessed: 1700000000,
+    }];
+    let (inserted, _) = CookieManager::write_firefox_cookies(&db_path, &cookies).unwrap();
+    assert_eq!(inserted, 1);
+
+    let read = CookieManager::read_firefox_cookies(&db_path).unwrap();
+    assert_eq!(read.len(), 1);
+    assert_eq!(read[0].value, "ff-session");
+
+    let _ = std::fs::remove_dir_all(&dir);
   }
 }

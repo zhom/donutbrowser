@@ -303,6 +303,11 @@ impl SynchronizerManager {
   }
 
   /// Bring the leader browser window to front.
+  ///
+  /// On macOS this is a no-op on purpose: the only way to raise another
+  /// app's window from Rust is via `osascript` / Apple Events, which
+  /// triggers the TCC "prevented from modifying other apps" prompt. Donut
+  /// must never touch other apps on the user's Mac.
   async fn focus_leader_window(leader: &BrowserProfile) {
     let profile = match Self::get_profile(&leader.id.to_string()) {
       Ok(p) => p,
@@ -311,18 +316,6 @@ impl SynchronizerManager {
     let Some(pid) = profile.process_id else {
       return;
     };
-
-    #[cfg(target_os = "macos")]
-    {
-      let _ = tokio::process::Command::new("osascript")
-        .arg("-e")
-        .arg(format!(
-          "tell application \"System Events\" to set frontmost of (first process whose unix id is {}) to true",
-          pid
-        ))
-        .output()
-        .await;
-    }
 
     #[cfg(target_os = "linux")]
     {
@@ -338,7 +331,7 @@ impl SynchronizerManager {
         .await;
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(not(target_os = "linux"))]
     {
       let _ = pid;
     }

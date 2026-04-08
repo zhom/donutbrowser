@@ -309,8 +309,11 @@ export function CookieManagementDialog({
   const toggleDomain = useCallback(
     (domain: string, cookies: UnifiedCookie[]) => {
       setExportSelection((prev) => {
-        const current = prev[domain];
-        if (current.allSelected) {
+        // `prev[domain]` is `undefined` when the domain was previously fully
+        // deselected (entries are deleted on empty — see toggleCookie). Treat
+        // missing as "not selected" so re-enabling falls through to the add
+        // branch instead of crashing on `.allSelected`.
+        if (prev[domain]?.allSelected) {
           const next = { ...prev };
           delete next[domain];
           return next;
@@ -592,8 +595,8 @@ function ExportDomainRow({
   onToggleExpand,
 }: ExportDomainRowProps) {
   const domainSelection = selection[domain.domain];
-  const isAllSelected = domainSelection.allSelected;
-  const selectedCount = domainSelection.cookies.size;
+  const isAllSelected = domainSelection?.allSelected ?? false;
+  const selectedCount = domainSelection?.cookies.size ?? 0;
   const isPartial =
     selectedCount > 0 && selectedCount < domain.cookie_count && !isAllSelected;
 
@@ -628,7 +631,8 @@ function ExportDomainRow({
       {isExpanded && (
         <div className="ml-7 pl-2 border-l space-y-0.5">
           {domain.cookies.map((cookie) => {
-            const isSelected = domainSelection.cookies.has(cookie.name);
+            const isSelected =
+              domainSelection?.cookies.has(cookie.name) ?? false;
             return (
               <div
                 key={`${domain.domain}-${cookie.name}`}

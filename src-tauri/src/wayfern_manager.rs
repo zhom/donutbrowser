@@ -511,11 +511,11 @@ impl WayfernManager {
                   let name: String = row.get(0).unwrap_or_default();
                   let host: String = row.get(1).unwrap_or_default();
                   let encrypted: Vec<u8> = row.get(2).unwrap_or_default();
-                  let decrypted =
-                    crate::cookie_manager::chrome_decrypt::decrypt(
-                      &encrypted,
-                      &encryption_key,
-                    );
+                  let decrypted = crate::cookie_manager::chrome_decrypt::decrypt(
+                    &encrypted,
+                    &host,
+                    &encryption_key,
+                  );
                   match decrypted {
                     Some(val) => log::info!(
                       "Pre-launch: Cookie decryption SUCCEEDED for '{}' (host: {}, decrypted {} bytes)",

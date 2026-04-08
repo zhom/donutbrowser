@@ -183,7 +183,8 @@
       "syncSettings": "同步设置",
       "assignToGroup": "分配到组",
       "changeFingerprint": "更改指纹",
-      "copyCookiesToProfile": "复制 Cookies 到配置文件"
+      "copyCookiesToProfile": "复制 Cookies 到配置文件",
+      "launchHook": "启动钩子 URL"
     },
     "synchronizer": {
       "launchWithSync": "使用同步器启动",
@@ -789,7 +790,9 @@
       "ruleTypes": "支持主机名、IP地址和正则表达式模式。"
     },
     "launchHook": {
+      "title": "启动钩子 URL",
       "label": "启动钩子 URL",
+      "description": "每次启动配置文件时，Donut Browser 都会向此 URL 发送 POST 请求。",
       "placeholder": "https://example.com/hooks/profile-launch"
     },
     "actions": {

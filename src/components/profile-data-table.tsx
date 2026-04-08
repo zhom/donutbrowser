@@ -33,6 +33,7 @@ import {
   ProfileBypassRulesDialog,
   ProfileDnsBlocklistDialog,
   ProfileInfoDialog,
+  ProfileLaunchHookDialog,
 } from "@/components/profile-info-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -936,6 +937,8 @@ export function ProfilesDataTable({
   const [bypassRulesProfile, setBypassRulesProfile] =
     React.useState<BrowserProfile | null>(null);
   const [dnsBlocklistProfile, setDnsBlocklistProfile] =
+    React.useState<BrowserProfile | null>(null);
+  const [launchHookProfile, setLaunchHookProfile] =
     React.useState<BrowserProfile | null>(null);
   const [launchingProfiles, setLaunchingProfiles] = React.useState<Set<string>>(
     new Set(),
@@ -2680,6 +2683,9 @@ export function ProfilesDataTable({
               onOpenDnsBlocklist={(profile) => {
                 setDnsBlocklistProfile(profile);
               }}
+              onOpenLaunchHook={(profile) => {
+                setLaunchHookProfile(profile);
+              }}
               onCloneProfile={onCloneProfile}
               onLaunchWithSync={onLaunchWithSync}
               onDeleteProfile={(profile) => {
@@ -2769,6 +2775,14 @@ export function ProfilesDataTable({
         }}
         profileId={dnsBlocklistProfile?.id ?? null}
         currentLevel={dnsBlocklistProfile?.dns_blocklist ?? null}
+      />
+      <ProfileLaunchHookDialog
+        isOpen={launchHookProfile !== null}
+        onClose={() => {
+          setLaunchHookProfile(null);
+        }}
+        profileId={launchHookProfile?.id ?? null}
+        currentLaunchHook={launchHookProfile?.launch_hook ?? null}
       />
     </>
   );
