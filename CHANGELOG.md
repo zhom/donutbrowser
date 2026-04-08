@@ -1,6 +1,16 @@
 # Changelog
 
 
+## v0.20.2 (2026-04-08)
+
+### Maintenance
+
+- chore: version bump
+- chore: aws integrity checks
+- chore: inject NEXT_PUBLIC_TURNSTILE everywhere
+- chore: update flake.nix for v0.20.1 [skip ci] (#272)
+
+
 ## v0.20.1 (2026-04-08)
 
 ### Maintenance
