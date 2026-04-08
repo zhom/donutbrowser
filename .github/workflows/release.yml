@@ -545,7 +545,7 @@ jobs:
 
   update-flake:
     if: github.repository == 'zhom/donutbrowser'
-    needs: [release]
+    needs: [release, changelog]
     runs-on: ubuntu-latest
     permissions:
       contents: write
