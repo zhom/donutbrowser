@@ -1,6 +1,35 @@
 # Changelog
 
 
+## v0.20.0 (2026-04-08)
+
+### Bug Fixes
+
+- cookie copying for wayfern
+
+### Refactoring
+
+- cleanup
+- dynamic proxy
+
+### Documentation
+
+- update CHANGELOG.md and README.md for v0.19.0 [skip ci] (#261)
+
+### Maintenance
+
+- chore: version bump
+- chore: linting
+- chore: linting
+- chore: linting
+- chore: update flake.nix for v0.19.0 [skip ci] (#262)
+
+### Other
+
+- deps(rust)(deps): bump the rust-dependencies group
+- deps(deps): bump the frontend-dependencies group with 19 updates
+
+
 ## v0.19.0 (2026-04-04)
 
 ### Features
