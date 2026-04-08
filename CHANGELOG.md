@@ -1,6 +1,16 @@
 # Changelog
 
 
+## v0.20.1 (2026-04-08)
+
+### Maintenance
+
+- chore: version bump
+- chore: normalize r2 endpoint
+- chore: pull turnstile public key in frontend at build time
+- chore: update flake.nix for v0.20.0 [skip ci] (#270)
+
+
 ## v0.20.0 (2026-04-08)
 
 ### Bug Fixes
