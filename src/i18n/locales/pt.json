@@ -229,6 +229,10 @@
       "noProxy": "Sem proxy / VPN",
       "noProxiesAvailable": "Nenhum proxy ou VPN disponível. Adicione um para rotear o tráfego deste perfil."
     },
+    "launchHook": {
+      "label": "URL do hook de inicialização",
+      "placeholder": "https://example.com/hooks/profile-launch"
+    },
     "version": {
       "fetching": "Buscando versões disponíveis...",
       "fetchError": "Falha ao buscar versões do navegador. Por favor, verifique sua conexão com a internet e tente novamente.",
@@ -759,6 +763,7 @@
       "browser": "Navegador",
       "releaseType": "Tipo de Versão",
       "proxyVpn": "Proxy / VPN",
+      "launchHook": "Hook de inicialização",
       "group": "Grupo",
       "tags": "Tags",
       "note": "Nota",
@@ -782,6 +787,10 @@
       "rulePlaceholder": "ex. example.com, 192.168.1.*, .*\\.local",
       "noRules": "Nenhuma regra de bypass configurada.",
       "ruleTypes": "Suporta nomes de host, endereços IP e padrões regex."
+    },
+    "launchHook": {
+      "label": "URL do hook de inicialização",
+      "placeholder": "https://example.com/hooks/profile-launch"
     },
     "actions": {
       "manageCookies": "Gerenciar Cookies",

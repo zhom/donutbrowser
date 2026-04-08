@@ -469,14 +469,6 @@ export function ProxyManagementDialog({
                                         </TooltipContent>
                                       </Tooltip>
                                       {proxy.name}
-                                      {proxy.dynamic_proxy_url && (
-                                        <Badge
-                                          variant="outline"
-                                          className="text-[10px] px-1 py-0"
-                                        >
-                                          Dynamic
-                                        </Badge>
-                                      )}
                                     </div>
                                   </TableCell>
                                   <TableCell>

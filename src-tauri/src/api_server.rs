@@ -31,6 +31,7 @@ pub struct ApiProfile {
   pub browser: String,
   pub version: String,
   pub proxy_id: Option<String>,
+  pub launch_hook: Option<String>,
   pub process_id: Option<u32>,
   pub last_launch: Option<u64>,
   pub release_type: String,
@@ -59,6 +60,7 @@ pub struct CreateProfileRequest {
   pub browser: String,
   pub version: String,
   pub proxy_id: Option<String>,
+  pub launch_hook: Option<String>,
   pub release_type: Option<String>,
   #[schema(value_type = Object)]
   pub camoufox_config: Option<serde_json::Value>,
@@ -74,6 +76,7 @@ pub struct UpdateProfileRequest {
   pub browser: Option<String>,
   pub version: Option<String>,
   pub proxy_id: Option<String>,
+  pub launch_hook: Option<String>,
   pub release_type: Option<String>,
   #[schema(value_type = Object)]
   pub camoufox_config: Option<serde_json::Value>,
@@ -111,17 +114,13 @@ struct ApiProxyResponse {
   name: String,
   #[schema(value_type = Object)]
   proxy_settings: ProxySettings,
-  dynamic_proxy_url: Option<String>,
-  dynamic_proxy_format: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
 struct CreateProxyRequest {
   name: String,
   #[schema(value_type = Object)]
-  proxy_settings: Option<ProxySettings>,
-  dynamic_proxy_url: Option<String>,
-  dynamic_proxy_format: Option<String>,
+  proxy_settings: ProxySettings,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -129,8 +128,6 @@ struct UpdateProxyRequest {
   name: Option<String>,
   #[schema(value_type = Object)]
   proxy_settings: Option<ProxySettings>,
-  dynamic_proxy_url: Option<String>,
-  dynamic_proxy_format: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -486,6 +483,7 @@ async fn get_profiles() -> Result<Json<ApiProfilesResponse>, StatusCode> {
           browser: profile.browser.clone(),
           version: profile.version.clone(),
           proxy_id: profile.proxy_id.clone(),
+          launch_hook: profile.launch_hook.clone(),
           process_id: profile.process_id,
           last_launch: profile.last_launch,
           release_type: profile.release_type.clone(),
@@ -541,6 +539,7 @@ async fn get_profile(
             browser: profile.browser.clone(),
             version: profile.version.clone(),
             proxy_id: profile.proxy_id.clone(),
+            launch_hook: profile.launch_hook.clone(),
             process_id: profile.process_id,
             last_launch: profile.last_launch,
             release_type: profile.release_type.clone(),
@@ -612,6 +611,7 @@ async fn create_profile(
       request.group_id.clone(),
       false,
       None,
+      request.launch_hook.clone(),
     )
     .await
   {
@@ -641,6 +641,7 @@ async fn create_profile(
           browser: profile.browser,
           version: profile.version,
           proxy_id: profile.proxy_id,
+          launch_hook: profile.launch_hook,
           process_id: profile.process_id,
           last_launch: profile.last_launch,
           release_type: profile.release_type,
@@ -708,6 +709,21 @@ async fn update_profile(
     if profile_manager
       .update_profile_proxy(state.app_handle.clone(), &id, Some(proxy_id))
       .await
+      .is_err()
+    {
+      return Err(StatusCode::BAD_REQUEST);
+    }
+  }
+
+  if let Some(launch_hook) = request.launch_hook {
+    let normalized = if launch_hook.trim().is_empty() {
+      None
+    } else {
+      Some(launch_hook)
+    };
+
+    if profile_manager
+      .update_profile_launch_hook(&state.app_handle, &id, normalized)
       .is_err()
     {
       return Err(StatusCode::BAD_REQUEST);
@@ -1035,8 +1051,6 @@ async fn get_proxies(
       .map(|p| ApiProxyResponse {
         id: p.id,
         name: p.name,
-        dynamic_proxy_url: p.dynamic_proxy_url,
-        dynamic_proxy_format: p.dynamic_proxy_format,
         proxy_settings: p.proxy_settings,
       })
       .collect(),
@@ -1070,8 +1084,6 @@ async fn get_proxy(
       id: proxy.id,
       name: proxy.name,
       proxy_settings: proxy.proxy_settings,
-      dynamic_proxy_url: proxy.dynamic_proxy_url,
-      dynamic_proxy_format: proxy.dynamic_proxy_format,
     }))
   } else {
     Err(StatusCode::NOT_FOUND)
@@ -1097,27 +1109,16 @@ async fn create_proxy(
   State(state): State<ApiServerState>,
   Json(request): Json<CreateProxyRequest>,
 ) -> Result<Json<ApiProxyResponse>, StatusCode> {
-  let result = if let (Some(url), Some(format)) =
-    (&request.dynamic_proxy_url, &request.dynamic_proxy_format)
-  {
-    PROXY_MANAGER.create_dynamic_proxy(
-      &state.app_handle,
-      request.name.clone(),
-      url.clone(),
-      format.clone(),
-    )
-  } else if let Some(settings) = request.proxy_settings {
-    PROXY_MANAGER.create_stored_proxy(&state.app_handle, request.name.clone(), settings)
-  } else {
-    return Err(StatusCode::BAD_REQUEST);
-  };
+  let result = PROXY_MANAGER.create_stored_proxy(
+    &state.app_handle,
+    request.name.clone(),
+    request.proxy_settings,
+  );
 
   match result {
     Ok(proxy) => Ok(Json(ApiProxyResponse {
       id: proxy.id,
       name: proxy.name,
-      dynamic_proxy_url: proxy.dynamic_proxy_url,
-      dynamic_proxy_format: proxy.dynamic_proxy_format,
       proxy_settings: proxy.proxy_settings,
     })),
     Err(_) => Err(StatusCode::BAD_REQUEST),
@@ -1148,26 +1149,13 @@ async fn update_proxy(
   State(state): State<ApiServerState>,
   Json(request): Json<UpdateProxyRequest>,
 ) -> Result<Json<ApiProxyResponse>, StatusCode> {
-  let is_dynamic = PROXY_MANAGER.is_dynamic_proxy(&id) || request.dynamic_proxy_url.is_some();
-
-  let result = if is_dynamic {
-    PROXY_MANAGER.update_dynamic_proxy(
-      &state.app_handle,
-      &id,
-      request.name,
-      request.dynamic_proxy_url,
-      request.dynamic_proxy_format,
-    )
-  } else {
-    PROXY_MANAGER.update_stored_proxy(&state.app_handle, &id, request.name, request.proxy_settings)
-  };
+  let result =
+    PROXY_MANAGER.update_stored_proxy(&state.app_handle, &id, request.name, request.proxy_settings);
 
   match result {
     Ok(proxy) => Ok(Json(ApiProxyResponse {
       id: proxy.id,
       name: proxy.name,
-      dynamic_proxy_url: proxy.dynamic_proxy_url,
-      dynamic_proxy_format: proxy.dynamic_proxy_format,
       proxy_settings: proxy.proxy_settings,
     })),
     Err(_) => Err(StatusCode::NOT_FOUND),

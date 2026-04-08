@@ -1199,6 +1199,7 @@ mod tests {
       version: "1.0.0".to_string(),
       proxy_id: None,
       vpn_id: None,
+      launch_hook: None,
       process_id: None,
       last_launch: None,
       release_type: "stable".to_string(),

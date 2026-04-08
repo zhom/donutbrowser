@@ -10,6 +10,7 @@ use crate::wayfern_manager::WayfernConfig;
 use std::fs::{self, create_dir_all};
 use std::path::{Path, PathBuf};
 use sysinfo::{Pid, ProcessRefreshKind, RefreshKind, System};
+use url::Url;
 
 pub struct ProfileManager {
   camoufox_manager: &'static crate::camoufox_manager::CamoufoxManager,
@@ -36,6 +37,25 @@ impl ProfileManager {
     crate::app_dirs::binaries_dir()
   }
 
+  fn normalize_launch_hook(
+    launch_hook: Option<String>,
+  ) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    let Some(raw) = launch_hook else {
+      return Ok(None);
+    };
+
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+      return Ok(None);
+    }
+
+    let parsed = Url::parse(trimmed).map_err(|e| format!("Invalid launch hook URL: {e}"))?;
+    match parsed.scheme() {
+      "http" | "https" => Ok(Some(parsed.to_string())),
+      _ => Err("Launch hook URL must use http or https".into()),
+    }
+  }
+
   #[allow(clippy::too_many_arguments)]
   pub async fn create_profile_with_group(
     &self,
@@ -51,10 +71,13 @@ impl ProfileManager {
     group_id: Option<String>,
     ephemeral: bool,
     dns_blocklist: Option<String>,
+    launch_hook: Option<String>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
     if proxy_id.is_some() && vpn_id.is_some() {
       return Err("Cannot set both proxy_id and vpn_id".into());
     }
+
+    let launch_hook = Self::normalize_launch_hook(launch_hook)?;
 
     // Sync cloud proxy credentials if the profile uses a cloud or cloud-derived proxy
     if let Some(ref pid) = proxy_id {
@@ -142,6 +165,7 @@ impl ProfileManager {
           version: version.to_string(),
           proxy_id: proxy_id.clone(),
           vpn_id: None,
+          launch_hook: launch_hook.clone(),
           process_id: None,
           last_launch: None,
           release_type: release_type.to_string(),
@@ -242,6 +266,7 @@ impl ProfileManager {
           version: version.to_string(),
           proxy_id: proxy_id.clone(),
           vpn_id: None,
+          launch_hook: launch_hook.clone(),
           process_id: None,
           last_launch: None,
           release_type: release_type.to_string(),
@@ -296,6 +321,7 @@ impl ProfileManager {
       version: version.to_string(),
       proxy_id: proxy_id.clone(),
       vpn_id: vpn_id.clone(),
+      launch_hook,
       process_id: None,
       last_launch: None,
       release_type: release_type.to_string(),
@@ -739,6 +765,35 @@ impl ProfileManager {
     Ok(profile)
   }
 
+  pub fn update_profile_launch_hook(
+    &self,
+    _app_handle: &tauri::AppHandle,
+    profile_id: &str,
+    launch_hook: Option<String>,
+  ) -> Result<BrowserProfile, Box<dyn std::error::Error>> {
+    let profile_uuid =
+      uuid::Uuid::parse_str(profile_id).map_err(|_| format!("Invalid profile ID: {profile_id}"))?;
+    let profiles = self.list_profiles()?;
+    let mut profile = profiles
+      .into_iter()
+      .find(|p| p.id == profile_uuid)
+      .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
+
+    profile.launch_hook = Self::normalize_launch_hook(launch_hook)?;
+
+    self.save_profile(&profile)?;
+
+    if let Err(e) = events::emit("profile-updated", &profile) {
+      log::warn!("Warning: Failed to emit profile update event: {e}");
+    }
+
+    if let Err(e) = events::emit_empty("profiles-changed") {
+      log::warn!("Warning: Failed to emit profiles-changed event: {e}");
+    }
+
+    Ok(profile)
+  }
+
   pub fn update_profile_proxy_bypass_rules(
     &self,
     _app_handle: &tauri::AppHandle,
@@ -913,6 +968,7 @@ impl ProfileManager {
       version: source.version,
       proxy_id: source.proxy_id,
       vpn_id: source.vpn_id,
+      launch_hook: source.launch_hook,
       process_id: None,
       last_launch: None,
       release_type: source.release_type,
@@ -1970,6 +2026,36 @@ mod tests {
       "PAC URL should percent-encode spaces: {pac_line}"
     );
   }
+
+  #[test]
+  fn test_normalize_launch_hook_accepts_http_and_https() {
+    let http =
+      ProfileManager::normalize_launch_hook(Some(" http://localhost:3000/hook ".to_string()))
+        .unwrap();
+    let https = ProfileManager::normalize_launch_hook(Some(
+      "https://example.com/hooks/profile-launch".to_string(),
+    ))
+    .unwrap();
+
+    assert_eq!(http.as_deref(), Some("http://localhost:3000/hook"));
+    assert_eq!(
+      https.as_deref(),
+      Some("https://example.com/hooks/profile-launch")
+    );
+  }
+
+  #[test]
+  fn test_normalize_launch_hook_clears_empty_values() {
+    let result = ProfileManager::normalize_launch_hook(Some("   ".to_string())).unwrap();
+    assert!(result.is_none());
+  }
+
+  #[test]
+  fn test_normalize_launch_hook_rejects_invalid_scheme() {
+    let err = ProfileManager::normalize_launch_hook(Some("ftp://example.com/hook".to_string()))
+      .unwrap_err();
+    assert!(err.to_string().contains("http or https"));
+  }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1987,6 +2073,7 @@ pub async fn create_browser_profile_with_group(
   group_id: Option<String>,
   ephemeral: bool,
   dns_blocklist: Option<String>,
+  launch_hook: Option<String>,
 ) -> Result<BrowserProfile, String> {
   let profile_manager = ProfileManager::instance();
   profile_manager
@@ -2003,6 +2090,7 @@ pub async fn create_browser_profile_with_group(
       group_id,
       ephemeral,
       dns_blocklist,
+      launch_hook,
     )
     .await
     .map_err(|e| format!("Failed to create profile: {e}"))
@@ -2067,6 +2155,18 @@ pub fn update_profile_note(
 }
 
 #[tauri::command]
+pub fn update_profile_launch_hook(
+  app_handle: tauri::AppHandle,
+  profile_id: String,
+  launch_hook: Option<String>,
+) -> Result<BrowserProfile, String> {
+  let profile_manager = ProfileManager::instance();
+  profile_manager
+    .update_profile_launch_hook(&app_handle, &profile_id, launch_hook)
+    .map_err(|e| format!("Failed to update profile launch hook: {e}"))
+}
+
+#[tauri::command]
 pub fn update_profile_proxy_bypass_rules(
   app_handle: tauri::AppHandle,
   profile_id: String,
@@ -2128,6 +2228,7 @@ pub async fn create_browser_profile_new(
   group_id: Option<String>,
   ephemeral: Option<bool>,
   dns_blocklist: Option<String>,
+  launch_hook: Option<String>,
 ) -> Result<BrowserProfile, String> {
   let fingerprint_os = camoufox_config
     .as_ref()
@@ -2156,6 +2257,7 @@ pub async fn create_browser_profile_new(
     group_id,
     ephemeral.unwrap_or(false),
     dns_blocklist,
+    launch_hook,
   )
   .await
 }

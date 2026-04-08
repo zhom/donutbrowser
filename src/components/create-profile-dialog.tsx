@@ -85,6 +85,7 @@ interface CreateProfileDialogProps {
     extensionGroupId?: string;
     ephemeral?: boolean;
     dnsBlocklist?: string;
+    launchHook?: string;
   }) => Promise<void>;
   selectedGroupId?: string;
   crossOsUnlocked?: boolean;
@@ -126,6 +127,7 @@ export function CreateProfileDialog({
   const [selectedProxyId, setSelectedProxyId] = useState<string>();
   const [proxyPopoverOpen, setProxyPopoverOpen] = useState(false);
   const [dnsBlocklist, setDnsBlocklist] = useState<string>("");
+  const [launchHook, setLaunchHook] = useState("");
 
   // Camoufox anti-detect states
   const [camoufoxConfig, setCamoufoxConfig] = useState<CamoufoxConfig>(() => ({
@@ -150,6 +152,7 @@ export function CreateProfileDialog({
     setSelectedBrowser(null);
     setProfileName("");
     setSelectedProxyId(undefined);
+    setLaunchHook("");
   };
 
   const handleTabChange = (value: string) => {
@@ -158,6 +161,7 @@ export function CreateProfileDialog({
     setSelectedBrowser(null);
     setProfileName("");
     setSelectedProxyId(undefined);
+    setLaunchHook("");
   };
 
   const [supportedBrowsers, setSupportedBrowsers] = useState<string[]>([]);
@@ -398,6 +402,7 @@ export function CreateProfileDialog({
             extensionGroupId: selectedExtensionGroupId,
             ephemeral,
             dnsBlocklist: dnsBlocklist || undefined,
+            launchHook: launchHook.trim() || undefined,
           });
         } else {
           // Default to Camoufox
@@ -424,6 +429,7 @@ export function CreateProfileDialog({
             extensionGroupId: selectedExtensionGroupId,
             ephemeral,
             dnsBlocklist: dnsBlocklist || undefined,
+            launchHook: launchHook.trim() || undefined,
           });
         }
       } else {
@@ -448,6 +454,7 @@ export function CreateProfileDialog({
           proxyId: selectedProxyId,
           groupId: selectedGroupId !== "default" ? selectedGroupId : undefined,
           dnsBlocklist: dnsBlocklist || undefined,
+          launchHook: launchHook.trim() || undefined,
         });
       }
 
@@ -469,6 +476,7 @@ export function CreateProfileDialog({
     setActiveTab("anti-detect");
     setSelectedBrowser(null);
     setSelectedProxyId(undefined);
+    setLaunchHook("");
     setReleaseTypes({});
     setIsLoadingReleaseTypes(false);
     setReleaseTypesError(null);
@@ -1167,6 +1175,23 @@ export function CreateProfileDialog({
                           )}
                         </div>
 
+                        <div className="space-y-2">
+                          <Label htmlFor="launch-hook-url">
+                            {t("createProfile.launchHook.label")}
+                          </Label>
+                          <Input
+                            id="launch-hook-url"
+                            value={launchHook}
+                            onChange={(e) => {
+                              setLaunchHook(e.target.value);
+                            }}
+                            placeholder={t(
+                              "createProfile.launchHook.placeholder",
+                            )}
+                            disabled={isCreating}
+                          />
+                        </div>
+
                         {/* DNS Blocklist */}
                         <div className="space-y-2">
                           <Label>{t("dnsBlocklist.title")}</Label>
@@ -1497,6 +1522,23 @@ export function CreateProfileDialog({
                               this profile's traffic.
                             </div>
                           )}
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="launch-hook-url-regular">
+                            {t("createProfile.launchHook.label")}
+                          </Label>
+                          <Input
+                            id="launch-hook-url-regular"
+                            value={launchHook}
+                            onChange={(e) => {
+                              setLaunchHook(e.target.value);
+                            }}
+                            placeholder={t(
+                              "createProfile.launchHook.placeholder",
+                            )}
+                            disabled={isCreating}
+                          />
                         </div>
                       </div>
                     </TabsContent>

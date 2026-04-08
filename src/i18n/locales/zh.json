@@ -229,6 +229,10 @@
       "noProxy": "无代理 / VPN",
       "noProxiesAvailable": "没有可用的代理或VPN。添加一个来路由此配置文件的流量。"
     },
+    "launchHook": {
+      "label": "启动钩子 URL",
+      "placeholder": "https://example.com/hooks/profile-launch"
+    },
     "version": {
       "fetching": "正在获取可用版本...",
       "fetchError": "获取浏览器版本失败。请检查您的网络连接并重试。",
@@ -759,6 +763,7 @@
       "browser": "浏览器",
       "releaseType": "发布类型",
       "proxyVpn": "代理 / VPN",
+      "launchHook": "启动钩子",
       "group": "分组",
       "tags": "标签",
       "note": "备注",
@@ -782,6 +787,10 @@
       "rulePlaceholder": "例如 example.com, 192.168.1.*, .*\\.local",
       "noRules": "未配置绕过规则。",
       "ruleTypes": "支持主机名、IP地址和正则表达式模式。"
+    },
+    "launchHook": {
+      "label": "启动钩子 URL",
+      "placeholder": "https://example.com/hooks/profile-launch"
     },
     "actions": {
       "manageCookies": "管理 Cookie",

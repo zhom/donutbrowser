@@ -145,10 +145,6 @@ impl StoredProxy {
     }
   }
 
-  pub fn is_dynamic(&self) -> bool {
-    self.dynamic_proxy_url.is_some()
-  }
-
   /// Migrate legacy geo_state to geo_region
   pub fn migrate_geo_fields(&mut self) {
     if self.geo_region.is_none() && self.geo_state.is_some() {
@@ -1066,20 +1062,13 @@ impl ProxyManager {
     self.load_proxy_check_cache(proxy_id)
   }
 
-  // Check if a stored proxy is dynamic
-  pub fn is_dynamic_proxy(&self, proxy_id: &str) -> bool {
-    let stored_proxies = self.stored_proxies.lock().unwrap();
-    stored_proxies.get(proxy_id).is_some_and(|p| p.is_dynamic())
-  }
-
-  // Fetch proxy settings from a dynamic proxy URL
-  pub async fn fetch_dynamic_proxy(
+  pub async fn fetch_proxy_from_url(
     &self,
     url: &str,
-    format: &str,
-  ) -> Result<ProxySettings, String> {
+    timeout: std::time::Duration,
+  ) -> Result<Option<ProxySettings>, String> {
     let client = reqwest::Client::builder()
-      .timeout(std::time::Duration::from_secs(15))
+      .timeout(timeout)
       .build()
       .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
 
@@ -1087,33 +1076,39 @@ impl ProxyManager {
       .get(url)
       .send()
       .await
-      .map_err(|e| format!("Failed to fetch dynamic proxy: {e}"))?;
+      .map_err(|e| format!("Failed to fetch launch hook: {e}"))?;
+
+    if response.status() == reqwest::StatusCode::NO_CONTENT {
+      return Ok(None);
+    }
 
     if !response.status().is_success() {
-      return Err(format!(
-        "Dynamic proxy URL returned status {}",
-        response.status()
-      ));
+      return Err(format!("Launch hook returned status {}", response.status()));
     }
 
     let body = response
       .text()
       .await
-      .map_err(|e| format!("Failed to read dynamic proxy response: {e}"))?;
+      .map_err(|e| format!("Failed to read launch hook response: {e}"))?;
 
     let body = body.trim();
     if body.is_empty() {
-      return Err("Dynamic proxy URL returned empty response".to_string());
+      return Err("Launch hook returned empty response".to_string());
     }
 
-    match format {
-      "json" => Self::parse_dynamic_proxy_json(body),
-      "text" => Self::parse_dynamic_proxy_text(body),
-      _ => Err(format!("Unsupported dynamic proxy format: {format}")),
+    if let Ok(settings) = Self::parse_dynamic_proxy_json(body) {
+      return Ok(Some(settings));
+    }
+
+    match Self::parse_dynamic_proxy_text(body) {
+      Ok(settings) => Ok(Some(settings)),
+      Err(text_error) => Err(format!(
+        "Failed to parse launch hook response: {text_error}"
+      )),
     }
   }
 
-  // Parse JSON format: { "ip"/"host": "...", "port": ..., "username": "...", "password": "..." }
+  // Parse JSON proxy payload: { "ip"/"host": "...", "port": ..., "username": "...", "password": "..." }
   fn parse_dynamic_proxy_json(body: &str) -> Result<ProxySettings, String> {
     let json: serde_json::Value =
       serde_json::from_str(body).map_err(|e| format!("Invalid JSON response: {e}"))?;
@@ -1179,7 +1174,7 @@ impl ProxyManager {
     })
   }
 
-  // Parse text format using the same logic as proxy import
+  // Parse plain text proxy payload using the same logic as proxy import
   fn parse_dynamic_proxy_text(body: &str) -> Result<ProxySettings, String> {
     let line = body
       .lines()
@@ -1208,136 +1203,6 @@ impl ProxyManager {
         Err(format!("Failed to parse proxy response: {reason}"))
       }
     }
-  }
-
-  // Resolve dynamic proxy: fetch from URL and return settings
-  pub async fn resolve_dynamic_proxy(&self, proxy_id: &str) -> Result<ProxySettings, String> {
-    let (url, format) = {
-      let stored_proxies = self.stored_proxies.lock().unwrap();
-      let proxy = stored_proxies
-        .get(proxy_id)
-        .ok_or_else(|| format!("Proxy '{proxy_id}' not found"))?;
-
-      match (&proxy.dynamic_proxy_url, &proxy.dynamic_proxy_format) {
-        (Some(url), Some(format)) => (url.clone(), format.clone()),
-        _ => return Err("Proxy is not a dynamic proxy".to_string()),
-      }
-    };
-
-    self.fetch_dynamic_proxy(&url, &format).await
-  }
-
-  // Create a dynamic stored proxy
-  pub fn create_dynamic_proxy(
-    &self,
-    _app_handle: &tauri::AppHandle,
-    name: String,
-    url: String,
-    format: String,
-  ) -> Result<StoredProxy, String> {
-    {
-      let stored_proxies = self.stored_proxies.lock().unwrap();
-      if stored_proxies.values().any(|p| p.name == name) {
-        return Err(format!("Proxy with name '{name}' already exists"));
-      }
-    }
-
-    let placeholder_settings = ProxySettings {
-      proxy_type: "http".to_string(),
-      host: "dynamic".to_string(),
-      port: 0,
-      username: None,
-      password: None,
-    };
-
-    let mut stored_proxy = StoredProxy::new(name, placeholder_settings);
-    stored_proxy.dynamic_proxy_url = Some(url);
-    stored_proxy.dynamic_proxy_format = Some(format);
-
-    {
-      let mut stored_proxies = self.stored_proxies.lock().unwrap();
-      stored_proxies.insert(stored_proxy.id.clone(), stored_proxy.clone());
-    }
-
-    if let Err(e) = self.save_proxy(&stored_proxy) {
-      log::warn!("Failed to save proxy: {e}");
-    }
-
-    if let Err(e) = events::emit_empty("proxies-changed") {
-      log::error!("Failed to emit proxies-changed event: {e}");
-    }
-
-    if stored_proxy.sync_enabled {
-      if let Some(scheduler) = crate::sync::get_global_scheduler() {
-        let id = stored_proxy.id.clone();
-        tauri::async_runtime::spawn(async move {
-          scheduler.queue_proxy_sync(id).await;
-        });
-      }
-    }
-
-    Ok(stored_proxy)
-  }
-
-  // Update a dynamic proxy's URL and format
-  pub fn update_dynamic_proxy(
-    &self,
-    _app_handle: &tauri::AppHandle,
-    proxy_id: &str,
-    name: Option<String>,
-    url: Option<String>,
-    format: Option<String>,
-  ) -> Result<StoredProxy, String> {
-    {
-      let stored_proxies = self.stored_proxies.lock().unwrap();
-      if !stored_proxies.contains_key(proxy_id) {
-        return Err(format!("Proxy with ID '{proxy_id}' not found"));
-      }
-      if let Some(ref new_name) = name {
-        if stored_proxies
-          .values()
-          .any(|p| p.id != proxy_id && p.name == *new_name)
-        {
-          return Err(format!("Proxy with name '{new_name}' already exists"));
-        }
-      }
-    }
-
-    let updated_proxy = {
-      let mut stored_proxies = self.stored_proxies.lock().unwrap();
-      let stored_proxy = stored_proxies.get_mut(proxy_id).unwrap();
-
-      if let Some(new_name) = name {
-        stored_proxy.update_name(new_name);
-      }
-      if let Some(new_url) = url {
-        stored_proxy.dynamic_proxy_url = Some(new_url);
-      }
-      if let Some(new_format) = format {
-        stored_proxy.dynamic_proxy_format = Some(new_format);
-      }
-
-      stored_proxy.clone()
-    };
-
-    if let Err(e) = self.save_proxy(&updated_proxy) {
-      log::warn!("Failed to save proxy: {e}");
-    }
-
-    if let Err(e) = events::emit_empty("proxies-changed") {
-      log::error!("Failed to emit proxies-changed event: {e}");
-    }
-
-    if updated_proxy.sync_enabled {
-      if let Some(scheduler) = crate::sync::get_global_scheduler() {
-        let id = updated_proxy.id.clone();
-        tauri::async_runtime::spawn(async move {
-          scheduler.queue_proxy_sync(id).await;
-        });
-      }
-    }
-
-    Ok(updated_proxy)
   }
 
   // Export all proxies as JSON
@@ -2239,6 +2104,8 @@ mod tests {
   use hyper::Response;
   use hyper_util::rt::TokioIo;
   use tokio::net::TcpListener;
+  use wiremock::matchers::{method, path};
+  use wiremock::{Mock, MockServer, ResponseTemplate};
 
   // Helper function to build donut-proxy binary for testing
   async fn ensure_donut_proxy_binary() -> Result<PathBuf, Box<dyn std::error::Error>> {
@@ -3668,74 +3535,102 @@ mod tests {
     assert!(err.contains("Empty"));
   }
 
-  #[test]
-  fn test_stored_proxy_is_dynamic() {
-    let mut proxy = StoredProxy::new(
-      "test".to_string(),
-      ProxySettings {
-        proxy_type: "http".to_string(),
-        host: "h.com".to_string(),
-        port: 80,
-        username: None,
-        password: None,
-      },
-    );
-    assert!(!proxy.is_dynamic());
+  #[tokio::test]
+  async fn test_fetch_proxy_from_url_parses_json_response() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+      .and(path("/hook"))
+      .respond_with(
+        ResponseTemplate::new(200).set_body_string(
+          r#"{"host":"proxy.example.com","port":3128,"type":"socks5","username":"user","password":"pass"}"#,
+        ),
+      )
+      .mount(&server)
+      .await;
 
-    proxy.dynamic_proxy_url = Some("https://api.example.com/proxy".to_string());
-    assert!(proxy.is_dynamic());
-  }
-
-  #[test]
-  fn test_is_dynamic_proxy_via_manager() {
     let pm = ProxyManager::new();
+    let result = pm
+      .fetch_proxy_from_url(
+        &format!("{}/hook", server.uri()),
+        Duration::from_millis(500),
+      )
+      .await
+      .unwrap()
+      .unwrap();
 
-    let mut proxy = StoredProxy::new(
-      "DynTest".to_string(),
-      ProxySettings {
-        proxy_type: "http".to_string(),
-        host: "dynamic".to_string(),
-        port: 0,
-        username: None,
-        password: None,
-      },
-    );
-    proxy.dynamic_proxy_url = Some("https://api.example.com/proxy".to_string());
-    proxy.dynamic_proxy_format = Some("json".to_string());
-
-    let id = proxy.id.clone();
-    pm.stored_proxies.lock().unwrap().insert(id.clone(), proxy);
-
-    assert!(pm.is_dynamic_proxy(&id));
-    assert!(!pm.is_dynamic_proxy("nonexistent"));
+    assert_eq!(result.host, "proxy.example.com");
+    assert_eq!(result.port, 3128);
+    assert_eq!(result.proxy_type, "socks5");
+    assert_eq!(result.username.as_deref(), Some("user"));
+    assert_eq!(result.password.as_deref(), Some("pass"));
   }
 
   #[tokio::test]
-  async fn test_resolve_dynamic_proxy_not_dynamic() {
+  async fn test_fetch_proxy_from_url_parses_text_response() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+      .and(path("/hook"))
+      .respond_with(ResponseTemplate::new(200).set_body_string("socks5://user:pass@1.2.3.4:1080"))
+      .mount(&server)
+      .await;
+
     let pm = ProxyManager::new();
+    let result = pm
+      .fetch_proxy_from_url(
+        &format!("{}/hook", server.uri()),
+        Duration::from_millis(500),
+      )
+      .await
+      .unwrap()
+      .unwrap();
 
-    let proxy = StoredProxy::new(
-      "Regular".to_string(),
-      ProxySettings {
-        proxy_type: "http".to_string(),
-        host: "1.2.3.4".to_string(),
-        port: 8080,
-        username: None,
-        password: None,
-      },
-    );
-    let id = proxy.id.clone();
-    pm.stored_proxies.lock().unwrap().insert(id.clone(), proxy);
-
-    let err = pm.resolve_dynamic_proxy(&id).await.unwrap_err();
-    assert!(err.contains("not a dynamic proxy"));
+    assert_eq!(result.host, "1.2.3.4");
+    assert_eq!(result.port, 1080);
+    assert_eq!(result.proxy_type, "socks5");
+    assert_eq!(result.username.as_deref(), Some("user"));
+    assert_eq!(result.password.as_deref(), Some("pass"));
   }
 
   #[tokio::test]
-  async fn test_resolve_dynamic_proxy_not_found() {
-    let pm = ProxyManager::new();
+  async fn test_fetch_proxy_from_url_returns_none_for_no_content() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+      .and(path("/hook"))
+      .respond_with(ResponseTemplate::new(204))
+      .mount(&server)
+      .await;
 
-    let err = pm.resolve_dynamic_proxy("nonexistent").await.unwrap_err();
-    assert!(err.contains("not found"));
+    let pm = ProxyManager::new();
+    let result = pm
+      .fetch_proxy_from_url(
+        &format!("{}/hook", server.uri()),
+        Duration::from_millis(500),
+      )
+      .await
+      .unwrap();
+
+    assert!(result.is_none());
+  }
+
+  #[tokio::test]
+  async fn test_fetch_proxy_from_url_respects_timeout() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+      .and(path("/hook"))
+      .respond_with(
+        ResponseTemplate::new(200)
+          .set_delay(Duration::from_millis(200))
+          .set_body_string(r#"{"host":"1.2.3.4","port":8080}"#),
+      )
+      .mount(&server)
+      .await;
+
+    let pm = ProxyManager::new();
+    let err = pm
+      .fetch_proxy_from_url(&format!("{}/hook", server.uri()), Duration::from_millis(50))
+      .await
+      .unwrap_err();
+
+    assert!(err.contains("Failed to fetch launch hook"));
   }
 }

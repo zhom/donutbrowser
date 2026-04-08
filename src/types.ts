@@ -18,6 +18,7 @@ export interface BrowserProfile {
   version: string;
   proxy_id?: string; // Reference to stored proxy
   vpn_id?: string; // Reference to stored VPN config
+  launch_hook?: string;
   process_id?: number;
   last_launch?: number;
   release_type: string; // "stable" or "nightly"
@@ -135,8 +136,6 @@ export interface StoredProxy {
   geo_region?: string;
   geo_city?: string;
   geo_isp?: string;
-  dynamic_proxy_url?: string;
-  dynamic_proxy_format?: string;
 }
 
 export interface LocationItem {

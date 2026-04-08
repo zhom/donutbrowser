@@ -229,6 +229,10 @@
       "noProxy": "プロキシ / VPNなし",
       "noProxiesAvailable": "利用可能なプロキシまたはVPNがありません。このプロファイルのトラフィックをルーティングするために追加してください。"
     },
+    "launchHook": {
+      "label": "起動フックURL",
+      "placeholder": "https://example.com/hooks/profile-launch"
+    },
     "version": {
       "fetching": "利用可能なバージョンを取得中...",
       "fetchError": "ブラウザバージョンの取得に失敗しました。インターネット接続を確認して再試行してください。",
@@ -759,6 +763,7 @@
       "browser": "ブラウザ",
       "releaseType": "リリースタイプ",
       "proxyVpn": "プロキシ / VPN",
+      "launchHook": "起動フック",
       "group": "グループ",
       "tags": "タグ",
       "note": "メモ",
@@ -782,6 +787,10 @@
       "rulePlaceholder": "例: example.com, 192.168.1.*, .*\\.local",
       "noRules": "バイパスルールは設定されていません。",
       "ruleTypes": "ホスト名、IPアドレス、正規表現パターンをサポートしています。"
+    },
+    "launchHook": {
+      "label": "起動フックURL",
+      "placeholder": "https://example.com/hooks/profile-launch"
     },
     "actions": {
       "manageCookies": "Cookieを管理",

@@ -9,7 +9,7 @@ use crate::proxy_manager::PROXY_MANAGER;
 use crate::wayfern_manager::{WayfernConfig, WayfernManager};
 use serde::Serialize;
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use sysinfo::System;
 pub struct BrowserRunner {
   pub profile_manager: &'static ProfileManager,
@@ -60,8 +60,6 @@ impl BrowserRunner {
 
   /// Refresh cloud proxy credentials if the profile uses a cloud or cloud-derived proxy,
   /// then resolve the proxy settings with profile-specific sid for sticky sessions.
-  /// Resolve proxy settings for a profile, returning an error for dynamic proxy failures.
-  /// Returns Ok(None) when no proxy is configured, Ok(Some) on success, Err on dynamic fetch failure.
   async fn resolve_proxy_with_refresh(
     &self,
     proxy_id: Option<&String>,
@@ -71,13 +69,6 @@ impl BrowserRunner {
       Some(id) => id,
       None => return Ok(None),
     };
-
-    // Handle dynamic proxies: fetch from URL at launch time
-    if PROXY_MANAGER.is_dynamic_proxy(proxy_id) {
-      log::info!("Fetching dynamic proxy settings for proxy {proxy_id}");
-      let settings = PROXY_MANAGER.resolve_dynamic_proxy(proxy_id).await?;
-      return Ok(Some(settings));
-    }
 
     if PROXY_MANAGER.is_cloud_or_derived(proxy_id) {
       log::info!("Refreshing cloud proxy credentials before launch for proxy {proxy_id}");
@@ -90,6 +81,38 @@ impl BrowserRunner {
       }
     }
     Ok(PROXY_MANAGER.get_proxy_settings_by_id(proxy_id))
+  }
+
+  async fn resolve_launch_hook_proxy(
+    &self,
+    profile: &BrowserProfile,
+  ) -> Result<Option<ProxySettings>, String> {
+    let Some(url) = profile.launch_hook.as_deref() else {
+      return Ok(None);
+    };
+
+    log::info!(
+      "Calling launch hook for profile {} (ID: {})",
+      profile.name,
+      profile.id
+    );
+
+    PROXY_MANAGER
+      .fetch_proxy_from_url(url, Duration::from_millis(500))
+      .await
+  }
+
+  async fn resolve_launch_proxy(
+    &self,
+    profile: &BrowserProfile,
+  ) -> Result<Option<ProxySettings>, String> {
+    if let Some(proxy_settings) = self.resolve_launch_hook_proxy(profile).await? {
+      return Ok(Some(proxy_settings));
+    }
+
+    self
+      .resolve_proxy_with_refresh(profile.proxy_id.as_ref(), Some(&profile.id.to_string()))
+      .await
   }
 
   /// Get the executable path for a browser profile
@@ -147,9 +170,8 @@ impl BrowserRunner {
       });
 
       // Always start a local proxy for Camoufox (for traffic monitoring and geoip support)
-      // Refresh cloud proxy credentials if needed before resolving
       let mut upstream_proxy = self
-        .resolve_proxy_with_refresh(profile.proxy_id.as_ref(), Some(&profile.id.to_string()))
+        .resolve_launch_proxy(profile)
         .await
         .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
 
@@ -408,9 +430,8 @@ impl BrowserRunner {
       });
 
       // Always start a local proxy for Wayfern (for traffic monitoring and geoip support)
-      // Refresh cloud proxy credentials if needed before resolving
       let mut upstream_proxy = self
-        .resolve_proxy_with_refresh(profile.proxy_id.as_ref(), Some(&profile.id.to_string()))
+        .resolve_launch_proxy(profile)
         .await
         .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
 
@@ -763,10 +784,8 @@ impl BrowserRunner {
     headless: bool,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
     // Always start a local proxy for API launches
-    // Determine upstream proxy if configured; otherwise use DIRECT
-    // Refresh cloud proxy credentials before resolving
     let upstream_proxy = self
-      .resolve_proxy_with_refresh(profile.proxy_id.as_ref(), Some(&profile.id.to_string()))
+      .resolve_launch_proxy(profile)
       .await
       .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
 
@@ -2273,10 +2292,7 @@ pub async fn launch_browser_profile(
     // Determine upstream proxy if configured; otherwise use DIRECT (no upstream)
     // Refresh cloud proxy credentials and inject profile-specific sid
     let mut upstream_proxy = BrowserRunner::instance()
-      .resolve_proxy_with_refresh(
-        profile_for_launch.proxy_id.as_ref(),
-        Some(&profile_for_launch.id.to_string()),
-      )
+      .resolve_launch_proxy(&profile_for_launch)
       .await?;
 
     // If profile has a VPN instead of proxy, start VPN worker and use it as upstream

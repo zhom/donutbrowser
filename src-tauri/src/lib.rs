@@ -67,8 +67,9 @@ use browser_runner::{
 use profile::manager::{
   check_browser_status, clone_profile, create_browser_profile_new, delete_profile,
   list_browser_profiles, rename_profile, update_camoufox_config, update_profile_dns_blocklist,
-  update_profile_note, update_profile_proxy, update_profile_proxy_bypass_rules,
-  update_profile_tags, update_profile_vpn, update_wayfern_config,
+  update_profile_launch_hook, update_profile_note, update_profile_proxy,
+  update_profile_proxy_bypass_rules, update_profile_tags, update_profile_vpn,
+  update_wayfern_config,
 };
 
 use browser_version_manager::{
@@ -212,19 +213,13 @@ async fn create_stored_proxy(
   app_handle: tauri::AppHandle,
   name: String,
   proxy_settings: Option<crate::browser::ProxySettings>,
-  dynamic_proxy_url: Option<String>,
-  dynamic_proxy_format: Option<String>,
 ) -> Result<crate::proxy_manager::StoredProxy, String> {
-  if let (Some(url), Some(format)) = (&dynamic_proxy_url, &dynamic_proxy_format) {
-    crate::proxy_manager::PROXY_MANAGER
-      .create_dynamic_proxy(&app_handle, name, url.clone(), format.clone())
-      .map_err(|e| format!("Failed to create dynamic proxy: {e}"))
-  } else if let Some(settings) = proxy_settings {
+  if let Some(settings) = proxy_settings {
     crate::proxy_manager::PROXY_MANAGER
       .create_stored_proxy(&app_handle, name, settings)
       .map_err(|e| format!("Failed to create stored proxy: {e}"))
   } else {
-    Err("Either proxy_settings or dynamic proxy URL and format are required".to_string())
+    Err("proxy_settings is required".to_string())
   }
 }
 
@@ -239,26 +234,10 @@ async fn update_stored_proxy(
   proxy_id: String,
   name: Option<String>,
   proxy_settings: Option<crate::browser::ProxySettings>,
-  dynamic_proxy_url: Option<String>,
-  dynamic_proxy_format: Option<String>,
 ) -> Result<crate::proxy_manager::StoredProxy, String> {
-  // Check if this is a dynamic proxy update
-  let is_dynamic = crate::proxy_manager::PROXY_MANAGER.is_dynamic_proxy(&proxy_id);
-  if is_dynamic || dynamic_proxy_url.is_some() {
-    crate::proxy_manager::PROXY_MANAGER
-      .update_dynamic_proxy(
-        &app_handle,
-        &proxy_id,
-        name,
-        dynamic_proxy_url,
-        dynamic_proxy_format,
-      )
-      .map_err(|e| format!("Failed to update dynamic proxy: {e}"))
-  } else {
-    crate::proxy_manager::PROXY_MANAGER
-      .update_stored_proxy(&app_handle, &proxy_id, name, proxy_settings)
-      .map_err(|e| format!("Failed to update stored proxy: {e}"))
-  }
+  crate::proxy_manager::PROXY_MANAGER
+    .update_stored_proxy(&app_handle, &proxy_id, name, proxy_settings)
+    .map_err(|e| format!("Failed to update stored proxy: {e}"))
 }
 
 #[tauri::command]
@@ -273,13 +252,8 @@ async fn check_proxy_validity(
   proxy_id: String,
   proxy_settings: Option<crate::browser::ProxySettings>,
 ) -> Result<crate::proxy_manager::ProxyCheckResult, String> {
-  // For dynamic proxies, fetch settings first
   let settings = if let Some(s) = proxy_settings {
     s
-  } else if crate::proxy_manager::PROXY_MANAGER.is_dynamic_proxy(&proxy_id) {
-    crate::proxy_manager::PROXY_MANAGER
-      .resolve_dynamic_proxy(&proxy_id)
-      .await?
   } else {
     crate::proxy_manager::PROXY_MANAGER
       .get_proxy_settings_by_id(&proxy_id)
@@ -288,24 +262,6 @@ async fn check_proxy_validity(
   crate::proxy_manager::PROXY_MANAGER
     .check_proxy_validity(&proxy_id, &settings)
     .await
-}
-
-#[tauri::command]
-async fn fetch_dynamic_proxy(
-  url: String,
-  format: String,
-) -> Result<crate::browser::ProxySettings, String> {
-  let settings = crate::proxy_manager::PROXY_MANAGER
-    .fetch_dynamic_proxy(&url, &format)
-    .await?;
-
-  // Validate the proxy actually works by connecting through it
-  crate::proxy_manager::PROXY_MANAGER
-    .check_proxy_validity("_dynamic_test", &settings)
-    .await
-    .map_err(|e| format!("Proxy resolved but connection failed: {e}"))?;
-
-  Ok(settings)
 }
 
 #[tauri::command]
@@ -1189,6 +1145,7 @@ async fn generate_sample_fingerprint(
     process_id: None,
     proxy_id: None,
     vpn_id: None,
+    launch_hook: None,
     last_launch: None,
     release_type: "stable".to_string(),
     camoufox_config: None,
@@ -1889,6 +1846,7 @@ pub fn run() {
       update_profile_vpn,
       update_profile_tags,
       update_profile_note,
+      update_profile_launch_hook,
       update_profile_proxy_bypass_rules,
       update_profile_dns_blocklist,
       check_browser_status,
@@ -1929,7 +1887,6 @@ pub fn run() {
       update_stored_proxy,
       delete_stored_proxy,
       check_proxy_validity,
-      fetch_dynamic_proxy,
       get_cached_proxy_check,
       export_proxies,
       import_proxies_json,

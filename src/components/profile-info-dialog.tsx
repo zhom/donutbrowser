@@ -128,6 +128,8 @@ export function ProfileInfoDialog({
   const [extensionGroupName, setExtensionGroupName] = React.useState<
     string | null
   >(null);
+  const [launchHookValue, setLaunchHookValue] = React.useState("");
+  const [isSavingLaunchHook, setIsSavingLaunchHook] = React.useState(false);
 
   React.useEffect(() => {
     if (!isOpen || !profile?.group_id) {
@@ -168,6 +170,12 @@ export function ProfileInfoDialog({
       setCopied(false);
     }
   }, [isOpen]);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setLaunchHookValue(profile?.launch_hook ?? "");
+    }
+  }, [isOpen, profile?.launch_hook]);
 
   if (!profile) return null;
 
@@ -217,6 +225,22 @@ export function ProfileInfoDialog({
   const hasTags = profile.tags && profile.tags.length > 0;
   const hasNote = !!profile.note;
   const showCrossOs = isCrossOsProfile(profile);
+  const trimmedLaunchHook = launchHookValue.trim();
+  const savedLaunchHook = profile.launch_hook ?? "";
+
+  const handleSaveLaunchHook = async () => {
+    setIsSavingLaunchHook(true);
+    try {
+      await invoke("update_profile_launch_hook", {
+        profileId: profile.id,
+        launchHook: trimmedLaunchHook || null,
+      });
+    } catch (error) {
+      console.error("Failed to update launch hook:", error);
+    } finally {
+      setIsSavingLaunchHook(false);
+    }
+  };
 
   interface ActionItem {
     icon: React.ReactNode;
@@ -474,6 +498,10 @@ export function ProfileInfoDialog({
                         : t("dnsBlocklist.none")
                     }
                   />
+                  <InfoCard
+                    label={t("profileInfo.fields.launchHook")}
+                    value={profile.launch_hook || t("profileInfo.values.none")}
+                  />
                 </div>
 
                 {/* Sync */}
@@ -546,33 +574,62 @@ export function ProfileInfoDialog({
           </TabsContent>
           <TabsContent value="settings">
             <div className="overflow-y-auto max-h-[calc(80vh-12rem)]">
-              <div className="flex flex-col py-1">
-                {visibleActions.map((action) => (
-                  <button
-                    key={action.label}
-                    type="button"
-                    disabled={action.disabled}
-                    onClick={action.onClick}
-                    className={cn(
-                      "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors text-left w-full",
-                      "hover:bg-accent disabled:opacity-50 disabled:pointer-events-none",
-                      action.destructive &&
-                        "text-destructive hover:bg-destructive/10",
-                    )}
-                  >
-                    {action.icon}
-                    <span className="flex-1 flex items-center gap-2">
-                      {action.label}
-                      {action.runningBadge && (
-                        <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-primary/15 text-primary uppercase">
-                          {t("common.status.running")}
-                        </span>
+              <div className="flex flex-col gap-3 py-1">
+                <div className="rounded-md bg-muted/50 border px-3 py-3">
+                  <p className="text-xs text-muted-foreground">
+                    {t("profileInfo.launchHook.label")}
+                  </p>
+                  <div className="flex gap-2 mt-2">
+                    <Input
+                      value={launchHookValue}
+                      onChange={(e) => {
+                        setLaunchHookValue(e.target.value);
+                      }}
+                      placeholder={t("profileInfo.launchHook.placeholder")}
+                      disabled={isSavingLaunchHook}
+                    />
+                    <Button
+                      onClick={() => void handleSaveLaunchHook()}
+                      disabled={
+                        isSavingLaunchHook ||
+                        trimmedLaunchHook === savedLaunchHook
+                      }
+                    >
+                      {t("common.buttons.save")}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col">
+                  {visibleActions.map((action) => (
+                    <button
+                      key={action.label}
+                      type="button"
+                      disabled={action.disabled}
+                      onClick={action.onClick}
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors text-left w-full",
+                        "hover:bg-accent disabled:opacity-50 disabled:pointer-events-none",
+                        action.destructive &&
+                          "text-destructive hover:bg-destructive/10",
                       )}
-                      {action.proBadge && !action.runningBadge && <ProBadge />}
-                    </span>
-                    <LuChevronRight className="w-4 h-4 text-muted-foreground" />
-                  </button>
-                ))}
+                    >
+                      {action.icon}
+                      <span className="flex-1 flex items-center gap-2">
+                        {action.label}
+                        {action.runningBadge && (
+                          <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-primary/15 text-primary uppercase">
+                            {t("common.status.running")}
+                          </span>
+                        )}
+                        {action.proBadge && !action.runningBadge && (
+                          <ProBadge />
+                        )}
+                      </span>
+                      <LuChevronRight className="w-4 h-4 text-muted-foreground" />
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </TabsContent>

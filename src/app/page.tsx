@@ -516,6 +516,7 @@ export default function Home() {
       extensionGroupId?: string;
       ephemeral?: boolean;
       dnsBlocklist?: string;
+      launchHook?: string;
     }) => {
       try {
         const profile = await invoke<BrowserProfile>(
@@ -534,6 +535,7 @@ export default function Home() {
               (selectedGroupId !== "default" ? selectedGroupId : undefined),
             ephemeral: profileData.ephemeral,
             dnsBlocklist: profileData.dnsBlocklist,
+            launchHook: profileData.launchHook,
           },
         );
 

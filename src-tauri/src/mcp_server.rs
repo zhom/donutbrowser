@@ -508,6 +508,10 @@ impl McpServer {
               "type": "string",
               "description": "Optional proxy UUID to assign"
             },
+            "launch_hook": {
+              "type": "string",
+              "description": "Optional HTTP(S) URL to call before launch for transient proxy overrides"
+            },
             "group_id": {
               "type": "string",
               "description": "Optional group UUID to assign"
@@ -538,6 +542,10 @@ impl McpServer {
             "proxy_id": {
               "type": "string",
               "description": "Proxy UUID to assign (empty string to remove)"
+            },
+            "launch_hook": {
+              "type": "string",
+              "description": "Launch hook URL to assign (empty string to remove)"
             },
             "group_id": {
               "type": "string",
@@ -713,7 +721,7 @@ impl McpServer {
       },
       McpTool {
         name: "create_proxy".to_string(),
-        description: "Create a new proxy configuration. For regular proxies, provide proxy_type/host/port. For dynamic proxies, provide dynamic_proxy_url and dynamic_proxy_format instead.".to_string(),
+        description: "Create a new proxy configuration.".to_string(),
         input_schema: serde_json::json!({
           "type": "object",
           "properties": {
@@ -741,18 +749,9 @@ impl McpServer {
             "password": {
               "type": "string",
               "description": "Optional password for authentication (for regular proxies)"
-            },
-            "dynamic_proxy_url": {
-              "type": "string",
-              "description": "URL to fetch proxy settings from (for dynamic proxies)"
-            },
-            "dynamic_proxy_format": {
-              "type": "string",
-              "enum": ["json", "text"],
-              "description": "Format of the dynamic proxy response: 'json' for JSON object or 'text' for text like host:port:user:pass (for dynamic proxies)"
             }
           },
-          "required": ["name"]
+          "required": ["name", "proxy_type", "host", "port"]
         }),
       },
       McpTool {
@@ -789,15 +788,6 @@ impl McpServer {
             "password": {
               "type": "string",
               "description": "Optional password for authentication (for regular proxies)"
-            },
-            "dynamic_proxy_url": {
-              "type": "string",
-              "description": "URL to fetch proxy settings from (for dynamic proxies)"
-            },
-            "dynamic_proxy_format": {
-              "type": "string",
-              "enum": ["json", "text"],
-              "description": "Format of the dynamic proxy response (for dynamic proxies)"
             }
           },
           "required": ["proxy_id"]
@@ -1809,6 +1799,10 @@ impl McpServer {
       .get("proxy_id")
       .and_then(|v| v.as_str())
       .map(|s| s.to_string());
+    let launch_hook = arguments
+      .get("launch_hook")
+      .and_then(|v| v.as_str())
+      .map(|s| s.to_string());
     let group_id = arguments
       .get("group_id")
       .and_then(|v| v.as_str())
@@ -1838,8 +1832,19 @@ impl McpServer {
 
     let mut profile = ProfileManager::instance()
       .create_profile_with_group(
-        app_handle, name, browser, version, "stable", proxy_id, None, None, None, group_id, false,
+        app_handle,
+        name,
+        browser,
+        version,
+        "stable",
+        proxy_id,
         None,
+        None,
+        None,
+        group_id,
+        false,
+        None,
+        launch_hook,
       )
       .await
       .map_err(|e| McpError {
@@ -1904,6 +1909,19 @@ impl McpServer {
         .map_err(|e| McpError {
           code: -32000,
           message: format!("Failed to update proxy: {e}"),
+        })?;
+    }
+
+    if let Some(launch_hook) = arguments.get("launch_hook").and_then(|v| v.as_str()) {
+      let normalized = if launch_hook.is_empty() {
+        None
+      } else {
+        Some(launch_hook.to_string())
+      };
+      pm.update_profile_launch_hook(app_handle, profile_id, normalized)
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to update launch hook: {e}"),
         })?;
     }
 
@@ -2361,73 +2379,53 @@ impl McpServer {
       message: "MCP server not properly initialized".to_string(),
     })?;
 
-    // Check if this is a dynamic proxy creation
-    let dynamic_url = arguments.get("dynamic_proxy_url").and_then(|v| v.as_str());
-    let dynamic_format = arguments
-      .get("dynamic_proxy_format")
-      .and_then(|v| v.as_str());
+    let proxy_type = arguments
+      .get("proxy_type")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing proxy_type".to_string(),
+      })?;
 
-    let proxy = if let (Some(url), Some(format)) = (dynamic_url, dynamic_format) {
-      PROXY_MANAGER
-        .create_dynamic_proxy(
-          app_handle,
-          name.to_string(),
-          url.to_string(),
-          format.to_string(),
-        )
-        .map_err(|e| McpError {
-          code: -32000,
-          message: format!("Failed to create dynamic proxy: {e}"),
-        })?
-    } else {
-      let proxy_type = arguments
-        .get("proxy_type")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| McpError {
-          code: -32602,
-          message: "Missing proxy_type (required for regular proxies)".to_string(),
-        })?;
+    let host = arguments
+      .get("host")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing host".to_string(),
+      })?;
 
-      let host = arguments
-        .get("host")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| McpError {
-          code: -32602,
-          message: "Missing host (required for regular proxies)".to_string(),
-        })?;
+    let port = arguments
+      .get("port")
+      .and_then(|v| v.as_u64())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing port".to_string(),
+      })? as u16;
 
-      let port = arguments
-        .get("port")
-        .and_then(|v| v.as_u64())
-        .ok_or_else(|| McpError {
-          code: -32602,
-          message: "Missing port (required for regular proxies)".to_string(),
-        })? as u16;
+    let username = arguments
+      .get("username")
+      .and_then(|v| v.as_str())
+      .map(|s| s.to_string());
+    let password = arguments
+      .get("password")
+      .and_then(|v| v.as_str())
+      .map(|s| s.to_string());
 
-      let username = arguments
-        .get("username")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-      let password = arguments
-        .get("password")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-
-      let proxy_settings = ProxySettings {
-        proxy_type: proxy_type.to_string(),
-        host: host.to_string(),
-        port,
-        username,
-        password,
-      };
-
-      PROXY_MANAGER
-        .create_stored_proxy(app_handle, name.to_string(), proxy_settings)
-        .map_err(|e| McpError {
-          code: -32000,
-          message: format!("Failed to create proxy: {e}"),
-        })?
+    let proxy_settings = ProxySettings {
+      proxy_type: proxy_type.to_string(),
+      host: host.to_string(),
+      port,
+      username,
+      password,
     };
+
+    let proxy = PROXY_MANAGER
+      .create_stored_proxy(app_handle, name.to_string(), proxy_settings)
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to create proxy: {e}"),
+      })?;
 
     Ok(serde_json::json!({
       "content": [{
@@ -2517,32 +2515,12 @@ impl McpServer {
       message: "MCP server not properly initialized".to_string(),
     })?;
 
-    // Check for dynamic proxy fields
-    let dynamic_url = arguments
-      .get("dynamic_proxy_url")
-      .and_then(|v| v.as_str())
-      .map(|s| s.to_string());
-    let dynamic_format = arguments
-      .get("dynamic_proxy_format")
-      .and_then(|v| v.as_str())
-      .map(|s| s.to_string());
-    let is_dynamic = PROXY_MANAGER.is_dynamic_proxy(proxy_id) || dynamic_url.is_some();
-
-    let proxy = if is_dynamic {
-      PROXY_MANAGER
-        .update_dynamic_proxy(app_handle, proxy_id, name, dynamic_url, dynamic_format)
-        .map_err(|e| McpError {
-          code: -32000,
-          message: format!("Failed to update dynamic proxy: {e}"),
-        })?
-    } else {
-      PROXY_MANAGER
-        .update_stored_proxy(app_handle, proxy_id, name, proxy_settings)
-        .map_err(|e| McpError {
-          code: -32000,
-          message: format!("Failed to update proxy: {e}"),
-        })?
-    };
+    let proxy = PROXY_MANAGER
+      .update_stored_proxy(app_handle, proxy_id, name, proxy_settings)
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to update proxy: {e}"),
+      })?;
 
     Ok(serde_json::json!({
       "content": [{
