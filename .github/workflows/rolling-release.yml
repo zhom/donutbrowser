@@ -138,6 +138,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build frontend
+        # NEXT_PUBLIC_* vars are inlined into the client bundle at build time,
+        # so they must be forwarded explicitly from secrets here — GitHub
+        # Secrets are NOT automatically exposed as env vars to `run` steps.
+        # If this env block is missing, released builds ship with undefined
+        # values where the Turnstile site key should be, and login breaks.
+        env:
+          NEXT_PUBLIC_TURNSTILE: ${{ secrets.NEXT_PUBLIC_TURNSTILE }}
         run: pnpm exec next build
 
       - name: Verify frontend dist exists
