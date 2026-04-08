@@ -40,6 +40,20 @@ jobs:
             echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Normalize R2 endpoint
+        # The R2_ENDPOINT_URL secret may be stored with or without a scheme.
+        # `aws s3 --endpoint-url` rejects values without `https://`, so we
+        # prepend it once here and export via $GITHUB_ENV so every later step
+        # inherits the normalised value. Keep this step before any `aws` call.
+        env:
+          RAW_ENDPOINT: ${{ secrets.R2_ENDPOINT_URL }}
+        run: |
+          endpoint="$RAW_ENDPOINT"
+          if [[ "$endpoint" != https://* && "$endpoint" != http://* ]]; then
+            endpoint="https://$endpoint"
+          fi
+          echo "R2_ENDPOINT=$endpoint" >> "$GITHUB_ENV"
+
       - name: Install tools
         run: |
           sudo apt-get update
@@ -67,7 +81,6 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: auto
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT_URL }}
           R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
         run: |
           DEB_DIR="/tmp/repo/deb"
@@ -131,7 +144,6 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: auto
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT_URL }}
           R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
         run: |
           RPM_DIR="/tmp/repo/rpm"
@@ -164,7 +176,6 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: auto
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT_URL }}
           R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
         run: |
           echo "Uploading DEB repository..."
@@ -182,7 +193,6 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: auto
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT_URL }}
           R2_BUCKET: ${{ secrets.R2_BUCKET_NAME }}
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
