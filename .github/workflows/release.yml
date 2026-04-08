@@ -139,11 +139,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build frontend
-        # NEXT_PUBLIC_* vars are inlined into the client bundle at build time,
-        # so they must be forwarded explicitly from secrets here — GitHub
-        # Secrets are NOT automatically exposed as env vars to `run` steps.
-        # If this env block is missing, released builds ship with undefined
-        # values where the Turnstile site key should be, and login breaks.
+        # NEXT_PUBLIC_* vars are inlined at build time and must be forwarded
+        # from secrets explicitly — they are NOT inherited from the job env.
         env:
           NEXT_PUBLIC_TURNSTILE: ${{ secrets.NEXT_PUBLIC_TURNSTILE }}
         run: pnpm exec next build
@@ -223,6 +220,12 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # tauri-action invokes `pnpm tauri build`, which runs
+          # `beforeBuildCommand` from tauri.conf.json. That rebuilds the
+          # frontend in its own subprocess, so the env var MUST be forwarded
+          # here or the inner `next build` inlines an empty string and
+          # overwrites the dist the explicit "Build frontend" step produced.
+          NEXT_PUBLIC_TURNSTILE: ${{ secrets.NEXT_PUBLIC_TURNSTILE }}
         with:
           projectPath: ./src-tauri
           tagName: ${{ github.ref_name }}
