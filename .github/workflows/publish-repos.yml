@@ -40,11 +40,11 @@ jobs:
             echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Normalize R2 endpoint
-        # The R2_ENDPOINT_URL secret may be stored with or without a scheme.
-        # `aws s3 --endpoint-url` rejects values without `https://`, so we
-        # prepend it once here and export via $GITHUB_ENV so every later step
-        # inherits the normalised value. Keep this step before any `aws` call.
+      - name: Configure aws-cli for R2
+        # aws-cli v2.23+ sends integrity checksums by default; Cloudflare R2
+        # rejects those headers with `Unauthorized` on ListObjectsV2.
+        # Also normalise the endpoint URL (must start with https://).
+        # Both values propagate to later steps via $GITHUB_ENV.
         env:
           RAW_ENDPOINT: ${{ secrets.R2_ENDPOINT_URL }}
         run: |
@@ -53,6 +53,8 @@ jobs:
             endpoint="https://$endpoint"
           fi
           echo "R2_ENDPOINT=$endpoint" >> "$GITHUB_ENV"
+          echo "AWS_REQUEST_CHECKSUM_CALCULATION=WHEN_REQUIRED" >> "$GITHUB_ENV"
+          echo "AWS_RESPONSE_CHECKSUM_VALIDATION=WHEN_REQUIRED" >> "$GITHUB_ENV"
 
       - name: Install tools
         run: |

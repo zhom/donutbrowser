@@ -27,6 +27,10 @@ done
 export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
 export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
 export AWS_DEFAULT_REGION="auto"
+# aws-cli v2.23+ sends integrity checksums by default; R2 rejects them
+# with `Unauthorized` on ListObjectsV2. Disable.
+export AWS_REQUEST_CHECKSUM_CALCULATION="WHEN_REQUIRED"
+export AWS_RESPONSE_CHECKSUM_VALIDATION="WHEN_REQUIRED"
 
 # Ensure endpoint URL has https:// prefix
 R2_ENDPOINT="$R2_ENDPOINT_URL"
