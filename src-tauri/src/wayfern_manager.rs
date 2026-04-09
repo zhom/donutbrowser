@@ -86,7 +86,18 @@ impl WayfernManager {
       inner: Arc::new(AsyncMutex::new(WayfernManagerInner {
         instances: HashMap::new(),
       })),
-      http_client: Client::new(),
+      // Every request this client makes goes to a local `http://127.0.0.1:<port>`
+      // endpoint that Wayfern is still bringing up. Without a per-request timeout,
+      // a single hanging connect or a stuck HTTP response will block
+      // `wait_for_cdp_ready` indefinitely — its 120-attempt poll loop depends on
+      // each request returning fast. A 2-second per-request timeout turns that
+      // into a worst-case ~60-second bounded wait, and `generate_fingerprint_config`
+      // can then return a real error instead of hanging the profile-creation UI
+      // forever.
+      http_client: Client::builder()
+        .timeout(Duration::from_secs(2))
+        .build()
+        .expect("Failed to build reqwest client for wayfern_manager"),
     }
   }
 
@@ -141,19 +152,29 @@ impl WayfernManager {
     let max_attempts = 120;
     let delay = Duration::from_millis(500);
 
+    let mut last_error: Option<String> = None;
     for attempt in 0..max_attempts {
       match self.http_client.get(&url).send().await {
         Ok(resp) if resp.status().is_success() => {
           log::info!("CDP ready on port {port} after {attempt} attempts");
           return Ok(());
         }
-        _ => {
+        Ok(resp) => {
+          last_error = Some(format!("HTTP {} from {url}", resp.status()));
+          tokio::time::sleep(delay).await;
+        }
+        Err(e) => {
+          last_error = Some(format!("request failed: {e}"));
           tokio::time::sleep(delay).await;
         }
       }
     }
 
-    Err(format!("CDP not ready after {max_attempts} attempts on port {port}").into())
+    let detail = last_error.unwrap_or_else(|| "no attempts completed".to_string());
+    // Log at error level so we can diagnose Windows/AV/firewall-induced CDP hangs
+    // in customer reports without needing them to reproduce in the moment.
+    log::error!("CDP not ready after {max_attempts} attempts on port {port}: {detail}");
+    Err(format!("CDP not ready after {max_attempts} attempts on port {port}: {detail}").into())
   }
 
   async fn get_cdp_targets(
@@ -270,6 +291,9 @@ impl WayfernManager {
     };
 
     if let Err(e) = self.wait_for_cdp_ready(port).await {
+      log::error!(
+        "Fingerprint-generation Wayfern (headless, pid={child_id:?}) never became CDP-ready: {e}"
+      );
       cleanup().await;
       return Err(e);
     }
