@@ -59,7 +59,14 @@ jobs:
       - name: Install tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y dpkg-dev createrepo-c
+          sudo apt-get install -y dpkg-dev createrepo-c python3-pip
+          # Install aws-cli v1 via pip, overriding the pre-installed v2.
+          # aws-cli v2.23+ sends CRC64NVME checksums that Cloudflare R2 rejects
+          # with Unauthorized, and the s3transfer lib used by `aws s3 sync` has
+          # a confirmed bug where WHEN_REQUIRED env var is silently ignored
+          # (boto/s3transfer#327). aws-cli v1 never sends these headers at all
+          # and matches the proven local Docker publish path.
+          pip3 install --break-system-packages awscli
 
       - name: Download packages from GitHub release
         env:
