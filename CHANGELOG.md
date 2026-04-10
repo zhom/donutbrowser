@@ -1,6 +1,19 @@
 # Changelog
 
 
+## v0.20.3 (2026-04-10)
+
+### Refactoring
+
+- debug wayfern launch
+
+### Maintenance
+
+- chore: versiom bump
+- chore: serialize changelog and flake jobs
+- chore: update flake.nix for v0.20.2 [skip ci] (#273)
+
+
 ## v0.20.2 (2026-04-08)
 
 ### Maintenance
