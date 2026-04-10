@@ -2,6 +2,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { LoadingButton } from "@/components/loading-button";
 import {
@@ -31,6 +32,7 @@ export function DeleteGroupDialog({
   group,
   onGroupDeleted,
 }: DeleteGroupDialogProps) {
+  const { t } = useTranslation();
   const [associatedProfiles, setAssociatedProfiles] = useState<
     BrowserProfile[]
   >([]);
@@ -155,7 +157,7 @@ export function DeleteGroupDialog({
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="move" id="move" />
                         <Label htmlFor="move" className="text-sm">
-                          Move profiles to Default group
+                          {t("groups.moveToDefault")}
                         </Label>
                       </div>
                       <div className="flex items-center space-x-2">

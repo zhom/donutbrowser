@@ -2,6 +2,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { GoPlus } from "react-icons/go";
 import { toast } from "sonner";
 import { CreateGroupDialog } from "@/components/create-group-dialog";
@@ -40,6 +41,7 @@ export function GroupAssignmentDialog({
   onAssignmentComplete,
   profiles = [],
 }: GroupAssignmentDialogProps) {
+  const { t } = useTranslation();
   const [groups, setGroups] = useState<ProfileGroup[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -72,10 +74,13 @@ export function GroupAssignmentDialog({
 
       const groupName = selectedGroupId
         ? groups.find((g) => g.id === selectedGroupId)?.name || "Unknown Group"
-        : "Default";
+        : t("groups.defaultGroup");
 
       toast.success(
-        `Successfully assigned ${selectedProfiles.length} profile(s) to ${groupName}`,
+        t("groups.assignSuccess", {
+          count: selectedProfiles.length,
+          group: groupName,
+        }),
       );
       onAssignmentComplete();
       onClose();
@@ -96,6 +101,7 @@ export function GroupAssignmentDialog({
     groups,
     onAssignmentComplete,
     onClose,
+    t,
   ]);
 
   useEffect(() => {
@@ -166,7 +172,9 @@ export function GroupAssignmentDialog({
                   <SelectValue placeholder="Select a group" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="default">Default (No Group)</SelectItem>
+                  <SelectItem value="default">
+                    {t("groups.defaultGroupNoGroup")}
+                  </SelectItem>
                   {groups.map((group) => (
                     <SelectItem key={group.id} value={group.id}>
                       {group.name}

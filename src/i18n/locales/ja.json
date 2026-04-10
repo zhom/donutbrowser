@@ -323,6 +323,11 @@
     "add": "グループを追加",
     "edit": "グループを編集",
     "delete": "グループを削除",
+    "defaultGroup": "デフォルト",
+    "defaultGroupNoGroup": "デフォルト（グループなし）",
+    "moveToDefault": "プロファイルをデフォルトグループに移動",
+    "noGroupDescription": "グループに属していないプロファイルは「デフォルト」グループに表示されます。",
+    "assignSuccess": "{{count}} 件のプロファイルを {{group}} に割り当てました",
     "noGroups": "グループがありません",
     "noGroupsDescription": "プロファイルを整理するためのグループを作成してください。",
     "form": {

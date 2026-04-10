@@ -9,7 +9,7 @@
 
 ### Maintenance
 
-- chore: versiom bump
+- chore: version bump
 - chore: serialize changelog and flake jobs
 - chore: update flake.nix for v0.20.2 [skip ci] (#273)
 

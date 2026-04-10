@@ -323,6 +323,11 @@
     "add": "Adicionar Grupo",
     "edit": "Editar Grupo",
     "delete": "Excluir Grupo",
+    "defaultGroup": "Padrão",
+    "defaultGroupNoGroup": "Padrão (Sem Grupo)",
+    "moveToDefault": "Mover perfis para o grupo Padrão",
+    "noGroupDescription": "Perfis sem grupo aparecerão no grupo \"Padrão\".",
+    "assignSuccess": "{{count}} perfil(s) atribuído(s) a {{group}} com sucesso",
     "noGroups": "Nenhum grupo criado",
     "noGroupsDescription": "Crie um grupo para organizar seus perfis.",
     "form": {

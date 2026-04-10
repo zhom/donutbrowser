@@ -3,6 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { GoPlus } from "react-icons/go";
 import { LuPencil, LuTrash2 } from "react-icons/lu";
 import { CreateGroupDialog } from "@/components/create-group-dialog";
@@ -90,6 +91,7 @@ export function GroupManagementDialog({
   onClose,
   onGroupManagementComplete,
 }: GroupManagementDialogProps) {
+  const { t } = useTranslation();
   const [groups, setGroups] = useState<GroupWithCount[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -233,10 +235,9 @@ export function GroupManagementDialog({
       <Dialog open={isOpen} onOpenChange={onClose}>
         <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>Manage Profile Groups</DialogTitle>
+            <DialogTitle>{t("groups.management")}</DialogTitle>
             <DialogDescription>
-              Create, edit, and delete profile groups. Profiles without a group
-              will appear in the "Default" group.
+              {t("groups.noGroupDescription")}
             </DialogDescription>
           </DialogHeader>
 
@@ -265,12 +266,11 @@ export function GroupManagementDialog({
             {/* Groups list */}
             {isLoading ? (
               <div className="text-sm text-muted-foreground">
-                Loading groups...
+                {t("common.loading")}
               </div>
             ) : groups.length === 0 ? (
               <div className="text-sm text-muted-foreground">
-                No groups created yet. Create your first group using the button
-                above.
+                {t("groups.noGroupsDescription")}
               </div>
             ) : (
               <div className="border rounded-md">

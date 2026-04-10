@@ -323,6 +323,11 @@
     "add": "添加分组",
     "edit": "编辑分组",
     "delete": "删除分组",
+    "defaultGroup": "默认",
+    "defaultGroupNoGroup": "默认（无分组）",
+    "moveToDefault": "将配置文件移至默认分组",
+    "noGroupDescription": "未分组的配置文件将显示在「默认」分组中。",
+    "assignSuccess": "已成功将 {{count}} 个配置文件分配到 {{group}}",
     "noGroups": "暂无分组",
     "noGroupsDescription": "创建分组来组织您的配置文件。",
     "form": {

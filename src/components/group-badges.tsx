@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import type { GroupWithCount } from "@/types";
 
@@ -18,6 +19,7 @@ export function GroupBadges({
   groups,
   isLoading,
 }: GroupBadgesProps) {
+  const { t } = useTranslation();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showLeftFade, setShowLeftFade] = useState(false);
   const [showRightFade, setShowRightFade] = useState(false);
@@ -181,7 +183,9 @@ export function GroupBadges({
               }
             }}
           >
-            <span>{group.name}</span>
+            <span>
+              {group.id === "default" ? t("groups.defaultGroup") : group.name}
+            </span>
             <span className="bg-background/20 text-xs px-1.5 py-0.5 rounded-sm">
               {group.count}
             </span>

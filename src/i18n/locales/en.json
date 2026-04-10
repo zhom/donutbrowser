@@ -323,6 +323,11 @@
     "add": "Add Group",
     "edit": "Edit Group",
     "delete": "Delete Group",
+    "defaultGroup": "Default",
+    "defaultGroupNoGroup": "Default (No Group)",
+    "moveToDefault": "Move profiles to Default group",
+    "noGroupDescription": "Profiles without a group will appear in the \"Default\" group.",
+    "assignSuccess": "Successfully assigned {{count}} profile(s) to {{group}}",
     "noGroups": "No groups created",
     "noGroupsDescription": "Create a group to organize your profiles.",
     "form": {
