@@ -344,7 +344,7 @@ impl SyncScheduler {
               }
             }
           }
-          _ = sleep(Duration::from_millis(500)) => {
+          _ = sleep(Duration::from_millis(2000)) => {
             scheduler.process_pending(&app_handle_clone).await;
           }
         }

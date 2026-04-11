@@ -1537,7 +1537,7 @@ pub fn run() {
       let _app_handle_cleanup = app.handle().clone();
       tauri::async_runtime::spawn(async move {
         let camoufox_manager = crate::camoufox_manager::CamoufoxManager::instance();
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
 
         loop {
           interval.tick().await;
@@ -1611,19 +1611,27 @@ pub fn run() {
         }
       });
 
-      // Periodically broadcast browser running status to the frontend
+      // Periodically broadcast browser running status to the frontend.
+      // When no profiles have stored PIDs (nothing was ever launched this
+      // session), we use a long interval (30s) to avoid burning CPU on
+      // full process-table scans via sysinfo. Once any profile is running
+      // we switch to the fast interval (5s) for responsive UI updates.
       let app_handle_status = app.handle().clone();
       tauri::async_runtime::spawn(async move {
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
+        const FAST_INTERVAL_SECS: u64 = 5;
+        const IDLE_INTERVAL_SECS: u64 = 30;
+
+        let mut interval =
+          tokio::time::interval(tokio::time::Duration::from_secs(FAST_INTERVAL_SECS));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         let mut last_running_states: std::collections::HashMap<String, bool> =
           std::collections::HashMap::new();
+        let mut current_interval_secs = FAST_INTERVAL_SECS;
 
         loop {
           interval.tick().await;
 
           let runner = crate::browser_runner::BrowserRunner::instance();
-          // If listing profiles fails, skip this tick
           let profiles = match runner.profile_manager.list_profiles() {
             Ok(p) => p,
             Err(e) => {
@@ -1631,6 +1639,30 @@ pub fn run() {
               continue;
             }
           };
+
+          // If no profile has a stored PID and we have no previously-known
+          // running states, there's nothing to check — skip the expensive
+          // process scan entirely.
+          let any_has_pid = profiles.iter().any(|p| p.process_id.is_some());
+          let any_was_running = last_running_states.values().any(|&v| v);
+
+          if !any_has_pid && !any_was_running {
+            // Switch to the idle interval to reduce CPU
+            if current_interval_secs != IDLE_INTERVAL_SECS {
+              current_interval_secs = IDLE_INTERVAL_SECS;
+              interval =
+                tokio::time::interval(tokio::time::Duration::from_secs(IDLE_INTERVAL_SECS));
+              interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            }
+            continue;
+          }
+
+          // At least one profile might be running — use the fast interval
+          if current_interval_secs != FAST_INTERVAL_SECS {
+            current_interval_secs = FAST_INTERVAL_SECS;
+            interval = tokio::time::interval(tokio::time::Duration::from_secs(FAST_INTERVAL_SECS));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+          }
 
           for profile in profiles {
             // Check browser status and track changes

@@ -145,14 +145,18 @@ export function usePermissions(): UsePermissionsReturn {
     initializePlatform();
   }, []);
 
-  // Set up interval checking when platform is determined
+  // Set up interval checking when platform is determined.
+  // On non-macOS platforms, permissions are always granted — a single check
+  // is enough and we skip the interval entirely to avoid burning CPU.
   useEffect(() => {
     if (!currentPlatform) return;
 
     // Initial check
     void checkPermissions();
 
-    // Set up 500ms interval for checking permissions
+    // Only poll on macOS where permissions can change at runtime
+    if (currentPlatform !== "macos") return;
+
     intervalRef.current = setInterval(() => {
       void checkPermissions();
     }, 500);
