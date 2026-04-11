@@ -1,6 +1,28 @@
 # Changelog
 
 
+## v0.20.4 (2026-04-11)
+
+### Refactoring
+
+- vpn
+- save port
+
+### Maintenance
+
+- chore: version bump
+- chore: linting
+- chore: overwrite aws cli
+- ci(deps): bump the github-actions group with 3 updates
+- chore: update flake.nix for v0.20.3 [skip ci] (#278)
+
+### Other
+
+- style: copy
+- deps(rust)(deps): bump the rust-dependencies group
+- deps(deps): bump next from 16.2.2 to 16.2.3
+
+
 ## v0.20.3 (2026-04-10)
 
 ### Refactoring
