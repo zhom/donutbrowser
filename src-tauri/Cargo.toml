@@ -81,11 +81,11 @@ utoipa = { version = "5", features = ["axum_extras", "chrono"] }
 utoipa-axum = "0.2"
 argon2 = "0.5"
 aes-gcm = "0.10"
-aes = "0.8"
-cbc = "0.1"
+aes = "0.9"
+cbc = "0.2"
 pbkdf2 = "0.12"
-sha1 = "0.10"
-sha2 = "0.10"
+sha1 = "0.11"
+sha2 = "0.11"
 hyper = { version = "1.8", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
 http-body-util = "0.1"
