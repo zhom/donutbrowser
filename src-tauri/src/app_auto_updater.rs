@@ -988,6 +988,10 @@ impl AppAutoUpdater {
             &format!("{}.log", installer_path.to_str().unwrap()),
           ]);
 
+          use std::os::windows::process::CommandExt;
+          const CREATE_NO_WINDOW: u32 = 0x08000000;
+          cmd.creation_flags(CREATE_NO_WINDOW);
+
           let output = cmd.output()?;
 
           if !output.status.success() {
@@ -1178,41 +1182,7 @@ impl AppAutoUpdater {
     deb_path: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     log::info!("Installing DEB package: {}", deb_path.display());
-
-    // Try different package managers in order of preference
-    let package_managers = [
-      ("dpkg", vec!["-i", deb_path.to_str().unwrap()]),
-      ("apt", vec!["install", "-y", deb_path.to_str().unwrap()]),
-    ];
-
-    let mut last_error = String::new();
-
-    for (manager, args) in &package_managers {
-      // Check if package manager exists
-      if Command::new("which").arg(manager).output().is_ok() {
-        log::info!("Trying to install with {manager}");
-
-        let output = Command::new("pkexec").arg(manager).args(args).output();
-
-        match output {
-          Ok(output) if output.status.success() => {
-            log::info!("DEB installation completed successfully with {manager}");
-            return Ok(());
-          }
-          Ok(output) => {
-            let error_msg = String::from_utf8_lossy(&output.stderr);
-            last_error = format!("{manager} failed: {error_msg}");
-            log::info!("Installation failed with {manager}: {error_msg}");
-          }
-          Err(e) => {
-            last_error = format!("Failed to execute {manager}: {e}");
-            log::info!("Failed to execute {manager}: {e}");
-          }
-        }
-      }
-    }
-
-    Err(format!("DEB installation failed. Last error: {last_error}").into())
+    Self::install_linux_package_with_privileges(deb_path, "dpkg", "-i")
   }
 
   /// Install Linux RPM package
@@ -1222,43 +1192,121 @@ impl AppAutoUpdater {
     rpm_path: &Path,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     log::info!("Installing RPM package: {}", rpm_path.display());
+    Self::install_linux_package_with_privileges(rpm_path, "rpm", "-Uvh")
+  }
 
-    // Try different package managers in order of preference
-    let package_managers = [
-      ("rpm", vec!["-Uvh", rpm_path.to_str().unwrap()]),
-      ("dnf", vec!["install", "-y", rpm_path.to_str().unwrap()]),
-      ("yum", vec!["install", "-y", rpm_path.to_str().unwrap()]),
-      ("zypper", vec!["install", "-y", rpm_path.to_str().unwrap()]),
-    ];
+  /// Install a Linux package with privilege escalation, using a fallback chain:
+  /// 1. pkexec (graphical PolicyKit prompt — most common on desktop Linux)
+  /// 2. zenity/kdialog password dialog → sudo -S (graphical sudo experience)
+  /// 3. sudo (terminal fallback — works in TTY sessions)
+  #[cfg(target_os = "linux")]
+  fn install_linux_package_with_privileges(
+    pkg_path: &Path,
+    install_cmd: &str,
+    install_arg: &str,
+  ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let pkg = pkg_path.to_str().unwrap_or_default();
 
-    let mut last_error = String::new();
+    // 1. Try pkexec (graphical PolicyKit prompt)
+    if let Ok(status) = Command::new("pkexec")
+      .args([install_cmd, install_arg, pkg])
+      .status()
+    {
+      if status.success() {
+        log::info!("Installed {pkg} with pkexec");
+        return Ok(());
+      }
+    }
 
-    for (manager, args) in &package_managers {
-      // Check if package manager exists
-      if Command::new("which").arg(manager).output().is_ok() {
-        log::info!("Trying to install with {manager}");
+    // 2. Try graphical password dialog → sudo -S
+    if let Some(password) = Self::get_password_graphically() {
+      if Self::install_with_sudo_stdin(pkg_path, &password, install_cmd, install_arg) {
+        log::info!("Installed {pkg} with graphical sudo");
+        return Ok(());
+      }
+    }
 
-        let output = Command::new("pkexec").arg(manager).args(args).output();
+    // 3. Terminal sudo fallback
+    if let Ok(status) = Command::new("sudo")
+      .args([install_cmd, install_arg, pkg])
+      .status()
+    {
+      if status.success() {
+        log::info!("Installed {pkg} with sudo");
+        return Ok(());
+      }
+    }
 
-        match output {
-          Ok(output) if output.status.success() => {
-            log::info!("RPM installation completed successfully with {manager}");
-            return Ok(());
-          }
-          Ok(output) => {
-            let error_msg = String::from_utf8_lossy(&output.stderr);
-            last_error = format!("{manager} failed: {error_msg}");
-            log::info!("Installation failed with {manager}: {error_msg}");
-          }
-          Err(e) => {
-            last_error = format!("Failed to execute {manager}: {e}");
-            log::info!("Failed to execute {manager}: {e}");
-          }
+    Err(format!("Failed to install {pkg} — all privilege escalation methods failed").into())
+  }
+
+  /// Try zenity then kdialog to get a password graphically.
+  #[cfg(target_os = "linux")]
+  fn get_password_graphically() -> Option<String> {
+    // Try zenity
+    if let Ok(output) = Command::new("zenity")
+      .args([
+        "--password",
+        "--title=Authentication Required",
+        "--text=Enter your password to install the update:",
+      ])
+      .output()
+    {
+      if output.status.success() {
+        let pw = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !pw.is_empty() {
+          return Some(pw);
         }
       }
     }
 
-    Err(format!("RPM installation failed. Last error: {last_error}").into())
+    // Fall back to kdialog
+    if let Ok(output) = Command::new("kdialog")
+      .args(["--password", "Enter your password to install the update:"])
+      .output()
+    {
+      if output.status.success() {
+        let pw = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !pw.is_empty() {
+          return Some(pw);
+        }
+      }
+    }
+
+    None
+  }
+
+  /// Pipe a password to `sudo -S <install_cmd> <install_arg> <pkg>`.
+  #[cfg(target_os = "linux")]
+  fn install_with_sudo_stdin(
+    pkg_path: &Path,
+    password: &str,
+    install_cmd: &str,
+    install_arg: &str,
+  ) -> bool {
+    use std::io::Write;
+
+    let child = Command::new("sudo")
+      .args([
+        "-S",
+        install_cmd,
+        install_arg,
+        pkg_path.to_str().unwrap_or_default(),
+      ])
+      .stdin(std::process::Stdio::piped())
+      .stdout(std::process::Stdio::piped())
+      .stderr(std::process::Stdio::piped())
+      .spawn();
+
+    match child {
+      Ok(mut child) => {
+        if let Some(mut stdin) = child.stdin.take() {
+          let _ = writeln!(stdin, "{password}");
+        }
+        child.wait().map(|s| s.success()).unwrap_or(false)
+      }
+      Err(_) => false,
+    }
   }
 
   /// Install Linux AppImage
@@ -1474,96 +1522,121 @@ rm "{}"
 
     #[cfg(target_os = "windows")]
     {
-      let app_path = self.get_current_app_path()?;
-      let current_pid = std::process::id();
+      use std::ffi::OsStr;
+      use std::os::windows::ffi::OsStrExt;
+
       let pending = PENDING_INSTALLER_PATH.lock().unwrap().take();
 
-      let temp_dir = std::env::temp_dir();
-      let script_path = temp_dir.join("donut_restart.bat");
-      let update_temp_dir = temp_dir.join("donut_app_update");
-
-      let script_content = if let Some(installer_path) = pending {
+      if let Some(installer_path) = pending {
+        // Use ShellExecuteW to run the installer directly — no batch script,
+        // no cmd.exe console window. The NSIS/MSI installer handles killing the
+        // old process and restarting the app natively (via /UPDATE and
+        // AUTOLAUNCHAPP flags).
         let ext = installer_path
           .extension()
           .and_then(|e| e.to_str())
           .unwrap_or("")
           .to_lowercase();
-        let install_cmd = match ext.as_str() {
-          "msi" => format!(
-            "msiexec /i \"{}\" /quiet /norestart REBOOT=ReallySuppress",
-            installer_path.to_str().unwrap()
-          ),
-          "exe" => format!("\"{}\" /S", installer_path.to_str().unwrap()),
-          _ => String::new(),
+
+        let (file, parameters) = match ext.as_str() {
+          "exe" => {
+            // NSIS installer: /S for silent, /UPDATE tells it this is an update
+            let file = installer_path.as_os_str().to_os_string();
+            let params = std::ffi::OsString::from("/S /UPDATE");
+            (file, params)
+          }
+          "msi" => {
+            // MSI: run msiexec.exe with the package
+            let msiexec = std::env::var("SYSTEMROOT")
+              .map(|p| format!("{p}\\System32\\msiexec.exe"))
+              .unwrap_or_else(|_| "msiexec.exe".to_string());
+            let file = std::ffi::OsString::from(msiexec);
+            let params = std::ffi::OsString::from(format!(
+              "/i {} /quiet /norestart /promptrestart AUTOLAUNCHAPP=True",
+              installer_path
+                .to_str()
+                .map(|p| format!("\"{p}\""))
+                .unwrap_or_default()
+            ));
+            (file, params)
+          }
+          _ => {
+            return Err("Unsupported Windows installer format for restart".into());
+          }
         };
 
-        format!(
-          r#"@echo off
-rem Wait for the current process to exit
-:wait_loop
-tasklist /fi "PID eq {pid}" >nul 2>&1
-if %errorlevel% equ 0 (
-    timeout /t 1 /nobreak >nul
-    goto wait_loop
-)
+        fn encode_wide(s: impl AsRef<OsStr>) -> Vec<u16> {
+          s.as_ref().encode_wide().chain(std::iter::once(0)).collect()
+        }
 
-rem Wait a bit more to ensure clean exit
-timeout /t 2 /nobreak >nul
+        let file_w = encode_wide(&file);
+        let params_w = encode_wide(&parameters);
 
-rem Run the installer
-{install_cmd}
+        log::info!(
+          "Running installer via ShellExecuteW: {:?} {:?}",
+          file,
+          parameters
+        );
 
-rem Wait for installation to complete
-timeout /t 3 /nobreak >nul
+        // windows-sys is not a direct dep, so use the raw FFI via the
+        // windows crate that Tauri pulls in. ShellExecuteW returns an
+        // HINSTANCE > 32 on success.
+        #[link(name = "shell32")]
+        extern "system" {
+          fn ShellExecuteW(
+            hwnd: *mut std::ffi::c_void,
+            operation: *const u16,
+            file: *const u16,
+            parameters: *const u16,
+            directory: *const u16,
+            show_cmd: i32,
+          ) -> isize;
+        }
+        const SW_SHOWNORMAL: i32 = 1;
+        let open: Vec<u16> = "open\0".encode_utf16().collect();
 
-rem Start the new application
-start "" "{app_path}"
+        let result = unsafe {
+          ShellExecuteW(
+            std::ptr::null_mut(),
+            open.as_ptr(),
+            file_w.as_ptr(),
+            params_w.as_ptr(),
+            std::ptr::null(),
+            SW_SHOWNORMAL,
+          )
+        };
 
-rem Clean up installer temp files
-rmdir /s /q "{update_temp}"
-
-rem Clean up this script
-del "%~f0"
-"#,
-          pid = current_pid,
-          install_cmd = install_cmd,
-          app_path = app_path.to_str().unwrap(),
-          update_temp = update_temp_dir.to_str().unwrap(),
-        )
+        if result as usize <= 32 {
+          return Err(format!("ShellExecuteW failed with code {result}").into());
+        }
       } else {
-        format!(
-          r#"@echo off
-rem Wait for the current process to exit
-:wait_loop
-tasklist /fi "PID eq {}" >nul 2>&1
-if %errorlevel% equ 0 (
-    timeout /t 1 /nobreak >nul
-    goto wait_loop
-)
+        // No pending installer — just restart the app. Use a minimal
+        // detached process to relaunch after we exit.
+        let app_path = self.get_current_app_path()?;
+        let current_pid = std::process::id();
+        let temp_dir = std::env::temp_dir();
+        let script_path = temp_dir.join("donut_restart.bat");
 
-rem Wait a bit more to ensure clean exit
-timeout /t 2 /nobreak >nul
+        let script_content = format!(
+          "@echo off\n\
+           :w\n\
+           tasklist /fi \"PID eq {current_pid}\" 2>nul | find \"{current_pid}\" >nul && (timeout /t 1 /nobreak >nul & goto w)\n\
+           timeout /t 1 /nobreak >nul\n\
+           start \"\" \"{app}\"\n\
+           del \"%~f0\"\n",
+          app = app_path.to_str().unwrap(),
+        );
+        fs::write(&script_path, script_content)?;
 
-rem Start the new application
-start "" "{}"
-
-rem Clean up this script
-del "%~f0"
-"#,
-          current_pid,
-          app_path.to_str().unwrap()
-        )
-      };
-
-      fs::write(&script_path, script_content)?;
-
-      let mut cmd = Command::new("cmd");
-      cmd.args(["/C", script_path.to_str().unwrap()]);
-
-      let _child = cmd.spawn()?;
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let _child = Command::new("cmd")
+          .args(["/C", script_path.to_str().unwrap()])
+          .creation_flags(CREATE_NO_WINDOW)
+          .spawn()?;
+      }
 
       tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
       std::process::exit(0);
     }
 
