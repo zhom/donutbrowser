@@ -487,7 +487,6 @@ impl Drop for TestEnvGuard {
 struct ProxyProcess {
   id: String,
   local_port: u16,
-  local_url: String,
 }
 
 async fn ensure_donut_proxy_binary() -> Result<PathBuf, Box<dyn std::error::Error + Send + Sync>> {
@@ -664,10 +663,6 @@ async fn start_proxy_with_upstream(
   Ok(ProxyProcess {
     id: config["id"].as_str().ok_or("Missing proxy id")?.to_string(),
     local_port: config["localPort"].as_u64().ok_or("Missing local port")? as u16,
-    local_url: config["localUrl"]
-      .as_str()
-      .ok_or("Missing local URL")?
-      .to_string(),
   })
 }
 
@@ -696,26 +691,21 @@ async fn raw_http_request_via_proxy(
   url: &str,
   host_header: &str,
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-  let mut stream = TcpStream::connect(("127.0.0.1", local_port)).await?;
+  let mut stream = tokio::time::timeout(
+    Duration::from_secs(20),
+    TcpStream::connect(("127.0.0.1", local_port)),
+  )
+  .await
+  .map_err(|_| "proxy TCP connect timed out after 20s")??;
+
   let request = format!("GET {url} HTTP/1.1\r\nHost: {host_header}\r\nConnection: close\r\n\r\n");
   stream.write_all(request.as_bytes()).await?;
 
   let mut response = Vec::new();
-  stream.read_to_end(&mut response).await?;
+  tokio::time::timeout(Duration::from_secs(20), stream.read_to_end(&mut response))
+    .await
+    .map_err(|_| "proxy HTTP response timed out after 20s")??;
   Ok(String::from_utf8_lossy(&response).to_string())
-}
-
-async fn https_get_via_proxy(
-  local_proxy_url: &str,
-  url: &str,
-) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-  let client = reqwest::Client::builder()
-    .timeout(Duration::from_secs(20))
-    .no_proxy()
-    .proxy(reqwest::Proxy::all(local_proxy_url)?)
-    .build()?;
-
-  Ok(client.get(url).send().await?.text().await?)
 }
 
 async fn cleanup_runtime() {
@@ -744,6 +734,7 @@ async fn wait_for_file(
 async fn run_proxy_feature_suite(
   binary_path: &PathBuf,
   vpn_id: &str,
+  server_tunnel_ip: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
   let vpn_worker = donutbrowser_lib::vpn_worker_runner::start_vpn_worker(vpn_id)
     .await
@@ -759,18 +750,18 @@ async fn run_proxy_feature_suite(
 
   sleep(Duration::from_millis(500)).await;
 
+  // Test HTTP traffic through the tunnel to the internal HTTP server running
+  // inside the WireGuard container. This avoids depending on internet access
+  // from Docker (macOS Docker Desktop can't reliably NAT WireGuard tunnel
+  // traffic through to the internet).
+  let internal_url = format!("http://{}:8080/", server_tunnel_ip);
+  let internal_host = format!("{}:8080", server_tunnel_ip);
   let http_response =
-    raw_http_request_via_proxy(proxy.local_port, "http://example.com/", "example.com").await?;
+    raw_http_request_via_proxy(proxy.local_port, &internal_url, &internal_host).await?;
   assert!(
-    http_response.contains("Example Domain"),
-    "HTTP traffic through donut-proxy+VPN should succeed, got: {}",
+    http_response.contains("WG-TUNNEL-OK"),
+    "HTTP traffic through donut-proxy+VPN tunnel should succeed, got: {}",
     &http_response[..http_response.len().min(300)]
-  );
-
-  let https_body = https_get_via_proxy(&proxy.local_url, "https://example.com/").await?;
-  assert!(
-    https_body.contains("Example Domain"),
-    "HTTPS traffic through donut-proxy+VPN should succeed"
   );
 
   let stats_file = donutbrowser_lib::app_dirs::cache_dir()
@@ -792,14 +783,16 @@ async fn run_proxy_feature_suite(
     .as_object()
     .ok_or("Traffic stats are missing per-domain data")?;
   assert!(
-    domains.contains_key("example.com"),
-    "Traffic stats should include example.com domain activity"
+    domains.contains_key(server_tunnel_ip),
+    "Traffic stats should include tunnel server IP activity, got: {:?}",
+    domains.keys().collect::<Vec<_>>()
   );
 
   stop_proxy(binary_path, &proxy.id).await?;
 
+  // DNS blocklist test: blocklist the tunnel server IP so it gets rejected
   let blocklist_file = tempfile::NamedTempFile::new()?;
-  std::fs::write(blocklist_file.path(), "example.com\n")?;
+  std::fs::write(blocklist_file.path(), format!("{server_tunnel_ip}\n"))?;
   let blocked_proxy = start_proxy_with_upstream(
     binary_path,
     &vpn_upstream,
@@ -808,12 +801,8 @@ async fn run_proxy_feature_suite(
     None,
   )
   .await?;
-  let blocked_response = raw_http_request_via_proxy(
-    blocked_proxy.local_port,
-    "http://example.com/",
-    "example.com",
-  )
-  .await?;
+  let blocked_response =
+    raw_http_request_via_proxy(blocked_proxy.local_port, &internal_url, &internal_host).await?;
   assert!(
     blocked_response.contains("403") || blocked_response.contains("Blocked by DNS blocklist"),
     "DNS blocklist should be enforced before forwarding to the VPN upstream"
@@ -875,8 +864,8 @@ async fn run_proxy_feature_suite(
 async fn test_wireguard_traffic_flows_through_donut_proxy(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
   let _env = TestEnvGuard::new()?;
-  cleanup_runtime().await;
 
+  cleanup_runtime().await;
   if !test_harness::is_docker_available() {
     eprintln!("skipping WireGuard e2e test because Docker is unavailable");
     return Ok(());
@@ -901,8 +890,10 @@ async fn test_wireguard_traffic_flows_through_donut_proxy(
     storage.save_config(&vpn_config)?;
   }
 
-  let result = run_proxy_feature_suite(&binary_path, &vpn_config.id).await;
+  let result =
+    run_proxy_feature_suite(&binary_path, &vpn_config.id, &wg_config.server_tunnel_ip).await;
   cleanup_runtime().await;
+
   result
 }
 
@@ -952,7 +943,9 @@ async fn test_openvpn_traffic_flows_through_donut_proxy(
     storage.save_config(&vpn_config)?;
   }
 
-  let result = run_proxy_feature_suite(&binary_path, &vpn_config.id).await;
+  // OpenVPN test uses the server's tunnel IP for internal-only traffic.
+  // The OpenVPN server's subnet is 10.9.0.0/24, server at 10.9.0.1.
+  let result = run_proxy_feature_suite(&binary_path, &vpn_config.id, "10.9.0.1").await;
   cleanup_runtime().await;
   result
 }

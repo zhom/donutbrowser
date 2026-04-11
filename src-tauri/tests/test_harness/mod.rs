@@ -90,8 +90,40 @@ pub async fn start_wireguard_server() -> Result<WireGuardTestConfig, String> {
     ));
   }
 
-  // Wait for container to be ready and generate configs
-  sleep(Duration::from_secs(10)).await;
+  // Wait for container to generate configs and bring up the WireGuard interface.
+  // A fixed sleep is flaky — on busy machines the interface takes longer. Instead
+  // we poll `wg show` inside the container until it reports an active interface,
+  // with a generous upper bound.
+  let wg_ready_deadline = tokio::time::Instant::now() + Duration::from_secs(45);
+  loop {
+    sleep(Duration::from_secs(2)).await;
+
+    // Check if peer config file has been generated
+    let config_check = Command::new("docker")
+      .args(["exec", WG_CONTAINER, "cat", "/config/peer1/peer1.conf"])
+      .output();
+    let config_exists = config_check
+      .as_ref()
+      .map(|o| o.status.success())
+      .unwrap_or(false);
+
+    // Check if WireGuard interface is actually up and listening
+    let wg_check = Command::new("docker")
+      .args(["exec", WG_CONTAINER, "wg", "show"])
+      .output();
+    let wg_up = wg_check
+      .as_ref()
+      .map(|o| o.status.success() && String::from_utf8_lossy(&o.stdout).contains("listening port"))
+      .unwrap_or(false);
+
+    if config_exists && wg_up {
+      break;
+    }
+
+    if tokio::time::Instant::now() >= wg_ready_deadline {
+      return Err("WireGuard container did not become ready within 45s".to_string());
+    }
+  }
 
   // Extract client config from container
   let config_output = Command::new("docker")
@@ -107,7 +139,30 @@ pub async fn start_wireguard_server() -> Result<WireGuardTestConfig, String> {
   }
 
   let config_str = String::from_utf8_lossy(&config_output.stdout).to_string();
-  parse_wireguard_test_config(&config_str)
+  let mut config = parse_wireguard_test_config(&config_str)?;
+
+  // Start a lightweight HTTP server inside the container on the WireGuard
+  // interface so tests can verify traffic flows through the tunnel without
+  // depending on internet access (Docker Desktop for Mac can't reliably NAT
+  // WireGuard tunnel traffic to the internet). The linuxserver/wireguard
+  // image doesn't have python3 or busybox httpd, but it has nc (netcat).
+  let _ = Command::new("docker")
+    .args([
+      "exec",
+      "-d",
+      WG_CONTAINER,
+      "sh",
+      "-c",
+      r#"while true; do printf "HTTP/1.1 200 OK\r\nContent-Length: 13\r\nConnection: close\r\n\r\nWG-TUNNEL-OK\n" | nc -l -p 8080 2>/dev/null; done"#,
+    ])
+    .output();
+  // Give the nc loop a moment to start accepting
+  sleep(Duration::from_millis(500)).await;
+
+  // Extract the server's tunnel IP (first octet group from INTERNAL_SUBNET + .1)
+  config.server_tunnel_ip = "10.64.0.1".to_string();
+
+  Ok(config)
 }
 
 /// Start an OpenVPN test server and return client config
@@ -282,6 +337,10 @@ pub struct WireGuardTestConfig {
   pub peer_endpoint: String,
   pub allowed_ips: Vec<String>,
   pub preshared_key: Option<String>,
+  /// IP of the WireGuard server on the tunnel interface (e.g. 10.64.0.1).
+  /// Tests use this to reach an HTTP server inside the container without
+  /// needing internet access from Docker.
+  pub server_tunnel_ip: String,
 }
 
 /// OpenVPN test configuration
@@ -355,6 +414,7 @@ fn parse_wireguard_test_config(content: &str) -> Result<WireGuardTestConfig, Str
     peer_endpoint,
     allowed_ips,
     preshared_key,
+    server_tunnel_ip: String::new(), // filled in by caller
   })
 }
 
@@ -382,6 +442,8 @@ fn get_ci_wireguard_config(host: &str, port: &str) -> Result<WireGuardTestConfig
     peer_endpoint: format!("{host}:{port}"),
     allowed_ips: vec!["0.0.0.0/0".to_string()],
     preshared_key: std::env::var("VPN_TEST_WG_PRESHARED_KEY").ok(),
+    server_tunnel_ip: std::env::var("VPN_TEST_WG_SERVER_IP")
+      .unwrap_or_else(|_| "10.0.0.1".to_string()),
   })
 }
 

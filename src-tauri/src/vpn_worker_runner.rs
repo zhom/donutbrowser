@@ -7,7 +7,7 @@ use crate::vpn_worker_storage::{
 use std::process::Stdio;
 
 const VPN_WORKER_POLL_INTERVAL_MS: u64 = 100;
-const VPN_WORKER_STARTUP_TIMEOUT_MS: u64 = 10_000;
+const VPN_WORKER_STARTUP_TIMEOUT_MS: u64 = 30_000;
 const OPENVPN_WORKER_STARTUP_TIMEOUT_MS: u64 = 100_000;
 
 async fn vpn_worker_accepting_connections(config: &VpnWorkerConfig) -> bool {

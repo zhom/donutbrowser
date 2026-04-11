@@ -240,58 +240,77 @@ impl WireGuardSocks5Server {
     socket: &UdpSocket,
     peer_addr: SocketAddr,
   ) -> Result<(), VpnError> {
-    let mut dst = vec![0u8; 2048];
-    let result = tunn.format_handshake_initiation(&mut dst, false);
-
-    match result {
-      TunnResult::WriteToNetwork(packet) => {
-        socket
-          .send_to(packet, peer_addr)
-          .map_err(|e| VpnError::Connection(format!("Failed to send handshake: {e}")))?;
-      }
-      TunnResult::Err(e) => {
-        return Err(VpnError::Tunnel(format!(
-          "Handshake initiation failed: {e:?}"
-        )));
-      }
-      _ => {}
-    }
-
     socket
-      .set_read_timeout(Some(std::time::Duration::from_secs(10)))
+      .set_read_timeout(Some(std::time::Duration::from_secs(5)))
       .map_err(|e| VpnError::Connection(format!("Failed to set timeout: {e}")))?;
 
-    let mut recv_buf = vec![0u8; 2048];
-    match socket.recv_from(&mut recv_buf) {
-      Ok((len, _)) => {
-        let result = tunn.decapsulate(None, &recv_buf[..len], &mut dst);
-        match result {
-          TunnResult::WriteToNetwork(response) => {
-            socket
-              .send_to(response, peer_addr)
-              .map_err(|e| VpnError::Connection(format!("Failed to send response: {e}")))?;
-          }
-          TunnResult::Done => {}
-          TunnResult::Err(e) => {
-            return Err(VpnError::Tunnel(format!(
-              "Handshake response failed: {e:?}"
-            )));
-          }
-          _ => {}
+    // WireGuard handshakes use UDP which can silently lose packets, especially
+    // through Docker port-forwarding layers. Retry the handshake initiation up
+    // to 5 times (25s total) before giving up — the protocol is designed for
+    // retransmission and peers handle duplicate initiations correctly.
+    let max_attempts = 5;
+    let mut last_error = String::from("no handshake attempt completed");
+
+    for attempt in 1..=max_attempts {
+      let mut dst = vec![0u8; 2048];
+      let result = tunn.format_handshake_initiation(&mut dst, false);
+
+      match result {
+        TunnResult::WriteToNetwork(packet) => {
+          socket
+            .send_to(packet, peer_addr)
+            .map_err(|e| VpnError::Connection(format!("Failed to send handshake: {e}")))?;
         }
+        TunnResult::Err(e) => {
+          return Err(VpnError::Tunnel(format!(
+            "Handshake initiation failed: {e:?}"
+          )));
+        }
+        _ => {}
       }
-      Err(e) => {
-        return Err(VpnError::Connection(format!(
-          "Handshake timeout or error: {e}"
-        )));
+
+      let mut recv_buf = vec![0u8; 2048];
+      match socket.recv_from(&mut recv_buf) {
+        Ok((len, _)) => {
+          let result = tunn.decapsulate(None, &recv_buf[..len], &mut dst);
+          match result {
+            TunnResult::WriteToNetwork(response) => {
+              socket
+                .send_to(response, peer_addr)
+                .map_err(|e| VpnError::Connection(format!("Failed to send response: {e}")))?;
+            }
+            TunnResult::Done => {}
+            TunnResult::Err(e) => {
+              last_error = format!("handshake response error: {e:?}");
+              log::warn!(
+                "[vpn-worker] Handshake attempt {attempt}/{max_attempts} failed: {last_error}"
+              );
+              continue;
+            }
+            _ => {}
+          }
+
+          socket
+            .set_read_timeout(None)
+            .map_err(|e| VpnError::Connection(format!("Failed to clear timeout: {e}")))?;
+          return Ok(());
+        }
+        Err(e) if attempt < max_attempts => {
+          log::warn!(
+            "[vpn-worker] Handshake attempt {attempt}/{max_attempts} timed out: {e}, retrying"
+          );
+          last_error = format!("timeout: {e}");
+          continue;
+        }
+        Err(e) => {
+          last_error = format!("timeout: {e}");
+        }
       }
     }
 
-    socket
-      .set_read_timeout(None)
-      .map_err(|e| VpnError::Connection(format!("Failed to clear timeout: {e}")))?;
-
-    Ok(())
+    Err(VpnError::Connection(format!(
+      "Handshake failed after {max_attempts} attempts: {last_error}"
+    )))
   }
 
   pub async fn run(self, config_id: String) -> Result<(), VpnError> {

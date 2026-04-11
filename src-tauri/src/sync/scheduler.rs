@@ -716,29 +716,22 @@ impl SyncScheduler {
       match entity_type.as_str() {
         "profile" => {
           let profile_manager = ProfileManager::instance();
-          let profile_to_delete = {
+          let has_profile = {
             if let Ok(profiles) = profile_manager.list_profiles() {
               let profile_uuid = uuid::Uuid::parse_str(&entity_id).ok();
-              profile_uuid.and_then(|uuid| profiles.into_iter().find(|p| p.id == uuid))
+              profile_uuid.is_some_and(|uuid| profiles.iter().any(|p| p.id == uuid))
             } else {
-              None
+              false
             }
           };
 
-          if let Some(mut profile) = profile_to_delete {
+          if has_profile {
             log::info!(
-              "Profile {} was deleted remotely, disabling sync locally",
+              "Profile {} was deleted remotely, deleting locally",
               entity_id
             );
-            profile.sync_mode = crate::profile::types::SyncMode::Disabled;
-            if let Err(e) = profile_manager.save_profile(&profile) {
-              log::warn!("Failed to disable sync for profile {}: {}", entity_id, e);
-            } else {
-              log::info!(
-                "Profile {} sync disabled due to remote tombstone (local copy kept)",
-                entity_id
-              );
-              let _ = events::emit("profiles-changed", ());
+            if let Err(e) = profile_manager.delete_profile_local_only(&entity_id) {
+              log::warn!("Failed to delete tombstoned profile {}: {}", entity_id, e);
             }
           }
         }
