@@ -243,14 +243,73 @@ export function IntegrationsDialog({
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">Port</Label>
                     <div className="flex items-center space-x-2">
+                      <Button
+                        size="sm"
+                        disabled={
+                          isApiStarting || apiServerPort === settings.api_port
+                        }
+                        onClick={async () => {
+                          const port = settings.api_port;
+                          if (port < 1 || port > 65535) {
+                            showErrorToast("Invalid port", {
+                              description: "Port must be between 1 and 65535",
+                            });
+                            return;
+                          }
+                          setIsApiStarting(true);
+                          try {
+                            await invoke("stop_api_server");
+                            const next = await invoke<AppSettings>(
+                              "save_app_settings",
+                              { settings },
+                            );
+                            setSettings(next);
+                            const actualPort = await invoke<number>(
+                              "start_api_server",
+                              { port },
+                            );
+                            setApiServerPort(actualPort);
+                            if (actualPort !== port) {
+                              showErrorToast(`Port ${port} is already in use`, {
+                                description: `Server started on fallback port ${actualPort}`,
+                              });
+                            } else {
+                              showSuccessToast(
+                                `API server running on port ${actualPort}`,
+                              );
+                            }
+                          } catch (e) {
+                            showErrorToast("Failed to start API server", {
+                              description:
+                                e instanceof Error
+                                  ? e.message
+                                  : "Unknown error",
+                            });
+                          } finally {
+                            setIsApiStarting(false);
+                          }
+                        }}
+                      >
+                        {t("common.buttons.save")}
+                      </Button>
                       <Input
-                        value={apiServerPort ?? settings.api_port}
-                        readOnly
+                        type="number"
+                        value={settings.api_port}
+                        onChange={(e) => {
+                          const val = Number.parseInt(e.target.value, 10);
+                          if (!Number.isNaN(val)) {
+                            setSettings({ ...settings, api_port: val });
+                          }
+                        }}
                         className="w-24 font-mono"
+                        min={1}
+                        max={65535}
                       />
-                      <span className="text-xs text-muted-foreground">
-                        Server is running
-                      </span>
+                      {apiServerPort && (
+                        <span className="text-xs text-muted-foreground">
+                          {t("common.status.running")}
+                        </span>
+                      )}
                     </div>
                   </div>
 
