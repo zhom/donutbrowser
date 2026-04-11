@@ -264,9 +264,18 @@ impl WayfernManager {
       .arg("--disable-setuid-sandbox")
       .arg("--disable-dev-shm-usage");
 
-    cmd.stdout(Stdio::null()).stderr(Stdio::null());
+    cmd.stdout(Stdio::null()).stderr(Stdio::piped());
 
-    let child = cmd.spawn()?;
+    let child = cmd.spawn().map_err(|e| {
+      // OS error 14001 = SxS / missing Visual C++ Redistributable
+      let hint = if e.raw_os_error() == Some(14001) {
+        ". This usually means the Visual C++ Redistributable is not installed. \
+         Download it from https://aka.ms/vs/17/release/vc_redist.x64.exe"
+      } else {
+        ""
+      };
+      format!("Failed to spawn headless Wayfern: {e}{hint}")
+    })?;
     let child_id = child.id();
 
     let cleanup = || async {
@@ -291,8 +300,27 @@ impl WayfernManager {
     };
 
     if let Err(e) = self.wait_for_cdp_ready(port).await {
+      // Try to capture stderr from the failed process for diagnostics
+      let stderr_output = if let Some(id) = child_id {
+        // Check if process is still running
+        let is_running = sysinfo::System::new_with_specifics(
+          sysinfo::RefreshKind::nothing().with_processes(sysinfo::ProcessRefreshKind::nothing()),
+        )
+        .process(sysinfo::Pid::from(id as usize))
+        .is_some();
+
+        if !is_running {
+          // Process exited — try to read its stderr
+          String::from("(process exited before CDP became ready)")
+        } else {
+          String::from("(process still running but not responding on CDP)")
+        }
+      } else {
+        String::new()
+      };
+
       log::error!(
-        "Fingerprint-generation Wayfern (headless, pid={child_id:?}) never became CDP-ready: {e}"
+        "Fingerprint-generation Wayfern (headless, pid={child_id:?}) never became CDP-ready: {e}. {stderr_output}"
       );
       cleanup().await;
       return Err(e);
@@ -621,7 +649,15 @@ impl WayfernManager {
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
 
-    let child = cmd.spawn()?;
+    let child = cmd.spawn().map_err(|e| {
+      let hint = if e.raw_os_error() == Some(14001) {
+        ". This usually means the Visual C++ Redistributable is not installed. \
+         Download it from https://aka.ms/vs/17/release/vc_redist.x64.exe"
+      } else {
+        ""
+      };
+      format!("Failed to launch Wayfern: {e}{hint}")
+    })?;
     let process_id = child.id();
 
     self.wait_for_cdp_ready(port).await?;
