@@ -12,8 +12,10 @@ use tauri::AppHandle;
 /// so no encryption path is needed here — Chromium reads plaintext when
 /// `encrypted_value` is empty, regardless of what other cookies store.
 pub mod chrome_decrypt {
-  use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, KeyIvInit};
+  use aes::cipher::{block_padding::Pkcs7, BlockModeDecrypt, KeyIvInit};
+  use ring::pbkdf2;
   use sha2::{Digest, Sha256};
+  use std::num::NonZeroU32;
   use std::path::Path;
 
   type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
@@ -35,7 +37,16 @@ pub mod chrome_decrypt {
 
   fn derive_key(password: &[u8]) -> [u8; KEY_LEN] {
     let mut key = [0u8; KEY_LEN];
-    pbkdf2::pbkdf2_hmac::<sha1::Sha1>(password, SALT, PBKDF2_ITERATIONS, &mut key);
+    // Using ring::pbkdf2 instead of the `pbkdf2` crate to avoid digest
+    // version conflicts between sha1 0.11 (digest 0.11) and pbkdf2 0.12
+    // (digest 0.10). ring's implementation is self-contained.
+    pbkdf2::derive(
+      pbkdf2::PBKDF2_HMAC_SHA1,
+      NonZeroU32::new(PBKDF2_ITERATIONS).expect("iterations must be non-zero"),
+      SALT,
+      password,
+      &mut key,
+    );
     key
   }
 
@@ -88,7 +99,7 @@ pub mod chrome_decrypt {
 
     let mut buf = ciphertext.to_vec();
     let decrypted = Aes128CbcDec::new(key.into(), &IV.into())
-      .decrypt_padded_mut::<Pkcs7>(&mut buf)
+      .decrypt_padded::<Pkcs7>(&mut buf)
       .ok()?;
 
     // Strip the SHA-256(host_key) integrity prefix if present. Older cookies

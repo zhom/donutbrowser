@@ -83,8 +83,7 @@ argon2 = "0.5"
 aes-gcm = "0.10"
 aes = "0.9"
 cbc = "0.2"
-pbkdf2 = "0.12"
-sha1 = "0.11"
+ring = "0.17"
 sha2 = "0.11"
 hyper = { version = "1.8", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
