@@ -1435,10 +1435,26 @@ async fn handle_connect_from_buffer(
   // Returns a BoxedAsyncStream so all upstream types (plain TCP, SOCKS,
   // Shadowsocks) share the same bidirectional-copy tunnel code below.
   let should_bypass = bypass_matcher.should_bypass(target_host);
+  // Helper: configure outbound TCP to match browser TCP fingerprint
+  let configure_tcp = |stream: &TcpStream| {
+    let _ = stream.set_nodelay(true);
+  };
   let target_stream: BoxedAsyncStream = match upstream_url.as_ref() {
-    None => Box::new(TcpStream::connect((target_host, target_port)).await?),
-    Some(url) if url == "DIRECT" => Box::new(TcpStream::connect((target_host, target_port)).await?),
-    _ if should_bypass => Box::new(TcpStream::connect((target_host, target_port)).await?),
+    None => {
+      let s = TcpStream::connect((target_host, target_port)).await?;
+      configure_tcp(&s);
+      Box::new(s)
+    }
+    Some(url) if url == "DIRECT" => {
+      let s = TcpStream::connect((target_host, target_port)).await?;
+      configure_tcp(&s);
+      Box::new(s)
+    }
+    _ if should_bypass => {
+      let s = TcpStream::connect((target_host, target_port)).await?;
+      configure_tcp(&s);
+      Box::new(s)
+    }
     Some(upstream_url_str) => {
       let upstream = Url::parse(upstream_url_str)?;
       let scheme = upstream.scheme();
@@ -1448,6 +1464,7 @@ async fn handle_connect_from_buffer(
           let proxy_host = upstream.host_str().unwrap_or("127.0.0.1");
           let proxy_port = upstream.port().unwrap_or(8080);
           let mut proxy_stream = TcpStream::connect((proxy_host, proxy_port)).await?;
+          configure_tcp(&proxy_stream);
 
           let mut connect_req = format!(
             "CONNECT {}:{} HTTP/1.1\r\nHost: {}:{}\r\n",

@@ -1,5 +1,6 @@
 use crate::browser_runner::BrowserRunner;
 use crate::profile::BrowserProfile;
+use playwright::api::Playwright;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -53,14 +54,14 @@ pub struct WayfernLaunchResult {
   pub cdp_port: Option<u16>,
 }
 
-#[derive(Debug)]
 struct WayfernInstance {
-  #[allow(dead_code)]
   id: String,
   process_id: Option<u32>,
   profile_path: Option<String>,
   url: Option<String>,
   cdp_port: Option<u16>,
+  playwright_context: Option<playwright::api::BrowserContext>,
+  playwright_runtime: Option<Playwright>,
 }
 
 struct WayfernManagerInner {
@@ -86,19 +87,21 @@ impl WayfernManager {
       inner: Arc::new(AsyncMutex::new(WayfernManagerInner {
         instances: HashMap::new(),
       })),
-      // Every request this client makes goes to a local `http://127.0.0.1:<port>`
-      // endpoint that Wayfern is still bringing up. Without a per-request timeout,
-      // a single hanging connect or a stuck HTTP response will block
-      // `wait_for_cdp_ready` indefinitely — its 120-attempt poll loop depends on
-      // each request returning fast. A 2-second per-request timeout turns that
-      // into a worst-case ~60-second bounded wait, and `generate_fingerprint_config`
-      // can then return a real error instead of hanging the profile-creation UI
-      // forever.
       http_client: Client::builder()
         .timeout(Duration::from_secs(2))
         .build()
         .expect("Failed to build reqwest client for wayfern_manager"),
     }
+  }
+
+  async fn create_playwright(
+    &self,
+  ) -> Result<Playwright, Box<dyn std::error::Error + Send + Sync>> {
+    Playwright::initialize()
+      .await
+      .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+        format!("Failed to initialize Playwright: {e}").into()
+      })
   }
 
   pub fn instance() -> &'static WayfernManager {
@@ -593,7 +596,6 @@ impl WayfernManager {
     let mut args = vec![
       format!("--remote-debugging-port={port}"),
       "--remote-debugging-address=127.0.0.1".to_string(),
-      format!("--user-data-dir={}", profile_path),
       "--no-first-run".to_string(),
       "--no-default-browser-check".to_string(),
       "--disable-background-mode".to_string(),
@@ -604,7 +606,7 @@ impl WayfernManager {
       "--disable-session-crashed-bubble".to_string(),
       "--hide-crash-restore-bubble".to_string(),
       "--disable-infobars".to_string(),
-      "--disable-features=DialMediaRouteProvider".to_string(),
+      "--disable-features=DialMediaRouteProvider,DnsOverHttps,AsyncDns".to_string(),
       "--use-mock-keychain".to_string(),
       "--password-store=basic".to_string(),
     ];
@@ -614,10 +616,6 @@ impl WayfernManager {
       args.push("--no-sandbox".to_string());
       args.push("--disable-setuid-sandbox".to_string());
       args.push("--disable-dev-shm-usage".to_string());
-    }
-
-    if let Some(proxy) = proxy_url {
-      args.push(format!("--proxy-server={proxy}"));
     }
 
     if ephemeral {
@@ -632,8 +630,17 @@ impl WayfernManager {
       args.push(format!("--load-extension={}", extension_paths.join(",")));
     }
 
-    // Pass wayfern token as CLI flag so the browser can gate CDP features
-    let wayfern_token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
+    let mut wayfern_token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
+    if wayfern_token.is_none() {
+      log::info!("Wayfern token not ready, waiting...");
+      for _ in 0..15 {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        wayfern_token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
+        if wayfern_token.is_some() {
+          break;
+        }
+      }
+    }
     if let Some(ref token) = wayfern_token {
       args.push(format!("--wayfern-token={token}"));
       log::info!("Wayfern token passed as CLI flag (length: {})", token.len());
@@ -641,28 +648,61 @@ impl WayfernManager {
       log::warn!("No wayfern token available — CDP gated methods will be blocked");
     }
 
-    // Don't add URL to args - we'll navigate via CDP after setting fingerprint
-    // This ensures fingerprint is applied at navigation commit time
+    if let Some(proxy) = proxy_url {
+      let pac_data = format!(
+        "data:application/x-ns-proxy-autoconfig,function FindProxyForURL(url,host){{return \"PROXY {}\";}}",
+        proxy.trim_start_matches("http://").trim_start_matches("https://")
+      );
+      args.push(format!("--proxy-pac-url={pac_data}"));
+      args.push("--dns-prefetch-disable".to_string());
+    }
 
-    let mut cmd = TokioCommand::new(&executable_path);
-    cmd.args(&args);
-    cmd.stdout(Stdio::piped());
-    cmd.stderr(Stdio::piped());
+    let pw = self.create_playwright().await?;
+    let chromium = pw.chromium();
+    let profile_path_ref = std::path::Path::new(profile_path);
+    let mut launcher = chromium.persistent_context_launcher(profile_path_ref);
+    launcher = launcher.executable(executable_path.as_ref());
+    launcher = launcher.headless(false);
+    launcher = launcher.chromium_sandbox(true);
+    launcher = launcher.args(&args);
+    launcher = launcher.timeout(0.0);
 
-    let child = cmd.spawn().map_err(|e| {
-      let hint = if e.raw_os_error() == Some(14001) {
-        ". This usually means the Visual C++ Redistributable is not installed. \
-         Download it from https://aka.ms/vs/17/release/vc_redist.x64.exe"
-      } else {
-        ""
-      };
-      format!("Failed to launch Wayfern: {e}{hint}")
-    })?;
-    let process_id = child.id();
+    let pw_context =
+      launcher
+        .launch()
+        .await
+        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+          let hint = if format!("{e}").contains("14001") {
+            ". This usually means the Visual C++ Redistributable is not installed. \
+           Download it from https://aka.ms/vs/17/release/vc_redist.x64.exe"
+          } else {
+            ""
+          };
+          format!("Failed to launch Wayfern: {e}{hint}").into()
+        })?;
 
-    self.wait_for_cdp_ready(port).await?;
+    let process_id = {
+      use sysinfo::{ProcessRefreshKind, RefreshKind, System};
+      let system = System::new_with_specifics(
+        RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
+      );
+      let mut found: Option<u32> = None;
+      for (pid, process) in system.processes() {
+        let cmd_str = process
+          .cmd()
+          .iter()
+          .map(|s| s.to_string_lossy().to_string())
+          .collect::<Vec<_>>()
+          .join(" ");
+        if cmd_str.contains(&format!("--remote-debugging-port={port}")) {
+          found = Some(pid.as_u32());
+          break;
+        }
+      }
+      found
+    };
+    let pw_runtime = pw;
 
-    // Get CDP targets first - needed for both fingerprint and navigation
     let targets = self.get_cdp_targets(port).await?;
     log::info!("Found {} CDP targets", targets.len());
 
@@ -761,37 +801,7 @@ impl WayfernManager {
       log::warn!("No fingerprint found in config, browser will use default fingerprint");
     }
 
-    // Set geolocation override via CDP so navigator.geolocation.getCurrentPosition() matches
-    if let Some(fingerprint_json) = &config.fingerprint {
-      if let Ok(fp) = serde_json::from_str::<serde_json::Value>(fingerprint_json) {
-        let fp_obj = if fp.get("fingerprint").is_some() {
-          fp.get("fingerprint").unwrap()
-        } else {
-          &fp
-        };
-        if let (Some(lat), Some(lng)) = (
-          fp_obj.get("latitude").and_then(|v| v.as_f64()),
-          fp_obj.get("longitude").and_then(|v| v.as_f64()),
-        ) {
-          let accuracy = fp_obj
-            .get("accuracy")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(100.0);
-          if let Some(target) = page_targets.first() {
-            if let Some(ws_url) = &target.websocket_debugger_url {
-              let _ = self
-                .send_cdp_command(
-                  ws_url,
-                  "Emulation.setGeolocationOverride",
-                  json!({ "latitude": lat, "longitude": lng, "accuracy": accuracy }),
-                )
-                .await;
-              log::info!("Set geolocation override: lat={lat}, lng={lng}");
-            }
-          }
-        }
-      }
-    }
+    // Geolocation is handled internally by the browser binary.
 
     // Navigate to URL via CDP - fingerprint will be applied at navigation commit time
     if let Some(url) = url {
@@ -816,6 +826,8 @@ impl WayfernManager {
       profile_path: Some(profile_path.to_string()),
       url: url.map(|s| s.to_string()),
       cdp_port: Some(port),
+      playwright_context: Some(pw_context),
+      playwright_runtime: Some(pw_runtime),
     };
 
     let mut inner = self.inner.lock().await;
@@ -837,6 +849,9 @@ impl WayfernManager {
     let mut inner = self.inner.lock().await;
 
     if let Some(instance) = inner.instances.remove(id) {
+      log::info!("Cleaning up Wayfern instance {}", instance.id);
+      drop(instance.playwright_context);
+      drop(instance.playwright_runtime);
       if let Some(pid) = instance.process_id {
         #[cfg(unix)]
         {
@@ -991,6 +1006,8 @@ impl WayfernManager {
           profile_path: Some(found_profile_path.clone()),
           url: None,
           cdp_port,
+          playwright_context: None,
+          playwright_runtime: None,
         },
       );
 
