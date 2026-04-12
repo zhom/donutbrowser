@@ -85,6 +85,7 @@ aes = "0.9"
 cbc = "0.2"
 ring = "0.17"
 sha2 = "0.11"
+shadowsocks = { version = "1.24", default-features = false, features = ["aead-cipher"] }
 hyper = { version = "1.8", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
 http-body-util = "0.1"

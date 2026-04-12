@@ -1298,3 +1298,134 @@ async fn test_local_proxy_with_socks5_upstream(
 
   Ok(())
 }
+
+/// Test proxying traffic through a real Shadowsocks server running in Docker.
+/// Verifies the full chain: client → donut-proxy → Shadowsocks → internet.
+#[tokio::test]
+#[serial]
+async fn test_local_proxy_with_shadowsocks_upstream(
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+  let binary_path = setup_test().await?;
+  let mut tracker = ProxyTestTracker::new(binary_path.clone());
+
+  // Check Docker availability
+  let docker_check = std::process::Command::new("docker").arg("version").output();
+  if docker_check.map(|o| !o.status.success()).unwrap_or(true) {
+    eprintln!("skipping Shadowsocks e2e test because Docker is unavailable");
+    return Ok(());
+  }
+
+  // Start a Shadowsocks server container
+  let ss_container = "donut-ss-test";
+  let ss_port = 18388u16;
+  let ss_password = "donut-test-password";
+  let ss_method = "aes-256-gcm";
+
+  // Clean up any previous container
+  let _ = std::process::Command::new("docker")
+    .args(["rm", "-f", ss_container])
+    .output();
+
+  let docker_start = std::process::Command::new("docker")
+    .args([
+      "run",
+      "-d",
+      "--name",
+      ss_container,
+      "-p",
+      &format!("{ss_port}:8388"),
+      "ghcr.io/shadowsocks/ssserver-rust:latest",
+      "ssserver",
+      "-s",
+      "[::]:8388",
+      "-k",
+      ss_password,
+      "-m",
+      ss_method,
+    ])
+    .output()?;
+
+  if !docker_start.status.success() {
+    let stderr = String::from_utf8_lossy(&docker_start.stderr);
+    eprintln!("skipping Shadowsocks e2e test: Docker run failed: {stderr}");
+    return Ok(());
+  }
+
+  // Wait for the SS server to be ready
+  for _ in 0..15 {
+    sleep(Duration::from_secs(1)).await;
+    if TcpStream::connect(("127.0.0.1", ss_port)).await.is_ok() {
+      break;
+    }
+  }
+
+  // Start donut-proxy with Shadowsocks upstream
+  let output = TestUtils::execute_command(
+    &binary_path,
+    &[
+      "proxy",
+      "start",
+      "--host",
+      "127.0.0.1",
+      "--proxy-port",
+      &ss_port.to_string(),
+      "--type",
+      "ss",
+      "--username",
+      ss_method,
+      "--password",
+      ss_password,
+    ],
+  )
+  .await?;
+
+  if !output.status.success() {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let _ = std::process::Command::new("docker")
+      .args(["rm", "-f", ss_container])
+      .output();
+    return Err(format!("Proxy start failed: {stderr}").into());
+  }
+
+  let config: Value = serde_json::from_str(&String::from_utf8(output.stdout)?)?;
+  let proxy_id = config["id"].as_str().unwrap().to_string();
+  let local_port = config["localPort"].as_u64().unwrap() as u16;
+  tracker.track_proxy(proxy_id);
+
+  // Wait for proxy to be fully ready
+  for _ in 0..20 {
+    sleep(Duration::from_millis(100)).await;
+    if TcpStream::connect(("127.0.0.1", local_port)).await.is_ok() {
+      break;
+    }
+  }
+  sleep(Duration::from_millis(500)).await;
+
+  // Test: HTTP request through donut-proxy → Shadowsocks → example.com
+  let mut stream = TcpStream::connect(("127.0.0.1", local_port)).await?;
+  let request =
+    "GET http://example.com/ HTTP/1.1\r\nHost: example.com\r\nConnection: close\r\n\r\n";
+  stream.write_all(request.as_bytes()).await?;
+
+  let mut response = vec![0u8; 16384];
+  let n = tokio::time::timeout(Duration::from_secs(15), stream.read(&mut response))
+    .await
+    .map_err(|_| "HTTP request through Shadowsocks timed out")?
+    .map_err(|e| format!("Read error: {e}"))?;
+  let response_str = String::from_utf8_lossy(&response[..n]);
+
+  assert!(
+    response_str.contains("Example Domain"),
+    "HTTP traffic through Shadowsocks should reach example.com, got: {}",
+    &response_str[..response_str.len().min(500)]
+  );
+  println!("Shadowsocks upstream proxy test passed");
+
+  // Cleanup
+  tracker.cleanup_all().await;
+  let _ = std::process::Command::new("docker")
+    .args(["rm", "-f", ss_container])
+    .output();
+
+  Ok(())
+}

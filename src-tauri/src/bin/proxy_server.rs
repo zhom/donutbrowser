@@ -121,7 +121,7 @@ async fn main() {
             .arg(
               Arg::new("type")
                 .long("type")
-                .help("Proxy type (http, https, socks4, socks5)"),
+                .help("Proxy type (http, https, socks4, socks5, ss)"),
             )
             .arg(Arg::new("username").long("username").help("Proxy username"))
             .arg(Arg::new("password").long("password").help("Proxy password"))
