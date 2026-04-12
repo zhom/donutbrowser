@@ -1005,7 +1005,19 @@ impl ProxyManager {
       Ok(proxy_config) => {
         let local_url = format!("http://127.0.0.1:{}", proxy_config.local_port.unwrap_or(0));
         let config_id = proxy_config.id.clone();
-        let result = ip_utils::fetch_public_ip(Some(&local_url)).await;
+        // Wrap in a timeout so the check worker doesn't stay alive indefinitely
+        // if the upstream is slow or unreachable.
+        let result = tokio::time::timeout(
+          std::time::Duration::from_secs(30),
+          ip_utils::fetch_public_ip(Some(&local_url)),
+        )
+        .await
+        .unwrap_or_else(|_| {
+          Err(ip_utils::IpError::Network(
+            "Proxy check timed out after 30s".to_string(),
+          ))
+        });
+        // Always stop the worker — even if the check failed or timed out
         let _ = crate::proxy_runner::stop_proxy_process(&config_id).await;
         result
       }
@@ -1996,9 +2008,56 @@ impl ProxyManager {
         "Cleaning up orphaned proxy config: {} (proxy process is dead)",
         config.id
       );
-      // Just delete the config file - the process is already dead
       use crate::proxy_storage::delete_proxy_config;
       delete_proxy_config(&config.id);
+    }
+
+    // Kill stale profileless proxy workers — these are check workers
+    // (from check_proxy_validity or similar) that were never cleaned up.
+    // Profile-associated proxies are left alone to avoid the regression
+    // where killing proxies for "dead" browsers on Linux also killed
+    // proxies for running browsers (due to launcher-vs-browser PID mismatch).
+    {
+      use crate::proxy_storage::{is_process_running, list_proxy_configs};
+      use std::time::{SystemTime, UNIX_EPOCH};
+
+      let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+      let all_configs = list_proxy_configs();
+      for config in all_configs {
+        // Only target proxies WITHOUT a profile_id (check workers)
+        if config.profile_id.is_some() {
+          continue;
+        }
+
+        // Must have a running process to kill
+        let Some(pid) = config.pid else { continue };
+        if !is_process_running(pid) {
+          continue;
+        }
+
+        // Check age: only kill if older than 5 minutes
+        let proxy_age = config
+          .id
+          .strip_prefix("proxy_")
+          .and_then(|s| s.split('_').next())
+          .and_then(|s| s.parse::<u64>().ok())
+          .map(|created_at| now.saturating_sub(created_at))
+          .unwrap_or(0);
+
+        if proxy_age > 300 {
+          log::info!(
+            "Killing stale profileless proxy {} (PID {}, age {}s)",
+            config.id,
+            pid,
+            proxy_age
+          );
+          let _ = crate::proxy_runner::stop_proxy_process(&config.id).await;
+        }
+      }
     }
 
     // Clean up orphaned VPN worker configs where the worker process is dead

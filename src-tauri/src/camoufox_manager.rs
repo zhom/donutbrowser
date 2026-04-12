@@ -659,6 +659,56 @@ impl CamoufoxManager {
       }
     }
 
+    // Write explicit proxy prefs to user.js so Firefox always uses the local
+    // donut-proxy and never falls back to stale proxy settings baked into prefs.js
+    // from a previous session. user.js values override prefs.js on every launch.
+    if let Some(proxy_str) = &config.proxy {
+      let user_js_path = profile_path.join("user.js");
+      let mut prefs = String::new();
+
+      // Preserve existing user.js content (ephemeral prefs, etc.)
+      if let Ok(existing) = std::fs::read_to_string(&user_js_path) {
+        // Strip old proxy prefs so we don't duplicate
+        for line in existing.lines() {
+          if !line.contains("network.proxy.") {
+            prefs.push_str(line);
+            prefs.push('\n');
+          }
+        }
+      }
+
+      if let Ok(parsed) = url::Url::parse(proxy_str) {
+        let host = parsed.host_str().unwrap_or("127.0.0.1");
+        let port = parsed.port().unwrap_or(8080);
+        let scheme = parsed.scheme();
+
+        if scheme == "socks5" || scheme == "socks4" {
+          prefs.push_str(&format!(
+            "user_pref(\"network.proxy.type\", 1);\n\
+             user_pref(\"network.proxy.socks\", \"{host}\");\n\
+             user_pref(\"network.proxy.socks_port\", {port});\n\
+             user_pref(\"network.proxy.socks_version\", {});\n\
+             user_pref(\"network.proxy.socks_remote_dns\", true);\n",
+            if scheme == "socks5" { 5 } else { 4 }
+          ));
+        } else {
+          // HTTP/HTTPS proxy
+          prefs.push_str(&format!(
+            "user_pref(\"network.proxy.type\", 1);\n\
+             user_pref(\"network.proxy.http\", \"{host}\");\n\
+             user_pref(\"network.proxy.http_port\", {port});\n\
+             user_pref(\"network.proxy.ssl\", \"{host}\");\n\
+             user_pref(\"network.proxy.ssl_port\", {port});\n\
+             user_pref(\"network.proxy.no_proxies_on\", \"\");\n"
+          ));
+        }
+
+        if let Err(e) = std::fs::write(&user_js_path, prefs) {
+          log::warn!("Failed to write proxy prefs to user.js: {e}");
+        }
+      }
+    }
+
     self
       .launch_camoufox(
         &app_handle,
