@@ -492,7 +492,7 @@ jobs:
             CHANGES="See the full changelog on GitHub."
           fi
 
-          printf '%s' "$CHANGES" > /tmp/discord-changes.txt
+          printf '%b' "$CHANGES" > /tmp/discord-changes.txt
 
       - name: Send Discord notification
         env:
