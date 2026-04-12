@@ -118,8 +118,7 @@ function RippleButton({
       ref={buttonRef}
       data-slot="ripple-button"
       onClick={handleClick}
-      whileTap={{ scale: 0.95 }}
-      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.97 }}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     >

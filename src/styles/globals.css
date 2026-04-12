@@ -153,15 +153,6 @@
   }
   body {
     @apply bg-background text-foreground;
-    overflow-x: hidden;
-  }
-
-  /* Prevent horizontal scrollbars in dialogs, scroll areas, and panels.
-     Content inside these containers should wrap, not overflow sideways. */
-  [role="dialog"],
-  [data-radix-scroll-area-viewport],
-  [data-slot="content"] {
-    overflow-x: hidden;
   }
 }
 
