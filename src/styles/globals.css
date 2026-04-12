@@ -143,9 +143,25 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    /* Thin, transparent-background scrollbars that look consistent across
+       Windows, macOS, and Linux. */
+    scrollbar-width: thin;
+    scrollbar-color: oklch(0.5 0 0 / 30%) transparent;
+  }
+  .dark * {
+    scrollbar-color: oklch(0.8 0 0 / 25%) transparent;
   }
   body {
     @apply bg-background text-foreground;
+    overflow-x: hidden;
+  }
+
+  /* Prevent horizontal scrollbars in dialogs, scroll areas, and panels.
+     Content inside these containers should wrap, not overflow sideways. */
+  [role="dialog"],
+  [data-radix-scroll-area-viewport],
+  [data-slot="content"] {
+    overflow-x: hidden;
   }
 }
 
