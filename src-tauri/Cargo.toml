@@ -76,7 +76,7 @@ chrono-tz = "0.10"
 axum = { version = "0.8.8", features = ["ws"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors"] }
-rand = "0.10.0"
+rand = "0.10.1"
 utoipa = { version = "5", features = ["axum_extras", "chrono"] }
 utoipa-axum = "0.2"
 argon2 = "0.5"
