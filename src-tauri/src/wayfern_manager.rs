@@ -519,7 +519,17 @@ impl WayfernManager {
     {
       let profile_path_buf = std::path::PathBuf::from(profile_path);
       let key_path = profile_path_buf.join("os_crypt_key");
-      let cookies_path = profile_path_buf.join("Default").join("Cookies");
+      let cookies_path = {
+        let network = profile_path_buf
+          .join("Default")
+          .join("Network")
+          .join("Cookies");
+        if network.exists() {
+          network
+        } else {
+          profile_path_buf.join("Default").join("Cookies")
+        }
+      };
 
       if key_path.exists() {
         let key_text = std::fs::read_to_string(&key_path).unwrap_or_default();
@@ -816,6 +826,29 @@ impl WayfernManager {
             Err(e) => log::error!("Failed to navigate to URL: {e}"),
           }
         }
+      }
+    }
+
+    // Clear Playwright's emulation overrides that cause tampering detection
+    for target in &page_targets {
+      if let Some(ws_url) = &target.websocket_debugger_url {
+        let _ = self
+          .send_cdp_command(ws_url, "Emulation.clearDeviceMetricsOverride", json!({}))
+          .await;
+        let _ = self
+          .send_cdp_command(
+            ws_url,
+            "Emulation.setFocusEmulationEnabled",
+            json!({ "enabled": false }),
+          )
+          .await;
+        let _ = self
+          .send_cdp_command(
+            ws_url,
+            "Emulation.setEmulatedMedia",
+            json!({ "media": "", "features": [] }),
+          )
+          .await;
       }
     }
 

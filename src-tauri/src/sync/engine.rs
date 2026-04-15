@@ -2344,7 +2344,18 @@ impl SyncEngine {
 
     // Verify critical files after download
     let os_crypt_key_path = profile_dir.join("profile").join("os_crypt_key");
-    let cookies_path = profile_dir.join("profile").join("Default").join("Cookies");
+    let cookies_path = {
+      let network = profile_dir
+        .join("profile")
+        .join("Default")
+        .join("Network")
+        .join("Cookies");
+      if network.exists() {
+        network
+      } else {
+        profile_dir.join("profile").join("Default").join("Cookies")
+      }
+    };
     if os_crypt_key_path.exists() {
       let key_data = fs::read(&os_crypt_key_path).unwrap_or_default();
       log::info!(

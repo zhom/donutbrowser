@@ -198,11 +198,20 @@ impl CookieManager {
 
     match profile.browser.as_str() {
       "wayfern" => {
-        let path = profile_data_path.join("Default").join("Cookies");
-        if path.exists() {
-          Ok(path)
+        let network_path = profile_data_path
+          .join("Default")
+          .join("Network")
+          .join("Cookies");
+        let legacy_path = profile_data_path.join("Default").join("Cookies");
+        if network_path.exists() {
+          Ok(network_path)
+        } else if legacy_path.exists() {
+          Ok(legacy_path)
         } else {
-          Err(format!("Cookie database not found at: {}", path.display()))
+          Err(format!(
+            "Cookie database not found at: {}",
+            network_path.display()
+          ))
         }
       }
       "camoufox" => {
@@ -232,11 +241,21 @@ impl CookieManager {
 
     match profile.browser.as_str() {
       "wayfern" => {
-        let path = profile_data_path.join("Default").join("Cookies");
-        if !path.exists() {
-          Self::create_empty_chrome_cookies_db(&path)?;
+        let network_path = profile_data_path
+          .join("Default")
+          .join("Network")
+          .join("Cookies");
+        let legacy_path = profile_data_path.join("Default").join("Cookies");
+        if network_path.exists() {
+          Ok(network_path)
+        } else if legacy_path.exists() {
+          Ok(legacy_path)
+        } else {
+          let dir = network_path.parent().unwrap();
+          std::fs::create_dir_all(dir).map_err(|e| format!("Failed to create Network dir: {e}"))?;
+          Self::create_empty_chrome_cookies_db(&network_path)?;
+          Ok(network_path)
         }
-        Ok(path)
       }
       "camoufox" => {
         let path = profile_data_path.join("cookies.sqlite");
