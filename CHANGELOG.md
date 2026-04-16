@@ -1,6 +1,39 @@
 # Changelog
 
 
+## v0.21.0 (2026-04-16)
+
+### Features
+
+- shadowsocks
+
+### Bug Fixes
+
+- vpn config discovery
+
+### Refactoring
+
+- cleanup
+- stricter proxy cleanup
+- wayfern launch
+- better error handling
+- self-updates
+- x64 performance
+
+### Maintenance
+
+- chore: version bump
+- chore: proper formatting
+- chore: remove pre-installed aws cli
+- chore: update flake.nix for v0.20.4 [skip ci] (#283)
+
+### Other
+
+- deps(rust)(deps): bump rand from 0.10.0 to 0.10.1 in /src-tauri (#285)
+- style: button should not become bigger on hover
+- style: scrollbars
+
+
 ## v0.20.4 (2026-04-11)
 
 ### Refactoring
