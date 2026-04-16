@@ -58,4 +58,4 @@ nodecar/nodecar-bin
 .env
 
 # next
-next-env.d.ts
+**/next-env.d.ts

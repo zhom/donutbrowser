@@ -93,7 +93,7 @@ clap = { version = "4", features = ["derive"] }
 async-socks5 = "0.6"
 
 # Camoufox/Playwright integration
-playwright = { git = "https://github.com/sctg-development/playwright-rust", branch = "master" }
+playwright = { git = "https://github.com/zhom/playwright-rust", branch = "master" }
 
 # Wayfern CDP integration
 tokio-tungstenite = { version = "0.29", features = ["native-tls"] }

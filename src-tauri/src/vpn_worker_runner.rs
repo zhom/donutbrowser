@@ -2,7 +2,8 @@ use crate::proxy_runner::find_sidecar_executable;
 use crate::proxy_storage::is_process_running;
 use crate::vpn_worker_storage::{
   delete_vpn_worker_config, find_vpn_worker_by_vpn_id, generate_vpn_worker_id,
-  get_vpn_worker_config, list_vpn_worker_configs, save_vpn_worker_config, VpnWorkerConfig,
+  get_vpn_worker_config, list_vpn_worker_configs, save_vpn_worker_config, vpn_worker_config_path,
+  VpnWorkerConfig,
 };
 use std::process::Stdio;
 
@@ -175,6 +176,8 @@ pub async fn start_vpn_worker(vpn_id: &str) -> Result<VpnWorkerConfig, Box<dyn s
   );
   save_vpn_worker_config(&config)?;
 
+  let config_json_path = vpn_worker_config_path(&id);
+
   // Spawn detached VPN worker process
   let exe = find_sidecar_executable("donut-proxy")?;
 
@@ -190,6 +193,8 @@ pub async fn start_vpn_worker(vpn_id: &str) -> Result<VpnWorkerConfig, Box<dyn s
     cmd.arg(&id);
     cmd.arg("--port");
     cmd.arg(local_port.to_string());
+    cmd.arg("--config-path");
+    cmd.arg(&config_json_path);
 
     cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::null());
@@ -235,6 +240,8 @@ pub async fn start_vpn_worker(vpn_id: &str) -> Result<VpnWorkerConfig, Box<dyn s
     cmd.arg(&id);
     cmd.arg("--port");
     cmd.arg(local_port.to_string());
+    cmd.arg("--config-path");
+    cmd.arg(&config_json_path);
 
     cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::null());
@@ -249,7 +256,8 @@ pub async fn start_vpn_worker(vpn_id: &str) -> Result<VpnWorkerConfig, Box<dyn s
 
     const DETACHED_PROCESS: u32 = 0x00000008;
     const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
-    cmd.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    cmd.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW);
 
     let child = cmd.spawn()?;
     let pid = child.id();

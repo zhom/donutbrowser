@@ -198,7 +198,12 @@ async fn main() {
             .required(true)
             .help("Local SOCKS5 port"),
         )
-        .arg(Arg::new("action").required(true).help("Action (start)")),
+        .arg(Arg::new("action").required(true).help("Action (start)"))
+        .arg(
+          Arg::new("config-path")
+            .long("config-path")
+            .help("Direct path to the VPN worker config JSON file"),
+        ),
     )
     .subcommand(
       Command::new("mcp-bridge")
@@ -391,6 +396,7 @@ async fn main() {
     let port = *vpn_matches
       .get_one::<u16>("port")
       .expect("port is required");
+    let config_path = vpn_matches.get_one::<String>("config-path");
 
     if action == "start" {
       set_high_priority();
@@ -398,8 +404,37 @@ async fn main() {
       log::info!("VPN worker starting, config id: {}", id);
       log::info!("Process PID: {}", std::process::id());
 
-      // Retry config loading to handle file system race condition
-      let config = {
+      let config = if let Some(path) = config_path {
+        // Load config directly from the provided path
+        log::info!("Loading VPN worker config from: {}", path);
+        match std::fs::read_to_string(path) {
+          Ok(content) => match serde_json::from_str::<
+            donutbrowser_lib::vpn_worker_storage::VpnWorkerConfig,
+          >(&content)
+          {
+            Ok(config) => {
+              log::info!(
+                "Found VPN worker config: id={}, vpn_type={}, vpn_id={}",
+                config.id,
+                config.vpn_type,
+                config.vpn_id
+              );
+              config
+            }
+            Err(e) => {
+              log::error!("Failed to parse VPN worker config from {}: {}", path, e);
+              process::exit(1);
+            }
+          },
+          Err(e) => {
+            log::error!("Failed to read VPN worker config from {}: {}", path, e);
+            process::exit(1);
+          }
+        }
+      } else {
+        // Fallback: discover config by ID with retries
+        let storage_dir = donutbrowser_lib::proxy_storage::get_storage_dir();
+        log::info!("Looking for VPN worker config in: {:?}", storage_dir);
         let mut attempts = 0;
         loop {
           if let Some(config) = donutbrowser_lib::vpn_worker_storage::get_vpn_worker_config(id) {
@@ -412,20 +447,21 @@ async fn main() {
             break config;
           }
           attempts += 1;
-          if attempts >= 10 {
+          if attempts >= 50 {
             log::error!(
-              "VPN worker configuration {} not found after {} attempts",
+              "VPN worker configuration {} not found after {} attempts in {:?}",
               id,
-              attempts
+              attempts,
+              storage_dir
             );
             process::exit(1);
           }
           log::info!(
-            "VPN worker config {} not found yet, retrying ({}/10)...",
+            "VPN worker config {} not found yet, retrying ({}/50)...",
             id,
             attempts
           );
-          std::thread::sleep(std::time::Duration::from_millis(50));
+          std::thread::sleep(std::time::Duration::from_millis(100));
         }
       };
 

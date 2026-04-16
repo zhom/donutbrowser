@@ -27,6 +27,10 @@ impl VpnWorkerConfig {
   }
 }
 
+pub fn vpn_worker_config_path(id: &str) -> std::path::PathBuf {
+  get_storage_dir().join(format!("vpn_worker_{}.json", id))
+}
+
 pub fn save_vpn_worker_config(config: &VpnWorkerConfig) -> Result<(), Box<dyn std::error::Error>> {
   let storage_dir = get_storage_dir();
   fs::create_dir_all(&storage_dir)?;
