@@ -2064,6 +2064,80 @@ impl ProxyManager {
       }
     }
 
+    // Kill proxy workers whose browser process has died.
+    //
+    // active_proxies is keyed by the EXACT browser PID that was recorded in
+    // update_proxy_pid(). Checking that PID against a single process-table
+    // snapshot is deterministic: either the PID refers to a live process or
+    // it doesn't. This avoids the fuzzy launcher-vs-browser detection used
+    // by check_browser_status (which historically had false negatives on
+    // Linux and was the reason profile-associated workers were left alone
+    // in the other cleanup branches).
+    //
+    // Without this, every time a user closes their browser via the window's
+    // X button (bypassing Donut's stop flow) or the browser crashes, the
+    // worker keeps running forever. On Windows users reported dozens of
+    // donut-proxy processes accumulating this way.
+    {
+      // Snapshot current active entries first so we don't hold the mutex
+      // while running the (expensive on Windows) sysinfo scan.
+      let snapshot: Vec<(u32, String, Option<String>)> = {
+        let proxies = self.active_proxies.lock().unwrap();
+        proxies
+          .iter()
+          .map(|(&browser_pid, info)| (browser_pid, info.id.clone(), info.profile_id.clone()))
+          .collect()
+      };
+
+      if !snapshot.is_empty() {
+        // One process-table scan for all candidates
+        let system = sysinfo::System::new_with_specifics(
+          sysinfo::RefreshKind::nothing().with_processes(sysinfo::ProcessRefreshKind::everything()),
+        );
+
+        let dead_browser_entries: Vec<(u32, String, Option<String>)> = snapshot
+          .into_iter()
+          .filter(|(browser_pid, _, _)| {
+            // The sentinel PID=0 is used as a placeholder during launch,
+            // before update_proxy_pid has recorded the real browser PID.
+            *browser_pid != 0
+              && system
+                .process(sysinfo::Pid::from_u32(*browser_pid))
+                .is_none()
+          })
+          .collect();
+
+        for (browser_pid, proxy_id, profile_id) in dead_browser_entries {
+          log::info!(
+            "Cleanup: browser PID {} is dead, stopping proxy worker {} (profile={:?})",
+            browser_pid,
+            proxy_id,
+            profile_id
+          );
+          {
+            let mut proxies = self.active_proxies.lock().unwrap();
+            // Re-check the entry still maps to the same proxy_id — another
+            // thread may have replaced it with a new proxy since we snapshotted.
+            if let Some(current) = proxies.get(&browser_pid) {
+              if current.id != proxy_id {
+                continue;
+              }
+            } else {
+              continue;
+            }
+            proxies.remove(&browser_pid);
+          }
+          if let Some(ref pid) = profile_id {
+            let mut map = self.profile_active_proxy_ids.lock().unwrap();
+            if map.get(pid) == Some(&proxy_id) {
+              map.remove(pid);
+            }
+          }
+          let _ = crate::proxy_runner::stop_proxy_process(&proxy_id).await;
+        }
+      }
+    }
+
     // Clean up orphaned VPN worker configs where the worker process is dead
     {
       use crate::proxy_storage::is_process_running;
