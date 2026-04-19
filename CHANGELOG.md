@@ -1,6 +1,25 @@
 # Changelog
 
 
+## v0.21.1 (2026-04-19)
+
+### Features
+
+- shadowsocks
+
+### Refactoring
+
+- better cleanup
+- proxy cleanup
+
+### Maintenance
+
+- chore: version bump
+- chore: linting
+- ci(deps): bump the github-actions group with 3 updates
+- chore: update flake.nix for v0.21.0 [skip ci] (#289)
+
+
 ## v0.21.0 (2026-04-16)
 
 ### Features
