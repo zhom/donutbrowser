@@ -144,7 +144,7 @@ Endpoint = 1.2.3.4:51820
 fn test_wireguard_config_missing_peer() {
   let config = r#"
 [Interface]
-PrivateKey = somekey
+PrivateKey = YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=
 Address = 10.0.0.2/24
 "#;
   let result = parse_wireguard_config(config);

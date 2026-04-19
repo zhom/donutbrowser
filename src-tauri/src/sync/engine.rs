@@ -230,11 +230,7 @@ impl SyncProgressTracker {
     let elapsed = self.start_time.elapsed().as_secs_f64().max(0.1);
     let speed = (completed_bytes as f64 / elapsed) as u64;
     let remaining_bytes = self.total_bytes.saturating_sub(completed_bytes);
-    let eta = if speed > 0 {
-      remaining_bytes / speed
-    } else {
-      0
-    };
+    let eta = remaining_bytes.checked_div(speed).unwrap_or(0);
 
     let _ = events::emit(
       "profile-sync-progress",

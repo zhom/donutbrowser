@@ -622,12 +622,10 @@ impl WireGuardSocks5Server {
           // smoltcp → Client
           if socket.can_recv() {
             match socket.recv(|data| (data.len(), data.to_vec())) {
-              Ok(data) if !data.is_empty() => {
-                if conn.tcp_stream.try_write(&data).is_err() {
-                  socket.close();
-                  completed.push(idx);
-                  continue;
-                }
+              Ok(data) if !data.is_empty() && conn.tcp_stream.try_write(&data).is_err() => {
+                socket.close();
+                completed.push(idx);
+                continue;
               }
               _ => {}
             }

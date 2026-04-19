@@ -141,11 +141,15 @@ pub fn parse_wireguard_config(content: &str) -> Result<WireGuardConfig, VpnError
   let mut peer: HashMap<String, String> = HashMap::new();
   let mut current_section: Option<&str> = None;
 
+  // Strip a UTF-8 BOM if present — some editors/tools emit one and it would
+  // otherwise prepend invisible bytes to the first section header
+  let content = content.strip_prefix('\u{feff}').unwrap_or(content);
+
   for line in content.lines() {
     let line = line.trim();
 
     // Skip empty lines and comments
-    if line.is_empty() || line.starts_with('#') {
+    if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
       continue;
     }
 
@@ -159,7 +163,7 @@ pub fn parse_wireguard_config(content: &str) -> Result<WireGuardConfig, VpnError
       continue;
     }
 
-    // Parse key-value pairs
+    // Parse key-value pairs (split on the first `=` so base64 padding is preserved)
     if let Some((key, value)) = line.split_once('=') {
       let key = key.trim().to_string();
       let value = value.trim().to_string();
@@ -181,6 +185,7 @@ pub fn parse_wireguard_config(content: &str) -> Result<WireGuardConfig, VpnError
     .get("PrivateKey")
     .ok_or_else(|| VpnError::InvalidWireGuard("Missing PrivateKey in [Interface]".to_string()))?
     .clone();
+  validate_wireguard_key(&private_key, "PrivateKey")?;
 
   let address = interface
     .get("Address")
@@ -191,6 +196,7 @@ pub fn parse_wireguard_config(content: &str) -> Result<WireGuardConfig, VpnError
     .get("PublicKey")
     .ok_or_else(|| VpnError::InvalidWireGuard("Missing PublicKey in [Peer]".to_string()))?
     .clone();
+  validate_wireguard_key(&peer_public_key, "PublicKey")?;
 
   let peer_endpoint = peer
     .get("Endpoint")
@@ -207,6 +213,9 @@ pub fn parse_wireguard_config(content: &str) -> Result<WireGuardConfig, VpnError
   let dns = interface.get("DNS").cloned();
   let mtu = interface.get("MTU").and_then(|s| s.parse().ok());
   let preshared_key = peer.get("PresharedKey").cloned();
+  if let Some(ref psk) = preshared_key {
+    validate_wireguard_key(psk, "PresharedKey")?;
+  }
 
   Ok(WireGuardConfig {
     private_key,
@@ -219,6 +228,30 @@ pub fn parse_wireguard_config(content: &str) -> Result<WireGuardConfig, VpnError
     persistent_keepalive,
     preshared_key,
   })
+}
+
+/// Validate that a WireGuard key is a base64-encoded 32-byte value.
+/// Reports the field name and a short preview of the bad value so users can
+/// see exactly what went wrong (e.g. a redacted/masked key).
+fn validate_wireguard_key(key: &str, field: &str) -> Result<(), VpnError> {
+  use base64::Engine;
+
+  let decoded = base64::engine::general_purpose::STANDARD
+    .decode(key)
+    .map_err(|e| {
+      let preview: String = key.chars().take(8).collect();
+      VpnError::InvalidWireGuard(format!(
+        "{field} is not valid base64 (starts with {preview:?}): {e}. \
+         Expected a 32-byte base64-encoded key (44 chars ending with '=')."
+      ))
+    })?;
+  if decoded.len() != 32 {
+    return Err(VpnError::InvalidWireGuard(format!(
+      "{field} decoded to {} bytes (expected 32). The config may be truncated or malformed.",
+      decoded.len()
+    )));
+  }
+  Ok(())
 }
 
 /// Parse an OpenVPN configuration file
@@ -250,31 +283,23 @@ pub fn parse_openvpn_config(content: &str) -> Result<OpenVpnConfig, VpnError> {
         if parts.len() >= 2 {
           remote_host = parts[1].to_string();
         }
-        if parts.len() >= 3 {
-          if let Ok(port) = parts[2].parse() {
-            remote_port = port;
-          }
+        if let Some(port) = parts.get(2).and_then(|p| p.parse().ok()) {
+          remote_port = port;
         }
         if parts.len() >= 4 {
           protocol = parts[3].to_string();
         }
       }
-      "proto" => {
-        if parts.len() >= 2 {
-          protocol = parts[1].to_string();
-        }
+      "proto" if parts.len() >= 2 => {
+        protocol = parts[1].to_string();
       }
       "port" => {
-        if parts.len() >= 2 {
-          if let Ok(port) = parts[1].parse() {
-            remote_port = port;
-          }
+        if let Some(port) = parts.get(1).and_then(|p| p.parse().ok()) {
+          remote_port = port;
         }
       }
-      "dev" => {
-        if parts.len() >= 2 {
-          dev_type = parts[1].to_string();
-        }
+      "dev" if parts.len() >= 2 => {
+        dev_type = parts[1].to_string();
       }
       _ => {}
     }
@@ -348,13 +373,13 @@ mod tests {
   fn test_parse_wireguard_config() {
     let content = r#"
 [Interface]
-PrivateKey = WGTestPrivateKey123456789012345678901234567890
+PrivateKey = YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=
 Address = 10.0.0.2/24
 DNS = 1.1.1.1
 MTU = 1420
 
 [Peer]
-PublicKey = WGTestPublicKey1234567890123456789012345678901
+PublicKey = YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI=
 Endpoint = vpn.example.com:51820
 AllowedIPs = 0.0.0.0/0, ::/0
 PersistentKeepalive = 25
@@ -363,14 +388,14 @@ PersistentKeepalive = 25
     let config = parse_wireguard_config(content).unwrap();
     assert_eq!(
       config.private_key,
-      "WGTestPrivateKey123456789012345678901234567890"
+      "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="
     );
     assert_eq!(config.address, "10.0.0.2/24");
     assert_eq!(config.dns, Some("1.1.1.1".to_string()));
     assert_eq!(config.mtu, Some(1420));
     assert_eq!(
       config.peer_public_key,
-      "WGTestPublicKey1234567890123456789012345678901"
+      "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI="
     );
     assert_eq!(config.peer_endpoint, "vpn.example.com:51820");
     assert_eq!(config.allowed_ips, vec!["0.0.0.0/0", "::/0"]);
@@ -381,20 +406,26 @@ PersistentKeepalive = 25
   fn test_parse_wireguard_config_minimal() {
     let content = r#"
 [Interface]
-PrivateKey = minimalkey
+PrivateKey = YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=
 Address = 10.0.0.2/32
 
 [Peer]
-PublicKey = peerpubkey
+PublicKey = YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI=
 Endpoint = 1.2.3.4:51820
 "#;
 
     let config = parse_wireguard_config(content).unwrap();
-    assert_eq!(config.private_key, "minimalkey");
+    assert_eq!(
+      config.private_key,
+      "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="
+    );
     assert_eq!(config.address, "10.0.0.2/32");
     assert!(config.dns.is_none());
     assert!(config.mtu.is_none());
-    assert_eq!(config.peer_public_key, "peerpubkey");
+    assert_eq!(
+      config.peer_public_key,
+      "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI="
+    );
     assert_eq!(config.peer_endpoint, "1.2.3.4:51820");
   }
 

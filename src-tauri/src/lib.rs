@@ -1422,11 +1422,43 @@ pub fn run() {
       // Without this cleanup, users on Windows accumulate dozens of idle workers
       // (one per profile launch) that the periodic cleanup won't touch because
       // profile-associated workers are deliberately skipped to avoid regressions.
+      //
+      // Preserves workers whose associated profile still has a running browser
+      // process — if the app crashed while a browser was running, its detached
+      // browser keeps going and needs the proxy/VPN worker to stay alive.
       tauri::async_runtime::spawn(async move {
         use crate::proxy_storage::{delete_proxy_config, is_process_running, list_proxy_configs};
         use crate::vpn_worker_storage::{delete_vpn_worker_config, list_vpn_worker_configs};
 
+        // Build sets of (profile_id, vpn_id) whose browsers are still running
+        let profile_manager = crate::profile::ProfileManager::instance();
+        let profiles = profile_manager.list_profiles().unwrap_or_default();
+
+        let running_profile_ids: std::collections::HashSet<String> = profiles
+          .iter()
+          .filter(|p| p.process_id.is_some_and(is_process_running))
+          .map(|p| p.id.to_string())
+          .collect();
+
+        let running_vpn_ids: std::collections::HashSet<String> = profiles
+          .iter()
+          .filter(|p| p.process_id.is_some_and(is_process_running))
+          .filter_map(|p| p.vpn_id.clone())
+          .collect();
+
         for config in list_proxy_configs() {
+          let has_running_browser = config
+            .profile_id
+            .as_ref()
+            .is_some_and(|pid| running_profile_ids.contains(pid));
+          if has_running_browser {
+            log::info!(
+              "Startup: preserving proxy worker {} (profile browser still running)",
+              config.id
+            );
+            continue;
+          }
+
           if let Some(pid) = config.pid {
             if is_process_running(pid) {
               log::info!(
@@ -1442,6 +1474,15 @@ pub fn run() {
         }
 
         for worker in list_vpn_worker_configs() {
+          if running_vpn_ids.contains(&worker.vpn_id) {
+            log::info!(
+              "Startup: preserving VPN worker {} (profile browser using vpn_id {} still running)",
+              worker.id,
+              worker.vpn_id
+            );
+            continue;
+          }
+
           if let Some(pid) = worker.pid {
             if is_process_running(pid) {
               log::info!(
