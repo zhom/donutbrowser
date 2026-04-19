@@ -1416,6 +1416,47 @@ pub fn run() {
         }
       }
 
+      // Kill orphaned proxy and VPN worker processes from previous app runs.
+      // Since active_proxies is an in-memory map that starts empty, any running
+      // donut-proxy workers on disk must be orphans the current app can't track.
+      // Without this cleanup, users on Windows accumulate dozens of idle workers
+      // (one per profile launch) that the periodic cleanup won't touch because
+      // profile-associated workers are deliberately skipped to avoid regressions.
+      tauri::async_runtime::spawn(async move {
+        use crate::proxy_storage::{delete_proxy_config, is_process_running, list_proxy_configs};
+        use crate::vpn_worker_storage::{delete_vpn_worker_config, list_vpn_worker_configs};
+
+        for config in list_proxy_configs() {
+          if let Some(pid) = config.pid {
+            if is_process_running(pid) {
+              log::info!(
+                "Startup: killing orphaned proxy worker {} (PID {})",
+                config.id,
+                pid
+              );
+              let _ = crate::proxy_runner::stop_proxy_process(&config.id).await;
+              continue;
+            }
+          }
+          delete_proxy_config(&config.id);
+        }
+
+        for worker in list_vpn_worker_configs() {
+          if let Some(pid) = worker.pid {
+            if is_process_running(pid) {
+              log::info!(
+                "Startup: killing orphaned VPN worker {} (PID {})",
+                worker.id,
+                pid
+              );
+              let _ = crate::vpn_worker_runner::stop_vpn_worker(&worker.id).await;
+              continue;
+            }
+          }
+          delete_vpn_worker_config(&worker.id);
+        }
+      });
+
       // Immediately bump non-running profiles to the latest installed browser version.
       // This runs synchronously before any network calls so profiles are updated on launch.
       {
