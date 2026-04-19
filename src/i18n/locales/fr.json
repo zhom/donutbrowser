@@ -278,13 +278,16 @@
       "username": "Nom d'utilisateur",
       "usernamePlaceholder": "Optionnel",
       "password": "Mot de passe",
-      "passwordPlaceholder": "Optionnel"
+      "passwordPlaceholder": "Optionnel",
+      "cipher": "Chiffrement",
+      "cipherPlaceholder": "aes-256-gcm"
     },
     "types": {
       "http": "HTTP",
       "https": "HTTPS",
       "socks4": "SOCKS4",
-      "socks5": "SOCKS5"
+      "socks5": "SOCKS5",
+      "ss": "Shadowsocks"
     },
     "tabs": {
       "regular": "Standard",

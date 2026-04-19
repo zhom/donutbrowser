@@ -1368,6 +1368,10 @@ impl ProxyManager {
       ("socks5", rest)
     } else if let Some(rest) = line.strip_prefix("socks://") {
       ("socks5", rest) // Default socks to socks5
+    } else if let Some(rest) = line.strip_prefix("ss://") {
+      ("ss", rest)
+    } else if let Some(rest) = line.strip_prefix("shadowsocks://") {
+      ("ss", rest)
     } else {
       return None;
     };

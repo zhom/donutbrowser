@@ -94,6 +94,19 @@ export function ProxyFormDialog({
       return;
     }
 
+    if (
+      form.proxy_type === "ss" &&
+      (!form.username.trim() || !form.password.trim())
+    ) {
+      toast.error(
+        t(
+          "proxies.form.ssCipherRequired",
+          "Cipher and password are required for Shadowsocks",
+        ),
+      );
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const payload = {
@@ -136,7 +149,12 @@ export function ProxyFormDialog({
   }, [isSubmitting, onClose]);
 
   const isFormValid =
-    form.name.trim() && form.host.trim() && form.port > 0 && form.port <= 65535;
+    form.name.trim() &&
+    form.host.trim() &&
+    form.port > 0 &&
+    form.port <= 65535 &&
+    (form.proxy_type !== "ss" ||
+      (form.username.trim() && form.password.trim()));
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -174,9 +192,9 @@ export function ProxyFormDialog({
                 <SelectValue placeholder="Select proxy type" />
               </SelectTrigger>
               <SelectContent>
-                {["http", "https", "socks4", "socks5"].map((type) => (
+                {["http", "https", "socks4", "socks5", "ss"].map((type) => (
                   <SelectItem key={type} value={type}>
-                    {type.toUpperCase()}
+                    {type === "ss" ? "Shadowsocks" : type.toUpperCase()}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -220,8 +238,9 @@ export function ProxyFormDialog({
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="proxy-username">
-                {t("proxies.form.username")} (
-                {t("proxies.form.usernamePlaceholder")})
+                {form.proxy_type === "ss"
+                  ? t("proxies.form.cipher")
+                  : `${t("proxies.form.username")} (${t("proxies.form.usernamePlaceholder")})`}
               </Label>
               <Input
                 id="proxy-username"
@@ -229,15 +248,20 @@ export function ProxyFormDialog({
                 onChange={(e) => {
                   setForm({ ...form, username: e.target.value });
                 }}
-                placeholder={t("proxies.form.usernamePlaceholder")}
+                placeholder={
+                  form.proxy_type === "ss"
+                    ? t("proxies.form.cipherPlaceholder")
+                    : t("proxies.form.usernamePlaceholder")
+                }
                 disabled={isSubmitting}
               />
             </div>
 
             <div className="grid gap-2">
               <Label htmlFor="proxy-password">
-                {t("proxies.form.password")} (
-                {t("proxies.form.passwordPlaceholder")})
+                {form.proxy_type === "ss"
+                  ? t("proxies.form.password")
+                  : `${t("proxies.form.password")} (${t("proxies.form.passwordPlaceholder")})`}
               </Label>
               <Input
                 id="proxy-password"

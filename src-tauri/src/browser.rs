@@ -4,7 +4,7 @@ use utoipa::ToSchema;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ProxySettings {
-  pub proxy_type: String, // "http", "https", "socks4", or "socks5"
+  pub proxy_type: String, // "http", "https", "socks4", "socks5", or "ss" (Shadowsocks)
   pub host: String,
   pub port: u16,
   pub username: Option<String>,
