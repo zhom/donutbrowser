@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v0.21.2 (2026-04-21)
+
+### Bug Fixes
+
+- properly handle headless mode
+
+### Maintenance
+
+- chore: version bump
+- chore: update flake.nix for v0.21.1 [skip ci] (#295)
+
+
 ## v0.21.1 (2026-04-19)
 
 ### Features
