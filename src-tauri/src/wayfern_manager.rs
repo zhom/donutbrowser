@@ -504,6 +504,7 @@ impl WayfernManager {
     ephemeral: bool,
     extension_paths: &[String],
     remote_debugging_port: Option<u16>,
+    headless: bool,
   ) -> Result<WayfernLaunchResult, Box<dyn std::error::Error + Send + Sync>> {
     let executable_path = BrowserRunner::instance()
       .get_browser_executable_path(profile)
@@ -672,7 +673,7 @@ impl WayfernManager {
     let profile_path_ref = std::path::Path::new(profile_path);
     let mut launcher = chromium.persistent_context_launcher(profile_path_ref);
     launcher = launcher.executable(executable_path.as_ref());
-    launcher = launcher.headless(false);
+    launcher = launcher.headless(headless);
     launcher = launcher.chromium_sandbox(true);
     launcher = launcher.args(&args);
     launcher = launcher.timeout(0.0);
@@ -1151,6 +1152,7 @@ impl WayfernManager {
         profile.ephemeral,
         &[],
         None,
+        false,
       )
       .await
   }

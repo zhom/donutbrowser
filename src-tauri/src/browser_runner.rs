@@ -156,7 +156,7 @@ impl BrowserRunner {
     url: Option<String>,
     _local_proxy_settings: Option<&ProxySettings>,
     remote_debugging_port: Option<u16>,
-    _headless: bool,
+    headless: bool,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
     // Handle Camoufox profiles using CamoufoxManager
     if profile.browser == "camoufox" {
@@ -335,6 +335,7 @@ impl BrowserRunner {
           camoufox_config,
           url,
           override_profile_path,
+          headless,
         )
         .await
         .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
@@ -592,6 +593,7 @@ impl BrowserRunner {
           profile.ephemeral,
           &extension_paths,
           remote_debugging_port,
+          headless,
         )
         .await
         .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {

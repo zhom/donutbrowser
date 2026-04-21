@@ -207,6 +207,7 @@ impl CamoufoxManager {
     profile_path: &str,
     config: &CamoufoxConfig,
     url: Option<&str>,
+    headless: bool,
   ) -> Result<CamoufoxLaunchResult, Box<dyn std::error::Error + Send + Sync>> {
     let custom_config = if let Some(existing_fingerprint) = &config.fingerprint {
       log::info!("Using existing fingerprint from profile metadata");
@@ -251,8 +252,9 @@ impl CamoufoxManager {
       args.push(url.to_string());
     }
 
-    // Add headless flag for tests
-    if std::env::var("CAMOUFOX_HEADLESS").is_ok() {
+    // Add headless flag when requested via the API or via the CAMOUFOX_HEADLESS
+    // env var (used by integration tests)
+    if headless || std::env::var("CAMOUFOX_HEADLESS").is_ok() {
       args.push("--headless".to_string());
     }
 
@@ -617,6 +619,7 @@ impl CamoufoxManager {
     config: CamoufoxConfig,
     url: Option<String>,
     override_profile_path: Option<std::path::PathBuf>,
+    headless: bool,
   ) -> Result<CamoufoxLaunchResult, String> {
     // Get profile path
     let profile_path = if let Some(ref override_path) = override_profile_path {
@@ -716,6 +719,7 @@ impl CamoufoxManager {
         &profile_path_str,
         &config,
         url.as_deref(),
+        headless,
       )
       .await
       .map_err(|e| format!("Failed to launch Camoufox: {e}"))
