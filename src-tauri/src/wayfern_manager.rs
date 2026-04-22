@@ -642,8 +642,12 @@ impl WayfernManager {
     }
 
     let mut wayfern_token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
-    if wayfern_token.is_none() {
-      log::info!("Wayfern token not ready, waiting...");
+    if wayfern_token.is_none()
+      && crate::cloud_auth::CLOUD_AUTH
+        .has_active_paid_subscription()
+        .await
+    {
+      log::info!("Wayfern token not ready for paid user, waiting...");
       for _ in 0..15 {
         tokio::time::sleep(Duration::from_secs(1)).await;
         wayfern_token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
@@ -655,8 +659,6 @@ impl WayfernManager {
     if let Some(ref token) = wayfern_token {
       args.push(format!("--wayfern-token={token}"));
       log::info!("Wayfern token passed as CLI flag (length: {})", token.len());
-    } else {
-      log::warn!("No wayfern token available — CDP gated methods will be blocked");
     }
 
     if let Some(proxy) = proxy_url {
