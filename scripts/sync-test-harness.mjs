@@ -48,6 +48,7 @@ async function downloadFile(url, dest) {
     protocol
       .get(url, (response) => {
         if (response.statusCode === 302 || response.statusCode === 301) {
+          file.close();
           downloadFile(response.headers.location, dest)
             .then(resolve)
             .catch(reject);
@@ -55,11 +56,28 @@ async function downloadFile(url, dest) {
         }
 
         if (response.statusCode !== 200) {
+          file.close();
           reject(new Error(`Failed to download: ${response.statusCode}`));
           return;
         }
 
-        pipeline(response, file).then(resolve).catch(reject);
+        // pipeline() resolves once the source ends but doesn't await the
+        // destination fd closing. Linux refuses to exec a file whose write
+        // fd is still open (ETXTBSY), so explicitly wait for 'close'.
+        pipeline(response, file)
+          .then(
+            () =>
+              new Promise((res, rej) => {
+                if (file.closed) {
+                  res();
+                } else {
+                  file.once("close", res);
+                  file.once("error", rej);
+                }
+              }),
+          )
+          .then(resolve)
+          .catch(reject);
       })
       .on("error", reject);
   });
