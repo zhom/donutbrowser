@@ -7,8 +7,7 @@ interface UseCloudAuthReturn {
   user: CloudUser | null;
   isLoggedIn: boolean;
   isLoading: boolean;
-  requestOtp: (email: string, captchaToken: string) => Promise<string>;
-  verifyOtp: (email: string, code: string) => Promise<CloudAuthState>;
+  exchangeDeviceCode: (code: string) => Promise<CloudAuthState>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<CloudUser>;
 }
@@ -50,17 +49,9 @@ export function useCloudAuth(): UseCloudAuthReturn {
     };
   }, [loadUser]);
 
-  const requestOtp = useCallback(
-    (email: string, captchaToken: string): Promise<string> => {
-      return invoke<string>("cloud_request_otp", { email, captchaToken });
-    },
-    [],
-  );
-
-  const verifyOtp = useCallback(
-    async (email: string, code: string): Promise<CloudAuthState> => {
-      const state = await invoke<CloudAuthState>("cloud_verify_otp", {
-        email,
+  const exchangeDeviceCode = useCallback(
+    async (code: string): Promise<CloudAuthState> => {
+      const state = await invoke<CloudAuthState>("cloud_exchange_device_code", {
         code,
       });
       setAuthState(state);
@@ -88,8 +79,7 @@ export function useCloudAuth(): UseCloudAuthReturn {
     user: authState?.user ?? null,
     isLoggedIn: authState !== null,
     isLoading,
-    requestOtp,
-    verifyOtp,
+    exchangeDeviceCode,
     logout,
     refreshProfile,
   };

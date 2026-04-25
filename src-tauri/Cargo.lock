@@ -4923,7 +4923,7 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 [[package]]
 name = "playwright"
 version = "0.0.23"
-source = "git+https://github.com/zhom/playwright-rust?branch=master#95a6c94d87c88376502ce2f33d4c61c09fc008a6"
+source = "git+https://github.com/zhom/playwright-rust?branch=master#0482f839aa24507268d9e3ee47c2be859eeef4f2"
 dependencies = [
  "base64 0.22.1",
  "chrono",

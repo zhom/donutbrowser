@@ -382,11 +382,10 @@
       "tabLabel": "云端",
       "selfHostedTabLabel": "自托管",
       "email": "电子邮件",
-      "emailPlaceholder": "you@example.com",
-      "sendCode": "发送验证码",
-      "codeSent": "验证码已发送！请检查您的邮箱。",
-      "verificationCode": "验证码",
-      "codePlaceholder": "输入6位验证码",
+      "deviceLinkInstructions": "点击\"登录\"以在浏览器中打开登录页面。登录后复制显示的代码并粘贴到下方。",
+      "openLogin": "登录",
+      "linkCodeLabel": "登录代码",
+      "linkCodePlaceholder": "粘贴网站的代码",
       "verifyAndLogin": "验证并登录",
       "loggingIn": "登录中...",
       "connected": "已连接",
@@ -397,8 +396,7 @@
       "logout": "退出登录",
       "logoutConfirm": "您确定要退出登录吗？云同步将会停止。",
       "loginSuccess": "登录成功！",
-      "logoutSuccess": "已成功退出登录。",
-      "loadingCaptcha": "正在加载验证码..."
+      "logoutSuccess": "已成功退出登录。"
     },
     "team": {
       "title": "团队",

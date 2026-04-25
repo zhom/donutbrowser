@@ -1,6 +1,5 @@
 use crate::browser_runner::BrowserRunner;
 use crate::profile::BrowserProfile;
-use playwright::api::Playwright;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -60,8 +59,6 @@ struct WayfernInstance {
   profile_path: Option<String>,
   url: Option<String>,
   cdp_port: Option<u16>,
-  playwright_context: Option<playwright::api::BrowserContext>,
-  playwright_runtime: Option<Playwright>,
 }
 
 struct WayfernManagerInner {
@@ -92,16 +89,6 @@ impl WayfernManager {
         .build()
         .expect("Failed to build reqwest client for wayfern_manager"),
     }
-  }
-
-  async fn create_playwright(
-    &self,
-  ) -> Result<Playwright, Box<dyn std::error::Error + Send + Sync>> {
-    Playwright::initialize()
-      .await
-      .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
-        format!("Failed to initialize Playwright: {e}").into()
-      })
   }
 
   pub fn instance() -> &'static WayfernManager {
@@ -514,7 +501,7 @@ impl WayfernManager {
       Some(p) => p,
       None => Self::find_free_port().await?,
     };
-    log::info!("Launching Wayfern on CDP port {port}");
+    log::info!("Launching Wayfern on CDP port {port} (detached)");
 
     // Diagnostic: verify critical profile files and test cookie decryption
     {
@@ -607,6 +594,7 @@ impl WayfernManager {
     let mut args = vec![
       format!("--remote-debugging-port={port}"),
       "--remote-debugging-address=127.0.0.1".to_string(),
+      format!("--user-data-dir={profile_path}"),
       "--no-first-run".to_string(),
       "--no-default-browser-check".to_string(),
       "--disable-background-mode".to_string(),
@@ -621,6 +609,10 @@ impl WayfernManager {
       "--use-mock-keychain".to_string(),
       "--password-store=basic".to_string(),
     ];
+
+    if headless {
+      args.push("--headless=new".to_string());
+    }
 
     #[cfg(target_os = "linux")]
     {
@@ -670,51 +662,28 @@ impl WayfernManager {
       args.push("--dns-prefetch-disable".to_string());
     }
 
-    let pw = self.create_playwright().await?;
-    let chromium = pw.chromium();
-    let profile_path_ref = std::path::Path::new(profile_path);
-    let mut launcher = chromium.persistent_context_launcher(profile_path_ref);
-    launcher = launcher.executable(executable_path.as_ref());
-    launcher = launcher.headless(headless);
-    launcher = launcher.chromium_sandbox(true);
-    launcher = launcher.args(&args);
-    launcher = launcher.timeout(0.0);
+    let mut command = TokioCommand::new(&executable_path);
+    command
+      .args(&args)
+      .stdin(Stdio::null())
+      .stdout(Stdio::null())
+      .stderr(Stdio::null());
 
-    let pw_context =
-      launcher
-        .launch()
-        .await
-        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
-          let hint = if format!("{e}").contains("14001") {
-            ". This usually means the Visual C++ Redistributable is not installed. \
+    let child = command
+      .spawn()
+      .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+        let hint = if e.raw_os_error() == Some(14001) {
+          ". This usually means the Visual C++ Redistributable is not installed. \
            Download it from https://aka.ms/vs/17/release/vc_redist.x64.exe"
-          } else {
-            ""
-          };
-          format!("Failed to launch Wayfern: {e}{hint}").into()
-        })?;
+        } else {
+          ""
+        };
+        format!("Failed to spawn Wayfern: {e}{hint}").into()
+      })?;
+    let process_id = child.id();
+    drop(child);
 
-    let process_id = {
-      use sysinfo::{ProcessRefreshKind, RefreshKind, System};
-      let system = System::new_with_specifics(
-        RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
-      );
-      let mut found: Option<u32> = None;
-      for (pid, process) in system.processes() {
-        let cmd_str = process
-          .cmd()
-          .iter()
-          .map(|s| s.to_string_lossy().to_string())
-          .collect::<Vec<_>>()
-          .join(" ");
-        if cmd_str.contains(&format!("--remote-debugging-port={port}")) {
-          found = Some(pid.as_u32());
-          break;
-        }
-      }
-      found
-    };
-    let pw_runtime = pw;
+    self.wait_for_cdp_ready(port).await?;
 
     let targets = self.get_cdp_targets(port).await?;
     log::info!("Found {} CDP targets", targets.len());
@@ -797,7 +766,6 @@ impl WayfernManager {
       for target in &page_targets {
         if let Some(ws_url) = &target.websocket_debugger_url {
           log::info!("Applying fingerprint to target via WebSocket: {}", ws_url);
-          // Wayfern.setFingerprint expects the fingerprint object directly, NOT wrapped
           match self
             .send_cdp_command(ws_url, "Wayfern.setFingerprint", fingerprint_params.clone())
             .await
@@ -816,23 +784,20 @@ impl WayfernManager {
 
     // Geolocation is handled internally by the browser binary.
 
-    // Navigate to URL via CDP - fingerprint will be applied at navigation commit time
     if let Some(url) = url {
       log::info!("Navigating to URL via CDP: {}", url);
       if let Some(target) = page_targets.first() {
         if let Some(ws_url) = &target.websocket_debugger_url {
-          match self
+          if let Err(e) = self
             .send_cdp_command(ws_url, "Page.navigate", json!({ "url": url }))
             .await
           {
-            Ok(_) => log::info!("Successfully navigated to URL: {}", url),
-            Err(e) => log::error!("Failed to navigate to URL: {e}"),
+            log::error!("Failed to navigate to URL: {e}");
           }
         }
       }
     }
 
-    // Clear Playwright's emulation overrides that cause tampering detection
     for target in &page_targets {
       if let Some(ws_url) = &target.websocket_debugger_url {
         let _ = self
@@ -862,8 +827,6 @@ impl WayfernManager {
       profile_path: Some(profile_path.to_string()),
       url: url.map(|s| s.to_string()),
       cdp_port: Some(port),
-      playwright_context: Some(pw_context),
-      playwright_runtime: Some(pw_runtime),
     };
 
     let mut inner = self.inner.lock().await;
@@ -886,8 +849,6 @@ impl WayfernManager {
 
     if let Some(instance) = inner.instances.remove(id) {
       log::info!("Cleaning up Wayfern instance {}", instance.id);
-      drop(instance.playwright_context);
-      drop(instance.playwright_runtime);
       if let Some(pid) = instance.process_id {
         #[cfg(unix)]
         {
@@ -911,40 +872,49 @@ impl WayfernManager {
     Ok(())
   }
 
-  /// Opens a URL in a new tab for an existing Wayfern instance using CDP.
-  /// Returns Ok(()) if successful, or an error if the instance is not found or CDP fails.
+  /// Opens a URL in a new tab for an existing Wayfern instance.
   pub async fn open_url_in_tab(
     &self,
     profile_path: &str,
     url: &str,
   ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let instance = self
-      .find_wayfern_by_profile(profile_path)
+    let inner = self.inner.lock().await;
+    let target_path = std::path::Path::new(profile_path)
+      .canonicalize()
+      .unwrap_or_else(|_| std::path::Path::new(profile_path).to_path_buf());
+
+    let port = inner
+      .instances
+      .values()
+      .find(|i| {
+        i.profile_path
+          .as_deref()
+          .map(|p| {
+            std::path::Path::new(p)
+              .canonicalize()
+              .unwrap_or_else(|_| std::path::Path::new(p).to_path_buf())
+              == target_path
+          })
+          .unwrap_or(false)
+      })
+      .and_then(|i| i.cdp_port)
+      .ok_or("Wayfern instance (with CDP port) not found for profile")?;
+    drop(inner);
+
+    // Open the URL in a new tab via the CDP HTTP convenience endpoint.
+    let new_tab_url = format!(
+      "http://127.0.0.1:{port}/json/new?{}",
+      urlencoding::encode(url)
+    );
+    let resp = self
+      .http_client
+      .put(&new_tab_url)
+      .send()
       .await
-      .ok_or("Wayfern instance not found for profile")?;
-
-    let cdp_port = instance
-      .cdp_port
-      .ok_or("No CDP port available for Wayfern instance")?;
-
-    // Get the browser target to create a new tab
-    let targets = self.get_cdp_targets(cdp_port).await?;
-
-    // Find a page target to get the WebSocket URL (we need any target to send commands)
-    let page_target = targets
-      .iter()
-      .find(|t| t.target_type == "page" && t.websocket_debugger_url.is_some())
-      .ok_or("No page target found for CDP")?;
-
-    let ws_url = page_target
-      .websocket_debugger_url
-      .as_ref()
-      .ok_or("No WebSocket URL available")?;
-
-    // Use Target.createTarget to open a new tab with the URL
-    self
-      .send_cdp_command(ws_url, "Target.createTarget", json!({ "url": url }))
-      .await?;
+      .map_err(|e| format!("Failed to open new tab: {e}"))?;
+    if !resp.status().is_success() {
+      return Err(format!("CDP /json/new returned HTTP {}", resp.status()).into());
+    }
 
     log::info!("Opened URL in new tab via CDP: {}", url);
     Ok(())
@@ -1042,8 +1012,6 @@ impl WayfernManager {
           profile_path: Some(found_profile_path.clone()),
           url: None,
           cdp_port,
-          playwright_context: None,
-          playwright_runtime: None,
         },
       );
 

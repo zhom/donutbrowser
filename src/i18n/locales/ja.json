@@ -382,11 +382,10 @@
       "tabLabel": "クラウド",
       "selfHostedTabLabel": "セルフホスト",
       "email": "メールアドレス",
-      "emailPlaceholder": "you@example.com",
-      "sendCode": "コードを送信",
-      "codeSent": "コードを送信しました！メールを確認してください。",
-      "verificationCode": "認証コード",
-      "codePlaceholder": "6桁のコードを入力",
+      "deviceLinkInstructions": "「ログイン」をクリックすると、ブラウザでログインページが開きます。サインイン後、表示されたコードをコピーして下に貼り付けてください。",
+      "openLogin": "ログイン",
+      "linkCodeLabel": "ログインコード",
+      "linkCodePlaceholder": "ウェブサイトのコードを貼り付け",
       "verifyAndLogin": "認証してログイン",
       "loggingIn": "ログイン中...",
       "connected": "接続済み",
@@ -397,8 +396,7 @@
       "logout": "ログアウト",
       "logoutConfirm": "ログアウトしてもよろしいですか？クラウド同期が停止します。",
       "loginSuccess": "ログインに成功しました！",
-      "logoutSuccess": "ログアウトしました。",
-      "loadingCaptcha": "キャプチャを読み込み中..."
+      "logoutSuccess": "ログアウトしました。"
     },
     "team": {
       "title": "チーム",

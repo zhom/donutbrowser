@@ -382,11 +382,10 @@
       "tabLabel": "Nuvem",
       "selfHostedTabLabel": "Auto-hospedado",
       "email": "E-mail",
-      "emailPlaceholder": "voce@exemplo.com",
-      "sendCode": "Enviar Código",
-      "codeSent": "Código enviado! Verifique seu e-mail.",
-      "verificationCode": "Código de Verificação",
-      "codePlaceholder": "Digite o código de 6 dígitos",
+      "deviceLinkInstructions": "Clique em \"Entrar\" para abrir a página de login no seu navegador. Após entrar lá, copie o código exibido e cole-o abaixo.",
+      "openLogin": "Entrar",
+      "linkCodeLabel": "Código de login",
+      "linkCodePlaceholder": "Cole o código do site",
       "verifyAndLogin": "Verificar e Entrar",
       "loggingIn": "Entrando...",
       "connected": "Conectado",
@@ -397,8 +396,7 @@
       "logout": "Sair",
       "logoutConfirm": "Tem certeza de que deseja sair? A sincronização na nuvem será interrompida.",
       "loginSuccess": "Login realizado com sucesso!",
-      "logoutSuccess": "Logout realizado com sucesso.",
-      "loadingCaptcha": "Carregando captcha..."
+      "logoutSuccess": "Logout realizado com sucesso."
     },
     "team": {
       "title": "Equipe",

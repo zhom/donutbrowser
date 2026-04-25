@@ -382,11 +382,10 @@
       "tabLabel": "Nube",
       "selfHostedTabLabel": "Autoalojado",
       "email": "Correo electrónico",
-      "emailPlaceholder": "tu@ejemplo.com",
-      "sendCode": "Enviar Código",
-      "codeSent": "¡Código enviado! Revisa tu correo electrónico.",
-      "verificationCode": "Código de Verificación",
-      "codePlaceholder": "Ingresa el código de 6 dígitos",
+      "deviceLinkInstructions": "Haz clic en \"Iniciar sesión\" para abrir la página de inicio de sesión en tu navegador. Después de iniciar sesión allí, copia el código que se muestra y pégalo abajo.",
+      "openLogin": "Iniciar sesión",
+      "linkCodeLabel": "Código de inicio de sesión",
+      "linkCodePlaceholder": "Pega el código del sitio web",
       "verifyAndLogin": "Verificar e Iniciar Sesión",
       "loggingIn": "Iniciando sesión...",
       "connected": "Conectado",
@@ -397,8 +396,7 @@
       "logout": "Cerrar Sesión",
       "logoutConfirm": "¿Estás seguro de que deseas cerrar sesión? La sincronización en la nube se detendrá.",
       "loginSuccess": "¡Sesión iniciada exitosamente!",
-      "logoutSuccess": "Sesión cerrada exitosamente.",
-      "loadingCaptcha": "Cargando captcha..."
+      "logoutSuccess": "Sesión cerrada exitosamente."
     },
     "team": {
       "title": "Equipo",

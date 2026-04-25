@@ -382,11 +382,10 @@
       "tabLabel": "Cloud",
       "selfHostedTabLabel": "Self-Hosted",
       "email": "Email",
-      "emailPlaceholder": "you@example.com",
-      "sendCode": "Send Code",
-      "codeSent": "Code sent! Check your email.",
-      "verificationCode": "Verification Code",
-      "codePlaceholder": "Enter 6-digit code",
+      "deviceLinkInstructions": "Click \"Login\" to open the login page in your browser. Once signed in there, copy the code shown and paste it below.",
+      "openLogin": "Login",
+      "linkCodeLabel": "Login code",
+      "linkCodePlaceholder": "Paste the code from the website",
       "verifyAndLogin": "Verify & Log In",
       "loggingIn": "Logging in...",
       "connected": "Connected",
@@ -397,8 +396,7 @@
       "logout": "Log Out",
       "logoutConfirm": "Are you sure you want to log out? Cloud sync will stop.",
       "loginSuccess": "Successfully logged in!",
-      "logoutSuccess": "Successfully logged out.",
-      "loadingCaptcha": "Loading captcha..."
+      "logoutSuccess": "Successfully logged out."
     },
     "team": {
       "title": "Team",

@@ -2087,9 +2087,9 @@ pub fn run() {
       disconnect_vpn,
       get_vpn_status,
       list_active_vpn_connections,
+      handle_url_open,
       // Cloud auth commands
-      cloud_auth::cloud_request_otp,
-      cloud_auth::cloud_verify_otp,
+      cloud_auth::cloud_exchange_device_code,
       cloud_auth::cloud_get_user,
       cloud_auth::cloud_refresh_profile,
       cloud_auth::cloud_logout,
@@ -2278,7 +2278,7 @@ mod tests {
             // Remove trailing comma and whitespace
             let command = line.trim_end_matches(',').trim();
             if !command.is_empty() {
-              // Strip module prefix (e.g., "cloud_auth::cloud_request_otp" -> "cloud_request_otp")
+              // Strip module prefix (e.g., "cloud_auth::cloud_get_user" -> "cloud_get_user")
               let command = command.rsplit("::").next().unwrap_or(command);
               commands.push(command.to_string());
             }

@@ -382,11 +382,10 @@
       "tabLabel": "Облако",
       "selfHostedTabLabel": "Свой сервер",
       "email": "Электронная почта",
-      "emailPlaceholder": "вы@пример.com",
-      "sendCode": "Отправить код",
-      "codeSent": "Код отправлен! Проверьте вашу почту.",
-      "verificationCode": "Код подтверждения",
-      "codePlaceholder": "Введите 6-значный код",
+      "deviceLinkInstructions": "Нажмите «Войти», чтобы открыть страницу входа в браузере. После входа скопируйте показанный код и вставьте его ниже.",
+      "openLogin": "Войти",
+      "linkCodeLabel": "Код входа",
+      "linkCodePlaceholder": "Вставьте код с сайта",
       "verifyAndLogin": "Подтвердить и Войти",
       "loggingIn": "Вход...",
       "connected": "Подключено",
@@ -397,8 +396,7 @@
       "logout": "Выйти",
       "logoutConfirm": "Вы уверены, что хотите выйти? Облачная синхронизация будет остановлена.",
       "loginSuccess": "Вход выполнен успешно!",
-      "logoutSuccess": "Выход выполнен успешно.",
-      "loadingCaptcha": "Загрузка капчи..."
+      "logoutSuccess": "Выход выполнен успешно."
     },
     "team": {
       "title": "Команда",

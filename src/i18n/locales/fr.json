@@ -382,11 +382,10 @@
       "tabLabel": "Cloud",
       "selfHostedTabLabel": "Auto-hébergé",
       "email": "E-mail",
-      "emailPlaceholder": "vous@exemple.com",
-      "sendCode": "Envoyer le Code",
-      "codeSent": "Code envoyé ! Vérifiez votre e-mail.",
-      "verificationCode": "Code de Vérification",
-      "codePlaceholder": "Entrez le code à 6 chiffres",
+      "deviceLinkInstructions": "Cliquez sur « Se connecter » pour ouvrir la page de connexion dans votre navigateur. Une fois connecté, copiez le code affiché et collez-le ci-dessous.",
+      "openLogin": "Se connecter",
+      "linkCodeLabel": "Code de connexion",
+      "linkCodePlaceholder": "Collez le code du site web",
       "verifyAndLogin": "Vérifier et Se Connecter",
       "loggingIn": "Connexion en cours...",
       "connected": "Connecté",
@@ -397,8 +396,7 @@
       "logout": "Se Déconnecter",
       "logoutConfirm": "Êtes-vous sûr de vouloir vous déconnecter ? La synchronisation cloud sera arrêtée.",
       "loginSuccess": "Connexion réussie !",
-      "logoutSuccess": "Déconnexion réussie.",
-      "loadingCaptcha": "Chargement du captcha..."
+      "logoutSuccess": "Déconnexion réussie."
     },
     "team": {
       "title": "Équipe",

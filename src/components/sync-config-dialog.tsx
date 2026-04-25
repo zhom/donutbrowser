@@ -1,7 +1,7 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LuEye, LuEyeOff } from "react-icons/lu";
 import { LoadingButton } from "@/components/loading-button";
@@ -27,32 +27,7 @@ import { useCloudAuth } from "@/hooks/use-cloud-auth";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import type { SyncSettings } from "@/types";
 
-const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE ?? "";
-
-interface TurnstileWindow extends Window {
-  turnstile?: {
-    render: (
-      container: string | HTMLElement,
-      options: {
-        sitekey: string;
-        callback: (token: string) => void;
-        "expired-callback": () => void;
-        "error-callback": () => void;
-        theme: "light" | "dark" | "auto";
-      },
-    ) => string;
-    remove: (widgetId: string) => void;
-  };
-}
-
-// RFC 5322 compliant email regex (emailregex.com)
-// eslint-disable-next-line no-control-regex
-const EMAIL_REGEX =
-  /(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21-\x5a\x53-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])+)\])/;
-
-function isValidEmail(email: string): boolean {
-  return EMAIL_REGEX.test(email);
-}
+const DEVICE_LINK_URL = "https://donutbrowser.com/auth/link";
 
 interface SyncConfigDialogProps {
   isOpen: boolean;
@@ -83,22 +58,11 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
     user,
     isLoggedIn,
     isLoading: isCloudLoading,
-    requestOtp,
-    verifyOtp,
+    exchangeDeviceCode,
     logout,
   } = useCloudAuth();
-  const [email, setEmail] = useState("");
-  const [otpCode, setOtpCode] = useState("");
-  const [codeSent, setCodeSent] = useState(false);
-  const [isSendingCode, setIsSendingCode] = useState(false);
+  const [linkCode, setLinkCode] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
-
-  // Turnstile captcha state
-  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
-  const [isCaptchaLoading, setIsCaptchaLoading] = useState(false);
-  const captchaContainerRef = useRef<HTMLDivElement>(null);
-  const turnstileWidgetIdRef = useRef<string | null>(null);
-  const turnstileScriptLoadedRef = useRef(false);
 
   const [activeTab, setActiveTab] = useState<string>("cloud");
   const [, setLiveProxyUsage] = useState<ProxyUsage | null>(null);
@@ -135,131 +99,18 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
     }
   }, [testConnection]);
 
-  const removeTurnstileWidget = useCallback(() => {
-    const win = window as TurnstileWindow;
-    if (turnstileWidgetIdRef.current && win.turnstile) {
-      win.turnstile.remove(turnstileWidgetIdRef.current);
-      turnstileWidgetIdRef.current = null;
-    }
-  }, []);
-
-  const renderTurnstile = useCallback(() => {
-    const win = window as TurnstileWindow;
-    if (!win.turnstile || !captchaContainerRef.current) return;
-
-    removeTurnstileWidget();
-    captchaContainerRef.current.innerHTML = "";
-
-    const widgetId = win.turnstile.render(captchaContainerRef.current, {
-      sitekey: TURNSTILE_SITE_KEY,
-      callback: (token: string) => {
-        setCaptchaToken(token);
-        setIsCaptchaLoading(false);
-      },
-      "expired-callback": () => {
-        setCaptchaToken(null);
-      },
-      "error-callback": () => {
-        setCaptchaToken(null);
-        setIsCaptchaLoading(false);
-      },
-      theme: "auto",
-    });
-    turnstileWidgetIdRef.current = widgetId;
-  }, [removeTurnstileWidget]);
-
-  const loadTurnstileScript = useCallback((): Promise<void> => {
-    return new Promise((resolve) => {
-      const win = window as TurnstileWindow;
-      if (win.turnstile) {
-        turnstileScriptLoadedRef.current = true;
-        resolve();
-        return;
-      }
-
-      if (turnstileScriptLoadedRef.current) {
-        const check = setInterval(() => {
-          if ((window as TurnstileWindow).turnstile) {
-            clearInterval(check);
-            resolve();
-          }
-        }, 100);
-        return;
-      }
-
-      const existing = document.querySelector(
-        'script[src*="challenges.cloudflare.com/turnstile"]',
-      );
-      if (existing) {
-        const check = setInterval(() => {
-          if ((window as TurnstileWindow).turnstile) {
-            clearInterval(check);
-            turnstileScriptLoadedRef.current = true;
-            resolve();
-          }
-        }, 100);
-        return;
-      }
-
-      turnstileScriptLoadedRef.current = true;
-      const script = document.createElement("script");
-      script.src =
-        "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-      script.async = true;
-      script.defer = true;
-      script.onload = () => {
-        const check = setInterval(() => {
-          if ((window as TurnstileWindow).turnstile) {
-            clearInterval(check);
-            resolve();
-          }
-        }, 100);
-      };
-      document.head.appendChild(script);
-    });
-  }, []);
-
-  useEffect(() => {
-    const emailValid = isValidEmail(email);
-    if (emailValid && !codeSent && TURNSTILE_SITE_KEY) {
-      setIsCaptchaLoading(true);
-      setCaptchaToken(null);
-      void loadTurnstileScript().then(() => {
-        renderTurnstile();
-      });
-    } else {
-      removeTurnstileWidget();
-      setCaptchaToken(null);
-      setIsCaptchaLoading(false);
-    }
-  }, [
-    email,
-    codeSent,
-    loadTurnstileScript,
-    renderTurnstile,
-    removeTurnstileWidget,
-  ]);
-
   useEffect(() => {
     if (isOpen) {
       setConnectionStatus("unknown");
       void loadSettings();
-      setCodeSent(false);
-      setOtpCode("");
-      setEmail("");
-      setCaptchaToken(null);
-      setIsCaptchaLoading(false);
-      removeTurnstileWidget();
+      setLinkCode("");
       void invoke<ProxyUsage | null>("cloud_get_proxy_usage")
         .then(setLiveProxyUsage)
         .catch(() => {
           setLiveProxyUsage(null);
         });
     }
-    return () => {
-      removeTurnstileWidget();
-    };
-  }, [isOpen, loadSettings, removeTurnstileWidget]);
+  }, [isOpen, loadSettings]);
 
   // Auto-select the appropriate tab based on connection state
   useEffect(() => {
@@ -345,44 +196,35 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
     }
   }, []);
 
-  const handleSendCode = useCallback(async () => {
-    if (!email || !captchaToken) return;
-    setIsSendingCode(true);
+  const handleOpenLogin = useCallback(async () => {
     try {
-      await requestOtp(email, captchaToken);
-      setCodeSent(true);
-      removeTurnstileWidget();
-      setCaptchaToken(null);
-      showSuccessToast(t("sync.cloud.codeSent"));
+      await invoke("handle_url_open", { url: DEVICE_LINK_URL });
     } catch (error) {
-      console.error("Failed to send OTP:", error);
+      console.error("Failed to open login link:", error);
       showErrorToast(String(error));
-    } finally {
-      setIsSendingCode(false);
     }
-  }, [email, captchaToken, requestOtp, removeTurnstileWidget, t]);
+  }, []);
 
-  const handleVerifyOtp = useCallback(async () => {
-    if (!email || !otpCode) return;
+  const handleVerifyCode = useCallback(async () => {
+    const trimmed = linkCode.trim();
+    if (!trimmed) return;
     setIsVerifying(true);
     try {
-      await verifyOtp(email, otpCode);
+      await exchangeDeviceCode(trimmed);
       showSuccessToast(t("sync.cloud.loginSuccess"));
-      // Restart sync service with cloud credentials
       try {
         await invoke("restart_sync_service");
       } catch (e) {
         console.error("Failed to restart sync service:", e);
       }
-      // Auto-close dialog after successful login, signal that login occurred
       onClose(true);
     } catch (error) {
-      console.error("OTP verification failed:", error);
+      console.error("Device-code exchange failed:", error);
       showErrorToast(String(error));
     } finally {
       setIsVerifying(false);
     }
-  }, [email, otpCode, verifyOtp, t, onClose]);
+  }, [linkCode, exchangeDeviceCode, t, onClose]);
 
   const handleCloudLogout = useCallback(async () => {
     try {
@@ -390,7 +232,6 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
       showSuccessToast(t("sync.cloud.logoutSuccess"));
       setServerUrl("");
       setToken("");
-      // Restart sync service (will fall back to self-hosted or stop)
       try {
         await invoke("restart_sync_service");
       } catch (e) {
@@ -402,7 +243,6 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
     }
   }, [logout, t]);
 
-  // Determine which tabs are available
   const cloudBlocked = !isLoggedIn && hasConfig;
   const selfHostedBlocked = isLoggedIn;
 
@@ -414,7 +254,6 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
           <DialogDescription>{t("sync.description")}</DialogDescription>
         </DialogHeader>
 
-        {/* If cloud is logged in, don't show tabs at all - just show cloud account */}
         {isLoggedIn && user ? (
           <div className="grid gap-4 py-4">
             <div className="flex gap-2 items-center text-sm">
@@ -527,76 +366,46 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
                 </div>
               ) : (
                 <div className="grid gap-4 py-4">
+                  <p className="text-sm text-muted-foreground">
+                    {t("sync.cloud.deviceLinkInstructions")}
+                  </p>
+                  <Button
+                    onClick={() => void handleOpenLogin()}
+                    className="w-full"
+                  >
+                    {t("sync.cloud.openLogin")}
+                  </Button>
+
                   <div className="space-y-2">
-                    <Label htmlFor="cloud-email">{t("sync.cloud.email")}</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        id="cloud-email"
-                        type="email"
-                        placeholder={t("sync.cloud.emailPlaceholder")}
-                        value={email}
-                        onChange={(e) => {
-                          setEmail(e.target.value);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !codeSent && captchaToken) {
-                            void handleSendCode();
-                          }
-                        }}
-                      />
-                      <LoadingButton
-                        onClick={() => void handleSendCode()}
-                        isLoading={isSendingCode}
-                        disabled={!email || codeSent || !captchaToken}
-                        variant="outline"
-                      >
-                        {t("sync.cloud.sendCode")}
-                      </LoadingButton>
-                    </div>
-
-                    {!codeSent && isValidEmail(email) && TURNSTILE_SITE_KEY && (
-                      <div className="mt-2">
-                        {isCaptchaLoading && (
-                          <div className="flex items-center gap-2 py-3 text-sm text-muted-foreground">
-                            <div className="w-4 h-4 rounded-full border-2 border-current animate-spin border-t-transparent" />
-                            {t("sync.cloud.loadingCaptcha")}
-                          </div>
-                        )}
-                        <div ref={captchaContainerRef} />
-                      </div>
-                    )}
+                    <Label htmlFor="cloud-link-code">
+                      {t("sync.cloud.linkCodeLabel")}
+                    </Label>
+                    <Input
+                      id="cloud-link-code"
+                      placeholder={t("sync.cloud.linkCodePlaceholder")}
+                      value={linkCode}
+                      onChange={(e) => {
+                        setLinkCode(e.target.value);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && linkCode.trim()) {
+                          void handleVerifyCode();
+                        }
+                      }}
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                    <LoadingButton
+                      onClick={() => void handleVerifyCode()}
+                      isLoading={isVerifying}
+                      disabled={!linkCode.trim()}
+                      className="w-full"
+                    >
+                      {isVerifying
+                        ? t("sync.cloud.loggingIn")
+                        : t("sync.cloud.verifyAndLogin")}
+                    </LoadingButton>
                   </div>
-
-                  {codeSent && (
-                    <div className="space-y-2">
-                      <Label htmlFor="cloud-otp">
-                        {t("sync.cloud.verificationCode")}
-                      </Label>
-                      <Input
-                        id="cloud-otp"
-                        placeholder={t("sync.cloud.codePlaceholder")}
-                        value={otpCode}
-                        onChange={(e) => {
-                          setOtpCode(e.target.value);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            void handleVerifyOtp();
-                          }
-                        }}
-                      />
-                      <LoadingButton
-                        onClick={() => void handleVerifyOtp()}
-                        isLoading={isVerifying}
-                        disabled={!otpCode}
-                        className="w-full"
-                      >
-                        {isVerifying
-                          ? t("sync.cloud.loggingIn")
-                          : t("sync.cloud.verifyAndLogin")}
-                      </LoadingButton>
-                    </div>
-                  )}
                 </div>
               )}
             </TabsContent>

@@ -7,6 +7,7 @@ use chrono::Utc;
 use lazy_static::lazy_static;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -54,12 +55,15 @@ pub struct CloudAuthState {
 }
 
 #[derive(Debug, Deserialize)]
-struct OtpRequestResponse {
-  message: String,
+struct DeviceCodeChallengeResponse {
+  #[serde(rename = "challengeId")]
+  challenge_id: String,
+  prefix: String,
+  difficulty: u32,
 }
 
 #[derive(Debug, Deserialize)]
-struct OtpVerifyResponse {
+struct DeviceCodeExchangeResponse {
   #[serde(rename = "accessToken")]
   access_token: String,
   #[serde(rename = "refreshToken")]
@@ -362,47 +366,49 @@ impl CloudAuthManager {
 
   // --- API methods ---
 
-  pub async fn request_otp(&self, email: &str, captcha_token: &str) -> Result<String, String> {
-    let url = format!("{CLOUD_API_URL}/api/auth/otp/request");
-    let response = self
+  pub async fn exchange_device_code(&self, code: &str) -> Result<CloudAuthState, String> {
+    let challenge_url = format!("{CLOUD_API_URL}/api/auth/device-code/challenge");
+    let challenge_response = self
       .client
-      .post(&url)
-      .json(&serde_json::json!({ "email": email, "captchaToken": captcha_token }))
+      .post(&challenge_url)
       .send()
       .await
-      .map_err(|e| format!("Failed to request OTP: {e}"))?;
+      .map_err(|e| format!("Failed to fetch challenge: {e}"))?;
 
-    if !response.status().is_success() {
-      let status = response.status();
-      let body = response.text().await.unwrap_or_default();
-      return Err(format!("OTP request failed ({status}): {body}"));
+    if !challenge_response.status().is_success() {
+      let status = challenge_response.status();
+      let body = challenge_response.text().await.unwrap_or_default();
+      return Err(format!("Challenge request failed ({status}): {body}"));
     }
 
-    let result: OtpRequestResponse = response
+    let challenge: DeviceCodeChallengeResponse = challenge_response
       .json()
       .await
-      .map_err(|e| format!("Failed to parse response: {e}"))?;
+      .map_err(|e| format!("Failed to parse challenge: {e}"))?;
 
-    Ok(result.message)
-  }
+    let nonce = solve_pow(&challenge.prefix, challenge.difficulty)
+      .ok_or_else(|| "Failed to solve proof-of-work".to_string())?;
 
-  pub async fn verify_otp(&self, email: &str, code: &str) -> Result<CloudAuthState, String> {
-    let url = format!("{CLOUD_API_URL}/api/auth/otp/verify");
+    let exchange_url = format!("{CLOUD_API_URL}/api/auth/device-code/exchange");
     let response = self
       .client
-      .post(&url)
-      .json(&serde_json::json!({ "email": email, "code": code }))
+      .post(&exchange_url)
+      .json(&serde_json::json!({
+        "code": code,
+        "challengeId": challenge.challenge_id,
+        "nonce": nonce,
+      }))
       .send()
       .await
-      .map_err(|e| format!("Failed to verify OTP: {e}"))?;
+      .map_err(|e| format!("Failed to verify code: {e}"))?;
 
     if !response.status().is_success() {
       let status = response.status();
       let body = response.text().await.unwrap_or_default();
-      return Err(format!("OTP verification failed ({status}): {body}"));
+      return Err(format!("Login failed ({status}): {body}"));
     }
 
-    let result: OtpVerifyResponse = response
+    let result: DeviceCodeExchangeResponse = response
       .json()
       .await
       .map_err(|e| format!("Failed to parse response: {e}"))?;
@@ -1097,20 +1103,51 @@ impl CloudAuthManager {
   }
 }
 
+fn solve_pow(prefix: &str, difficulty: u32) -> Option<String> {
+  if difficulty == 0 || difficulty > 32 {
+    return None;
+  }
+  let prefix_bytes = prefix.as_bytes();
+  let mut buf = Vec::with_capacity(prefix_bytes.len() + 24);
+  for nonce in 0u64..u64::MAX {
+    buf.clear();
+    buf.extend_from_slice(prefix_bytes);
+    let nonce_str = nonce.to_string();
+    buf.extend_from_slice(nonce_str.as_bytes());
+    let digest = Sha256::digest(&buf);
+    if has_leading_zero_bits(&digest, difficulty) {
+      return Some(nonce_str);
+    }
+  }
+  None
+}
+
+fn has_leading_zero_bits(digest: &[u8], bits: u32) -> bool {
+  let full_bytes = (bits / 8) as usize;
+  if digest.len() < full_bytes + 1 {
+    return false;
+  }
+  for &b in &digest[..full_bytes] {
+    if b != 0 {
+      return false;
+    }
+  }
+  let remainder = bits % 8;
+  if remainder == 0 {
+    return true;
+  }
+  let mask = 0xffu8 << (8 - remainder);
+  (digest[full_bytes] & mask) == 0
+}
+
 // --- Tauri commands ---
 
 #[tauri::command]
-pub async fn cloud_request_otp(email: String, captcha_token: String) -> Result<String, String> {
-  CLOUD_AUTH.request_otp(&email, &captcha_token).await
-}
-
-#[tauri::command]
-pub async fn cloud_verify_otp(
+pub async fn cloud_exchange_device_code(
   app_handle: tauri::AppHandle,
-  email: String,
   code: String,
 ) -> Result<CloudAuthState, String> {
-  let state = CLOUD_AUTH.verify_otp(&email, &code).await?;
+  let state = CLOUD_AUTH.exchange_device_code(&code).await?;
 
   let has_subscription = CLOUD_AUTH.has_active_paid_subscription().await;
   log::info!(
