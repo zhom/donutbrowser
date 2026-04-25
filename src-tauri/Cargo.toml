@@ -73,7 +73,7 @@ once_cell = "1"
 urlencoding = "2.1"
 chrono = { version = "0.4", features = ["serde"] }
 chrono-tz = "0.10"
-axum = { version = "0.8.8", features = ["ws"] }
+axum = { version = "0.8.9", features = ["ws"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors"] }
 rand = "0.10.1"
@@ -111,7 +111,7 @@ smoltcp = { version = "0.13", default-features = false, features = ["std", "medi
 
 # Daemon dependencies (tray icon)
 tray-icon = "0.22"
-muda = "0.17"
+muda = "0.18"
 tao = "0.35"
 image = "0.25"
 dirs = "6"
