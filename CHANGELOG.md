@@ -1,6 +1,22 @@
 # Changelog
 
 
+## v0.22.0 (2026-04-25)
+
+### Refactoring
+
+- auth and wayfern
+- cdp gates cleanup
+
+### Maintenance
+
+- chore: tests
+- chore:cargo audit
+- chore: version bump
+- chore: ignore .claude
+- chore: update flake.nix for v0.21.2 [skip ci] (#298)
+
+
 ## v0.21.2 (2026-04-21)
 
 ### Bug Fixes
