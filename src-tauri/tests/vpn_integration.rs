@@ -8,8 +8,7 @@ mod test_harness;
 
 use common::TestUtils;
 use donutbrowser_lib::vpn::{
-  detect_vpn_type, parse_openvpn_config, parse_wireguard_config, OpenVpnConfig, VpnConfig,
-  VpnStorage, VpnType, WireGuardConfig,
+  detect_vpn_type, parse_wireguard_config, VpnConfig, VpnStorage, VpnType, WireGuardConfig,
 };
 use serde_json::Value;
 use serial_test::serial;
@@ -46,42 +45,12 @@ fn test_wireguard_config_import() {
 }
 
 #[test]
-fn test_openvpn_config_import() {
-  let config = include_str!("fixtures/test.ovpn");
-  let result = parse_openvpn_config(config);
-
-  assert!(
-    result.is_ok(),
-    "Failed to parse OpenVPN config: {:?}",
-    result.err()
-  );
-
-  let ovpn = result.unwrap();
-  assert_eq!(ovpn.remote_host, "vpn.example.com");
-  assert_eq!(ovpn.remote_port, 1194);
-  assert_eq!(ovpn.protocol, "udp");
-  assert_eq!(ovpn.dev_type, "tun");
-  assert!(ovpn.has_inline_ca);
-  assert!(ovpn.has_inline_cert);
-  assert!(ovpn.has_inline_key);
-}
-
-#[test]
 fn test_detect_vpn_type_wireguard_by_extension() {
   let content = "[Interface]\nPrivateKey = test\n[Peer]\nPublicKey = peer";
   let result = detect_vpn_type(content, "my-vpn.conf");
 
   assert!(result.is_ok());
   assert_eq!(result.unwrap(), VpnType::WireGuard);
-}
-
-#[test]
-fn test_detect_vpn_type_openvpn_by_extension() {
-  let content = "client\nremote vpn.example.com 1194";
-  let result = detect_vpn_type(content, "my-vpn.ovpn");
-
-  assert!(result.is_ok());
-  assert_eq!(result.unwrap(), VpnType::OpenVPN);
 }
 
 #[test]
@@ -102,25 +71,18 @@ Endpoint = 1.2.3.4:51820
 }
 
 #[test]
-fn test_detect_vpn_type_openvpn_by_content() {
-  let content = r#"
-client
-dev tun
-proto udp
-remote vpn.server.com 443
-"#;
-  let result = detect_vpn_type(content, "config.txt");
-
-  assert!(result.is_ok());
-  assert_eq!(result.unwrap(), VpnType::OpenVPN);
-}
-
-#[test]
 fn test_detect_vpn_type_unknown() {
   let content = "this is just some random text that is not a vpn config";
   let result = detect_vpn_type(content, "random.txt");
 
   assert!(result.is_err());
+}
+
+#[test]
+fn test_reject_openvpn_content() {
+  let content = "client\ndev tun\nproto udp\nremote vpn.example.com 1194";
+  assert!(detect_vpn_type(content, "old.ovpn").is_err());
+  assert!(detect_vpn_type(content, "config.txt").is_err());
 }
 
 #[test]
@@ -152,32 +114,6 @@ Address = 10.0.0.2/24
   assert!(result.is_err());
   let err = result.unwrap_err().to_string();
   assert!(err.contains("PublicKey") || err.contains("Peer"));
-}
-
-#[test]
-fn test_openvpn_config_missing_remote() {
-  let config = r#"
-client
-dev tun
-proto udp
-"#;
-  let result = parse_openvpn_config(config);
-
-  assert!(result.is_err());
-  let err = result.unwrap_err().to_string();
-  assert!(err.contains("remote"));
-}
-
-#[test]
-fn test_openvpn_config_with_port_in_remote() {
-  let config = "client\nremote server.example.com 443 tcp";
-  let result = parse_openvpn_config(config);
-
-  assert!(result.is_ok());
-  let ovpn = result.unwrap();
-  assert_eq!(ovpn.remote_host, "server.example.com");
-  assert_eq!(ovpn.remote_port, 443);
-  assert_eq!(ovpn.protocol, "tcp");
 }
 
 // ============================================================================
@@ -228,16 +164,11 @@ fn test_vpn_storage_list() {
   let temp_dir = tempfile::TempDir::new().unwrap();
   let storage = create_test_storage(&temp_dir);
 
-  // Save two configs
   for i in 1..=2 {
     let config = VpnConfig {
       id: format!("list-test-{i}"),
       name: format!("VPN {i}"),
-      vpn_type: if i == 1 {
-        VpnType::WireGuard
-      } else {
-        VpnType::OpenVPN
-      },
+      vpn_type: VpnType::WireGuard,
       config_data: "secret data".to_string(),
       created_at: 1000 * i as i64,
       last_used: None,
@@ -250,7 +181,6 @@ fn test_vpn_storage_list() {
   let list = storage.list_configs().unwrap();
   assert_eq!(list.len(), 2);
 
-  // Config data should be empty in listing
   for cfg in &list {
     assert!(cfg.config_data.is_empty());
   }
@@ -297,6 +227,52 @@ fn test_vpn_storage_import() {
   assert!(!imported.id.is_empty());
 }
 
+/// Existing OpenVPN entries on disk should be silently dropped at load time
+/// after support was removed. Stored configs are encrypted at rest, so we
+/// build the on-disk JSON by hand instead of going through `save_config`.
+#[test]
+#[serial]
+fn test_vpn_storage_drops_legacy_openvpn_entries() {
+  let temp_dir = tempfile::TempDir::new().unwrap();
+  let storage_path = temp_dir.path().join("vpn_configs.json");
+  std::fs::write(
+    &storage_path,
+    r#"{
+      "version": 1,
+      "configs": [
+        {
+          "id": "wg-keep",
+          "name": "Keep me",
+          "vpn_type": "WireGuard",
+          "encrypted_data": "",
+          "nonce": "",
+          "created_at": 1,
+          "last_used": null,
+          "sync_enabled": false,
+          "last_sync": null
+        },
+        {
+          "id": "ovpn-drop",
+          "name": "Drop me",
+          "vpn_type": "OpenVPN",
+          "encrypted_data": "",
+          "nonce": "",
+          "created_at": 2,
+          "last_used": null,
+          "sync_enabled": false,
+          "last_sync": null
+        }
+      ]
+    }"#,
+  )
+  .unwrap();
+
+  let storage = create_test_storage(&temp_dir);
+  let configs = storage.list_configs().unwrap();
+  let ids: Vec<_> = configs.iter().map(|c| c.id.as_str()).collect();
+  assert_eq!(ids, vec!["wg-keep"]);
+}
+
 // ============================================================================
 // Helper Functions
 // ============================================================================
@@ -309,13 +285,9 @@ fn create_test_storage(temp_dir: &tempfile::TempDir) -> VpnStorage {
 // Connection Tests (require Docker)
 // ============================================================================
 
-/// These tests require Docker to be available.
-/// They are automatically skipped if Docker is not installed.
-
 #[tokio::test]
 #[serial]
 async fn test_wireguard_tunnel_init() {
-  // This test only verifies tunnel creation, not actual connection
   let config = WireGuardConfig {
     private_key: "YEocP0e2o1WT5GlvBvQzVF7EeR6z9aCk+ZdZ5NKEuXA=".to_string(),
     address: "10.0.0.2/24".to_string(),
@@ -332,30 +304,6 @@ async fn test_wireguard_tunnel_init() {
 
   let tunnel = WireGuardTunnel::new("test-wg".to_string(), config);
   assert_eq!(tunnel.vpn_id(), "test-wg");
-  assert!(!tunnel.is_connected());
-  assert_eq!(tunnel.bytes_sent(), 0);
-  assert_eq!(tunnel.bytes_received(), 0);
-}
-
-#[tokio::test]
-#[serial]
-async fn test_openvpn_tunnel_init() {
-  // This test only verifies tunnel creation, not actual connection
-  let config = OpenVpnConfig {
-    raw_config: "client\nremote localhost 1194".to_string(),
-    remote_host: "localhost".to_string(),
-    remote_port: 1194,
-    protocol: "udp".to_string(),
-    dev_type: "tun".to_string(),
-    has_inline_ca: false,
-    has_inline_cert: false,
-    has_inline_key: false,
-  };
-
-  use donutbrowser_lib::vpn::{OpenVpnTunnel, VpnTunnel};
-
-  let tunnel = OpenVpnTunnel::new("test-ovpn".to_string(), config);
-  assert_eq!(tunnel.vpn_id(), "test-ovpn");
   assert!(!tunnel.is_connected());
   assert_eq!(tunnel.bytes_sent(), 0);
   assert_eq!(tunnel.bytes_received(), 0);
@@ -565,45 +513,6 @@ fn build_wireguard_config(config: &test_harness::WireGuardTestConfig) -> String 
   )
 }
 
-fn openvpn_client_available() -> bool {
-  if let Ok(path) = std::env::var("DONUTBROWSER_OPENVPN_BIN") {
-    return PathBuf::from(path).exists();
-  }
-
-  std::process::Command::new(if cfg!(windows) { "where" } else { "which" })
-    .arg("openvpn")
-    .output()
-    .map(|output| output.status.success())
-    .unwrap_or(false)
-}
-
-#[cfg(windows)]
-fn openvpn_adapter_available() -> bool {
-  let openvpn = std::process::Command::new("openvpn")
-    .arg("--show-adapters")
-    .output();
-
-  openvpn
-    .ok()
-    .map(|output| {
-      let text = format!(
-        "{}{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-      );
-      text
-        .lines()
-        .map(str::trim)
-        .any(|line| !line.is_empty() && !line.starts_with("Available adapters"))
-    })
-    .unwrap_or(false)
-}
-
-#[cfg(not(windows))]
-fn openvpn_adapter_available() -> bool {
-  true
-}
-
 async fn start_proxy_with_upstream(
   binary_path: &PathBuf,
   upstream_proxy: &str,
@@ -750,10 +659,6 @@ async fn run_proxy_feature_suite(
 
   sleep(Duration::from_millis(500)).await;
 
-  // Test HTTP traffic through the tunnel to the internal HTTP server running
-  // inside the WireGuard container. This avoids depending on internet access
-  // from Docker (macOS Docker Desktop can't reliably NAT WireGuard tunnel
-  // traffic through to the internet).
   let internal_url = format!("http://{}:8080/", server_tunnel_ip);
   let internal_host = format!("{}:8080", server_tunnel_ip);
   let http_response =
@@ -790,7 +695,6 @@ async fn run_proxy_feature_suite(
 
   stop_proxy(binary_path, &proxy.id).await?;
 
-  // DNS blocklist test: blocklist the tunnel server IP so it gets rejected
   let blocklist_file = tempfile::NamedTempFile::new()?;
   std::fs::write(blocklist_file.path(), format!("{server_tunnel_ip}\n"))?;
   let blocked_proxy = start_proxy_with_upstream(
@@ -894,58 +798,5 @@ async fn test_wireguard_traffic_flows_through_donut_proxy(
     run_proxy_feature_suite(&binary_path, &vpn_config.id, &wg_config.server_tunnel_ip).await;
   cleanup_runtime().await;
 
-  result
-}
-
-#[tokio::test]
-#[serial]
-async fn test_openvpn_traffic_flows_through_donut_proxy(
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-  let _env = TestEnvGuard::new()?;
-  cleanup_runtime().await;
-
-  if std::env::var("DONUTBROWSER_RUN_OPENVPN_E2E")
-    .ok()
-    .as_deref()
-    != Some("1")
-  {
-    eprintln!("skipping OpenVPN e2e test because DONUTBROWSER_RUN_OPENVPN_E2E is not set");
-    return Ok(());
-  }
-
-  if !test_harness::is_docker_available() {
-    eprintln!("skipping OpenVPN e2e test because Docker is unavailable");
-    return Ok(());
-  }
-
-  if !openvpn_client_available() {
-    eprintln!("skipping OpenVPN e2e test because the OpenVPN client binary is unavailable");
-    return Ok(());
-  }
-
-  if !openvpn_adapter_available() {
-    eprintln!("skipping OpenVPN e2e test because no Windows OpenVPN adapter is available");
-    return Ok(());
-  }
-
-  let binary_path = ensure_donut_proxy_binary().await?;
-  let ovpn_config = match test_harness::start_openvpn_server().await {
-    Ok(config) => config,
-    Err(error) => {
-      eprintln!("skipping OpenVPN e2e test: {error}");
-      return Ok(());
-    }
-  };
-
-  let vpn_config = new_test_vpn_config("OpenVPN E2E", VpnType::OpenVPN, ovpn_config.raw_config);
-  {
-    let storage = donutbrowser_lib::vpn::VPN_STORAGE.lock().unwrap();
-    storage.save_config(&vpn_config)?;
-  }
-
-  // OpenVPN test uses the server's tunnel IP for internal-only traffic.
-  // The OpenVPN server's subnet is 10.9.0.0/24, server at 10.9.0.1.
-  let result = run_proxy_feature_suite(&binary_path, &vpn_config.id, "10.9.0.1").await;
-  cleanup_runtime().await;
   result
 }

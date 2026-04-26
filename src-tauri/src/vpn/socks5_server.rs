@@ -52,8 +52,25 @@ impl WgDevice {
       let mut dst = vec![0u8; ip_packet.len() + 256];
       let mut tunn = self.tunn.lock().unwrap();
       let result = tunn.encapsulate(&ip_packet, &mut dst);
-      if let TunnResult::WriteToNetwork(packet) = result {
-        let _ = self.udp_socket.send_to(packet, self.peer_addr);
+      match result {
+        TunnResult::WriteToNetwork(packet) => {
+          if let Err(e) = self.udp_socket.send_to(packet, self.peer_addr) {
+            log::error!("[wg] udp send_to failed: {e}");
+          }
+        }
+        TunnResult::Done => {
+          // boringtun has nothing to send right now (e.g. handshake not yet
+          // complete); silently drop. smoltcp will retransmit.
+        }
+        TunnResult::Err(e) => {
+          log::error!(
+            "[wg] encapsulate error for {}B IP packet: {e:?}",
+            ip_packet.len()
+          );
+        }
+        TunnResult::WriteToTunnelV4(_, _) | TunnResult::WriteToTunnelV6(_, _) => {
+          log::error!("[wg] encapsulate returned unexpected WriteToTunnel — bug?");
+        }
       }
     }
   }
@@ -313,7 +330,11 @@ impl WireGuardSocks5Server {
     )))
   }
 
-  pub async fn run(self, config_id: String) -> Result<(), VpnError> {
+  pub async fn run(
+    self,
+    config_id: String,
+    config_path: Option<std::path::PathBuf>,
+  ) -> Result<(), VpnError> {
     let peer_addr = self.resolve_endpoint()?;
     let mut tunn = self.create_tunnel()?;
 
@@ -371,11 +392,37 @@ impl WireGuardSocks5Server {
       .map_err(|e| VpnError::Connection(format!("Failed to get local addr: {e}")))?
       .port();
 
-    // Update config with actual port and local_url
-    if let Some(mut wc) = crate::vpn_worker_storage::get_vpn_worker_config(&config_id) {
+    // Update config with actual port and local_url. Prefer the explicit
+    // config path the worker was started with — see issue #287, where
+    // get_storage_dir() in the worker process resolved to a different
+    // directory than in the parent (Qubes/sandboxed Linux), causing the
+    // write-back to land in the wrong place and the parent to time out.
+    let updated = match &config_path {
+      Some(path) => crate::vpn_worker_storage::get_vpn_worker_config_from_path(path)
+        .or_else(|| crate::vpn_worker_storage::get_vpn_worker_config(&config_id)),
+      None => crate::vpn_worker_storage::get_vpn_worker_config(&config_id),
+    };
+    if let Some(mut wc) = updated {
       wc.local_port = Some(actual_port);
       wc.local_url = Some(format!("socks5://127.0.0.1:{}", actual_port));
-      let _ = crate::vpn_worker_storage::save_vpn_worker_config(&wc);
+      let result = match &config_path {
+        Some(path) => crate::vpn_worker_storage::save_vpn_worker_config_to_path(&wc, path)
+          .map_err(|e| e.to_string()),
+        None => crate::vpn_worker_storage::save_vpn_worker_config(&wc).map_err(|e| e.to_string()),
+      };
+      if let Err(e) = result {
+        log::error!(
+          "[vpn-worker] Failed to write back local_url to config: {} (path={:?})",
+          e,
+          config_path
+        );
+      }
+    } else {
+      log::error!(
+        "[vpn-worker] Could not load worker config for write-back (id={}, path={:?})",
+        config_id,
+        config_path
+      );
     }
 
     log::info!(

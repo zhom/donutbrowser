@@ -9,7 +9,6 @@ use std::process::Stdio;
 
 const VPN_WORKER_POLL_INTERVAL_MS: u64 = 100;
 const VPN_WORKER_STARTUP_TIMEOUT_MS: u64 = 30_000;
-const OPENVPN_WORKER_STARTUP_TIMEOUT_MS: u64 = 100_000;
 
 async fn vpn_worker_accepting_connections(config: &VpnWorkerConfig) -> bool {
   let Some(port) = config.local_port else {
@@ -44,13 +43,8 @@ fn read_worker_log(id: &str) -> String {
 
 async fn wait_for_vpn_worker_ready(
   id: &str,
-  vpn_type: &str,
 ) -> Result<VpnWorkerConfig, Box<dyn std::error::Error>> {
-  let startup_timeout = if vpn_type == "openvpn" {
-    tokio::time::Duration::from_millis(OPENVPN_WORKER_STARTUP_TIMEOUT_MS)
-  } else {
-    tokio::time::Duration::from_millis(VPN_WORKER_STARTUP_TIMEOUT_MS)
-  };
+  let startup_timeout = tokio::time::Duration::from_millis(VPN_WORKER_STARTUP_TIMEOUT_MS);
   let startup_deadline = tokio::time::Instant::now() + startup_timeout;
 
   tokio::time::sleep(tokio::time::Duration::from_millis(
@@ -124,7 +118,7 @@ pub async fn start_vpn_worker(vpn_id: &str) -> Result<VpnWorkerConfig, Box<dyn s
           return Ok(existing);
         }
 
-        return wait_for_vpn_worker_ready(&existing.id, &existing.vpn_type).await;
+        return wait_for_vpn_worker_ready(&existing.id).await;
       }
     }
     // Worker config exists but process is dead, clean up
@@ -141,10 +135,7 @@ pub async fn start_vpn_worker(vpn_id: &str) -> Result<VpnWorkerConfig, Box<dyn s
       .map_err(|e| format!("Failed to load VPN config: {e}"))?
   };
 
-  let vpn_type_str = match vpn_config.vpn_type {
-    crate::vpn::VpnType::WireGuard => "wireguard",
-    crate::vpn::VpnType::OpenVPN => "openvpn",
-  };
+  let vpn_type_str = "wireguard";
 
   // Write decrypted config to a temp file
   let config_file_path = std::env::temp_dir()
@@ -270,7 +261,7 @@ pub async fn start_vpn_worker(vpn_id: &str) -> Result<VpnWorkerConfig, Box<dyn s
     drop(child);
   }
 
-  wait_for_vpn_worker_ready(&id, vpn_type_str).await
+  wait_for_vpn_worker_ready(&id).await
 }
 
 pub async fn stop_vpn_worker(id: &str) -> Result<bool, Box<dyn std::error::Error>> {

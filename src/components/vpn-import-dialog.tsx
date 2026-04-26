@@ -52,17 +52,6 @@ const detectVpnType = (
       endpoint: endpointMatch ? endpointMatch[1] : null,
     };
   }
-  if (
-    lowerFilename.endsWith(".ovpn") ||
-    (content.includes("remote ") &&
-      (content.includes("client") || content.includes("dev tun")))
-  ) {
-    const remoteMatch = content.match(/remote\s+(\S+)(?:\s+(\d+))?/i);
-    const endpoint = remoteMatch
-      ? `${remoteMatch[1]}${remoteMatch[2] ? `:${remoteMatch[2]}` : ""}`
-      : null;
-    return { isVpn: true, type: "OpenVPN", endpoint };
-  }
   return { isVpn: false, type: null, endpoint: null };
 };
 
@@ -105,7 +94,7 @@ export function VpnImportDialog({ isOpen, onClose }: VpnImportDialogProps) {
       endpoint: detection.endpoint,
     });
     const baseName = filename
-      .replace(/\.(conf|ovpn)$/i, "")
+      .replace(/\.conf$/i, "")
       .replace(/_/g, " ")
       .replace(/-/g, " ");
     setVpnName(baseName || `${detection.type} VPN`);
@@ -132,13 +121,11 @@ export function VpnImportDialog({ isOpen, onClose }: VpnImportDialogProps) {
       e.preventDefault();
       setIsDragOver(false);
       const files = Array.from(e.dataTransfer.files);
-      const validFile = files.find(
-        (f) => f.name.endsWith(".conf") || f.name.endsWith(".ovpn"),
-      );
+      const validFile = files.find((f) => f.name.endsWith(".conf"));
       if (validFile) {
         handleFileRead(validFile);
       } else {
-        toast.error("Please drop a .conf or .ovpn file");
+        toast.error("Please drop a WireGuard .conf file");
       }
     },
     [handleFileRead],
@@ -200,7 +187,7 @@ export function VpnImportDialog({ isOpen, onClose }: VpnImportDialogProps) {
           <DialogTitle>Import VPN Config</DialogTitle>
           <DialogDescription>
             {step === "dropzone" &&
-              "Import a WireGuard (.conf) or OpenVPN (.ovpn) configuration file"}
+              "Import a WireGuard (.conf) configuration file"}
             {step === "vpn-preview" && "Review the VPN configuration to import"}
             {step === "vpn-result" && "VPN import completed"}
           </DialogDescription>
@@ -230,16 +217,12 @@ export function VpnImportDialog({ isOpen, onClose }: VpnImportDialogProps) {
             >
               <LuUpload className="w-10 h-10 text-muted-foreground mb-4" />
               <p className="text-sm text-muted-foreground text-center">
-                Drop a VPN config file here or click to browse
-                <br />
-                <span className="text-xs">
-                  (.conf for WireGuard, .ovpn for OpenVPN)
-                </span>
+                Drop a WireGuard .conf file here or click to browse
               </p>
               <input
                 id="vpn-file-input"
                 type="file"
-                accept=".conf,.ovpn"
+                accept=".conf"
                 className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0];

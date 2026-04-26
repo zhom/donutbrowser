@@ -34,7 +34,7 @@
 - **Unlimited browser profiles** — each fully isolated with its own fingerprint, cookies, extensions, and data
 - **Chromium & Firefox engines** — Chromium powered by [Wayfern](https://wayfern.com), Firefox powered by [Camoufox](https://camoufox.com), both with advanced fingerprint spoofing
 - **Proxy support** — HTTP, HTTPS, SOCKS4, SOCKS5 per profile, with dynamic proxy URLs
-- **VPN support** — WireGuard and OpenVPN configs per profile
+- **VPN support** — WireGuard configs per profile
 - **Local API & MCP** — REST API and [Model Context Protocol](https://modelcontextprotocol.io) server for integration with Claude, automation tools, and custom workflows
 - **Profile groups** — organize profiles and apply bulk settings
 - **Import profiles** — migrate from Chrome, Firefox, Edge, Brave, or other Chromium browsers

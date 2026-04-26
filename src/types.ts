@@ -667,7 +667,7 @@ export type ProxyParseResult =
   | { status: "invalid"; line: string; reason: string };
 
 // VPN types
-export type VpnType = "WireGuard" | "OpenVPN";
+export type VpnType = "WireGuard";
 
 export interface VpnConfig {
   id: string;

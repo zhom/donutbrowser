@@ -1068,7 +1068,7 @@ export function CreateProfileDialog({
                                           v.id === selectedProxyId.slice(4),
                                       );
                                       return vpn
-                                        ? `${vpn.vpn_type === "WireGuard" ? "WG" : "OVPN"} — ${vpn.name}`
+                                        ? `WG — ${vpn.name}`
                                         : "No proxy / VPN";
                                     }
                                     const proxy = storedProxies.find(
@@ -1154,9 +1154,7 @@ export function CreateProfileDialog({
                                               variant="outline"
                                               className="text-[10px] px-1 py-0 leading-tight mr-1"
                                             >
-                                              {vpn.vpn_type === "WireGuard"
-                                                ? "WG"
-                                                : "OVPN"}
+                                              WG
                                             </Badge>
                                             {vpn.name}
                                           </CommandItem>
@@ -1417,7 +1415,7 @@ export function CreateProfileDialog({
                                           v.id === selectedProxyId.slice(4),
                                       );
                                       return vpn
-                                        ? `${vpn.vpn_type === "WireGuard" ? "WG" : "OVPN"} — ${vpn.name}`
+                                        ? `WG — ${vpn.name}`
                                         : "No proxy / VPN";
                                     }
                                     const proxy = storedProxies.find(
@@ -1503,9 +1501,7 @@ export function CreateProfileDialog({
                                               variant="outline"
                                               className="text-[10px] px-1 py-0 leading-tight mr-1"
                                             >
-                                              {vpn.vpn_type === "WireGuard"
-                                                ? "WG"
-                                                : "OVPN"}
+                                              WG
                                             </Badge>
                                             {vpn.name}
                                           </CommandItem>

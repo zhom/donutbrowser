@@ -2219,11 +2219,7 @@ export function ProfilesDataTable({
             : effectiveProxy
               ? effectiveProxy.name
               : "Not Selected";
-          const vpnBadge = effectiveVpn
-            ? effectiveVpn.vpn_type === "WireGuard"
-              ? "WG"
-              : "OVPN"
-            : null;
+          const vpnBadge = effectiveVpn ? "WG" : null;
           const tooltipText = hasAssignment ? displayName : null;
           const isSelectorOpen = meta.openProxySelectorFor === profile.id;
           const selectedId = effectiveVpnId ?? effectiveProxyId ?? null;
@@ -2385,7 +2381,7 @@ export function ProfilesDataTable({
                                   variant="outline"
                                   className="text-[10px] px-1 py-0 leading-tight mr-1"
                                 >
-                                  {vpn.vpn_type === "WireGuard" ? "WG" : "OVPN"}
+                                  WG
                                 </Badge>
                                 {vpn.name}
                               </CommandItem>

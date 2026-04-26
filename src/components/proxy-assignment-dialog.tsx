@@ -179,9 +179,7 @@ export function ProxyAssignmentDialog({
                     if (selectionType === "none") return "None";
                     if (selectionType === "vpn") {
                       const vpn = vpnConfigs.find((v) => v.id === selectedId);
-                      return vpn
-                        ? `${vpn.vpn_type === "WireGuard" ? "WG" : "OVPN"} — ${vpn.name}`
-                        : "None";
+                      return vpn ? `WG — ${vpn.name}` : "None";
                     }
                     const proxy = storedProxies.find(
                       (p) => p.id === selectedId,
@@ -264,7 +262,7 @@ export function ProxyAssignmentDialog({
                               variant="outline"
                               className="text-[10px] px-1 py-0 leading-tight mr-1"
                             >
-                              {vpn.vpn_type === "WireGuard" ? "WG" : "OVPN"}
+                              WG
                             </Badge>
                             {vpn.name}
                           </CommandItem>

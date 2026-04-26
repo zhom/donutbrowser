@@ -3,10 +3,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { LoadingButton } from "@/components/loading-button";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Dialog,
   DialogContent,
@@ -19,15 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RippleButton } from "@/components/ui/ripple";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import type { VpnConfig, VpnType } from "@/types";
+import type { VpnConfig } from "@/types";
 
 interface VpnFormDialogProps {
   isOpen: boolean;
@@ -48,19 +38,6 @@ interface WireGuardFormData {
   presharedKey: string;
 }
 
-interface OpenVpnFormData {
-  name: string;
-  rawConfig: string;
-}
-
-interface VpnDependencyStatus {
-  isAvailable: boolean;
-  requiresExternalInstall: boolean;
-  missingBinary: boolean;
-  missingWindowsAdapter: boolean;
-  dependencyCheckFailed: boolean;
-}
-
 const defaultWireGuardForm: WireGuardFormData = {
   name: "",
   privateKey: "",
@@ -72,11 +49,6 @@ const defaultWireGuardForm: WireGuardFormData = {
   allowedIps: "0.0.0.0/0, ::/0",
   persistentKeepalive: "",
   presharedKey: "",
-};
-
-const defaultOpenVpnForm: OpenVpnFormData = {
-  name: "",
-  rawConfig: "",
 };
 
 function buildWireGuardConfig(form: WireGuardFormData): string {
@@ -102,62 +74,23 @@ export function VpnFormDialog({
   onClose,
   editingVpn,
 }: VpnFormDialogProps) {
-  const { t } = useTranslation();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [vpnType, setVpnType] = useState<VpnType>("WireGuard");
   const [wireGuardForm, setWireGuardForm] =
     useState<WireGuardFormData>(defaultWireGuardForm);
-  const [openVpnForm, setOpenVpnForm] =
-    useState<OpenVpnFormData>(defaultOpenVpnForm);
-  const [vpnDependencyStatus, setVpnDependencyStatus] =
-    useState<VpnDependencyStatus | null>(null);
 
   const resetForms = useCallback(() => {
-    setVpnType("WireGuard");
     setWireGuardForm(defaultWireGuardForm);
-    setOpenVpnForm(defaultOpenVpnForm);
   }, []);
 
   useEffect(() => {
     if (isOpen) {
       if (editingVpn) {
-        setVpnType(editingVpn.vpn_type);
-        if (editingVpn.vpn_type === "WireGuard") {
-          setWireGuardForm({ ...defaultWireGuardForm, name: editingVpn.name });
-        } else {
-          setOpenVpnForm({ name: editingVpn.name, rawConfig: "" });
-        }
+        setWireGuardForm({ ...defaultWireGuardForm, name: editingVpn.name });
       } else {
         resetForms();
       }
     }
   }, [isOpen, editingVpn, resetForms]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setVpnDependencyStatus(null);
-      return;
-    }
-
-    let cancelled = false;
-
-    void invoke<VpnDependencyStatus>("get_vpn_dependency_status", { vpnType })
-      .then((status) => {
-        if (!cancelled) {
-          setVpnDependencyStatus(status);
-        }
-      })
-      .catch((error) => {
-        console.error("Failed to load VPN dependency status:", error);
-        if (!cancelled) {
-          setVpnDependencyStatus(null);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, vpnType]);
 
   const handleClose = useCallback(() => {
     if (!isSubmitting) {
@@ -167,10 +100,7 @@ export function VpnFormDialog({
 
   const handleSubmit = useCallback(async () => {
     if (editingVpn) {
-      const name =
-        vpnType === "WireGuard"
-          ? wireGuardForm.name.trim()
-          : openVpnForm.name.trim();
+      const name = wireGuardForm.name.trim();
 
       if (!name) {
         toast.error("VPN name is required");
@@ -196,80 +126,49 @@ export function VpnFormDialog({
       return;
     }
 
-    if (vpnType === "WireGuard") {
-      const { name, privateKey, address, peerPublicKey, peerEndpoint } =
-        wireGuardForm;
+    const { name, privateKey, address, peerPublicKey, peerEndpoint } =
+      wireGuardForm;
 
-      if (!name.trim()) {
-        toast.error("VPN name is required");
-        return;
-      }
-      if (!privateKey.trim()) {
-        toast.error("Private key is required");
-        return;
-      }
-      if (!address.trim()) {
-        toast.error("Address is required");
-        return;
-      }
-      if (!peerPublicKey.trim()) {
-        toast.error("Peer public key is required");
-        return;
-      }
-      if (!peerEndpoint.trim()) {
-        toast.error("Peer endpoint is required");
-        return;
-      }
-
-      setIsSubmitting(true);
-      try {
-        const configData = buildWireGuardConfig(wireGuardForm);
-        await invoke("create_vpn_config_manual", {
-          name: name.trim(),
-          vpnType: "WireGuard",
-          configData,
-        });
-        await emit("vpn-configs-changed");
-        toast.success("WireGuard VPN created successfully");
-        onClose();
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        toast.error(`Failed to create VPN: ${errorMessage}`);
-      } finally {
-        setIsSubmitting(false);
-      }
-    } else {
-      const { name, rawConfig } = openVpnForm;
-
-      if (!name.trim()) {
-        toast.error("VPN name is required");
-        return;
-      }
-      if (!rawConfig.trim()) {
-        toast.error("OpenVPN config content is required");
-        return;
-      }
-
-      setIsSubmitting(true);
-      try {
-        await invoke("create_vpn_config_manual", {
-          name: name.trim(),
-          vpnType: "OpenVPN",
-          configData: rawConfig,
-        });
-        await emit("vpn-configs-changed");
-        toast.success("OpenVPN configuration created successfully");
-        onClose();
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        toast.error(`Failed to create VPN: ${errorMessage}`);
-      } finally {
-        setIsSubmitting(false);
-      }
+    if (!name.trim()) {
+      toast.error("VPN name is required");
+      return;
     }
-  }, [editingVpn, vpnType, wireGuardForm, openVpnForm, onClose]);
+    if (!privateKey.trim()) {
+      toast.error("Private key is required");
+      return;
+    }
+    if (!address.trim()) {
+      toast.error("Address is required");
+      return;
+    }
+    if (!peerPublicKey.trim()) {
+      toast.error("Peer public key is required");
+      return;
+    }
+    if (!peerEndpoint.trim()) {
+      toast.error("Peer endpoint is required");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const configData = buildWireGuardConfig(wireGuardForm);
+      await invoke("create_vpn_config_manual", {
+        name: name.trim(),
+        vpnType: "WireGuard",
+        configData,
+      });
+      await emit("vpn-configs-changed");
+      toast.success("WireGuard VPN created successfully");
+      onClose();
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      toast.error(`Failed to create VPN: ${errorMessage}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [editingVpn, wireGuardForm, onClose]);
 
   const updateWireGuard = useCallback(
     (field: keyof WireGuardFormData, value: string) => {
@@ -278,54 +177,10 @@ export function VpnFormDialog({
     [],
   );
 
-  const updateOpenVpn = useCallback(
-    (field: keyof OpenVpnFormData, value: string) => {
-      setOpenVpnForm((prev) => ({ ...prev, [field]: value }));
-    },
-    [],
-  );
-
-  const dialogTitle = editingVpn
-    ? "Edit VPN"
-    : vpnType === "WireGuard"
-      ? "Create WireGuard VPN"
-      : "Create OpenVPN Configuration";
-
+  const dialogTitle = editingVpn ? "Edit VPN" : "Create WireGuard VPN";
   const dialogDescription = editingVpn
     ? "Update the name of your VPN configuration."
-    : vpnType === "WireGuard"
-      ? "Enter your WireGuard interface and peer details."
-      : "Paste your .ovpn configuration file content.";
-
-  let dependencyWarningTitle: string | null = null;
-  let dependencyWarningDescription: string | null = null;
-
-  if (
-    vpnType === "OpenVPN" &&
-    vpnDependencyStatus?.requiresExternalInstall &&
-    !vpnDependencyStatus.isAvailable
-  ) {
-    if (vpnDependencyStatus.missingBinary) {
-      dependencyWarningTitle = t("vpnForm.dependencies.openVpnMissingTitle");
-      dependencyWarningDescription = t(
-        "vpnForm.dependencies.openVpnMissingDescription",
-      );
-    } else if (vpnDependencyStatus.missingWindowsAdapter) {
-      dependencyWarningTitle = t(
-        "vpnForm.dependencies.openVpnAdapterMissingTitle",
-      );
-      dependencyWarningDescription = t(
-        "vpnForm.dependencies.openVpnAdapterMissingDescription",
-      );
-    } else if (vpnDependencyStatus.dependencyCheckFailed) {
-      dependencyWarningTitle = t(
-        "vpnForm.dependencies.openVpnCheckFailedTitle",
-      );
-      dependencyWarningDescription = t(
-        "vpnForm.dependencies.openVpnCheckFailedDescription",
-      );
-    }
-  }
+    : "Enter your WireGuard interface and peer details.";
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -337,221 +192,147 @@ export function VpnFormDialog({
 
         <ScrollArea className="max-h-[60vh] pr-4">
           <div className="grid gap-4 py-2">
-            {dependencyWarningTitle && dependencyWarningDescription && (
-              <Alert className="border-warning/50 bg-warning/10">
-                <AlertTitle className="text-warning">
-                  {dependencyWarningTitle}
-                </AlertTitle>
-                <AlertDescription className="text-warning">
-                  {dependencyWarningDescription}
-                </AlertDescription>
-              </Alert>
-            )}
+            <div className="grid gap-2">
+              <Label htmlFor="wg-name">Name</Label>
+              <Input
+                id="wg-name"
+                value={wireGuardForm.name}
+                onChange={(e) => {
+                  updateWireGuard("name", e.target.value);
+                }}
+                placeholder="e.g. Home WireGuard"
+                disabled={isSubmitting}
+              />
+            </div>
 
             {!editingVpn && (
-              <div className="grid gap-2">
-                <Label>VPN Type</Label>
-                <Select
-                  value={vpnType}
-                  onValueChange={(value) => {
-                    setVpnType(value as VpnType);
-                  }}
-                  disabled={isSubmitting}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select VPN type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="WireGuard">WireGuard</SelectItem>
-                    <SelectItem value="OpenVPN">OpenVPN</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {vpnType === "WireGuard" && (
               <>
                 <div className="grid gap-2">
-                  <Label htmlFor="wg-name">Name</Label>
+                  <Label htmlFor="wg-private-key">Private Key</Label>
                   <Input
-                    id="wg-name"
-                    value={wireGuardForm.name}
+                    id="wg-private-key"
+                    value={wireGuardForm.privateKey}
                     onChange={(e) => {
-                      updateWireGuard("name", e.target.value);
+                      updateWireGuard("privateKey", e.target.value);
                     }}
-                    placeholder="e.g. Home WireGuard"
+                    placeholder="Base64-encoded private key"
                     disabled={isSubmitting}
                   />
                 </div>
 
-                {!editingVpn && (
-                  <>
-                    <div className="grid gap-2">
-                      <Label htmlFor="wg-private-key">Private Key</Label>
-                      <Input
-                        id="wg-private-key"
-                        value={wireGuardForm.privateKey}
-                        onChange={(e) => {
-                          updateWireGuard("privateKey", e.target.value);
-                        }}
-                        placeholder="Base64-encoded private key"
-                        disabled={isSubmitting}
-                      />
-                    </div>
-
-                    <div className="grid gap-2">
-                      <Label htmlFor="wg-address">Address</Label>
-                      <Input
-                        id="wg-address"
-                        value={wireGuardForm.address}
-                        onChange={(e) => {
-                          updateWireGuard("address", e.target.value);
-                        }}
-                        placeholder="e.g. 10.0.0.2/24"
-                        disabled={isSubmitting}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="wg-dns">DNS (optional)</Label>
-                        <Input
-                          id="wg-dns"
-                          value={wireGuardForm.dns}
-                          onChange={(e) => {
-                            updateWireGuard("dns", e.target.value);
-                          }}
-                          placeholder="e.g. 1.1.1.1"
-                          disabled={isSubmitting}
-                        />
-                      </div>
-
-                      <div className="grid gap-2">
-                        <Label htmlFor="wg-mtu">MTU (optional)</Label>
-                        <Input
-                          id="wg-mtu"
-                          type="number"
-                          value={wireGuardForm.mtu}
-                          onChange={(e) => {
-                            updateWireGuard("mtu", e.target.value);
-                          }}
-                          placeholder="e.g. 1420"
-                          disabled={isSubmitting}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid gap-2">
-                      <Label htmlFor="wg-peer-public-key">
-                        Peer Public Key
-                      </Label>
-                      <Input
-                        id="wg-peer-public-key"
-                        value={wireGuardForm.peerPublicKey}
-                        onChange={(e) => {
-                          updateWireGuard("peerPublicKey", e.target.value);
-                        }}
-                        placeholder="Base64-encoded peer public key"
-                        disabled={isSubmitting}
-                      />
-                    </div>
-
-                    <div className="grid gap-2">
-                      <Label htmlFor="wg-peer-endpoint">Peer Endpoint</Label>
-                      <Input
-                        id="wg-peer-endpoint"
-                        value={wireGuardForm.peerEndpoint}
-                        onChange={(e) => {
-                          updateWireGuard("peerEndpoint", e.target.value);
-                        }}
-                        placeholder="e.g. vpn.example.com:51820"
-                        disabled={isSubmitting}
-                      />
-                    </div>
-
-                    <div className="grid gap-2">
-                      <Label htmlFor="wg-allowed-ips">Allowed IPs</Label>
-                      <Input
-                        id="wg-allowed-ips"
-                        value={wireGuardForm.allowedIps}
-                        onChange={(e) => {
-                          updateWireGuard("allowedIps", e.target.value);
-                        }}
-                        placeholder="e.g. 0.0.0.0/0, ::/0"
-                        disabled={isSubmitting}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="wg-keepalive">
-                          Persistent Keepalive (optional)
-                        </Label>
-                        <Input
-                          id="wg-keepalive"
-                          type="number"
-                          value={wireGuardForm.persistentKeepalive}
-                          onChange={(e) => {
-                            updateWireGuard(
-                              "persistentKeepalive",
-                              e.target.value,
-                            );
-                          }}
-                          placeholder="e.g. 25"
-                          disabled={isSubmitting}
-                        />
-                      </div>
-
-                      <div className="grid gap-2">
-                        <Label htmlFor="wg-preshared-key">
-                          Preshared Key (optional)
-                        </Label>
-                        <Input
-                          id="wg-preshared-key"
-                          value={wireGuardForm.presharedKey}
-                          onChange={(e) => {
-                            updateWireGuard("presharedKey", e.target.value);
-                          }}
-                          placeholder="Base64-encoded preshared key"
-                          disabled={isSubmitting}
-                        />
-                      </div>
-                    </div>
-                  </>
-                )}
-              </>
-            )}
-
-            {vpnType === "OpenVPN" && (
-              <>
                 <div className="grid gap-2">
-                  <Label htmlFor="ovpn-name">Name</Label>
+                  <Label htmlFor="wg-address">Address</Label>
                   <Input
-                    id="ovpn-name"
-                    value={openVpnForm.name}
+                    id="wg-address"
+                    value={wireGuardForm.address}
                     onChange={(e) => {
-                      updateOpenVpn("name", e.target.value);
+                      updateWireGuard("address", e.target.value);
                     }}
-                    placeholder="e.g. Work OpenVPN"
+                    placeholder="e.g. 10.0.0.2/24"
                     disabled={isSubmitting}
                   />
                 </div>
 
-                {!editingVpn && (
+                <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="ovpn-config">Raw Config</Label>
-                    <Textarea
-                      id="ovpn-config"
-                      value={openVpnForm.rawConfig}
+                    <Label htmlFor="wg-dns">DNS (optional)</Label>
+                    <Input
+                      id="wg-dns"
+                      value={wireGuardForm.dns}
                       onChange={(e) => {
-                        updateOpenVpn("rawConfig", e.target.value);
+                        updateWireGuard("dns", e.target.value);
                       }}
-                      placeholder="Paste your .ovpn file content here..."
-                      className="min-h-[200px] font-mono text-xs"
+                      placeholder="e.g. 1.1.1.1"
                       disabled={isSubmitting}
                     />
                   </div>
-                )}
+
+                  <div className="grid gap-2">
+                    <Label htmlFor="wg-mtu">MTU (optional)</Label>
+                    <Input
+                      id="wg-mtu"
+                      type="number"
+                      value={wireGuardForm.mtu}
+                      onChange={(e) => {
+                        updateWireGuard("mtu", e.target.value);
+                      }}
+                      placeholder="e.g. 1420"
+                      disabled={isSubmitting}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="wg-peer-public-key">Peer Public Key</Label>
+                  <Input
+                    id="wg-peer-public-key"
+                    value={wireGuardForm.peerPublicKey}
+                    onChange={(e) => {
+                      updateWireGuard("peerPublicKey", e.target.value);
+                    }}
+                    placeholder="Base64-encoded peer public key"
+                    disabled={isSubmitting}
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="wg-peer-endpoint">Peer Endpoint</Label>
+                  <Input
+                    id="wg-peer-endpoint"
+                    value={wireGuardForm.peerEndpoint}
+                    onChange={(e) => {
+                      updateWireGuard("peerEndpoint", e.target.value);
+                    }}
+                    placeholder="e.g. vpn.example.com:51820"
+                    disabled={isSubmitting}
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="wg-allowed-ips">Allowed IPs</Label>
+                  <Input
+                    id="wg-allowed-ips"
+                    value={wireGuardForm.allowedIps}
+                    onChange={(e) => {
+                      updateWireGuard("allowedIps", e.target.value);
+                    }}
+                    placeholder="e.g. 0.0.0.0/0, ::/0"
+                    disabled={isSubmitting}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="wg-keepalive">
+                      Persistent Keepalive (optional)
+                    </Label>
+                    <Input
+                      id="wg-keepalive"
+                      type="number"
+                      value={wireGuardForm.persistentKeepalive}
+                      onChange={(e) => {
+                        updateWireGuard("persistentKeepalive", e.target.value);
+                      }}
+                      placeholder="e.g. 25"
+                      disabled={isSubmitting}
+                    />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label htmlFor="wg-preshared-key">
+                      Preshared Key (optional)
+                    </Label>
+                    <Input
+                      id="wg-preshared-key"
+                      value={wireGuardForm.presharedKey}
+                      onChange={(e) => {
+                        updateWireGuard("presharedKey", e.target.value);
+                      }}
+                      placeholder="Base64-encoded preshared key"
+                      disabled={isSubmitting}
+                    />
+                  </div>
+                </div>
               </>
             )}
           </div>

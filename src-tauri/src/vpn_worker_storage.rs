@@ -1,6 +1,7 @@
 use crate::proxy_storage::get_storage_dir;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VpnWorkerConfig {
@@ -36,10 +37,32 @@ pub fn save_vpn_worker_config(config: &VpnWorkerConfig) -> Result<(), Box<dyn st
   fs::create_dir_all(&storage_dir)?;
 
   let file_path = storage_dir.join(format!("vpn_worker_{}.json", config.id));
-  let content = serde_json::to_string_pretty(config)?;
-  fs::write(&file_path, content)?;
+  save_vpn_worker_config_to_path(config, &file_path)
+}
 
+/// Write a worker config to a specific path. Used by detached worker
+/// processes that already know their config file path (passed via
+/// `--config-path`) and must write back to the same location regardless of
+/// how `get_storage_dir()` resolves in the worker process — which can
+/// differ from the parent on Linux distros that sandbox the GUI (Qubes,
+/// flatpak, etc.) and is the cause of issue #287.
+pub fn save_vpn_worker_config_to_path(
+  config: &VpnWorkerConfig,
+  path: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+  if let Some(parent) = path.parent() {
+    fs::create_dir_all(parent)?;
+  }
+  let content = serde_json::to_string_pretty(config)?;
+  fs::write(path, content)?;
   Ok(())
+}
+
+/// Read a worker config from a specific path. Counterpart to
+/// `save_vpn_worker_config_to_path`.
+pub fn get_vpn_worker_config_from_path(path: &Path) -> Option<VpnWorkerConfig> {
+  let content = fs::read_to_string(path).ok()?;
+  serde_json::from_str(&content).ok()
 }
 
 pub fn get_vpn_worker_config(id: &str) -> Option<VpnWorkerConfig> {

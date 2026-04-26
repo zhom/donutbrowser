@@ -11,8 +11,6 @@ pub enum VpnError {
   UnknownFormat,
   #[error("Invalid WireGuard config: {0}")]
   InvalidWireGuard(String),
-  #[error("Invalid OpenVPN config: {0}")]
-  InvalidOpenVpn(String),
   #[error("Storage error: {0}")]
   Storage(String),
   #[error("Connection error: {0}")]
@@ -31,14 +29,12 @@ pub enum VpnError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VpnType {
   WireGuard,
-  OpenVPN,
 }
 
 impl std::fmt::Display for VpnType {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
       VpnType::WireGuard => write!(f, "WireGuard"),
-      VpnType::OpenVPN => write!(f, "OpenVPN"),
     }
   }
 }
@@ -72,19 +68,6 @@ pub struct WireGuardConfig {
   pub preshared_key: Option<String>,
 }
 
-/// Parsed OpenVPN configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OpenVpnConfig {
-  pub raw_config: String,
-  pub remote_host: String,
-  pub remote_port: u16,
-  pub protocol: String, // "udp" or "tcp"
-  pub dev_type: String, // "tun" or "tap"
-  pub has_inline_ca: bool,
-  pub has_inline_cert: bool,
-  pub has_inline_key: bool,
-}
-
 /// Result of importing a VPN configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VpnImportResult {
@@ -110,26 +93,16 @@ pub struct VpnStatus {
 pub fn detect_vpn_type(content: &str, filename: &str) -> Result<VpnType, VpnError> {
   let filename_lower = filename.to_lowercase();
 
-  // Check file extension first
-  if filename_lower.ends_with(".conf") {
-    // .conf could be WireGuard - check content
-    if content.contains("[Interface]") && content.contains("[Peer]") {
-      return Ok(VpnType::WireGuard);
-    }
-  }
-
-  if filename_lower.ends_with(".ovpn") {
-    return Ok(VpnType::OpenVPN);
-  }
-
-  // Check content patterns
-  if content.contains("[Interface]") && content.contains("PrivateKey") && content.contains("[Peer]")
+  if filename_lower.ends_with(".conf")
+    && content.contains("[Interface]")
+    && content.contains("[Peer]")
   {
     return Ok(VpnType::WireGuard);
   }
 
-  if content.contains("remote ") && (content.contains("client") || content.contains("dev tun")) {
-    return Ok(VpnType::OpenVPN);
+  if content.contains("[Interface]") && content.contains("PrivateKey") && content.contains("[Peer]")
+  {
+    return Ok(VpnType::WireGuard);
   }
 
   Err(VpnError::UnknownFormat)
@@ -254,75 +227,6 @@ fn validate_wireguard_key(key: &str, field: &str) -> Result<(), VpnError> {
   Ok(())
 }
 
-/// Parse an OpenVPN configuration file
-pub fn parse_openvpn_config(content: &str) -> Result<OpenVpnConfig, VpnError> {
-  let mut remote_host = String::new();
-  let mut remote_port: u16 = 1194; // Default OpenVPN port
-  let mut protocol = "udp".to_string();
-  let mut dev_type = "tun".to_string();
-
-  let has_inline_ca = content.contains("<ca>") && content.contains("</ca>");
-  let has_inline_cert = content.contains("<cert>") && content.contains("</cert>");
-  let has_inline_key = content.contains("<key>") && content.contains("</key>");
-
-  for line in content.lines() {
-    let line = line.trim();
-
-    // Skip empty lines and comments
-    if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
-      continue;
-    }
-
-    let parts: Vec<&str> = line.split_whitespace().collect();
-    if parts.is_empty() {
-      continue;
-    }
-
-    match parts[0] {
-      "remote" => {
-        if parts.len() >= 2 {
-          remote_host = parts[1].to_string();
-        }
-        if let Some(port) = parts.get(2).and_then(|p| p.parse().ok()) {
-          remote_port = port;
-        }
-        if parts.len() >= 4 {
-          protocol = parts[3].to_string();
-        }
-      }
-      "proto" if parts.len() >= 2 => {
-        protocol = parts[1].to_string();
-      }
-      "port" => {
-        if let Some(port) = parts.get(1).and_then(|p| p.parse().ok()) {
-          remote_port = port;
-        }
-      }
-      "dev" if parts.len() >= 2 => {
-        dev_type = parts[1].to_string();
-      }
-      _ => {}
-    }
-  }
-
-  if remote_host.is_empty() {
-    return Err(VpnError::InvalidOpenVpn(
-      "Missing 'remote' directive".to_string(),
-    ));
-  }
-
-  Ok(OpenVpnConfig {
-    raw_config: content.to_string(),
-    remote_host,
-    remote_port,
-    protocol,
-    dev_type,
-    has_inline_ca,
-    has_inline_cert,
-    has_inline_key,
-  })
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -337,15 +241,6 @@ mod tests {
   }
 
   #[test]
-  fn test_detect_openvpn_by_extension() {
-    let content = "client\nremote vpn.example.com 1194";
-    assert_eq!(
-      detect_vpn_type(content, "test.ovpn").unwrap(),
-      VpnType::OpenVPN
-    );
-  }
-
-  #[test]
   fn test_detect_wireguard_by_content() {
     let content = "[Interface]\nPrivateKey = testkey123\nAddress = 10.0.0.2/24\n\n[Peer]\nPublicKey = peerkey456\nEndpoint = vpn.example.com:51820";
     assert_eq!(
@@ -355,18 +250,16 @@ mod tests {
   }
 
   #[test]
-  fn test_detect_openvpn_by_content() {
-    let content = "client\ndev tun\nproto udp\nremote vpn.example.com 1194";
-    assert_eq!(
-      detect_vpn_type(content, "config").unwrap(),
-      VpnType::OpenVPN
-    );
-  }
-
-  #[test]
   fn test_detect_unknown_format() {
     let content = "random text that is not a vpn config";
     assert!(detect_vpn_type(content, "random.txt").is_err());
+  }
+
+  #[test]
+  fn test_reject_openvpn_content() {
+    let content = "client\ndev tun\nproto udp\nremote vpn.example.com 1194";
+    assert!(detect_vpn_type(content, "test.ovpn").is_err());
+    assert!(detect_vpn_type(content, "config").is_err());
   }
 
   #[test]
@@ -443,82 +336,5 @@ Endpoint = 1.2.3.4:51820
     let result = parse_wireguard_config(content);
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("PrivateKey"));
-  }
-
-  #[test]
-  fn test_parse_openvpn_config() {
-    let content = r#"
-client
-dev tun
-proto udp
-remote vpn.example.com 1194
-resolv-retry infinite
-nobind
-persist-key
-persist-tun
-<ca>
------BEGIN CERTIFICATE-----
-...certificate data...
------END CERTIFICATE-----
-</ca>
-<cert>
------BEGIN CERTIFICATE-----
-...cert data...
------END CERTIFICATE-----
-</cert>
-<key>
------BEGIN PRIVATE KEY-----
-...key data...
------END PRIVATE KEY-----
-</key>
-"#;
-
-    let config = parse_openvpn_config(content).unwrap();
-    assert_eq!(config.remote_host, "vpn.example.com");
-    assert_eq!(config.remote_port, 1194);
-    assert_eq!(config.protocol, "udp");
-    assert_eq!(config.dev_type, "tun");
-    assert!(config.has_inline_ca);
-    assert!(config.has_inline_cert);
-    assert!(config.has_inline_key);
-  }
-
-  #[test]
-  fn test_parse_openvpn_config_minimal() {
-    let content = r#"
-client
-remote vpn.example.com
-"#;
-
-    let config = parse_openvpn_config(content).unwrap();
-    assert_eq!(config.remote_host, "vpn.example.com");
-    assert_eq!(config.remote_port, 1194); // Default
-    assert_eq!(config.protocol, "udp"); // Default
-  }
-
-  #[test]
-  fn test_parse_openvpn_config_with_port_and_proto() {
-    let content = r#"
-client
-remote vpn.example.com 443 tcp
-"#;
-
-    let config = parse_openvpn_config(content).unwrap();
-    assert_eq!(config.remote_host, "vpn.example.com");
-    assert_eq!(config.remote_port, 443);
-    assert_eq!(config.protocol, "tcp");
-  }
-
-  #[test]
-  fn test_parse_openvpn_missing_remote() {
-    let content = r#"
-client
-dev tun
-proto udp
-"#;
-
-    let result = parse_openvpn_config(content);
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("remote"));
   }
 }

@@ -26,7 +26,7 @@ donutbrowser/
 │   │   ├── api_server.rs            # REST API (utoipa + axum)
 │   │   ├── mcp_server.rs            # MCP protocol server
 │   │   ├── sync/                    # Cloud sync (engine, encryption, manifest, scheduler)
-│   │   ├── vpn/                     # WireGuard & OpenVPN tunnels
+│   │   ├── vpn/                     # WireGuard tunnels
 │   │   ├── camoufox/                # Camoufox fingerprint engine (Bayesian network)
 │   │   ├── wayfern_manager.rs       # Wayfern (Chromium) browser management
 │   │   ├── camoufox_manager.rs      # Camoufox (Firefox) browser management

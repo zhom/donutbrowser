@@ -848,17 +848,17 @@ impl McpServer {
       // VPN management tools
       McpTool {
         name: "import_vpn".to_string(),
-        description: "Import a WireGuard (.conf) or OpenVPN (.ovpn) configuration".to_string(),
+        description: "Import a WireGuard (.conf) configuration".to_string(),
         input_schema: serde_json::json!({
           "type": "object",
           "properties": {
             "content": {
               "type": "string",
-              "description": "Raw VPN config file content"
+              "description": "Raw WireGuard config file content"
             },
             "filename": {
               "type": "string",
-              "description": "Original filename (.conf or .ovpn) for type detection"
+              "description": "Original filename (.conf)"
             },
             "name": {
               "type": "string",

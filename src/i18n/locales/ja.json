@@ -812,16 +812,6 @@
       "button": "複製"
     }
   },
-  "vpnForm": {
-    "dependencies": {
-      "openVpnMissingTitle": "OpenVPN がインストールされていません",
-      "openVpnMissingDescription": "この設定は保存できますが、このデバイスに OpenVPN がインストールされるまで Donut Browser では接続できません。",
-      "openVpnAdapterMissingTitle": "OpenVPN アダプターが見つかりません",
-      "openVpnAdapterMissingDescription": "OpenVPN はインストールされていますが、TAP/Wintun/ovpn-dco アダプターが見つかりませんでした。Windows で接続する前に OpenVPN を修復または再インストールしてください。",
-      "openVpnCheckFailedTitle": "OpenVPN のインストールを確認できませんでした",
-      "openVpnCheckFailedDescription": "Donut Browser はローカルの OpenVPN インストールを確認できませんでした。Windows で接続する前に OpenVPN を修復または再インストールしてください。"
-    }
-  },
   "extensions": {
     "title": "拡張機能",
     "description": "プロファイル用のブラウザ拡張機能と拡張機能グループを管理します。",

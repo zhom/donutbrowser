@@ -490,23 +490,10 @@ async fn main() {
 
           let server =
             donutbrowser_lib::vpn::socks5_server::WireGuardSocks5Server::new(wg_config, port);
-          if let Err(e) = server.run(id.clone()).await {
-            log::error!("VPN worker failed: {}", e);
-            process::exit(1);
-          }
-        }
-        "openvpn" => {
-          let ovpn_config = match donutbrowser_lib::vpn::parse_openvpn_config(&vpn_config_data) {
-            Ok(c) => c,
-            Err(e) => {
-              log::error!("Failed to parse OpenVPN config: {}", e);
-              process::exit(1);
-            }
-          };
-
-          let server =
-            donutbrowser_lib::vpn::openvpn_socks5::OpenVpnSocks5Server::new(ovpn_config, port);
-          if let Err(e) = server.run(id.clone()).await {
+          if let Err(e) = server
+            .run(id.clone(), config_path.map(std::path::PathBuf::from))
+            .await
+          {
             log::error!("VPN worker failed: {}", e);
             process::exit(1);
           }

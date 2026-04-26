@@ -769,42 +769,6 @@ async fn download_geoip_database(app_handle: tauri::AppHandle) -> Result<(), Str
 }
 
 // VPN commands
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct VpnDependencyStatus {
-  is_available: bool,
-  requires_external_install: bool,
-  missing_binary: bool,
-  missing_windows_adapter: bool,
-  dependency_check_failed: bool,
-}
-
-#[tauri::command]
-async fn get_vpn_dependency_status(vpn_type: vpn::VpnType) -> Result<VpnDependencyStatus, String> {
-  match vpn_type {
-    vpn::VpnType::WireGuard => Ok(VpnDependencyStatus {
-      is_available: true,
-      requires_external_install: false,
-      missing_binary: false,
-      missing_windows_adapter: false,
-      dependency_check_failed: false,
-    }),
-    vpn::VpnType::OpenVPN => {
-      let status = crate::vpn::openvpn_socks5::OpenVpnSocks5Server::dependency_status();
-      let is_available =
-        status.binary_found && !status.missing_windows_adapter && !status.dependency_check_failed;
-
-      Ok(VpnDependencyStatus {
-        is_available,
-        requires_external_install: true,
-        missing_binary: !status.binary_found,
-        missing_windows_adapter: status.missing_windows_adapter,
-        dependency_check_failed: status.dependency_check_failed,
-      })
-    }
-  }
-}
-
 #[tauri::command]
 async fn import_vpn_config(
   content: String,
@@ -2075,7 +2039,6 @@ pub fn run() {
       add_mcp_to_claude_code,
       remove_mcp_from_claude_code,
       // VPN commands
-      get_vpn_dependency_status,
       import_vpn_config,
       list_vpn_configs,
       get_vpn_config,

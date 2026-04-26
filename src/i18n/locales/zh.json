@@ -812,16 +812,6 @@
       "button": "克隆"
     }
   },
-  "vpnForm": {
-    "dependencies": {
-      "openVpnMissingTitle": "未安装 OpenVPN",
-      "openVpnMissingDescription": "你现在可以保存这个配置，但在此设备上安装 OpenVPN 之前，Donut Browser 无法连接它。",
-      "openVpnAdapterMissingTitle": "缺少 OpenVPN 适配器",
-      "openVpnAdapterMissingDescription": "已安装 OpenVPN，但未找到 TAP/Wintun/ovpn-dco 适配器。在 Windows 上连接前，请修复或重新安装 OpenVPN。",
-      "openVpnCheckFailedTitle": "无法验证 OpenVPN 安装",
-      "openVpnCheckFailedDescription": "Donut Browser 无法检查本机 OpenVPN 安装。在 Windows 上连接前，请修复或重新安装 OpenVPN。"
-    }
-  },
   "extensions": {
     "title": "扩展程序",
     "description": "管理配置文件的浏览器扩展程序和扩展程序组。",

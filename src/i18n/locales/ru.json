@@ -812,16 +812,6 @@
       "button": "Клонировать"
     }
   },
-  "vpnForm": {
-    "dependencies": {
-      "openVpnMissingTitle": "OpenVPN не установлен",
-      "openVpnMissingDescription": "Вы можете сохранить эту конфигурацию, но Donut Browser не сможет подключиться, пока OpenVPN не будет установлен на этом устройстве.",
-      "openVpnAdapterMissingTitle": "Отсутствует адаптер OpenVPN",
-      "openVpnAdapterMissingDescription": "OpenVPN установлен, но адаптер TAP/Wintun/ovpn-dco не найден. Восстановите или переустановите OpenVPN перед подключением в Windows.",
-      "openVpnCheckFailedTitle": "Не удалось проверить установку OpenVPN",
-      "openVpnCheckFailedDescription": "Donut Browser не смог проверить локальную установку OpenVPN. Восстановите или переустановите OpenVPN перед подключением в Windows."
-    }
-  },
   "extensions": {
     "title": "Расширения",
     "description": "Управляйте расширениями браузера и группами расширений для ваших профилей.",

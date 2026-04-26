@@ -161,7 +161,17 @@ impl VpnStorage {
     let content = fs::read_to_string(&self.storage_path)
       .map_err(|e| VpnError::Storage(format!("Failed to read storage file: {e}")))?;
 
-    serde_json::from_str(&content)
+    // Drop entries whose vpn_type isn't recognized by the current build (e.g.
+    // legacy "OpenVPN" entries after support was removed). Filtering at JSON
+    // level keeps the rest of the file deserializable instead of the whole
+    // load failing on a single unknown variant.
+    let mut value: serde_json::Value = serde_json::from_str(&content)
+      .map_err(|e| VpnError::Storage(format!("Failed to parse storage file: {e}")))?;
+    if let Some(arr) = value.get_mut("configs").and_then(|v| v.as_array_mut()) {
+      arr.retain(|c| c.get("vpn_type").and_then(|t| t.as_str()) == Some("WireGuard"));
+    }
+
+    serde_json::from_value(value)
       .map_err(|e| VpnError::Storage(format!("Failed to parse storage file: {e}")))
   }
 
@@ -328,13 +338,9 @@ impl VpnStorage {
     vpn_type: VpnType,
     config_data: &str,
   ) -> Result<VpnConfig, VpnError> {
-    // Validate the config by parsing it
     match vpn_type {
       VpnType::WireGuard => {
         super::parse_wireguard_config(config_data)?;
-      }
-      VpnType::OpenVPN => {
-        super::parse_openvpn_config(config_data)?;
       }
     }
 
@@ -392,20 +398,15 @@ impl VpnStorage {
   ) -> Result<VpnConfig, VpnError> {
     let vpn_type = super::detect_vpn_type(content, filename)?;
 
-    // Validate the config by parsing it
     match vpn_type {
       VpnType::WireGuard => {
         super::parse_wireguard_config(content)?;
-      }
-      VpnType::OpenVPN => {
-        super::parse_openvpn_config(content)?;
       }
     }
 
     let id = Uuid::new_v4().to_string();
     let display_name = name.unwrap_or_else(|| {
-      // Generate name from filename
-      let base = filename.trim_end_matches(".conf").trim_end_matches(".ovpn");
+      let base = filename.trim_end_matches(".conf");
       format!("{} ({})", base, vpn_type)
     });
     let sync_enabled = crate::sync::is_sync_configured();
@@ -491,7 +492,7 @@ mod tests {
     let config2 = VpnConfig {
       id: "id-2".to_string(),
       name: "VPN 2".to_string(),
-      vpn_type: VpnType::OpenVPN,
+      vpn_type: VpnType::WireGuard,
       config_data: "secret2".to_string(),
       created_at: 2000,
       last_used: Some(3000),

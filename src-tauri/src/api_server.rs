@@ -130,6 +130,39 @@ struct UpdateProxyRequest {
   proxy_settings: Option<ProxySettings>,
 }
 
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+struct ApiVpnResponse {
+  id: String,
+  name: String,
+  /// Always "WireGuard"
+  vpn_type: String,
+  created_at: i64,
+  last_used: Option<i64>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+struct ImportVpnRequest {
+  /// Raw WireGuard `.conf` file content
+  content: String,
+  /// Original filename
+  filename: String,
+  /// Optional display name; defaults to filename-based name
+  name: Option<String>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+struct CreateVpnRequest {
+  name: String,
+  /// Must be "WireGuard"
+  vpn_type: String,
+  config_data: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+struct UpdateVpnRequest {
+  name: String,
+}
+
 #[derive(Debug, Deserialize, ToSchema)]
 struct DownloadBrowserRequest {
   browser: String,
@@ -191,6 +224,12 @@ struct OpenUrlRequest {
     create_proxy,
     update_proxy,
     delete_proxy,
+    get_vpns,
+    get_vpn,
+    import_vpn,
+    create_vpn,
+    update_vpn,
+    delete_vpn,
     download_browser_api,
     get_browser_versions,
     check_browser_downloaded,
@@ -207,6 +246,10 @@ struct OpenUrlRequest {
     ApiProxyResponse,
     CreateProxyRequest,
     UpdateProxyRequest,
+    ApiVpnResponse,
+    ImportVpnRequest,
+    CreateVpnRequest,
+    UpdateVpnRequest,
     DownloadBrowserRequest,
     DownloadBrowserResponse,
     RunProfileResponse,
@@ -219,6 +262,7 @@ struct OpenUrlRequest {
     (name = "groups", description = "Group management endpoints"),
     (name = "tags", description = "Tag management endpoints"),
     (name = "proxies", description = "Proxy management endpoints"),
+    (name = "vpns", description = "VPN management endpoints"),
     (name = "browsers", description = "Browser management endpoints"),
   ),
   modifiers(&SecurityAddon),
@@ -311,6 +355,9 @@ impl ApiServer {
       .routes(routes!(get_tags))
       .routes(routes!(get_proxies, create_proxy))
       .routes(routes!(get_proxy, update_proxy, delete_proxy))
+      .routes(routes!(get_vpns, create_vpn))
+      .routes(routes!(import_vpn))
+      .routes(routes!(get_vpn, update_vpn, delete_vpn))
       .routes(routes!(get_extensions))
       .routes(routes!(delete_extension_api))
       .routes(routes!(get_extension_groups))
@@ -1186,6 +1233,212 @@ async fn delete_proxy(
   match PROXY_MANAGER.delete_stored_proxy(&state.app_handle, &id) {
     Ok(_) => Ok(StatusCode::NO_CONTENT),
     Err(_) => Err(StatusCode::BAD_REQUEST),
+  }
+}
+
+// API Handlers - VPNs
+
+fn vpn_to_api_response(c: &crate::vpn::VpnConfig) -> ApiVpnResponse {
+  ApiVpnResponse {
+    id: c.id.clone(),
+    name: c.name.clone(),
+    vpn_type: c.vpn_type.to_string(),
+    created_at: c.created_at,
+    last_used: c.last_used,
+  }
+}
+
+fn parse_vpn_type(s: &str) -> Option<crate::vpn::VpnType> {
+  match s.to_ascii_lowercase().as_str() {
+    "wireguard" | "wg" => Some(crate::vpn::VpnType::WireGuard),
+    _ => None,
+  }
+}
+
+#[utoipa::path(
+  get,
+  path = "/v1/vpns",
+  responses(
+    (status = 200, description = "List of all VPN configurations", body = Vec<ApiVpnResponse>),
+    (status = 401, description = "Unauthorized"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(("bearer_auth" = [])),
+  tag = "vpns"
+)]
+async fn get_vpns(
+  State(_state): State<ApiServerState>,
+) -> Result<Json<Vec<ApiVpnResponse>>, StatusCode> {
+  let storage = crate::vpn::VPN_STORAGE
+    .lock()
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+  let configs = storage
+    .list_configs()
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+  Ok(Json(configs.iter().map(vpn_to_api_response).collect()))
+}
+
+#[utoipa::path(
+  get,
+  path = "/v1/vpns/{id}",
+  params(("id" = String, Path, description = "VPN configuration ID")),
+  responses(
+    (status = 200, description = "VPN configuration details", body = ApiVpnResponse),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "VPN configuration not found"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(("bearer_auth" = [])),
+  tag = "vpns"
+)]
+async fn get_vpn(
+  Path(id): Path<String>,
+  State(_state): State<ApiServerState>,
+) -> Result<Json<ApiVpnResponse>, StatusCode> {
+  let storage = crate::vpn::VPN_STORAGE
+    .lock()
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+  let configs = storage
+    .list_configs()
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+  configs
+    .iter()
+    .find(|c| c.id == id)
+    .map(|c| Json(vpn_to_api_response(c)))
+    .ok_or(StatusCode::NOT_FOUND)
+}
+
+#[utoipa::path(
+  post,
+  path = "/v1/vpns/import",
+  request_body = ImportVpnRequest,
+  responses(
+    (status = 200, description = "VPN configuration imported successfully", body = ApiVpnResponse),
+    (status = 400, description = "Invalid or unrecognized VPN config"),
+    (status = 401, description = "Unauthorized"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(("bearer_auth" = [])),
+  tag = "vpns"
+)]
+async fn import_vpn(
+  State(_state): State<ApiServerState>,
+  Json(request): Json<ImportVpnRequest>,
+) -> Result<Json<ApiVpnResponse>, StatusCode> {
+  let result = {
+    let storage = crate::vpn::VPN_STORAGE
+      .lock()
+      .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    storage.import_config(&request.content, &request.filename, request.name)
+  };
+  match result {
+    Ok(config) => {
+      let _ = events::emit("vpn-configs-changed", ());
+      Ok(Json(vpn_to_api_response(&config)))
+    }
+    Err(_) => Err(StatusCode::BAD_REQUEST),
+  }
+}
+
+#[utoipa::path(
+  post,
+  path = "/v1/vpns",
+  request_body = CreateVpnRequest,
+  responses(
+    (status = 200, description = "VPN configuration created successfully", body = ApiVpnResponse),
+    (status = 400, description = "Invalid VPN config or unknown vpn_type"),
+    (status = 401, description = "Unauthorized"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(("bearer_auth" = [])),
+  tag = "vpns"
+)]
+async fn create_vpn(
+  State(_state): State<ApiServerState>,
+  Json(request): Json<CreateVpnRequest>,
+) -> Result<Json<ApiVpnResponse>, StatusCode> {
+  let vpn_type = parse_vpn_type(&request.vpn_type).ok_or(StatusCode::BAD_REQUEST)?;
+  let result = {
+    let storage = crate::vpn::VPN_STORAGE
+      .lock()
+      .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    storage.create_config_manual(&request.name, vpn_type, &request.config_data)
+  };
+  match result {
+    Ok(config) => {
+      let _ = events::emit("vpn-configs-changed", ());
+      Ok(Json(vpn_to_api_response(&config)))
+    }
+    Err(_) => Err(StatusCode::BAD_REQUEST),
+  }
+}
+
+#[utoipa::path(
+  put,
+  path = "/v1/vpns/{id}",
+  params(("id" = String, Path, description = "VPN configuration ID")),
+  request_body = UpdateVpnRequest,
+  responses(
+    (status = 200, description = "VPN configuration updated successfully", body = ApiVpnResponse),
+    (status = 400, description = "Bad request"),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "VPN configuration not found"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(("bearer_auth" = [])),
+  tag = "vpns"
+)]
+async fn update_vpn(
+  Path(id): Path<String>,
+  State(_state): State<ApiServerState>,
+  Json(request): Json<UpdateVpnRequest>,
+) -> Result<Json<ApiVpnResponse>, StatusCode> {
+  let result = {
+    let storage = crate::vpn::VPN_STORAGE
+      .lock()
+      .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    storage.update_config_name(&id, &request.name)
+  };
+  match result {
+    Ok(config) => {
+      let _ = events::emit("vpn-configs-changed", ());
+      Ok(Json(vpn_to_api_response(&config)))
+    }
+    Err(_) => Err(StatusCode::NOT_FOUND),
+  }
+}
+
+#[utoipa::path(
+  delete,
+  path = "/v1/vpns/{id}",
+  params(("id" = String, Path, description = "VPN configuration ID")),
+  responses(
+    (status = 204, description = "VPN configuration deleted successfully"),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "VPN configuration not found"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(("bearer_auth" = [])),
+  tag = "vpns"
+)]
+async fn delete_vpn(
+  Path(id): Path<String>,
+  State(_state): State<ApiServerState>,
+) -> Result<StatusCode, StatusCode> {
+  let _ = crate::vpn_worker_runner::stop_vpn_worker_by_vpn_id(&id).await;
+
+  let result = {
+    let storage = crate::vpn::VPN_STORAGE
+      .lock()
+      .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    storage.delete_config(&id)
+  };
+  match result {
+    Ok(_) => {
+      let _ = events::emit("vpn-configs-changed", ());
+      Ok(StatusCode::NO_CONTENT)
+    }
+    Err(_) => Err(StatusCode::NOT_FOUND),
   }
 }
 

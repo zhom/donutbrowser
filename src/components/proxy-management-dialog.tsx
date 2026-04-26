@@ -670,11 +670,7 @@ export function ProxyManagementDialog({
                                     </div>
                                   </TableCell>
                                   <TableCell>
-                                    <Badge variant="outline">
-                                      {vpn.vpn_type === "WireGuard"
-                                        ? "WG"
-                                        : "OVPN"}
-                                    </Badge>
+                                    <Badge variant="outline">WG</Badge>
                                   </TableCell>
                                   <TableCell>
                                     <Badge variant="secondary">
