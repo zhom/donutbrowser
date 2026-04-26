@@ -1,5 +1,5 @@
-use muda::{Menu, MenuItem};
 use std::process::Command;
+use tray_icon::menu::{Menu, MenuItem};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
 pub fn load_icon() -> Icon {

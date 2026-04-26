@@ -11,11 +11,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use muda::MenuEvent;
 use serde::{Deserialize, Serialize};
 use tao::event::{Event, StartCause};
 use tao::event_loop::{ControlFlow, EventLoopBuilder};
 use tokio::runtime::Runtime;
+use tray_icon::menu::MenuEvent;
 use tray_icon::TrayIcon;
 #[cfg(not(target_os = "macos"))]
 use tray_icon::{MouseButton, TrayIconEvent};

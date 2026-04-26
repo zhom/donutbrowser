@@ -111,7 +111,6 @@ smoltcp = { version = "0.13", default-features = false, features = ["std", "medi
 
 # Daemon dependencies (tray icon)
 tray-icon = "0.22"
-muda = "0.18"
 tao = "0.35"
 image = "0.25"
 dirs = "6"
