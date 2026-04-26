@@ -68,12 +68,12 @@ export function WayfernTermsDialog({
             Please review the Terms and Conditions at:
           </p>
           <a
-            href="https://wayfern.com/terms-and-conditions"
+            href="https://wayfern.com/tos"
             target="_blank"
             rel="noopener noreferrer"
             className="text-primary hover:underline text-sm font-medium block"
           >
-            https://wayfern.com/terms-and-conditions
+            https://wayfern.com/tos
           </a>
           <p className="text-sm text-muted-foreground">
             By clicking "I Accept", you agree to be bound by these terms.
