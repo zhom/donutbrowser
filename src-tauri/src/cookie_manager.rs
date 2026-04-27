@@ -50,20 +50,6 @@ pub mod chrome_decrypt {
     key
   }
 
-  /// Get the encryption key for Chrome cookies.
-  ///
-  /// Wayfern stores `os_crypt_key` as a plain file inside the profile's
-  /// user-data-dir on all platforms (see the wayfern patches for
-  /// `os_crypt_mac.mm` and `os_crypt_linux.cc`). The file contains a
-  /// base64-encoded 128-bit random value that is used as the PBKDF2
-  /// password — not as the raw AES key — matching Chromium's
-  /// `OSCryptImpl::DeriveKey` flow.
-  ///
-  /// If the file is missing we return `None`. We must NEVER fall back to the
-  /// real macOS Keychain or any other system credential store. Wayfern
-  /// profiles are fully self-contained and reaching into another app's entry
-  /// would trigger the macOS "confidential information stored in …" prompt
-  /// and the "prevented from modifying other apps" warning.
   pub fn get_encryption_key(profile_data_path: &Path) -> Option<[u8; KEY_LEN]> {
     let key_file = profile_data_path.join("os_crypt_key");
     // Read as raw bytes and do NOT trim — Chromium's `ReadFileToString`
@@ -186,10 +172,21 @@ impl CookieManager {
   /// Windows epoch offset: seconds between 1601-01-01 and 1970-01-01
   const WINDOWS_EPOCH_DIFF: i64 = 11644473600;
 
-  /// Get the Chrome cookie encryption key for a Wayfern profile
   fn get_chrome_encryption_key(profile: &BrowserProfile, profiles_dir: &Path) -> Option<[u8; 16]> {
     let profile_data_path = profile.get_profile_data_path(profiles_dir);
     chrome_decrypt::get_encryption_key(&profile_data_path)
+  }
+
+  fn wayfern_cookie_path(profile_data_path: &Path) -> PathBuf {
+    let default_dir = profile_data_path.join("Default");
+    #[cfg(target_os = "windows")]
+    {
+      default_dir.join("Network").join("Cookies")
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+      default_dir.join("Cookies")
+    }
   }
 
   /// Get the cookie database path for a profile (read-side: errors if missing).
@@ -198,20 +195,11 @@ impl CookieManager {
 
     match profile.browser.as_str() {
       "wayfern" => {
-        let network_path = profile_data_path
-          .join("Default")
-          .join("Network")
-          .join("Cookies");
-        let legacy_path = profile_data_path.join("Default").join("Cookies");
-        if network_path.exists() {
-          Ok(network_path)
-        } else if legacy_path.exists() {
-          Ok(legacy_path)
+        let path = Self::wayfern_cookie_path(&profile_data_path);
+        if path.exists() {
+          Ok(path)
         } else {
-          Err(format!(
-            "Cookie database not found at: {}",
-            network_path.display()
-          ))
+          Err(format!("Cookie database not found at: {}", path.display()))
         }
       }
       "camoufox" => {
@@ -241,21 +229,11 @@ impl CookieManager {
 
     match profile.browser.as_str() {
       "wayfern" => {
-        let network_path = profile_data_path
-          .join("Default")
-          .join("Network")
-          .join("Cookies");
-        let legacy_path = profile_data_path.join("Default").join("Cookies");
-        if network_path.exists() {
-          Ok(network_path)
-        } else if legacy_path.exists() {
-          Ok(legacy_path)
-        } else {
-          let dir = network_path.parent().unwrap();
-          std::fs::create_dir_all(dir).map_err(|e| format!("Failed to create Network dir: {e}"))?;
-          Self::create_empty_chrome_cookies_db(&network_path)?;
-          Ok(network_path)
+        let path = Self::wayfern_cookie_path(&profile_data_path);
+        if !path.exists() {
+          Self::create_empty_chrome_cookies_db(&path)?;
         }
+        Ok(path)
       }
       "camoufox" => {
         let path = profile_data_path.join("cookies.sqlite");
