@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v0.22.2 (2026-04-27)
+
+### Refactoring
+
+- cookie management
+
+### Maintenance
+
+- chore: version bump
+- chore: update flake.nix for v0.22.1 [skip ci] (#313)
+
+
 ## v0.22.1 (2026-04-27)
 
 ### Bug Fixes
