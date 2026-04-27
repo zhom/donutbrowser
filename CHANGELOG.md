@@ -1,6 +1,32 @@
 # Changelog
 
 
+## v0.22.1 (2026-04-27)
+
+### Bug Fixes
+
+- link proper wayfern tos
+
+### Refactoring
+
+- vpn refresh and remove openvpn support
+
+### Documentation
+
+- update CHANGELOG.md and README.md for v0.22.0 [skip ci] (#306)
+
+### Maintenance
+
+- chore: version bump
+- chore: linting
+- chore: audit
+- chore: update flake.nix for v0.22.0 [skip ci] (#307)
+
+### Other
+
+- deps(rust)(deps): bump the rust-dependencies group across 1 directory with 34 updates (#305)
+
+
 ## v0.22.0 (2026-04-25)
 
 ### Refactoring
