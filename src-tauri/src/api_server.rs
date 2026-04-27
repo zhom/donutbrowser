@@ -1584,8 +1584,17 @@ async fn run_profile(
     .await
     .map_err(|_| StatusCode::CONFLICT)?;
 
-  // Generate a random port for remote debugging
-  let remote_debugging_port = rand::random::<u16>().saturating_add(9000).max(9000);
+  let remote_debugging_port = {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+      .await
+      .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let port = listener
+      .local_addr()
+      .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+      .port();
+    drop(listener);
+    port
+  };
 
   // Use the same launch method as the main app, but with remote debugging enabled
   match crate::browser_runner::launch_browser_profile_with_debugging(
