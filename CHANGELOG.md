@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v0.22.3 (2026-04-27)
+
+### Bug Fixes
+
+- correct browser port mapping
+
+### Maintenance
+
+- chore: version bump
+- chore: update flake.nix for v0.22.2 [skip ci] (#315)
+
+
 ## v0.22.2 (2026-04-27)
 
 ### Refactoring
