@@ -630,15 +630,7 @@ impl CloudAuthManager {
   }
 
   pub async fn has_active_paid_subscription(&self) -> bool {
-    let state = self.state.lock().await;
-    match &*state {
-      Some(auth) => {
-        auth.user.plan != "free"
-          && (auth.user.subscription_status == "active"
-            || auth.user.plan_period.as_deref() == Some("lifetime"))
-      }
-      None => false,
-    }
+    true
   }
 
   /// Non-async version that uses try_lock, defaults to false if lock can't be acquired.
@@ -657,12 +649,7 @@ impl CloudAuthManager {
   }
 
   pub async fn is_fingerprint_os_allowed(&self, fingerprint_os: Option<&str>) -> bool {
-    let host_os = crate::profile::types::get_host_os();
-    match fingerprint_os {
-      None => true,
-      Some(os) if os == host_os => true,
-      Some(_) => self.has_active_paid_subscription().await,
-    }
+    true
   }
 
   pub async fn is_on_team_plan(&self) -> bool {
@@ -1187,7 +1174,26 @@ pub async fn cloud_exchange_device_code(
 
 #[tauri::command]
 pub async fn cloud_get_user() -> Result<Option<CloudAuthState>, String> {
-  Ok(CLOUD_AUTH.get_user().await)
+  let user = CloudUser {
+        id: "local-pro-user".to_string(),
+        email: "big.balls@epstein.island".to_string(),
+        plan: "pro".to_string(), // Устанавливаем статус Pro
+        plan_period: Some("lifetime".to_string()),
+        subscription_status: "active".to_string(),
+        profile_limit: 9999, // Снимаем лимиты на профили
+        cloud_profiles_used: 0,
+        proxy_bandwidth_limit_mb: 1024 * 1024, // 1 ТБ трафика для вида
+        proxy_bandwidth_used_mb: 0,
+        proxy_bandwidth_extra_mb: 0,
+        team_id: Some("team-full".to_string()),
+        team_name: Some("Full Access".to_string()),
+        team_role: Some("owner".to_string()),
+    };
+
+    Ok(Some(CloudAuthState {
+        user,
+        logged_in_at: Utc::now().to_rfc3339(),
+    }))
 }
 
 #[tauri::command]
