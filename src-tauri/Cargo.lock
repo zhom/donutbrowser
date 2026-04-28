@@ -1780,7 +1780,7 @@ dependencies = [
 
 [[package]]
 name = "donutbrowser"
-version = "0.22.3"
+version = "0.22.4"
 dependencies = [
  "aes 0.9.0",
  "aes-gcm",
