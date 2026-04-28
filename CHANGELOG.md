@@ -1,6 +1,15 @@
 # Changelog
 
 
+## v0.22.4 (2026-04-28)
+
+### Maintenance
+
+- chore: version bump
+- chore: i18n
+- chore: update flake.nix for v0.22.3 [skip ci] (#321)
+
+
 ## v0.22.3 (2026-04-27)
 
 ### Bug Fixes
