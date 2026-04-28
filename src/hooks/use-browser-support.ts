@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
+import i18n from "@/i18n";
 
 export function useBrowserSupport() {
   const [supportedBrowsers, setSupportedBrowsers] = useState<string[]>([]);
@@ -18,7 +19,7 @@ export function useBrowserSupport() {
         setError(
           err instanceof Error
             ? err.message
-            : "Failed to load supported browsers",
+            : i18n.t("errors.loadSupportedBrowsersFailed"),
         );
       } finally {
         setIsLoading(false);

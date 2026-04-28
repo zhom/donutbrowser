@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
+import i18n from "@/i18n";
 import { getBrowserDisplayName } from "@/lib/browser-utils";
 import {
   showAutoUpdateToast,
@@ -162,9 +163,14 @@ export function useVersionUpdater() {
                   );
 
                   showSuccessToast(
-                    `${browserDisplayName} ${new_version} already available`,
+                    i18n.t("versionUpdater.toast.alreadyAvailable", {
+                      browser: browserDisplayName,
+                      version: new_version,
+                    }),
                     {
-                      description: "Updating profile configurations...",
+                      description: i18n.t(
+                        "versionUpdater.toast.updatingProfiles",
+                      ),
                       duration: 3000,
                     },
                   );
@@ -187,25 +193,44 @@ export function useVersionUpdater() {
 
                 // Show success message based on whether profiles were updated
                 if (updatedProfiles.length > 0) {
-                  const profileText =
+                  const description =
                     updatedProfiles.length === 1
-                      ? `Profile "${updatedProfiles[0]}" has been updated`
-                      : `${updatedProfiles.length} profiles have been updated`;
+                      ? i18n.t("versionUpdater.toast.singleProfileUpdated", {
+                          name: updatedProfiles[0],
+                          version: new_version,
+                        })
+                      : i18n.t("versionUpdater.toast.multipleProfilesUpdated", {
+                          count: updatedProfiles.length,
+                          version: new_version,
+                        });
 
-                  showSuccessToast(`${browserDisplayName} update completed`, {
-                    description: `${profileText} to version ${new_version}. You can now launch your browsers with the latest version.`,
-                    duration: 6000,
-                  });
+                  showSuccessToast(
+                    i18n.t("versionUpdater.toast.updateCompleted", {
+                      browser: browserDisplayName,
+                    }),
+                    {
+                      description,
+                      duration: 6000,
+                    },
+                  );
                 } else {
-                  showSuccessToast(`${browserDisplayName} update completed`, {
-                    description: `Version ${new_version} is now available. Running profiles will use the new version when restarted.`,
-                    duration: 6000,
-                  });
+                  showSuccessToast(
+                    i18n.t("versionUpdater.toast.updateCompleted", {
+                      browser: browserDisplayName,
+                    }),
+                    {
+                      description: i18n.t(
+                        "versionUpdater.toast.versionAvailable",
+                        { version: new_version },
+                      ),
+                      duration: 6000,
+                    },
+                  );
                 }
               } catch (error) {
                 console.error("Failed to handle browser auto-update:", error);
 
-                let errorMessage = "Unknown error occurred";
+                let errorMessage = i18n.t("common.errors.unknown");
                 if (error instanceof Error) {
                   errorMessage = error.message;
                 } else if (typeof error === "string") {
@@ -218,10 +243,15 @@ export function useVersionUpdater() {
                   errorMessage = String(error.message);
                 }
 
-                showErrorToast(`Failed to auto-update ${browserDisplayName}`, {
-                  description: errorMessage,
-                  duration: 8000,
-                });
+                showErrorToast(
+                  i18n.t("versionUpdater.toast.autoUpdateFailed", {
+                    browser: browserDisplayName,
+                  }),
+                  {
+                    description: errorMessage,
+                    duration: 8000,
+                  },
+                );
               } finally {
                 // Remove from active downloads
                 activeDownloads.current.delete(downloadKey);
@@ -286,18 +316,27 @@ export function useVersionUpdater() {
       ).length;
 
       if (failedUpdates > 0) {
-        showErrorToast("Update completed with some errors", {
-          description: `${totalNewVersions} new versions found, ${failedUpdates} browsers failed to update`,
+        showErrorToast(i18n.t("versionUpdater.toast.updateWithErrors"), {
+          description: i18n.t(
+            "versionUpdater.toast.updateWithErrorsDescription",
+            {
+              newVersions: totalNewVersions,
+              failedUpdates,
+            },
+          ),
           duration: 5000,
         });
       } else if (totalNewVersions > 0) {
-        showSuccessToast("Browser versions updated successfully", {
-          description: `Found ${totalNewVersions} new versions across ${successfulUpdates} browsers. Auto-downloads will start shortly.`,
+        showSuccessToast(i18n.t("versionUpdater.toast.updateSuccess"), {
+          description: i18n.t("versionUpdater.toast.updateSuccessDescription", {
+            newVersions: totalNewVersions,
+            successfulUpdates,
+          }),
           duration: 4000,
         });
       } else {
-        showSuccessToast("No new browser versions found", {
-          description: "All browser versions are up to date",
+        showSuccessToast(i18n.t("versionUpdater.toast.upToDate"), {
+          description: i18n.t("versionUpdater.toast.upToDateDescription"),
           duration: 3000,
         });
       }
@@ -306,7 +345,7 @@ export function useVersionUpdater() {
       return results;
     } catch (error) {
       console.error("Failed to trigger manual update:", error);
-      let errorMessage = "Unknown error occurred";
+      let errorMessage = i18n.t("common.errors.unknown");
       if (error instanceof Error) {
         errorMessage = error.message;
       } else if (typeof error === "string") {
@@ -315,7 +354,7 @@ export function useVersionUpdater() {
         errorMessage = String(error.message);
       }
 
-      showErrorToast("Failed to update browser versions", {
+      showErrorToast(i18n.t("versionUpdater.toast.updateAllFailed"), {
         description: errorMessage,
         duration: 4000,
       });
@@ -337,10 +376,16 @@ export function useVersionUpdater() {
         if (result.new_versions_count && result.new_versions_count > 0) {
           const browserName = getBrowserDisplayName(browserStr);
           showSuccessToast(
-            `Found ${result.new_versions_count} new ${browserName} versions!`,
+            i18n.t("browserDownload.toast.foundNewVersions", {
+              count: result.new_versions_count,
+              browser: browserName,
+            }),
             {
               duration: 3000,
-              description: `Total available: ${result.total_versions_count} versions`,
+              description: i18n.t(
+                "browserDownload.toast.totalAvailableVersions",
+                { count: result.total_versions_count },
+              ),
             },
           );
         }

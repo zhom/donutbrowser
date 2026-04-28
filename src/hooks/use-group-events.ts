@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
+import i18n from "@/i18n";
 import type { GroupWithCount } from "@/types";
 
 /**
@@ -23,7 +24,9 @@ export function useGroupEvents() {
       setError(null);
     } catch (err: unknown) {
       console.error("Failed to load groups:", err);
-      setError(`Failed to load groups: ${JSON.stringify(err)}`);
+      setError(
+        i18n.t("errors.loadGroupsFailed", { error: JSON.stringify(err) }),
+      );
     }
   }, []);
 
@@ -65,7 +68,9 @@ export function useGroupEvents() {
       } catch (err) {
         console.error("Failed to setup group event listeners:", err);
         setError(
-          `Failed to setup group event listeners: ${JSON.stringify(err)}`,
+          i18n.t("errors.setupGroupListenersFailed", {
+            error: JSON.stringify(err),
+          }),
         );
       } finally {
         setIsLoading(false);

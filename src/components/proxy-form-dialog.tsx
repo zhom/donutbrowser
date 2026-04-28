@@ -83,14 +83,12 @@ export function ProxyFormDialog({
 
   const handleSubmit = useCallback(async () => {
     if (!form.name.trim()) {
-      toast.error(t("proxies.form.nameRequired", "Proxy name is required"));
+      toast.error(t("proxies.form.nameRequired"));
       return;
     }
 
     if (!form.host.trim() || !form.port) {
-      toast.error(
-        t("proxies.form.hostPortRequired", "Host and port are required"),
-      );
+      toast.error(t("proxies.form.hostPortRequired"));
       return;
     }
 
@@ -98,12 +96,7 @@ export function ProxyFormDialog({
       form.proxy_type === "ss" &&
       (!form.username.trim() || !form.password.trim())
     ) {
-      toast.error(
-        t(
-          "proxies.form.ssCipherRequired",
-          "Cipher and password are required for Shadowsocks",
-        ),
-      );
+      toast.error(t("proxies.form.ssCipherRequired"));
       return;
     }
 
@@ -136,7 +129,7 @@ export function ProxyFormDialog({
       console.error("Failed to save proxy:", error);
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      toast.error(`Failed to save proxy: ${errorMessage}`);
+      toast.error(t("proxies.form.saveFailed", { error: errorMessage }));
     } finally {
       setIsSubmitting(false);
     }
@@ -189,7 +182,7 @@ export function ProxyFormDialog({
               disabled={isSubmitting}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select proxy type" />
+                <SelectValue placeholder={t("proxies.form.selectType")} />
               </SelectTrigger>
               <SelectContent>
                 {["http", "https", "socks4", "socks5", "ss"].map((type) => (

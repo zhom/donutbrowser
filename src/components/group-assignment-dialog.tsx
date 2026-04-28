@@ -57,11 +57,13 @@ export function GroupAssignmentDialog({
       setGroups(groupList);
     } catch (err) {
       console.error("Failed to load groups:", err);
-      setError(err instanceof Error ? err.message : "Failed to load groups");
+      setError(
+        err instanceof Error ? err.message : t("groupManagement.loadFailed"),
+      );
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   const handleAssign = useCallback(async () => {
     setIsAssigning(true);
@@ -73,7 +75,8 @@ export function GroupAssignmentDialog({
       });
 
       const groupName = selectedGroupId
-        ? groups.find((g) => g.id === selectedGroupId)?.name || "Unknown Group"
+        ? groups.find((g) => g.id === selectedGroupId)?.name ||
+          t("groups.unknownGroup")
         : t("groups.defaultGroup");
 
       toast.success(
@@ -89,7 +92,7 @@ export function GroupAssignmentDialog({
       const errorMessage =
         err instanceof Error
           ? err.message
-          : "Failed to assign profiles to group";
+          : t("groupAssignment.failedFallback");
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
@@ -116,15 +119,21 @@ export function GroupAssignmentDialog({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Assign to Group</DialogTitle>
+          <DialogTitle>{t("groupAssignment.title")}</DialogTitle>
           <DialogDescription>
-            Assign {selectedProfiles.length} selected profile(s) to a group.
+            {selectedProfiles.length === 1
+              ? t("groupAssignment.description_one", {
+                  count: selectedProfiles.length,
+                })
+              : t("groupAssignment.description_other", {
+                  count: selectedProfiles.length,
+                })}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>Selected Profiles:</Label>
+            <Label>{t("groupAssignment.selectedProfilesLabel")}</Label>
             <div className="p-3 bg-muted rounded-md max-h-32 overflow-y-auto">
               <ul className="text-sm space-y-1">
                 {selectedProfiles.map((profileId) => {
@@ -145,7 +154,9 @@ export function GroupAssignmentDialog({
 
           <div className="space-y-2">
             <div className="flex justify-between items-center">
-              <Label htmlFor="group-select">Assign to Group:</Label>
+              <Label htmlFor="group-select">
+                {t("groupAssignment.assignGroupLabel")}
+              </Label>
               <RippleButton
                 size="sm"
                 variant="outline"
@@ -154,12 +165,13 @@ export function GroupAssignmentDialog({
                   setCreateDialogOpen(true);
                 }}
               >
-                <GoPlus className="mr-1 w-3 h-3" /> Create Group
+                <GoPlus className="mr-1 w-3 h-3" />{" "}
+                {t("groupManagement.createGroup")}
               </RippleButton>
             </div>
             {isLoading ? (
               <div className="text-sm text-muted-foreground">
-                Loading groups...
+                {t("groupManagement.loading")}
               </div>
             ) : (
               <Select
@@ -169,7 +181,7 @@ export function GroupAssignmentDialog({
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a group" />
+                  <SelectValue placeholder={t("groupAssignment.placeholder")} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="default">
@@ -198,14 +210,14 @@ export function GroupAssignmentDialog({
             onClick={onClose}
             disabled={isAssigning}
           >
-            Cancel
+            {t("common.buttons.cancel")}
           </RippleButton>
           <LoadingButton
             isLoading={isAssigning}
             onClick={() => void handleAssign()}
             disabled={isLoading}
           >
-            Assign
+            {t("groupAssignment.assignButton")}
           </LoadingButton>
         </DialogFooter>
       </DialogContent>

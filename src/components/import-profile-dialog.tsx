@@ -3,6 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { FaFolder } from "react-icons/fa";
 import { toast } from "sonner";
 import { LoadingButton } from "@/components/loading-button";
@@ -49,6 +50,7 @@ export function ImportProfileDialog({
   onClose,
   crossOsUnlocked,
 }: ImportProfileDialogProps) {
+  const { t } = useTranslation();
   const [detectedProfiles, setDetectedProfiles] = useState<DetectedProfile[]>(
     [],
   );
@@ -103,11 +105,11 @@ export function ImportProfileDialog({
       }
     } catch (error) {
       console.error("Failed to detect existing profiles:", error);
-      toast.error("Failed to detect existing browser profiles");
+      toast.error(t("importProfile.detectFailed"));
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   const selectedProfile = detectedProfiles.find(
     (p) => p.path === selectedDetectedProfile,
@@ -118,7 +120,7 @@ export function ImportProfileDialog({
       const selected = await open({
         directory: true,
         multiple: false,
-        title: "Select Browser Profile Folder",
+        title: t("importProfile.selectFolderTitle"),
       });
 
       if (selected && typeof selected === "string") {
@@ -126,7 +128,7 @@ export function ImportProfileDialog({
       }
     } catch (error) {
       console.error("Failed to open folder dialog:", error);
-      toast.error("Failed to open folder dialog");
+      toast.error(t("importProfile.folderDialogFailed"));
     }
   };
 
@@ -137,14 +139,14 @@ export function ImportProfileDialog({
 
     if (importMode === "auto-detect") {
       if (!selectedDetectedProfile || !autoDetectProfileName.trim()) {
-        toast.error("Please select a profile and provide a name");
+        toast.error(t("importProfile.selectAndName"));
         return;
       }
       const profile = detectedProfiles.find(
         (p) => p.path === selectedDetectedProfile,
       );
       if (!profile) {
-        toast.error("Selected profile not found");
+        toast.error(t("importProfile.profileNotFound"));
         return;
       }
       sourcePath = profile.path;
@@ -156,7 +158,7 @@ export function ImportProfileDialog({
         !manualProfilePath.trim() ||
         !manualProfileName.trim()
       ) {
-        toast.error("Please fill in all fields");
+        toast.error(t("importProfile.fillFields"));
         return;
       }
       sourcePath = manualProfilePath.trim();
@@ -180,7 +182,9 @@ export function ImportProfileDialog({
         wayfernConfig: mappedBrowser === "wayfern" ? wayfernConfig : null,
       });
 
-      toast.success(`Successfully imported profile "${newProfileName}"`);
+      toast.success(
+        t("importProfile.importedSuccess", { name: newProfileName }),
+      );
       onClose();
     } catch (error) {
       console.error("Failed to import profile:", error);
@@ -190,13 +194,13 @@ export function ImportProfileDialog({
       if (errorMessage.includes("No downloaded versions found")) {
         const browserDisplayName = getBrowserDisplayName(browserType);
         toast.error(
-          `${browserDisplayName} is not installed. Please download ${browserDisplayName} first from the main window, then try importing again.`,
+          t("importProfile.notInstalled", { browser: browserDisplayName }),
           {
             duration: 8000,
           },
         );
       } else {
-        toast.error(`Failed to import profile: ${errorMessage}`);
+        toast.error(t("importProfile.importFailed", { error: errorMessage }));
       }
     } finally {
       setIsImporting(false);
@@ -214,6 +218,7 @@ export function ImportProfileDialog({
     wayfernConfig,
     onClose,
     selectedProfile,
+    t,
   ]);
 
   const handleClose = () => {
@@ -290,7 +295,7 @@ export function ImportProfileDialog({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[80vh] my-8 flex flex-col">
         <DialogHeader className="flex-shrink-0">
-          <DialogTitle>Import Browser Profile</DialogTitle>
+          <DialogTitle>{t("importProfile.title")}</DialogTitle>
         </DialogHeader>
 
         <div className="overflow-y-auto flex-1 space-y-6 min-h-0">
@@ -305,7 +310,7 @@ export function ImportProfileDialog({
                   className="flex-1"
                   disabled={isLoading}
                 >
-                  Auto-Detect
+                  {t("importProfile.autoDetect")}
                 </RippleButton>
                 <RippleButton
                   variant={importMode === "manual" ? "default" : "outline"}
@@ -315,30 +320,29 @@ export function ImportProfileDialog({
                   className="flex-1"
                   disabled={isLoading}
                 >
-                  Manual Import
+                  {t("importProfile.manualImport")}
                 </RippleButton>
               </div>
 
               {importMode === "auto-detect" && (
                 <div className="space-y-4">
                   <h3 className="text-lg font-medium">
-                    Detected Browser Profiles
+                    {t("importProfile.detectedProfilesTitle")}
                   </h3>
 
                   {isLoading ? (
                     <div className="py-8 text-center">
                       <p className="text-muted-foreground">
-                        Scanning for browser profiles...
+                        {t("importProfile.scanning")}
                       </p>
                     </div>
                   ) : detectedProfiles.length === 0 ? (
                     <div className="py-8 text-center">
                       <p className="text-muted-foreground">
-                        No browser profiles found on your system.
+                        {t("importProfile.noneFound")}
                       </p>
                       <p className="mt-2 text-sm text-muted-foreground">
-                        Try the manual import option if you have profiles in
-                        custom locations.
+                        {t("importProfile.noneFoundHint")}
                       </p>
                     </div>
                   ) : (
@@ -348,7 +352,7 @@ export function ImportProfileDialog({
                           htmlFor="detected-profile-select"
                           className="mb-2"
                         >
-                          Select Profile:
+                          {t("importProfile.selectProfile")}
                         </Label>
                         <Select
                           value={selectedDetectedProfile ?? undefined}
@@ -357,7 +361,11 @@ export function ImportProfileDialog({
                           }}
                         >
                           <SelectTrigger id="detected-profile-select">
-                            <SelectValue placeholder="Choose a detected profile" />
+                            <SelectValue
+                              placeholder={t(
+                                "importProfile.selectProfilePlaceholder",
+                              )}
+                            />
                           </SelectTrigger>
                           <SelectContent>
                             {detectedProfiles.map((profile) => {
@@ -395,11 +403,15 @@ export function ImportProfileDialog({
                       {selectedProfile && (
                         <div className="p-3 rounded-lg bg-muted">
                           <p className="text-sm">
-                            <span className="font-medium">Path:</span>{" "}
+                            <span className="font-medium">
+                              {t("importProfile.pathLabel")}
+                            </span>{" "}
                             {selectedProfile.path}
                           </p>
                           <p className="text-sm">
-                            <span className="font-medium">Browser:</span>{" "}
+                            <span className="font-medium">
+                              {t("importProfile.browserLabel")}
+                            </span>{" "}
                             {getBrowserDisplayName(selectedProfile.browser)}
                           </p>
                         </div>
@@ -407,7 +419,7 @@ export function ImportProfileDialog({
 
                       <div>
                         <Label htmlFor="auto-profile-name" className="mb-2">
-                          New Profile Name:
+                          {t("importProfile.newProfileName")}
                         </Label>
                         <Input
                           id="auto-profile-name"
@@ -415,7 +427,9 @@ export function ImportProfileDialog({
                           onChange={(e) => {
                             setAutoDetectProfileName(e.target.value);
                           }}
-                          placeholder="Enter a name for the imported profile"
+                          placeholder={t(
+                            "importProfile.newProfileNamePlaceholder",
+                          )}
                         />
                       </div>
                     </div>
@@ -425,12 +439,14 @@ export function ImportProfileDialog({
 
               {importMode === "manual" && (
                 <div className="space-y-4">
-                  <h3 className="text-lg font-medium">Manual Profile Import</h3>
+                  <h3 className="text-lg font-medium">
+                    {t("importProfile.manualTitle")}
+                  </h3>
 
                   <div className="space-y-4">
                     <div>
                       <Label htmlFor="manual-browser-select" className="mb-2">
-                        Browser Type:
+                        {t("importProfile.browserType")}
                       </Label>
                       <Select
                         value={manualBrowserType ?? undefined}
@@ -443,8 +459,8 @@ export function ImportProfileDialog({
                           <SelectValue
                             placeholder={
                               isLoadingSupport
-                                ? "Loading browsers..."
-                                : "Select browser type"
+                                ? t("importProfile.loadingBrowsers")
+                                : t("importProfile.selectBrowserType")
                             }
                           />
                         </SelectTrigger>
@@ -468,7 +484,7 @@ export function ImportProfileDialog({
 
                     <div>
                       <Label htmlFor="manual-profile-path" className="mb-2">
-                        Profile Folder Path:
+                        {t("importProfile.profileFolderPath")}
                       </Label>
                       <div className="flex gap-2">
                         <Input
@@ -477,19 +493,21 @@ export function ImportProfileDialog({
                           onChange={(e) => {
                             setManualProfilePath(e.target.value);
                           }}
-                          placeholder="Enter the full path to the profile folder"
+                          placeholder={t(
+                            "importProfile.profileFolderPlaceholder",
+                          )}
                         />
                         <Button
                           variant="outline"
                           size="icon"
                           onClick={() => void handleBrowseFolder()}
-                          title="Browse for folder"
+                          title={t("importProfile.browseFolderTitle")}
                         >
                           <FaFolder className="w-4 h-4" />
                         </Button>
                       </div>
                       <p className="mt-2 text-xs text-muted-foreground">
-                        Example paths:
+                        {t("importProfile.examplePaths")}
                         <br />
                         macOS: ~/Library/Application
                         Support/Firefox/Profiles/xxx.default
@@ -502,7 +520,7 @@ export function ImportProfileDialog({
 
                     <div>
                       <Label htmlFor="manual-profile-name" className="mb-2">
-                        New Profile Name:
+                        {t("importProfile.newProfileName")}
                       </Label>
                       <Input
                         id="manual-profile-name"
@@ -510,7 +528,9 @@ export function ImportProfileDialog({
                         onChange={(e) => {
                           setManualProfileName(e.target.value);
                         }}
-                        placeholder="Enter a name for the imported profile"
+                        placeholder={t(
+                          "importProfile.newProfileNamePlaceholder",
+                        )}
                       />
                     </div>
                   </div>
@@ -523,14 +543,16 @@ export function ImportProfileDialog({
             <div className="space-y-4">
               <Alert>
                 <AlertDescription>
-                  This profile will be imported as a{" "}
+                  {t("importProfile.importedAsPrefix")}{" "}
                   <strong>{getBrowserDisplayName(currentMappedBrowser)}</strong>{" "}
-                  profile.
+                  {t("importProfile.importedAsSuffix")}
                 </AlertDescription>
               </Alert>
 
               <div>
-                <Label className="mb-2">Proxy (Optional)</Label>
+                <Label className="mb-2">
+                  {t("importProfile.proxyOptional")}
+                </Label>
                 <Select
                   value={selectedProxyId ?? "none"}
                   onValueChange={(value) => {
@@ -538,10 +560,12 @@ export function ImportProfileDialog({
                   }}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="No proxy" />
+                    <SelectValue placeholder={t("importProfile.noProxy")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">No proxy</SelectItem>
+                    <SelectItem value="none">
+                      {t("importProfile.noProxy")}
+                    </SelectItem>
                     {storedProxies.map((proxy) => (
                       <SelectItem key={proxy.id} value={proxy.id}>
                         {proxy.name}
@@ -580,7 +604,7 @@ export function ImportProfileDialog({
           {currentStep === "select" ? (
             <>
               <RippleButton variant="outline" onClick={handleClose}>
-                Cancel
+                {t("common.buttons.cancel")}
               </RippleButton>
               <RippleButton
                 disabled={!canProceedToNext}
@@ -588,7 +612,7 @@ export function ImportProfileDialog({
                   setCurrentStep("configure");
                 }}
               >
-                Next
+                {t("importProfile.nextButton")}
               </RippleButton>
             </>
           ) : (
@@ -599,7 +623,7 @@ export function ImportProfileDialog({
                   setCurrentStep("select");
                 }}
               >
-                Back
+                {t("common.buttons.back")}
               </RippleButton>
               <LoadingButton
                 isLoading={isImporting}
@@ -607,7 +631,7 @@ export function ImportProfileDialog({
                   void handleImport();
                 }}
               >
-                Import
+                {t("importProfile.importButton")}
               </LoadingButton>
             </>
           )}

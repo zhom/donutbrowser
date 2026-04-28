@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
+import i18n from "@/i18n";
 import type { BrowserProfile, GroupWithCount } from "@/types";
 
 interface UseProfileEventsReturn {
@@ -38,7 +39,9 @@ export function useProfileEvents(): UseProfileEventsReturn {
       setError(null);
     } catch (err: unknown) {
       console.error("Failed to load profiles:", err);
-      setError(`Failed to load profiles: ${JSON.stringify(err)}`);
+      setError(
+        i18n.t("errors.loadProfilesFailed", { error: JSON.stringify(err) }),
+      );
     }
   }, []);
 
@@ -101,7 +104,9 @@ export function useProfileEvents(): UseProfileEventsReturn {
       } catch (err) {
         console.error("Failed to setup profile event listeners:", err);
         setError(
-          `Failed to setup profile event listeners: ${JSON.stringify(err)}`,
+          i18n.t("errors.setupProfileListenersFailed", {
+            error: JSON.stringify(err),
+          }),
         );
       } finally {
         setIsLoading(false);

@@ -2,6 +2,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { LuCheck, LuCopy, LuDownload } from "react-icons/lu";
 import { toast } from "sonner";
 import {
@@ -23,6 +24,7 @@ interface ProxyExportDialogProps {
 }
 
 export function ProxyExportDialog({ isOpen, onClose }: ProxyExportDialogProps) {
+  const { t } = useTranslation();
   const [format, setFormat] = useState<"json" | "txt">("json");
   const [exportContent, setExportContent] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
@@ -35,12 +37,12 @@ export function ProxyExportDialog({ isOpen, onClose }: ProxyExportDialogProps) {
       setExportContent(content);
     } catch (error) {
       console.error("Failed to export proxies:", error);
-      toast.error("Failed to export proxies");
+      toast.error(t("proxies.exportDialog.failed"));
       setExportContent("");
     } finally {
       setIsLoading(false);
     }
-  }, [format]);
+  }, [format, t]);
 
   useEffect(() => {
     if (isOpen) {
@@ -52,15 +54,15 @@ export function ProxyExportDialog({ isOpen, onClose }: ProxyExportDialogProps) {
     try {
       await navigator.clipboard.writeText(exportContent);
       setCopied(true);
-      toast.success("Copied to clipboard");
+      toast.success(t("toasts.success.copied"));
       setTimeout(() => {
         setCopied(false);
       }, 2000);
     } catch (error) {
       console.error("Failed to copy to clipboard:", error);
-      toast.error("Failed to copy to clipboard");
+      toast.error(t("toasts.error.copyFailed"));
     }
-  }, [exportContent]);
+  }, [exportContent, t]);
 
   const handleDownload = useCallback(() => {
     const filename = format === "json" ? "proxies.json" : "proxies.txt";
@@ -76,8 +78,8 @@ export function ProxyExportDialog({ isOpen, onClose }: ProxyExportDialogProps) {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
-    toast.success(`Downloaded ${filename}`);
-  }, [format, exportContent]);
+    toast.success(t("proxies.exportDialog.downloaded", { filename }));
+  }, [format, exportContent, t]);
 
   const handleClose = useCallback(() => {
     setFormat("json");
@@ -90,15 +92,15 @@ export function ProxyExportDialog({ isOpen, onClose }: ProxyExportDialogProps) {
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Export Proxies</DialogTitle>
+          <DialogTitle>{t("proxies.exportDialog.title")}</DialogTitle>
           <DialogDescription>
-            Export your proxy configurations to a file
+            {t("proxies.exportDialog.description")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>Export Format</Label>
+            <Label>{t("proxies.exportDialog.format")}</Label>
             <RadioGroup
               value={format}
               onValueChange={(value) => {
@@ -109,24 +111,24 @@ export function ProxyExportDialog({ isOpen, onClose }: ProxyExportDialogProps) {
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="json" id="format-json" />
                 <Label htmlFor="format-json" className="cursor-pointer">
-                  JSON
+                  {t("proxies.exportDialog.json")}
                 </Label>
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="txt" id="format-txt" />
                 <Label htmlFor="format-txt" className="cursor-pointer">
-                  TXT (URL format)
+                  {t("proxies.exportDialog.txt")}
                 </Label>
               </div>
             </RadioGroup>
           </div>
 
           <div className="space-y-2">
-            <Label>Preview</Label>
+            <Label>{t("proxies.exportDialog.preview")}</Label>
             <ScrollArea className="h-[200px] border rounded-md bg-muted/30">
               {isLoading ? (
                 <div className="flex items-center justify-center h-full p-4 text-sm text-muted-foreground">
-                  Loading...
+                  {t("common.buttons.loading")}
                 </div>
               ) : exportContent ? (
                 <pre className="p-3 text-xs font-mono whitespace-pre-wrap break-all">
@@ -134,7 +136,7 @@ export function ProxyExportDialog({ isOpen, onClose }: ProxyExportDialogProps) {
                 </pre>
               ) : (
                 <div className="flex items-center justify-center h-full p-4 text-sm text-muted-foreground">
-                  No proxies to export
+                  {t("proxies.exportDialog.noProxies")}
                 </div>
               )}
             </ScrollArea>
@@ -143,7 +145,7 @@ export function ProxyExportDialog({ isOpen, onClose }: ProxyExportDialogProps) {
 
         <DialogFooter className="flex-col sm:flex-row gap-2">
           <RippleButton variant="outline" onClick={handleClose}>
-            Close
+            {t("common.buttons.close")}
           </RippleButton>
           <RippleButton
             variant="outline"
@@ -156,7 +158,9 @@ export function ProxyExportDialog({ isOpen, onClose }: ProxyExportDialogProps) {
             ) : (
               <LuCopy className="w-4 h-4" />
             )}
-            {copied ? "Copied" : "Copy"}
+            {copied
+              ? t("proxies.exportDialog.copied")
+              : t("common.buttons.copy")}
           </RippleButton>
           <RippleButton
             onClick={handleDownload}
@@ -164,7 +168,7 @@ export function ProxyExportDialog({ isOpen, onClose }: ProxyExportDialogProps) {
             className="flex gap-2 items-center"
           >
             <LuDownload className="w-4 h-4" />
-            Download
+            {t("common.buttons.download")}
           </RippleButton>
         </DialogFooter>
       </DialogContent>

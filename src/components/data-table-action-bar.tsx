@@ -4,6 +4,7 @@ import type { Table } from "@tanstack/react-table";
 import { AnimatePresence, motion } from "motion/react";
 import * as React from "react";
 import * as ReactDOM from "react-dom";
+import { useTranslation } from "react-i18next";
 import { LuX } from "react-icons/lu";
 import { Button } from "@/components/ui/button";
 import {
@@ -134,6 +135,7 @@ interface DataTableActionBarSelectionProps<TData> {
 function DataTableActionBarSelection<TData>({
   table,
 }: DataTableActionBarSelectionProps<TData>) {
+  const { t } = useTranslation();
   const onClearSelection = React.useCallback(() => {
     table.toggleAllRowsSelected(false);
   }, [table]);
@@ -141,7 +143,9 @@ function DataTableActionBarSelection<TData>({
   return (
     <div className="flex h-7 items-center rounded-md border pr-1 pl-2.5">
       <span className="whitespace-nowrap text-xs">
-        {table.getFilteredSelectedRowModel().rows.length} selected
+        {t("dataTableActionBar.selected", {
+          count: table.getFilteredSelectedRowModel().rows.length,
+        })}
       </span>
       <div className="mr-1 ml-2 h-4 w-px bg-border" />
       <Tooltip>
@@ -159,9 +163,9 @@ function DataTableActionBarSelection<TData>({
           sideOffset={10}
           className="flex items-center gap-2 border bg-accent px-2 py-1 font-semibold text-foreground dark:bg-card [&>span]:hidden"
         >
-          <p>Clear selection</p>
+          <p>{t("dataTableActionBar.clearSelection")}</p>
           <kbd className="select-none rounded border bg-background px-1.5 py-px font-mono font-normal text-[0.7rem] text-foreground shadow-xs">
-            <abbr title="Escape" className="no-underline">
+            <abbr title={t("common.keys.escape")} className="no-underline">
               Esc
             </abbr>
           </kbd>

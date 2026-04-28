@@ -625,10 +625,10 @@ export function CreateProfileDialog({
                       <div className="space-y-6">
                         <div className="text-center">
                           <h3 className="text-lg font-medium">
-                            Regular Browsers
+                            {t("createProfile.regular.title")}
                           </h3>
                           <p className="mt-2 text-sm text-muted-foreground">
-                            Choose from supported regular browsers
+                            {t("createProfile.regular.description")}
                           </p>
                         </div>
 
@@ -655,7 +655,7 @@ export function CreateProfileDialog({
                                     {browser.label}
                                   </div>
                                   <div className="text-sm text-muted-foreground">
-                                    Regular Browser
+                                    {t("createProfile.regular.badge")}
                                   </div>
                                 </div>
                               </Button>
@@ -672,7 +672,9 @@ export function CreateProfileDialog({
                       <div className="space-y-6">
                         {/* Profile Name */}
                         <div className="space-y-2">
-                          <Label htmlFor="profile-name">Profile Name</Label>
+                          <Label htmlFor="profile-name">
+                            {t("createProfile.profileName")}
+                          </Label>
                           <Input
                             id="profile-name"
                             value={profileName}
@@ -688,7 +690,9 @@ export function CreateProfileDialog({
                                 void handleCreate();
                               }
                             }}
-                            placeholder="Enter profile name"
+                            placeholder={t(
+                              "createProfile.profileNamePlaceholder",
+                            )}
                           />
                         </div>
 
@@ -722,7 +726,7 @@ export function CreateProfileDialog({
                               <div className="flex gap-3 items-center p-3 rounded-md border">
                                 <div className="w-4 h-4 rounded-full border-2 animate-spin border-muted/40 border-t-primary" />
                                 <p className="text-sm text-muted-foreground">
-                                  Fetching available versions...
+                                  {t("createProfile.version.fetching")}
                                 </p>
                               </div>
                             )}
@@ -739,7 +743,7 @@ export function CreateProfileDialog({
                                   size="sm"
                                   variant="outline"
                                 >
-                                  Retry
+                                  {t("common.buttons.retry")}
                                 </RippleButton>
                               </div>
                             )}
@@ -748,8 +752,9 @@ export function CreateProfileDialog({
                               !getBestAvailableVersion("wayfern") && (
                                 <div className="flex gap-3 items-center p-3 rounded-md border border-warning/50 bg-warning/10">
                                   <p className="text-sm text-warning">
-                                    Wayfern is not available on your platform
-                                    yet.
+                                    {t("createProfile.platformUnavailable", {
+                                      browser: "Wayfern",
+                                    })}
                                   </p>
                                 </div>
                               )}
@@ -760,11 +765,12 @@ export function CreateProfileDialog({
                               getBestAvailableVersion("wayfern") && (
                                 <div className="flex gap-3 items-center p-3 rounded-md border">
                                   <p className="text-sm text-muted-foreground">
-                                    {(() => {
-                                      const bestVersion =
-                                        getBestAvailableVersion("wayfern");
-                                      return `Wayfern version (${bestVersion?.version}) needs to be downloaded`;
-                                    })()}
+                                    {t("createProfile.version.needsDownload", {
+                                      browser: "Wayfern",
+                                      version:
+                                        getBestAvailableVersion("wayfern")
+                                          ?.version,
+                                    })}
                                   </p>
                                   <LoadingButton
                                     onClick={() => {
@@ -779,8 +785,8 @@ export function CreateProfileDialog({
                                     )}
                                   >
                                     {isBrowserCurrentlyDownloading("wayfern")
-                                      ? "Downloading..."
-                                      : "Download"}
+                                      ? t("common.buttons.downloading")
+                                      : t("common.buttons.download")}
                                   </LoadingButton>
                                 </div>
                               )}
@@ -789,20 +795,22 @@ export function CreateProfileDialog({
                               !isBrowserCurrentlyDownloading("wayfern") &&
                               isBrowserVersionAvailable("wayfern") && (
                                 <div className="p-3 text-sm rounded-md border text-muted-foreground">
-                                  {(() => {
-                                    const bestVersion =
-                                      getBestAvailableVersion("wayfern");
-                                    return `✓ Wayfern version (${bestVersion?.version}) is available`;
-                                  })()}
+                                  ✓{" "}
+                                  {t("createProfile.version.available", {
+                                    browser: "Wayfern",
+                                    version:
+                                      getBestAvailableVersion("wayfern")
+                                        ?.version,
+                                  })}
                                 </div>
                               )}
                             {isBrowserCurrentlyDownloading("wayfern") && (
                               <div className="p-3 text-sm rounded-md border text-muted-foreground">
-                                {(() => {
-                                  const bestVersion =
-                                    getBestAvailableVersion("wayfern");
-                                  return `Downloading Wayfern version (${bestVersion?.version})...`;
-                                })()}
+                                {t("createProfile.version.downloading", {
+                                  browser: "Wayfern",
+                                  version:
+                                    getBestAvailableVersion("wayfern")?.version,
+                                })}
                               </div>
                             )}
 
@@ -826,7 +834,7 @@ export function CreateProfileDialog({
                               <div className="flex gap-3 items-center p-3 rounded-md border">
                                 <div className="w-4 h-4 rounded-full border-2 animate-spin border-muted/40 border-t-primary" />
                                 <p className="text-sm text-muted-foreground">
-                                  Fetching available versions...
+                                  {t("createProfile.version.fetching")}
                                 </p>
                               </div>
                             )}
@@ -843,7 +851,7 @@ export function CreateProfileDialog({
                                   size="sm"
                                   variant="outline"
                                 >
-                                  Retry
+                                  {t("common.buttons.retry")}
                                 </RippleButton>
                               </div>
                             )}
@@ -852,8 +860,9 @@ export function CreateProfileDialog({
                               !getBestAvailableVersion("camoufox") && (
                                 <div className="flex gap-3 items-center p-3 rounded-md border border-warning/50 bg-warning/10">
                                   <p className="text-sm text-warning">
-                                    Camoufox is not available on your platform
-                                    yet.
+                                    {t("createProfile.platformUnavailable", {
+                                      browser: "Camoufox",
+                                    })}
                                   </p>
                                 </div>
                               )}
@@ -864,11 +873,12 @@ export function CreateProfileDialog({
                               getBestAvailableVersion("camoufox") && (
                                 <div className="flex gap-3 items-center p-3 rounded-md border">
                                   <p className="text-sm text-muted-foreground">
-                                    {(() => {
-                                      const bestVersion =
-                                        getBestAvailableVersion("camoufox");
-                                      return `Camoufox version (${bestVersion?.version}) needs to be downloaded`;
-                                    })()}
+                                    {t("createProfile.version.needsDownload", {
+                                      browser: "Camoufox",
+                                      version:
+                                        getBestAvailableVersion("camoufox")
+                                          ?.version,
+                                    })}
                                   </p>
                                   <LoadingButton
                                     onClick={() => {
@@ -883,8 +893,8 @@ export function CreateProfileDialog({
                                     )}
                                   >
                                     {isBrowserCurrentlyDownloading("camoufox")
-                                      ? "Downloading..."
-                                      : "Download"}
+                                      ? t("common.buttons.downloading")
+                                      : t("common.buttons.download")}
                                   </LoadingButton>
                                 </div>
                               )}
@@ -893,20 +903,23 @@ export function CreateProfileDialog({
                               !isBrowserCurrentlyDownloading("camoufox") &&
                               isBrowserVersionAvailable("camoufox") && (
                                 <div className="p-3 text-sm rounded-md border text-muted-foreground">
-                                  {(() => {
-                                    const bestVersion =
-                                      getBestAvailableVersion("camoufox");
-                                    return `✓ Camoufox version (${bestVersion?.version}) is available`;
-                                  })()}
+                                  ✓{" "}
+                                  {t("createProfile.version.available", {
+                                    browser: "Camoufox",
+                                    version:
+                                      getBestAvailableVersion("camoufox")
+                                        ?.version,
+                                  })}
                                 </div>
                               )}
                             {isBrowserCurrentlyDownloading("camoufox") && (
                               <div className="p-3 text-sm rounded-md border text-muted-foreground">
-                                {(() => {
-                                  const bestVersion =
-                                    getBestAvailableVersion("camoufox");
-                                  return `Downloading Camoufox version (${bestVersion?.version})...`;
-                                })()}
+                                {t("createProfile.version.downloading", {
+                                  browser: "Camoufox",
+                                  version:
+                                    getBestAvailableVersion("camoufox")
+                                      ?.version,
+                                })}
                               </div>
                             )}
 
@@ -971,13 +984,15 @@ export function CreateProfileDialog({
                                   getBestAvailableVersion(selectedBrowser) && (
                                     <div className="flex gap-3 items-center">
                                       <p className="text-sm text-muted-foreground">
-                                        {(() => {
-                                          const bestVersion =
-                                            getBestAvailableVersion(
-                                              selectedBrowser,
-                                            );
-                                          return `Latest version (${bestVersion?.version}) needs to be downloaded`;
-                                        })()}
+                                        {t(
+                                          "createProfile.version.latestNeedsDownload",
+                                          {
+                                            version:
+                                              getBestAvailableVersion(
+                                                selectedBrowser,
+                                              )?.version,
+                                          },
+                                        )}
                                       </p>
                                       <LoadingButton
                                         onClick={() => {
@@ -992,7 +1007,7 @@ export function CreateProfileDialog({
                                           selectedBrowser,
                                         )}
                                       >
-                                        Download
+                                        {t("common.buttons.download")}
                                       </LoadingButton>
                                     </div>
                                   )}
@@ -1005,26 +1020,31 @@ export function CreateProfileDialog({
                                     selectedBrowser,
                                   ) && (
                                     <div className="text-sm text-muted-foreground">
-                                      {(() => {
-                                        const bestVersion =
-                                          getBestAvailableVersion(
-                                            selectedBrowser,
-                                          );
-                                        return `✓ Latest version (${bestVersion?.version}) is available`;
-                                      })()}
+                                      ✓{" "}
+                                      {t(
+                                        "createProfile.version.latestAvailable",
+                                        {
+                                          version:
+                                            getBestAvailableVersion(
+                                              selectedBrowser,
+                                            )?.version,
+                                        },
+                                      )}
                                     </div>
                                   )}
                                 {isBrowserCurrentlyDownloading(
                                   selectedBrowser,
                                 ) && (
                                   <div className="text-sm text-muted-foreground">
-                                    {(() => {
-                                      const bestVersion =
-                                        getBestAvailableVersion(
-                                          selectedBrowser,
-                                        );
-                                      return `Downloading version (${bestVersion?.version})...`;
-                                    })()}
+                                    {t(
+                                      "createProfile.version.latestDownloading",
+                                      {
+                                        version:
+                                          getBestAvailableVersion(
+                                            selectedBrowser,
+                                          )?.version,
+                                      },
+                                    )}
                                   </div>
                                 )}
                               </div>
@@ -1035,7 +1055,7 @@ export function CreateProfileDialog({
                         {/* Proxy / VPN Selection - Always visible */}
                         <div className="space-y-3">
                           <div className="flex justify-between items-center">
-                            <Label>Proxy / VPN</Label>
+                            <Label>{t("createProfile.proxy.title")}</Label>
                             <RippleButton
                               size="sm"
                               variant="outline"
@@ -1044,7 +1064,8 @@ export function CreateProfileDialog({
                               }}
                               className="px-2 h-7 text-xs"
                             >
-                              <GoPlus className="mr-1 w-3 h-3" /> Add Proxy
+                              <GoPlus className="mr-1 w-3 h-3" />{" "}
+                              {t("createProfile.proxy.addProxy")}
                             </RippleButton>
                           </div>
                           {storedProxies.length > 0 || vpnConfigs.length > 0 ? (
@@ -1061,7 +1082,7 @@ export function CreateProfileDialog({
                                 >
                                   {(() => {
                                     if (!selectedProxyId)
-                                      return "No proxy / VPN";
+                                      return t("createProfile.proxy.noProxy");
                                     if (selectedProxyId.startsWith("vpn-")) {
                                       const vpn = vpnConfigs.find(
                                         (v) =>
@@ -1069,12 +1090,15 @@ export function CreateProfileDialog({
                                       );
                                       return vpn
                                         ? `WG — ${vpn.name}`
-                                        : "No proxy / VPN";
+                                        : t("createProfile.proxy.noProxy");
                                     }
                                     const proxy = storedProxies.find(
                                       (p) => p.id === selectedProxyId,
                                     );
-                                    return proxy?.name ?? "No proxy / VPN";
+                                    return (
+                                      proxy?.name ??
+                                      t("createProfile.proxy.noProxy")
+                                    );
                                   })()}
                                   <LuChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                 </Button>
@@ -1084,10 +1108,14 @@ export function CreateProfileDialog({
                                 sideOffset={8}
                               >
                                 <Command>
-                                  <CommandInput placeholder="Search proxies or VPNs..." />
+                                  <CommandInput
+                                    placeholder={t(
+                                      "createProfile.proxy.search",
+                                    )}
+                                  />
                                   <CommandList>
                                     <CommandEmpty>
-                                      No proxies or VPNs found.
+                                      {t("createProfile.proxy.notFound")}
                                     </CommandEmpty>
                                     <CommandGroup>
                                       <CommandItem
@@ -1105,7 +1133,7 @@ export function CreateProfileDialog({
                                               : "opacity-0",
                                           )}
                                         />
-                                        None
+                                        {t("common.labels.none")}
                                       </CommandItem>
                                       {storedProxies.map((proxy) => (
                                         <CommandItem
@@ -1167,8 +1195,7 @@ export function CreateProfileDialog({
                             </Popover>
                           ) : (
                             <div className="flex gap-3 items-center p-3 text-sm rounded-md border text-muted-foreground">
-                              No proxies or VPNs available. Add one to route
-                              this profile's traffic.
+                              {t("createProfile.proxy.noProxiesAvailable")}
                             </div>
                           )}
                         </div>
@@ -1265,7 +1292,9 @@ export function CreateProfileDialog({
                       <div className="space-y-6">
                         {/* Profile Name */}
                         <div className="space-y-2">
-                          <Label htmlFor="profile-name">Profile Name</Label>
+                          <Label htmlFor="profile-name">
+                            {t("createProfile.profileName")}
+                          </Label>
                           <Input
                             id="profile-name"
                             value={profileName}
@@ -1281,7 +1310,9 @@ export function CreateProfileDialog({
                                 void handleCreate();
                               }
                             }}
-                            placeholder="Enter profile name"
+                            placeholder={t(
+                              "createProfile.profileNamePlaceholder",
+                            )}
                           />
                         </div>
 
@@ -1310,7 +1341,7 @@ export function CreateProfileDialog({
                                     size="sm"
                                     variant="outline"
                                   >
-                                    Retry
+                                    {t("common.buttons.retry")}
                                   </RippleButton>
                                 </div>
                               )}
@@ -1323,13 +1354,15 @@ export function CreateProfileDialog({
                                 getBestAvailableVersion(selectedBrowser) && (
                                   <div className="flex gap-3 items-center">
                                     <p className="text-sm text-muted-foreground">
-                                      {(() => {
-                                        const bestVersion =
-                                          getBestAvailableVersion(
-                                            selectedBrowser,
-                                          );
-                                        return `Latest version (${bestVersion?.version}) needs to be downloaded`;
-                                      })()}
+                                      {t(
+                                        "createProfile.version.latestNeedsDownload",
+                                        {
+                                          version:
+                                            getBestAvailableVersion(
+                                              selectedBrowser,
+                                            )?.version,
+                                        },
+                                      )}
                                     </p>
                                     <LoadingButton
                                       onClick={() => {
@@ -1344,7 +1377,7 @@ export function CreateProfileDialog({
                                         selectedBrowser,
                                       )}
                                     >
-                                      Download
+                                      {t("common.buttons.download")}
                                     </LoadingButton>
                                   </div>
                                 )}
@@ -1355,24 +1388,30 @@ export function CreateProfileDialog({
                                 ) &&
                                 isBrowserVersionAvailable(selectedBrowser) && (
                                   <div className="text-sm text-muted-foreground">
-                                    {(() => {
-                                      const bestVersion =
-                                        getBestAvailableVersion(
-                                          selectedBrowser,
-                                        );
-                                      return `✓ Latest version (${bestVersion?.version}) is available`;
-                                    })()}
+                                    ✓{" "}
+                                    {t(
+                                      "createProfile.version.latestAvailable",
+                                      {
+                                        version:
+                                          getBestAvailableVersion(
+                                            selectedBrowser,
+                                          )?.version,
+                                      },
+                                    )}
                                   </div>
                                 )}
                               {isBrowserCurrentlyDownloading(
                                 selectedBrowser,
                               ) && (
                                 <div className="text-sm text-muted-foreground">
-                                  {(() => {
-                                    const bestVersion =
-                                      getBestAvailableVersion(selectedBrowser);
-                                    return `Downloading version (${bestVersion?.version})...`;
-                                  })()}
+                                  {t(
+                                    "createProfile.version.latestDownloading",
+                                    {
+                                      version:
+                                        getBestAvailableVersion(selectedBrowser)
+                                          ?.version,
+                                    },
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -1382,7 +1421,7 @@ export function CreateProfileDialog({
                         {/* Proxy / VPN Selection - Always visible */}
                         <div className="space-y-3">
                           <div className="flex justify-between items-center">
-                            <Label>Proxy / VPN</Label>
+                            <Label>{t("createProfile.proxy.title")}</Label>
                             <RippleButton
                               size="sm"
                               variant="outline"
@@ -1391,7 +1430,8 @@ export function CreateProfileDialog({
                               }}
                               className="px-2 h-7 text-xs"
                             >
-                              <GoPlus className="mr-1 w-3 h-3" /> Add Proxy
+                              <GoPlus className="mr-1 w-3 h-3" />{" "}
+                              {t("createProfile.proxy.addProxy")}
                             </RippleButton>
                           </div>
                           {storedProxies.length > 0 || vpnConfigs.length > 0 ? (
@@ -1408,7 +1448,7 @@ export function CreateProfileDialog({
                                 >
                                   {(() => {
                                     if (!selectedProxyId)
-                                      return "No proxy / VPN";
+                                      return t("createProfile.proxy.noProxy");
                                     if (selectedProxyId.startsWith("vpn-")) {
                                       const vpn = vpnConfigs.find(
                                         (v) =>
@@ -1416,12 +1456,15 @@ export function CreateProfileDialog({
                                       );
                                       return vpn
                                         ? `WG — ${vpn.name}`
-                                        : "No proxy / VPN";
+                                        : t("createProfile.proxy.noProxy");
                                     }
                                     const proxy = storedProxies.find(
                                       (p) => p.id === selectedProxyId,
                                     );
-                                    return proxy?.name ?? "No proxy / VPN";
+                                    return (
+                                      proxy?.name ??
+                                      t("createProfile.proxy.noProxy")
+                                    );
                                   })()}
                                   <LuChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                 </Button>
@@ -1431,10 +1474,14 @@ export function CreateProfileDialog({
                                 sideOffset={8}
                               >
                                 <Command>
-                                  <CommandInput placeholder="Search proxies or VPNs..." />
+                                  <CommandInput
+                                    placeholder={t(
+                                      "createProfile.proxy.search",
+                                    )}
+                                  />
                                   <CommandList>
                                     <CommandEmpty>
-                                      No proxies or VPNs found.
+                                      {t("createProfile.proxy.notFound")}
                                     </CommandEmpty>
                                     <CommandGroup>
                                       <CommandItem
@@ -1452,7 +1499,7 @@ export function CreateProfileDialog({
                                               : "opacity-0",
                                           )}
                                         />
-                                        None
+                                        {t("common.labels.none")}
                                       </CommandItem>
                                       {storedProxies.map((proxy) => (
                                         <CommandItem
@@ -1514,8 +1561,7 @@ export function CreateProfileDialog({
                             </Popover>
                           ) : (
                             <div className="flex gap-3 items-center p-3 text-sm rounded-md border text-muted-foreground">
-                              No proxies or VPNs available. Add one to route
-                              this profile's traffic.
+                              {t("createProfile.proxy.noProxiesAvailable")}
                             </div>
                           )}
                         </div>
@@ -1549,19 +1595,19 @@ export function CreateProfileDialog({
           {currentStep === "browser-config" ? (
             <>
               <RippleButton variant="outline" onClick={handleBack}>
-                Back
+                {t("common.buttons.back")}
               </RippleButton>
               <LoadingButton
                 onClick={handleCreate}
                 isLoading={isCreating}
                 disabled={isCreateDisabled}
               >
-                Create
+                {t("common.buttons.create")}
               </LoadingButton>
             </>
           ) : (
             <RippleButton variant="outline" onClick={handleClose}>
-              Cancel
+              {t("common.buttons.cancel")}
             </RippleButton>
           )}
         </DialogFooter>

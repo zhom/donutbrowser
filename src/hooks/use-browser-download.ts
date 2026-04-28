@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Event as TauriEvent } from "@tauri-apps/api/event";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
+import i18n from "@/i18n";
 import { getBrowserDisplayName } from "@/lib/browser-utils";
 import {
   dismissToast,
@@ -106,11 +107,18 @@ export function useBrowserDownload() {
       return githubReleases;
     } catch (error) {
       console.error("Failed to load versions:", error);
-      showErrorToast(`Failed to fetch ${browserName} versions`, {
-        description:
-          error instanceof Error ? error.message : "Unknown error occurred",
-        duration: 4000,
-      });
+      showErrorToast(
+        i18n.t("browserDownload.toast.fetchVersionsFailed", {
+          browser: browserName,
+        }),
+        {
+          description:
+            error instanceof Error
+              ? error.message
+              : i18n.t("common.errors.unknown"),
+          duration: 4000,
+        },
+      );
       throw error;
     }
   }, []);
@@ -146,10 +154,16 @@ export function useBrowserDownload() {
       // Show notification about new versions if any were found
       if (result.new_versions_count && result.new_versions_count > 0) {
         showSuccessToast(
-          `Found ${result.new_versions_count} new ${browserName} versions!`,
+          i18n.t("browserDownload.toast.foundNewVersions", {
+            count: result.new_versions_count,
+            browser: browserName,
+          }),
           {
             duration: 3000,
-            description: `Total available: ${result.total_versions_count} versions`,
+            description: i18n.t(
+              "browserDownload.toast.totalAvailableVersions",
+              { count: result.total_versions_count },
+            ),
           },
         );
       }
@@ -157,11 +171,18 @@ export function useBrowserDownload() {
       return githubReleases;
     } catch (error) {
       console.error("Failed to load versions:", error);
-      showErrorToast(`Failed to fetch ${browserName} versions`, {
-        description:
-          error instanceof Error ? error.message : "Unknown error occurred",
-        duration: 4000,
-      });
+      showErrorToast(
+        i18n.t("browserDownload.toast.fetchVersionsFailed", {
+          browser: browserName,
+        }),
+        {
+          description:
+            error instanceof Error
+              ? error.message
+              : i18n.t("common.errors.unknown"),
+          duration: 4000,
+        },
+      );
       throw error;
     }
   }, []);
@@ -215,7 +236,7 @@ export function useBrowserDownload() {
           // Dismiss any existing download toast and show error
           dismissToast(`download-${browserStr}-${version}`);
 
-          let errorMessage = "Unknown error occurred";
+          let errorMessage = i18n.t("common.errors.unknown");
           if (error instanceof Error) {
             errorMessage = error.message;
           } else if (typeof error === "string") {
@@ -226,10 +247,16 @@ export function useBrowserDownload() {
 
           // Ensure the long-running download toast is dismissed, and show a finite error toast
           dismissToast(`download-${browserStr}-${version}`);
-          showErrorToast(`Failed to download ${browserName} ${version}`, {
-            description: errorMessage,
-            duration: 8000,
-          });
+          showErrorToast(
+            i18n.t("browserDownload.toast.downloadFailed", {
+              browser: browserName,
+              version,
+            }),
+            {
+              description: errorMessage,
+              duration: 8000,
+            },
+          );
         }
         throw error;
       } finally {
@@ -297,7 +324,7 @@ export function useBrowserDownload() {
               ).toFixed(1);
               const etaText = progress.eta_seconds
                 ? formatTime(progress.eta_seconds)
-                : "calculating...";
+                : i18n.t("browserDownload.toast.calculating");
 
               const toastId = `download-${browserName.toLowerCase()}-${progress.version}`;
               showDownloadToast(
@@ -346,10 +373,14 @@ export function useBrowserDownload() {
               );
               setDownloadProgress(null);
               showErrorToast(
-                `${browserName} ${progress.version}: extraction failed`,
+                i18n.t("browserDownload.toast.extractionFailed", {
+                  browser: browserName,
+                  version: progress.version,
+                }),
                 {
-                  description:
-                    "The corrupt file was deleted. It will be re-downloaded on next attempt.",
+                  description: i18n.t(
+                    "browserDownload.toast.extractionFailedDescription",
+                  ),
                 },
               );
             } else if (progress.stage === "completed") {

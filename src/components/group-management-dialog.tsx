@@ -44,37 +44,46 @@ type SyncStatus = "disabled" | "syncing" | "synced" | "error" | "waiting";
 function getSyncStatusDot(
   group: GroupWithCount,
   liveStatus: SyncStatus | undefined,
+  t: (key: string, options?: Record<string, unknown>) => string,
   errorMessage?: string,
 ): { color: string; tooltip: string; animate: boolean } {
   const status = liveStatus ?? (group.sync_enabled ? "synced" : "disabled");
 
   switch (status) {
     case "syncing":
-      return { color: "bg-warning", tooltip: "Syncing...", animate: true };
+      return {
+        color: "bg-warning",
+        tooltip: t("syncTooltips.syncing"),
+        animate: true,
+      };
     case "synced":
       return {
         color: "bg-success",
         tooltip: group.last_sync
-          ? `Synced ${new Date(group.last_sync * 1000).toLocaleString()}`
-          : "Synced",
+          ? t("syncTooltips.syncedAt", {
+              time: new Date(group.last_sync * 1000).toLocaleString(),
+            })
+          : t("syncTooltips.synced"),
         animate: false,
       };
     case "waiting":
       return {
         color: "bg-warning",
-        tooltip: "Waiting to sync",
+        tooltip: t("syncTooltips.waiting"),
         animate: false,
       };
     case "error":
       return {
         color: "bg-destructive",
-        tooltip: errorMessage ? `Sync error: ${errorMessage}` : "Sync error",
+        tooltip: errorMessage
+          ? t("syncTooltips.errorWith", { error: errorMessage })
+          : t("syncTooltips.error"),
         animate: false,
       };
     default:
       return {
         color: "bg-muted-foreground",
-        tooltip: "Not synced",
+        tooltip: t("syncTooltips.notSynced"),
         animate: false,
       };
   }
@@ -165,11 +174,13 @@ export function GroupManagementDialog({
       setGroupInUse(inUse);
     } catch (err) {
       console.error("Failed to load groups:", err);
-      setError(err instanceof Error ? err.message : "Failed to load groups");
+      setError(
+        err instanceof Error ? err.message : t("groupManagement.loadFailed"),
+      );
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   const handleGroupCreated = useCallback(
     (_newGroup: ProfileGroup) => {
@@ -210,18 +221,24 @@ export function GroupManagementDialog({
           groupId: group.id,
           enabled: !group.sync_enabled,
         });
-        showSuccessToast(group.sync_enabled ? "Sync disabled" : "Sync enabled");
+        showSuccessToast(
+          group.sync_enabled
+            ? t("proxies.management.syncDisabled")
+            : t("proxies.management.syncEnabled"),
+        );
         await loadGroups();
       } catch (error) {
         console.error("Failed to toggle sync:", error);
         showErrorToast(
-          error instanceof Error ? error.message : "Failed to update sync",
+          error instanceof Error
+            ? error.message
+            : t("proxies.management.updateSyncFailed"),
         );
       } finally {
         setIsTogglingSync((prev) => ({ ...prev, [group.id]: false }));
       }
     },
-    [loadGroups],
+    [loadGroups, t],
   );
 
   useEffect(() => {
@@ -244,7 +261,7 @@ export function GroupManagementDialog({
           <div className="space-y-4">
             {/* Create new group button */}
             <div className="flex justify-between items-center">
-              <Label>Groups</Label>
+              <Label>{t("groupManagement.groupsLabel")}</Label>
               <RippleButton
                 size="sm"
                 onClick={() => {
@@ -253,7 +270,7 @@ export function GroupManagementDialog({
                 className="flex gap-2 items-center"
               >
                 <GoPlus className="w-4 h-4" />
-                Create
+                {t("proxies.management.create")}
               </RippleButton>
             </div>
 
@@ -278,10 +295,16 @@ export function GroupManagementDialog({
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead className="w-20">Profiles</TableHead>
-                        <TableHead className="w-24">Sync</TableHead>
-                        <TableHead className="w-24">Actions</TableHead>
+                        <TableHead>{t("common.labels.name")}</TableHead>
+                        <TableHead className="w-20">
+                          {t("groupManagement.profilesCol")}
+                        </TableHead>
+                        <TableHead className="w-24">
+                          {t("proxies.management.syncCol")}
+                        </TableHead>
+                        <TableHead className="w-24">
+                          {t("common.labels.actions")}
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -289,6 +312,7 @@ export function GroupManagementDialog({
                         const syncDot = getSyncStatusDot(
                           group,
                           groupSyncStatus[group.id],
+                          t,
                           groupSyncErrors[group.id],
                         );
                         return (
@@ -332,14 +356,13 @@ export function GroupManagementDialog({
                                 <TooltipContent>
                                   {groupInUse[group.id] ? (
                                     <p>
-                                      Sync cannot be disabled while this group
-                                      is used by synced profiles
+                                      {t("groupManagement.syncCannotDisable")}
                                     </p>
                                   ) : (
                                     <p>
                                       {group.sync_enabled
-                                        ? "Disable sync"
-                                        : "Enable sync"}
+                                        ? t("proxies.management.disableSync")
+                                        : t("proxies.management.enableSync")}
                                     </p>
                                   )}
                                 </TooltipContent>
@@ -360,7 +383,9 @@ export function GroupManagementDialog({
                                     </Button>
                                   </TooltipTrigger>
                                   <TooltipContent>
-                                    <p>Edit group</p>
+                                    <p>
+                                      {t("groupManagement.editGroupTooltip")}
+                                    </p>
                                   </TooltipContent>
                                 </Tooltip>
                                 <Tooltip>
@@ -376,7 +401,9 @@ export function GroupManagementDialog({
                                     </Button>
                                   </TooltipTrigger>
                                   <TooltipContent>
-                                    <p>Delete group</p>
+                                    <p>
+                                      {t("groupManagement.deleteGroupTooltip")}
+                                    </p>
                                   </TooltipContent>
                                 </Tooltip>
                               </div>
@@ -393,7 +420,7 @@ export function GroupManagementDialog({
 
           <DialogFooter>
             <RippleButton variant="outline" onClick={onClose}>
-              Close
+              {t("common.buttons.close")}
             </RippleButton>
           </DialogFooter>
         </DialogContent>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { SharedCamoufoxConfigForm } from "@/components/shared-camoufox-config-form";
 import {
   Dialog,
@@ -51,6 +52,7 @@ export function CamoufoxConfigDialog({
   isRunning = false,
   crossOsUnlocked = false,
 }: CamoufoxConfigDialogProps) {
+  const { t } = useTranslation();
   // Use union type to support both Camoufox and Wayfern configs
   const [config, setConfig] = useState<CamoufoxConfig | WayfernConfig>(() => ({
     geoip: true,
@@ -93,9 +95,8 @@ export function CamoufoxConfigDialog({
         JSON.parse(config.fingerprint);
       } catch (_error) {
         const { toast } = await import("sonner");
-        toast.error("Invalid fingerprint configuration", {
-          description:
-            "The fingerprint configuration contains invalid JSON. Please check your advanced settings.",
+        toast.error(t("camoufoxDialog.invalidFingerprint"), {
+          description: t("camoufoxDialog.invalidFingerprintDescription"),
         });
         return;
       }
@@ -112,9 +113,11 @@ export function CamoufoxConfigDialog({
     } catch (error) {
       console.error("Failed to save config:", error);
       const { toast } = await import("sonner");
-      toast.error("Failed to save configuration", {
+      toast.error(t("camoufoxDialog.saveFailed"), {
         description:
-          error instanceof Error ? error.message : "Unknown error occurred",
+          error instanceof Error
+            ? error.message
+            : t("camoufoxDialog.unknownError"),
       });
     } finally {
       setIsSaving(false);
@@ -149,8 +152,15 @@ export function CamoufoxConfigDialog({
       <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
         <DialogHeader className="shrink-0">
           <DialogTitle>
-            {isRunning ? "View" : "Configure"} Fingerprint Settings -{" "}
-            {profile.name} ({browserName})
+            {isRunning
+              ? t("camoufoxDialog.titleView", {
+                  name: profile.name,
+                  browser: browserName,
+                })
+              : t("camoufoxDialog.titleConfigure", {
+                  name: profile.name,
+                  browser: browserName,
+                })}
           </DialogTitle>
         </DialogHeader>
 
@@ -185,7 +195,7 @@ export function CamoufoxConfigDialog({
 
         <DialogFooter className="shrink-0 pt-4 border-t">
           <RippleButton variant="outline" onClick={handleClose}>
-            {isRunning ? "Close" : "Cancel"}
+            {isRunning ? t("common.buttons.close") : t("common.buttons.cancel")}
           </RippleButton>
           {!isRunning && (
             <LoadingButton
@@ -193,7 +203,7 @@ export function CamoufoxConfigDialog({
               onClick={handleSave}
               disabled={isSaving}
             >
-              Save
+              {t("common.buttons.save")}
             </LoadingButton>
           )}
         </DialogFooter>

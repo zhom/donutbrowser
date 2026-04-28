@@ -28,7 +28,9 @@
       "refresh": "刷新",
       "loading": "加载中...",
       "saveSettings": "保存设置",
-      "moreInfo": "了解更多"
+      "moreInfo": "了解更多",
+      "downloading": "下载中...",
+      "minimize": "最小化"
     },
     "status": {
       "active": "活跃",
@@ -56,7 +58,9 @@
       "default": "默认",
       "custom": "自定义",
       "optional": "可选",
-      "required": "必填"
+      "required": "必填",
+      "unknownProfile": "未知",
+      "mode": "模式"
     },
     "time": {
       "days": "天",
@@ -64,7 +68,26 @@
       "minutes": "分钟",
       "seconds": "秒",
       "remaining": "剩余"
-    }
+    },
+    "aria": {
+      "selectAll": "全选",
+      "selectRow": "选择行",
+      "selectProfile": "选择配置文件"
+    },
+    "keys": {
+      "escape": "Esc"
+    },
+    "errors": {
+      "unknown": "发生未知错误"
+    },
+    "window": {
+      "minimize": "最小化"
+    },
+    "commandPalette": {
+      "title": "命令面板",
+      "description": "搜索要执行的命令..."
+    },
+    "noResults": "未找到结果。"
   },
   "settings": {
     "title": "设置",
@@ -85,7 +108,8 @@
       "title": "语言",
       "description": "选择应用程序界面的首选语言。",
       "systemDefault": "系统默认",
-      "selectLanguage": "选择语言"
+      "selectLanguage": "选择语言",
+      "interface": "界面语言"
     },
     "defaultBrowser": {
       "title": "默认浏览器",
@@ -100,7 +124,8 @@
       "microphone": "麦克风",
       "microphoneDescription": "浏览器应用程序的麦克风访问权限",
       "camera": "摄像头",
-      "cameraDescription": "浏览器应用程序的摄像头访问权限"
+      "cameraDescription": "浏览器应用程序的摄像头访问权限",
+      "accessRequested": "已请求 {{permission}} 访问权限"
     },
     "integrations": {
       "title": "集成",
@@ -134,7 +159,8 @@
     "advanced": {
       "title": "高级",
       "clearCache": "清除所有版本缓存",
-      "clearCacheDescription": "清除所有缓存的浏览器版本数据并从源刷新所有浏览器版本。这将强制重新下载所有浏览器的版本信息。"
+      "clearCacheDescription": "清除所有缓存的浏览器版本数据并从源刷新所有浏览器版本。这将强制重新下载所有浏览器的版本信息。",
+      "clearCacheFailed": "清除缓存失败"
     },
     "disableAutoUpdates": "禁用应用自动更新",
     "disableAutoUpdatesDescription": "阻止应用程序自动检查和安装 Donut Browser 更新。浏览器更新不受影响。"
@@ -169,7 +195,8 @@
       "note": "备注",
       "group": "分组",
       "proxy": "代理 / VPN",
-      "lastLaunch": "最后启动"
+      "lastLaunch": "最后启动",
+      "empty": "未找到配置文件。"
     },
     "actions": {
       "launch": "启动",
@@ -205,7 +232,30 @@
     "ephemeral": "临时",
     "ephemeralDescription": "浏览器被强制将配置数据写入内存而非磁盘。关闭浏览器时数据将被删除。",
     "ephemeralBadge": "临时",
-    "ephemeralAlpha": "Alpha"
+    "ephemeralAlpha": "Alpha",
+    "bulkDelete": {
+      "title": "删除所选配置文件",
+      "description": "此操作无法撤销。这将永久删除 {{count}} 个配置文件及其关联的所有数据。",
+      "confirmButton": "删除 {{count}} 个配置文件"
+    },
+    "note": {
+      "empty": "无备注",
+      "placeholder": "添加备注..."
+    },
+    "aria": {
+      "profileInfo": "配置文件信息"
+    },
+    "delete": {
+      "title": "删除配置文件",
+      "description": "此操作无法撤销。这将永久删除配置文件 \"{{profileName}}\" 及其关联的所有数据。",
+      "confirmButton": "删除配置文件"
+    },
+    "actionBar": {
+      "assignToGroup": "分配到分组",
+      "assignProxy": "分配代理",
+      "assignExtensionGroup": "分配扩展分组",
+      "copyCookies": "复制 Cookie"
+    }
   },
   "createProfile": {
     "title": "创建新配置文件",
@@ -228,7 +278,10 @@
       "title": "代理 / VPN",
       "addProxy": "添加代理",
       "noProxy": "无代理 / VPN",
-      "noProxiesAvailable": "没有可用的代理或VPN。添加一个来路由此配置文件的流量。"
+      "noProxiesAvailable": "没有可用的代理或VPN。添加一个来路由此配置文件的流量。",
+      "search": "搜索代理或 VPN...",
+      "notFound": "未找到代理或 VPN。",
+      "searchWithCountries": "搜索代理、VPN 或国家/地区..."
     },
     "launchHook": {
       "label": "启动钩子 URL",
@@ -248,7 +301,8 @@
     "chromiumSubtitle": "由 Wayfern 驱动",
     "firefoxLabel": "Firefox",
     "firefoxSubtitle": "由 Camoufox 驱动",
-    "camoufoxWarning": "Firefox（Camoufox）由第三方组织维护。在生产环境中，请使用 Chromium。"
+    "camoufoxWarning": "Firefox（Camoufox）由第三方组织维护。在生产环境中，请使用 Chromium。",
+    "platformUnavailable": "{{browser}} 在您的平台上尚不可用。"
   },
   "deleteDialog": {
     "title": "删除配置文件",
@@ -259,7 +313,31 @@
   },
   "proxies": {
     "title": "代理",
-    "management": "代理和VPN",
+    "management": {
+      "description": "管理代理和 VPN 配置以便在配置文件中重复使用",
+      "tabProxies": "代理",
+      "tabVpns": "VPN",
+      "create": "创建",
+      "loading": "正在加载代理...",
+      "noneCreated": "尚未创建代理。使用上方按钮创建第一个代理。",
+      "usage": "使用情况",
+      "syncCol": "同步",
+      "syncCannotDisable": "此代理被同步的配置文件使用时无法禁用同步",
+      "enableSync": "启用同步",
+      "disableSync": "禁用同步",
+      "editProxy": "编辑代理",
+      "deleteProxy": "删除代理",
+      "cannotDelete_one": "无法删除: 被 {{count}} 个配置文件使用",
+      "cannotDelete_other": "无法删除: 被 {{count}} 个配置文件使用",
+      "syncEnabled": "已启用同步",
+      "syncDisabled": "已禁用同步",
+      "updateSyncFailed": "更新同步失败",
+      "deleteSuccess": "代理删除成功",
+      "deleteFailed": "删除代理失败",
+      "deleteTitle": "删除代理",
+      "deleteDescription": "此操作无法撤消。代理「{{name}}」将被永久删除。",
+      "title": "代理和 VPN"
+    },
     "add": "添加代理",
     "edit": "编辑代理",
     "delete": "删除代理",
@@ -280,7 +358,12 @@
       "password": "密码",
       "passwordPlaceholder": "可选",
       "cipher": "加密方式",
-      "cipherPlaceholder": "aes-256-gcm"
+      "cipherPlaceholder": "aes-256-gcm",
+      "nameRequired": "代理名称为必填项",
+      "hostPortRequired": "主机和端口为必填项",
+      "ssCipherRequired": "Shadowsocks 需要密码学和密码",
+      "selectType": "选择代理类型",
+      "saveFailed": "保存代理失败: {{error}}"
     },
     "types": {
       "http": "HTTP",
@@ -318,6 +401,45 @@
     "sync": {
       "enabled": "同步已启用",
       "disabled": "同步已禁用"
+    },
+    "exportDialog": {
+      "title": "导出代理",
+      "description": "将代理配置导出到文件",
+      "format": "导出格式",
+      "json": "JSON",
+      "txt": "TXT (URL 格式)",
+      "preview": "预览",
+      "noProxies": "没有可导出的代理",
+      "downloaded": "已下载 {{filename}}",
+      "failed": "导出代理失败",
+      "copied": "已复制"
+    },
+    "importDialog": {
+      "title": "导入代理",
+      "descDropzone": "从 JSON 或 TXT 文件导入代理",
+      "descPreview": "查看要导入的代理",
+      "descAmbiguous": "某些代理具有不明确的格式。请选择正确的格式。",
+      "descResult": "导入完成",
+      "dropzonePrompt": "拖放代理配置文件",
+      "dropzoneFormats": "(.json, .txt)",
+      "pasteHint": "使用 {{modKey}}+V 从剪贴板粘贴",
+      "wrongFileType": "请拖放 .json 或 .txt 文件",
+      "fileReadError": "读取文件失败",
+      "fileProcessError": "处理文件失败",
+      "noValidProxies": "在文件中未找到有效代理",
+      "namePrefix": "名称前缀",
+      "namePrefixDefault": "Imported",
+      "namePrefixHint": "代理将被命名为「{{prefix}} Proxy 1」、「{{prefix}} Proxy 2」等。",
+      "proxiesToImport": "要导入的代理 ({{count}})",
+      "invalidCount": "({{count}} 个无效)",
+      "ambiguousIntro": "以下代理格式不明确。请为每个选择正确的解释。",
+      "imported": "已导入:",
+      "skippedDuplicates": "已跳过 (重复):",
+      "errors": "错误",
+      "importButton": "导入 {{count}} 个代理",
+      "continueButton": "继续",
+      "doneButton": "完成",
+      "failed": "导入代理失败"
     }
   },
   "groups": {
@@ -343,7 +465,30 @@
     "sync": {
       "enabled": "同步已启用",
       "disabled": "同步已禁用"
-    }
+    },
+    "createTitle": "创建新组",
+    "createDescription": "创建新组以组织您的浏览器配置文件。",
+    "editTitle": "编辑组",
+    "editDescription": "更新组的名称。",
+    "createSuccess": "组创建成功",
+    "createFailed": "创建组失败",
+    "updateSuccess": "组更新成功",
+    "updateFailed": "更新组失败",
+    "deleteTitle": "删除组",
+    "deleteDescription": "此操作无法撤销。这将永久删除该组。",
+    "deleteSuccess": "组删除成功",
+    "deleteFailed": "删除组失败",
+    "loadingProfiles": "正在加载关联的配置文件...",
+    "associatedProfiles": "关联的配置文件 ({{count}})",
+    "whatToDoWithProfiles": "这些配置文件应该怎么办？",
+    "moveToDefaultOption": "将配置文件移至默认组",
+    "deleteAlongWithGroup": "将配置文件与组一起删除",
+    "noAssociatedProfiles": "此组没有关联的配置文件。",
+    "deleteGroup": "删除组",
+    "deleteGroupAndProfiles": "删除组和配置文件",
+    "loadProfilesFailed": "加载配置文件失败",
+    "unknownGroup": "未知分组",
+    "profileGroupsAriaLabel": "配置文件分组"
   },
   "sync": {
     "mode": {
@@ -366,7 +511,16 @@
       "configureService": "配置同步服务"
     },
     "title": "同步服务",
-    "config": "同步配置",
+    "config": {
+      "serverUrlRequired": "请输入服务器 URL",
+      "connectionSuccess": "连接成功!",
+      "serverError": "服务器返回了错误",
+      "connectFailed": "连接服务器失败",
+      "settingsSaved": "同步设置已保存",
+      "saveFailed": "保存设置失败",
+      "disconnected": "已断开同步",
+      "disconnectFailed": "断开连接失败"
+    },
     "serverUrl": "服务器 URL",
     "serverUrlPlaceholder": "https://sync.example.com",
     "token": "同步令牌",
@@ -410,6 +564,12 @@
       "profileLockedShort": "使用中",
       "cannotLaunchLocked": "无法启动 — 配置文件正被 {{email}} 使用",
       "createdBy": "由 {{email}} 创建"
+    },
+    "disabled": "已禁用",
+    "toast": {
+      "profileSynced": "配置文件 '{{name}}' 同步成功",
+      "profileSyncFailed": "同步配置文件 '{{name}}' 失败",
+      "profileSyncFailedWithError": "同步配置文件 '{{name}}' 失败: {{error}}"
     }
   },
   "integrations": {
@@ -447,7 +607,31 @@
       "removedFromClaudeCode": "已从 Claude Code 移除",
       "config": "MCP 配置",
       "copyConfig": "复制配置"
-    }
+    },
+    "tabApi": "本地 API",
+    "tabMcp": "MCP (AI 助手)",
+    "apiEnableLabel": "启用本地 API 服务器",
+    "apiEnableDescription": "允许通过 REST API 管理配置文件、分组和代理。",
+    "apiPortLabel": "端口",
+    "apiTokenLabel": "认证令牌",
+    "apiTokenHint": "在 Authorization 头中包含: Bearer {{tokenSlot}}",
+    "apiInvalidPort": "无效的端口",
+    "apiInvalidPortDescription": "端口必须在 1 到 65535 之间",
+    "apiPortInUse": "端口 {{port}} 已被占用",
+    "apiFallbackPort": "服务器在备用端口 {{port}} 上启动",
+    "apiStarted": "API 服务器已在端口 {{port}} 上启动",
+    "apiRunning": "API 服务器在端口 {{port}} 上运行",
+    "apiStopped": "API 服务器已停止",
+    "apiToggleFailed": "切换 API 服务器失败",
+    "apiStartFailed": "启动 API 服务器失败",
+    "apiUnknownError": "未知错误",
+    "tokenCopied": "令牌已复制",
+    "mcpEnableLabel": "启用 MCP 服务器 (Model Context Protocol)",
+    "mcpEnableDescription": "允许 Claude Desktop 等 AI 助手控制浏览器。",
+    "mcpAcceptTermsFirst": "(请先在设置中接受 Wayfern 条款)",
+    "mcpStarted": "MCP 服务器已在端口 {{port}} 上启动",
+    "mcpStopped": "MCP 服务器已停止",
+    "mcpToggleFailed": "切换 MCP 服务器失败"
   },
   "import": {
     "title": "导入配置文件",
@@ -465,7 +649,9 @@
       "fingerprint": {
         "title": "指纹",
         "randomize": "启动时随机化",
-        "randomizeDescription": "每次启动浏览器时生成新的指纹。"
+        "randomizeDescription": "每次启动浏览器时生成新的指纹。",
+        "osCpuPlaceholder": "例如: Intel Mac OS X 10.15",
+        "webglRendererPlaceholder": "例如: llvmpipe 或类似"
       },
       "os": {
         "title": "操作系统",
@@ -499,7 +685,10 @@
       "fingerprint": {
         "title": "指纹",
         "randomize": "启动时随机化",
-        "randomizeDescription": "每次启动浏览器时生成新的指纹。"
+        "randomizeDescription": "每次启动浏览器时生成新的指纹。",
+        "platformPlaceholder": "例如: Win32、MacIntel、Linux x86_64",
+        "timezoneOffsetPlaceholder": "例如: EST (UTC-5) 为 300",
+        "webglRendererPlaceholder": "例如: Intel(R) HD Graphics"
       },
       "os": {
         "title": "操作系统",
@@ -534,13 +723,53 @@
       "selectCookies": "选择 Cookies",
       "allDomains": "所有域名",
       "selectedCount": "已选择 {{count}} 个 cookie",
-      "selectedCount_plural": "已选择 {{count}} 个 cookies"
+      "selectedCount_plural": "已选择 {{count}} 个 cookies",
+      "dialogDescription_one": "从源配置文件复制 Cookie 到 {{count}} 个选定的配置文件。",
+      "dialogDescription_other": "从源配置文件复制 Cookie 到 {{count}} 个选定的配置文件。",
+      "sourceProfile": "源配置文件",
+      "sourcePlaceholder": "选择要复制 Cookie 的配置文件",
+      "running": "(运行中)",
+      "targetProfiles": "目标配置文件 ({{count}})",
+      "noOtherTargets": "未选择其他 Wayfern/Camoufox 配置文件",
+      "selectSourceFirst": "请先选择源配置文件",
+      "selectionStatus": "(已选择 {{selected}} / {{total}})",
+      "searchPlaceholder": "搜索域名或 Cookie...",
+      "noMatching": "未找到匹配的 Cookie",
+      "noFound": "未找到 Cookie",
+      "replaceNote": "同名同域名的现有 Cookie 将被替换,其他 Cookie 将保留。",
+      "cannotCopyRunningOne": "无法复制 Cookie: {{names}} 仍在运行",
+      "cannotCopyRunningMany": "无法复制 Cookie: {{names}} 仍在运行",
+      "someErrors": "发生错误: {{errors}}",
+      "successMessage": "已成功复制 {{copied}} 个 Cookie (替换 {{replaced}} 个)",
+      "failedMessage": "复制 Cookie 失败: {{error}}",
+      "copyButton_one": "复制 {{count}} 个 Cookie",
+      "copyButton_other": "复制 {{count}} 个 Cookie",
+      "copyButtonEmpty": "复制 Cookies"
     },
     "success": "Cookies 复制成功",
     "error": "复制 cookies 失败",
     "management": {
       "title": "Cookie 管理",
-      "menuItem": "Cookie 管理"
+      "menuItem": "Cookie 管理",
+      "tabImport": "导入",
+      "tabExport": "导出",
+      "importDescription": "从 Netscape 或 JSON 格式的文件导入 Cookies。",
+      "dropPrompt": "点击选择 Cookie 文件",
+      "fileFormats": "(.txt、.cookies 或 .json)",
+      "cookiesFound": "找到 {{count}} 个 Cookie",
+      "importedSuccess": "已成功导入 {{imported}} 个 Cookie (替换 {{replaced}} 个)",
+      "linesSkipped": "已跳过 {{count}} 行",
+      "fileReadError": "读取文件失败",
+      "loadFailed": "加载 Cookie 失败: {{error}}",
+      "cookiesLabel": "Cookies",
+      "selectionStatus": "(已选择 {{selected}} / {{total}})",
+      "selectAll": "全选",
+      "deselectAll": "取消全选",
+      "noCookies": "此配置文件中未找到 Cookie",
+      "doneButton": "完成",
+      "importButton": "导入",
+      "exportButton": "导出",
+      "backButton": "返回"
     },
     "import": {
       "title": "导入 Cookies",
@@ -623,7 +852,30 @@
     "maxLength": "最多 {{max}} 个字符",
     "networkError": "网络错误。请检查您的连接。",
     "serverError": "服务器错误。请稍后重试。",
-    "unknownError": "发生未知错误。请重试。"
+    "unknownError": "发生未知错误。请重试。",
+    "noProfilesForUrl": "没有可用的配置文件。请先创建配置文件再打开 URL。",
+    "updateCamoufoxConfigFailed": "更新 camoufox 配置失败: {{error}}",
+    "updateWayfernConfigFailed": "更新 wayfern 配置失败: {{error}}",
+    "createProfileFailed": "创建配置文件失败: {{error}}",
+    "launchBrowserFailed": "启动浏览器失败: {{error}}",
+    "cannotDeleteRunningProfile": "浏览器运行时无法删除配置文件。请先停止浏览器。",
+    "deleteProfileFailed": "删除配置文件失败: {{error}}",
+    "renameProfileFailed": "重命名配置文件失败: {{error}}",
+    "killBrowserFailed": "终止浏览器失败: {{error}}",
+    "deleteSelectedProfilesFailed": "删除所选配置文件失败: {{error}}",
+    "cookieCopyUnsupportedBrowser": "Cookie 复制仅适用于 Wayfern 和 Camoufox 配置文件",
+    "updateSyncSettingsFailed": "更新同步设置失败",
+    "cloneProfileFailed": "克隆配置文件失败: {{error}}",
+    "loadSupportedBrowsersFailed": "加载受支持的浏览器失败",
+    "setupExtensionListenersFailed": "设置扩展事件监听器失败: {{error}}",
+    "loadGroupsFailed": "加载分组失败: {{error}}",
+    "setupGroupListenersFailed": "设置分组事件监听器失败: {{error}}",
+    "loadProfilesFailed": "加载配置文件失败: {{error}}",
+    "setupProfileListenersFailed": "设置配置文件事件监听器失败: {{error}}",
+    "loadProxiesFailed": "加载代理失败: {{error}}",
+    "setupProxyListenersFailed": "设置代理事件监听器失败: {{error}}",
+    "loadVpnConfigsFailed": "加载 VPN 配置失败: {{error}}",
+    "setupVpnListenersFailed": "设置 VPN 事件监听器失败: {{error}}"
   },
   "browser": {
     "camoufox": "Camoufox",
@@ -729,7 +981,10 @@
     "brandVersion": "品牌版本",
     "proFeature": "这是 Pro 功能",
     "generateFingerprint": "生成指纹",
-    "refreshFingerprint": "刷新指纹"
+    "refreshFingerprint": "刷新指纹",
+    "canvasNoiseSeedPlaceholder": "输入用于 canvas 指纹的种子字符串",
+    "addFontsPlaceholder": "添加字体...",
+    "enterAsJson": "以 JSON 格式输入 {{title}}"
   },
   "warnings": {
     "windowResizeTitle": "自定义窗口尺寸",
@@ -882,11 +1137,11 @@
   "dnsBlocklist": {
     "title": "DNS 拦截列表",
     "none": "无",
-    "light": "Light",
-    "normal": "Normal",
+    "light": "轻量",
+    "normal": "标准",
     "pro": "Pro",
     "proPlus": "Pro++",
-    "ultimate": "Ultimate",
+    "ultimate": "终极",
     "settingsDescription": "DNS 拦截列表在代理级别拦截广告、跟踪器和恶意软件域名。列表每 12 小时自动刷新一次。",
     "manageLists": "管理 DNS 拦截列表",
     "refreshAll": "刷新所有列表",
@@ -895,5 +1150,407 @@
     "fresh": "最新",
     "stale": "过期",
     "notCached": "未缓存"
+  },
+  "vpns": {
+    "form": {
+      "titleEdit": "编辑 VPN",
+      "titleCreate": "创建 WireGuard VPN",
+      "descEdit": "更新 VPN 配置名称。",
+      "descCreate": "输入 WireGuard 接口和对等节点的详细信息。",
+      "name": "名称",
+      "namePlaceholder": "例如：家庭 WireGuard",
+      "privateKey": "私钥",
+      "privateKeyPlaceholder": "Base64 编码的私钥",
+      "address": "地址",
+      "addressPlaceholder": "例如：10.0.0.2/24",
+      "dnsOptional": "DNS（可选）",
+      "dnsPlaceholder": "例如：1.1.1.1",
+      "mtuOptional": "MTU（可选）",
+      "mtuPlaceholder": "例如：1420",
+      "peerPublicKey": "对等节点公钥",
+      "peerPublicKeyPlaceholder": "Base64 编码的对等节点公钥",
+      "peerEndpoint": "对等节点端点",
+      "peerEndpointPlaceholder": "例如：vpn.example.com:51820",
+      "allowedIps": "允许的 IP",
+      "allowedIpsPlaceholder": "例如：0.0.0.0/0, ::/0",
+      "keepaliveOptional": "持久心跳（可选）",
+      "keepalivePlaceholder": "例如：25",
+      "presharedKeyOptional": "预共享密钥（可选）",
+      "presharedKeyPlaceholder": "Base64 编码的预共享密钥",
+      "updateButton": "更新 VPN",
+      "createButton": "创建 VPN",
+      "nameRequired": "VPN 名称必填",
+      "privateKeyRequired": "私钥必填",
+      "addressRequired": "地址必填",
+      "peerPublicKeyRequired": "对等节点公钥必填",
+      "peerEndpointRequired": "对等节点端点必填",
+      "updated": "VPN 更新成功",
+      "created": "WireGuard VPN 创建成功",
+      "updateFailed": "更新 VPN 失败：{{error}}",
+      "createFailed": "创建 VPN 失败：{{error}}"
+    },
+    "import": {
+      "title": "导入 VPN 配置",
+      "descDropzone": "导入 WireGuard (.conf) 配置文件",
+      "descPreview": "查看要导入的 VPN 配置",
+      "descResult": "VPN 导入完成",
+      "dropzonePrompt": "将 WireGuard .conf 文件拖到这里或点击浏览",
+      "pasteHint": "使用 {{modKey}}+V 从剪贴板粘贴",
+      "invalidContent": "内容似乎不是有效的 VPN 配置",
+      "fileReadError": "读取文件失败",
+      "wrongFileType": "请放下 WireGuard .conf 文件",
+      "configurationLabel": "{{type}} 配置",
+      "endpointLabel": "端点：{{endpoint}}",
+      "vpnNameLabel": "VPN 名称",
+      "vpnNamePlaceholder": "我的 VPN",
+      "configPreview": "配置预览",
+      "importedSuccess": "VPN 导入成功",
+      "importFailed": "导入失败",
+      "importButton": "导入 VPN",
+      "doneButton": "完成",
+      "failedGeneric": "导入 VPN 配置失败",
+      "defaultName": "{{type}} VPN"
+    },
+    "management": {
+      "loading": "正在加载 VPN...",
+      "noneCreated": "尚未创建 VPN 配置。使用上方按钮导入或创建一个。",
+      "editVpn": "编辑 VPN",
+      "deleteVpn": "删除 VPN",
+      "cannotDelete_one": "无法删除: 被 {{count}} 个配置文件使用",
+      "cannotDelete_other": "无法删除: 被 {{count}} 个配置文件使用",
+      "syncCannotDisable": "此 VPN 被同步的配置文件使用时无法禁用同步",
+      "deleteSuccess": "VPN 删除成功",
+      "deleteFailed": "删除 VPN 失败",
+      "deleteTitle": "删除 VPN",
+      "deleteDescription": "此操作无法撤消。VPN「{{name}}」将被永久删除。"
+    }
+  },
+  "importProfile": {
+    "title": "导入浏览器配置文件",
+    "autoDetect": "自动检测",
+    "manualImport": "手动导入",
+    "detectedProfilesTitle": "检测到的浏览器配置文件",
+    "scanning": "正在扫描浏览器配置文件...",
+    "noneFound": "在你的系统上未找到浏览器配置文件。",
+    "noneFoundHint": "如果配置文件位于自定义位置,请尝试手动导入选项。",
+    "selectProfile": "选择配置文件:",
+    "selectProfilePlaceholder": "选择检测到的配置文件",
+    "pathLabel": "路径:",
+    "browserLabel": "浏览器:",
+    "newProfileName": "新配置文件名称:",
+    "newProfileNamePlaceholder": "输入要导入的配置文件名称",
+    "manualTitle": "手动配置文件导入",
+    "browserType": "浏览器类型:",
+    "loadingBrowsers": "正在加载浏览器...",
+    "selectBrowserType": "选择浏览器类型",
+    "profileFolderPath": "配置文件夹路径:",
+    "profileFolderPlaceholder": "输入配置文件夹的完整路径",
+    "browseFolderTitle": "浏览文件夹",
+    "examplePaths": "示例路径:",
+    "selectFolderTitle": "选择浏览器配置文件夹",
+    "folderDialogFailed": "打开文件夹对话框失败",
+    "detectFailed": "检测现有浏览器配置文件失败",
+    "fillFields": "请填写所有字段",
+    "selectAndName": "请选择配置文件并提供名称",
+    "profileNotFound": "未找到所选配置文件",
+    "importedSuccess": "已成功导入配置文件「{{name}}」",
+    "notInstalled": "{{browser}} 未安装。请先从主窗口下载 {{browser}},然后再尝试导入。",
+    "importFailed": "导入配置文件失败: {{error}}",
+    "importedAsPrefix": "此配置文件将作为以下配置文件导入:",
+    "importedAsSuffix": "",
+    "proxyOptional": "代理 (可选)",
+    "noProxy": "无代理",
+    "nextButton": "下一步",
+    "importButton": "导入"
+  },
+  "syncTooltips": {
+    "syncing": "同步中...",
+    "syncedAt": "已同步 {{time}}",
+    "synced": "已同步",
+    "waiting": "等待同步",
+    "errorWith": "同步错误: {{error}}",
+    "error": "同步错误",
+    "notSynced": "未同步"
+  },
+  "groupManagement": {
+    "description": "管理你的配置文件分组",
+    "createGroup": "创建分组",
+    "noGroups": "尚未创建分组。使用上方按钮创建第一个分组。",
+    "loading": "正在加载分组...",
+    "profileCount_one": "{{count}} 个配置文件",
+    "profileCount_other": "{{count}} 个配置文件",
+    "groupsLabel": "分组",
+    "profilesCol": "配置文件",
+    "syncCannotDisable": "此分组被同步的配置文件使用时无法禁用同步",
+    "editGroupTooltip": "编辑分组",
+    "deleteGroupTooltip": "删除分组",
+    "loadFailed": "加载分组失败"
+  },
+  "proxyAssignment": {
+    "title": "分配代理 / VPN",
+    "description_one": "为 {{count}} 个选定的配置文件分配代理或 VPN。",
+    "description_other": "为 {{count}} 个选定的配置文件分配代理或 VPN。",
+    "selectLabel": "代理 / VPN",
+    "placeholder": "选择代理或 VPN",
+    "noProxy": "无代理 / VPN",
+    "searchPlaceholder": "搜索代理或 VPN...",
+    "notFound": "未找到代理或 VPN。",
+    "assignButton": "分配",
+    "success": "已成功为 {{count}} 个配置文件分配代理/VPN",
+    "failed": "分配代理/VPN 失败",
+    "selectedProfilesLabel": "选定的配置文件:",
+    "assignProxyVpnLabel": "分配代理 / VPN:",
+    "noneOption": "无",
+    "noValidProfiles": "未选择有效的配置文件。",
+    "vpnGroupHeading": "VPN",
+    "failedFallback": "为配置文件分配代理/VPN 失败"
+  },
+  "groupAssignment": {
+    "title": "分配分组",
+    "description_one": "为 {{count}} 个选定的配置文件分配分组。",
+    "description_other": "为 {{count}} 个选定的配置文件分配分组。",
+    "selectLabel": "分组",
+    "placeholder": "选择分组",
+    "noGroup": "无分组 (默认)",
+    "assignButton": "分配",
+    "success": "已成功为 {{count}} 个配置文件分配分组",
+    "failed": "分配分组失败",
+    "selectedProfilesLabel": "选定的配置文件:",
+    "assignGroupLabel": "分配到分组:",
+    "noValidProfiles": "未选择有效的配置文件。",
+    "failedFallback": "为配置文件分配分组失败"
+  },
+  "profileSelector": {
+    "title": "选择配置文件",
+    "description": "选择一个配置文件来打开此 URL",
+    "searchPlaceholder": "搜索配置文件...",
+    "noProfiles": "没有可用的配置文件",
+    "noResults": "没有匹配的配置文件",
+    "selectButton": "选择",
+    "launching": "正在启动...",
+    "chooseProfileTitle": "选择配置文件",
+    "openingUrl": "打开 URL:",
+    "urlCopied": "URL 已复制到剪贴板!",
+    "selectProfileLabel": "选择配置文件:",
+    "noneAvailableShort": "没有可用的配置文件。请先创建一个配置文件。",
+    "noneAvailableLong": "关闭此对话框并从主窗口创建配置文件以开始使用。",
+    "chooseAProfile": "选择一个配置文件",
+    "badgeProxy": "代理",
+    "badgeRunning": "运行中",
+    "badgeUnavailable": "不可用",
+    "openButton": "打开"
+  },
+  "locationProxy": {
+    "title": "快速位置代理",
+    "description": "选择一个国家来路由此配置文件。系统将自动创建代理。",
+    "country": "国家",
+    "selectCountry": "选择国家",
+    "searchCountry": "搜索国家...",
+    "noCountriesFound": "未找到国家。",
+    "apply": "应用",
+    "creating": "正在创建代理...",
+    "success": "已应用位置代理",
+    "failed": "应用位置代理失败",
+    "titleCreate": "创建位置代理",
+    "descriptionCreate": "创建带 24 小时粘性会话的地理定位代理",
+    "countryLabel": "国家 (必填)",
+    "regionLabel": "地区 (可选)",
+    "cityLabel": "城市 (可选)",
+    "ispLabel": "ISP (可选)",
+    "nameLabel": "名称",
+    "namePlaceholder": "代理名称",
+    "loadingCountries": "正在加载国家...",
+    "selectCountryPh": "选择国家",
+    "searchCountries": "搜索国家...",
+    "loadFailed": "加载国家失败",
+    "selectCountryFirst": "请先选择国家",
+    "loadingRegions": "正在加载地区...",
+    "noRegions": "没有可用的地区",
+    "selectRegion": "选择地区",
+    "searchRegions": "搜索地区...",
+    "loadingCities": "正在加载城市...",
+    "noCities": "没有可用的城市",
+    "selectCity": "选择城市",
+    "searchCities": "搜索城市...",
+    "loadingIsps": "正在加载 ISP...",
+    "noIsps": "没有可用的 ISP",
+    "selectIsp": "选择 ISP",
+    "searchIsps": "搜索 ISP...",
+    "createSuccess": "已创建位置代理",
+    "createFailed": "创建位置代理失败",
+    "creatingButton": "正在创建...",
+    "createButton": "创建"
+  },
+  "launchOnLogin": {
+    "title": "启用登录时启动?",
+    "description": "在后台运行有助于保持代理和浏览器存活。",
+    "declineButton": "不再询问",
+    "declining": "...",
+    "enableButton": "启用",
+    "enableSuccess": "已启用登录时启动",
+    "enableFailed": "启用登录时启动失败",
+    "declineFailed": "保存偏好失败",
+    "tryAgain": "请重试"
+  },
+  "wayfernTerms": {
+    "title": "Wayfern 条款和条件",
+    "description": "在使用 Donut Browser 之前,你必须阅读并同意 Wayfern 的条款和条件。",
+    "reviewLabel": "请查看以下条款和条件:",
+    "agreeNotice": "点击「我接受」即表示你同意受这些条款约束。",
+    "acceptButton": "我接受",
+    "acceptSuccess": "已成功接受条款",
+    "acceptFailed": "接受条款失败",
+    "tryAgain": "请重试"
+  },
+  "commercialTrial": {
+    "title": "商业试用期已过期",
+    "description": "你的 2 周商业试用期已结束。",
+    "body": "如果你将 Donut Browser 用于商业目的,需要购买商业许可证才能继续。你仍然可以免费用于个人用途。",
+    "understandButton": "我明白了",
+    "failed": "保存确认失败",
+    "tryAgain": "请重试"
+  },
+  "permissionDialog": {
+    "titleMicrophone": "需要麦克风访问权限",
+    "titleCamera": "需要摄像头访问权限",
+    "descMicrophone": "Donut Browser 需要访问你的麦克风以在浏览器中启用麦克风功能。每个想使用麦克风的网站仍会单独请求你的许可。",
+    "descCamera": "Donut Browser 需要访问你的摄像头以在浏览器中启用摄像头功能。每个想使用摄像头的网站仍会单独请求你的许可。",
+    "grantedMicrophone": "权限已授予!从 Donut Browser 启动的浏览器现在可以访问你的麦克风。",
+    "grantedCamera": "权限已授予!从 Donut Browser 启动的浏览器现在可以访问你的摄像头。",
+    "notGrantedMicrophone": "未授予权限。点击下方按钮请求访问你的麦克风。",
+    "notGrantedCamera": "未授予权限。点击下方按钮请求访问你的摄像头。",
+    "doneButton": "完成",
+    "cancelButton": "取消",
+    "grantAccessButton": "授予访问",
+    "requestSuccessMicrophone": "已请求麦克风访问",
+    "requestSuccessCamera": "已请求摄像头访问",
+    "requestFailed": "请求权限失败"
+  },
+  "traffic": {
+    "title": "流量详情",
+    "bandwidthOverTime": "随时间变化的带宽",
+    "timePeriodPlaceholder": "时间段",
+    "last1m": "最近 1 分钟",
+    "last5m": "最近 5 分钟",
+    "last30m": "最近 30 分钟",
+    "last1h": "最近 1 小时",
+    "last2h": "最近 2 小时",
+    "last4h": "最近 4 小时",
+    "last1d": "最近 1 天",
+    "last7d": "最近 7 天",
+    "last30d": "最近 30 天",
+    "allTime": "所有时间",
+    "allTimeShort": "所有时间",
+    "totalSuffix": "总计",
+    "sentLabel": "已发送 ({{period}})",
+    "receivedLabel": "已接收 ({{period}})",
+    "requestsLabel": "请求数 ({{period}})",
+    "allTimeTraffic": "总流量:",
+    "allTimeRequests": "总请求数:",
+    "proxyDisclaimer": "注意: 如果你使用代理、VPN 或类似服务,你的提供商可能会因加密开销和协议差异而以不同方式计算流量。",
+    "topByTraffic": "按流量排名的顶级域名 ({{period}})",
+    "topByRequests": "按请求数排名的顶级域名 ({{period}})",
+    "columnDomain": "域名",
+    "columnRequests": "请求数",
+    "columnSent": "已发送",
+    "columnReceived": "已接收",
+    "columnTotal": "总流量",
+    "uniqueIps": "独立 IP ({{count}})",
+    "noData": "此配置文件没有可用的流量数据。",
+    "noDataHint": "启动配置文件后,流量数据将会显示。",
+    "sentLegend": "已发送",
+    "receivedLegend": "已接收",
+    "tooltipSent": "↑ 已发送: ",
+    "tooltipReceived": "↓ 已接收: "
+  },
+  "camoufoxDialog": {
+    "titleView": "查看指纹设置 - {{name}} ({{browser}})",
+    "titleConfigure": "配置指纹设置 - {{name}} ({{browser}})",
+    "invalidFingerprint": "无效的指纹配置",
+    "invalidFingerprintDescription": "指纹配置包含无效的 JSON。请检查高级设置。",
+    "saveFailed": "保存配置失败",
+    "unknownError": "发生未知错误"
+  },
+  "proxyCheck": {
+    "unknownLocation": "未知",
+    "locationToast": "你的代理位置:",
+    "failed": "代理检查失败: {{error}}",
+    "tooltipChecking": "正在检查代理...",
+    "tooltipIp": "IP: {{ip}}",
+    "tooltipChecked": "已检查 {{time}}",
+    "tooltipFailed": "失败 {{time}}",
+    "tooltipFailedTitle": "代理检查失败",
+    "tooltipDefault": "检查代理有效性"
+  },
+  "vpnCheck": {
+    "valid": "VPN「{{name}}」配置有效",
+    "invalid": "VPN「{{name}}」配置无效",
+    "failed": "VPN 检查失败: {{error}}",
+    "tooltipChecking": "正在检查 VPN 配置...",
+    "tooltipValid": "配置有效",
+    "tooltipInvalid": "配置无效",
+    "tooltipChecked": "已检查 {{time}}",
+    "tooltipDefault": "检查 VPN 配置有效性"
+  },
+  "profileTable": {
+    "syncTooltipDisabled": "同步已禁用",
+    "syncTooltipSyncing": "同步中...",
+    "syncTooltipSyncedAt": "已同步 {{time}}",
+    "syncTooltipSynced": "已同步",
+    "syncTooltipWaiting": "等待同步",
+    "syncTooltipErrorWith": "同步错误: {{error}}",
+    "syncTooltipError": "同步错误",
+    "syncTooltipNotSynced": "未同步",
+    "noTags": "无标签",
+    "syncTooltipCloseToSync": "关闭配置文件以进行同步",
+    "syncTooltipDisabledWithLast": "同步已禁用,上次同步 {{time}}"
+  },
+  "releaseTypeSelector": {
+    "noReleaseTypes": "没有可用的发布类型。",
+    "placeholder": "选择发布类型...",
+    "stable": "Stable",
+    "nightly": "Nightly",
+    "downloaded": "已下载",
+    "downloadBrowser": "下载浏览器",
+    "downloading": "正在下载..."
+  },
+  "dataTableActionBar": {
+    "selected": "已选择 {{count}}",
+    "clearSelection": "清除选择"
+  },
+  "appUpdate": {
+    "toast": {
+      "updateFailed": "更新 Donut Browser 失败",
+      "restartFailed": "重启失败"
+    }
+  },
+  "browserDownload": {
+    "toast": {
+      "fetchVersionsFailed": "获取 {{browser}} 版本失败",
+      "foundNewVersions": "发现 {{count}} 个新的 {{browser}} 版本!",
+      "totalAvailableVersions": "总计可用: {{count}} 个版本",
+      "downloadFailed": "下载 {{browser}} {{version}} 失败",
+      "calculating": "计算中...",
+      "extractionFailed": "{{browser}} {{version}}: 解压失败",
+      "extractionFailedDescription": "损坏的文件已删除。下次尝试时将重新下载。"
+    }
+  },
+  "versionUpdater": {
+    "toast": {
+      "alreadyAvailable": "{{browser}} {{version}} 已可用",
+      "updatingProfiles": "正在更新配置文件设置...",
+      "updateCompleted": "{{browser}} 更新完成",
+      "singleProfileUpdated": "配置文件 \"{{name}}\" 已更新到版本 {{version}}。现在可以使用最新版本启动浏览器。",
+      "multipleProfilesUpdated": "{{count}} 个配置文件已更新到版本 {{version}}。现在可以使用最新版本启动浏览器。",
+      "versionAvailable": "版本 {{version}} 现已可用。运行中的配置文件将在重启时使用新版本。",
+      "autoUpdateFailed": "自动更新 {{browser}} 失败",
+      "updateWithErrors": "更新完成,但有部分错误",
+      "updateWithErrorsDescription": "发现 {{newVersions}} 个新版本,{{failedUpdates}} 个浏览器更新失败",
+      "updateSuccess": "浏览器版本更新成功",
+      "updateSuccessDescription": "在 {{successfulUpdates}} 个浏览器中发现 {{newVersions}} 个新版本。自动下载即将开始。",
+      "upToDate": "未发现新的浏览器版本",
+      "upToDateDescription": "所有浏览器版本都是最新的",
+      "updateAllFailed": "更新浏览器版本失败"
+    }
   }
 }

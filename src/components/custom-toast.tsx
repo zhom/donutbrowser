@@ -49,6 +49,7 @@
  */
 /** biome-ignore-all lint/suspicious/noExplicitAny: TODO */
 
+import { useTranslation } from "react-i18next";
 import {
   LuCheckCheck,
   LuDownload,
@@ -214,6 +215,7 @@ function getToastIcon(type: ToastProps["type"], stage?: string) {
 }
 
 export function UnifiedToast(props: ToastProps) {
+  const { t } = useTranslation();
   const { title, description, type, action, onCancel } = props;
   const stage = "stage" in props ? props.stage : undefined;
   const progress = "progress" in props ? props.progress : undefined;
@@ -231,7 +233,7 @@ export function UnifiedToast(props: ToastProps) {
               type="button"
               onClick={onCancel}
               className="ml-2 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-              aria-label="Cancel"
+              aria-label={t("common.buttons.cancel")}
             >
               <LuX className="w-3 h-3" />
             </button>

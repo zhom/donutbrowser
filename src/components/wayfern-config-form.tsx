@@ -316,7 +316,9 @@ export function WayfernConfigForm({
                       e.target.value || undefined,
                     );
                   }}
-                  placeholder="e.g., Win32, MacIntel, Linux x86_64"
+                  placeholder={t(
+                    "config.wayfern.fingerprint.platformPlaceholder",
+                  )}
                 />
               </div>
               <div className="space-y-2">
@@ -755,7 +757,9 @@ export function WayfernConfigForm({
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
                     );
                   }}
-                  placeholder="e.g., 300 for EST (UTC-5)"
+                  placeholder={t(
+                    "config.wayfern.fingerprint.timezoneOffsetPlaceholder",
+                  )}
                 />
               </div>
               <div className="space-y-2">
@@ -841,7 +845,9 @@ export function WayfernConfigForm({
                       e.target.value || undefined,
                     );
                   }}
-                  placeholder="e.g., Intel(R) HD Graphics"
+                  placeholder={t(
+                    "config.wayfern.fingerprint.webglRendererPlaceholder",
+                  )}
                 />
               </div>
             </div>
@@ -880,7 +886,7 @@ export function WayfernConfigForm({
                     e.target.value || undefined,
                   );
                 }}
-                placeholder="Enter a seed string for canvas fingerprint"
+                placeholder={t("fingerprint.canvasNoiseSeedPlaceholder")}
               />
               <p className="text-sm text-muted-foreground">
                 {t("fingerprint.canvasNoiseSeedDescription")}

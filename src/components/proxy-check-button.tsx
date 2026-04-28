@@ -2,6 +2,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { FiCheck } from "react-icons/fi";
 import { toast } from "sonner";
 import { FlagIcon } from "@/components/flag-icon";
@@ -35,6 +36,7 @@ export function ProxyCheckButton({
   disabled = false,
   setCheckingProfileId,
 }: ProxyCheckButtonProps) {
+  const { t } = useTranslation();
   const [localResult, setLocalResult] = React.useState<
     ProxyCheckResult | undefined
   >(cachedResult);
@@ -60,11 +62,13 @@ export function ProxyCheckButton({
       if (result.city) locationParts.push(result.city);
       if (result.country) locationParts.push(result.country);
       const location =
-        locationParts.length > 0 ? locationParts.join(", ") : "Unknown";
+        locationParts.length > 0
+          ? locationParts.join(", ")
+          : t("proxyCheck.unknownLocation");
 
       toast.success(
         <div className="flex flex-col">
-          Your proxy location is:
+          {t("proxyCheck.locationToast")}
           <div className="flex items-center whitespace-nowrap">
             {location}
             {result.country_code && (
@@ -79,7 +83,7 @@ export function ProxyCheckButton({
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      toast.error(`Proxy check failed: ${errorMessage}`);
+      toast.error(t("proxyCheck.failed", { error: errorMessage }));
 
       // Save failed check result
       const failedResult: ProxyCheckResult = {
@@ -102,6 +106,7 @@ export function ProxyCheckButton({
     onCheckComplete,
     onCheckFailed,
     setCheckingProfileId,
+    t,
   ]);
 
   const isCurrentlyChecking = checkingProfileId === profileId;
@@ -133,7 +138,7 @@ export function ProxyCheckButton({
       </TooltipTrigger>
       <TooltipContent>
         {isCurrentlyChecking ? (
-          <p>Checking proxy...</p>
+          <p>{t("proxyCheck.tooltipChecking")}</p>
         ) : result?.is_valid ? (
           <div className="space-y-1">
             <p className="flex items-center gap-1">
@@ -141,24 +146,28 @@ export function ProxyCheckButton({
                 <FlagIcon countryCode={result.country_code} />
               )}
               {[result.city, result.country].filter(Boolean).join(", ") ||
-                "Unknown"}
+                t("proxyCheck.unknownLocation")}
             </p>
             <p className="text-xs text-primary-foreground/70">
-              IP: {result.ip}
+              {t("proxyCheck.tooltipIp", { ip: result.ip })}
             </p>
             <p className="text-xs text-primary-foreground/70">
-              Checked {formatRelativeTime(result.timestamp)}
+              {t("proxyCheck.tooltipChecked", {
+                time: formatRelativeTime(result.timestamp),
+              })}
             </p>
           </div>
         ) : result && !result.is_valid ? (
           <div>
-            <p>Proxy check failed</p>
+            <p>{t("proxyCheck.tooltipFailedTitle")}</p>
             <p className="text-xs text-primary-foreground/70">
-              Failed {formatRelativeTime(result.timestamp)}
+              {t("proxyCheck.tooltipFailed", {
+                time: formatRelativeTime(result.timestamp),
+              })}
             </p>
           </div>
         ) : (
-          <p>Check proxy validity</p>
+          <p>{t("proxyCheck.tooltipDefault")}</p>
         )}
       </TooltipContent>
     </Tooltip>

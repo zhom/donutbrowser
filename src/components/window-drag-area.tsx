@@ -2,6 +2,7 @@
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 type Platform = "macos" | "windows" | "linux";
 
@@ -13,6 +14,7 @@ function detectPlatform(): Platform {
 }
 
 export function WindowDragArea() {
+  const { t } = useTranslation();
   const [platform, setPlatform] = useState<Platform | null>(null);
 
   useEffect(() => {
@@ -104,7 +106,7 @@ export function WindowDragArea() {
             viewBox="0 0 10 1"
             fill="currentColor"
             role="img"
-            aria-label="Minimize"
+            aria-label={t("common.window.minimize")}
           >
             <rect width="10" height="1" />
           </svg>
@@ -124,7 +126,7 @@ export function WindowDragArea() {
             stroke="currentColor"
             strokeWidth="1.2"
             role="img"
-            aria-label="Close"
+            aria-label={t("common.buttons.close")}
           >
             <line x1="1" y1="1" x2="9" y2="9" />
             <line x1="9" y1="1" x2="1" y2="9" />

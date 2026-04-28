@@ -2,6 +2,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { LoadingButton } from "@/components/loading-button";
 import {
@@ -28,6 +29,7 @@ export function CreateGroupDialog({
   onClose,
   onGroupCreated,
 }: CreateGroupDialogProps) {
+  const { t } = useTranslation();
   const [groupName, setGroupName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,20 +44,20 @@ export function CreateGroupDialog({
         name: groupName.trim(),
       });
 
-      toast.success("Group created successfully");
+      toast.success(t("groups.createSuccess"));
       onGroupCreated(newGroup);
       setGroupName("");
       onClose();
     } catch (err) {
       console.error("Failed to create group:", err);
       const errorMessage =
-        err instanceof Error ? err.message : "Failed to create group";
+        err instanceof Error ? err.message : t("groups.createFailed");
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
       setIsCreating(false);
     }
-  }, [groupName, onGroupCreated, onClose]);
+  }, [groupName, onGroupCreated, onClose, t]);
 
   const handleClose = useCallback(() => {
     setGroupName("");
@@ -67,18 +69,16 @@ export function CreateGroupDialog({
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Create New Group</DialogTitle>
-          <DialogDescription>
-            Create a new group to organize your browser profiles.
-          </DialogDescription>
+          <DialogTitle>{t("groups.createTitle")}</DialogTitle>
+          <DialogDescription>{t("groups.createDescription")}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="group-name">Group Name</Label>
+            <Label htmlFor="group-name">{t("groups.form.name")}</Label>
             <Input
               id="group-name"
-              placeholder="Enter group name..."
+              placeholder={t("groups.form.namePlaceholder")}
               value={groupName}
               onChange={(e) => {
                 setGroupName(e.target.value);
@@ -105,14 +105,14 @@ export function CreateGroupDialog({
             onClick={handleClose}
             disabled={isCreating}
           >
-            Cancel
+            {t("common.buttons.cancel")}
           </RippleButton>
           <LoadingButton
             isLoading={isCreating}
             onClick={() => void handleCreate()}
             disabled={!groupName.trim()}
           >
-            Create
+            {t("common.buttons.create")}
           </LoadingButton>
         </DialogFooter>
       </DialogContent>

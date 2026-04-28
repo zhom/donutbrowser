@@ -2,6 +2,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { LoadingButton } from "@/components/loading-button";
 import {
   Dialog,
@@ -22,6 +23,7 @@ export function CommercialTrialModal({
   isOpen,
   onClose,
 }: CommercialTrialModalProps) {
+  const { t } = useTranslation();
   const [isAcknowledging, setIsAcknowledging] = useState(false);
 
   const handleAcknowledge = useCallback(async () => {
@@ -31,14 +33,16 @@ export function CommercialTrialModal({
       onClose();
     } catch (error) {
       console.error("Failed to acknowledge trial expiration:", error);
-      showErrorToast("Failed to save acknowledgment", {
+      showErrorToast(t("commercialTrial.failed"), {
         description:
-          error instanceof Error ? error.message : "Please try again",
+          error instanceof Error
+            ? error.message
+            : t("commercialTrial.tryAgain"),
       });
     } finally {
       setIsAcknowledging(false);
     }
-  }, [onClose]);
+  }, [onClose, t]);
 
   return (
     <Dialog open={isOpen}>
@@ -55,17 +59,15 @@ export function CommercialTrialModal({
         }}
       >
         <DialogHeader>
-          <DialogTitle>Commercial Trial Expired</DialogTitle>
+          <DialogTitle>{t("commercialTrial.title")}</DialogTitle>
           <DialogDescription>
-            Your 2-week commercial trial period has ended.
+            {t("commercialTrial.description")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <p className="text-sm text-muted-foreground">
-            If you are using Donut Browser for business purposes, you need to
-            purchase a commercial license to continue. You can still use it for
-            personal use for free.
+            {t("commercialTrial.body")}
           </p>
         </div>
 
@@ -74,7 +76,7 @@ export function CommercialTrialModal({
             onClick={handleAcknowledge}
             isLoading={isAcknowledging}
           >
-            I Understand
+            {t("commercialTrial.understandButton")}
           </LoadingButton>
         </DialogFooter>
       </DialogContent>

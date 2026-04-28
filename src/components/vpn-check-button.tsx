@@ -2,6 +2,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { FiCheck } from "react-icons/fi";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ export function VpnCheckButton({
   setCheckingVpnId,
   disabled = false,
 }: VpnCheckButtonProps) {
+  const { t } = useTranslation();
   const [result, setResult] = React.useState<ProxyCheckResult | undefined>();
 
   const handleCheck = React.useCallback(async () => {
@@ -41,14 +43,14 @@ export function VpnCheckButton({
       setResult(checkResult);
 
       if (checkResult.is_valid) {
-        toast.success(`VPN "${vpnName}" configuration is valid`);
+        toast.success(t("vpnCheck.valid", { name: vpnName }));
       } else {
-        toast.error(`VPN "${vpnName}" configuration is invalid`);
+        toast.error(t("vpnCheck.invalid", { name: vpnName }));
       }
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      toast.error(`VPN check failed: ${errorMessage}`);
+      toast.error(t("vpnCheck.failed", { error: errorMessage }));
 
       setResult({
         ip: "",
@@ -58,7 +60,7 @@ export function VpnCheckButton({
     } finally {
       setCheckingVpnId(null);
     }
-  }, [vpnId, vpnName, checkingVpnId, setCheckingVpnId]);
+  }, [vpnId, vpnName, checkingVpnId, setCheckingVpnId, t]);
 
   const isCurrentlyChecking = checkingVpnId === vpnId;
 
@@ -85,23 +87,27 @@ export function VpnCheckButton({
       </TooltipTrigger>
       <TooltipContent>
         {isCurrentlyChecking ? (
-          <p>Checking VPN config...</p>
+          <p>{t("vpnCheck.tooltipChecking")}</p>
         ) : result?.is_valid ? (
           <div className="space-y-1">
-            <p>Configuration valid</p>
+            <p>{t("vpnCheck.tooltipValid")}</p>
             <p className="text-xs text-primary-foreground/70">
-              Checked {formatRelativeTime(result.timestamp)}
+              {t("vpnCheck.tooltipChecked", {
+                time: formatRelativeTime(result.timestamp),
+              })}
             </p>
           </div>
         ) : result && !result.is_valid ? (
           <div>
-            <p>Configuration invalid</p>
+            <p>{t("vpnCheck.tooltipInvalid")}</p>
             <p className="text-xs text-primary-foreground/70">
-              Checked {formatRelativeTime(result.timestamp)}
+              {t("vpnCheck.tooltipChecked", {
+                time: formatRelativeTime(result.timestamp),
+              })}
             </p>
           </div>
         ) : (
-          <p>Check VPN config validity</p>
+          <p>{t("vpnCheck.tooltipDefault")}</p>
         )}
       </TooltipContent>
     </Tooltip>

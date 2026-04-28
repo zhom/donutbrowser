@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { BsCamera, BsMic } from "react-icons/bs";
 import { LoadingButton } from "@/components/loading-button";
 import {
@@ -29,6 +30,7 @@ export function PermissionDialog({
   permissionType,
   onPermissionGranted,
 }: PermissionDialogProps) {
+  const { t } = useTranslation();
   const [isRequesting, setIsRequesting] = useState(false);
   const [isMacOS, setIsMacOS] = useState(false);
   const {
@@ -74,18 +76,18 @@ export function PermissionDialog({
   const getPermissionTitle = (type: PermissionType) => {
     switch (type) {
       case "microphone":
-        return "Microphone Access Required";
+        return t("permissionDialog.titleMicrophone");
       case "camera":
-        return "Camera Access Required";
+        return t("permissionDialog.titleCamera");
     }
   };
 
   const getPermissionDescription = (type: PermissionType) => {
     switch (type) {
       case "microphone":
-        return "Donut Browser needs access to your microphone to enable microphone functionality in web browsers. Each website that wants to use your microphone will still ask for your permission individually.";
+        return t("permissionDialog.descMicrophone");
       case "camera":
-        return "Donut Browser needs access to your camera to enable camera functionality in web browsers. Each website that wants to use your camera will still ask for your permission individually.";
+        return t("permissionDialog.descCamera");
     }
   };
 
@@ -94,14 +96,13 @@ export function PermissionDialog({
     try {
       await requestPermission(permissionType);
       showSuccessToast(
-        `${getPermissionTitle(permissionType).replace(
-          " Required",
-          "",
-        )} permission requested`,
+        permissionType === "microphone"
+          ? t("permissionDialog.requestSuccessMicrophone")
+          : t("permissionDialog.requestSuccessCamera"),
       );
     } catch (error) {
       console.error("Failed to request permission:", error);
-      showErrorToast("Failed to request permission");
+      showErrorToast(t("permissionDialog.requestFailed"));
     } finally {
       setIsRequesting(false);
     }
@@ -131,8 +132,9 @@ export function PermissionDialog({
           {isCurrentPermissionGranted && (
             <div className="p-3 bg-success/10 rounded-lg">
               <p className="text-sm text-success">
-                ✅ Permission granted! Browsers launched from Donut Browser can
-                now access your {permissionType}.
+                {permissionType === "microphone"
+                  ? t("permissionDialog.grantedMicrophone")
+                  : t("permissionDialog.grantedCamera")}
               </p>
             </div>
           )}
@@ -140,8 +142,9 @@ export function PermissionDialog({
           {!isCurrentPermissionGranted && (
             <div className="p-3 bg-warning/10 rounded-lg">
               <p className="text-sm text-warning">
-                ⚠️ Permission not granted. Click the button below to request
-                access to your {permissionType}.
+                {permissionType === "microphone"
+                  ? t("permissionDialog.notGrantedMicrophone")
+                  : t("permissionDialog.notGrantedCamera")}
               </p>
             </div>
           )}
@@ -149,7 +152,9 @@ export function PermissionDialog({
 
         <DialogFooter className="gap-2">
           <RippleButton variant="outline" onClick={onClose}>
-            {isCurrentPermissionGranted ? "Done" : "Cancel"}
+            {isCurrentPermissionGranted
+              ? t("permissionDialog.doneButton")
+              : t("permissionDialog.cancelButton")}
           </RippleButton>
 
           {!isCurrentPermissionGranted && (
@@ -162,7 +167,7 @@ export function PermissionDialog({
               }}
               className="min-w-24"
             >
-              Grant Access
+              {t("permissionDialog.grantAccessButton")}
             </LoadingButton>
           )}
         </DialogFooter>

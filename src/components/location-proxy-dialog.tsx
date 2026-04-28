@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
@@ -29,6 +30,7 @@ export function LocationProxyDialog({
   isOpen,
   onClose,
 }: LocationProxyDialogProps) {
+  const { t } = useTranslation();
   const [countries, setCountries] = useState<LocationItem[]>([]);
   const [regions, setRegions] = useState<LocationItem[]>([]);
   const [cities, setCities] = useState<LocationItem[]>([]);
@@ -68,12 +70,12 @@ export function LocationProxyDialog({
       })
       .catch((err) => {
         console.error("Failed to fetch countries:", err);
-        toast.error("Failed to load countries");
+        toast.error(t("locationProxy.loadFailed"));
       })
       .finally(() => {
         setIsLoadingCountries(false);
       });
-  }, [isOpen]);
+  }, [isOpen, t]);
 
   // Fetch regions when country changes
   useEffect(() => {
@@ -188,13 +190,13 @@ export function LocationProxyDialog({
         city: selectedCity || null,
         isp: selectedIsp || null,
       });
-      toast.success("Location proxy created");
+      toast.success(t("locationProxy.createSuccess"));
       await emit("stored-proxies-changed");
       handleClose();
     } catch (error) {
       console.error("Failed to create location proxy:", error);
       toast.error(
-        typeof error === "string" ? error : "Failed to create location proxy",
+        typeof error === "string" ? error : t("locationProxy.createFailed"),
       );
     } finally {
       setIsCreating(false);
@@ -206,6 +208,7 @@ export function LocationProxyDialog({
     selectedIsp,
     proxyName,
     handleClose,
+    t,
   ]);
 
   const countryOptions = countries.map((c) => ({
@@ -224,9 +227,9 @@ export function LocationProxyDialog({
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Create Location Proxy</DialogTitle>
+          <DialogTitle>{t("locationProxy.titleCreate")}</DialogTitle>
           <DialogDescription>
-            Create a geo-targeted proxy with a 24-hour sticky session
+            {t("locationProxy.descriptionCreate")}
           </DialogDescription>
         </DialogHeader>
 
@@ -234,7 +237,7 @@ export function LocationProxyDialog({
           {/* Country - always visible */}
           <div className="space-y-2">
             <Label className="flex items-center gap-2">
-              Country (required)
+              {t("locationProxy.countryLabel")}
               {isLoadingCountries && <LoadingSpinner />}
             </Label>
             <Combobox
@@ -242,9 +245,11 @@ export function LocationProxyDialog({
               value={selectedCountry}
               onValueChange={setSelectedCountry}
               placeholder={
-                isLoadingCountries ? "Loading countries..." : "Select country"
+                isLoadingCountries
+                  ? t("locationProxy.loadingCountries")
+                  : t("locationProxy.selectCountryPh")
               }
-              searchPlaceholder="Search countries..."
+              searchPlaceholder={t("locationProxy.searchCountries")}
               disabled={isLoadingCountries}
             />
           </div>
@@ -252,7 +257,7 @@ export function LocationProxyDialog({
           {/* Region - always visible, disabled until country is selected */}
           <div className="space-y-2">
             <Label className="flex items-center gap-2">
-              Region (optional)
+              {t("locationProxy.regionLabel")}
               {isLoadingRegions && <LoadingSpinner />}
             </Label>
             <Combobox
@@ -261,14 +266,14 @@ export function LocationProxyDialog({
               onValueChange={setSelectedRegion}
               placeholder={
                 !selectedCountry
-                  ? "Select a country first"
+                  ? t("locationProxy.selectCountryFirst")
                   : isLoadingRegions
-                    ? "Loading regions..."
+                    ? t("locationProxy.loadingRegions")
                     : regionOptions.length === 0
-                      ? "No regions available"
-                      : "Select region"
+                      ? t("locationProxy.noRegions")
+                      : t("locationProxy.selectRegion")
               }
-              searchPlaceholder="Search regions..."
+              searchPlaceholder={t("locationProxy.searchRegions")}
               disabled={!selectedCountry || isLoadingRegions}
             />
           </div>
@@ -276,7 +281,7 @@ export function LocationProxyDialog({
           {/* City - always visible, disabled until country is selected */}
           <div className="space-y-2">
             <Label className="flex items-center gap-2">
-              City (optional)
+              {t("locationProxy.cityLabel")}
               {isLoadingCities && <LoadingSpinner />}
             </Label>
             <Combobox
@@ -285,14 +290,14 @@ export function LocationProxyDialog({
               onValueChange={setSelectedCity}
               placeholder={
                 !selectedCountry
-                  ? "Select a country first"
+                  ? t("locationProxy.selectCountryFirst")
                   : isLoadingCities
-                    ? "Loading cities..."
+                    ? t("locationProxy.loadingCities")
                     : cityOptions.length === 0
-                      ? "No cities available"
-                      : "Select city"
+                      ? t("locationProxy.noCities")
+                      : t("locationProxy.selectCity")
               }
-              searchPlaceholder="Search cities..."
+              searchPlaceholder={t("locationProxy.searchCities")}
               disabled={!selectedCountry || isLoadingCities}
             />
           </div>
@@ -300,7 +305,7 @@ export function LocationProxyDialog({
           {/* ISP - always visible, disabled until country is selected */}
           <div className="space-y-2">
             <Label className="flex items-center gap-2">
-              ISP (optional)
+              {t("locationProxy.ispLabel")}
               {isLoadingIsps && <LoadingSpinner />}
             </Label>
             <Combobox
@@ -309,40 +314,42 @@ export function LocationProxyDialog({
               onValueChange={setSelectedIsp}
               placeholder={
                 !selectedCountry
-                  ? "Select a country first"
+                  ? t("locationProxy.selectCountryFirst")
                   : isLoadingIsps
-                    ? "Loading ISPs..."
+                    ? t("locationProxy.loadingIsps")
                     : ispOptions.length === 0
-                      ? "No ISPs available"
-                      : "Select ISP"
+                      ? t("locationProxy.noIsps")
+                      : t("locationProxy.selectIsp")
               }
-              searchPlaceholder="Search ISPs..."
+              searchPlaceholder={t("locationProxy.searchIsps")}
               disabled={!selectedCountry || isLoadingIsps}
             />
           </div>
 
           {/* Name */}
           <div className="space-y-2">
-            <Label>Name</Label>
+            <Label>{t("locationProxy.nameLabel")}</Label>
             <Input
               value={proxyName}
               onChange={(e) => {
                 setProxyName(e.target.value);
               }}
-              placeholder="Proxy name"
+              placeholder={t("locationProxy.namePlaceholder")}
             />
           </div>
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={handleClose}>
-            Cancel
+            {t("common.buttons.cancel")}
           </Button>
           <RippleButton
             onClick={handleCreate}
             disabled={!selectedCountry || !proxyName.trim() || isCreating}
           >
-            {isCreating ? "Creating..." : "Create"}
+            {isCreating
+              ? t("locationProxy.creatingButton")
+              : t("locationProxy.createButton")}
           </RippleButton>
         </DialogFooter>
       </DialogContent>

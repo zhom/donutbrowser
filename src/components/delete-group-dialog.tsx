@@ -56,11 +56,13 @@ export function DeleteGroupDialog({
       setAssociatedProfiles(groupProfiles);
     } catch (err) {
       console.error("Failed to load associated profiles:", err);
-      setError(err instanceof Error ? err.message : "Failed to load profiles");
+      setError(
+        err instanceof Error ? err.message : t("groups.loadProfilesFailed"),
+      );
     } finally {
       setIsLoading(false);
     }
-  }, [group]);
+  }, [group, t]);
 
   useEffect(() => {
     if (isOpen && group) {
@@ -90,19 +92,19 @@ export function DeleteGroupDialog({
       // Delete the group
       await invoke("delete_profile_group", { groupId: group.id });
 
-      toast.success("Group deleted successfully");
+      toast.success(t("groups.deleteSuccess"));
       onGroupDeleted();
       onClose();
     } catch (err) {
       console.error("Failed to delete group:", err);
       const errorMessage =
-        err instanceof Error ? err.message : "Failed to delete group";
+        err instanceof Error ? err.message : t("groups.deleteFailed");
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
       setIsDeleting(false);
     }
-  }, [group, deleteAction, associatedProfiles, onGroupDeleted, onClose]);
+  }, [group, deleteAction, associatedProfiles, onGroupDeleted, onClose, t]);
 
   const handleClose = useCallback(() => {
     setError(null);
@@ -115,17 +117,14 @@ export function DeleteGroupDialog({
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Delete Group</DialogTitle>
-          <DialogDescription>
-            This action cannot be undone. This will permanently delete the group
-            "{group?.name}".
-          </DialogDescription>
+          <DialogTitle>{t("groups.deleteTitle")}</DialogTitle>
+          <DialogDescription>{t("groups.deleteDescription")}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           {isLoading ? (
             <div className="text-sm text-muted-foreground">
-              Loading associated profiles...
+              {t("groups.loadingProfiles")}
             </div>
           ) : (
             <>
@@ -133,7 +132,9 @@ export function DeleteGroupDialog({
                 <div className="space-y-3">
                   <div className="space-y-2">
                     <Label>
-                      Associated Profiles ({associatedProfiles.length})
+                      {t("groups.associatedProfiles", {
+                        count: associatedProfiles.length,
+                      })}
                     </Label>
                     <ScrollArea className="h-32 w-full border rounded-md p-3">
                       <div className="space-y-1">
@@ -147,7 +148,7 @@ export function DeleteGroupDialog({
                   </div>
 
                   <div className="space-y-3">
-                    <Label>What should happen to these profiles?</Label>
+                    <Label>{t("groups.whatToDoWithProfiles")}</Label>
                     <RadioGroup
                       value={deleteAction}
                       onValueChange={(value) => {
@@ -166,7 +167,7 @@ export function DeleteGroupDialog({
                           htmlFor="delete"
                           className="text-sm text-destructive"
                         >
-                          Delete profiles along with the group
+                          {t("groups.deleteAlongWithGroup")}
                         </Label>
                       </div>
                     </RadioGroup>
@@ -176,7 +177,7 @@ export function DeleteGroupDialog({
 
               {associatedProfiles.length === 0 && !isLoading && (
                 <div className="text-sm text-muted-foreground">
-                  This group has no associated profiles.
+                  {t("groups.noAssociatedProfiles")}
                 </div>
               )}
             </>
@@ -195,7 +196,7 @@ export function DeleteGroupDialog({
             onClick={handleClose}
             disabled={isDeleting}
           >
-            Cancel
+            {t("common.buttons.cancel")}
           </RippleButton>
           <LoadingButton
             variant="destructive"
@@ -203,10 +204,9 @@ export function DeleteGroupDialog({
             onClick={() => void handleDelete()}
             disabled={isLoading}
           >
-            Delete Group
-            {deleteAction === "delete" &&
-              associatedProfiles.length > 0 &&
-              " & Profiles"}
+            {deleteAction === "delete" && associatedProfiles.length > 0
+              ? t("groups.deleteGroupAndProfiles")
+              : t("groups.deleteGroup")}
           </LoadingButton>
         </DialogFooter>
       </DialogContent>

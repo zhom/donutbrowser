@@ -60,6 +60,14 @@ donutbrowser/
 - Don't duplicate code unless there's a very good reason; keep the same logic in one place
 - Anytime you make changes that affect copy or add new text, it has to be reflected in all translation files
 
+## Translations (mandatory)
+
+- Never write user-facing strings as raw English literals in JSX, toast messages, dialog titles/descriptions, button labels, placeholders, table headers, tooltips, or empty-state text. Always go through `t("namespace.key")` from `useTranslation()`.
+- This applies to every component under `src/` — including new ones. If a component doesn't already import `useTranslation`, add it.
+- Adding a new string means adding the key to ALL seven locale files in `src/i18n/locales/` (en, es, fr, ja, pt, ru, zh) — not just `en.json`. The English version alone is incomplete work.
+- Reuse existing keys (`common.buttons.*`, `common.labels.*`, `createProfile.*`, etc.) before creating new namespaces. Check `en.json` first.
+- Strings excluded from this rule: `console.log/warn/error`, dev-only debug labels, internal IDs, CSS class names, type names. If unsure whether a string renders to the user, assume it does and translate it.
+
 ## Singletons
 
 - If there is a global singleton of a struct, only use it inside a method while properly initializing it, unless explicitly specified otherwise

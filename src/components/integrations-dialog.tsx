@@ -148,7 +148,7 @@ export function IntegrationsDialog({
           settings: { ...settings, api_enabled: true },
         });
         setSettings(next);
-        showSuccessToast(`API server started on port ${port}`);
+        showSuccessToast(t("integrations.apiStarted", { port }));
       } else {
         await invoke("stop_api_server");
         setApiServerPort(null);
@@ -156,12 +156,13 @@ export function IntegrationsDialog({
           settings: { ...settings, api_enabled: false, api_token: null },
         });
         setSettings(next);
-        showSuccessToast("API server stopped");
+        showSuccessToast(t("integrations.apiStopped"));
       }
     } catch (e) {
       console.error("Failed to toggle API:", e);
-      showErrorToast("Failed to toggle API server", {
-        description: e instanceof Error ? e.message : "Unknown error",
+      showErrorToast(t("integrations.apiToggleFailed"), {
+        description:
+          e instanceof Error ? e.message : t("integrations.apiUnknownError"),
       });
     } finally {
       setIsApiStarting(false);
@@ -178,7 +179,7 @@ export function IntegrationsDialog({
         });
         setSettings(next);
         void loadMcpConfig();
-        showSuccessToast(`MCP server started on port ${port}`);
+        showSuccessToast(t("integrations.mcpStarted", { port }));
       } else {
         await invoke("stop_mcp_server");
         const next = await invoke<AppSettings>("save_app_settings", {
@@ -186,12 +187,13 @@ export function IntegrationsDialog({
         });
         setSettings(next);
         setMcpConfig(null);
-        showSuccessToast("MCP server stopped");
+        showSuccessToast(t("integrations.mcpStopped"));
       }
     } catch (e) {
       console.error("Failed to toggle MCP server:", e);
-      showErrorToast("Failed to toggle MCP server", {
-        description: e instanceof Error ? e.message : "Unknown error",
+      showErrorToast(t("integrations.mcpToggleFailed"), {
+        description:
+          e instanceof Error ? e.message : t("integrations.apiUnknownError"),
       });
     } finally {
       setIsMcpStarting(false);
@@ -207,14 +209,14 @@ export function IntegrationsDialog({
     >
       <DialogContent className="max-w-xl max-h-[80vh] my-8 flex flex-col">
         <DialogHeader className="shrink-0">
-          <DialogTitle>Integrations</DialogTitle>
+          <DialogTitle>{t("integrations.title")}</DialogTitle>
         </DialogHeader>
 
         <div className="overflow-y-auto flex-1 min-h-0">
           <Tabs defaultValue="api" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="api">Local API</TabsTrigger>
-              <TabsTrigger value="mcp">MCP (AI Assistants)</TabsTrigger>
+              <TabsTrigger value="api">{t("integrations.tabApi")}</TabsTrigger>
+              <TabsTrigger value="mcp">{t("integrations.tabMcp")}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="api" className="space-y-4 mt-4">
@@ -230,10 +232,10 @@ export function IntegrationsDialog({
                     htmlFor="api-enabled"
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                   >
-                    Enable Local API Server
+                    {t("integrations.apiEnableLabel")}
                   </Label>
                   <p className="text-xs text-muted-foreground">
-                    Allow managing profiles, groups, and proxies via REST API.
+                    {t("integrations.apiEnableDescription")}
                   </p>
                 </div>
               </div>
@@ -241,7 +243,9 @@ export function IntegrationsDialog({
               {settings.api_enabled && (
                 <div className="space-y-4 p-4 rounded-md border bg-muted/40">
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium">Port</Label>
+                    <Label className="text-sm font-medium">
+                      {t("integrations.apiPortLabel")}
+                    </Label>
                     <div className="flex items-center space-x-2">
                       <Button
                         size="sm"
@@ -251,8 +255,10 @@ export function IntegrationsDialog({
                         onClick={async () => {
                           const port = settings.api_port;
                           if (port < 1 || port > 65535) {
-                            showErrorToast("Invalid port", {
-                              description: "Port must be between 1 and 65535",
+                            showErrorToast(t("integrations.apiInvalidPort"), {
+                              description: t(
+                                "integrations.apiInvalidPortDescription",
+                              ),
                             });
                             return;
                           }
@@ -270,20 +276,28 @@ export function IntegrationsDialog({
                             );
                             setApiServerPort(actualPort);
                             if (actualPort !== port) {
-                              showErrorToast(`Port ${port} is already in use`, {
-                                description: `Server started on fallback port ${actualPort}`,
-                              });
+                              showErrorToast(
+                                t("integrations.apiPortInUse", { port }),
+                                {
+                                  description: t(
+                                    "integrations.apiFallbackPort",
+                                    { port: actualPort },
+                                  ),
+                                },
+                              );
                             } else {
                               showSuccessToast(
-                                `API server running on port ${actualPort}`,
+                                t("integrations.apiRunning", {
+                                  port: actualPort,
+                                }),
                               );
                             }
                           } catch (e) {
-                            showErrorToast("Failed to start API server", {
+                            showErrorToast(t("integrations.apiStartFailed"), {
                               description:
                                 e instanceof Error
                                   ? e.message
-                                  : "Unknown error",
+                                  : t("integrations.apiUnknownError"),
                             });
                           } finally {
                             setIsApiStarting(false);
@@ -315,7 +329,7 @@ export function IntegrationsDialog({
 
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">
-                      Authentication Token
+                      {t("integrations.apiTokenLabel")}
                     </Label>
                     <div className="flex items-center space-x-2">
                       <div className="relative flex-1">
@@ -343,11 +357,13 @@ export function IntegrationsDialog({
                       </div>
                       <CopyToClipboard
                         text={settings.api_token ?? ""}
-                        successMessage="Token copied"
+                        successMessage={t("integrations.tokenCopied")}
                       />
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Include in Authorization header: Bearer {"<token>"}
+                      {t("integrations.apiTokenHint", {
+                        tokenSlot: "<token>",
+                      })}
                     </p>
                   </div>
                 </div>
@@ -367,13 +383,13 @@ export function IntegrationsDialog({
                     htmlFor="mcp-enabled"
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                   >
-                    Enable MCP Server (Model Context Protocol)
+                    {t("integrations.mcpEnableLabel")}
                   </Label>
                   <p className="text-xs text-muted-foreground">
-                    Allow AI assistants like Claude Desktop to control browsers.
+                    {t("integrations.mcpEnableDescription")}
                     {!termsAccepted && (
                       <span className="ml-1 text-warning">
-                        (Accept Wayfern terms in Settings first)
+                        {t("integrations.mcpAcceptTermsFirst")}
                       </span>
                     )}
                   </p>

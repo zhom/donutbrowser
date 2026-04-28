@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { LuCheck, LuChevronsUpDown, LuDownload } from "react-icons/lu";
 import { LoadingButton } from "@/components/loading-button";
 import { Badge } from "@/components/ui/badge";
@@ -37,11 +38,14 @@ export function ReleaseTypeSelector({
   availableReleaseTypes,
   isDownloading,
   onDownload,
-  placeholder = "Select release type...",
+  placeholder,
   showDownloadButton = true,
   downloadedVersions = [],
 }: ReleaseTypeSelectorProps) {
+  const { t } = useTranslation();
   const [popoverOpen, setPopoverOpen] = useState(false);
+  const effectivePlaceholder =
+    placeholder ?? t("releaseTypeSelector.placeholder");
 
   const releaseOptions = [
     ...(availableReleaseTypes.stable
@@ -64,9 +68,9 @@ export function ReleaseTypeSelector({
 
   const selectedDisplayText = selectedReleaseType
     ? selectedReleaseType === "stable"
-      ? "Stable"
-      : "Nightly"
-    : placeholder;
+      ? t("releaseTypeSelector.stable")
+      : t("releaseTypeSelector.nightly")
+    : effectivePlaceholder;
 
   const selectedVersion =
     selectedReleaseType === "stable"
@@ -95,7 +99,9 @@ export function ReleaseTypeSelector({
           </PopoverTrigger>
           <PopoverContent className="p-0">
             <Command>
-              <CommandEmpty>No release types available.</CommandEmpty>
+              <CommandEmpty>
+                {t("releaseTypeSelector.noReleaseTypes")}
+              </CommandEmpty>
               <CommandList>
                 <CommandGroup>
                   {releaseOptions.map((option) => {
@@ -130,7 +136,7 @@ export function ReleaseTypeSelector({
                           <span className="capitalize">{option.type}</span>
                           {option.type === "nightly" && (
                             <Badge variant="secondary" className="text-xs">
-                              Nightly
+                              {t("releaseTypeSelector.nightly")}
                             </Badge>
                           )}
                           <Badge variant="outline" className="text-xs">
@@ -138,7 +144,7 @@ export function ReleaseTypeSelector({
                           </Badge>
                           {isDownloaded && (
                             <Badge variant="default" className="text-xs">
-                              Downloaded
+                              {t("releaseTypeSelector.downloaded")}
                             </Badge>
                           )}
                         </div>
@@ -162,7 +168,7 @@ export function ReleaseTypeSelector({
             </Badge>
             {downloadedVersions.includes(releaseOptions[0].version) && (
               <Badge variant="default" className="text-xs">
-                Downloaded
+                {t("releaseTypeSelector.downloaded")}
               </Badge>
             )}
           </div>
@@ -182,7 +188,9 @@ export function ReleaseTypeSelector({
             className="w-full"
           >
             <LuDownload className="mr-2 w-4 h-4" />
-            {isDownloading ? "Downloading..." : "Download Browser"}
+            {isDownloading
+              ? t("releaseTypeSelector.downloading")
+              : t("releaseTypeSelector.downloadBrowser")}
           </LoadingButton>
         )}
     </div>

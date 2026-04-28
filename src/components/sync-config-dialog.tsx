@@ -126,7 +126,7 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
 
   const handleTestConnection = useCallback(async () => {
     if (!serverUrl) {
-      showErrorToast("Please enter a server URL");
+      showErrorToast(t("sync.config.serverUrlRequired"));
       return;
     }
 
@@ -137,18 +137,18 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
       const response = await fetch(healthUrl);
       if (response.ok) {
         setConnectionStatus("connected");
-        showSuccessToast("Connection successful!");
+        showSuccessToast(t("sync.config.connectionSuccess"));
       } else {
         setConnectionStatus("error");
-        showErrorToast("Server responded with an error");
+        showErrorToast(t("sync.config.serverError"));
       }
     } catch {
       setConnectionStatus("error");
-      showErrorToast("Failed to connect to server");
+      showErrorToast(t("sync.config.connectFailed"));
     } finally {
       setIsTesting(false);
     }
-  }, [serverUrl]);
+  }, [serverUrl, t]);
 
   const handleSave = useCallback(async () => {
     setIsSaving(true);
@@ -162,15 +162,15 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
       } catch (e) {
         console.error("Failed to restart sync service:", e);
       }
-      showSuccessToast("Sync settings saved");
+      showSuccessToast(t("sync.config.settingsSaved"));
       onClose();
     } catch (error) {
       console.error("Failed to save sync settings:", error);
-      showErrorToast("Failed to save settings");
+      showErrorToast(t("sync.config.saveFailed"));
     } finally {
       setIsSaving(false);
     }
-  }, [serverUrl, token, onClose]);
+  }, [serverUrl, token, onClose, t]);
 
   const handleDisconnect = useCallback(async () => {
     setIsSaving(true);
@@ -187,14 +187,14 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
       setServerUrl("");
       setToken("");
       setConnectionStatus("unknown");
-      showSuccessToast("Sync disconnected");
+      showSuccessToast(t("sync.config.disconnected"));
     } catch (error) {
       console.error("Failed to disconnect:", error);
-      showErrorToast("Failed to disconnect");
+      showErrorToast(t("sync.config.disconnectFailed"));
     } finally {
       setIsSaving(false);
     }
-  }, []);
+  }, [t]);
 
   const handleOpenLogin = useCallback(async () => {
     try {

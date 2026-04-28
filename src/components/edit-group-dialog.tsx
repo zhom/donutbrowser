@@ -2,6 +2,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { LoadingButton } from "@/components/loading-button";
 import {
@@ -30,6 +31,7 @@ export function EditGroupDialog({
   group,
   onGroupUpdated,
 }: EditGroupDialogProps) {
+  const { t } = useTranslation();
   const [groupName, setGroupName] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,19 +56,19 @@ export function EditGroupDialog({
         name: groupName.trim(),
       });
 
-      toast.success("Group updated successfully");
+      toast.success(t("groups.updateSuccess"));
       onGroupUpdated(updatedGroup);
       onClose();
     } catch (err) {
       console.error("Failed to update group:", err);
       const errorMessage =
-        err instanceof Error ? err.message : "Failed to update group";
+        err instanceof Error ? err.message : t("groups.updateFailed");
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
       setIsUpdating(false);
     }
-  }, [group, groupName, onGroupUpdated, onClose]);
+  }, [group, groupName, onGroupUpdated, onClose, t]);
 
   const handleClose = useCallback(() => {
     setError(null);
@@ -77,18 +79,16 @@ export function EditGroupDialog({
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Edit Group</DialogTitle>
-          <DialogDescription>
-            Update the name of the group "{group?.name}".
-          </DialogDescription>
+          <DialogTitle>{t("groups.editTitle")}</DialogTitle>
+          <DialogDescription>{t("groups.editDescription")}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="group-name">Group Name</Label>
+            <Label htmlFor="group-name">{t("groups.form.name")}</Label>
             <Input
               id="group-name"
-              placeholder="Enter group name..."
+              placeholder={t("groups.form.namePlaceholder")}
               value={groupName}
               onChange={(e) => {
                 setGroupName(e.target.value);
@@ -115,14 +115,14 @@ export function EditGroupDialog({
             onClick={handleClose}
             disabled={isUpdating}
           >
-            Cancel
+            {t("common.buttons.cancel")}
           </RippleButton>
           <LoadingButton
             isLoading={isUpdating}
             onClick={() => void handleUpdate()}
             disabled={!groupName.trim() || groupName === group?.name}
           >
-            Update Group
+            {t("groups.edit")}
           </LoadingButton>
         </DialogFooter>
       </DialogContent>

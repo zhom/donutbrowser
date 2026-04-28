@@ -28,7 +28,9 @@
       "refresh": "更新",
       "loading": "読み込み中...",
       "saveSettings": "設定を保存",
-      "moreInfo": "詳細"
+      "moreInfo": "詳細",
+      "downloading": "ダウンロード中...",
+      "minimize": "最小化"
     },
     "status": {
       "active": "アクティブ",
@@ -56,7 +58,9 @@
       "default": "デフォルト",
       "custom": "カスタム",
       "optional": "任意",
-      "required": "必須"
+      "required": "必須",
+      "unknownProfile": "不明",
+      "mode": "モード"
     },
     "time": {
       "days": "日",
@@ -64,7 +68,26 @@
       "minutes": "分",
       "seconds": "秒",
       "remaining": "残り"
-    }
+    },
+    "aria": {
+      "selectAll": "すべて選択",
+      "selectRow": "行を選択",
+      "selectProfile": "プロファイルを選択"
+    },
+    "keys": {
+      "escape": "Esc"
+    },
+    "errors": {
+      "unknown": "不明なエラーが発生しました"
+    },
+    "window": {
+      "minimize": "最小化"
+    },
+    "commandPalette": {
+      "title": "コマンドパレット",
+      "description": "実行するコマンドを検索..."
+    },
+    "noResults": "結果が見つかりません。"
   },
   "settings": {
     "title": "設定",
@@ -85,7 +108,8 @@
       "title": "言語",
       "description": "アプリケーションインターフェースの言語を選択します。",
       "systemDefault": "システムデフォルト",
-      "selectLanguage": "言語を選択"
+      "selectLanguage": "言語を選択",
+      "interface": "インターフェース言語"
     },
     "defaultBrowser": {
       "title": "デフォルトブラウザ",
@@ -100,7 +124,8 @@
       "microphone": "マイク",
       "microphoneDescription": "ブラウザアプリケーションのマイクアクセス",
       "camera": "カメラ",
-      "cameraDescription": "ブラウザアプリケーションのカメラアクセス"
+      "cameraDescription": "ブラウザアプリケーションのカメラアクセス",
+      "accessRequested": "{{permission}} アクセスを要求しました"
     },
     "integrations": {
       "title": "統合",
@@ -134,7 +159,8 @@
     "advanced": {
       "title": "詳細設定",
       "clearCache": "すべてのバージョンキャッシュをクリア",
-      "clearCacheDescription": "キャッシュされたすべてのブラウザバージョンデータをクリアし、すべてのブラウザバージョンをソースから更新します。これにより、すべてのブラウザのバージョン情報が強制的に再ダウンロードされます。"
+      "clearCacheDescription": "キャッシュされたすべてのブラウザバージョンデータをクリアし、すべてのブラウザバージョンをソースから更新します。これにより、すべてのブラウザのバージョン情報が強制的に再ダウンロードされます。",
+      "clearCacheFailed": "キャッシュのクリアに失敗しました"
     },
     "disableAutoUpdates": "アプリの自動更新を無効にする",
     "disableAutoUpdatesDescription": "Donut Browserの自動更新確認・インストールを無効にします。ブラウザの更新には影響しません。"
@@ -169,7 +195,8 @@
       "note": "メモ",
       "group": "グループ",
       "proxy": "プロキシ / VPN",
-      "lastLaunch": "最終起動"
+      "lastLaunch": "最終起動",
+      "empty": "プロファイルが見つかりません。"
     },
     "actions": {
       "launch": "起動",
@@ -205,7 +232,30 @@
     "ephemeral": "一時的",
     "ephemeralDescription": "ブラウザはプロファイルデータをディスクではなくメモリに書き込むよう強制されます。ブラウザを閉じるとデータは削除されます。",
     "ephemeralBadge": "一時的",
-    "ephemeralAlpha": "Alpha"
+    "ephemeralAlpha": "Alpha",
+    "bulkDelete": {
+      "title": "選択したプロファイルを削除",
+      "description": "この操作は取り消せません。{{count}} 個のプロファイルと関連するすべてのデータが永久に削除されます。",
+      "confirmButton": "{{count}} 個のプロファイルを削除"
+    },
+    "note": {
+      "empty": "メモなし",
+      "placeholder": "メモを追加..."
+    },
+    "aria": {
+      "profileInfo": "プロファイル情報"
+    },
+    "delete": {
+      "title": "プロファイルを削除",
+      "description": "この操作は取り消せません。プロファイル「{{profileName}}」と関連するすべてのデータが永久に削除されます。",
+      "confirmButton": "プロファイルを削除"
+    },
+    "actionBar": {
+      "assignToGroup": "グループに割り当て",
+      "assignProxy": "プロキシを割り当て",
+      "assignExtensionGroup": "拡張機能グループを割り当て",
+      "copyCookies": "Cookieをコピー"
+    }
   },
   "createProfile": {
     "title": "新しいプロファイルを作成",
@@ -228,7 +278,10 @@
       "title": "プロキシ / VPN",
       "addProxy": "プロキシを追加",
       "noProxy": "プロキシ / VPNなし",
-      "noProxiesAvailable": "利用可能なプロキシまたはVPNがありません。このプロファイルのトラフィックをルーティングするために追加してください。"
+      "noProxiesAvailable": "利用可能なプロキシまたはVPNがありません。このプロファイルのトラフィックをルーティングするために追加してください。",
+      "search": "プロキシまたは VPN を検索...",
+      "notFound": "プロキシまたは VPN が見つかりません。",
+      "searchWithCountries": "プロキシ、VPN、または国を検索..."
     },
     "launchHook": {
       "label": "起動フックURL",
@@ -248,7 +301,8 @@
     "chromiumSubtitle": "Wayfern搭載",
     "firefoxLabel": "Firefox",
     "firefoxSubtitle": "Camoufox搭載",
-    "camoufoxWarning": "Firefox（Camoufox）はサードパーティの組織によって管理されています。本番環境での使用にはChromiumをご利用ください。"
+    "camoufoxWarning": "Firefox（Camoufox）はサードパーティの組織によって管理されています。本番環境での使用にはChromiumをご利用ください。",
+    "platformUnavailable": "{{browser}} はまだお使いのプラットフォームで利用できません。"
   },
   "deleteDialog": {
     "title": "プロファイルを削除",
@@ -259,7 +313,31 @@
   },
   "proxies": {
     "title": "プロキシ",
-    "management": "プロキシ & VPN",
+    "management": {
+      "description": "プロキシと VPN の構成を管理し、プロファイル間で再利用します",
+      "tabProxies": "プロキシ",
+      "tabVpns": "VPN",
+      "create": "作成",
+      "loading": "プロキシを読み込み中...",
+      "noneCreated": "プロキシはまだありません。上のボタンから最初のプロキシを作成してください。",
+      "usage": "使用状況",
+      "syncCol": "同期",
+      "syncCannotDisable": "このプロキシが同期されたプロファイルで使用されている間は同期を無効にできません",
+      "enableSync": "同期を有効にする",
+      "disableSync": "同期を無効にする",
+      "editProxy": "プロキシを編集",
+      "deleteProxy": "プロキシを削除",
+      "cannotDelete_one": "削除できません: {{count}} プロファイルで使用中",
+      "cannotDelete_other": "削除できません: {{count}} プロファイルで使用中",
+      "syncEnabled": "同期が有効になりました",
+      "syncDisabled": "同期が無効になりました",
+      "updateSyncFailed": "同期の更新に失敗しました",
+      "deleteSuccess": "プロキシを削除しました",
+      "deleteFailed": "プロキシの削除に失敗しました",
+      "deleteTitle": "プロキシを削除",
+      "deleteDescription": "この操作は取り消せません。プロキシ「{{name}}」は完全に削除されます。",
+      "title": "プロキシと VPN"
+    },
     "add": "プロキシを追加",
     "edit": "プロキシを編集",
     "delete": "プロキシを削除",
@@ -280,7 +358,12 @@
       "password": "パスワード",
       "passwordPlaceholder": "任意",
       "cipher": "暗号方式",
-      "cipherPlaceholder": "aes-256-gcm"
+      "cipherPlaceholder": "aes-256-gcm",
+      "nameRequired": "プロキシ名が必要です",
+      "hostPortRequired": "ホストとポートが必要です",
+      "ssCipherRequired": "Shadowsocks には暗号とパスワードが必要です",
+      "selectType": "プロキシの種類を選択",
+      "saveFailed": "プロキシの保存に失敗しました: {{error}}"
     },
     "types": {
       "http": "HTTP",
@@ -318,6 +401,45 @@
     "sync": {
       "enabled": "同期有効",
       "disabled": "同期無効"
+    },
+    "exportDialog": {
+      "title": "プロキシをエクスポート",
+      "description": "プロキシ設定をファイルにエクスポートします",
+      "format": "エクスポート形式",
+      "json": "JSON",
+      "txt": "TXT (URL 形式)",
+      "preview": "プレビュー",
+      "noProxies": "エクスポートするプロキシがありません",
+      "downloaded": "{{filename}} をダウンロードしました",
+      "failed": "プロキシのエクスポートに失敗しました",
+      "copied": "コピーしました"
+    },
+    "importDialog": {
+      "title": "プロキシをインポート",
+      "descDropzone": "JSON または TXT ファイルからプロキシをインポート",
+      "descPreview": "インポートするプロキシを確認",
+      "descAmbiguous": "一部のプロキシに曖昧な形式があります。正しい形式を選択してください。",
+      "descResult": "インポートが完了しました",
+      "dropzonePrompt": "プロキシ構成ファイルをドロップしてください",
+      "dropzoneFormats": "(.json, .txt)",
+      "pasteHint": "{{modKey}}+V でクリップボードから貼り付け",
+      "wrongFileType": ".json または .txt ファイルをドロップしてください",
+      "fileReadError": "ファイルの読み込みに失敗しました",
+      "fileProcessError": "ファイルの処理に失敗しました",
+      "noValidProxies": "ファイルに有効なプロキシが見つかりませんでした",
+      "namePrefix": "名前のプレフィックス",
+      "namePrefixDefault": "Imported",
+      "namePrefixHint": "プロキシは「{{prefix}} Proxy 1」「{{prefix}} Proxy 2」などの名前になります。",
+      "proxiesToImport": "インポートするプロキシ ({{count}})",
+      "invalidCount": "({{count}} 個無効)",
+      "ambiguousIntro": "以下のプロキシは曖昧な形式です。それぞれ正しい解釈を選択してください。",
+      "imported": "インポート済み:",
+      "skippedDuplicates": "スキップ (重複):",
+      "errors": "エラー",
+      "importButton": "{{count}} 個のプロキシをインポート",
+      "continueButton": "続ける",
+      "doneButton": "完了",
+      "failed": "プロキシのインポートに失敗しました"
     }
   },
   "groups": {
@@ -343,7 +465,30 @@
     "sync": {
       "enabled": "同期有効",
       "disabled": "同期無効"
-    }
+    },
+    "createTitle": "新しいグループを作成",
+    "createDescription": "ブラウザプロファイルを整理する新しいグループを作成します。",
+    "editTitle": "グループを編集",
+    "editDescription": "グループの名前を更新します。",
+    "createSuccess": "グループを正常に作成しました",
+    "createFailed": "グループの作成に失敗しました",
+    "updateSuccess": "グループを正常に更新しました",
+    "updateFailed": "グループの更新に失敗しました",
+    "deleteTitle": "グループを削除",
+    "deleteDescription": "この操作は取り消せません。グループが完全に削除されます。",
+    "deleteSuccess": "グループを正常に削除しました",
+    "deleteFailed": "グループの削除に失敗しました",
+    "loadingProfiles": "関連するプロファイルを読み込んでいます...",
+    "associatedProfiles": "関連プロファイル ({{count}})",
+    "whatToDoWithProfiles": "これらのプロファイルをどうしますか？",
+    "moveToDefaultOption": "プロファイルをデフォルトグループに移動",
+    "deleteAlongWithGroup": "プロファイルもグループと一緒に削除",
+    "noAssociatedProfiles": "このグループには関連するプロファイルがありません。",
+    "deleteGroup": "グループを削除",
+    "deleteGroupAndProfiles": "グループとプロファイルを削除",
+    "loadProfilesFailed": "プロファイルの読み込みに失敗しました",
+    "unknownGroup": "不明なグループ",
+    "profileGroupsAriaLabel": "プロファイルグループ"
   },
   "sync": {
     "mode": {
@@ -366,7 +511,16 @@
       "configureService": "同期サービスを設定"
     },
     "title": "同期サービス",
-    "config": "同期設定",
+    "config": {
+      "serverUrlRequired": "サーバーURLを入力してください",
+      "connectionSuccess": "接続に成功しました!",
+      "serverError": "サーバーがエラーで応答しました",
+      "connectFailed": "サーバーへの接続に失敗しました",
+      "settingsSaved": "同期設定を保存しました",
+      "saveFailed": "設定の保存に失敗しました",
+      "disconnected": "同期を切断しました",
+      "disconnectFailed": "切断に失敗しました"
+    },
     "serverUrl": "サーバーURL",
     "serverUrlPlaceholder": "https://sync.example.com",
     "token": "同期トークン",
@@ -410,6 +564,12 @@
       "profileLockedShort": "使用中",
       "cannotLaunchLocked": "起動できません — {{email}} がプロファイルを使用中です",
       "createdBy": "{{email}} が作成"
+    },
+    "disabled": "無効",
+    "toast": {
+      "profileSynced": "プロファイル '{{name}}' を同期しました",
+      "profileSyncFailed": "プロファイル '{{name}}' の同期に失敗しました",
+      "profileSyncFailedWithError": "プロファイル '{{name}}' の同期に失敗しました: {{error}}"
     }
   },
   "integrations": {
@@ -447,7 +607,31 @@
       "removedFromClaudeCode": "Claude Code から削除しました",
       "config": "MCP設定",
       "copyConfig": "設定をコピー"
-    }
+    },
+    "tabApi": "ローカル API",
+    "tabMcp": "MCP (AI アシスタント)",
+    "apiEnableLabel": "ローカル API サーバーを有効にする",
+    "apiEnableDescription": "REST API でプロファイル、グループ、プロキシを管理できます。",
+    "apiPortLabel": "ポート",
+    "apiTokenLabel": "認証トークン",
+    "apiTokenHint": "Authorization ヘッダーに含めてください: Bearer {{tokenSlot}}",
+    "apiInvalidPort": "無効なポート",
+    "apiInvalidPortDescription": "ポートは 1 から 65535 の間で指定してください",
+    "apiPortInUse": "ポート {{port}} は既に使用中です",
+    "apiFallbackPort": "フォールバックポート {{port}} でサーバーを起動しました",
+    "apiStarted": "API サーバーをポート {{port}} で起動しました",
+    "apiRunning": "API サーバーはポート {{port}} で実行中",
+    "apiStopped": "API サーバーを停止しました",
+    "apiToggleFailed": "API サーバーの切り替えに失敗しました",
+    "apiStartFailed": "API サーバーの起動に失敗しました",
+    "apiUnknownError": "不明なエラー",
+    "tokenCopied": "トークンをコピーしました",
+    "mcpEnableLabel": "MCP サーバーを有効にする (Model Context Protocol)",
+    "mcpEnableDescription": "Claude Desktop などの AI アシスタントがブラウザを制御できます。",
+    "mcpAcceptTermsFirst": "(設定で先に Wayfern の規約に同意してください)",
+    "mcpStarted": "MCP サーバーをポート {{port}} で起動しました",
+    "mcpStopped": "MCP サーバーを停止しました",
+    "mcpToggleFailed": "MCP サーバーの切り替えに失敗しました"
   },
   "import": {
     "title": "プロファイルをインポート",
@@ -465,7 +649,9 @@
       "fingerprint": {
         "title": "フィンガープリント",
         "randomize": "起動時にランダム化",
-        "randomizeDescription": "ブラウザ起動時に新しいフィンガープリントを生成します。"
+        "randomizeDescription": "ブラウザ起動時に新しいフィンガープリントを生成します。",
+        "osCpuPlaceholder": "例: Intel Mac OS X 10.15",
+        "webglRendererPlaceholder": "例: llvmpipe など"
       },
       "os": {
         "title": "オペレーティングシステム",
@@ -499,7 +685,10 @@
       "fingerprint": {
         "title": "フィンガープリント",
         "randomize": "起動時にランダム化",
-        "randomizeDescription": "ブラウザ起動時に新しいフィンガープリントを生成します。"
+        "randomizeDescription": "ブラウザ起動時に新しいフィンガープリントを生成します。",
+        "platformPlaceholder": "例: Win32、MacIntel、Linux x86_64",
+        "timezoneOffsetPlaceholder": "例: EST (UTC-5) の場合は 300",
+        "webglRendererPlaceholder": "例: Intel(R) HD Graphics"
       },
       "os": {
         "title": "オペレーティングシステム",
@@ -534,13 +723,53 @@
       "selectCookies": "Cookieを選択",
       "allDomains": "すべてのドメイン",
       "selectedCount": "{{count}} 個のCookieを選択",
-      "selectedCount_plural": "{{count}} 個のCookieを選択"
+      "selectedCount_plural": "{{count}} 個のCookieを選択",
+      "dialogDescription_one": "ソースプロファイルから {{count}} 件の選択されたプロファイルへ Cookie をコピーします。",
+      "dialogDescription_other": "ソースプロファイルから {{count}} 件の選択されたプロファイルへ Cookie をコピーします。",
+      "sourceProfile": "ソースプロファイル",
+      "sourcePlaceholder": "Cookie をコピーするプロファイルを選択",
+      "running": "(実行中)",
+      "targetProfiles": "対象プロファイル ({{count}})",
+      "noOtherTargets": "他に Wayfern/Camoufox プロファイルが選択されていません",
+      "selectSourceFirst": "最初にソースプロファイルを選択してください",
+      "selectionStatus": "({{selected}} / {{total}} 選択中)",
+      "searchPlaceholder": "ドメインまたは Cookie を検索...",
+      "noMatching": "一致する Cookie が見つかりません",
+      "noFound": "Cookie が見つかりません",
+      "replaceNote": "同じ名前とドメインの既存 Cookie は置き換えられます。その他の Cookie はそのまま保持されます。",
+      "cannotCopyRunningOne": "Cookie をコピーできません: {{names}} はまだ実行中です",
+      "cannotCopyRunningMany": "Cookie をコピーできません: {{names}} はまだ実行中です",
+      "someErrors": "いくつかのエラーが発生しました: {{errors}}",
+      "successMessage": "{{copied}} 件の Cookie をコピーしました ({{replaced}} 件置換)",
+      "failedMessage": "Cookie のコピーに失敗しました: {{error}}",
+      "copyButton_one": "{{count}} 件の Cookie をコピー",
+      "copyButton_other": "{{count}} 件の Cookie をコピー",
+      "copyButtonEmpty": "Cookie をコピー"
     },
     "success": "Cookieが正常にコピーされました",
     "error": "Cookieのコピーに失敗しました",
     "management": {
       "title": "Cookie管理",
-      "menuItem": "Cookie管理"
+      "menuItem": "Cookie管理",
+      "tabImport": "インポート",
+      "tabExport": "エクスポート",
+      "importDescription": "Netscape または JSON 形式のファイルから Cookie をインポートします。",
+      "dropPrompt": "クリックして Cookie ファイルを選択",
+      "fileFormats": "(.txt, .cookies, または .json)",
+      "cookiesFound": "{{count}} 件の Cookie が見つかりました",
+      "importedSuccess": "{{imported}} 件の Cookie をインポートしました ({{replaced}} 件置換)",
+      "linesSkipped": "{{count}} 行をスキップ",
+      "fileReadError": "ファイルの読み込みに失敗しました",
+      "loadFailed": "Cookie の読み込みに失敗しました: {{error}}",
+      "cookiesLabel": "Cookies",
+      "selectionStatus": "({{selected}} / {{total}} 選択中)",
+      "selectAll": "すべて選択",
+      "deselectAll": "すべて解除",
+      "noCookies": "このプロファイルに Cookie はありません",
+      "doneButton": "完了",
+      "importButton": "インポート",
+      "exportButton": "エクスポート",
+      "backButton": "戻る"
     },
     "import": {
       "title": "Cookieのインポート",
@@ -623,7 +852,30 @@
     "maxLength": "{{max}} 文字以内で入力してください",
     "networkError": "ネットワークエラー。接続を確認してください。",
     "serverError": "サーバーエラー。後でもう一度お試しください。",
-    "unknownError": "不明なエラーが発生しました。もう一度お試しください。"
+    "unknownError": "不明なエラーが発生しました。もう一度お試しください。",
+    "noProfilesForUrl": "利用可能なプロファイルがありません。URLを開く前にプロファイルを作成してください。",
+    "updateCamoufoxConfigFailed": "camoufox設定の更新に失敗しました: {{error}}",
+    "updateWayfernConfigFailed": "wayfern設定の更新に失敗しました: {{error}}",
+    "createProfileFailed": "プロファイルの作成に失敗しました: {{error}}",
+    "launchBrowserFailed": "ブラウザの起動に失敗しました: {{error}}",
+    "cannotDeleteRunningProfile": "ブラウザの実行中にプロファイルを削除できません。先にブラウザを停止してください。",
+    "deleteProfileFailed": "プロファイルの削除に失敗しました: {{error}}",
+    "renameProfileFailed": "プロファイルの名前変更に失敗しました: {{error}}",
+    "killBrowserFailed": "ブラウザの停止に失敗しました: {{error}}",
+    "deleteSelectedProfilesFailed": "選択したプロファイルの削除に失敗しました: {{error}}",
+    "cookieCopyUnsupportedBrowser": "Cookieのコピーは Wayfern および Camoufox プロファイルでのみ機能します",
+    "updateSyncSettingsFailed": "同期設定の更新に失敗しました",
+    "cloneProfileFailed": "プロファイルの複製に失敗しました: {{error}}",
+    "loadSupportedBrowsersFailed": "サポートされているブラウザの読み込みに失敗しました",
+    "setupExtensionListenersFailed": "拡張機能イベントリスナーの設定に失敗しました: {{error}}",
+    "loadGroupsFailed": "グループの読み込みに失敗しました: {{error}}",
+    "setupGroupListenersFailed": "グループイベントリスナーの設定に失敗しました: {{error}}",
+    "loadProfilesFailed": "プロファイルの読み込みに失敗しました: {{error}}",
+    "setupProfileListenersFailed": "プロファイルイベントリスナーの設定に失敗しました: {{error}}",
+    "loadProxiesFailed": "プロキシの読み込みに失敗しました: {{error}}",
+    "setupProxyListenersFailed": "プロキシイベントリスナーの設定に失敗しました: {{error}}",
+    "loadVpnConfigsFailed": "VPN設定の読み込みに失敗しました: {{error}}",
+    "setupVpnListenersFailed": "VPNイベントリスナーの設定に失敗しました: {{error}}"
   },
   "browser": {
     "camoufox": "Camoufox",
@@ -729,7 +981,10 @@
     "brandVersion": "ブランドバージョン",
     "proFeature": "これはPro機能です",
     "generateFingerprint": "フィンガープリントを生成",
-    "refreshFingerprint": "フィンガープリントを更新"
+    "refreshFingerprint": "フィンガープリントを更新",
+    "canvasNoiseSeedPlaceholder": "キャンバスフィンガープリント用のシード文字列を入力",
+    "addFontsPlaceholder": "フォントを追加...",
+    "enterAsJson": "{{title}} を JSON で入力"
   },
   "warnings": {
     "windowResizeTitle": "カスタムウィンドウサイズ",
@@ -882,11 +1137,11 @@
   "dnsBlocklist": {
     "title": "DNSブロックリスト",
     "none": "なし",
-    "light": "Light",
-    "normal": "Normal",
+    "light": "ライト",
+    "normal": "標準",
     "pro": "Pro",
     "proPlus": "Pro++",
-    "ultimate": "Ultimate",
+    "ultimate": "アルティメット",
     "settingsDescription": "DNSブロックリストは、プロキシレベルで広告、トラッカー、マルウェアドメインをブロックします。リストは12時間ごとに自動的に更新されます。",
     "manageLists": "DNSブロックリストを管理",
     "refreshAll": "すべてのリストを更新",
@@ -895,5 +1150,407 @@
     "fresh": "最新",
     "stale": "期限切れ",
     "notCached": "キャッシュなし"
+  },
+  "vpns": {
+    "form": {
+      "titleEdit": "VPN を編集",
+      "titleCreate": "WireGuard VPN を作成",
+      "descEdit": "VPN 設定の名前を更新します。",
+      "descCreate": "WireGuard インターフェースとピアの詳細を入力してください。",
+      "name": "名前",
+      "namePlaceholder": "例: 自宅 WireGuard",
+      "privateKey": "秘密鍵",
+      "privateKeyPlaceholder": "Base64 エンコードされた秘密鍵",
+      "address": "アドレス",
+      "addressPlaceholder": "例: 10.0.0.2/24",
+      "dnsOptional": "DNS (任意)",
+      "dnsPlaceholder": "例: 1.1.1.1",
+      "mtuOptional": "MTU (任意)",
+      "mtuPlaceholder": "例: 1420",
+      "peerPublicKey": "ピア公開鍵",
+      "peerPublicKeyPlaceholder": "Base64 エンコードされたピア公開鍵",
+      "peerEndpoint": "ピアエンドポイント",
+      "peerEndpointPlaceholder": "例: vpn.example.com:51820",
+      "allowedIps": "許可された IP",
+      "allowedIpsPlaceholder": "例: 0.0.0.0/0, ::/0",
+      "keepaliveOptional": "永続キープアライブ (任意)",
+      "keepalivePlaceholder": "例: 25",
+      "presharedKeyOptional": "事前共有鍵 (任意)",
+      "presharedKeyPlaceholder": "Base64 エンコードされた事前共有鍵",
+      "updateButton": "VPN を更新",
+      "createButton": "VPN を作成",
+      "nameRequired": "VPN 名は必須です",
+      "privateKeyRequired": "秘密鍵は必須です",
+      "addressRequired": "アドレスは必須です",
+      "peerPublicKeyRequired": "ピア公開鍵は必須です",
+      "peerEndpointRequired": "ピアエンドポイントは必須です",
+      "updated": "VPN を正常に更新しました",
+      "created": "WireGuard VPN を正常に作成しました",
+      "updateFailed": "VPN の更新に失敗しました: {{error}}",
+      "createFailed": "VPN の作成に失敗しました: {{error}}"
+    },
+    "import": {
+      "title": "VPN 設定をインポート",
+      "descDropzone": "WireGuard (.conf) 設定ファイルをインポート",
+      "descPreview": "インポートする VPN 設定を確認してください",
+      "descResult": "VPN のインポートが完了しました",
+      "dropzonePrompt": "WireGuard .conf ファイルをここにドロップするか、クリックして参照してください",
+      "pasteHint": "{{modKey}}+V でクリップボードから貼り付け",
+      "invalidContent": "コンテンツは有効な VPN 設定ではないようです",
+      "fileReadError": "ファイルの読み込みに失敗しました",
+      "wrongFileType": "WireGuard .conf ファイルをドロップしてください",
+      "configurationLabel": "{{type}} 設定",
+      "endpointLabel": "エンドポイント: {{endpoint}}",
+      "vpnNameLabel": "VPN 名",
+      "vpnNamePlaceholder": "マイ VPN",
+      "configPreview": "設定プレビュー",
+      "importedSuccess": "VPN を正常にインポートしました",
+      "importFailed": "インポートに失敗しました",
+      "importButton": "VPN をインポート",
+      "doneButton": "完了",
+      "failedGeneric": "VPN 設定のインポートに失敗しました",
+      "defaultName": "{{type}} VPN"
+    },
+    "management": {
+      "loading": "VPN を読み込み中...",
+      "noneCreated": "VPN 構成はまだありません。上のボタンからインポートまたは作成してください。",
+      "editVpn": "VPN を編集",
+      "deleteVpn": "VPN を削除",
+      "cannotDelete_one": "削除できません: {{count}} プロファイルで使用中",
+      "cannotDelete_other": "削除できません: {{count}} プロファイルで使用中",
+      "syncCannotDisable": "この VPN が同期されたプロファイルで使用されている間は同期を無効にできません",
+      "deleteSuccess": "VPN を削除しました",
+      "deleteFailed": "VPN の削除に失敗しました",
+      "deleteTitle": "VPN を削除",
+      "deleteDescription": "この操作は取り消せません。VPN「{{name}}」は完全に削除されます。"
+    }
+  },
+  "importProfile": {
+    "title": "ブラウザプロファイルをインポート",
+    "autoDetect": "自動検出",
+    "manualImport": "手動インポート",
+    "detectedProfilesTitle": "検出されたブラウザプロファイル",
+    "scanning": "ブラウザプロファイルをスキャン中...",
+    "noneFound": "システムにブラウザプロファイルが見つかりませんでした。",
+    "noneFoundHint": "カスタムの場所にプロファイルがある場合は手動インポートをお試しください。",
+    "selectProfile": "プロファイルを選択:",
+    "selectProfilePlaceholder": "検出されたプロファイルを選択",
+    "pathLabel": "パス:",
+    "browserLabel": "ブラウザ:",
+    "newProfileName": "新しいプロファイル名:",
+    "newProfileNamePlaceholder": "インポートするプロファイルの名前を入力",
+    "manualTitle": "手動プロファイルインポート",
+    "browserType": "ブラウザの種類:",
+    "loadingBrowsers": "ブラウザを読み込み中...",
+    "selectBrowserType": "ブラウザの種類を選択",
+    "profileFolderPath": "プロファイルフォルダパス:",
+    "profileFolderPlaceholder": "プロファイルフォルダのフルパスを入力",
+    "browseFolderTitle": "フォルダを参照",
+    "examplePaths": "パスの例:",
+    "selectFolderTitle": "ブラウザプロファイルフォルダを選択",
+    "folderDialogFailed": "フォルダダイアログを開けませんでした",
+    "detectFailed": "既存のブラウザプロファイルの検出に失敗しました",
+    "fillFields": "すべてのフィールドを入力してください",
+    "selectAndName": "プロファイルを選択し、名前を入力してください",
+    "profileNotFound": "選択されたプロファイルが見つかりません",
+    "importedSuccess": "プロファイル「{{name}}」をインポートしました",
+    "notInstalled": "{{browser}} はインストールされていません。メインウィンドウから {{browser}} をダウンロードしてからもう一度インポートしてください。",
+    "importFailed": "プロファイルのインポートに失敗しました: {{error}}",
+    "importedAsPrefix": "このプロファイルは次のプロファイルとしてインポートされます:",
+    "importedAsSuffix": "",
+    "proxyOptional": "プロキシ (任意)",
+    "noProxy": "プロキシなし",
+    "nextButton": "次へ",
+    "importButton": "インポート"
+  },
+  "syncTooltips": {
+    "syncing": "同期中...",
+    "syncedAt": "同期済み {{time}}",
+    "synced": "同期済み",
+    "waiting": "同期待ち",
+    "errorWith": "同期エラー: {{error}}",
+    "error": "同期エラー",
+    "notSynced": "未同期"
+  },
+  "groupManagement": {
+    "description": "プロファイルのグループを管理します",
+    "createGroup": "グループを作成",
+    "noGroups": "グループはまだありません。上のボタンから最初のグループを作成してください。",
+    "loading": "グループを読み込み中...",
+    "profileCount_one": "{{count}} プロファイル",
+    "profileCount_other": "{{count}} プロファイル",
+    "groupsLabel": "グループ",
+    "profilesCol": "プロファイル",
+    "syncCannotDisable": "このグループが同期されたプロファイルで使用されている間は同期を無効にできません",
+    "editGroupTooltip": "グループを編集",
+    "deleteGroupTooltip": "グループを削除",
+    "loadFailed": "グループの読み込みに失敗しました"
+  },
+  "proxyAssignment": {
+    "title": "プロキシ / VPN を割り当てる",
+    "description_one": "{{count}} 件の選択されたプロファイルにプロキシまたは VPN を割り当てます。",
+    "description_other": "{{count}} 件の選択されたプロファイルにプロキシまたは VPN を割り当てます。",
+    "selectLabel": "プロキシ / VPN",
+    "placeholder": "プロキシまたは VPN を選択",
+    "noProxy": "プロキシ / VPN なし",
+    "searchPlaceholder": "プロキシまたは VPN を検索...",
+    "notFound": "プロキシまたは VPN が見つかりません。",
+    "assignButton": "割り当てる",
+    "success": "{{count}} 件のプロファイルにプロキシ/VPN を割り当てました",
+    "failed": "プロキシ/VPN の割り当てに失敗しました",
+    "selectedProfilesLabel": "選択したプロファイル:",
+    "assignProxyVpnLabel": "プロキシ / VPN を割り当てる:",
+    "noneOption": "なし",
+    "noValidProfiles": "有効なプロファイルが選択されていません。",
+    "vpnGroupHeading": "VPN",
+    "failedFallback": "プロファイルへのプロキシ/VPN の割り当てに失敗しました"
+  },
+  "groupAssignment": {
+    "title": "グループを割り当てる",
+    "description_one": "{{count}} 件の選択されたプロファイルにグループを割り当てます。",
+    "description_other": "{{count}} 件の選択されたプロファイルにグループを割り当てます。",
+    "selectLabel": "グループ",
+    "placeholder": "グループを選択",
+    "noGroup": "グループなし (デフォルト)",
+    "assignButton": "割り当てる",
+    "success": "{{count}} 件のプロファイルにグループを割り当てました",
+    "failed": "グループの割り当てに失敗しました",
+    "selectedProfilesLabel": "選択したプロファイル:",
+    "assignGroupLabel": "グループに割り当てる:",
+    "noValidProfiles": "有効なプロファイルが選択されていません。",
+    "failedFallback": "プロファイルへのグループの割り当てに失敗しました"
+  },
+  "profileSelector": {
+    "title": "プロファイルを選択",
+    "description": "この URL を開くプロファイルを選択してください",
+    "searchPlaceholder": "プロファイルを検索...",
+    "noProfiles": "利用可能なプロファイルがありません",
+    "noResults": "検索条件に一致するプロファイルがありません",
+    "selectButton": "選択",
+    "launching": "起動中...",
+    "chooseProfileTitle": "プロファイルを選択",
+    "openingUrl": "URL を開く:",
+    "urlCopied": "URL をクリップボードにコピーしました!",
+    "selectProfileLabel": "プロファイルを選択:",
+    "noneAvailableShort": "利用可能なプロファイルがありません。まずプロファイルを作成してください。",
+    "noneAvailableLong": "このダイアログを閉じてメインウィンドウからプロファイルを作成してください。",
+    "chooseAProfile": "プロファイルを選択",
+    "badgeProxy": "プロキシ",
+    "badgeRunning": "実行中",
+    "badgeUnavailable": "利用不可",
+    "openButton": "開く"
+  },
+  "locationProxy": {
+    "title": "クイックロケーションプロキシ",
+    "description": "このプロファイルを経由する国を選択してください。プロキシが自動的に作成されます。",
+    "country": "国",
+    "selectCountry": "国を選択",
+    "searchCountry": "国を検索...",
+    "noCountriesFound": "国が見つかりません。",
+    "apply": "適用",
+    "creating": "プロキシを作成中...",
+    "success": "ロケーションプロキシを適用しました",
+    "failed": "ロケーションプロキシの適用に失敗しました",
+    "titleCreate": "位置プロキシを作成",
+    "descriptionCreate": "24 時間スティッキーセッションのジオターゲットプロキシを作成します",
+    "countryLabel": "国 (必須)",
+    "regionLabel": "地域 (任意)",
+    "cityLabel": "都市 (任意)",
+    "ispLabel": "ISP (任意)",
+    "nameLabel": "名前",
+    "namePlaceholder": "プロキシ名",
+    "loadingCountries": "国を読み込み中...",
+    "selectCountryPh": "国を選択",
+    "searchCountries": "国を検索...",
+    "loadFailed": "国の読み込みに失敗しました",
+    "selectCountryFirst": "まず国を選択してください",
+    "loadingRegions": "地域を読み込み中...",
+    "noRegions": "利用可能な地域がありません",
+    "selectRegion": "地域を選択",
+    "searchRegions": "地域を検索...",
+    "loadingCities": "都市を読み込み中...",
+    "noCities": "利用可能な都市がありません",
+    "selectCity": "都市を選択",
+    "searchCities": "都市を検索...",
+    "loadingIsps": "ISP を読み込み中...",
+    "noIsps": "利用可能な ISP がありません",
+    "selectIsp": "ISP を選択",
+    "searchIsps": "ISP を検索...",
+    "createSuccess": "位置プロキシを作成しました",
+    "createFailed": "位置プロキシの作成に失敗しました",
+    "creatingButton": "作成中...",
+    "createButton": "作成"
+  },
+  "launchOnLogin": {
+    "title": "ログイン時に起動しますか?",
+    "description": "バックグラウンドで実行することで、プロキシとブラウザを維持できます。",
+    "declineButton": "今後は表示しない",
+    "declining": "...",
+    "enableButton": "有効にする",
+    "enableSuccess": "ログイン時の起動を有効にしました",
+    "enableFailed": "ログイン時の起動を有効にできませんでした",
+    "declineFailed": "設定の保存に失敗しました",
+    "tryAgain": "もう一度お試しください"
+  },
+  "wayfernTerms": {
+    "title": "Wayfern 利用規約",
+    "description": "Donut Browser を使用する前に、Wayfern の利用規約を読み、同意する必要があります。",
+    "reviewLabel": "次の URL で利用規約をご確認ください:",
+    "agreeNotice": "「同意します」をクリックすると、これらの条項に拘束されることに同意します。",
+    "acceptButton": "同意します",
+    "acceptSuccess": "規約に同意しました",
+    "acceptFailed": "規約への同意に失敗しました",
+    "tryAgain": "もう一度お試しください"
+  },
+  "commercialTrial": {
+    "title": "商用試用期間が終了しました",
+    "description": "2 週間の商用試用期間が終了しました。",
+    "body": "商用目的で Donut Browser を使用する場合は、続行するために商用ライセンスを購入する必要があります。個人利用は引き続き無料でお使いいただけます。",
+    "understandButton": "了解しました",
+    "failed": "確認の保存に失敗しました",
+    "tryAgain": "もう一度お試しください"
+  },
+  "permissionDialog": {
+    "titleMicrophone": "マイクへのアクセスが必要です",
+    "titleCamera": "カメラへのアクセスが必要です",
+    "descMicrophone": "Donut Browser はブラウザのマイク機能を有効にするためにマイクへのアクセスを必要とします。マイクを使用するウェブサイトはそれぞれ個別に許可を求めます。",
+    "descCamera": "Donut Browser はブラウザのカメラ機能を有効にするためにカメラへのアクセスを必要とします。カメラを使用するウェブサイトはそれぞれ個別に許可を求めます。",
+    "grantedMicrophone": "許可が付与されました!Donut Browser から起動したブラウザはマイクにアクセスできます。",
+    "grantedCamera": "許可が付与されました!Donut Browser から起動したブラウザはカメラにアクセスできます。",
+    "notGrantedMicrophone": "許可されていません。下のボタンを押してマイクへのアクセスを要求してください。",
+    "notGrantedCamera": "許可されていません。下のボタンを押してカメラへのアクセスを要求してください。",
+    "doneButton": "完了",
+    "cancelButton": "キャンセル",
+    "grantAccessButton": "アクセスを許可",
+    "requestSuccessMicrophone": "マイクアクセスをリクエストしました",
+    "requestSuccessCamera": "カメラアクセスをリクエストしました",
+    "requestFailed": "許可のリクエストに失敗しました"
+  },
+  "traffic": {
+    "title": "トラフィックの詳細",
+    "bandwidthOverTime": "時間ごとの帯域幅",
+    "timePeriodPlaceholder": "期間",
+    "last1m": "直近 1 分",
+    "last5m": "直近 5 分",
+    "last30m": "直近 30 分",
+    "last1h": "直近 1 時間",
+    "last2h": "直近 2 時間",
+    "last4h": "直近 4 時間",
+    "last1d": "直近 1 日",
+    "last7d": "直近 7 日",
+    "last30d": "直近 30 日",
+    "allTime": "全期間",
+    "allTimeShort": "全期間",
+    "totalSuffix": "合計",
+    "sentLabel": "送信 ({{period}})",
+    "receivedLabel": "受信 ({{period}})",
+    "requestsLabel": "リクエスト ({{period}})",
+    "allTimeTraffic": "全期間トラフィック:",
+    "allTimeRequests": "全期間リクエスト:",
+    "proxyDisclaimer": "注意: プロキシ、VPN、または類似のサービスを使用している場合、暗号化のオーバーヘッドやプロトコルの違いによりプロバイダーがトラフィックを別の方法で計算する場合があります。",
+    "topByTraffic": "トラフィック別トップドメイン ({{period}})",
+    "topByRequests": "リクエスト別トップドメイン ({{period}})",
+    "columnDomain": "ドメイン",
+    "columnRequests": "リクエスト",
+    "columnSent": "送信",
+    "columnReceived": "受信",
+    "columnTotal": "合計トラフィック",
+    "uniqueIps": "ユニーク IP ({{count}})",
+    "noData": "このプロファイルのトラフィックデータはありません。",
+    "noDataHint": "プロファイルを起動するとトラフィックデータが表示されます。",
+    "sentLegend": "送信",
+    "receivedLegend": "受信",
+    "tooltipSent": "↑ 送信: ",
+    "tooltipReceived": "↓ 受信: "
+  },
+  "camoufoxDialog": {
+    "titleView": "フィンガープリント設定を表示 - {{name}} ({{browser}})",
+    "titleConfigure": "フィンガープリント設定 - {{name}} ({{browser}})",
+    "invalidFingerprint": "無効なフィンガープリント設定",
+    "invalidFingerprintDescription": "フィンガープリント設定に無効な JSON が含まれています。詳細設定を確認してください。",
+    "saveFailed": "設定の保存に失敗しました",
+    "unknownError": "不明なエラーが発生しました"
+  },
+  "proxyCheck": {
+    "unknownLocation": "不明",
+    "locationToast": "プロキシの場所:",
+    "failed": "プロキシのチェックに失敗しました: {{error}}",
+    "tooltipChecking": "プロキシをチェック中...",
+    "tooltipIp": "IP: {{ip}}",
+    "tooltipChecked": "チェック済み {{time}}",
+    "tooltipFailed": "失敗 {{time}}",
+    "tooltipFailedTitle": "プロキシのチェックに失敗しました",
+    "tooltipDefault": "プロキシの有効性をチェック"
+  },
+  "vpnCheck": {
+    "valid": "VPN「{{name}}」の構成は有効です",
+    "invalid": "VPN「{{name}}」の構成は無効です",
+    "failed": "VPN チェックに失敗しました: {{error}}",
+    "tooltipChecking": "VPN 構成をチェック中...",
+    "tooltipValid": "構成は有効",
+    "tooltipInvalid": "構成は無効",
+    "tooltipChecked": "チェック済み {{time}}",
+    "tooltipDefault": "VPN 構成の有効性をチェック"
+  },
+  "profileTable": {
+    "syncTooltipDisabled": "同期無効",
+    "syncTooltipSyncing": "同期中...",
+    "syncTooltipSyncedAt": "同期済み {{time}}",
+    "syncTooltipSynced": "同期済み",
+    "syncTooltipWaiting": "同期待ち",
+    "syncTooltipErrorWith": "同期エラー: {{error}}",
+    "syncTooltipError": "同期エラー",
+    "syncTooltipNotSynced": "未同期",
+    "noTags": "タグなし",
+    "syncTooltipCloseToSync": "プロファイルを閉じて同期",
+    "syncTooltipDisabledWithLast": "同期無効、最終同期 {{time}}"
+  },
+  "releaseTypeSelector": {
+    "noReleaseTypes": "利用可能なリリースタイプがありません。",
+    "placeholder": "リリースタイプを選択...",
+    "stable": "Stable",
+    "nightly": "Nightly",
+    "downloaded": "ダウンロード済み",
+    "downloadBrowser": "ブラウザをダウンロード",
+    "downloading": "ダウンロード中..."
+  },
+  "dataTableActionBar": {
+    "selected": "{{count}} 件選択",
+    "clearSelection": "選択を解除"
+  },
+  "appUpdate": {
+    "toast": {
+      "updateFailed": "Donut Browser の更新に失敗しました",
+      "restartFailed": "再起動に失敗しました"
+    }
+  },
+  "browserDownload": {
+    "toast": {
+      "fetchVersionsFailed": "{{browser}} のバージョン取得に失敗しました",
+      "foundNewVersions": "{{browser}} の新バージョン {{count}} 個が見つかりました!",
+      "totalAvailableVersions": "合計利用可能: {{count}} バージョン",
+      "downloadFailed": "{{browser}} {{version}} のダウンロードに失敗しました",
+      "calculating": "計算中...",
+      "extractionFailed": "{{browser}} {{version}}: 展開に失敗しました",
+      "extractionFailedDescription": "破損したファイルは削除されました。次回の試行時に再ダウンロードされます。"
+    }
+  },
+  "versionUpdater": {
+    "toast": {
+      "alreadyAvailable": "{{browser}} {{version}} はすでに利用可能です",
+      "updatingProfiles": "プロファイル設定を更新中...",
+      "updateCompleted": "{{browser}} の更新が完了しました",
+      "singleProfileUpdated": "プロファイル「{{name}}」がバージョン {{version}} に更新されました。最新バージョンでブラウザを起動できます。",
+      "multipleProfilesUpdated": "{{count}} 個のプロファイルがバージョン {{version}} に更新されました。最新バージョンでブラウザを起動できます。",
+      "versionAvailable": "バージョン {{version}} が利用可能になりました。実行中のプロファイルは再起動時に新しいバージョンを使用します。",
+      "autoUpdateFailed": "{{browser}} の自動更新に失敗しました",
+      "updateWithErrors": "一部のエラーで更新が完了しました",
+      "updateWithErrorsDescription": "{{newVersions}} 個の新しいバージョンが見つかり、{{failedUpdates}} 個のブラウザの更新に失敗しました",
+      "updateSuccess": "ブラウザのバージョンを正常に更新しました",
+      "updateSuccessDescription": "{{successfulUpdates}} 個のブラウザに {{newVersions}} 個の新しいバージョンが見つかりました。自動ダウンロードがまもなく開始します。",
+      "upToDate": "新しいブラウザのバージョンは見つかりませんでした",
+      "upToDateDescription": "すべてのブラウザバージョンは最新です",
+      "updateAllFailed": "ブラウザバージョンの更新に失敗しました"
+    }
   }
 }

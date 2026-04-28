@@ -74,6 +74,7 @@ function ObjectEditor({
   title,
   readOnly = false,
 }: ObjectEditorProps) {
+  const { t } = useTranslation();
   const [jsonString, setJsonString] = useState("");
 
   useEffect(() => {
@@ -111,7 +112,7 @@ function ObjectEditor({
         onChange={(e) => {
           handleChange(e.target.value);
         }}
-        placeholder={`Enter ${title} as JSON`}
+        placeholder={t("fingerprint.enterAsJson", { title })}
         className="font-mono text-sm"
         rows={6}
         disabled={readOnly}
@@ -465,7 +466,9 @@ export function SharedCamoufoxConfigForm({
                       e.target.value || undefined,
                     );
                   }}
-                  placeholder="e.g., Intel Mac OS X 10.15"
+                  placeholder={t(
+                    "config.camoufox.fingerprint.osCpuPlaceholder",
+                  )}
                 />
               </div>
               <div className="space-y-2">
@@ -904,7 +907,9 @@ export function SharedCamoufoxConfigForm({
                       e.target.value || undefined,
                     );
                   }}
-                  placeholder="e.g., llvmpipe, or similar"
+                  placeholder={t(
+                    "config.camoufox.fingerprint.webglRendererPlaceholder",
+                  )}
                 />
               </div>
             </div>
@@ -1010,7 +1015,7 @@ export function SharedCamoufoxConfigForm({
                   selected.map((s: Option) => s.value),
                 );
               }}
-              placeholder="Add fonts..."
+              placeholder={t("fingerprint.addFontsPlaceholder")}
               creatable
             />
           </div>

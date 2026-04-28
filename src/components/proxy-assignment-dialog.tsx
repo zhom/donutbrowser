@@ -3,6 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { LuCheck, LuChevronsUpDown } from "react-icons/lu";
 import { toast } from "sonner";
 import { LoadingButton } from "@/components/loading-button";
@@ -53,6 +54,7 @@ export function ProxyAssignmentDialog({
   storedProxies = [],
   vpnConfigs = [],
 }: ProxyAssignmentDialogProps) {
+  const { t } = useTranslation();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectionType, setSelectionType] = useState<"none" | "proxy" | "vpn">(
     "none",
@@ -84,7 +86,7 @@ export function ProxyAssignmentDialog({
       });
 
       if (validProfiles.length === 0) {
-        setError("No valid profiles selected.");
+        setError(t("proxyAssignment.noValidProfiles"));
         setIsAssigning(false);
         return;
       }
@@ -111,7 +113,7 @@ export function ProxyAssignmentDialog({
       const errorMessage =
         err instanceof Error
           ? err.message
-          : "Failed to assign proxy/VPN to profiles";
+          : t("proxyAssignment.failedFallback");
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
@@ -124,6 +126,7 @@ export function ProxyAssignmentDialog({
     profiles,
     onAssignmentComplete,
     onClose,
+    t,
   ]);
 
   useEffect(() => {
@@ -138,16 +141,21 @@ export function ProxyAssignmentDialog({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Assign Proxy / VPN</DialogTitle>
+          <DialogTitle>{t("proxyAssignment.title")}</DialogTitle>
           <DialogDescription>
-            Assign a proxy or VPN to {selectedProfiles.length} selected
-            profile(s).
+            {selectedProfiles.length === 1
+              ? t("proxyAssignment.description_one", {
+                  count: selectedProfiles.length,
+                })
+              : t("proxyAssignment.description_other", {
+                  count: selectedProfiles.length,
+                })}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>Selected Profiles:</Label>
+            <Label>{t("proxyAssignment.selectedProfilesLabel")}</Label>
             <div className="p-3 bg-muted rounded-md max-h-32 overflow-y-auto">
               <ul className="text-sm space-y-1">
                 {selectedProfiles.map((profileId) => {
@@ -166,7 +174,9 @@ export function ProxyAssignmentDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="proxy-vpn-select">Assign Proxy / VPN:</Label>
+            <Label htmlFor="proxy-vpn-select">
+              {t("proxyAssignment.assignProxyVpnLabel")}
+            </Label>
             <Popover open={proxyPopoverOpen} onOpenChange={setProxyPopoverOpen}>
               <PopoverTrigger asChild>
                 <Button
@@ -176,24 +186,29 @@ export function ProxyAssignmentDialog({
                   className="w-full justify-between font-normal"
                 >
                   {(() => {
-                    if (selectionType === "none") return "None";
+                    if (selectionType === "none")
+                      return t("proxyAssignment.noneOption");
                     if (selectionType === "vpn") {
                       const vpn = vpnConfigs.find((v) => v.id === selectedId);
-                      return vpn ? `WG — ${vpn.name}` : "None";
+                      return vpn
+                        ? `WG — ${vpn.name}`
+                        : t("proxyAssignment.noneOption");
                     }
                     const proxy = storedProxies.find(
                       (p) => p.id === selectedId,
                     );
-                    return proxy ? proxy.name : "None";
+                    return proxy ? proxy.name : t("proxyAssignment.noneOption");
                   })()}
                   <LuChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-[240px] p-0" sideOffset={8}>
                 <Command>
-                  <CommandInput placeholder="Search proxies or VPNs..." />
+                  <CommandInput
+                    placeholder={t("proxyAssignment.searchPlaceholder")}
+                  />
                   <CommandList>
-                    <CommandEmpty>No proxies or VPNs found.</CommandEmpty>
+                    <CommandEmpty>{t("proxyAssignment.notFound")}</CommandEmpty>
                     <CommandGroup>
                       <CommandItem
                         value="__none__"
@@ -210,7 +225,7 @@ export function ProxyAssignmentDialog({
                               : "opacity-0",
                           )}
                         />
-                        None
+                        {t("proxyAssignment.noneOption")}
                       </CommandItem>
                       {storedProxies
                         .filter(
@@ -240,7 +255,9 @@ export function ProxyAssignmentDialog({
                         ))}
                     </CommandGroup>
                     {vpnConfigs.length > 0 && (
-                      <CommandGroup heading="VPNs">
+                      <CommandGroup
+                        heading={t("proxyAssignment.vpnGroupHeading")}
+                      >
                         {vpnConfigs.map((vpn) => (
                           <CommandItem
                             key={vpn.id}
@@ -288,13 +305,13 @@ export function ProxyAssignmentDialog({
             onClick={onClose}
             disabled={isAssigning}
           >
-            Cancel
+            {t("common.buttons.cancel")}
           </RippleButton>
           <LoadingButton
             isLoading={isAssigning}
             onClick={() => void handleAssign()}
           >
-            Assign
+            {t("proxyAssignment.assignButton")}
           </LoadingButton>
         </DialogFooter>
       </DialogContent>

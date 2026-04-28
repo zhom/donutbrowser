@@ -2,6 +2,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   LuChevronDown,
   LuChevronRight,
@@ -66,6 +67,7 @@ export function CookieCopyDialog({
   runningProfiles,
   onCopyComplete,
 }: CookieCopyDialogProps) {
+  const { t } = useTranslation();
   const [sourceProfileId, setSourceProfileId] = useState<string | null>(null);
   const [cookieData, setCookieData] = useState<CookieReadResult | null>(null);
   const [isLoadingCookies, setIsLoadingCookies] = useState(false);
@@ -243,10 +245,11 @@ export function CookieCopyDialog({
       runningProfiles.has(p.id),
     );
     if (runningTargets.length > 0) {
+      const names = runningTargets.map((p) => p.name).join(", ");
       toast.error(
-        `Cannot copy cookies: ${runningTargets.map((p) => p.name).join(", ")} ${
-          runningTargets.length === 1 ? "is" : "are"
-        } still running`,
+        runningTargets.length === 1
+          ? t("cookies.copy.cannotCopyRunningOne", { names })
+          : t("cookies.copy.cannotCopyRunningMany", { names }),
       );
       return;
     }
@@ -277,10 +280,15 @@ export function CookieCopyDialog({
       }
 
       if (errors.length > 0) {
-        toast.error(`Some errors occurred: ${errors.join(", ")}`);
+        toast.error(
+          t("cookies.copy.someErrors", { errors: errors.join(", ") }),
+        );
       } else {
         toast.success(
-          `Successfully copied ${totalCopied + totalReplaced} cookies (${totalReplaced} replaced)`,
+          t("cookies.copy.successMessage", {
+            copied: totalCopied + totalReplaced,
+            replaced: totalReplaced,
+          }),
         );
         onCopyComplete?.();
         onClose();
@@ -288,7 +296,9 @@ export function CookieCopyDialog({
     } catch (err) {
       console.error("Failed to copy cookies:", err);
       toast.error(
-        `Failed to copy cookies: ${err instanceof Error ? err.message : String(err)}`,
+        t("cookies.copy.failedMessage", {
+          error: err instanceof Error ? err.message : String(err),
+        }),
       );
     } finally {
       setIsCopying(false);
@@ -300,6 +310,7 @@ export function CookieCopyDialog({
     buildSelectedCookies,
     onCopyComplete,
     onClose,
+    t,
   ]);
 
   useEffect(() => {
@@ -325,23 +336,30 @@ export function CookieCopyDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <LuCookie className="w-5 h-5" />
-            Copy Cookies
+            {t("cookies.copy.title")}
           </DialogTitle>
           <DialogDescription>
-            Copy cookies from a source profile to {selectedProfiles.length}{" "}
-            selected profile{selectedProfiles.length !== 1 ? "s" : ""}.
+            {selectedProfiles.length === 1
+              ? t("cookies.copy.dialogDescription_one", {
+                  count: selectedProfiles.length,
+                })
+              : t("cookies.copy.dialogDescription_other", {
+                  count: selectedProfiles.length,
+                })}
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto space-y-4">
           <div className="space-y-2">
-            <Label>Source Profile</Label>
+            <Label>{t("cookies.copy.sourceProfile")}</Label>
             <Select
               value={sourceProfileId ?? undefined}
               onValueChange={handleSourceChange}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select a profile to copy cookies from" />
+                <SelectValue
+                  placeholder={t("cookies.copy.sourcePlaceholder")}
+                />
               </SelectTrigger>
               <SelectContent>
                 {eligibleSourceProfiles.map((profile) => {
@@ -358,7 +376,7 @@ export function CookieCopyDialog({
                         <span>{profile.name}</span>
                         {isRunning && (
                           <span className="text-xs text-muted-foreground">
-                            (running)
+                            {t("cookies.copy.running")}
                           </span>
                         )}
                       </div>
@@ -370,13 +388,17 @@ export function CookieCopyDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>Target Profiles ({targetProfiles.length})</Label>
+            <Label>
+              {t("cookies.copy.targetProfiles", {
+                count: targetProfiles.length,
+              })}
+            </Label>
             <div className="p-2 bg-muted rounded-md max-h-20 overflow-y-auto">
               {targetProfiles.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   {sourceProfileId
-                    ? "No other Wayfern/Camoufox profiles selected"
-                    : "Select a source profile first"}
+                    ? t("cookies.copy.noOtherTargets")
+                    : t("cookies.copy.selectSourceFirst")}
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-1">
@@ -388,7 +410,7 @@ export function CookieCopyDialog({
                       {p.name}
                       {runningProfiles.has(p.id) && (
                         <span className="text-xs text-destructive">
-                          (running)
+                          {t("cookies.copy.running")}
                         </span>
                       )}
                     </span>
@@ -402,11 +424,13 @@ export function CookieCopyDialog({
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>
-                  Select Cookies{" "}
+                  {t("cookies.copy.selectCookies")}{" "}
                   {cookieData && (
                     <span className="text-muted-foreground">
-                      ({selectedCookieCount} of {cookieData.total_count}{" "}
-                      selected)
+                      {t("cookies.copy.selectionStatus", {
+                        selected: selectedCookieCount,
+                        total: cookieData.total_count,
+                      })}
                     </span>
                   )}
                 </Label>
@@ -415,7 +439,7 @@ export function CookieCopyDialog({
               <div className="relative">
                 <LuSearch className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search domains or cookies..."
+                  placeholder={t("cookies.copy.searchPlaceholder")}
                   value={searchQuery}
                   onChange={(e) => {
                     setSearchQuery(e.target.value);
@@ -435,8 +459,8 @@ export function CookieCopyDialog({
               ) : filteredDomains.length === 0 ? (
                 <div className="p-4 text-center text-muted-foreground">
                   {searchQuery
-                    ? "No matching cookies found"
-                    : "No cookies found"}
+                    ? t("cookies.copy.noMatching")
+                    : t("cookies.copy.noFound")}
                 </div>
               ) : (
                 <ScrollArea className="h-[250px] border rounded-md">
@@ -457,8 +481,7 @@ export function CookieCopyDialog({
               )}
 
               <p className="text-xs text-muted-foreground">
-                Existing cookies with the same name and domain will be replaced.
-                Other cookies will be kept.
+                {t("cookies.copy.replaceNote")}
               </p>
             </div>
           )}
@@ -470,15 +493,22 @@ export function CookieCopyDialog({
             onClick={onClose}
             disabled={isCopying}
           >
-            Cancel
+            {t("common.buttons.cancel")}
           </RippleButton>
           <LoadingButton
             isLoading={isCopying}
             onClick={() => void handleCopy()}
             disabled={!canCopy}
           >
-            Copy {selectedCookieCount > 0 ? `${selectedCookieCount} ` : ""}
-            Cookie{selectedCookieCount !== 1 ? "s" : ""}
+            {selectedCookieCount === 0
+              ? t("cookies.copy.copyButtonEmpty")
+              : selectedCookieCount === 1
+                ? t("cookies.copy.copyButton_one", {
+                    count: selectedCookieCount,
+                  })
+                : t("cookies.copy.copyButton_other", {
+                    count: selectedCookieCount,
+                  })}
           </LoadingButton>
         </DialogFooter>
       </DialogContent>

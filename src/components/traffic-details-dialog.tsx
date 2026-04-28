@@ -2,6 +2,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import {
   Area,
   AreaChart,
@@ -152,6 +153,7 @@ export function TrafficDetailsDialog({
   profileId,
   profileName,
 }: TrafficDetailsDialogProps) {
+  const { t } = useTranslation();
   const [stats, setStats] = React.useState<FilteredTrafficStats | null>(null);
   const [timePeriod, setTimePeriod] = React.useState<TimePeriod>("5m");
 
@@ -211,7 +213,9 @@ export function TrafficDetailsDialog({
           {payload.map((entry) => (
             <p key={String(entry.dataKey)} className="text-sm">
               <span className="text-muted-foreground">
-                {entry.dataKey === "sent" ? "↑ Sent: " : "↓ Received: "}
+                {entry.dataKey === "sent"
+                  ? t("traffic.tooltipSent")
+                  : t("traffic.tooltipReceived")}
               </span>
               <span className="font-medium">
                 {formatBytesPerSecond(
@@ -223,7 +227,7 @@ export function TrafficDetailsDialog({
         </div>
       );
     },
-    [],
+    [t],
   );
 
   // Top domains sorted by total traffic
@@ -255,7 +259,7 @@ export function TrafficDetailsDialog({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>
-            Traffic Details
+            {t("traffic.title")}
             {profileName && (
               <span className="text-muted-foreground font-normal ml-2">
                 — {profileName}
@@ -269,7 +273,9 @@ export function TrafficDetailsDialog({
             {/* Chart with Period Selector */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium">Bandwidth Over Time</h3>
+                <h3 className="text-sm font-medium">
+                  {t("traffic.bandwidthOverTime")}
+                </h3>
                 <Select
                   value={timePeriod}
                   onValueChange={(v) => {
@@ -277,19 +283,21 @@ export function TrafficDetailsDialog({
                   }}
                 >
                   <SelectTrigger className="w-[120px] h-8">
-                    <SelectValue placeholder="Time period" />
+                    <SelectValue
+                      placeholder={t("traffic.timePeriodPlaceholder")}
+                    />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1m">Last 1 min</SelectItem>
-                    <SelectItem value="5m">Last 5 min</SelectItem>
-                    <SelectItem value="30m">Last 30 min</SelectItem>
-                    <SelectItem value="1h">Last 1 hour</SelectItem>
-                    <SelectItem value="2h">Last 2 hours</SelectItem>
-                    <SelectItem value="4h">Last 4 hours</SelectItem>
-                    <SelectItem value="1d">Last 1 day</SelectItem>
-                    <SelectItem value="7d">Last 7 days</SelectItem>
-                    <SelectItem value="30d">Last 30 days</SelectItem>
-                    <SelectItem value="all">All time</SelectItem>
+                    <SelectItem value="1m">{t("traffic.last1m")}</SelectItem>
+                    <SelectItem value="5m">{t("traffic.last5m")}</SelectItem>
+                    <SelectItem value="30m">{t("traffic.last30m")}</SelectItem>
+                    <SelectItem value="1h">{t("traffic.last1h")}</SelectItem>
+                    <SelectItem value="2h">{t("traffic.last2h")}</SelectItem>
+                    <SelectItem value="4h">{t("traffic.last4h")}</SelectItem>
+                    <SelectItem value="1d">{t("traffic.last1d")}</SelectItem>
+                    <SelectItem value="7d">{t("traffic.last7d")}</SelectItem>
+                    <SelectItem value="30d">{t("traffic.last30d")}</SelectItem>
+                    <SelectItem value="all">{t("traffic.allTime")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -393,7 +401,9 @@ export function TrafficDetailsDialog({
                     className="w-3 h-3 rounded"
                     style={{ backgroundColor: "var(--chart-1)" }}
                   />
-                  <span className="text-xs text-muted-foreground">Sent</span>
+                  <span className="text-xs text-muted-foreground">
+                    {t("traffic.sentLegend")}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div
@@ -401,7 +411,7 @@ export function TrafficDetailsDialog({
                     style={{ backgroundColor: "var(--chart-2)" }}
                   />
                   <span className="text-xs text-muted-foreground">
-                    Received
+                    {t("traffic.receivedLegend")}
                   </span>
                 </div>
               </div>
@@ -411,7 +421,12 @@ export function TrafficDetailsDialog({
             <div className="grid grid-cols-3 gap-4">
               <div className="bg-muted/50 rounded-lg p-3">
                 <p className="text-xs text-muted-foreground">
-                  Sent ({timePeriod === "all" ? "total" : timePeriod})
+                  {t("traffic.sentLabel", {
+                    period:
+                      timePeriod === "all"
+                        ? t("traffic.totalSuffix")
+                        : timePeriod,
+                  })}
                 </p>
                 <p className="text-lg font-semibold text-chart-1">
                   {formatBytes(stats?.period_bytes_sent ?? 0)}
@@ -419,7 +434,12 @@ export function TrafficDetailsDialog({
               </div>
               <div className="bg-muted/50 rounded-lg p-3">
                 <p className="text-xs text-muted-foreground">
-                  Received ({timePeriod === "all" ? "total" : timePeriod})
+                  {t("traffic.receivedLabel", {
+                    period:
+                      timePeriod === "all"
+                        ? t("traffic.totalSuffix")
+                        : timePeriod,
+                  })}
                 </p>
                 <p className="text-lg font-semibold text-chart-2">
                   {formatBytes(stats?.period_bytes_received ?? 0)}
@@ -427,7 +447,12 @@ export function TrafficDetailsDialog({
               </div>
               <div className="bg-muted/50 rounded-lg p-3">
                 <p className="text-xs text-muted-foreground">
-                  Requests ({timePeriod === "all" ? "total" : timePeriod})
+                  {t("traffic.requestsLabel", {
+                    period:
+                      timePeriod === "all"
+                        ? t("traffic.totalSuffix")
+                        : timePeriod,
+                  })}
                 </p>
                 <p className="text-lg font-semibold">
                   {(stats?.period_requests ?? 0).toLocaleString()}
@@ -438,38 +463,50 @@ export function TrafficDetailsDialog({
             {/* Total Stats (smaller, under period stats) */}
             <div className="flex items-center gap-6 text-sm text-muted-foreground border-t pt-4">
               <div>
-                <span className="font-medium">All-time traffic:</span>{" "}
+                <span className="font-medium">
+                  {t("traffic.allTimeTraffic")}
+                </span>{" "}
                 {formatBytes(
                   (stats?.total_bytes_sent ?? 0) +
                     (stats?.total_bytes_received ?? 0),
                 )}
               </div>
               <div>
-                <span className="font-medium">All-time requests:</span>{" "}
+                <span className="font-medium">
+                  {t("traffic.allTimeRequests")}
+                </span>{" "}
                 {stats?.total_requests?.toLocaleString() ?? 0}
               </div>
             </div>
 
             {/* Disclaimer about proxy/VPN traffic calculation */}
             <p className="text-xs text-muted-foreground italic">
-              Note: If you are using a proxy, VPN, or similar service, your
-              provider may calculate traffic differently due to encryption
-              overhead and protocol differences.
+              {t("traffic.proxyDisclaimer")}
             </p>
 
             {/* Top Domains by Traffic */}
             {topDomainsByTraffic.length > 0 && (
               <div>
                 <h3 className="text-sm font-medium mb-2">
-                  Top Domains by Traffic (
-                  {timePeriod === "all" ? "all time" : timePeriod})
+                  {t("traffic.topByTraffic", {
+                    period:
+                      timePeriod === "all"
+                        ? t("traffic.allTimeShort")
+                        : timePeriod,
+                  })}
                 </h3>
                 <div className="border rounded-md">
                   <div className="grid grid-cols-[1fr_80px_80px_80px] gap-2 px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-muted/30">
-                    <span>Domain</span>
-                    <span className="text-right">Requests</span>
-                    <span className="text-right">Sent</span>
-                    <span className="text-right">Received</span>
+                    <span>{t("traffic.columnDomain")}</span>
+                    <span className="text-right">
+                      {t("traffic.columnRequests")}
+                    </span>
+                    <span className="text-right">
+                      {t("traffic.columnSent")}
+                    </span>
+                    <span className="text-right">
+                      {t("traffic.columnReceived")}
+                    </span>
                   </div>
                   <div className="max-h-[180px] overflow-y-auto">
                     {topDomainsByTraffic.map((domain, index) => (
@@ -503,14 +540,22 @@ export function TrafficDetailsDialog({
             {topDomainsByRequests.length > 0 && (
               <div>
                 <h3 className="text-sm font-medium mb-2">
-                  Top Domains by Requests (
-                  {timePeriod === "all" ? "all time" : timePeriod})
+                  {t("traffic.topByRequests", {
+                    period:
+                      timePeriod === "all"
+                        ? t("traffic.allTimeShort")
+                        : timePeriod,
+                  })}
                 </h3>
                 <div className="border rounded-md">
                   <div className="grid grid-cols-[1fr_80px_100px] gap-2 px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-muted/30">
-                    <span>Domain</span>
-                    <span className="text-right">Requests</span>
-                    <span className="text-right">Total Traffic</span>
+                    <span>{t("traffic.columnDomain")}</span>
+                    <span className="text-right">
+                      {t("traffic.columnRequests")}
+                    </span>
+                    <span className="text-right">
+                      {t("traffic.columnTotal")}
+                    </span>
                   </div>
                   <div className="max-h-[180px] overflow-y-auto">
                     {topDomainsByRequests.map((domain, index) => (
@@ -543,7 +588,7 @@ export function TrafficDetailsDialog({
             {stats?.unique_ips && stats.unique_ips.length > 0 && (
               <div>
                 <h3 className="text-sm font-medium mb-2">
-                  Unique IPs ({stats.unique_ips.length})
+                  {t("traffic.uniqueIps", { count: stats.unique_ips.length })}
                 </h3>
                 <div className="border rounded-md p-3 max-h-[120px] overflow-y-auto">
                   <div className="flex flex-wrap gap-1.5">
@@ -563,10 +608,8 @@ export function TrafficDetailsDialog({
             {/* No data state */}
             {!stats && (
               <div className="text-center py-8 text-muted-foreground">
-                <p>No traffic data available for this profile.</p>
-                <p className="text-sm mt-1">
-                  Traffic data will appear after you launch the profile.
-                </p>
+                <p>{t("traffic.noData")}</p>
+                <p className="text-sm mt-1">{t("traffic.noDataHint")}</p>
               </div>
             )}
           </div>

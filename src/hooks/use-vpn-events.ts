@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
+import i18n from "@/i18n";
 import type { VpnConfig } from "@/types";
 
 /**
@@ -37,7 +38,9 @@ export function useVpnEvents() {
       setError(null);
     } catch (err: unknown) {
       console.error("Failed to load VPN configs:", err);
-      setError(`Failed to load VPN configs: ${JSON.stringify(err)}`);
+      setError(
+        i18n.t("errors.loadVpnConfigsFailed", { error: JSON.stringify(err) }),
+      );
     }
   }, [loadVpnUsage]);
 
@@ -62,7 +65,11 @@ export function useVpnEvents() {
         });
       } catch (err) {
         console.error("Failed to setup VPN event listeners:", err);
-        setError(`Failed to setup VPN event listeners: ${JSON.stringify(err)}`);
+        setError(
+          i18n.t("errors.setupVpnListenersFailed", {
+            error: JSON.stringify(err),
+          }),
+        );
       } finally {
         setIsLoading(false);
       }

@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useRef, useState } from "react";
+import i18n from "@/i18n";
 import { getBrowserDisplayName } from "@/lib/browser-utils";
 import { dismissToast, showToast } from "@/lib/toast-utils";
 
@@ -147,7 +148,10 @@ export function useUpdateNotifications(
           showToast({
             id: `auto-update-error-${browser}-${newVersion}`,
             type: "error",
-            title: `Failed to download ${browserDisplayName} ${newVersion}`,
+            title: i18n.t("browserDownload.toast.downloadFailed", {
+              browser: browserDisplayName,
+              version: newVersion,
+            }),
             description: String(downloadError),
             duration: 8000,
           });

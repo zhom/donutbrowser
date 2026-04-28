@@ -3,6 +3,7 @@
 import { AnimatePresence, type HTMLMotionProps, motion } from "motion/react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import type * as React from "react";
+import { useTranslation } from "react-i18next";
 import { RxCross2 } from "react-icons/rx";
 
 import { useControlledState } from "@/hooks/use-controlled-state";
@@ -115,6 +116,7 @@ function DialogContent({
   transition = { type: "spring", stiffness: 150, damping: 25 },
   ...props
 }: DialogContentProps) {
+  const { t } = useTranslation();
   const initialRotation =
     from === "bottom" || from === "left" ? "20deg" : "-20deg";
   const isVertical = from === "top" || from === "bottom";
@@ -166,7 +168,7 @@ function DialogContent({
           {children}
           <DialogPrimitive.Close className="cursor-pointer ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
             <RxCross2 />
-            <span className="sr-only">Close</span>
+            <span className="sr-only">{t("common.buttons.close")}</span>
           </DialogPrimitive.Close>
         </motion.div>
       </DialogPrimitive.Content>

@@ -165,34 +165,46 @@ export function SettingsDialog({
     }
   }, []);
 
-  const getPermissionDisplayName = useCallback((type: PermissionType) => {
-    switch (type) {
-      case "microphone":
-        return "Microphone";
-      case "camera":
-        return "Camera";
-    }
-  }, []);
+  const getPermissionDisplayName = useCallback(
+    (type: PermissionType) => {
+      switch (type) {
+        case "microphone":
+          return t("settings.permissions.microphone");
+        case "camera":
+          return t("settings.permissions.camera");
+      }
+    },
+    [t],
+  );
 
-  const getStatusBadge = useCallback((isGranted: boolean) => {
-    if (isGranted) {
-      return (
-        <Badge variant="default" className="text-success-foreground bg-success">
-          Granted
-        </Badge>
-      );
-    }
-    return <Badge variant="secondary">Not Granted</Badge>;
-  }, []);
+  const getStatusBadge = useCallback(
+    (isGranted: boolean) => {
+      if (isGranted) {
+        return (
+          <Badge
+            variant="default"
+            className="text-success-foreground bg-success"
+          >
+            {t("common.status.granted")}
+          </Badge>
+        );
+      }
+      return <Badge variant="secondary">{t("common.status.notGranted")}</Badge>;
+    },
+    [t],
+  );
 
-  const getPermissionDescription = useCallback((type: PermissionType) => {
-    switch (type) {
-      case "microphone":
-        return "Access to microphone for browser applications";
-      case "camera":
-        return "Access to camera for browser applications";
-    }
-  }, []);
+  const getPermissionDescription = useCallback(
+    (type: PermissionType) => {
+      switch (type) {
+        case "microphone":
+          return t("settings.permissions.microphoneDescription");
+        case "camera":
+          return t("settings.permissions.cameraDescription");
+      }
+    },
+    [t],
+  );
 
   const loadSettings = useCallback(async () => {
     setIsLoading(true);
@@ -332,15 +344,15 @@ export function SettingsDialog({
       // Don't show immediate success toast - let the version update progress events handle it
     } catch (error) {
       console.error("Failed to clear cache:", error);
-      showErrorToast("Failed to clear cache", {
+      showErrorToast(t("settings.advanced.clearCacheFailed"), {
         description:
-          error instanceof Error ? error.message : "Unknown error occurred",
+          error instanceof Error ? error.message : t("common.errors.unknown"),
         duration: 4000,
       });
     } finally {
       setIsClearingCache(false);
     }
-  }, []);
+  }, [t]);
 
   const handleRequestPermission = useCallback(
     async (permissionType: PermissionType) => {
@@ -348,7 +360,9 @@ export function SettingsDialog({
       try {
         await requestPermission(permissionType);
         showSuccessToast(
-          `${getPermissionDisplayName(permissionType)} access requested`,
+          t("settings.permissions.accessRequested", {
+            permission: getPermissionDisplayName(permissionType),
+          }),
         );
       } catch (error) {
         console.error("Failed to request permission:", error);
@@ -356,7 +370,7 @@ export function SettingsDialog({
         setRequestingPermission(null);
       }
     },
-    [getPermissionDisplayName, requestPermission],
+    [getPermissionDisplayName, requestPermission, t],
   );
 
   const handleSave = useCallback(async () => {
@@ -592,11 +606,13 @@ export function SettingsDialog({
           <div className="grid overflow-y-auto flex-1 gap-6 py-4 min-h-0">
             {/* Appearance Section */}
             <div className="space-y-4">
-              <Label className="text-base font-medium">Appearance</Label>
+              <Label className="text-base font-medium">
+                {t("settings.appearance.title")}
+              </Label>
 
               <div className="grid gap-2">
                 <Label htmlFor="theme-select" className="text-sm">
-                  Theme
+                  {t("settings.appearance.theme")}
                 </Label>
                 <Select
                   value={settings.theme}
@@ -614,20 +630,29 @@ export function SettingsDialog({
                   }}
                 >
                   <SelectTrigger id="theme-select">
-                    <SelectValue placeholder="Select theme" />
+                    <SelectValue
+                      placeholder={t("settings.appearance.selectTheme")}
+                    />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="light">Light</SelectItem>
-                    <SelectItem value="dark">Dark</SelectItem>
-                    <SelectItem value="system">System</SelectItem>
-                    <SelectItem value="custom">Custom</SelectItem>
+                    <SelectItem value="light">
+                      {t("settings.appearance.light")}
+                    </SelectItem>
+                    <SelectItem value="dark">
+                      {t("settings.appearance.dark")}
+                    </SelectItem>
+                    <SelectItem value="system">
+                      {t("settings.appearance.system")}
+                    </SelectItem>
+                    <SelectItem value="custom">
+                      {t("common.labels.custom")}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <p className="text-xs text-muted-foreground">
-                Choose your preferred theme or follow your system settings.
-                Custom theme changes are applied only when you save.
+                {t("settings.appearance.themeDescription")}
               </p>
 
               {settings.theme === "custom" && (
@@ -637,7 +662,7 @@ export function SettingsDialog({
                       htmlFor="theme-preset-select"
                       className="text-sm font-medium"
                     >
-                      Theme Preset
+                      {t("settings.appearance.themePreset")}
                     </Label>
                     <Select
                       value={customThemeState.selectedThemeId ?? "custom"}
@@ -659,7 +684,11 @@ export function SettingsDialog({
                       }}
                     >
                       <SelectTrigger id="theme-preset-select">
-                        <SelectValue placeholder="Select a theme preset" />
+                        <SelectValue
+                          placeholder={t(
+                            "settings.appearance.selectThemePreset",
+                          )}
+                        />
                       </SelectTrigger>
                       <SelectContent>
                         {THEMES.map((theme) => (
@@ -667,12 +696,16 @@ export function SettingsDialog({
                             {theme.name}
                           </SelectItem>
                         ))}
-                        <SelectItem value="custom">Your Own</SelectItem>
+                        <SelectItem value="custom">
+                          {t("settings.appearance.yourOwn")}
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
-                  <div className="text-sm font-medium">Custom Colors</div>
+                  <div className="text-sm font-medium">
+                    {t("settings.appearance.customColors")}
+                  </div>
                   <div className="grid grid-cols-4 gap-3">
                     {THEME_VARIABLES.map(({ key, label }) => {
                       const colorValue =
@@ -744,11 +777,13 @@ export function SettingsDialog({
 
             {/* Language Section */}
             <div className="space-y-4">
-              <Label className="text-base font-medium">Language</Label>
+              <Label className="text-base font-medium">
+                {t("settings.language.title")}
+              </Label>
 
               <div className="grid gap-2">
                 <Label htmlFor="language-select" className="text-sm">
-                  Interface Language
+                  {t("settings.language.interface")}
                 </Label>
                 <Select
                   value={selectedLanguage ?? "system"}
@@ -758,10 +793,14 @@ export function SettingsDialog({
                   disabled={isLanguageLoading}
                 >
                   <SelectTrigger id="language-select">
-                    <SelectValue placeholder="Select language" />
+                    <SelectValue
+                      placeholder={t("settings.language.selectLanguage")}
+                    />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="system">System Default</SelectItem>
+                    <SelectItem value="system">
+                      {t("settings.language.systemDefault")}
+                    </SelectItem>
                     {supportedLanguages.map((lang) => (
                       <SelectItem key={lang.code} value={lang.code}>
                         {lang.nativeName} ({lang.name})
@@ -878,10 +917,11 @@ export function SettingsDialog({
 
             {/* Integrations Section */}
             <div className="space-y-4">
-              <Label className="text-base font-medium">Integrations</Label>
+              <Label className="text-base font-medium">
+                {t("settings.integrations.title")}
+              </Label>
               <p className="text-xs text-muted-foreground">
-                Configure Local API and MCP (Model Context Protocol) for
-                integrating with external tools and AI assistants.
+                {t("settings.integrations.description")}
               </p>
               <RippleButton
                 variant="outline"
@@ -1064,28 +1104,29 @@ export function SettingsDialog({
             {/* Commercial License Section */}
             <div className="space-y-4">
               <Label className="text-base font-medium">
-                Commercial License
+                {t("settings.commercial.title")}
               </Label>
 
               <div className="flex items-center justify-between p-3 rounded-md border bg-muted/40">
                 {trialStatus?.type === "Active" ? (
                   <div className="space-y-1">
                     <p className="text-sm font-medium">
-                      Trial: {trialStatus.days_remaining} days,{" "}
-                      {trialStatus.hours_remaining} hours remaining
+                      {t("settings.commercial.trialActive", {
+                        days: trialStatus.days_remaining,
+                        hours: trialStatus.hours_remaining,
+                      })}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Commercial use is free during the trial period
+                      {t("settings.commercial.trialActiveDescription")}
                     </p>
                   </div>
                 ) : (
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-warning">
-                      Trial expired
+                      {t("settings.commercial.trialExpired")}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Personal use remains free. Commercial use requires a
-                      license.
+                      {t("settings.commercial.trialExpiredDescription")}
                     </p>
                   </div>
                 )}
@@ -1094,7 +1135,9 @@ export function SettingsDialog({
 
             {/* Advanced Section */}
             <div className="space-y-4">
-              <Label className="text-base font-medium">Advanced</Label>
+              <Label className="text-base font-medium">
+                {t("settings.advanced.title")}
+              </Label>
 
               {!isLinux && (
                 <div className="flex items-start space-x-3 p-3 rounded-lg border">

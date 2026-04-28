@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
+import i18n from "@/i18n";
 import type { Extension, ExtensionGroup } from "@/types";
 
 export function useExtensionEvents() {
@@ -47,7 +48,9 @@ export function useExtensionEvents() {
       } catch (err) {
         console.error("Failed to setup extension event listeners:", err);
         setError(
-          `Failed to setup extension event listeners: ${JSON.stringify(err)}`,
+          i18n.t("errors.setupExtensionListenersFailed", {
+            error: JSON.stringify(err),
+          }),
         );
       } finally {
         setIsLoading(false);

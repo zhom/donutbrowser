@@ -14,6 +14,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { LuPipette } from "react-icons/lu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -366,12 +367,13 @@ export const ColorPickerOutput = ({
   className: _className,
   ...props
 }: ColorPickerOutputProps) => {
+  const { t } = useTranslation();
   const { mode, setMode } = useColorPicker();
 
   return (
     <Select onValueChange={setMode} value={mode}>
       <SelectTrigger className="w-20 h-8 text-xs shrink-0" {...props}>
-        <SelectValue placeholder="Mode" />
+        <SelectValue placeholder={t("common.labels.mode")} />
       </SelectTrigger>
       <SelectContent>
         {formats.map((format) => (

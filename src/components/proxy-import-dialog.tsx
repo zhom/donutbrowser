@@ -3,6 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { LuUpload } from "react-icons/lu";
 import { toast } from "sonner";
 import { LoadingButton } from "@/components/loading-button";
@@ -39,6 +40,7 @@ interface AmbiguousProxy {
 }
 
 export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
+  const { t } = useTranslation();
   const [step, setStep] = useState<ImportStep>("dropzone");
   const [isDragOver, setIsDragOver] = useState(false);
   const [parsedProxies, setParsedProxies] = useState<ParsedProxyLine[]>([]);
@@ -52,7 +54,9 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
     null,
   );
   const [isImporting, setIsImporting] = useState(false);
-  const [namePrefix, setNamePrefix] = useState("Imported");
+  const [namePrefix, setNamePrefix] = useState(
+    t("proxies.importDialog.namePrefixDefault"),
+  );
 
   const os = getCurrentOS();
   const modKey = os === "macos" ? "⌘" : "Ctrl";
@@ -65,8 +69,8 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
     setInvalidProxies([]);
     setImportResult(null);
     setIsImporting(false);
-    setNamePrefix("Imported");
-  }, []);
+    setNamePrefix(t("proxies.importDialog.namePrefixDefault"));
+  }, [t]);
 
   const processContent = useCallback(
     async (content: string, isJson: boolean, _filename = "") => {
@@ -116,19 +120,21 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
           } else if (parsed.length > 0) {
             setStep("preview");
           } else {
-            toast.error("No valid proxies found in the file");
+            toast.error(t("proxies.importDialog.noValidProxies"));
           }
         }
       } catch (error) {
         console.error("Failed to process content:", error);
         toast.error(
-          error instanceof Error ? error.message : "Failed to process file",
+          error instanceof Error
+            ? error.message
+            : t("proxies.importDialog.fileProcessError"),
         );
       } finally {
         setIsImporting(false);
       }
     },
-    [],
+    [t],
   );
 
   const handleFileRead = useCallback(
@@ -140,11 +146,11 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
         void processContent(content, isJson, file.name);
       };
       reader.onerror = () => {
-        toast.error("Failed to read file");
+        toast.error(t("proxies.importDialog.fileReadError"));
       };
       reader.readAsText(file);
     },
-    [processContent],
+    [processContent, t],
   );
 
   const handleDrop = useCallback(
@@ -160,10 +166,10 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
       if (validFile) {
         handleFileRead(validFile);
       } else {
-        toast.error("Please drop a .json or .txt file");
+        toast.error(t("proxies.importDialog.wrongFileType"));
       }
     },
-    [handleFileRead],
+    [handleFileRead, t],
   );
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
@@ -206,7 +212,8 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
         "import_proxies_from_parsed",
         {
           parsedProxies,
-          namePrefix: namePrefix.trim() || "Imported",
+          namePrefix:
+            namePrefix.trim() || t("proxies.importDialog.namePrefixDefault"),
         },
       );
       setImportResult(result);
@@ -215,12 +222,14 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
     } catch (error) {
       console.error("Failed to import proxies:", error);
       toast.error(
-        error instanceof Error ? error.message : "Failed to import proxies",
+        error instanceof Error
+          ? error.message
+          : t("proxies.importDialog.failed"),
       );
     } finally {
       setIsImporting(false);
     }
-  }, [parsedProxies, namePrefix]);
+  }, [parsedProxies, namePrefix, t]);
 
   const handleAmbiguousFormatSelect = useCallback(
     (index: number, format: string) => {
@@ -273,13 +282,12 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Import Proxies</DialogTitle>
+          <DialogTitle>{t("proxies.importDialog.title")}</DialogTitle>
           <DialogDescription>
-            {step === "dropzone" && "Import proxies from a JSON or TXT file"}
-            {step === "preview" && "Review the proxies to import"}
-            {step === "ambiguous" &&
-              "Some proxies have ambiguous formats. Please select the correct format."}
-            {step === "result" && "Import completed"}
+            {step === "dropzone" && t("proxies.importDialog.descDropzone")}
+            {step === "preview" && t("proxies.importDialog.descPreview")}
+            {step === "ambiguous" && t("proxies.importDialog.descAmbiguous")}
+            {step === "result" && t("proxies.importDialog.descResult")}
           </DialogDescription>
         </DialogHeader>
 
@@ -309,9 +317,11 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
             >
               <LuUpload className="w-10 h-10 text-muted-foreground mb-4" />
               <p className="text-sm text-muted-foreground text-center">
-                Drop a proxy config file
+                {t("proxies.importDialog.dropzonePrompt")}
                 <br />
-                <span className="text-xs">(.json, .txt)</span>
+                <span className="text-xs">
+                  {t("proxies.importDialog.dropzoneFormats")}
+                </span>
               </p>
               <input
                 id="proxy-file-input"
@@ -326,7 +336,7 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
               />
             </div>
             <p className="text-xs text-muted-foreground text-center">
-              Paste from clipboard with {modKey}+V
+              {t("proxies.importDialog.pasteHint", { modKey })}
             </p>
           </div>
         )}
@@ -334,27 +344,35 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
         {step === "preview" && (
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name-prefix">Name Prefix</Label>
+              <Label htmlFor="name-prefix">
+                {t("proxies.importDialog.namePrefix")}
+              </Label>
               <Input
                 id="name-prefix"
-                placeholder="Imported"
+                placeholder={t("proxies.importDialog.namePrefixDefault")}
                 value={namePrefix}
                 onChange={(e) => {
                   setNamePrefix(e.target.value);
                 }}
               />
               <p className="text-xs text-muted-foreground">
-                Proxies will be named &quot;{namePrefix || "Imported"} Proxy
-                1&quot;, &quot;{namePrefix || "Imported"} Proxy 2&quot;, etc.
+                {t("proxies.importDialog.namePrefixHint", {
+                  prefix:
+                    namePrefix || t("proxies.importDialog.namePrefixDefault"),
+                })}
               </p>
             </div>
 
             <div className="space-y-2">
               <Label>
-                Proxies to import ({parsedProxies.length})
+                {t("proxies.importDialog.proxiesToImport", {
+                  count: parsedProxies.length,
+                })}
                 {invalidProxies.length > 0 && (
                   <span className="text-muted-foreground ml-2">
-                    ({invalidProxies.length} invalid)
+                    {t("proxies.importDialog.invalidCount", {
+                      count: invalidProxies.length,
+                    })}
                   </span>
                 )}
               </Label>
@@ -387,8 +405,7 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
         {step === "ambiguous" && (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              The following proxies have an ambiguous format. Please select the
-              correct interpretation for each.
+              {t("proxies.importDialog.ambiguousIntro")}
             </p>
             <ScrollArea className="h-[250px] border rounded-md">
               <div className="p-3 space-y-4">
@@ -430,14 +447,18 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
           <div className="space-y-4">
             <div className="p-4 bg-muted/30 rounded-lg space-y-2">
               <div className="flex justify-between">
-                <span className="text-sm">Imported:</span>
+                <span className="text-sm">
+                  {t("proxies.importDialog.imported")}
+                </span>
                 <span className="text-sm font-medium text-success">
                   {importResult.imported_count}
                 </span>
               </div>
               {importResult.skipped_count > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-sm">Skipped (duplicates):</span>
+                  <span className="text-sm">
+                    {t("proxies.importDialog.skippedDuplicates")}
+                  </span>
                   <span className="text-sm font-medium text-warning">
                     {importResult.skipped_count}
                   </span>
@@ -445,7 +466,9 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
               )}
               {importResult.errors.length > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-sm">Errors:</span>
+                  <span className="text-sm">
+                    {t("proxies.importDialog.errors")}
+                  </span>
                   <span className="text-sm font-medium text-destructive">
                     {importResult.errors.length}
                   </span>
@@ -455,7 +478,7 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
 
             {importResult.errors.length > 0 && (
               <div className="space-y-2">
-                <Label>Errors</Label>
+                <Label>{t("proxies.importDialog.errors")}</Label>
                 <ScrollArea className="h-[100px] border rounded-md">
                   <div className="p-2 space-y-1">
                     {importResult.errors.map((error, i) => (
@@ -476,21 +499,23 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
         <DialogFooter>
           {step === "dropzone" && (
             <RippleButton variant="outline" onClick={handleClose}>
-              Cancel
+              {t("common.buttons.cancel")}
             </RippleButton>
           )}
 
           {step === "preview" && (
             <>
               <RippleButton variant="outline" onClick={resetState}>
-                Back
+                {t("common.buttons.back")}
               </RippleButton>
               <LoadingButton
                 isLoading={isImporting}
                 onClick={() => void handleImport()}
                 disabled={parsedProxies.length === 0}
               >
-                Import {parsedProxies.length} Proxies
+                {t("proxies.importDialog.importButton", {
+                  count: parsedProxies.length,
+                })}
               </LoadingButton>
             </>
           )}
@@ -498,19 +523,21 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
           {step === "ambiguous" && (
             <>
               <RippleButton variant="outline" onClick={resetState}>
-                Back
+                {t("common.buttons.back")}
               </RippleButton>
               <RippleButton
                 onClick={handleResolveAmbiguous}
                 disabled={ambiguousProxies.some((p) => !p.selectedFormat)}
               >
-                Continue
+                {t("proxies.importDialog.continueButton")}
               </RippleButton>
             </>
           )}
 
           {step === "result" && (
-            <RippleButton onClick={handleClose}>Done</RippleButton>
+            <RippleButton onClick={handleClose}>
+              {t("proxies.importDialog.doneButton")}
+            </RippleButton>
           )}
         </DialogFooter>
       </DialogContent>

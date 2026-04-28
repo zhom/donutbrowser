@@ -28,7 +28,9 @@
       "refresh": "Refresh",
       "loading": "Loading...",
       "saveSettings": "Save Settings",
-      "moreInfo": "More info"
+      "moreInfo": "More info",
+      "downloading": "Downloading...",
+      "minimize": "Minimize"
     },
     "status": {
       "active": "Active",
@@ -56,7 +58,9 @@
       "default": "Default",
       "custom": "Custom",
       "optional": "Optional",
-      "required": "Required"
+      "required": "Required",
+      "unknownProfile": "Unknown",
+      "mode": "Mode"
     },
     "time": {
       "days": "days",
@@ -64,7 +68,26 @@
       "minutes": "minutes",
       "seconds": "seconds",
       "remaining": "remaining"
-    }
+    },
+    "aria": {
+      "selectAll": "Select all",
+      "selectRow": "Select row",
+      "selectProfile": "Select profile"
+    },
+    "keys": {
+      "escape": "Escape"
+    },
+    "errors": {
+      "unknown": "Unknown error occurred"
+    },
+    "window": {
+      "minimize": "Minimize"
+    },
+    "commandPalette": {
+      "title": "Command Palette",
+      "description": "Search for a command to run..."
+    },
+    "noResults": "No results found."
   },
   "settings": {
     "title": "Settings",
@@ -85,7 +108,8 @@
       "title": "Language",
       "description": "Choose your preferred language for the application interface.",
       "systemDefault": "System Default",
-      "selectLanguage": "Select language"
+      "selectLanguage": "Select language",
+      "interface": "Interface Language"
     },
     "defaultBrowser": {
       "title": "Default Browser",
@@ -100,7 +124,8 @@
       "microphone": "Microphone",
       "microphoneDescription": "Access to microphone for browser applications",
       "camera": "Camera",
-      "cameraDescription": "Access to camera for browser applications"
+      "cameraDescription": "Access to camera for browser applications",
+      "accessRequested": "{{permission}} access requested"
     },
     "integrations": {
       "title": "Integrations",
@@ -134,7 +159,8 @@
     "advanced": {
       "title": "Advanced",
       "clearCache": "Clear All Version Cache",
-      "clearCacheDescription": "Clear all cached browser version data and refresh all browser versions from their sources. This will force a fresh download of version information for all browsers."
+      "clearCacheDescription": "Clear all cached browser version data and refresh all browser versions from their sources. This will force a fresh download of version information for all browsers.",
+      "clearCacheFailed": "Failed to clear cache"
     },
     "disableAutoUpdates": "Disable App Auto Updates",
     "disableAutoUpdatesDescription": "Prevent the app from automatically checking and installing Donut Browser updates. Browser updates are not affected."
@@ -169,7 +195,8 @@
       "note": "Note",
       "group": "Group",
       "proxy": "Proxy / VPN",
-      "lastLaunch": "Last Launch"
+      "lastLaunch": "Last Launch",
+      "empty": "No profiles found."
     },
     "actions": {
       "launch": "Launch",
@@ -205,7 +232,30 @@
     "ephemeral": "Ephemeral",
     "ephemeralDescription": "The browser is forced to write profile data into memory instead of disk. Data is deleted when the browser is closed.",
     "ephemeralBadge": "Ephemeral",
-    "ephemeralAlpha": "Alpha"
+    "ephemeralAlpha": "Alpha",
+    "bulkDelete": {
+      "title": "Delete Selected Profiles",
+      "description": "This action cannot be undone. This will permanently delete {{count}} profile(s) and all associated data.",
+      "confirmButton": "Delete {{count}} Profile(s)"
+    },
+    "note": {
+      "empty": "No Note",
+      "placeholder": "Add a note..."
+    },
+    "aria": {
+      "profileInfo": "Profile info"
+    },
+    "delete": {
+      "title": "Delete Profile",
+      "description": "This action cannot be undone. This will permanently delete the profile \"{{profileName}}\" and all its associated data.",
+      "confirmButton": "Delete Profile"
+    },
+    "actionBar": {
+      "assignToGroup": "Assign to Group",
+      "assignProxy": "Assign Proxy",
+      "assignExtensionGroup": "Assign Extension Group",
+      "copyCookies": "Copy Cookies"
+    }
   },
   "createProfile": {
     "title": "Create New Profile",
@@ -228,7 +278,10 @@
       "title": "Proxy / VPN",
       "addProxy": "Add Proxy",
       "noProxy": "No proxy / VPN",
-      "noProxiesAvailable": "No proxies or VPNs available. Add one to route this profile's traffic."
+      "noProxiesAvailable": "No proxies or VPNs available. Add one to route this profile's traffic.",
+      "search": "Search proxies or VPNs...",
+      "notFound": "No proxies or VPNs found.",
+      "searchWithCountries": "Search proxies, VPNs, or countries..."
     },
     "launchHook": {
       "label": "Launch Hook URL",
@@ -248,7 +301,8 @@
     "chromiumSubtitle": "Powered by Wayfern",
     "firefoxLabel": "Firefox",
     "firefoxSubtitle": "Powered by Camoufox",
-    "camoufoxWarning": "Firefox (Camoufox) is maintained by a third-party organization. For production use, please use Chromium."
+    "camoufoxWarning": "Firefox (Camoufox) is maintained by a third-party organization. For production use, please use Chromium.",
+    "platformUnavailable": "{{browser}} is not available on your platform yet."
   },
   "deleteDialog": {
     "title": "Delete Profile",
@@ -259,7 +313,31 @@
   },
   "proxies": {
     "title": "Proxies",
-    "management": "Proxies & VPNs",
+    "management": {
+      "description": "Manage your proxy and VPN configurations for reuse across profiles",
+      "tabProxies": "Proxies",
+      "tabVpns": "VPNs",
+      "create": "Create",
+      "loading": "Loading proxies...",
+      "noneCreated": "No proxies created yet. Create your first proxy using the button above.",
+      "usage": "Usage",
+      "syncCol": "Sync",
+      "syncCannotDisable": "Sync cannot be disabled while this proxy is used by synced profiles",
+      "enableSync": "Enable sync",
+      "disableSync": "Disable sync",
+      "editProxy": "Edit proxy",
+      "deleteProxy": "Delete proxy",
+      "cannotDelete_one": "Cannot delete: in use by {{count}} profile",
+      "cannotDelete_other": "Cannot delete: in use by {{count}} profiles",
+      "syncEnabled": "Sync enabled",
+      "syncDisabled": "Sync disabled",
+      "updateSyncFailed": "Failed to update sync",
+      "deleteSuccess": "Proxy deleted successfully",
+      "deleteFailed": "Failed to delete proxy",
+      "deleteTitle": "Delete Proxy",
+      "deleteDescription": "This action cannot be undone. This will permanently delete the proxy \"{{name}}\".",
+      "title": "Proxies & VPNs"
+    },
     "add": "Add Proxy",
     "edit": "Edit Proxy",
     "delete": "Delete Proxy",
@@ -280,7 +358,12 @@
       "password": "Password",
       "passwordPlaceholder": "Optional",
       "cipher": "Cipher",
-      "cipherPlaceholder": "aes-256-gcm"
+      "cipherPlaceholder": "aes-256-gcm",
+      "nameRequired": "Proxy name is required",
+      "hostPortRequired": "Host and port are required",
+      "ssCipherRequired": "Cipher and password are required for Shadowsocks",
+      "selectType": "Select proxy type",
+      "saveFailed": "Failed to save proxy: {{error}}"
     },
     "types": {
       "http": "HTTP",
@@ -318,6 +401,45 @@
     "sync": {
       "enabled": "Sync Enabled",
       "disabled": "Sync Disabled"
+    },
+    "exportDialog": {
+      "title": "Export Proxies",
+      "description": "Export your proxy configurations to a file",
+      "format": "Export Format",
+      "json": "JSON",
+      "txt": "TXT (URL format)",
+      "preview": "Preview",
+      "noProxies": "No proxies to export",
+      "downloaded": "Downloaded {{filename}}",
+      "failed": "Failed to export proxies",
+      "copied": "Copied"
+    },
+    "importDialog": {
+      "title": "Import Proxies",
+      "descDropzone": "Import proxies from a JSON or TXT file",
+      "descPreview": "Review the proxies to import",
+      "descAmbiguous": "Some proxies have ambiguous formats. Please select the correct format.",
+      "descResult": "Import completed",
+      "dropzonePrompt": "Drop a proxy config file",
+      "dropzoneFormats": "(.json, .txt)",
+      "pasteHint": "Paste from clipboard with {{modKey}}+V",
+      "wrongFileType": "Please drop a .json or .txt file",
+      "fileReadError": "Failed to read file",
+      "fileProcessError": "Failed to process file",
+      "noValidProxies": "No valid proxies found in the file",
+      "namePrefix": "Name Prefix",
+      "namePrefixDefault": "Imported",
+      "namePrefixHint": "Proxies will be named \"{{prefix}} Proxy 1\", \"{{prefix}} Proxy 2\", etc.",
+      "proxiesToImport": "Proxies to import ({{count}})",
+      "invalidCount": "({{count}} invalid)",
+      "ambiguousIntro": "The following proxies have an ambiguous format. Please select the correct interpretation for each.",
+      "imported": "Imported:",
+      "skippedDuplicates": "Skipped (duplicates):",
+      "errors": "Errors",
+      "importButton": "Import {{count}} Proxies",
+      "continueButton": "Continue",
+      "doneButton": "Done",
+      "failed": "Failed to import proxies"
     }
   },
   "groups": {
@@ -343,7 +465,30 @@
     "sync": {
       "enabled": "Sync Enabled",
       "disabled": "Sync Disabled"
-    }
+    },
+    "createTitle": "Create New Group",
+    "createDescription": "Create a new group to organize your browser profiles.",
+    "editTitle": "Edit Group",
+    "editDescription": "Update the name of your group.",
+    "createSuccess": "Group created successfully",
+    "createFailed": "Failed to create group",
+    "updateSuccess": "Group updated successfully",
+    "updateFailed": "Failed to update group",
+    "deleteTitle": "Delete Group",
+    "deleteDescription": "This action cannot be undone. This will permanently delete the group.",
+    "deleteSuccess": "Group deleted successfully",
+    "deleteFailed": "Failed to delete group",
+    "loadingProfiles": "Loading associated profiles...",
+    "associatedProfiles": "Associated Profiles ({{count}})",
+    "whatToDoWithProfiles": "What should happen to these profiles?",
+    "moveToDefaultOption": "Move profiles to Default group",
+    "deleteAlongWithGroup": "Delete profiles along with the group",
+    "noAssociatedProfiles": "This group has no associated profiles.",
+    "deleteGroup": "Delete Group",
+    "deleteGroupAndProfiles": "Delete Group & Profiles",
+    "loadProfilesFailed": "Failed to load profiles",
+    "unknownGroup": "Unknown Group",
+    "profileGroupsAriaLabel": "Profile groups"
   },
   "sync": {
     "mode": {
@@ -366,7 +511,16 @@
       "configureService": "Configure Sync Service"
     },
     "title": "Account",
-    "config": "Sync Configuration",
+    "config": {
+      "serverUrlRequired": "Please enter a server URL",
+      "connectionSuccess": "Connection successful!",
+      "serverError": "Server responded with an error",
+      "connectFailed": "Failed to connect to server",
+      "settingsSaved": "Sync settings saved",
+      "saveFailed": "Failed to save settings",
+      "disconnected": "Sync disconnected",
+      "disconnectFailed": "Failed to disconnect"
+    },
     "serverUrl": "Server URL",
     "serverUrlPlaceholder": "https://sync.example.com",
     "token": "Sync Token",
@@ -410,6 +564,12 @@
       "profileLockedShort": "In use",
       "cannotLaunchLocked": "Cannot launch — profile is in use by {{email}}",
       "createdBy": "Created by {{email}}"
+    },
+    "disabled": "Disabled",
+    "toast": {
+      "profileSynced": "Profile '{{name}}' synced successfully",
+      "profileSyncFailed": "Failed to sync profile '{{name}}'",
+      "profileSyncFailedWithError": "Failed to sync profile '{{name}}': {{error}}"
     }
   },
   "integrations": {
@@ -447,7 +607,31 @@
       "removedFromClaudeCode": "Removed from Claude Code",
       "config": "MCP Configuration",
       "copyConfig": "Copy Configuration"
-    }
+    },
+    "tabApi": "Local API",
+    "tabMcp": "MCP (AI Assistants)",
+    "apiEnableLabel": "Enable Local API Server",
+    "apiEnableDescription": "Allow managing profiles, groups, and proxies via REST API.",
+    "apiPortLabel": "Port",
+    "apiTokenLabel": "Authentication Token",
+    "apiTokenHint": "Include in Authorization header: Bearer {{tokenSlot}}",
+    "apiInvalidPort": "Invalid port",
+    "apiInvalidPortDescription": "Port must be between 1 and 65535",
+    "apiPortInUse": "Port {{port}} is already in use",
+    "apiFallbackPort": "Server started on fallback port {{port}}",
+    "apiStarted": "API server started on port {{port}}",
+    "apiRunning": "API server running on port {{port}}",
+    "apiStopped": "API server stopped",
+    "apiToggleFailed": "Failed to toggle API server",
+    "apiStartFailed": "Failed to start API server",
+    "apiUnknownError": "Unknown error",
+    "tokenCopied": "Token copied",
+    "mcpEnableLabel": "Enable MCP Server (Model Context Protocol)",
+    "mcpEnableDescription": "Allow AI assistants like Claude Desktop to control browsers.",
+    "mcpAcceptTermsFirst": "(Accept Wayfern terms in Settings first)",
+    "mcpStarted": "MCP server started on port {{port}}",
+    "mcpStopped": "MCP server stopped",
+    "mcpToggleFailed": "Failed to toggle MCP server"
   },
   "import": {
     "title": "Import Profile",
@@ -465,7 +649,9 @@
       "fingerprint": {
         "title": "Fingerprint",
         "randomize": "Randomize on Launch",
-        "randomizeDescription": "Generate a new fingerprint each time the browser is launched."
+        "randomizeDescription": "Generate a new fingerprint each time the browser is launched.",
+        "osCpuPlaceholder": "e.g., Intel Mac OS X 10.15",
+        "webglRendererPlaceholder": "e.g., llvmpipe, or similar"
       },
       "os": {
         "title": "Operating System",
@@ -499,7 +685,10 @@
       "fingerprint": {
         "title": "Fingerprint",
         "randomize": "Randomize on Launch",
-        "randomizeDescription": "Generate a new fingerprint each time the browser is launched."
+        "randomizeDescription": "Generate a new fingerprint each time the browser is launched.",
+        "platformPlaceholder": "e.g., Win32, MacIntel, Linux x86_64",
+        "timezoneOffsetPlaceholder": "e.g., 300 for EST (UTC-5)",
+        "webglRendererPlaceholder": "e.g., Intel(R) HD Graphics"
       },
       "os": {
         "title": "Operating System",
@@ -534,13 +723,53 @@
       "selectCookies": "Select Cookies",
       "allDomains": "All Domains",
       "selectedCount": "{{count}} cookie selected",
-      "selectedCount_plural": "{{count}} cookies selected"
+      "selectedCount_plural": "{{count}} cookies selected",
+      "dialogDescription_one": "Copy cookies from a source profile to {{count}} selected profile.",
+      "dialogDescription_other": "Copy cookies from a source profile to {{count}} selected profiles.",
+      "sourceProfile": "Source Profile",
+      "sourcePlaceholder": "Select a profile to copy cookies from",
+      "running": "(running)",
+      "targetProfiles": "Target Profiles ({{count}})",
+      "noOtherTargets": "No other Wayfern/Camoufox profiles selected",
+      "selectSourceFirst": "Select a source profile first",
+      "selectionStatus": "({{selected}} of {{total}} selected)",
+      "searchPlaceholder": "Search domains or cookies...",
+      "noMatching": "No matching cookies found",
+      "noFound": "No cookies found",
+      "replaceNote": "Existing cookies with the same name and domain will be replaced. Other cookies will be kept.",
+      "cannotCopyRunningOne": "Cannot copy cookies: {{names}} is still running",
+      "cannotCopyRunningMany": "Cannot copy cookies: {{names}} are still running",
+      "someErrors": "Some errors occurred: {{errors}}",
+      "successMessage": "Successfully copied {{copied}} cookies ({{replaced}} replaced)",
+      "failedMessage": "Failed to copy cookies: {{error}}",
+      "copyButton_one": "Copy {{count}} Cookie",
+      "copyButton_other": "Copy {{count}} Cookies",
+      "copyButtonEmpty": "Copy Cookies"
     },
     "success": "Cookies copied successfully",
     "error": "Failed to copy cookies",
     "management": {
       "title": "Cookie Management",
-      "menuItem": "Cookie Management"
+      "menuItem": "Cookie Management",
+      "tabImport": "Import",
+      "tabExport": "Export",
+      "importDescription": "Import cookies from a Netscape or JSON format file.",
+      "dropPrompt": "Click to choose a cookie file",
+      "fileFormats": "(.txt, .cookies, or .json)",
+      "cookiesFound": "{{count}} cookies found",
+      "importedSuccess": "Successfully imported {{imported}} cookies ({{replaced}} replaced)",
+      "linesSkipped": "{{count}} line(s) skipped",
+      "fileReadError": "Failed to read file",
+      "loadFailed": "Failed to load cookies: {{error}}",
+      "cookiesLabel": "Cookies",
+      "selectionStatus": "({{selected}} of {{total}} selected)",
+      "selectAll": "Select all",
+      "deselectAll": "Deselect all",
+      "noCookies": "No cookies found in this profile",
+      "doneButton": "Done",
+      "importButton": "Import",
+      "exportButton": "Export",
+      "backButton": "Back"
     },
     "import": {
       "title": "Import Cookies",
@@ -623,7 +852,30 @@
     "maxLength": "Must be at most {{max}} characters",
     "networkError": "Network error. Please check your connection.",
     "serverError": "Server error. Please try again later.",
-    "unknownError": "An unknown error occurred. Please try again."
+    "unknownError": "An unknown error occurred. Please try again.",
+    "noProfilesForUrl": "No profiles available. Please create a profile first before opening URLs.",
+    "updateCamoufoxConfigFailed": "Failed to update camoufox config: {{error}}",
+    "updateWayfernConfigFailed": "Failed to update wayfern config: {{error}}",
+    "createProfileFailed": "Failed to create profile: {{error}}",
+    "launchBrowserFailed": "Failed to launch browser: {{error}}",
+    "cannotDeleteRunningProfile": "Cannot delete profile while browser is running. Please stop the browser first.",
+    "deleteProfileFailed": "Failed to delete profile: {{error}}",
+    "renameProfileFailed": "Failed to rename profile: {{error}}",
+    "killBrowserFailed": "Failed to kill browser: {{error}}",
+    "deleteSelectedProfilesFailed": "Failed to delete selected profiles: {{error}}",
+    "cookieCopyUnsupportedBrowser": "Cookie copy only works with Wayfern and Camoufox profiles",
+    "updateSyncSettingsFailed": "Failed to update sync settings",
+    "cloneProfileFailed": "Failed to clone profile: {{error}}",
+    "loadSupportedBrowsersFailed": "Failed to load supported browsers",
+    "setupExtensionListenersFailed": "Failed to setup extension event listeners: {{error}}",
+    "loadGroupsFailed": "Failed to load groups: {{error}}",
+    "setupGroupListenersFailed": "Failed to setup group event listeners: {{error}}",
+    "loadProfilesFailed": "Failed to load profiles: {{error}}",
+    "setupProfileListenersFailed": "Failed to setup profile event listeners: {{error}}",
+    "loadProxiesFailed": "Failed to load proxies: {{error}}",
+    "setupProxyListenersFailed": "Failed to setup proxy event listeners: {{error}}",
+    "loadVpnConfigsFailed": "Failed to load VPN configs: {{error}}",
+    "setupVpnListenersFailed": "Failed to setup VPN event listeners: {{error}}"
   },
   "browser": {
     "camoufox": "Camoufox",
@@ -729,7 +981,10 @@
     "brandVersion": "Brand Version",
     "proFeature": "This is a Pro feature",
     "generateFingerprint": "Generate Fingerprint",
-    "refreshFingerprint": "Refresh Fingerprint"
+    "refreshFingerprint": "Refresh Fingerprint",
+    "canvasNoiseSeedPlaceholder": "Enter a seed string for canvas fingerprint",
+    "addFontsPlaceholder": "Add fonts...",
+    "enterAsJson": "Enter {{title}} as JSON"
   },
   "warnings": {
     "windowResizeTitle": "Custom Window Dimensions",
@@ -895,5 +1150,407 @@
     "fresh": "Fresh",
     "stale": "Stale",
     "notCached": "Not cached"
+  },
+  "vpns": {
+    "form": {
+      "titleEdit": "Edit VPN",
+      "titleCreate": "Create WireGuard VPN",
+      "descEdit": "Update the name of your VPN configuration.",
+      "descCreate": "Enter your WireGuard interface and peer details.",
+      "name": "Name",
+      "namePlaceholder": "e.g. Home WireGuard",
+      "privateKey": "Private Key",
+      "privateKeyPlaceholder": "Base64-encoded private key",
+      "address": "Address",
+      "addressPlaceholder": "e.g. 10.0.0.2/24",
+      "dnsOptional": "DNS (optional)",
+      "dnsPlaceholder": "e.g. 1.1.1.1",
+      "mtuOptional": "MTU (optional)",
+      "mtuPlaceholder": "e.g. 1420",
+      "peerPublicKey": "Peer Public Key",
+      "peerPublicKeyPlaceholder": "Base64-encoded peer public key",
+      "peerEndpoint": "Peer Endpoint",
+      "peerEndpointPlaceholder": "e.g. vpn.example.com:51820",
+      "allowedIps": "Allowed IPs",
+      "allowedIpsPlaceholder": "e.g. 0.0.0.0/0, ::/0",
+      "keepaliveOptional": "Persistent Keepalive (optional)",
+      "keepalivePlaceholder": "e.g. 25",
+      "presharedKeyOptional": "Preshared Key (optional)",
+      "presharedKeyPlaceholder": "Base64-encoded preshared key",
+      "updateButton": "Update VPN",
+      "createButton": "Create VPN",
+      "nameRequired": "VPN name is required",
+      "privateKeyRequired": "Private key is required",
+      "addressRequired": "Address is required",
+      "peerPublicKeyRequired": "Peer public key is required",
+      "peerEndpointRequired": "Peer endpoint is required",
+      "updated": "VPN updated successfully",
+      "created": "WireGuard VPN created successfully",
+      "updateFailed": "Failed to update VPN: {{error}}",
+      "createFailed": "Failed to create VPN: {{error}}"
+    },
+    "import": {
+      "title": "Import VPN Config",
+      "descDropzone": "Import a WireGuard (.conf) configuration file",
+      "descPreview": "Review the VPN configuration to import",
+      "descResult": "VPN import completed",
+      "dropzonePrompt": "Drop a WireGuard .conf file here or click to browse",
+      "pasteHint": "Paste from clipboard with {{modKey}}+V",
+      "invalidContent": "Content does not appear to be a valid VPN configuration",
+      "fileReadError": "Failed to read file",
+      "wrongFileType": "Please drop a WireGuard .conf file",
+      "configurationLabel": "{{type}} Configuration",
+      "endpointLabel": "Endpoint: {{endpoint}}",
+      "vpnNameLabel": "VPN Name",
+      "vpnNamePlaceholder": "My VPN",
+      "configPreview": "Config Preview",
+      "importedSuccess": "VPN Imported Successfully",
+      "importFailed": "Import Failed",
+      "importButton": "Import VPN",
+      "doneButton": "Done",
+      "failedGeneric": "Failed to import VPN config",
+      "defaultName": "{{type}} VPN"
+    },
+    "management": {
+      "loading": "Loading VPNs...",
+      "noneCreated": "No VPN configs created yet. Import or create one using the buttons above.",
+      "editVpn": "Edit VPN",
+      "deleteVpn": "Delete VPN",
+      "cannotDelete_one": "Cannot delete: in use by {{count}} profile",
+      "cannotDelete_other": "Cannot delete: in use by {{count}} profiles",
+      "syncCannotDisable": "Sync cannot be disabled while this VPN is used by synced profiles",
+      "deleteSuccess": "VPN deleted successfully",
+      "deleteFailed": "Failed to delete VPN",
+      "deleteTitle": "Delete VPN",
+      "deleteDescription": "This action cannot be undone. This will permanently delete the VPN \"{{name}}\"."
+    }
+  },
+  "importProfile": {
+    "title": "Import Browser Profile",
+    "autoDetect": "Auto-Detect",
+    "manualImport": "Manual Import",
+    "detectedProfilesTitle": "Detected Browser Profiles",
+    "scanning": "Scanning for browser profiles...",
+    "noneFound": "No browser profiles found on your system.",
+    "noneFoundHint": "Try the manual import option if you have profiles in custom locations.",
+    "selectProfile": "Select Profile:",
+    "selectProfilePlaceholder": "Choose a detected profile",
+    "pathLabel": "Path:",
+    "browserLabel": "Browser:",
+    "newProfileName": "New Profile Name:",
+    "newProfileNamePlaceholder": "Enter a name for the imported profile",
+    "manualTitle": "Manual Profile Import",
+    "browserType": "Browser Type:",
+    "loadingBrowsers": "Loading browsers...",
+    "selectBrowserType": "Select browser type",
+    "profileFolderPath": "Profile Folder Path:",
+    "profileFolderPlaceholder": "Enter the full path to the profile folder",
+    "browseFolderTitle": "Browse for folder",
+    "examplePaths": "Example paths:",
+    "selectFolderTitle": "Select Browser Profile Folder",
+    "folderDialogFailed": "Failed to open folder dialog",
+    "detectFailed": "Failed to detect existing browser profiles",
+    "fillFields": "Please fill in all fields",
+    "selectAndName": "Please select a profile and provide a name",
+    "profileNotFound": "Selected profile not found",
+    "importedSuccess": "Successfully imported profile \"{{name}}\"",
+    "notInstalled": "{{browser}} is not installed. Please download {{browser}} first from the main window, then try importing again.",
+    "importFailed": "Failed to import profile: {{error}}",
+    "importedAsPrefix": "This profile will be imported as a",
+    "importedAsSuffix": "profile.",
+    "proxyOptional": "Proxy (Optional)",
+    "noProxy": "No proxy",
+    "nextButton": "Next",
+    "importButton": "Import"
+  },
+  "syncTooltips": {
+    "syncing": "Syncing...",
+    "syncedAt": "Synced {{time}}",
+    "synced": "Synced",
+    "waiting": "Waiting to sync",
+    "errorWith": "Sync error: {{error}}",
+    "error": "Sync error",
+    "notSynced": "Not synced"
+  },
+  "groupManagement": {
+    "description": "Manage your profile groups",
+    "createGroup": "Create Group",
+    "noGroups": "No groups created yet. Create your first group using the button above.",
+    "loading": "Loading groups...",
+    "profileCount_one": "{{count}} profile",
+    "profileCount_other": "{{count}} profiles",
+    "groupsLabel": "Groups",
+    "profilesCol": "Profiles",
+    "syncCannotDisable": "Sync cannot be disabled while this group is used by synced profiles",
+    "editGroupTooltip": "Edit group",
+    "deleteGroupTooltip": "Delete group",
+    "loadFailed": "Failed to load groups"
+  },
+  "proxyAssignment": {
+    "title": "Assign Proxy / VPN",
+    "description_one": "Assign a proxy or VPN to {{count}} selected profile.",
+    "description_other": "Assign a proxy or VPN to {{count}} selected profiles.",
+    "selectLabel": "Proxy / VPN",
+    "placeholder": "Select a proxy or VPN",
+    "noProxy": "No proxy / VPN",
+    "searchPlaceholder": "Search proxies or VPNs...",
+    "notFound": "No proxies or VPNs found.",
+    "assignButton": "Assign",
+    "success": "Successfully assigned proxy/VPN to {{count}} profile(s)",
+    "failed": "Failed to assign proxy/VPN",
+    "selectedProfilesLabel": "Selected Profiles:",
+    "assignProxyVpnLabel": "Assign Proxy / VPN:",
+    "noneOption": "None",
+    "noValidProfiles": "No valid profiles selected.",
+    "vpnGroupHeading": "VPNs",
+    "failedFallback": "Failed to assign proxy/VPN to profiles"
+  },
+  "groupAssignment": {
+    "title": "Assign Group",
+    "description_one": "Assign a group to {{count}} selected profile.",
+    "description_other": "Assign a group to {{count}} selected profiles.",
+    "selectLabel": "Group",
+    "placeholder": "Select a group",
+    "noGroup": "No Group (Default)",
+    "assignButton": "Assign",
+    "success": "Successfully assigned group to {{count}} profile(s)",
+    "failed": "Failed to assign group",
+    "selectedProfilesLabel": "Selected Profiles:",
+    "assignGroupLabel": "Assign to Group:",
+    "noValidProfiles": "No valid profiles selected.",
+    "failedFallback": "Failed to assign group to profiles"
+  },
+  "profileSelector": {
+    "title": "Select Profile",
+    "description": "Choose a profile to launch with this URL",
+    "searchPlaceholder": "Search profiles...",
+    "noProfiles": "No profiles available",
+    "noResults": "No profiles match your search",
+    "selectButton": "Select",
+    "launching": "Launching...",
+    "chooseProfileTitle": "Choose Profile",
+    "openingUrl": "Opening URL:",
+    "urlCopied": "URL copied to clipboard!",
+    "selectProfileLabel": "Select Profile:",
+    "noneAvailableShort": "No profiles available. Please create a profile first.",
+    "noneAvailableLong": "Close this dialog and create a profile from the main window to get started.",
+    "chooseAProfile": "Choose a profile",
+    "badgeProxy": "Proxy",
+    "badgeRunning": "Running",
+    "badgeUnavailable": "Unavailable",
+    "openButton": "Open"
+  },
+  "locationProxy": {
+    "title": "Quick Location Proxy",
+    "description": "Choose a country to route this profile through. A proxy will be created automatically.",
+    "country": "Country",
+    "selectCountry": "Select a country",
+    "searchCountry": "Search country...",
+    "noCountriesFound": "No countries found.",
+    "apply": "Apply",
+    "creating": "Creating proxy...",
+    "success": "Location proxy applied",
+    "failed": "Failed to apply location proxy",
+    "titleCreate": "Create Location Proxy",
+    "descriptionCreate": "Create a geo-targeted proxy with a 24-hour sticky session",
+    "countryLabel": "Country (required)",
+    "regionLabel": "Region (optional)",
+    "cityLabel": "City (optional)",
+    "ispLabel": "ISP (optional)",
+    "nameLabel": "Name",
+    "namePlaceholder": "Proxy name",
+    "loadingCountries": "Loading countries...",
+    "selectCountryPh": "Select country",
+    "searchCountries": "Search countries...",
+    "loadFailed": "Failed to load countries",
+    "selectCountryFirst": "Select a country first",
+    "loadingRegions": "Loading regions...",
+    "noRegions": "No regions available",
+    "selectRegion": "Select region",
+    "searchRegions": "Search regions...",
+    "loadingCities": "Loading cities...",
+    "noCities": "No cities available",
+    "selectCity": "Select city",
+    "searchCities": "Search cities...",
+    "loadingIsps": "Loading ISPs...",
+    "noIsps": "No ISPs available",
+    "selectIsp": "Select ISP",
+    "searchIsps": "Search ISPs...",
+    "createSuccess": "Location proxy created",
+    "createFailed": "Failed to create location proxy",
+    "creatingButton": "Creating...",
+    "createButton": "Create"
+  },
+  "launchOnLogin": {
+    "title": "Enable Launch on Login?",
+    "description": "Running in the background helps keep your proxies and browsers alive.",
+    "declineButton": "Don't Ask Again",
+    "declining": "...",
+    "enableButton": "Enable",
+    "enableSuccess": "Launch on login enabled",
+    "enableFailed": "Failed to enable launch on login",
+    "declineFailed": "Failed to save preference",
+    "tryAgain": "Please try again"
+  },
+  "wayfernTerms": {
+    "title": "Wayfern Terms and Conditions",
+    "description": "Before using Donut Browser, you must read and agree to Wayfern's Terms and Conditions.",
+    "reviewLabel": "Please review the Terms and Conditions at:",
+    "agreeNotice": "By clicking \"I Accept\", you agree to be bound by these terms.",
+    "acceptButton": "I Accept",
+    "acceptSuccess": "Terms accepted successfully",
+    "acceptFailed": "Failed to accept terms",
+    "tryAgain": "Please try again"
+  },
+  "commercialTrial": {
+    "title": "Commercial Trial Expired",
+    "description": "Your 2-week commercial trial period has ended.",
+    "body": "If you are using Donut Browser for business purposes, you need to purchase a commercial license to continue. You can still use it for personal use for free.",
+    "understandButton": "I Understand",
+    "failed": "Failed to save acknowledgment",
+    "tryAgain": "Please try again"
+  },
+  "permissionDialog": {
+    "titleMicrophone": "Microphone Access Required",
+    "titleCamera": "Camera Access Required",
+    "descMicrophone": "Donut Browser needs access to your microphone to enable microphone functionality in web browsers. Each website that wants to use your microphone will still ask for your permission individually.",
+    "descCamera": "Donut Browser needs access to your camera to enable camera functionality in web browsers. Each website that wants to use your camera will still ask for your permission individually.",
+    "grantedMicrophone": "Permission granted! Browsers launched from Donut Browser can now access your microphone.",
+    "grantedCamera": "Permission granted! Browsers launched from Donut Browser can now access your camera.",
+    "notGrantedMicrophone": "Permission not granted. Click the button below to request access to your microphone.",
+    "notGrantedCamera": "Permission not granted. Click the button below to request access to your camera.",
+    "doneButton": "Done",
+    "cancelButton": "Cancel",
+    "grantAccessButton": "Grant Access",
+    "requestSuccessMicrophone": "Microphone Access permission requested",
+    "requestSuccessCamera": "Camera Access permission requested",
+    "requestFailed": "Failed to request permission"
+  },
+  "traffic": {
+    "title": "Traffic Details",
+    "bandwidthOverTime": "Bandwidth Over Time",
+    "timePeriodPlaceholder": "Time period",
+    "last1m": "Last 1 min",
+    "last5m": "Last 5 min",
+    "last30m": "Last 30 min",
+    "last1h": "Last 1 hour",
+    "last2h": "Last 2 hours",
+    "last4h": "Last 4 hours",
+    "last1d": "Last 1 day",
+    "last7d": "Last 7 days",
+    "last30d": "Last 30 days",
+    "allTime": "All time",
+    "allTimeShort": "all time",
+    "totalSuffix": "total",
+    "sentLabel": "Sent ({{period}})",
+    "receivedLabel": "Received ({{period}})",
+    "requestsLabel": "Requests ({{period}})",
+    "allTimeTraffic": "All-time traffic:",
+    "allTimeRequests": "All-time requests:",
+    "proxyDisclaimer": "Note: If you are using a proxy, VPN, or similar service, your provider may calculate traffic differently due to encryption overhead and protocol differences.",
+    "topByTraffic": "Top Domains by Traffic ({{period}})",
+    "topByRequests": "Top Domains by Requests ({{period}})",
+    "columnDomain": "Domain",
+    "columnRequests": "Requests",
+    "columnSent": "Sent",
+    "columnReceived": "Received",
+    "columnTotal": "Total Traffic",
+    "uniqueIps": "Unique IPs ({{count}})",
+    "noData": "No traffic data available for this profile.",
+    "noDataHint": "Traffic data will appear after you launch the profile.",
+    "sentLegend": "Sent",
+    "receivedLegend": "Received",
+    "tooltipSent": "↑ Sent: ",
+    "tooltipReceived": "↓ Received: "
+  },
+  "camoufoxDialog": {
+    "titleView": "View Fingerprint Settings - {{name}} ({{browser}})",
+    "titleConfigure": "Configure Fingerprint Settings - {{name}} ({{browser}})",
+    "invalidFingerprint": "Invalid fingerprint configuration",
+    "invalidFingerprintDescription": "The fingerprint configuration contains invalid JSON. Please check your advanced settings.",
+    "saveFailed": "Failed to save configuration",
+    "unknownError": "Unknown error occurred"
+  },
+  "proxyCheck": {
+    "unknownLocation": "Unknown",
+    "locationToast": "Your proxy location is:",
+    "failed": "Proxy check failed: {{error}}",
+    "tooltipChecking": "Checking proxy...",
+    "tooltipIp": "IP: {{ip}}",
+    "tooltipChecked": "Checked {{time}}",
+    "tooltipFailed": "Failed {{time}}",
+    "tooltipFailedTitle": "Proxy check failed",
+    "tooltipDefault": "Check proxy validity"
+  },
+  "vpnCheck": {
+    "valid": "VPN \"{{name}}\" configuration is valid",
+    "invalid": "VPN \"{{name}}\" configuration is invalid",
+    "failed": "VPN check failed: {{error}}",
+    "tooltipChecking": "Checking VPN config...",
+    "tooltipValid": "Configuration valid",
+    "tooltipInvalid": "Configuration invalid",
+    "tooltipChecked": "Checked {{time}}",
+    "tooltipDefault": "Check VPN config validity"
+  },
+  "profileTable": {
+    "syncTooltipDisabled": "Sync disabled",
+    "syncTooltipSyncing": "Syncing...",
+    "syncTooltipSyncedAt": "Synced {{time}}",
+    "syncTooltipSynced": "Synced",
+    "syncTooltipWaiting": "Waiting to sync",
+    "syncTooltipErrorWith": "Sync error: {{error}}",
+    "syncTooltipError": "Sync error",
+    "syncTooltipNotSynced": "Not synced",
+    "noTags": "No tags",
+    "syncTooltipCloseToSync": "Close the profile to sync",
+    "syncTooltipDisabledWithLast": "Sync disabled, last sync {{time}}"
+  },
+  "releaseTypeSelector": {
+    "noReleaseTypes": "No release types available.",
+    "placeholder": "Select release type...",
+    "stable": "Stable",
+    "nightly": "Nightly",
+    "downloaded": "Downloaded",
+    "downloadBrowser": "Download Browser",
+    "downloading": "Downloading..."
+  },
+  "dataTableActionBar": {
+    "selected": "{{count}} selected",
+    "clearSelection": "Clear selection"
+  },
+  "appUpdate": {
+    "toast": {
+      "updateFailed": "Failed to update Donut Browser",
+      "restartFailed": "Failed to restart"
+    }
+  },
+  "browserDownload": {
+    "toast": {
+      "fetchVersionsFailed": "Failed to fetch {{browser}} versions",
+      "foundNewVersions": "Found {{count}} new {{browser}} versions!",
+      "totalAvailableVersions": "Total available: {{count}} versions",
+      "downloadFailed": "Failed to download {{browser}} {{version}}",
+      "calculating": "calculating...",
+      "extractionFailed": "{{browser}} {{version}}: extraction failed",
+      "extractionFailedDescription": "The corrupt file was deleted. It will be re-downloaded on next attempt."
+    }
+  },
+  "versionUpdater": {
+    "toast": {
+      "alreadyAvailable": "{{browser}} {{version}} already available",
+      "updatingProfiles": "Updating profile configurations...",
+      "updateCompleted": "{{browser}} update completed",
+      "singleProfileUpdated": "Profile \"{{name}}\" has been updated to version {{version}}. You can now launch your browsers with the latest version.",
+      "multipleProfilesUpdated": "{{count}} profiles have been updated to version {{version}}. You can now launch your browsers with the latest version.",
+      "versionAvailable": "Version {{version}} is now available. Running profiles will use the new version when restarted.",
+      "autoUpdateFailed": "Failed to auto-update {{browser}}",
+      "updateWithErrors": "Update completed with some errors",
+      "updateWithErrorsDescription": "{{newVersions}} new versions found, {{failedUpdates}} browsers failed to update",
+      "updateSuccess": "Browser versions updated successfully",
+      "updateSuccessDescription": "Found {{newVersions}} new versions across {{successfulUpdates}} browsers. Auto-downloads will start shortly.",
+      "upToDate": "No new browser versions found",
+      "upToDateDescription": "All browser versions are up to date",
+      "updateAllFailed": "Failed to update browser versions"
+    }
   }
 }

@@ -3,12 +3,14 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { AppUpdateToast } from "@/components/app-update-toast";
 import { showToast } from "@/lib/toast-utils";
 import type { AppUpdateInfo, AppUpdateProgress } from "@/types";
 
 export function useAppUpdateNotifications() {
+  const { t } = useTranslation();
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [updateProgress, setUpdateProgress] =
@@ -60,32 +62,35 @@ export function useAppUpdateNotifications() {
     }
   }, [isClient]);
 
-  const handleAppUpdate = useCallback(async (appUpdateInfo: AppUpdateInfo) => {
-    try {
-      setIsUpdating(true);
-      setUpdateProgress({
-        stage: "downloading",
-        percentage: 0,
-        speed: undefined,
-        eta: undefined,
-        message: "Starting update...",
-      });
+  const handleAppUpdate = useCallback(
+    async (appUpdateInfo: AppUpdateInfo) => {
+      try {
+        setIsUpdating(true);
+        setUpdateProgress({
+          stage: "downloading",
+          percentage: 0,
+          speed: undefined,
+          eta: undefined,
+          message: "Starting update...",
+        });
 
-      await invoke("download_and_prepare_app_update", {
-        updateInfo: appUpdateInfo,
-      });
-    } catch (error) {
-      console.error("Failed to update app:", error);
-      showToast({
-        type: "error",
-        title: "Failed to update Donut Browser",
-        description: String(error),
-        duration: 6000,
-      });
-      setIsUpdating(false);
-      setUpdateProgress(null);
-    }
-  }, []);
+        await invoke("download_and_prepare_app_update", {
+          updateInfo: appUpdateInfo,
+        });
+      } catch (error) {
+        console.error("Failed to update app:", error);
+        showToast({
+          type: "error",
+          title: t("appUpdate.toast.updateFailed"),
+          description: String(error),
+          duration: 6000,
+        });
+        setIsUpdating(false);
+        setUpdateProgress(null);
+      }
+    },
+    [t],
+  );
 
   const handleRestart = useCallback(async () => {
     try {
@@ -94,12 +99,12 @@ export function useAppUpdateNotifications() {
       console.error("Failed to restart app:", error);
       showToast({
         type: "error",
-        title: "Failed to restart",
+        title: t("appUpdate.toast.restartFailed"),
         description: String(error),
         duration: 6000,
       });
     }
-  }, []);
+  }, [t]);
 
   const dismissAppUpdate = useCallback(() => {
     if (!isClient) return;
