@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { LuCheck, LuCopy } from "react-icons/lu";
 import { Button } from "@/components/ui/button";
 import { showSuccessToast } from "@/lib/toast-utils";
@@ -26,6 +27,7 @@ export function CopyToClipboard({
   className,
   successMessage = "Copied to clipboard",
 }: CopyToClipboardProps) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
   const copyToClipboard = useCallback(async () => {
@@ -47,9 +49,11 @@ export function CopyToClipboard({
       size={size}
       className={`relative ${className ?? ""}`}
       onClick={copyToClipboard}
-      aria-label={copied ? "Copied" : "Copy to clipboard"}
+      aria-label={copied ? t("common.aria.copied") : t("common.aria.copy")}
     >
-      <span className="sr-only">{copied ? "Copied" : "Copy"}</span>
+      <span className="sr-only">
+        {copied ? t("common.srOnly.copied") : t("common.srOnly.copy")}
+      </span>
       <LuCopy
         className={`h-4 w-4 transition-all duration-300 ${
           copied ? "scale-0" : "scale-100"

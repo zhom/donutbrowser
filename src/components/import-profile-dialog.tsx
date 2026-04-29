@@ -543,9 +543,9 @@ export function ImportProfileDialog({
             <div className="space-y-4">
               <Alert>
                 <AlertDescription>
-                  {t("importProfile.importedAsPrefix")}{" "}
-                  <strong>{getBrowserDisplayName(currentMappedBrowser)}</strong>{" "}
-                  {t("importProfile.importedAsSuffix")}
+                  {t("importProfile.importedAs", {
+                    browser: getBrowserDisplayName(currentMappedBrowser),
+                  })}
                 </AlertDescription>
               </Alert>
 

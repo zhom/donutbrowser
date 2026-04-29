@@ -283,7 +283,7 @@ export function GroupManagementDialog({
             {/* Groups list */}
             {isLoading ? (
               <div className="text-sm text-muted-foreground">
-                {t("common.loading")}
+                {t("common.buttons.loading")}
               </div>
             ) : groups.length === 0 ? (
               <div className="text-sm text-muted-foreground">

@@ -60,7 +60,8 @@
       "optional": "任意",
       "required": "必須",
       "unknownProfile": "不明",
-      "mode": "モード"
+      "mode": "モード",
+      "never": "一度もありません"
     },
     "time": {
       "days": "日",
@@ -72,7 +73,11 @@
     "aria": {
       "selectAll": "すべて選択",
       "selectRow": "行を選択",
-      "selectProfile": "プロファイルを選択"
+      "selectProfile": "プロファイルを選択",
+      "copy": "クリップボードにコピー",
+      "copied": "コピーしました",
+      "showToken": "トークンを表示",
+      "hideToken": "トークンを非表示"
     },
     "keys": {
       "escape": "Esc"
@@ -87,7 +92,11 @@
       "title": "コマンドパレット",
       "description": "実行するコマンドを検索..."
     },
-    "noResults": "結果が見つかりません。"
+    "noResults": "結果が見つかりません。",
+    "srOnly": {
+      "copy": "コピー",
+      "copied": "コピーしました"
+    }
   },
   "settings": {
     "title": "設定",
@@ -196,7 +205,8 @@
       "group": "グループ",
       "proxy": "プロキシ / VPN",
       "lastLaunch": "最終起動",
-      "empty": "プロファイルが見つかりません。"
+      "empty": "プロファイルが見つかりません。",
+      "notSelected": "未選択"
     },
     "actions": {
       "launch": "起動",
@@ -488,7 +498,8 @@
     "deleteGroupAndProfiles": "グループとプロファイルを削除",
     "loadProfilesFailed": "プロファイルの読み込みに失敗しました",
     "unknownGroup": "不明なグループ",
-    "profileGroupsAriaLabel": "プロファイルグループ"
+    "profileGroupsAriaLabel": "プロファイルグループ",
+    "loading": "グループを読み込み中..."
   },
   "sync": {
     "mode": {
@@ -631,7 +642,8 @@
     "mcpAcceptTermsFirst": "(設定で先に Wayfern の規約に同意してください)",
     "mcpStarted": "MCP サーバーをポート {{port}} で起動しました",
     "mcpStopped": "MCP サーバーを停止しました",
-    "mcpToggleFailed": "MCP サーバーの切り替えに失敗しました"
+    "mcpToggleFailed": "MCP サーバーの切り替えに失敗しました",
+    "openSettings": "統合設定を開く"
   },
   "import": {
     "title": "プロファイルをインポート",
@@ -711,6 +723,10 @@
         "webrtc": "WebRTCをブロック",
         "webgl": "WebGLをブロック"
       }
+    },
+    "shared": {
+      "browserBehavior": "ブラウザの動作",
+      "allowAddonsOpenTabs": "ブラウザアドオンが新しいタブを自動的に開くことを許可"
     }
   },
   "cookies": {
@@ -875,7 +891,8 @@
     "loadProxiesFailed": "プロキシの読み込みに失敗しました: {{error}}",
     "setupProxyListenersFailed": "プロキシイベントリスナーの設定に失敗しました: {{error}}",
     "loadVpnConfigsFailed": "VPN設定の読み込みに失敗しました: {{error}}",
-    "setupVpnListenersFailed": "VPNイベントリスナーの設定に失敗しました: {{error}}"
+    "setupVpnListenersFailed": "VPNイベントリスナーの設定に失敗しました: {{error}}",
+    "themeNotFound": "Tokyo Night テーマが見つかりません"
   },
   "browser": {
     "camoufox": "Camoufox",
@@ -901,7 +918,7 @@
     "blockWebRTC": "WebRTCをブロック",
     "blockWebGL": "WebGLをブロック",
     "navigatorProperties": "Navigatorプロパティ",
-    "userAgent": "User Agent",
+    "userAgent": "ユーザーエージェント",
     "userAgentAndPlatform": "User Agent & Platform",
     "platform": "Platform",
     "platformVersion": "Platform Version",
@@ -909,7 +926,7 @@
     "osCpu": "OS CPU",
     "hardwareConcurrency": "Hardware Concurrency",
     "maxTouchPoints": "最大タッチポイント数",
-    "doNotTrack": "Do Not Track",
+    "doNotTrack": "追跡しない",
     "selectDntPlaceholder": "DNT値を選択",
     "dntAllowed": "0（トラッキング許可）",
     "dntNotAllowed": "1（トラッキング不許可）",
@@ -931,8 +948,8 @@
     "outerHeight": "外側の高さ",
     "innerWidth": "内側の幅",
     "innerHeight": "内側の高さ",
-    "screenX": "Screen X",
-    "screenY": "Screen Y",
+    "screenX": "画面 X",
+    "screenY": "画面 Y",
     "geolocation": "ジオロケーション",
     "timezoneAndGeolocation": "タイムゾーンとジオロケーション",
     "timezoneGeolocationDescription": "これらの値はブラウザのタイムゾーンとジオロケーションAPIを上書きします。",
@@ -946,15 +963,15 @@
     "region": "地域",
     "script": "スクリプト",
     "webglProperties": "WebGLプロパティ",
-    "webglVendor": "WebGL Vendor",
-    "webglRenderer": "WebGL Renderer",
+    "webglVendor": "WebGL ベンダー",
+    "webglRenderer": "WebGL レンダラー",
     "webglParameters": "WebGLパラメータ",
     "webglParametersJson": "WebGLパラメータ (JSON)",
     "webgl2Parameters": "WebGL2パラメータ",
-    "webglShaderPrecisionFormats": "WebGL Shader Precision Formats",
-    "webgl2ShaderPrecisionFormats": "WebGL2 Shader Precision Formats",
+    "webglShaderPrecisionFormats": "WebGL シェーダー精度フォーマット",
+    "webgl2ShaderPrecisionFormats": "WebGL2 シェーダー精度フォーマット",
     "canvasFingerprint": "Canvas Fingerprint",
-    "canvasNoiseSeed": "Canvas Noise Seed",
+    "canvasNoiseSeed": "Canvas ノイズシード",
     "canvasNoiseSeedDescription": "このシードは一貫性がありながらもユニークなCanvasフィンガープリントを生成するために使用されます。各プロファイルには異なるシードを設定してください。",
     "fonts": "フォント",
     "fontsJson": "フォント (JSON配列)",
@@ -975,8 +992,8 @@
     "maxChannelCount": "最大チャンネル数",
     "vendorInfo": "ベンダー情報",
     "vendor": "ベンダー",
-    "vendorSub": "Vendor Sub",
-    "productSub": "Product Sub",
+    "vendorSub": "ベンダーサブ",
+    "productSub": "プロダクトサブ",
     "brand": "ブランド",
     "brandVersion": "ブランドバージョン",
     "proFeature": "これはPro機能です",
@@ -1124,7 +1141,9 @@
     "syncEnabled": "同期が有効",
     "syncDisabled": "同期が無効",
     "syncEnableTooltip": "同期を有効にする",
-    "syncDisableTooltip": "同期を無効にする"
+    "syncDisableTooltip": "同期を無効にする",
+    "loadGroupsFailed": "拡張機能グループの読み込みに失敗しました",
+    "assignGroupFailed": "拡張機能グループの割り当てに失敗しました"
   },
   "pro": {
     "badge": "PRO",
@@ -1256,12 +1275,11 @@
     "importedSuccess": "プロファイル「{{name}}」をインポートしました",
     "notInstalled": "{{browser}} はインストールされていません。メインウィンドウから {{browser}} をダウンロードしてからもう一度インポートしてください。",
     "importFailed": "プロファイルのインポートに失敗しました: {{error}}",
-    "importedAsPrefix": "このプロファイルは次のプロファイルとしてインポートされます:",
-    "importedAsSuffix": "",
     "proxyOptional": "プロキシ (任意)",
     "noProxy": "プロキシなし",
     "nextButton": "次へ",
-    "importButton": "インポート"
+    "importButton": "インポート",
+    "importedAs": "このプロファイルは {{browser}} プロファイルとしてインポートされます。"
   },
   "syncTooltips": {
     "syncing": "同期中...",
@@ -1503,7 +1521,12 @@
     "syncTooltipNotSynced": "未同期",
     "noTags": "タグなし",
     "syncTooltipCloseToSync": "プロファイルを閉じて同期",
-    "syncTooltipDisabledWithLast": "同期無効、最終同期 {{time}}"
+    "syncTooltipDisabledWithLast": "同期無効、最終同期 {{time}}",
+    "addTagsPlaceholder": "タグを追加",
+    "tagsHeader": "タグ",
+    "noteHeader": "メモ",
+    "vpnsHeading": "VPN",
+    "createByCountryHeading": "国別に作成"
   },
   "releaseTypeSelector": {
     "noReleaseTypes": "利用可能なリリースタイプがありません。",
@@ -1521,7 +1544,14 @@
   "appUpdate": {
     "toast": {
       "updateFailed": "Donut Browser の更新に失敗しました",
-      "restartFailed": "再起動に失敗しました"
+      "restartFailed": "再起動に失敗しました",
+      "updateReady": "アップデートの準備完了。再起動して適用",
+      "manualDownloadRequired": "手動ダウンロードが必要です",
+      "restartNow": "今すぐ再起動",
+      "viewRelease": "リリースを見る",
+      "later": "後で",
+      "uploading": "アップロード中",
+      "downloading": "ダウンロード中"
     }
   },
   "browserDownload": {
@@ -1532,7 +1562,10 @@
       "downloadFailed": "{{browser}} {{version}} のダウンロードに失敗しました",
       "calculating": "計算中...",
       "extractionFailed": "{{browser}} {{version}}: 展開に失敗しました",
-      "extractionFailedDescription": "破損したファイルは削除されました。次回の試行時に再ダウンロードされます。"
+      "extractionFailedDescription": "破損したファイルは削除されました。次回の試行時に再ダウンロードされます。",
+      "extracting": "ブラウザファイルを展開中... アプリを閉じないでください。",
+      "verifying": "ブラウザファイルを検証中...",
+      "downloadingRolling": "ローリングリリースビルドをダウンロード中..."
     }
   },
   "versionUpdater": {

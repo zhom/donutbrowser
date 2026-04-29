@@ -452,7 +452,11 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
                               setShowToken(!showToken);
                             }}
                             className="absolute right-3 top-1/2 p-1 rounded-sm transition-colors transform -translate-y-1/2 hover:bg-accent"
-                            aria-label={showToken ? "Hide token" : "Show token"}
+                            aria-label={
+                              showToken
+                                ? t("common.aria.hideToken")
+                                : t("common.aria.showToken")
+                            }
                           >
                             {showToken ? (
                               <LuEyeOff className="w-4 h-4 text-muted-foreground hover:text-foreground" />

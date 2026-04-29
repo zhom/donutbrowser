@@ -139,7 +139,7 @@ export function GroupBadges({
     return (
       <div className="flex gap-2 mb-4">
         <div className="flex items-center gap-2 px-4.5 py-1.5 text-xs">
-          Loading groups...
+          {t("groups.loading")}
         </div>
       </div>
     );

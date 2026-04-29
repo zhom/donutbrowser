@@ -60,7 +60,8 @@
       "optional": "Opcional",
       "required": "Requerido",
       "unknownProfile": "Desconocido",
-      "mode": "Modo"
+      "mode": "Modo",
+      "never": "Nunca"
     },
     "time": {
       "days": "días",
@@ -72,7 +73,11 @@
     "aria": {
       "selectAll": "Seleccionar todo",
       "selectRow": "Seleccionar fila",
-      "selectProfile": "Seleccionar perfil"
+      "selectProfile": "Seleccionar perfil",
+      "copy": "Copiar al portapapeles",
+      "copied": "Copiado",
+      "showToken": "Mostrar token",
+      "hideToken": "Ocultar token"
     },
     "keys": {
       "escape": "Escape"
@@ -87,7 +92,11 @@
       "title": "Paleta de comandos",
       "description": "Busca un comando para ejecutar..."
     },
-    "noResults": "No se encontraron resultados."
+    "noResults": "No se encontraron resultados.",
+    "srOnly": {
+      "copy": "Copiar",
+      "copied": "Copiado"
+    }
   },
   "settings": {
     "title": "Configuración",
@@ -196,7 +205,8 @@
       "group": "Grupo",
       "proxy": "Proxy / VPN",
       "lastLaunch": "Último Inicio",
-      "empty": "No se encontraron perfiles."
+      "empty": "No se encontraron perfiles.",
+      "notSelected": "No seleccionado"
     },
     "actions": {
       "launch": "Iniciar",
@@ -488,7 +498,8 @@
     "deleteGroupAndProfiles": "Eliminar Grupo y Perfiles",
     "loadProfilesFailed": "Error al cargar los perfiles",
     "unknownGroup": "Grupo desconocido",
-    "profileGroupsAriaLabel": "Grupos de perfiles"
+    "profileGroupsAriaLabel": "Grupos de perfiles",
+    "loading": "Cargando grupos..."
   },
   "sync": {
     "mode": {
@@ -631,7 +642,8 @@
     "mcpAcceptTermsFirst": "(Acepta primero los términos de Wayfern en Configuración)",
     "mcpStarted": "Servidor MCP iniciado en puerto {{port}}",
     "mcpStopped": "Servidor MCP detenido",
-    "mcpToggleFailed": "Error al alternar el servidor MCP"
+    "mcpToggleFailed": "Error al alternar el servidor MCP",
+    "openSettings": "Abrir configuración de integraciones"
   },
   "import": {
     "title": "Importar Perfil",
@@ -711,6 +723,10 @@
         "webrtc": "Bloquear WebRTC",
         "webgl": "Bloquear WebGL"
       }
+    },
+    "shared": {
+      "browserBehavior": "Comportamiento del navegador",
+      "allowAddonsOpenTabs": "Permitir que los complementos abran nuevas pestañas automáticamente"
     }
   },
   "cookies": {
@@ -875,7 +891,8 @@
     "loadProxiesFailed": "Error al cargar los proxies: {{error}}",
     "setupProxyListenersFailed": "Error al configurar los listeners de eventos de proxies: {{error}}",
     "loadVpnConfigsFailed": "Error al cargar las configuraciones de VPN: {{error}}",
-    "setupVpnListenersFailed": "Error al configurar los listeners de eventos de VPN: {{error}}"
+    "setupVpnListenersFailed": "Error al configurar los listeners de eventos de VPN: {{error}}",
+    "themeNotFound": "Tema Tokyo Night no encontrado"
   },
   "browser": {
     "camoufox": "Camoufox",
@@ -901,15 +918,15 @@
     "blockWebRTC": "Bloquear WebRTC",
     "blockWebGL": "Bloquear WebGL",
     "navigatorProperties": "Propiedades del navegador",
-    "userAgent": "User Agent",
+    "userAgent": "Agente de usuario",
     "userAgentAndPlatform": "User Agent y plataforma",
     "platform": "Plataforma",
     "platformVersion": "Versión de plataforma",
     "appVersion": "Versión de la aplicación",
-    "osCpu": "OS CPU",
+    "osCpu": "CPU del SO",
     "hardwareConcurrency": "Concurrencia de hardware",
     "maxTouchPoints": "Puntos táctiles máximos",
-    "doNotTrack": "Do Not Track",
+    "doNotTrack": "No rastrear",
     "selectDntPlaceholder": "Seleccionar valor DNT",
     "dntAllowed": "0 (rastreo permitido)",
     "dntNotAllowed": "1 (rastreo no permitido)",
@@ -931,8 +948,8 @@
     "outerHeight": "Alto exterior",
     "innerWidth": "Ancho interior",
     "innerHeight": "Alto interior",
-    "screenX": "Screen X",
-    "screenY": "Screen Y",
+    "screenX": "Pantalla X",
+    "screenY": "Pantalla Y",
     "geolocation": "Geolocalización",
     "timezoneAndGeolocation": "Zona horaria y geolocalización",
     "timezoneGeolocationDescription": "Estos valores anulan las APIs de zona horaria y geolocalización del navegador.",
@@ -946,15 +963,15 @@
     "region": "Región",
     "script": "Script",
     "webglProperties": "Propiedades de WebGL",
-    "webglVendor": "WebGL Vendor",
-    "webglRenderer": "WebGL Renderer",
+    "webglVendor": "Proveedor WebGL",
+    "webglRenderer": "Renderizador WebGL",
     "webglParameters": "Parámetros de WebGL",
     "webglParametersJson": "Parámetros de WebGL (JSON)",
     "webgl2Parameters": "Parámetros de WebGL2",
-    "webglShaderPrecisionFormats": "Formatos de precisión de WebGL Shader",
-    "webgl2ShaderPrecisionFormats": "Formatos de precisión de WebGL2 Shader",
+    "webglShaderPrecisionFormats": "Formatos de precisión de shader WebGL",
+    "webgl2ShaderPrecisionFormats": "Formatos de precisión de shader WebGL2",
     "canvasFingerprint": "Canvas Fingerprint",
-    "canvasNoiseSeed": "Canvas Noise Seed",
+    "canvasNoiseSeed": "Semilla de ruido de Canvas",
     "canvasNoiseSeedDescription": "Esta semilla se usa para generar una huella digital de Canvas consistente pero única. Cada perfil debe tener una semilla diferente.",
     "fonts": "Fuentes",
     "fontsJson": "Fuentes (JSON array)",
@@ -975,8 +992,8 @@
     "maxChannelCount": "Número máximo de canales",
     "vendorInfo": "Información del proveedor",
     "vendor": "Proveedor",
-    "vendorSub": "Vendor Sub",
-    "productSub": "Product Sub",
+    "vendorSub": "Proveedor Sub",
+    "productSub": "Producto Sub",
     "brand": "Marca",
     "brandVersion": "Versión de marca",
     "proFeature": "Esta es una función Pro",
@@ -1124,7 +1141,9 @@
     "syncEnabled": "Sincronización habilitada",
     "syncDisabled": "Sincronización deshabilitada",
     "syncEnableTooltip": "Habilitar sincronización",
-    "syncDisableTooltip": "Deshabilitar sincronización"
+    "syncDisableTooltip": "Deshabilitar sincronización",
+    "loadGroupsFailed": "Error al cargar grupos de extensiones",
+    "assignGroupFailed": "Error al asignar grupo de extensiones"
   },
   "pro": {
     "badge": "PRO",
@@ -1256,12 +1275,11 @@
     "importedSuccess": "Perfil \"{{name}}\" importado correctamente",
     "notInstalled": "{{browser}} no está instalado. Por favor descarga {{browser}} primero desde la ventana principal y luego intenta importar de nuevo.",
     "importFailed": "Error al importar el perfil: {{error}}",
-    "importedAsPrefix": "Este perfil se importará como un perfil de",
-    "importedAsSuffix": ".",
     "proxyOptional": "Proxy (Opcional)",
     "noProxy": "Sin proxy",
     "nextButton": "Siguiente",
-    "importButton": "Importar"
+    "importButton": "Importar",
+    "importedAs": "Este perfil se importará como un perfil de {{browser}}."
   },
   "syncTooltips": {
     "syncing": "Sincronizando...",
@@ -1497,13 +1515,18 @@
     "syncTooltipSyncing": "Sincronizando...",
     "syncTooltipSyncedAt": "Sincronizado {{time}}",
     "syncTooltipSynced": "Sincronizado",
-    "syncTooltipWaiting": "Esperando sincronización",
+    "syncTooltipWaiting": "Esperando para sincronizar",
     "syncTooltipErrorWith": "Error de sincronización: {{error}}",
     "syncTooltipError": "Error de sincronización",
-    "syncTooltipNotSynced": "Sin sincronizar",
+    "syncTooltipNotSynced": "No sincronizado",
     "noTags": "Sin etiquetas",
     "syncTooltipCloseToSync": "Cierra el perfil para sincronizar",
-    "syncTooltipDisabledWithLast": "Sincronización desactivada, última sincronización {{time}}"
+    "syncTooltipDisabledWithLast": "Sincronización desactivada, última sincronización {{time}}",
+    "addTagsPlaceholder": "Añadir etiquetas",
+    "tagsHeader": "Etiquetas",
+    "noteHeader": "Nota",
+    "vpnsHeading": "VPN",
+    "createByCountryHeading": "Crear por país"
   },
   "releaseTypeSelector": {
     "noReleaseTypes": "No hay tipos de versión disponibles.",
@@ -1521,7 +1544,14 @@
   "appUpdate": {
     "toast": {
       "updateFailed": "Error al actualizar Donut Browser",
-      "restartFailed": "Error al reiniciar"
+      "restartFailed": "Error al reiniciar",
+      "updateReady": "Actualización lista, reinicia para aplicar",
+      "manualDownloadRequired": "Descarga manual requerida",
+      "restartNow": "Reiniciar ahora",
+      "viewRelease": "Ver lanzamiento",
+      "later": "Más tarde",
+      "uploading": "Subiendo",
+      "downloading": "Descargando"
     }
   },
   "browserDownload": {
@@ -1532,7 +1562,10 @@
       "downloadFailed": "Error al descargar {{browser}} {{version}}",
       "calculating": "calculando...",
       "extractionFailed": "{{browser}} {{version}}: error de extracción",
-      "extractionFailedDescription": "El archivo dañado fue eliminado. Se volverá a descargar en el próximo intento."
+      "extractionFailedDescription": "El archivo dañado fue eliminado. Se volverá a descargar en el próximo intento.",
+      "extracting": "Extrayendo archivos del navegador... No cierre la aplicación.",
+      "verifying": "Verificando archivos del navegador...",
+      "downloadingRolling": "Descargando compilación rolling release..."
     }
   },
   "versionUpdater": {

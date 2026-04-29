@@ -60,7 +60,8 @@
       "optional": "Optional",
       "required": "Required",
       "unknownProfile": "Unknown",
-      "mode": "Mode"
+      "mode": "Mode",
+      "never": "Never"
     },
     "time": {
       "days": "days",
@@ -72,7 +73,11 @@
     "aria": {
       "selectAll": "Select all",
       "selectRow": "Select row",
-      "selectProfile": "Select profile"
+      "selectProfile": "Select profile",
+      "copy": "Copy to clipboard",
+      "copied": "Copied",
+      "showToken": "Show token",
+      "hideToken": "Hide token"
     },
     "keys": {
       "escape": "Escape"
@@ -87,7 +92,11 @@
       "title": "Command Palette",
       "description": "Search for a command to run..."
     },
-    "noResults": "No results found."
+    "noResults": "No results found.",
+    "srOnly": {
+      "copy": "Copy",
+      "copied": "Copied"
+    }
   },
   "settings": {
     "title": "Settings",
@@ -196,7 +205,8 @@
       "group": "Group",
       "proxy": "Proxy / VPN",
       "lastLaunch": "Last Launch",
-      "empty": "No profiles found."
+      "empty": "No profiles found.",
+      "notSelected": "Not Selected"
     },
     "actions": {
       "launch": "Launch",
@@ -488,7 +498,8 @@
     "deleteGroupAndProfiles": "Delete Group & Profiles",
     "loadProfilesFailed": "Failed to load profiles",
     "unknownGroup": "Unknown Group",
-    "profileGroupsAriaLabel": "Profile groups"
+    "profileGroupsAriaLabel": "Profile groups",
+    "loading": "Loading groups..."
   },
   "sync": {
     "mode": {
@@ -631,7 +642,8 @@
     "mcpAcceptTermsFirst": "(Accept Wayfern terms in Settings first)",
     "mcpStarted": "MCP server started on port {{port}}",
     "mcpStopped": "MCP server stopped",
-    "mcpToggleFailed": "Failed to toggle MCP server"
+    "mcpToggleFailed": "Failed to toggle MCP server",
+    "openSettings": "Open Integrations Settings"
   },
   "import": {
     "title": "Import Profile",
@@ -711,6 +723,10 @@
         "webrtc": "Block WebRTC",
         "webgl": "Block WebGL"
       }
+    },
+    "shared": {
+      "browserBehavior": "Browser Behavior",
+      "allowAddonsOpenTabs": "Allow browser addons to open new tabs automatically"
     }
   },
   "cookies": {
@@ -875,7 +891,8 @@
     "loadProxiesFailed": "Failed to load proxies: {{error}}",
     "setupProxyListenersFailed": "Failed to setup proxy event listeners: {{error}}",
     "loadVpnConfigsFailed": "Failed to load VPN configs: {{error}}",
-    "setupVpnListenersFailed": "Failed to setup VPN event listeners: {{error}}"
+    "setupVpnListenersFailed": "Failed to setup VPN event listeners: {{error}}",
+    "themeNotFound": "Tokyo Night theme not found"
   },
   "browser": {
     "camoufox": "Camoufox",
@@ -1124,7 +1141,9 @@
     "syncEnabled": "Sync enabled",
     "syncDisabled": "Sync disabled",
     "syncEnableTooltip": "Enable sync",
-    "syncDisableTooltip": "Disable sync"
+    "syncDisableTooltip": "Disable sync",
+    "loadGroupsFailed": "Failed to load extension groups",
+    "assignGroupFailed": "Failed to assign extension group"
   },
   "pro": {
     "badge": "PRO",
@@ -1256,12 +1275,11 @@
     "importedSuccess": "Successfully imported profile \"{{name}}\"",
     "notInstalled": "{{browser}} is not installed. Please download {{browser}} first from the main window, then try importing again.",
     "importFailed": "Failed to import profile: {{error}}",
-    "importedAsPrefix": "This profile will be imported as a",
-    "importedAsSuffix": "profile.",
     "proxyOptional": "Proxy (Optional)",
     "noProxy": "No proxy",
     "nextButton": "Next",
-    "importButton": "Import"
+    "importButton": "Import",
+    "importedAs": "This profile will be imported as a {{browser}} profile."
   },
   "syncTooltips": {
     "syncing": "Syncing...",
@@ -1503,7 +1521,12 @@
     "syncTooltipNotSynced": "Not synced",
     "noTags": "No tags",
     "syncTooltipCloseToSync": "Close the profile to sync",
-    "syncTooltipDisabledWithLast": "Sync disabled, last sync {{time}}"
+    "syncTooltipDisabledWithLast": "Sync disabled, last sync {{time}}",
+    "addTagsPlaceholder": "Add tags",
+    "tagsHeader": "Tags",
+    "noteHeader": "Note",
+    "vpnsHeading": "VPNs",
+    "createByCountryHeading": "Create by country"
   },
   "releaseTypeSelector": {
     "noReleaseTypes": "No release types available.",
@@ -1521,7 +1544,14 @@
   "appUpdate": {
     "toast": {
       "updateFailed": "Failed to update Donut Browser",
-      "restartFailed": "Failed to restart"
+      "restartFailed": "Failed to restart",
+      "updateReady": "Update ready, restart to apply",
+      "manualDownloadRequired": "Manual download required",
+      "restartNow": "Restart Now",
+      "viewRelease": "View Release",
+      "later": "Later",
+      "uploading": "Uploading",
+      "downloading": "Downloading"
     }
   },
   "browserDownload": {
@@ -1532,7 +1562,10 @@
       "downloadFailed": "Failed to download {{browser}} {{version}}",
       "calculating": "calculating...",
       "extractionFailed": "{{browser}} {{version}}: extraction failed",
-      "extractionFailedDescription": "The corrupt file was deleted. It will be re-downloaded on next attempt."
+      "extractionFailedDescription": "The corrupt file was deleted. It will be re-downloaded on next attempt.",
+      "extracting": "Extracting browser files... Please do not close the app.",
+      "verifying": "Verifying browser files...",
+      "downloadingRolling": "Downloading rolling release build..."
     }
   },
   "versionUpdater": {

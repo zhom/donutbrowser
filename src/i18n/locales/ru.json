@@ -60,7 +60,8 @@
       "optional": "Необязательно",
       "required": "Обязательно",
       "unknownProfile": "Неизвестный",
-      "mode": "Режим"
+      "mode": "Режим",
+      "never": "Никогда"
     },
     "time": {
       "days": "дней",
@@ -72,7 +73,11 @@
     "aria": {
       "selectAll": "Выбрать все",
       "selectRow": "Выбрать строку",
-      "selectProfile": "Выбрать профиль"
+      "selectProfile": "Выбрать профиль",
+      "copy": "Скопировать в буфер обмена",
+      "copied": "Скопировано",
+      "showToken": "Показать токен",
+      "hideToken": "Скрыть токен"
     },
     "keys": {
       "escape": "Esc"
@@ -87,7 +92,11 @@
       "title": "Палитра команд",
       "description": "Найдите команду для выполнения..."
     },
-    "noResults": "Результаты не найдены."
+    "noResults": "Результаты не найдены.",
+    "srOnly": {
+      "copy": "Скопировать",
+      "copied": "Скопировано"
+    }
   },
   "settings": {
     "title": "Настройки",
@@ -196,7 +205,8 @@
       "group": "Группа",
       "proxy": "Прокси / VPN",
       "lastLaunch": "Последний запуск",
-      "empty": "Профили не найдены."
+      "empty": "Профили не найдены.",
+      "notSelected": "Не выбрано"
     },
     "actions": {
       "launch": "Запустить",
@@ -488,7 +498,8 @@
     "deleteGroupAndProfiles": "Удалить группу и профили",
     "loadProfilesFailed": "Не удалось загрузить профили",
     "unknownGroup": "Неизвестная группа",
-    "profileGroupsAriaLabel": "Группы профилей"
+    "profileGroupsAriaLabel": "Группы профилей",
+    "loading": "Загрузка групп..."
   },
   "sync": {
     "mode": {
@@ -631,7 +642,8 @@
     "mcpAcceptTermsFirst": "(Сначала примите условия Wayfern в Настройках)",
     "mcpStarted": "MCP сервер запущен на порту {{port}}",
     "mcpStopped": "MCP сервер остановлен",
-    "mcpToggleFailed": "Не удалось переключить MCP сервер"
+    "mcpToggleFailed": "Не удалось переключить MCP сервер",
+    "openSettings": "Открыть настройки интеграций"
   },
   "import": {
     "title": "Импорт профиля",
@@ -711,6 +723,10 @@
         "webrtc": "Блокировать WebRTC",
         "webgl": "Блокировать WebGL"
       }
+    },
+    "shared": {
+      "browserBehavior": "Поведение браузера",
+      "allowAddonsOpenTabs": "Разрешить расширениям браузера автоматически открывать новые вкладки"
     }
   },
   "cookies": {
@@ -875,7 +891,8 @@
     "loadProxiesFailed": "Не удалось загрузить прокси: {{error}}",
     "setupProxyListenersFailed": "Не удалось настроить слушатели событий прокси: {{error}}",
     "loadVpnConfigsFailed": "Не удалось загрузить конфигурации VPN: {{error}}",
-    "setupVpnListenersFailed": "Не удалось настроить слушатели событий VPN: {{error}}"
+    "setupVpnListenersFailed": "Не удалось настроить слушатели событий VPN: {{error}}",
+    "themeNotFound": "Тема Tokyo Night не найдена"
   },
   "browser": {
     "camoufox": "Camoufox",
@@ -906,10 +923,10 @@
     "platform": "Платформа",
     "platformVersion": "Версия платформы",
     "appVersion": "Версия приложения",
-    "osCpu": "OS CPU",
+    "osCpu": "ЦП ОС",
     "hardwareConcurrency": "Количество потоков процессора",
     "maxTouchPoints": "Максимальное количество точек касания",
-    "doNotTrack": "Do Not Track",
+    "doNotTrack": "Не отслеживать",
     "selectDntPlaceholder": "Выберите значение DNT",
     "dntAllowed": "0 (отслеживание разрешено)",
     "dntNotAllowed": "1 (отслеживание не разрешено)",
@@ -931,8 +948,8 @@
     "outerHeight": "Внешняя высота",
     "innerWidth": "Внутренняя ширина",
     "innerHeight": "Внутренняя высота",
-    "screenX": "Screen X",
-    "screenY": "Screen Y",
+    "screenX": "Экран X",
+    "screenY": "Экран Y",
     "geolocation": "Геолокация",
     "timezoneAndGeolocation": "Часовой пояс и геолокация",
     "timezoneGeolocationDescription": "Эти значения переопределяют API часового пояса и геолокации браузера.",
@@ -946,15 +963,15 @@
     "region": "Регион",
     "script": "Скрипт",
     "webglProperties": "Свойства WebGL",
-    "webglVendor": "WebGL Vendor",
-    "webglRenderer": "WebGL Renderer",
+    "webglVendor": "Производитель WebGL",
+    "webglRenderer": "Рендерер WebGL",
     "webglParameters": "Параметры WebGL",
     "webglParametersJson": "Параметры WebGL (JSON)",
     "webgl2Parameters": "Параметры WebGL2",
-    "webglShaderPrecisionFormats": "WebGL Shader Precision Formats",
-    "webgl2ShaderPrecisionFormats": "WebGL2 Shader Precision Formats",
+    "webglShaderPrecisionFormats": "Форматы точности шейдера WebGL",
+    "webgl2ShaderPrecisionFormats": "Форматы точности шейдера WebGL2",
     "canvasFingerprint": "Отпечаток Canvas",
-    "canvasNoiseSeed": "Canvas Noise Seed",
+    "canvasNoiseSeed": "Сид шума Canvas",
     "canvasNoiseSeedDescription": "Это зерно используется для генерации постоянного, но уникального отпечатка Canvas. У каждого профиля должно быть своё зерно.",
     "fonts": "Шрифты",
     "fontsJson": "Шрифты (JSON-массив)",
@@ -975,8 +992,8 @@
     "maxChannelCount": "Максимальное количество каналов",
     "vendorInfo": "Информация о производителе",
     "vendor": "Производитель",
-    "vendorSub": "Vendor Sub",
-    "productSub": "Product Sub",
+    "vendorSub": "Подверсия производителя",
+    "productSub": "Подверсия продукта",
     "brand": "Бренд",
     "brandVersion": "Версия бренда",
     "proFeature": "Это функция Pro",
@@ -1124,7 +1141,9 @@
     "syncEnabled": "Синхронизация включена",
     "syncDisabled": "Синхронизация отключена",
     "syncEnableTooltip": "Включить синхронизацию",
-    "syncDisableTooltip": "Отключить синхронизацию"
+    "syncDisableTooltip": "Отключить синхронизацию",
+    "loadGroupsFailed": "Не удалось загрузить группы расширений",
+    "assignGroupFailed": "Не удалось назначить группу расширений"
   },
   "pro": {
     "badge": "PRO",
@@ -1256,12 +1275,11 @@
     "importedSuccess": "Профиль «{{name}}» успешно импортирован",
     "notInstalled": "{{browser}} не установлен. Сначала загрузите {{browser}} из главного окна, затем попробуйте импортировать снова.",
     "importFailed": "Не удалось импортировать профиль: {{error}}",
-    "importedAsPrefix": "Этот профиль будет импортирован как профиль",
-    "importedAsSuffix": ".",
     "proxyOptional": "Прокси (необязательно)",
     "noProxy": "Без прокси",
     "nextButton": "Далее",
-    "importButton": "Импорт"
+    "importButton": "Импорт",
+    "importedAs": "Этот профиль будет импортирован как профиль {{browser}}."
   },
   "syncTooltips": {
     "syncing": "Синхронизация...",
@@ -1503,7 +1521,12 @@
     "syncTooltipNotSynced": "Не синхронизировано",
     "noTags": "Нет тегов",
     "syncTooltipCloseToSync": "Закройте профиль для синхронизации",
-    "syncTooltipDisabledWithLast": "Синхронизация отключена, последняя синхронизация {{time}}"
+    "syncTooltipDisabledWithLast": "Синхронизация отключена, последняя синхронизация {{time}}",
+    "addTagsPlaceholder": "Добавить теги",
+    "tagsHeader": "Теги",
+    "noteHeader": "Заметка",
+    "vpnsHeading": "VPN",
+    "createByCountryHeading": "Создать по стране"
   },
   "releaseTypeSelector": {
     "noReleaseTypes": "Нет доступных типов выпусков.",
@@ -1521,7 +1544,14 @@
   "appUpdate": {
     "toast": {
       "updateFailed": "Не удалось обновить Donut Browser",
-      "restartFailed": "Не удалось перезапустить"
+      "restartFailed": "Не удалось перезапустить",
+      "updateReady": "Обновление готово, перезапустите для применения",
+      "manualDownloadRequired": "Требуется ручная загрузка",
+      "restartNow": "Перезапустить сейчас",
+      "viewRelease": "Посмотреть релиз",
+      "later": "Позже",
+      "uploading": "Загрузка",
+      "downloading": "Скачивание"
     }
   },
   "browserDownload": {
@@ -1532,7 +1562,10 @@
       "downloadFailed": "Не удалось загрузить {{browser}} {{version}}",
       "calculating": "вычисление...",
       "extractionFailed": "{{browser}} {{version}}: ошибка распаковки",
-      "extractionFailedDescription": "Повреждённый файл удалён. Он будет повторно загружен при следующей попытке."
+      "extractionFailedDescription": "Повреждённый файл удалён. Он будет повторно загружен при следующей попытке.",
+      "extracting": "Распаковка файлов браузера... Не закрывайте приложение.",
+      "verifying": "Проверка файлов браузера...",
+      "downloadingRolling": "Загрузка rolling release сборки..."
     }
   },
   "versionUpdater": {

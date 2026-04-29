@@ -953,7 +953,7 @@ export function CreateProfileDialog({
                                   <div className="flex gap-3 items-center">
                                     <div className="w-4 h-4 rounded-full border-2 animate-spin border-muted/40 border-t-primary" />
                                     <p className="text-sm text-muted-foreground">
-                                      Fetching available versions...
+                                      {t("createProfile.version.fetching")}
                                     </p>
                                   </div>
                                 )}

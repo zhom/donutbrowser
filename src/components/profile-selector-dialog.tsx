@@ -1,7 +1,7 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LoadingButton } from "@/components/loading-button";
 import { Badge } from "@/components/ui/badge";
@@ -50,7 +50,15 @@ export function ProfileSelectorDialog({
 }: ProfileSelectorDialogProps) {
   const { t } = useTranslation();
   // Use the centralized profile events hook
-  const { profiles, runningProfiles: hookRunningProfiles } = useProfileEvents();
+  const { profiles: rawProfiles, runningProfiles: hookRunningProfiles } =
+    useProfileEvents();
+  const profiles = useMemo(
+    () =>
+      [...rawProfiles].sort((a, b) =>
+        a.name.toLowerCase().localeCompare(b.name.toLowerCase()),
+      ),
+    [rawProfiles],
+  );
 
   // Use external runningProfiles if provided, otherwise use hook's runningProfiles
   const runningProfiles = externalRunningProfiles ?? hookRunningProfiles;
@@ -148,11 +156,7 @@ export function ProfileSelectorDialog({
       if (runningAvailableProfile) {
         setSelectedProfile(runningAvailableProfile.name);
       } else {
-        // Sort profiles by name and select first
-        const sortedProfiles = [...profiles].sort((a, b) =>
-          a.name.localeCompare(b.name),
-        );
-        setSelectedProfile(sortedProfiles[0].name);
+        setSelectedProfile(profiles[0].name);
       }
     }
   }, [isOpen, profiles, selectedProfile, runningProfiles]);

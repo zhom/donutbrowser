@@ -166,7 +166,7 @@ export function ProfileSyncDialog({
   }, [profile, hasConfig, onSyncConfigOpen, onClose, t]);
 
   const formatLastSync = (timestamp?: number) => {
-    if (!timestamp) return t("common.labels.never", "Never");
+    if (!timestamp) return t("common.labels.never");
     const date = new Date(timestamp * 1000);
     return date.toLocaleString();
   };
@@ -177,7 +177,7 @@ export function ProfileSyncDialog({
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{t("sync.mode.title", "Profile Sync")}</DialogTitle>
+          <DialogTitle>{t("sync.mode.title")}</DialogTitle>
           <DialogDescription>
             {t("sync.mode.description", {
               name: profile.name,
@@ -194,9 +194,7 @@ export function ProfileSyncDialog({
           <div className="grid gap-4 py-4">
             {!hasConfig && (
               <div className="p-3 text-sm rounded-md bg-muted">
-                <p className="mb-2">
-                  {t("sync.mode.notConfigured", "Sync service not configured.")}
-                </p>
+                <p className="mb-2">{t("sync.mode.notConfigured")}</p>
                 <Button
                   variant="outline"
                   size="sm"
@@ -205,7 +203,7 @@ export function ProfileSyncDialog({
                     onClose();
                   }}
                 >
-                  {t("sync.mode.configureService", "Configure Sync Service")}
+                  {t("sync.mode.configureService")}
                 </Button>
               </div>
             )}
@@ -222,13 +220,10 @@ export function ProfileSyncDialog({
                     <RadioGroupItem value="Disabled" id="sync-disabled" />
                     <Label htmlFor="sync-disabled" className="cursor-pointer">
                       <span className="font-medium">
-                        {t("sync.mode.disabled", "Disabled")}
+                        {t("sync.mode.disabled")}
                       </span>
                       <p className="text-sm text-muted-foreground">
-                        {t(
-                          "sync.mode.disabledDescription",
-                          "No sync for this profile",
-                        )}
+                        {t("sync.mode.disabledDescription")}
                       </p>
                     </Label>
                   </div>
@@ -237,13 +232,10 @@ export function ProfileSyncDialog({
                     <RadioGroupItem value="Regular" id="sync-regular" />
                     <Label htmlFor="sync-regular" className="cursor-pointer">
                       <span className="font-medium">
-                        {t("sync.mode.regular", "Regular Sync")}
+                        {t("sync.mode.regular")}
                       </span>
                       <p className="text-sm text-muted-foreground">
-                        {t(
-                          "sync.mode.regularDescription",
-                          "Fast sync, unencrypted",
-                        )}
+                        {t("sync.mode.regularDescription")}
                       </p>
                     </Label>
                   </div>
@@ -263,18 +255,12 @@ export function ProfileSyncDialog({
                       }
                     >
                       <span className="font-medium">
-                        {t("sync.mode.encrypted", "E2E Encrypted Sync")}
+                        {t("sync.mode.encrypted")}
                       </span>
                       <p className="text-sm text-muted-foreground">
                         {canUseEncryption
-                          ? t(
-                              "sync.mode.encryptedDescription",
-                              "Encrypted before upload. Server never sees plaintext data.",
-                            )
-                          : t(
-                              "settings.encryption.requiresProOrOwner",
-                              "Profile encryption is available for Pro users and team owners.",
-                            )}
+                          ? t("sync.mode.encryptedDescription")
+                          : t("settings.encryption.requiresProOrOwner")}
                       </p>
                     </Label>
                   </div>
@@ -284,15 +270,12 @@ export function ProfileSyncDialog({
                   !hasE2ePassword &&
                   userChangedMode && (
                     <div className="p-3 text-sm rounded-md bg-destructive/10 text-destructive">
-                      {t(
-                        "sync.mode.noPasswordWarning",
-                        "E2E password not set. Please set a password in Settings.",
-                      )}
+                      {t("sync.mode.noPasswordWarning")}
                     </div>
                   )}
 
                 <div className="space-y-2">
-                  <Label>{t("sync.mode.lastSynced", "Last Synced")}</Label>
+                  <Label>{t("sync.mode.lastSynced")}</Label>
                   <div className="flex gap-2 items-center">
                     <Badge variant="outline">
                       {formatLastSync(profile.last_sync)}
@@ -319,7 +302,7 @@ export function ProfileSyncDialog({
           </Button>
           {hasConfig && isSyncEnabled(profile) && (
             <LoadingButton onClick={handleSyncNow} isLoading={isSyncing}>
-              {t("sync.mode.syncNow", "Sync Now")}
+              {t("sync.mode.syncNow")}
             </LoadingButton>
           )}
         </DialogFooter>

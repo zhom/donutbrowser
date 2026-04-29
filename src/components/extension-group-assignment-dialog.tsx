@@ -55,12 +55,12 @@ export function ExtensionGroupAssignmentDialog({
     } catch (err) {
       console.error("Failed to load extension groups:", err);
       setError(
-        err instanceof Error ? err.message : "Failed to load extension groups",
+        err instanceof Error ? err.message : t("extensions.loadGroupsFailed"),
       );
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   const handleAssign = useCallback(async () => {
     setIsAssigning(true);
@@ -79,7 +79,7 @@ export function ExtensionGroupAssignmentDialog({
     } catch (err) {
       console.error("Failed to assign extension group:", err);
       const errorMessage =
-        err instanceof Error ? err.message : "Failed to assign extension group";
+        err instanceof Error ? err.message : t("extensions.assignGroupFailed");
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {

@@ -536,7 +536,11 @@ const TagsCell = React.memo<{
             onChange={(opts) => void handleChange(opts)}
             creatable
             selectFirstItem={false}
-            placeholder={effectiveTags.length === 0 ? "Add tags" : ""}
+            placeholder={
+              effectiveTags.length === 0
+                ? translate("profileTable.addTagsPlaceholder")
+                : ""
+            }
             className={cn(
               "bg-transparent border-0! focus-within:ring-0!",
               "[&_div:first-child]:border-0! [&_div:first-child]:ring-0! [&_div:first-child]:focus-within:ring-0!",
@@ -1846,6 +1850,7 @@ export function ProfilesDataTable({
       },
       {
         id: "actions",
+        size: 100,
         cell: ({ row, table }) => {
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
@@ -1964,7 +1969,7 @@ export function ProfilesDataTable({
                       size="sm"
                       disabled={!canLaunch || isLaunching || isStopping}
                       className={cn(
-                        "min-w-[70px] h-7",
+                        "min-w-[80px] h-7 px-3",
                         !canLaunch && "opacity-50 cursor-not-allowed",
                         canLaunch && "cursor-pointer",
                         isFollower && "border-accent",
@@ -1980,9 +1985,9 @@ export function ProfilesDataTable({
                           <div className="w-3 h-3 rounded-full border border-current animate-spin border-t-transparent" />
                         </div>
                       ) : isRunning ? (
-                        "Stop"
+                        meta.t("profiles.actions.stop")
                       ) : (
-                        "Launch"
+                        meta.t("profiles.actions.launch")
                       )}
                     </RippleButton>
                   </span>
@@ -1999,7 +2004,9 @@ export function ProfilesDataTable({
       },
       {
         accessorKey: "name",
-        header: ({ column }) => {
+        size: 130,
+        header: ({ column, table }) => {
+          const meta = table.options.meta as TableMeta;
           return (
             <Button
               variant="ghost"
@@ -2008,7 +2015,7 @@ export function ProfilesDataTable({
               }}
               className="justify-start p-0 h-auto font-semibold text-left cursor-pointer"
             >
-              Name
+              {meta.t("common.labels.name")}
               {column.getIsSorted() === "asc" ? (
                 <LuChevronUp className="ml-2 w-4 h-4" />
               ) : column.getIsSorted() === "desc" ? (
@@ -2137,7 +2144,11 @@ export function ProfilesDataTable({
       },
       {
         id: "tags",
-        header: "Tags",
+        size: 110,
+        header: ({ table }) => {
+          const meta = table.options.meta as TableMeta;
+          return meta.t("profileTable.tagsHeader");
+        },
         cell: ({ row, table }) => {
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
@@ -2166,7 +2177,11 @@ export function ProfilesDataTable({
       },
       {
         id: "note",
-        header: "Note",
+        size: 110,
+        header: ({ table }) => {
+          const meta = table.options.meta as TableMeta;
+          return meta.t("profileTable.noteHeader");
+        },
         cell: ({ row, table }) => {
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
@@ -2193,7 +2208,11 @@ export function ProfilesDataTable({
       },
       {
         id: "proxy",
-        header: "Proxy / VPN",
+        size: 130,
+        header: ({ table }) => {
+          const meta = table.options.meta as TableMeta;
+          return meta.t("profiles.table.proxy");
+        },
         cell: ({ row, table }) => {
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
@@ -2231,7 +2250,7 @@ export function ProfilesDataTable({
             ? effectiveVpn.name
             : effectiveProxy
               ? effectiveProxy.name
-              : "Not Selected";
+              : meta.t("profiles.table.notSelected");
           const vpnBadge = effectiveVpn ? "WG" : null;
           const tooltipText = hasAssignment ? displayName : null;
           const isSelectorOpen = meta.openProxySelectorFor === profile.id;
@@ -2372,7 +2391,7 @@ export function ProfilesDataTable({
                             ))}
                         </CommandGroup>
                         {meta.vpnConfigs.length > 0 && (
-                          <CommandGroup heading="VPNs">
+                          <CommandGroup heading={t("profileTable.vpnsHeading")}>
                             {meta.vpnConfigs.map((vpn) => (
                               <CommandItem
                                 key={vpn.id}
@@ -2405,7 +2424,9 @@ export function ProfilesDataTable({
                         )}
                         {meta.canCreateLocationProxy &&
                           meta.countries.length > 0 && (
-                            <CommandGroup heading="Create by country">
+                            <CommandGroup
+                              heading={t("profileTable.createByCountryHeading")}
+                            >
                               {meta.countries
                                 .filter(
                                   (c) =>
@@ -2569,7 +2590,7 @@ export function ProfilesDataTable({
           platform === "macos" ? "h-[340px]" : "h-[280px]",
         )}
       >
-        <Table className="overflow-visible">
+        <Table className="overflow-visible table-fixed">
           <TableHeader className="overflow-visible">
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id} className="overflow-visible">

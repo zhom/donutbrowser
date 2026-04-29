@@ -392,7 +392,7 @@ export function ProxyManagementDialog({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+        <DialogContent className="max-w-[min(95vw,1600px)] max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{t("proxies.management.title")}</DialogTitle>
             <DialogDescription>
@@ -411,7 +411,7 @@ export function ProxyManagementDialog({
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="proxies">
+              <TabsContent value="proxies" className="mt-4">
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
                     <div className="flex gap-2">
@@ -460,196 +460,188 @@ export function ProxyManagementDialog({
                       {t("proxies.management.noneCreated")}
                     </div>
                   ) : (
-                    <div className="border rounded-md">
-                      <ScrollArea className="h-[240px]">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>{t("common.labels.name")}</TableHead>
-                              <TableHead className="w-20">
-                                {t("proxies.management.usage")}
-                              </TableHead>
-                              <TableHead className="w-24">
-                                {t("proxies.management.syncCol")}
-                              </TableHead>
-                              <TableHead className="w-24">
-                                {t("common.labels.actions")}
-                              </TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {storedProxies.map((proxy) => {
-                              const syncDot = getSyncStatusDot(
-                                proxy,
-                                proxySyncStatus[proxy.id],
-                                t,
-                                proxySyncErrors[proxy.id],
-                              );
-                              return (
-                                <TableRow key={proxy.id}>
-                                  <TableCell className="font-medium">
-                                    <div className="flex items-center gap-2">
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <div
-                                            className={`w-2 h-2 rounded-full shrink-0 ${syncDot.color} ${
-                                              syncDot.animate
-                                                ? "animate-pulse"
-                                                : ""
-                                            }`}
-                                          />
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                          <p>{syncDot.tooltip}</p>
-                                        </TooltipContent>
-                                      </Tooltip>
-                                      {proxy.name}
-                                    </div>
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge variant="secondary">
-                                      {proxyUsage[proxy.id] ?? 0}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell>
+                    <div className="border rounded-md max-h-[240px] overflow-auto">
+                      <Table className="min-w-max">
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>{t("common.labels.name")}</TableHead>
+                            <TableHead className="whitespace-nowrap w-px">
+                              {t("proxies.management.usage")}
+                            </TableHead>
+                            <TableHead className="whitespace-nowrap w-px">
+                              {t("proxies.management.syncCol")}
+                            </TableHead>
+                            <TableHead className="whitespace-nowrap w-px">
+                              {t("common.labels.actions")}
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {storedProxies.map((proxy) => {
+                            const syncDot = getSyncStatusDot(
+                              proxy,
+                              proxySyncStatus[proxy.id],
+                              t,
+                              proxySyncErrors[proxy.id],
+                            );
+                            return (
+                              <TableRow key={proxy.id}>
+                                <TableCell className="font-medium">
+                                  <div className="flex items-center gap-2">
                                     <Tooltip>
                                       <TooltipTrigger asChild>
-                                        <div className="flex items-center">
-                                          <Checkbox
-                                            checked={proxy.sync_enabled}
-                                            onCheckedChange={() =>
-                                              void handleToggleSync(proxy)
-                                            }
-                                            disabled={
-                                              isTogglingSync[proxy.id] ||
-                                              proxyInUse[proxy.id]
-                                            }
-                                          />
-                                        </div>
+                                        <div
+                                          className={`w-2 h-2 rounded-full shrink-0 ${syncDot.color} ${
+                                            syncDot.animate
+                                              ? "animate-pulse"
+                                              : ""
+                                          }`}
+                                        />
                                       </TooltipTrigger>
                                       <TooltipContent>
-                                        {proxyInUse[proxy.id] ? (
-                                          <p>
-                                            {t(
-                                              "proxies.management.syncCannotDisable",
-                                            )}
-                                          </p>
-                                        ) : (
-                                          <p>
-                                            {proxy.sync_enabled
-                                              ? t(
-                                                  "proxies.management.disableSync",
-                                                )
-                                              : t(
-                                                  "proxies.management.enableSync",
-                                                )}
-                                          </p>
-                                        )}
+                                        <p>{syncDot.tooltip}</p>
                                       </TooltipContent>
                                     </Tooltip>
-                                  </TableCell>
-                                  <TableCell>
-                                    <div className="flex gap-1">
-                                      <ProxyCheckButton
-                                        proxy={proxy}
-                                        profileId={proxy.id}
-                                        checkingProfileId={checkingProxyId}
-                                        cachedResult={
-                                          proxyCheckResults[proxy.id]
-                                        }
-                                        setCheckingProfileId={
-                                          setCheckingProxyId
-                                        }
-                                        onCheckComplete={(result) => {
-                                          setProxyCheckResults((prev) => ({
-                                            ...prev,
-                                            [proxy.id]: result,
-                                          }));
-                                        }}
-                                        onCheckFailed={(result) => {
-                                          setProxyCheckResults((prev) => ({
-                                            ...prev,
-                                            [proxy.id]: result,
-                                          }));
-                                        }}
-                                      />
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
+                                    {proxy.name}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="secondary">
+                                    {proxyUsage[proxy.id] ?? 0}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <div className="flex items-center">
+                                        <Checkbox
+                                          checked={proxy.sync_enabled}
+                                          onCheckedChange={() =>
+                                            void handleToggleSync(proxy)
+                                          }
+                                          disabled={
+                                            isTogglingSync[proxy.id] ||
+                                            proxyInUse[proxy.id]
+                                          }
+                                        />
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      {proxyInUse[proxy.id] ? (
+                                        <p>
+                                          {t(
+                                            "proxies.management.syncCannotDisable",
+                                          )}
+                                        </p>
+                                      ) : (
+                                        <p>
+                                          {proxy.sync_enabled
+                                            ? t(
+                                                "proxies.management.disableSync",
+                                              )
+                                            : t(
+                                                "proxies.management.enableSync",
+                                              )}
+                                        </p>
+                                      )}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex gap-1">
+                                    <ProxyCheckButton
+                                      proxy={proxy}
+                                      profileId={proxy.id}
+                                      checkingProfileId={checkingProxyId}
+                                      cachedResult={proxyCheckResults[proxy.id]}
+                                      setCheckingProfileId={setCheckingProxyId}
+                                      onCheckComplete={(result) => {
+                                        setProxyCheckResults((prev) => ({
+                                          ...prev,
+                                          [proxy.id]: result,
+                                        }));
+                                      }}
+                                      onCheckFailed={(result) => {
+                                        setProxyCheckResults((prev) => ({
+                                          ...prev,
+                                          [proxy.id]: result,
+                                        }));
+                                      }}
+                                    />
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => {
+                                            handleEditProxy(proxy);
+                                          }}
+                                        >
+                                          <LuPencil className="w-4 h-4" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p>
+                                          {t("proxies.management.editProxy")}
+                                        </p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span>
                                           <Button
                                             variant="ghost"
                                             size="sm"
                                             onClick={() => {
-                                              handleEditProxy(proxy);
+                                              handleDeleteProxy(proxy);
                                             }}
+                                            disabled={
+                                              (proxyUsage[proxy.id] ?? 0) > 0
+                                            }
                                           >
-                                            <LuPencil className="w-4 h-4" />
+                                            <LuTrash2 className="w-4 h-4" />
                                           </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        {(proxyUsage[proxy.id] ?? 0) > 0 ? (
                                           <p>
-                                            {t("proxies.management.editProxy")}
+                                            {(proxyUsage[proxy.id] ?? 0) === 1
+                                              ? t(
+                                                  "proxies.management.cannotDelete_one",
+                                                  {
+                                                    count: proxyUsage[proxy.id],
+                                                  },
+                                                )
+                                              : t(
+                                                  "proxies.management.cannotDelete_other",
+                                                  {
+                                                    count: proxyUsage[proxy.id],
+                                                  },
+                                                )}
                                           </p>
-                                        </TooltipContent>
-                                      </Tooltip>
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <span>
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              onClick={() => {
-                                                handleDeleteProxy(proxy);
-                                              }}
-                                              disabled={
-                                                (proxyUsage[proxy.id] ?? 0) > 0
-                                              }
-                                            >
-                                              <LuTrash2 className="w-4 h-4" />
-                                            </Button>
-                                          </span>
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                          {(proxyUsage[proxy.id] ?? 0) > 0 ? (
-                                            <p>
-                                              {(proxyUsage[proxy.id] ?? 0) === 1
-                                                ? t(
-                                                    "proxies.management.cannotDelete_one",
-                                                    {
-                                                      count:
-                                                        proxyUsage[proxy.id],
-                                                    },
-                                                  )
-                                                : t(
-                                                    "proxies.management.cannotDelete_other",
-                                                    {
-                                                      count:
-                                                        proxyUsage[proxy.id],
-                                                    },
-                                                  )}
-                                            </p>
-                                          ) : (
-                                            <p>
-                                              {t(
-                                                "proxies.management.deleteProxy",
-                                              )}
-                                            </p>
-                                          )}
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </div>
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      </ScrollArea>
+                                        ) : (
+                                          <p>
+                                            {t(
+                                              "proxies.management.deleteProxy",
+                                            )}
+                                          </p>
+                                        )}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
                     </div>
                   )}
                 </div>
               </TabsContent>
 
-              <TabsContent value="vpns">
+              <TabsContent value="vpns" className="mt-4">
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
                     <div className="flex gap-2">
@@ -684,169 +676,167 @@ export function ProxyManagementDialog({
                       {t("vpns.management.noneCreated")}
                     </div>
                   ) : (
-                    <div className="border rounded-md">
-                      <ScrollArea className="h-[240px]">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>{t("common.labels.name")}</TableHead>
-                              <TableHead className="w-16">
-                                {t("common.labels.type")}
-                              </TableHead>
-                              <TableHead className="w-20">
-                                {t("proxies.management.usage")}
-                              </TableHead>
-                              <TableHead className="w-24">
-                                {t("proxies.management.syncCol")}
-                              </TableHead>
-                              <TableHead className="w-24">
-                                {t("common.labels.actions")}
-                              </TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {vpnConfigs.map((vpn) => {
-                              const syncDot = getSyncStatusDot(
-                                vpn,
-                                vpnSyncStatus[vpn.id],
-                                t,
-                                vpnSyncErrors[vpn.id],
-                              );
-                              return (
-                                <TableRow key={vpn.id}>
-                                  <TableCell className="font-medium">
-                                    <div className="flex items-center gap-2">
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <div
-                                            className={`w-2 h-2 rounded-full shrink-0 ${syncDot.color} ${
-                                              syncDot.animate
-                                                ? "animate-pulse"
-                                                : ""
-                                            }`}
-                                          />
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                          <p>{syncDot.tooltip}</p>
-                                        </TooltipContent>
-                                      </Tooltip>
-                                      {vpn.name}
-                                    </div>
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge variant="outline">WG</Badge>
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge variant="secondary">
-                                      {vpnUsage[vpn.id] ?? 0}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell>
+                    <div className="border rounded-md max-h-[240px] overflow-auto">
+                      <Table className="min-w-max">
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>{t("common.labels.name")}</TableHead>
+                            <TableHead className="whitespace-nowrap w-px">
+                              {t("common.labels.type")}
+                            </TableHead>
+                            <TableHead className="whitespace-nowrap w-px">
+                              {t("proxies.management.usage")}
+                            </TableHead>
+                            <TableHead className="whitespace-nowrap w-px">
+                              {t("proxies.management.syncCol")}
+                            </TableHead>
+                            <TableHead className="whitespace-nowrap w-px">
+                              {t("common.labels.actions")}
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {vpnConfigs.map((vpn) => {
+                            const syncDot = getSyncStatusDot(
+                              vpn,
+                              vpnSyncStatus[vpn.id],
+                              t,
+                              vpnSyncErrors[vpn.id],
+                            );
+                            return (
+                              <TableRow key={vpn.id}>
+                                <TableCell className="font-medium">
+                                  <div className="flex items-center gap-2">
                                     <Tooltip>
                                       <TooltipTrigger asChild>
-                                        <div className="flex items-center">
-                                          <Checkbox
-                                            checked={vpn.sync_enabled}
-                                            onCheckedChange={() =>
-                                              void handleToggleVpnSync(vpn)
-                                            }
-                                            disabled={
-                                              isTogglingVpnSync[vpn.id] ||
-                                              vpnInUse[vpn.id]
-                                            }
-                                          />
-                                        </div>
+                                        <div
+                                          className={`w-2 h-2 rounded-full shrink-0 ${syncDot.color} ${
+                                            syncDot.animate
+                                              ? "animate-pulse"
+                                              : ""
+                                          }`}
+                                        />
                                       </TooltipTrigger>
                                       <TooltipContent>
-                                        {vpnInUse[vpn.id] ? (
-                                          <p>
-                                            {t(
-                                              "vpns.management.syncCannotDisable",
-                                            )}
-                                          </p>
-                                        ) : (
-                                          <p>
-                                            {vpn.sync_enabled
-                                              ? t(
-                                                  "proxies.management.disableSync",
-                                                )
-                                              : t(
-                                                  "proxies.management.enableSync",
-                                                )}
-                                          </p>
-                                        )}
+                                        <p>{syncDot.tooltip}</p>
                                       </TooltipContent>
                                     </Tooltip>
-                                  </TableCell>
-                                  <TableCell>
-                                    <div className="flex gap-1">
-                                      <VpnCheckButton
-                                        vpnId={vpn.id}
-                                        vpnName={vpn.name}
-                                        checkingVpnId={checkingVpnId}
-                                        setCheckingVpnId={setCheckingVpnId}
-                                      />
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
+                                    {vpn.name}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="outline">WG</Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="secondary">
+                                    {vpnUsage[vpn.id] ?? 0}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <div className="flex items-center">
+                                        <Checkbox
+                                          checked={vpn.sync_enabled}
+                                          onCheckedChange={() =>
+                                            void handleToggleVpnSync(vpn)
+                                          }
+                                          disabled={
+                                            isTogglingVpnSync[vpn.id] ||
+                                            vpnInUse[vpn.id]
+                                          }
+                                        />
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      {vpnInUse[vpn.id] ? (
+                                        <p>
+                                          {t(
+                                            "vpns.management.syncCannotDisable",
+                                          )}
+                                        </p>
+                                      ) : (
+                                        <p>
+                                          {vpn.sync_enabled
+                                            ? t(
+                                                "proxies.management.disableSync",
+                                              )
+                                            : t(
+                                                "proxies.management.enableSync",
+                                              )}
+                                        </p>
+                                      )}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex gap-1">
+                                    <VpnCheckButton
+                                      vpnId={vpn.id}
+                                      vpnName={vpn.name}
+                                      checkingVpnId={checkingVpnId}
+                                      setCheckingVpnId={setCheckingVpnId}
+                                    />
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => {
+                                            handleEditVpn(vpn);
+                                          }}
+                                        >
+                                          <LuPencil className="w-4 h-4" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p>{t("vpns.management.editVpn")}</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span>
                                           <Button
                                             variant="ghost"
                                             size="sm"
                                             onClick={() => {
-                                              handleEditVpn(vpn);
+                                              handleDeleteVpn(vpn);
                                             }}
+                                            disabled={
+                                              (vpnUsage[vpn.id] ?? 0) > 0
+                                            }
                                           >
-                                            <LuPencil className="w-4 h-4" />
+                                            <LuTrash2 className="w-4 h-4" />
                                           </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                          <p>{t("vpns.management.editVpn")}</p>
-                                        </TooltipContent>
-                                      </Tooltip>
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <span>
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              onClick={() => {
-                                                handleDeleteVpn(vpn);
-                                              }}
-                                              disabled={
-                                                (vpnUsage[vpn.id] ?? 0) > 0
-                                              }
-                                            >
-                                              <LuTrash2 className="w-4 h-4" />
-                                            </Button>
-                                          </span>
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                          {(vpnUsage[vpn.id] ?? 0) > 0 ? (
-                                            <p>
-                                              {(vpnUsage[vpn.id] ?? 0) === 1
-                                                ? t(
-                                                    "vpns.management.cannotDelete_one",
-                                                    { count: vpnUsage[vpn.id] },
-                                                  )
-                                                : t(
-                                                    "vpns.management.cannotDelete_other",
-                                                    { count: vpnUsage[vpn.id] },
-                                                  )}
-                                            </p>
-                                          ) : (
-                                            <p>
-                                              {t("vpns.management.deleteVpn")}
-                                            </p>
-                                          )}
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </div>
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      </ScrollArea>
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        {(vpnUsage[vpn.id] ?? 0) > 0 ? (
+                                          <p>
+                                            {(vpnUsage[vpn.id] ?? 0) === 1
+                                              ? t(
+                                                  "vpns.management.cannotDelete_one",
+                                                  { count: vpnUsage[vpn.id] },
+                                                )
+                                              : t(
+                                                  "vpns.management.cannotDelete_other",
+                                                  { count: vpnUsage[vpn.id] },
+                                                )}
+                                          </p>
+                                        ) : (
+                                          <p>
+                                            {t("vpns.management.deleteVpn")}
+                                          </p>
+                                        )}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
                     </div>
                   )}
                 </div>

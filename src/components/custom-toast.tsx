@@ -294,7 +294,9 @@ export function UnifiedToast(props: ToastProps) {
           "completed_files" in progress && (
             <div className="mt-1">
               <p className="text-xs text-muted-foreground">
-                {progress.phase === "uploading" ? "Uploading" : "Downloading"}{" "}
+                {progress.phase === "uploading"
+                  ? t("appUpdate.toast.uploading")
+                  : t("appUpdate.toast.downloading")}{" "}
                 {progress.completed_files}/{progress.total_files} files
                 {" \u2022 "}
                 {formatBytesCompact(progress.completed_bytes)} /{" "}
@@ -349,17 +351,17 @@ export function UnifiedToast(props: ToastProps) {
           <>
             {stage === "extracting" && (
               <p className="mt-1 text-xs text-muted-foreground">
-                Extracting browser files... Please do not close the app.
+                {t("browserDownload.toast.extracting")}
               </p>
             )}
             {stage === "verifying" && (
               <p className="mt-1 text-xs text-muted-foreground">
-                Verifying browser files...
+                {t("browserDownload.toast.verifying")}
               </p>
             )}
             {stage === "downloading (twilight rolling release)" && (
               <p className="mt-1 text-xs text-muted-foreground">
-                Downloading rolling release build...
+                {t("browserDownload.toast.downloadingRolling")}
               </p>
             )}
           </>

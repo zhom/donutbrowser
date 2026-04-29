@@ -1070,7 +1070,7 @@ export default function Home() {
 
   return (
     <div className="grid items-center justify-items-center min-h-screen gap-8 font-(family-name:--font-geist-sans) bg-background">
-      <main className="flex flex-col items-center w-full max-w-3xl">
+      <main className="flex flex-col items-center w-full max-w-4xl px-3">
         <div className="w-full">
           <HomeHeader
             onCreateProfileDialogOpen={setCreateProfileDialogOpen}

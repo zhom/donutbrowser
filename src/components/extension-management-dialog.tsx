@@ -50,36 +50,43 @@ type SyncStatus = "disabled" | "syncing" | "synced" | "error" | "waiting";
 function getSyncStatusDot(
   item: { sync_enabled?: boolean; last_sync?: number },
   liveStatus: SyncStatus | undefined,
+  t: (key: string, options?: Record<string, unknown>) => string,
 ): { color: string; tooltip: string; animate: boolean } {
   const status = liveStatus ?? (item.sync_enabled ? "synced" : "disabled");
 
   switch (status) {
     case "syncing":
-      return { color: "bg-warning", tooltip: "Syncing...", animate: true };
+      return {
+        color: "bg-warning",
+        tooltip: t("profileTable.syncTooltipSyncing"),
+        animate: true,
+      };
     case "synced":
       return {
         color: "bg-success",
         tooltip: item.last_sync
-          ? `Synced ${new Date(item.last_sync * 1000).toLocaleString()}`
-          : "Synced",
+          ? t("profileTable.syncTooltipSyncedAt", {
+              time: new Date(item.last_sync * 1000).toLocaleString(),
+            })
+          : t("profileTable.syncTooltipSynced"),
         animate: false,
       };
     case "waiting":
       return {
         color: "bg-warning",
-        tooltip: "Waiting to sync",
+        tooltip: t("profileTable.syncTooltipWaiting"),
         animate: false,
       };
     case "error":
       return {
         color: "bg-destructive",
-        tooltip: "Sync error",
+        tooltip: t("profileTable.syncTooltipError"),
         animate: false,
       };
     default:
       return {
         color: "bg-muted-foreground",
-        tooltip: "Not synced",
+        tooltip: t("profileTable.syncTooltipNotSynced"),
         animate: false,
       };
   }
@@ -674,6 +681,7 @@ export function ExtensionManagementDialog({
                           const syncDot = getSyncStatusDot(
                             ext,
                             extSyncStatus[ext.id],
+                            t,
                           );
                           return (
                             <div
@@ -840,6 +848,7 @@ export function ExtensionManagementDialog({
                           const groupSyncDot = getSyncStatusDot(
                             group,
                             extSyncStatus[group.id],
+                            t,
                           );
 
                           return (
@@ -995,7 +1004,7 @@ export function ExtensionManagementDialog({
           }
         }}
       >
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{t("extensions.editGroup")}</DialogTitle>
             <DialogDescription>
@@ -1003,87 +1012,89 @@ export function ExtensionManagementDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>{t("common.labels.name")}</Label>
-              <Input
-                value={editGroupName}
-                onChange={(e) => {
-                  setEditGroupName(e.target.value);
-                }}
-                placeholder={t("extensions.groupNamePlaceholder")}
-              />
-            </div>
-
-            {extensions.filter((e) => !editGroupExtensionIds.includes(e.id))
-              .length > 0 && (
+          <ScrollArea className="overflow-y-auto flex-1 -mx-6 px-6">
+            <div className="space-y-4">
               <div className="space-y-2">
-                <Label>{t("extensions.addToGroup")}</Label>
-                <Select
-                  value=""
-                  onValueChange={(extId) => {
-                    setEditGroupExtensionIds((prev) => [...prev, extId]);
+                <Label>{t("common.labels.name")}</Label>
+                <Input
+                  value={editGroupName}
+                  onChange={(e) => {
+                    setEditGroupName(e.target.value);
                   }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={t("extensions.addToGroup")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {extensions
-                      .filter((e) => !editGroupExtensionIds.includes(e.id))
-                      .map((ext) => (
-                        <SelectItem key={ext.id} value={ext.id}>
-                          <div className="flex items-center gap-2">
-                            {renderExtensionIcon(ext, "sm")}
-                            {ext.name}
-                          </div>
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
+                  placeholder={t("extensions.groupNamePlaceholder")}
+                />
               </div>
-            )}
 
-            <div className="space-y-2">
-              <Label>{t("extensions.groupExtensions")}</Label>
-              {editGroupExtensionIds.length === 0 ? (
-                <div className="text-sm text-muted-foreground py-2">
-                  {t("extensions.noExtensionsInGroup")}
-                </div>
-              ) : (
-                <div className="space-y-1 max-h-[200px] overflow-y-auto">
-                  {editGroupExtensionIds.map((extId) => {
-                    const ext = extensions.find((e) => e.id === extId);
-                    if (!ext) return null;
-                    return (
-                      <div
-                        key={extId}
-                        className="flex items-center gap-2 rounded-md border px-2 py-1.5"
-                      >
-                        {renderExtensionIcon(ext, "sm")}
-                        <span className="text-sm flex-1 truncate min-w-0">
-                          {ext.name}
-                        </span>
-                        {renderCompatIcons(ext.browser_compatibility)}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0 shrink-0"
-                          onClick={() => {
-                            setEditGroupExtensionIds((prev) =>
-                              prev.filter((id) => id !== extId),
-                            );
-                          }}
-                        >
-                          <LuTrash2 className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    );
-                  })}
+              {extensions.filter((e) => !editGroupExtensionIds.includes(e.id))
+                .length > 0 && (
+                <div className="space-y-2">
+                  <Label>{t("extensions.addToGroup")}</Label>
+                  <Select
+                    value=""
+                    onValueChange={(extId) => {
+                      setEditGroupExtensionIds((prev) => [...prev, extId]);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t("extensions.addToGroup")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {extensions
+                        .filter((e) => !editGroupExtensionIds.includes(e.id))
+                        .map((ext) => (
+                          <SelectItem key={ext.id} value={ext.id}>
+                            <div className="flex items-center gap-2">
+                              {renderExtensionIcon(ext, "sm")}
+                              {ext.name}
+                            </div>
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
+
+              <div className="space-y-2">
+                <Label>{t("extensions.groupExtensions")}</Label>
+                {editGroupExtensionIds.length === 0 ? (
+                  <div className="text-sm text-muted-foreground py-2">
+                    {t("extensions.noExtensionsInGroup")}
+                  </div>
+                ) : (
+                  <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                    {editGroupExtensionIds.map((extId) => {
+                      const ext = extensions.find((e) => e.id === extId);
+                      if (!ext) return null;
+                      return (
+                        <div
+                          key={extId}
+                          className="flex items-center gap-2 rounded-md border px-2 py-1.5"
+                        >
+                          {renderExtensionIcon(ext, "sm")}
+                          <span className="text-sm flex-1 truncate min-w-0">
+                            {ext.name}
+                          </span>
+                          {renderCompatIcons(ext.browser_compatibility)}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0 shrink-0"
+                            onClick={() => {
+                              setEditGroupExtensionIds((prev) =>
+                                prev.filter((id) => id !== extId),
+                              );
+                            }}
+                          >
+                            <LuTrash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          </ScrollArea>
 
           <DialogFooter>
             <Button
@@ -1117,7 +1128,7 @@ export function ExtensionManagementDialog({
           }
         }}
       >
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{t("extensions.editExtension")}</DialogTitle>
             <DialogDescription>
@@ -1125,123 +1136,127 @@ export function ExtensionManagementDialog({
             </DialogDescription>
           </DialogHeader>
 
-          {editingExtension && (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>{t("common.labels.name")}</Label>
-                <Input
-                  value={editExtensionName}
-                  onChange={(e) => {
-                    setEditExtensionName(e.target.value);
-                  }}
-                  placeholder={t("extensions.namePlaceholder")}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") void handleUpdateExtension();
-                  }}
-                />
-              </div>
+          <ScrollArea className="overflow-y-auto flex-1 -mx-6 px-6">
+            {editingExtension && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>{t("common.labels.name")}</Label>
+                  <Input
+                    value={editExtensionName}
+                    onChange={(e) => {
+                      setEditExtensionName(e.target.value);
+                    }}
+                    placeholder={t("extensions.namePlaceholder")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void handleUpdateExtension();
+                    }}
+                  />
+                </div>
 
-              {/* Metadata from manifest.json */}
-              <div className="rounded-md border p-3 space-y-2">
-                <Label className="text-xs text-muted-foreground uppercase tracking-wide">
-                  {t("extensions.metadata")}
-                </Label>
-                <div className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-1.5 text-sm">
-                  {editingExtension.version && (
-                    <>
-                      <span className="text-muted-foreground">
-                        {t("extensions.version")}
-                      </span>
-                      <span>{editingExtension.version}</span>
-                    </>
-                  )}
-                  {editingExtension.author && (
-                    <>
-                      <span className="text-muted-foreground">
-                        {t("extensions.author")}
-                      </span>
-                      <span>{editingExtension.author}</span>
-                    </>
-                  )}
-                  {editingExtension.description && (
-                    <>
-                      <span className="text-muted-foreground">
-                        {t("common.labels.description")}
-                      </span>
-                      <span className="line-clamp-3">
-                        {editingExtension.description}
-                      </span>
-                    </>
-                  )}
-                  <span className="text-muted-foreground">
-                    {t("extensions.compatibility.label")}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    {renderCompatIcons(editingExtension.browser_compatibility)}
-                  </div>
-                  <span className="text-muted-foreground">
-                    {t("common.labels.type")}
-                  </span>
-                  <span>.{editingExtension.file_type}</span>
-                  {editingExtension.homepage_url && (
-                    <>
-                      <span className="text-muted-foreground">
-                        {t("extensions.homepage")}
-                      </span>
-                      <a
-                        href={editingExtension.homepage_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline flex items-center gap-1 truncate"
-                      >
-                        <span className="truncate">
-                          {editingExtension.homepage_url}
+                {/* Metadata from manifest.json */}
+                <div className="rounded-md border p-3 space-y-2">
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">
+                    {t("extensions.metadata")}
+                  </Label>
+                  <div className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-1.5 text-sm">
+                    {editingExtension.version && (
+                      <>
+                        <span className="text-muted-foreground">
+                          {t("extensions.version")}
                         </span>
-                        <LuExternalLink className="w-3 h-3 shrink-0" />
-                      </a>
-                    </>
-                  )}
-                  {!editingExtension.version &&
-                    !editingExtension.author &&
-                    !editingExtension.description &&
-                    !editingExtension.homepage_url && (
-                      <span className="col-span-2 text-muted-foreground text-xs">
-                        {t("extensions.noMetadata")}
+                        <span>{editingExtension.version}</span>
+                      </>
+                    )}
+                    {editingExtension.author && (
+                      <>
+                        <span className="text-muted-foreground">
+                          {t("extensions.author")}
+                        </span>
+                        <span>{editingExtension.author}</span>
+                      </>
+                    )}
+                    {editingExtension.description && (
+                      <>
+                        <span className="text-muted-foreground">
+                          {t("common.labels.description")}
+                        </span>
+                        <span className="line-clamp-3">
+                          {editingExtension.description}
+                        </span>
+                      </>
+                    )}
+                    <span className="text-muted-foreground">
+                      {t("extensions.compatibility.label")}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {renderCompatIcons(
+                        editingExtension.browser_compatibility,
+                      )}
+                    </div>
+                    <span className="text-muted-foreground">
+                      {t("common.labels.type")}
+                    </span>
+                    <span>.{editingExtension.file_type}</span>
+                    {editingExtension.homepage_url && (
+                      <>
+                        <span className="text-muted-foreground">
+                          {t("extensions.homepage")}
+                        </span>
+                        <a
+                          href={editingExtension.homepage_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline flex items-center gap-1 truncate"
+                        >
+                          <span className="truncate">
+                            {editingExtension.homepage_url}
+                          </span>
+                          <LuExternalLink className="w-3 h-3 shrink-0" />
+                        </a>
+                      </>
+                    )}
+                    {!editingExtension.version &&
+                      !editingExtension.author &&
+                      !editingExtension.description &&
+                      !editingExtension.homepage_url && (
+                        <span className="col-span-2 text-muted-foreground text-xs">
+                          {t("extensions.noMetadata")}
+                        </span>
+                      )}
+                  </div>
+                </div>
+
+                {/* Re-upload */}
+                <div className="space-y-2">
+                  <Label>{t("extensions.reupload")}</Label>
+                  <div className="flex gap-2 items-center">
+                    <RippleButton
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        document.getElementById("ext-edit-file-input")?.click()
+                      }
+                    >
+                      <LuUpload className="w-3 h-3 mr-1" />
+                      {t("extensions.selectFile")}
+                    </RippleButton>
+                    <input
+                      id="ext-edit-file-input"
+                      type="file"
+                      accept=".xpi,.crx,.zip"
+                      className="hidden"
+                      onChange={handleEditFileSelect}
+                    />
+                    {pendingUpdateFile && (
+                      <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                        {pendingUpdateFile.name}
                       </span>
                     )}
+                  </div>
                 </div>
               </div>
-
-              {/* Re-upload */}
-              <div className="space-y-2">
-                <Label>{t("extensions.reupload")}</Label>
-                <div className="flex gap-2 items-center">
-                  <RippleButton
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      document.getElementById("ext-edit-file-input")?.click()
-                    }
-                  >
-                    <LuUpload className="w-3 h-3 mr-1" />
-                    {t("extensions.selectFile")}
-                  </RippleButton>
-                  <input
-                    id="ext-edit-file-input"
-                    type="file"
-                    accept=".xpi,.crx,.zip"
-                    className="hidden"
-                    onChange={handleEditFileSelect}
-                  />
-                  {pendingUpdateFile && (
-                    <span className="text-xs text-muted-foreground truncate max-w-[200px]">
-                      {pendingUpdateFile.name}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+            )}
+          </ScrollArea>
 
           <DialogFooter>
             <Button

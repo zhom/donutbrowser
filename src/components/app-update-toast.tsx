@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslation } from "react-i18next";
 import { FaExternalLinkAlt, FaTimes } from "react-icons/fa";
 import { LuCheckCheck } from "react-icons/lu";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ export function AppUpdateToast({
   onDismiss,
   updateReady = false,
 }: AppUpdateToastProps) {
+  const { t } = useTranslation();
   const handleRestartClick = async () => {
     await onRestart();
   };
@@ -43,10 +45,10 @@ export function AppUpdateToast({
           <div className="flex flex-col gap-1">
             <span className="text-sm font-semibold text-foreground">
               {updateReady
-                ? "Update ready, restart to apply"
+                ? t("appUpdate.toast.updateReady")
                 : updateInfo.repo_update
                   ? "Update available via package manager"
-                  : "Manual download required"}
+                  : t("appUpdate.toast.manualDownloadRequired")}
             </span>
             <div className="text-xs text-muted-foreground">
               {updateInfo.current_version} → {updateInfo.new_version}
@@ -71,7 +73,7 @@ export function AppUpdateToast({
               className="flex gap-2 items-center text-xs"
             >
               <LuCheckCheck className="w-3 h-3" />
-              Restart Now
+              {t("appUpdate.toast.restartNow")}
             </RippleButton>
           ) : (
             !updateInfo.repo_update &&
@@ -82,7 +84,7 @@ export function AppUpdateToast({
                 className="flex gap-2 items-center text-xs"
               >
                 <FaExternalLinkAlt className="w-3 h-3" />
-                View Release
+                {t("appUpdate.toast.viewRelease")}
               </RippleButton>
             )
           )}
@@ -92,7 +94,7 @@ export function AppUpdateToast({
             size="sm"
             className="text-xs"
           >
-            Later
+            {t("appUpdate.toast.later")}
           </RippleButton>
         </div>
       </div>

@@ -811,7 +811,7 @@ export function SettingsDialog({
               </div>
 
               <p className="text-xs text-muted-foreground">
-                Choose your preferred language for the application interface.
+                {t("settings.language.description")}
               </p>
             </div>
 
@@ -820,10 +820,12 @@ export function SettingsDialog({
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <Label className="text-base font-medium">
-                    Default Browser
+                    {t("settings.defaultBrowser.title")}
                   </Label>
                   <Badge variant={isDefaultBrowser ? "default" : "secondary"}>
-                    {isDefaultBrowser ? "Active" : "Inactive"}
+                    {isDefaultBrowser
+                      ? t("common.status.active")
+                      : t("common.status.inactive")}
                   </Badge>
                 </div>
 
@@ -839,13 +841,12 @@ export function SettingsDialog({
                   className="w-full"
                 >
                   {isDefaultBrowser
-                    ? "Already Default Browser"
-                    : "Set as Default Browser"}
+                    ? t("settings.defaultBrowser.alreadyDefault")
+                    : t("settings.defaultBrowser.setAsDefault")}
                 </LoadingButton>
 
                 <p className="text-xs text-muted-foreground">
-                  When set as default, Donut Browser will handle web links and
-                  allow you to choose which profile to use.
+                  {t("settings.defaultBrowser.description")}
                 </p>
               </div>
             )}
@@ -854,12 +855,12 @@ export function SettingsDialog({
             {isMacOS && (
               <div className="space-y-4">
                 <Label className="text-base font-medium">
-                  System Permissions
+                  {t("settings.permissions.title")}
                 </Label>
 
                 {isLoadingPermissions ? (
                   <div className="text-sm text-muted-foreground">
-                    Loading permissions...
+                    {t("settings.permissions.loading")}
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -928,7 +929,7 @@ export function SettingsDialog({
                 className="w-full"
                 onClick={onIntegrationsOpen}
               >
-                Open Integrations Settings
+                {t("integrations.openSettings")}
               </RippleButton>
             </div>
 
@@ -952,33 +953,24 @@ export function SettingsDialog({
             {/* Sync Encryption Section */}
             <div className="space-y-4">
               <Label className="text-base font-medium">
-                {t("settings.encryption.title", "Sync Encryption")}
+                {t("settings.encryption.title")}
               </Label>
               <p className="text-xs text-muted-foreground">
-                {t(
-                  "settings.encryption.description",
-                  "Set a password to enable E2E encrypted sync. If you lose this password, encrypted profiles cannot be recovered.",
-                )}
+                {t("settings.encryption.description")}
               </p>
 
               {!canUseEncryption ? (
                 <p className="text-sm text-muted-foreground">
-                  {t(
-                    "settings.encryption.requiresProOrOwner",
-                    "Profile encryption is available for Pro users and team owners.",
-                  )}
+                  {t("settings.encryption.requiresProOrOwner")}
                 </p>
               ) : hasE2ePassword ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <Badge variant="default">
-                      {t("settings.encryption.passwordSet", "Active")}
+                      {t("settings.encryption.passwordSet")}
                     </Badge>
                     <span className="text-sm text-muted-foreground">
-                      {t(
-                        "settings.encryption.passwordSetDescription",
-                        "E2E encryption password is set",
-                      )}
+                      {t("settings.encryption.passwordSetDescription")}
                     </span>
                   </div>
                   <div className="flex gap-2">
@@ -992,10 +984,7 @@ export function SettingsDialog({
                         setE2eError("");
                       }}
                     >
-                      {t(
-                        "settings.encryption.changePassword",
-                        "Change Password",
-                      )}
+                      {t("settings.encryption.changePassword")}
                     </Button>
                     <Button
                       variant="destructive"
@@ -1004,21 +993,13 @@ export function SettingsDialog({
                         try {
                           await invoke("delete_e2e_password");
                           setHasE2ePassword(false);
-                          showSuccessToast(
-                            t(
-                              "settings.encryption.removed",
-                              "Encryption password removed",
-                            ),
-                          );
+                          showSuccessToast(t("settings.encryption.removed"));
                         } catch (error) {
                           showErrorToast(String(error));
                         }
                       }}
                     >
-                      {t(
-                        "settings.encryption.removePassword",
-                        "Remove Password",
-                      )}
+                      {t("settings.encryption.removePassword")}
                     </Button>
                   </div>
                 </div>
@@ -1026,10 +1007,7 @@ export function SettingsDialog({
                 <div className="space-y-3">
                   <Input
                     type="password"
-                    placeholder={t(
-                      "settings.encryption.passwordPlaceholder",
-                      "Password (min 8 characters)",
-                    )}
+                    placeholder={t("settings.encryption.passwordPlaceholder")}
                     value={e2ePassword}
                     onChange={(e) => {
                       setE2ePassword(e.target.value);
@@ -1038,10 +1016,7 @@ export function SettingsDialog({
                   />
                   <Input
                     type="password"
-                    placeholder={t(
-                      "settings.encryption.confirmPlaceholder",
-                      "Confirm password",
-                    )}
+                    placeholder={t("settings.encryption.confirmPlaceholder")}
                     value={e2ePasswordConfirm}
                     onChange={(e) => {
                       setE2ePasswordConfirm(e.target.value);
@@ -1057,21 +1032,11 @@ export function SettingsDialog({
                     isLoading={isSavingE2e}
                     onClick={async () => {
                       if (e2ePassword.length < 8) {
-                        setE2eError(
-                          t(
-                            "settings.encryption.passwordTooShort",
-                            "Password must be at least 8 characters",
-                          ),
-                        );
+                        setE2eError(t("settings.encryption.passwordTooShort"));
                         return;
                       }
                       if (e2ePassword !== e2ePasswordConfirm) {
-                        setE2eError(
-                          t(
-                            "settings.encryption.passwordMismatch",
-                            "Passwords do not match",
-                          ),
-                        );
+                        setE2eError(t("settings.encryption.passwordMismatch"));
                         return;
                       }
                       setIsSavingE2e(true);
@@ -1083,10 +1048,7 @@ export function SettingsDialog({
                         setE2ePassword("");
                         setE2ePasswordConfirm("");
                         showSuccessToast(
-                          t(
-                            "settings.encryption.passwordSaved",
-                            "Encryption password set",
-                          ),
+                          t("settings.encryption.passwordSaved"),
                         );
                       } catch (error) {
                         showErrorToast(String(error));
@@ -1095,7 +1057,7 @@ export function SettingsDialog({
                       }
                     }}
                   >
-                    {t("settings.encryption.setPassword", "Set Password")}
+                    {t("settings.encryption.setPassword")}
                   </LoadingButton>
                 </div>
               )}
@@ -1172,13 +1134,11 @@ export function SettingsDialog({
                 variant="outline"
                 className="w-full"
               >
-                Clear All Version Cache
+                {t("settings.advanced.clearCache")}
               </LoadingButton>
 
               <p className="text-xs text-muted-foreground">
-                Clear all cached browser version data and refresh all browser
-                versions from their sources. This will force a fresh download of
-                version information for all browsers.
+                {t("settings.advanced.clearCacheDescription")}
               </p>
             </div>
 
@@ -1194,7 +1154,7 @@ export function SettingsDialog({
 
           <DialogFooter className="shrink-0">
             <RippleButton variant="outline" onClick={handleClose}>
-              Cancel
+              {t("common.buttons.cancel")}
             </RippleButton>
             <LoadingButton
               isLoading={isSaving}
@@ -1205,7 +1165,7 @@ export function SettingsDialog({
               }}
               disabled={isLoading || !hasChanges}
             >
-              Save Settings
+              {t("common.buttons.saveSettings")}
             </LoadingButton>
           </DialogFooter>
         </DialogContent>

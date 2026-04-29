@@ -60,7 +60,8 @@
       "optional": "可选",
       "required": "必填",
       "unknownProfile": "未知",
-      "mode": "模式"
+      "mode": "模式",
+      "never": "从不"
     },
     "time": {
       "days": "天",
@@ -72,7 +73,11 @@
     "aria": {
       "selectAll": "全选",
       "selectRow": "选择行",
-      "selectProfile": "选择配置文件"
+      "selectProfile": "选择配置文件",
+      "copy": "复制到剪贴板",
+      "copied": "已复制",
+      "showToken": "显示令牌",
+      "hideToken": "隐藏令牌"
     },
     "keys": {
       "escape": "Esc"
@@ -87,7 +92,11 @@
       "title": "命令面板",
       "description": "搜索要执行的命令..."
     },
-    "noResults": "未找到结果。"
+    "noResults": "未找到结果。",
+    "srOnly": {
+      "copy": "复制",
+      "copied": "已复制"
+    }
   },
   "settings": {
     "title": "设置",
@@ -196,7 +205,8 @@
       "group": "分组",
       "proxy": "代理 / VPN",
       "lastLaunch": "最后启动",
-      "empty": "未找到配置文件。"
+      "empty": "未找到配置文件。",
+      "notSelected": "未选择"
     },
     "actions": {
       "launch": "启动",
@@ -488,7 +498,8 @@
     "deleteGroupAndProfiles": "删除组和配置文件",
     "loadProfilesFailed": "加载配置文件失败",
     "unknownGroup": "未知分组",
-    "profileGroupsAriaLabel": "配置文件分组"
+    "profileGroupsAriaLabel": "配置文件分组",
+    "loading": "正在加载组..."
   },
   "sync": {
     "mode": {
@@ -631,7 +642,8 @@
     "mcpAcceptTermsFirst": "(请先在设置中接受 Wayfern 条款)",
     "mcpStarted": "MCP 服务器已在端口 {{port}} 上启动",
     "mcpStopped": "MCP 服务器已停止",
-    "mcpToggleFailed": "切换 MCP 服务器失败"
+    "mcpToggleFailed": "切换 MCP 服务器失败",
+    "openSettings": "打开集成设置"
   },
   "import": {
     "title": "导入配置文件",
@@ -711,6 +723,10 @@
         "webrtc": "阻止 WebRTC",
         "webgl": "阻止 WebGL"
       }
+    },
+    "shared": {
+      "browserBehavior": "浏览器行为",
+      "allowAddonsOpenTabs": "允许浏览器附加组件自动打开新标签页"
     }
   },
   "cookies": {
@@ -875,7 +891,8 @@
     "loadProxiesFailed": "加载代理失败: {{error}}",
     "setupProxyListenersFailed": "设置代理事件监听器失败: {{error}}",
     "loadVpnConfigsFailed": "加载 VPN 配置失败: {{error}}",
-    "setupVpnListenersFailed": "设置 VPN 事件监听器失败: {{error}}"
+    "setupVpnListenersFailed": "设置 VPN 事件监听器失败: {{error}}",
+    "themeNotFound": "未找到 Tokyo Night 主题"
   },
   "browser": {
     "camoufox": "Camoufox",
@@ -901,15 +918,15 @@
     "blockWebRTC": "阻止 WebRTC",
     "blockWebGL": "阻止 WebGL",
     "navigatorProperties": "Navigator 属性",
-    "userAgent": "User Agent",
+    "userAgent": "用户代理",
     "userAgentAndPlatform": "User Agent 和平台",
     "platform": "平台",
     "platformVersion": "平台版本",
     "appVersion": "应用版本",
-    "osCpu": "OS CPU",
+    "osCpu": "操作系统 CPU",
     "hardwareConcurrency": "硬件并发数",
     "maxTouchPoints": "最大触摸点数",
-    "doNotTrack": "Do Not Track",
+    "doNotTrack": "请勿跟踪",
     "selectDntPlaceholder": "选择 DNT 值",
     "dntAllowed": "0（允许跟踪）",
     "dntNotAllowed": "1（不允许跟踪）",
@@ -931,8 +948,8 @@
     "outerHeight": "外部高度",
     "innerWidth": "内部宽度",
     "innerHeight": "内部高度",
-    "screenX": "Screen X",
-    "screenY": "Screen Y",
+    "screenX": "屏幕 X",
+    "screenY": "屏幕 Y",
     "geolocation": "地理位置",
     "timezoneAndGeolocation": "时区和地理位置",
     "timezoneGeolocationDescription": "这些值会覆盖浏览器的时区和地理位置 API。",
@@ -946,15 +963,15 @@
     "region": "地区",
     "script": "脚本",
     "webglProperties": "WebGL 属性",
-    "webglVendor": "WebGL Vendor",
-    "webglRenderer": "WebGL Renderer",
+    "webglVendor": "WebGL 供应商",
+    "webglRenderer": "WebGL 渲染器",
     "webglParameters": "WebGL 参数",
     "webglParametersJson": "WebGL 参数 (JSON)",
     "webgl2Parameters": "WebGL2 参数",
-    "webglShaderPrecisionFormats": "WebGL Shader Precision Formats",
-    "webgl2ShaderPrecisionFormats": "WebGL2 Shader Precision Formats",
+    "webglShaderPrecisionFormats": "WebGL 着色器精度格式",
+    "webgl2ShaderPrecisionFormats": "WebGL2 着色器精度格式",
     "canvasFingerprint": "Canvas 指纹",
-    "canvasNoiseSeed": "Canvas Noise Seed",
+    "canvasNoiseSeed": "Canvas 噪声种子",
     "canvasNoiseSeedDescription": "此种子用于生成一致但唯一的 Canvas 指纹。每个配置文件应使用不同的种子。",
     "fonts": "字体",
     "fontsJson": "字体 (JSON 数组)",
@@ -975,8 +992,8 @@
     "maxChannelCount": "最大通道数",
     "vendorInfo": "供应商信息",
     "vendor": "供应商",
-    "vendorSub": "Vendor Sub",
-    "productSub": "Product Sub",
+    "vendorSub": "供应商子版本",
+    "productSub": "产品子版本",
     "brand": "品牌",
     "brandVersion": "品牌版本",
     "proFeature": "这是 Pro 功能",
@@ -1124,7 +1141,9 @@
     "syncEnabled": "同步已启用",
     "syncDisabled": "同步已禁用",
     "syncEnableTooltip": "启用同步",
-    "syncDisableTooltip": "禁用同步"
+    "syncDisableTooltip": "禁用同步",
+    "loadGroupsFailed": "加载扩展组失败",
+    "assignGroupFailed": "分配扩展组失败"
   },
   "pro": {
     "badge": "PRO",
@@ -1256,12 +1275,11 @@
     "importedSuccess": "已成功导入配置文件「{{name}}」",
     "notInstalled": "{{browser}} 未安装。请先从主窗口下载 {{browser}},然后再尝试导入。",
     "importFailed": "导入配置文件失败: {{error}}",
-    "importedAsPrefix": "此配置文件将作为以下配置文件导入:",
-    "importedAsSuffix": "",
     "proxyOptional": "代理 (可选)",
     "noProxy": "无代理",
     "nextButton": "下一步",
-    "importButton": "导入"
+    "importButton": "导入",
+    "importedAs": "此配置文件将作为 {{browser}} 配置文件导入。"
   },
   "syncTooltips": {
     "syncing": "同步中...",
@@ -1503,7 +1521,12 @@
     "syncTooltipNotSynced": "未同步",
     "noTags": "无标签",
     "syncTooltipCloseToSync": "关闭配置文件以进行同步",
-    "syncTooltipDisabledWithLast": "同步已禁用,上次同步 {{time}}"
+    "syncTooltipDisabledWithLast": "同步已禁用,上次同步 {{time}}",
+    "addTagsPlaceholder": "添加标签",
+    "tagsHeader": "标签",
+    "noteHeader": "备注",
+    "vpnsHeading": "VPN",
+    "createByCountryHeading": "按国家创建"
   },
   "releaseTypeSelector": {
     "noReleaseTypes": "没有可用的发布类型。",
@@ -1521,7 +1544,14 @@
   "appUpdate": {
     "toast": {
       "updateFailed": "更新 Donut Browser 失败",
-      "restartFailed": "重启失败"
+      "restartFailed": "重启失败",
+      "updateReady": "更新就绪，请重启以应用",
+      "manualDownloadRequired": "需要手动下载",
+      "restartNow": "立即重启",
+      "viewRelease": "查看版本",
+      "later": "稍后",
+      "uploading": "上传中",
+      "downloading": "下载中"
     }
   },
   "browserDownload": {
@@ -1532,7 +1562,10 @@
       "downloadFailed": "下载 {{browser}} {{version}} 失败",
       "calculating": "计算中...",
       "extractionFailed": "{{browser}} {{version}}: 解压失败",
-      "extractionFailedDescription": "损坏的文件已删除。下次尝试时将重新下载。"
+      "extractionFailedDescription": "损坏的文件已删除。下次尝试时将重新下载。",
+      "extracting": "正在提取浏览器文件...请不要关闭应用。",
+      "verifying": "正在验证浏览器文件...",
+      "downloadingRolling": "正在下载滚动发布版本..."
     }
   },
   "versionUpdater": {
