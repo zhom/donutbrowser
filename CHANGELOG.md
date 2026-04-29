@@ -1,6 +1,19 @@
 # Changelog
 
 
+## v0.22.5 (2026-04-29)
+
+### Bug Fixes
+
+- declare libxdo as runtime dependency
+
+### Maintenance
+
+- chore: version bump
+- chore: copy
+- chore: update flake.nix for v0.22.4 [skip ci] (#324)
+
+
 ## v0.22.4 (2026-04-28)
 
 ### Maintenance
