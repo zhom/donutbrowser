@@ -42,11 +42,11 @@
     "linux": {
       "deb": {
         "desktopTemplate": "donutbrowser.desktop",
-        "depends": ["xdg-utils"]
+        "depends": ["xdg-utils", "libxdo3"]
       },
       "rpm": {
         "desktopTemplate": "donutbrowser.desktop",
-        "depends": ["xdg-utils"]
+        "depends": ["xdg-utils", "libxdo"]
       },
       "appimage": {
         "files": {
