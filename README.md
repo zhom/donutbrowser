@@ -161,6 +161,13 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
                     <sub><b>Jory Severijnse</b></sub>
                 </a>
             </td>
+            <td align="center">
+                <a href="https://github.com/ThiagoMafra-Integrare">
+                    <img src="https://avatars.githubusercontent.com/u/222241596?v=4" width="100;" alt="ThiagoMafra-Integrare"/>
+                    <br />
+                    <sub><b>Thiago Mafra</b></sub>
+                </a>
+            </td>
 		</tr>
 	<tbody>
 </table>
