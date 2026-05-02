@@ -96,7 +96,7 @@
       "fast-xml-parser@<5.7.0": ">=5.7.2"
     }
   },
-  "packageManager": "pnpm@10.33.0",
+  "packageManager": "pnpm@10.33.2",
   "lint-staged": {
     "**/*.{js,jsx,ts,tsx,json,css}": [
       "biome check --fix"
