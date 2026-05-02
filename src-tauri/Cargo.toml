@@ -102,7 +102,7 @@ serde_yaml = "0.9"
 thiserror = "2.0"
 regex-lite = "0.1"
 tempfile = "3"
-maxminddb = "0.27"
+maxminddb = "0.28"
 quick-xml = { version = "0.39", features = ["serialize"] }
 
 # VPN support
@@ -110,7 +110,7 @@ boringtun = "0.7"
 smoltcp = { version = "0.13", default-features = false, features = ["std", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-tcp", "socket-udp"] }
 
 # Daemon dependencies (tray icon)
-tray-icon = "0.22"
+tray-icon = "0.23"
 tao = "0.35"
 image = "0.25"
 dirs = "6"
