@@ -41,6 +41,7 @@ pub struct ApiProfile {
   pub tags: Vec<String>,
   pub is_running: bool,
   pub proxy_bypass_rules: Vec<String>,
+  pub vpn_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -60,6 +61,7 @@ pub struct CreateProfileRequest {
   pub browser: String,
   pub version: String,
   pub proxy_id: Option<String>,
+  pub vpn_id: Option<String>,
   pub launch_hook: Option<String>,
   pub release_type: Option<String>,
   #[schema(value_type = Object)]
@@ -76,6 +78,7 @@ pub struct UpdateProfileRequest {
   pub browser: Option<String>,
   pub version: Option<String>,
   pub proxy_id: Option<String>,
+  pub vpn_id: Option<String>,
   pub launch_hook: Option<String>,
   pub release_type: Option<String>,
   #[schema(value_type = Object)]
@@ -138,6 +141,16 @@ struct ApiVpnResponse {
   vpn_type: String,
   created_at: i64,
   last_used: Option<i64>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+struct ApiVpnExportResponse {
+  id: String,
+  name: String,
+  /// Always "WireGuard"
+  vpn_type: String,
+  /// Raw `.conf` file content (decrypted)
+  config_data: String,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -357,6 +370,7 @@ impl ApiServer {
       .routes(routes!(get_proxy, update_proxy, delete_proxy))
       .routes(routes!(get_vpns, create_vpn))
       .routes(routes!(import_vpn))
+      .routes(routes!(export_vpn))
       .routes(routes!(get_vpn, update_vpn, delete_vpn))
       .routes(routes!(get_extensions))
       .routes(routes!(delete_extension_api))
@@ -542,6 +556,7 @@ async fn get_profiles() -> Result<Json<ApiProfilesResponse>, StatusCode> {
           tags: profile.tags.clone(),
           is_running: profile.process_id.is_some(), // Simple check based on process_id
           proxy_bypass_rules: profile.proxy_bypass_rules.clone(),
+          vpn_id: profile.vpn_id.clone(),
         })
         .collect();
 
@@ -598,6 +613,7 @@ async fn get_profile(
             tags: profile.tags.clone(),
             is_running: profile.process_id.is_some(), // Simple check based on process_id
             proxy_bypass_rules: profile.proxy_bypass_rules.clone(),
+            vpn_id: profile.vpn_id.clone(),
           },
         }))
       } else {
@@ -652,7 +668,7 @@ async fn create_profile(
       &request.version,
       request.release_type.as_deref().unwrap_or("stable"),
       request.proxy_id.clone(),
-      None, // vpn_id
+      request.vpn_id.clone(),
       camoufox_config,
       wayfern_config,
       request.group_id.clone(),
@@ -700,6 +716,7 @@ async fn create_profile(
           tags: profile.tags,
           is_running: false,
           proxy_bypass_rules: profile.proxy_bypass_rules,
+          vpn_id: profile.vpn_id,
         },
       }))
     }
@@ -733,6 +750,12 @@ async fn update_profile(
 ) -> Result<Json<ApiProfileResponse>, StatusCode> {
   let profile_manager = ProfileManager::instance();
 
+  if request.proxy_id.as_deref().is_some_and(|s| !s.is_empty())
+    && request.vpn_id.as_deref().is_some_and(|s| !s.is_empty())
+  {
+    return Err(StatusCode::BAD_REQUEST);
+  }
+
   // Update profile fields
   if let Some(new_name) = request.name {
     if profile_manager
@@ -755,6 +778,21 @@ async fn update_profile(
   if let Some(proxy_id) = request.proxy_id {
     if profile_manager
       .update_profile_proxy(state.app_handle.clone(), &id, Some(proxy_id))
+      .await
+      .is_err()
+    {
+      return Err(StatusCode::BAD_REQUEST);
+    }
+  }
+
+  if let Some(vpn_id) = request.vpn_id {
+    let normalized = if vpn_id.is_empty() {
+      None
+    } else {
+      Some(vpn_id)
+    };
+    if profile_manager
+      .update_profile_vpn(state.app_handle.clone(), &id, normalized)
       .await
       .is_err()
     {
@@ -1306,6 +1344,37 @@ async fn get_vpn(
     .find(|c| c.id == id)
     .map(|c| Json(vpn_to_api_response(c)))
     .ok_or(StatusCode::NOT_FOUND)
+}
+
+#[utoipa::path(
+  get,
+  path = "/v1/vpns/{id}/export",
+  params(("id" = String, Path, description = "VPN configuration ID")),
+  responses(
+    (status = 200, description = "Decrypted VPN configuration", body = ApiVpnExportResponse),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "VPN configuration not found"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(("bearer_auth" = [])),
+  tag = "vpns"
+)]
+async fn export_vpn(
+  Path(id): Path<String>,
+  State(_state): State<ApiServerState>,
+) -> Result<Json<ApiVpnExportResponse>, StatusCode> {
+  let storage = crate::vpn::VPN_STORAGE
+    .lock()
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+  match storage.load_config(&id) {
+    Ok(config) => Ok(Json(ApiVpnExportResponse {
+      id: config.id,
+      name: config.name,
+      vpn_type: config.vpn_type.to_string(),
+      config_data: config.config_data,
+    })),
+    Err(_) => Err(StatusCode::NOT_FOUND),
+  }
 }
 
 #[utoipa::path(
