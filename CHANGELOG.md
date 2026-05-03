@@ -1,6 +1,33 @@
 # Changelog
 
 
+## v0.22.6 (2026-05-03)
+
+### Features
+
+- vpn manipulation via the api
+
+### Refactoring
+
+- don't block ui on clade check
+
+### Documentation
+
+- update CHANGELOG.md and README.md for v0.22.5 [skip ci] (#327)
+
+### Maintenance
+
+- chore: version bump
+- chore: rand bump
+- chore: pnpm bump
+- ci(deps): bump the github-actions group with 3 updates (#330)
+- chore: update flake.nix for v0.22.5 [skip ci] (#328)
+
+### Other
+
+- deps(rust)(deps): bump the rust-dependencies group (#331)
+
+
 ## v0.22.5 (2026-04-29)
 
 ### Bug Fixes
