@@ -675,11 +675,17 @@ fn find_claude_cli() -> Option<std::path::PathBuf> {
 }
 
 #[tauri::command]
-fn is_mcp_in_claude_code() -> Result<bool, String> {
+async fn is_mcp_in_claude_code() -> Result<bool, String> {
   let cli = find_claude_cli().ok_or("Claude Code CLI not found")?;
-  let output = std::process::Command::new(&cli)
+  // `claude mcp list` health-checks every registered MCP server, so a
+  // missing or stalled server can hang the call for many seconds. Cap it
+  // — for this dialog, a slow `claude` is treated the same as "not registered".
+  let fut = tokio::process::Command::new(&cli)
     .args(["mcp", "list"])
-    .output()
+    .output();
+  let output = tokio::time::timeout(std::time::Duration::from_secs(2), fut)
+    .await
+    .map_err(|_| "claude mcp list timed out".to_string())?
     .map_err(|e| format!("Failed to run claude: {e}"))?;
   let stdout = String::from_utf8_lossy(&output.stdout);
   Ok(stdout.contains("donut-browser"))
