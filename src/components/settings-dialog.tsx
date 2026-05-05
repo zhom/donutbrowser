@@ -408,7 +408,12 @@ export function SettingsDialog({
       // Update settings with any generated tokens
       setSettings(savedSettings);
       settingsToSave = savedSettings;
-      setTheme(settings.theme === "custom" ? "dark" : settings.theme);
+      // Pass the actual theme value through. Calling setTheme("dark") here
+      // when the user is on "custom" pushes the provider state to "dark",
+      // which triggers its clear-custom-vars effect and wipes the CSS
+      // variables we set just below — that's the bug where saving a custom
+      // theme made it disappear until the app was restarted.
+      setTheme(settings.theme);
 
       // Apply or clear custom variables only on Save
       if (settings.theme === "custom") {
@@ -539,7 +544,7 @@ export function SettingsDialog({
         checkDefaultBrowserStatus().catch((err: unknown) => {
           console.error(err);
         });
-      }, 500); // Check every 500ms
+      }, 2000);
 
       // Cleanup interval on component unmount or dialog close
       return () => {

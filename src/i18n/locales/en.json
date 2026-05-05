@@ -1442,7 +1442,11 @@
     "grantAccessButton": "Grant Access",
     "requestSuccessMicrophone": "Microphone Access permission requested",
     "requestSuccessCamera": "Camera Access permission requested",
-    "requestFailed": "Failed to request permission"
+    "requestFailed": "Failed to request permission",
+    "stillNotGrantedMicrophone": "Microphone access still hasn't been granted. You may need to enable it manually in System Settings → Privacy & Security → Microphone.",
+    "stillNotGrantedCamera": "Camera access still hasn't been granted. You may need to enable it manually in System Settings → Privacy & Security → Camera.",
+    "grantedToastMicrophone": "Microphone access granted",
+    "grantedToastCamera": "Camera access granted"
   },
   "traffic": {
     "title": "Traffic Details",

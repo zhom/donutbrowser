@@ -174,6 +174,10 @@ pub struct ProxyManager {
   // Track active proxy IDs by profile name for targeted cleanup
   profile_active_proxy_ids: Mutex<HashMap<String, String>>, // Maps profile name to proxy id
   stored_proxies: Mutex<HashMap<String, StoredProxy>>,      // Maps proxy ID to stored proxy
+  // Consecutive cleanup passes during which a browser PID looked dead.
+  // We only reap a worker after it has been missed in N consecutive scans —
+  // a single sysinfo blip under load shouldn't kill a still-running worker.
+  dead_browser_misses: Mutex<HashMap<u32, u8>>,
 }
 
 impl ProxyManager {
@@ -183,6 +187,7 @@ impl ProxyManager {
       profile_proxies: Mutex::new(HashMap::new()),
       profile_active_proxy_ids: Mutex::new(HashMap::new()),
       stored_proxies: Mutex::new(HashMap::new()),
+      dead_browser_misses: Mutex::new(HashMap::new()),
     };
 
     // Load stored proxies on initialization
@@ -2095,17 +2100,52 @@ impl ProxyManager {
           sysinfo::RefreshKind::nothing().with_processes(sysinfo::ProcessRefreshKind::everything()),
         );
 
-        let dead_browser_entries: Vec<(u32, String, Option<String>)> = snapshot
-          .into_iter()
-          .filter(|(browser_pid, _, _)| {
-            // The sentinel PID=0 is used as a placeholder during launch,
-            // before update_proxy_pid has recorded the real browser PID.
-            *browser_pid != 0
-              && system
-                .process(sysinfo::Pid::from_u32(*browser_pid))
-                .is_none()
-          })
-          .collect();
+        // Two-state classification: alive PIDs reset their miss counter,
+        // dead PIDs increment it. A worker is only reaped after MISS_THRESHOLD
+        // consecutive misses (~60s by default given the 30s cleanup cadence),
+        // so a single sysinfo blip under heavy load doesn't kill a healthy worker.
+        const MISS_THRESHOLD: u8 = 2;
+
+        let mut alive_pids: Vec<u32> = Vec::new();
+        let mut dead_candidates: Vec<(u32, String, Option<String>)> = Vec::new();
+        let mut snapshot_pids: std::collections::HashSet<u32> = std::collections::HashSet::new();
+        for (browser_pid, proxy_id, profile_id) in snapshot {
+          snapshot_pids.insert(browser_pid);
+          // The sentinel PID=0 is used as a placeholder during launch,
+          // before update_proxy_pid has recorded the real browser PID.
+          if browser_pid == 0 {
+            continue;
+          }
+          if system
+            .process(sysinfo::Pid::from_u32(browser_pid))
+            .is_some()
+          {
+            alive_pids.push(browser_pid);
+          } else {
+            dead_candidates.push((browser_pid, proxy_id, profile_id));
+          }
+        }
+
+        let dead_browser_entries: Vec<(u32, String, Option<String>)> = {
+          let mut misses = self.dead_browser_misses.lock().unwrap();
+          // Forget PIDs no longer tracked at all (worker already torn down elsewhere).
+          misses.retain(|pid, _| snapshot_pids.contains(pid));
+          // Reset miss count for any PID that's currently alive.
+          for pid in &alive_pids {
+            misses.remove(pid);
+          }
+          // Increment dead candidates and select those past threshold.
+          let mut to_reap = Vec::new();
+          for (browser_pid, proxy_id, profile_id) in dead_candidates {
+            let count = misses.entry(browser_pid).or_insert(0);
+            *count = count.saturating_add(1);
+            if *count >= MISS_THRESHOLD {
+              misses.remove(&browser_pid);
+              to_reap.push((browser_pid, proxy_id, profile_id));
+            }
+          }
+          to_reap
+        };
 
         for (browser_pid, proxy_id, profile_id) in dead_browser_entries {
           log::info!(

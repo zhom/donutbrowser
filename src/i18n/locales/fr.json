@@ -1442,7 +1442,11 @@
     "grantAccessButton": "Accorder l'accès",
     "requestSuccessMicrophone": "Accès au microphone demandé",
     "requestSuccessCamera": "Accès à la caméra demandé",
-    "requestFailed": "Échec de la demande de permission"
+    "requestFailed": "Échec de la demande de permission",
+    "stillNotGrantedMicrophone": "L'accès au microphone n'a toujours pas été accordé. Vous devrez peut-être l'activer manuellement dans Réglages Système → Confidentialité et sécurité → Microphone.",
+    "stillNotGrantedCamera": "L'accès à la caméra n'a toujours pas été accordé. Vous devrez peut-être l'activer manuellement dans Réglages Système → Confidentialité et sécurité → Caméra.",
+    "grantedToastMicrophone": "Accès au microphone accordé",
+    "grantedToastCamera": "Accès à la caméra accordé"
   },
   "traffic": {
     "title": "Détails du trafic",

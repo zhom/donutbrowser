@@ -1442,7 +1442,11 @@
     "grantAccessButton": "アクセスを許可",
     "requestSuccessMicrophone": "マイクアクセスをリクエストしました",
     "requestSuccessCamera": "カメラアクセスをリクエストしました",
-    "requestFailed": "許可のリクエストに失敗しました"
+    "requestFailed": "許可のリクエストに失敗しました",
+    "stillNotGrantedMicrophone": "マイクへのアクセスはまだ許可されていません。システム設定 → プライバシーとセキュリティ → マイク で手動で有効にする必要があるかもしれません。",
+    "stillNotGrantedCamera": "カメラへのアクセスはまだ許可されていません。システム設定 → プライバシーとセキュリティ → カメラ で手動で有効にする必要があるかもしれません。",
+    "grantedToastMicrophone": "マイクへのアクセスが許可されました",
+    "grantedToastCamera": "カメラへのアクセスが許可されました"
   },
   "traffic": {
     "title": "トラフィックの詳細",

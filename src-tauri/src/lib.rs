@@ -1888,21 +1888,31 @@ pub fn run() {
       // Start cloud auth background refresh loop
       let app_handle_cloud = app.handle().clone();
       tauri::async_runtime::spawn(async move {
-        // On startup, refresh sync token and proxy if cloud auth is active.
+        // On startup, refresh sync token, proxy config, and wayfern token in
+        // PARALLEL. Previously they were awaited sequentially, so the wayfern
+        // token request didn't even start until the earlier two API calls had
+        // finished. Wayfern launch can race with this task — a few seconds of
+        // serialized API calls translates directly into a slow first launch
+        // because launch_wayfern blocks waiting for the token to land.
         // api_call_with_retry handles 401/refresh internally — no direct
         // refresh_access_token call needed.
         if cloud_auth::CLOUD_AUTH.is_logged_in().await {
-          if let Err(e) = cloud_auth::CLOUD_AUTH.get_or_refresh_sync_token().await {
-            log::warn!("Failed to refresh cloud sync token on startup: {e}");
-          }
-          cloud_auth::CLOUD_AUTH.sync_cloud_proxy().await;
-
-          // Request wayfern token on startup for paid users
-          if cloud_auth::CLOUD_AUTH.has_active_paid_subscription().await {
-            if let Err(e) = cloud_auth::CLOUD_AUTH.request_wayfern_token().await {
-              log::warn!("Failed to request wayfern token on startup: {e}");
+          let sync_token_fut = async {
+            if let Err(e) = cloud_auth::CLOUD_AUTH.get_or_refresh_sync_token().await {
+              log::warn!("Failed to refresh cloud sync token on startup: {e}");
             }
-          }
+          };
+          let proxy_fut = async {
+            cloud_auth::CLOUD_AUTH.sync_cloud_proxy().await;
+          };
+          let wayfern_fut = async {
+            if cloud_auth::CLOUD_AUTH.has_active_paid_subscription().await {
+              if let Err(e) = cloud_auth::CLOUD_AUTH.request_wayfern_token().await {
+                log::warn!("Failed to request wayfern token on startup: {e}");
+              }
+            }
+          };
+          tokio::join!(sync_token_fut, proxy_fut, wayfern_fut);
         }
         cloud_auth::CloudAuthManager::start_sync_token_refresh_loop(app_handle_cloud).await;
       });

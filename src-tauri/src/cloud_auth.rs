@@ -127,8 +127,16 @@ lazy_static! {
 impl CloudAuthManager {
   fn new() -> Self {
     let state = Self::load_auth_state_from_disk();
+    // Bound every cloud API call so no single slow / hung request can stall
+    // the startup chain (sync-token → proxy-config → wayfern-token), which
+    // otherwise gates Wayfern launch behind whichever endpoint is slowest.
+    let client = Client::builder()
+      .timeout(std::time::Duration::from_secs(15))
+      .connect_timeout(std::time::Duration::from_secs(5))
+      .build()
+      .unwrap_or_else(|_| Client::new());
     Self {
-      client: Client::new(),
+      client,
       state: Mutex::new(state),
       refresh_lock: tokio::sync::Mutex::new(()),
       wayfern_token: Mutex::new(None),
@@ -990,7 +998,15 @@ impl CloudAuthManager {
     let token = self
       .api_call_with_retry(|access_token| {
         let url = format!("{CLOUD_API_URL}/api/auth/wayfern-start");
-        let client = reqwest::Client::new();
+        // Bound the request: without a timeout, an unreachable
+        // api.donutbrowser.com hangs the background fetch indefinitely,
+        // which in turn forces wayfern_manager's launch-time wait to
+        // exhaust its full polling budget every time.
+        let client = reqwest::Client::builder()
+          .timeout(std::time::Duration::from_secs(8))
+          .connect_timeout(std::time::Duration::from_secs(4))
+          .build()
+          .unwrap_or_else(|_| reqwest::Client::new());
         async move {
           let response = client
             .post(&url)

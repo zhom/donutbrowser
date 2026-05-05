@@ -12,6 +12,39 @@ use tokio::process::Command;
 #[cfg(target_os = "macos")]
 use std::fs::create_dir_all;
 
+/// Returns true if `path` carries a `com.apple.quarantine` extended attribute.
+///
+/// Uses `getxattr` with a null buffer to query the attribute size only —
+/// this is a read-only syscall and does NOT trigger macOS Sequoia's App
+/// Management TCC prompt. We use it to gate the `xattr -d` removal: macOS
+/// fires the prompt on the modify-class syscall (`removexattr`) even when
+/// the operation is a no-op, so skipping the call entirely when the
+/// attribute is absent is the only way to stay quiet.
+#[cfg(target_os = "macos")]
+fn has_quarantine_attr(path: &Path) -> bool {
+  use std::ffi::CString;
+  use std::os::unix::ffi::OsStrExt;
+  let Ok(path_c) = CString::new(path.as_os_str().as_bytes()) else {
+    return false;
+  };
+  let Ok(attr_c) = CString::new("com.apple.quarantine") else {
+    return false;
+  };
+  // SAFETY: getxattr is a stable libc API. Passing a null buffer with size 0
+  // makes it a pure read-only size query.
+  let result = unsafe {
+    libc::getxattr(
+      path_c.as_ptr(),
+      attr_c.as_ptr(),
+      std::ptr::null_mut(),
+      0,
+      0,
+      0,
+    )
+  };
+  result >= 0
+}
+
 pub struct Extractor;
 
 impl Extractor {
@@ -207,18 +240,23 @@ impl Extractor {
 
     match extraction_result {
       Ok(path) => {
-        // Remove quarantine attributes on macOS to prevent
-        // "app was prevented from modifying data" prompts
+        // Remove quarantine attributes on macOS to prevent Gatekeeper prompts —
+        // but only if there's actually something to remove. Calling the
+        // modify-class `removexattr` syscall on a file without quarantine still
+        // fires macOS Sequoia's App Management TCC notification, so we skip
+        // the call entirely when the attribute is absent.
         #[cfg(target_os = "macos")]
         {
-          let _ = tokio::process::Command::new("xattr")
-            .args([
-              "-dr",
-              "com.apple.quarantine",
-              dest_dir.to_str().unwrap_or("."),
-            ])
-            .output()
-            .await;
+          if has_quarantine_attr(dest_dir) {
+            let _ = tokio::process::Command::new("xattr")
+              .args([
+                "-dr",
+                "com.apple.quarantine",
+                dest_dir.to_str().unwrap_or("."),
+              ])
+              .output()
+              .await;
+          }
         }
 
         log::info!(
@@ -419,9 +457,15 @@ impl Extractor {
 
     log::info!("Copying .app to: {}", app_path.display());
 
+    // `-X` strips extended attributes (notably com.apple.quarantine) during
+    // the copy itself. Without it, `cp -R` preserves quarantine from the
+    // mounted DMG, which then has to be removed with `xattr -dr` — and that
+    // removexattr syscall on a signed .app bundle trips macOS Sequoia's App
+    // Management TCC notification ("Donut.app was prevented from modifying
+    // apps on your Mac"). Stripping at copy time is silent.
     let output = Command::new("cp")
       .args([
-        "-R",
+        "-RX",
         app_entry.to_str().unwrap(),
         app_path.to_str().unwrap(),
       ])
@@ -444,18 +488,21 @@ impl Extractor {
 
     log::info!("Successfully copied .app bundle");
 
-    // Remove quarantine attributes
-    let _ = Command::new("xattr")
-      .args(["-dr", "com.apple.quarantine", app_path.to_str().unwrap()])
-      .output()
-      .await;
-
-    let _ = Command::new("xattr")
-      .args(["-cr", app_path.to_str().unwrap()])
-      .output()
-      .await;
-
-    log::info!("Removed quarantine attributes");
+    // Remove the macOS quarantine attribute so Gatekeeper doesn't block launch
+    // — but only if it's actually present. A no-op `removexattr` syscall on a
+    // signed .app bundle still trips macOS Sequoia's App Management privacy
+    // prompt ("Donut.app was prevented from modifying apps on your Mac"),
+    // even when no modification actually happens, so we gate the call behind
+    // a read-only `getxattr` check.
+    if has_quarantine_attr(&app_path) {
+      let _ = Command::new("xattr")
+        .args(["-dr", "com.apple.quarantine", app_path.to_str().unwrap()])
+        .output()
+        .await;
+      log::info!("Removed quarantine attributes");
+    } else {
+      log::info!("No quarantine attribute on .app, skipping xattr removal");
+    }
 
     // Unmount the DMG
     let output = Command::new("hdiutil")

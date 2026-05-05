@@ -928,18 +928,35 @@ impl AppAutoUpdater {
       // Move new app to current location
       fs::rename(installer_path, &current_app_path)?;
 
-      // Remove quarantine attributes from the new app
-      let _ = Command::new("xattr")
-        .args([
-          "-dr",
-          "com.apple.quarantine",
-          current_app_path.to_str().unwrap(),
-        ])
-        .output();
-
-      let _ = Command::new("xattr")
-        .args(["-cr", current_app_path.to_str().unwrap()])
-        .output();
+      // Remove the macOS quarantine attribute from the freshly-installed app
+      // so Gatekeeper doesn't block its first launch — but only if it's
+      // actually present. macOS Sequoia's App Management TCC fires on the
+      // modify-class syscall regardless of whether anything is actually
+      // modified, so we gate the call behind a read-only `getxattr` check.
+      let needs_quarantine_removal = {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+        let path_c = CString::new(current_app_path.as_os_str().as_bytes()).ok();
+        let attr_c = CString::new("com.apple.quarantine").ok();
+        match (path_c, attr_c) {
+          (Some(p), Some(a)) => {
+            // SAFETY: getxattr with a null buffer is a read-only size query.
+            let result =
+              unsafe { libc::getxattr(p.as_ptr(), a.as_ptr(), std::ptr::null_mut(), 0, 0, 0) };
+            result >= 0
+          }
+          _ => false,
+        }
+      };
+      if needs_quarantine_removal {
+        let _ = Command::new("xattr")
+          .args([
+            "-dr",
+            "com.apple.quarantine",
+            current_app_path.to_str().unwrap(),
+          ])
+          .output();
+      }
 
       // Clean up backup after successful installation
       let _ = fs::remove_dir_all(&backup_path);

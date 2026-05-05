@@ -272,7 +272,7 @@ const HomeHeader = ({
                     <Button
                       size="sm"
                       variant="outline"
-                      className="flex gap-2 items-center h-[36px]"
+                      className="flex gap-2 items-center h-[36px] border-foreground/20 hover:text-foreground"
                     >
                       <GoKebabHorizontal className="w-4 h-4" />
                     </Button>

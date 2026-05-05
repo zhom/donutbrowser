@@ -32,6 +32,14 @@ const DEVICE_LINK_URL = "https://donutbrowser.com/auth/link";
 interface SyncConfigDialogProps {
   isOpen: boolean;
   onClose: (loginOccurred?: boolean) => void;
+  /**
+   * Called after the user clicks "Login" so the parent can open the
+   * device-code verify dialog as a separate step. Implementations should
+   * close this dialog and open the verify one — that keeps the verify
+   * step visually independent and avoids stacking on top of other
+   * dialogs (e.g. the profile selector triggered by deep links).
+   */
+  onLoginStarted?: () => void;
 }
 
 interface ProxyUsage {
@@ -42,7 +50,11 @@ interface ProxyUsage {
   extra_limit_mb: number;
 }
 
-export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
+export function SyncConfigDialog({
+  isOpen,
+  onClose,
+  onLoginStarted,
+}: SyncConfigDialogProps) {
   const { t } = useTranslation();
 
   // Self-hosted state
@@ -58,11 +70,8 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
     user,
     isLoggedIn,
     isLoading: isCloudLoading,
-    exchangeDeviceCode,
     logout,
   } = useCloudAuth();
-  const [linkCode, setLinkCode] = useState("");
-  const [isVerifying, setIsVerifying] = useState(false);
 
   const [activeTab, setActiveTab] = useState<string>("cloud");
   const [, setLiveProxyUsage] = useState<ProxyUsage | null>(null);
@@ -103,7 +112,6 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
     if (isOpen) {
       setConnectionStatus("unknown");
       void loadSettings();
-      setLinkCode("");
       void invoke<ProxyUsage | null>("cloud_get_proxy_usage")
         .then(setLiveProxyUsage)
         .catch(() => {
@@ -199,32 +207,15 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
   const handleOpenLogin = useCallback(async () => {
     try {
       await invoke("handle_url_open", { url: DEVICE_LINK_URL });
+      // Hand off the verify step to its own dialog so the user has a
+      // focused place to paste the code, and so it doesn't visually
+      // stack with this dialog or any other modal currently on screen.
+      onLoginStarted?.();
     } catch (error) {
       console.error("Failed to open login link:", error);
       showErrorToast(String(error));
     }
-  }, []);
-
-  const handleVerifyCode = useCallback(async () => {
-    const trimmed = linkCode.trim();
-    if (!trimmed) return;
-    setIsVerifying(true);
-    try {
-      await exchangeDeviceCode(trimmed);
-      showSuccessToast(t("sync.cloud.loginSuccess"));
-      try {
-        await invoke("restart_sync_service");
-      } catch (e) {
-        console.error("Failed to restart sync service:", e);
-      }
-      onClose(true);
-    } catch (error) {
-      console.error("Device-code exchange failed:", error);
-      showErrorToast(String(error));
-    } finally {
-      setIsVerifying(false);
-    }
-  }, [linkCode, exchangeDeviceCode, t, onClose]);
+  }, [onLoginStarted]);
 
   const handleCloudLogout = useCallback(async () => {
     try {
@@ -375,37 +366,6 @@ export function SyncConfigDialog({ isOpen, onClose }: SyncConfigDialogProps) {
                   >
                     {t("sync.cloud.openLogin")}
                   </Button>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="cloud-link-code">
-                      {t("sync.cloud.linkCodeLabel")}
-                    </Label>
-                    <Input
-                      id="cloud-link-code"
-                      placeholder={t("sync.cloud.linkCodePlaceholder")}
-                      value={linkCode}
-                      onChange={(e) => {
-                        setLinkCode(e.target.value);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && linkCode.trim()) {
-                          void handleVerifyCode();
-                        }
-                      }}
-                      autoComplete="off"
-                      spellCheck={false}
-                    />
-                    <LoadingButton
-                      onClick={() => void handleVerifyCode()}
-                      isLoading={isVerifying}
-                      disabled={!linkCode.trim()}
-                      className="w-full"
-                    >
-                      {isVerifying
-                        ? t("sync.cloud.loggingIn")
-                        : t("sync.cloud.verifyAndLogin")}
-                    </LoadingButton>
-                  </div>
                 </div>
               )}
             </TabsContent>

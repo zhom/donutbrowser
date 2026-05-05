@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BsCamera, BsMic } from "react-icons/bs";
 import { LoadingButton } from "@/components/loading-button";
@@ -21,7 +21,14 @@ interface PermissionDialogProps {
   isOpen: boolean;
   onClose: () => void;
   permissionType: PermissionType;
-  onPermissionGranted?: () => void;
+  /**
+   * Fired when the displayed permission becomes granted. The just-granted
+   * type is passed through so the parent can act optimistically — its own
+   * usePermissions instance polls on a 5 s cadence and would otherwise be
+   * stale right after the macOS system prompt is accepted, leaving the
+   * dialog open in a confusing state.
+   */
+  onPermissionGranted?: (justGranted: PermissionType) => void;
 }
 
 export function PermissionDialog({
@@ -32,6 +39,7 @@ export function PermissionDialog({
 }: PermissionDialogProps) {
   const { t } = useTranslation();
   const [isRequesting, setIsRequesting] = useState(false);
+  const [isWaitingForGrant, setIsWaitingForGrant] = useState(false);
   const [isMacOS, setIsMacOS] = useState(false);
   const {
     requestPermission,
@@ -57,12 +65,68 @@ export function PermissionDialog({
       ? isMicrophoneAccessGranted
       : isCameraAccessGranted;
 
-  // Auto-close dialog when permission is granted
+  // Mirror the latest permission state into a ref so the deferred timeout
+  // callback can read it without being recreated on every state change.
+  const isCurrentPermissionGrantedRef = useRef(isCurrentPermissionGranted);
   useEffect(() => {
-    if (isCurrentPermissionGranted && isOpen) {
-      onPermissionGranted?.();
+    isCurrentPermissionGrantedRef.current = isCurrentPermissionGranted;
+  }, [isCurrentPermissionGranted]);
+
+  // When the permission becomes granted, fire a success toast and let the
+  // parent decide what to do next (progress to the other permission, or close).
+  // We deliberately do NOT keep the dialog around to show a "Done" state —
+  // the toast is the confirmation, and the dialog closes immediately.
+  // Use a ref to ensure we only fire the toast once per grant transition.
+  const grantedToastFiredForRef = useRef<PermissionType | null>(null);
+  useEffect(() => {
+    if (!isOpen) {
+      grantedToastFiredForRef.current = null;
+      return;
     }
-  }, [isCurrentPermissionGranted, isOpen, onPermissionGranted]);
+    if (
+      isCurrentPermissionGranted &&
+      grantedToastFiredForRef.current !== permissionType
+    ) {
+      grantedToastFiredForRef.current = permissionType;
+      showSuccessToast(
+        permissionType === "microphone"
+          ? t("permissionDialog.grantedToastMicrophone")
+          : t("permissionDialog.grantedToastCamera"),
+      );
+      onPermissionGranted?.(permissionType);
+    }
+  }, [
+    isCurrentPermissionGranted,
+    isOpen,
+    onPermissionGranted,
+    permissionType,
+    t,
+  ]);
+
+  // Pending-grant timeout: triggered after the user clicks "Grant Access"
+  // to give the macOS permission state a few seconds to propagate to our poll.
+  const waitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // If permission becomes granted during the wait window, end the wait early.
+  useEffect(() => {
+    if (isWaitingForGrant && isCurrentPermissionGranted) {
+      if (waitTimeoutRef.current) {
+        clearTimeout(waitTimeoutRef.current);
+        waitTimeoutRef.current = null;
+      }
+      setIsWaitingForGrant(false);
+    }
+  }, [isWaitingForGrant, isCurrentPermissionGranted]);
+
+  // Clear any pending timeout on unmount.
+  useEffect(() => {
+    return () => {
+      if (waitTimeoutRef.current) {
+        clearTimeout(waitTimeoutRef.current);
+        waitTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   const getPermissionIcon = (type: PermissionType) => {
     switch (type) {
@@ -95,11 +159,25 @@ export function PermissionDialog({
     setIsRequesting(true);
     try {
       await requestPermission(permissionType);
-      showSuccessToast(
-        permissionType === "microphone"
-          ? t("permissionDialog.requestSuccessMicrophone")
-          : t("permissionDialog.requestSuccessCamera"),
-      );
+      // The macOS permission poll runs every 5 s, so the new state can take
+      // a moment to surface. Keep the grant button in its busy state for
+      // that window so the user has clear feedback, and notify them if the
+      // grant still hasn't landed by the end.
+      setIsWaitingForGrant(true);
+      if (waitTimeoutRef.current) {
+        clearTimeout(waitTimeoutRef.current);
+      }
+      waitTimeoutRef.current = setTimeout(() => {
+        waitTimeoutRef.current = null;
+        setIsWaitingForGrant(false);
+        if (!isCurrentPermissionGrantedRef.current) {
+          showErrorToast(
+            permissionType === "microphone"
+              ? t("permissionDialog.stillNotGrantedMicrophone")
+              : t("permissionDialog.stillNotGrantedCamera"),
+          );
+        }
+      }, 5000);
     } catch (error) {
       console.error("Failed to request permission:", error);
       showErrorToast(t("permissionDialog.requestFailed"));
@@ -129,16 +207,6 @@ export function PermissionDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          {isCurrentPermissionGranted && (
-            <div className="p-3 bg-success/10 rounded-lg">
-              <p className="text-sm text-success">
-                {permissionType === "microphone"
-                  ? t("permissionDialog.grantedMicrophone")
-                  : t("permissionDialog.grantedCamera")}
-              </p>
-            </div>
-          )}
-
           {!isCurrentPermissionGranted && (
             <div className="p-3 bg-warning/10 rounded-lg">
               <p className="text-sm text-warning">
@@ -151,15 +219,17 @@ export function PermissionDialog({
         </div>
 
         <DialogFooter className="gap-2">
-          <RippleButton variant="outline" onClick={onClose}>
-            {isCurrentPermissionGranted
-              ? t("permissionDialog.doneButton")
-              : t("permissionDialog.cancelButton")}
+          <RippleButton
+            variant="outline"
+            onClick={onClose}
+            className="min-w-24"
+          >
+            {t("permissionDialog.cancelButton")}
           </RippleButton>
 
           {!isCurrentPermissionGranted && (
             <LoadingButton
-              isLoading={isRequesting}
+              isLoading={isRequesting || isWaitingForGrant}
               onClick={() => {
                 handleRequestPermission().catch((err: unknown) => {
                   console.error(err);

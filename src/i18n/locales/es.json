@@ -1442,7 +1442,11 @@
     "grantAccessButton": "Conceder acceso",
     "requestSuccessMicrophone": "Acceso al micrófono solicitado",
     "requestSuccessCamera": "Acceso a la cámara solicitado",
-    "requestFailed": "Error al solicitar el permiso"
+    "requestFailed": "Error al solicitar el permiso",
+    "stillNotGrantedMicrophone": "El acceso al micrófono aún no se ha concedido. Puede que tengas que habilitarlo manualmente en Configuración del Sistema → Privacidad y Seguridad → Micrófono.",
+    "stillNotGrantedCamera": "El acceso a la cámara aún no se ha concedido. Puede que tengas que habilitarlo manualmente en Configuración del Sistema → Privacidad y Seguridad → Cámara.",
+    "grantedToastMicrophone": "Acceso al micrófono concedido",
+    "grantedToastCamera": "Acceso a la cámara concedido"
   },
   "traffic": {
     "title": "Detalles de tráfico",

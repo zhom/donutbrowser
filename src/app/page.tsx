@@ -12,6 +12,7 @@ import { CookieCopyDialog } from "@/components/cookie-copy-dialog";
 import { CookieManagementDialog } from "@/components/cookie-management-dialog";
 import { CreateProfileDialog } from "@/components/create-profile-dialog";
 import { DeleteConfirmationDialog } from "@/components/delete-confirmation-dialog";
+import { DeviceCodeVerifyDialog } from "@/components/device-code-verify-dialog";
 import { ExtensionGroupAssignmentDialog } from "@/components/extension-group-assignment-dialog";
 import { ExtensionManagementDialog } from "@/components/extension-management-dialog";
 import { GroupAssignmentDialog } from "@/components/group-assignment-dialog";
@@ -197,6 +198,7 @@ export default function Home() {
     useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [syncConfigDialogOpen, setSyncConfigDialogOpen] = useState(false);
+  const [deviceCodeDialogOpen, setDeviceCodeDialogOpen] = useState(false);
   const [syncAllDialogOpen, setSyncAllDialogOpen] = useState(false);
   const [profileSyncDialogOpen, setProfileSyncDialogOpen] = useState(false);
   const [currentProfileForSync, setCurrentProfileForSync] =
@@ -394,21 +396,32 @@ export default function Home() {
     }
   }, [isMicrophoneAccessGranted, isCameraAccessGranted, isInitialized]);
 
-  const checkNextPermission = useCallback(() => {
-    try {
-      if (!isMicrophoneAccessGranted) {
-        setCurrentPermissionType("microphone");
-        setPermissionDialogOpen(true);
-      } else if (!isCameraAccessGranted) {
-        setCurrentPermissionType("camera");
-        setPermissionDialogOpen(true);
-      } else {
-        setPermissionDialogOpen(false);
+  const checkNextPermission = useCallback(
+    (justGranted?: PermissionType) => {
+      try {
+        // Treat the just-granted permission as already granted even if our
+        // own usePermissions instance hasn't observed it yet — it polls on a
+        // 5 s cadence and would otherwise leave the dialog stuck on the
+        // permission the user just successfully granted.
+        const micGranted =
+          isMicrophoneAccessGranted || justGranted === "microphone";
+        const camGranted = isCameraAccessGranted || justGranted === "camera";
+
+        if (!micGranted) {
+          setCurrentPermissionType("microphone");
+          setPermissionDialogOpen(true);
+        } else if (!camGranted) {
+          setCurrentPermissionType("camera");
+          setPermissionDialogOpen(true);
+        } else {
+          setPermissionDialogOpen(false);
+        }
+      } catch (error) {
+        console.error("Failed to check next permission:", error);
       }
-    } catch (error) {
-      console.error("Failed to check next permission:", error);
-    }
-  }, [isMicrophoneAccessGranted, isCameraAccessGranted]);
+    },
+    [isMicrophoneAccessGranted, isCameraAccessGranted],
+  );
 
   const listenForUrlEvents = useCallback(async () => {
     try {
@@ -1316,7 +1329,28 @@ export default function Home() {
             setSyncAllDialogOpen(true);
           }
         }}
+        onLoginStarted={() => {
+          // Hand the verify step off to its own dialog. We close this one
+          // first so the verify dialog isn't stacked on top of it (and
+          // can't end up stacked on top of the profile selector either).
+          setSyncConfigDialogOpen(false);
+          setDeviceCodeDialogOpen(true);
+        }}
       />
+
+      {/* Only render while no profile-selector flow is in progress, so the
+          verify dialog never lands on top of a deep-link-triggered selector. */}
+      {pendingUrls.length === 0 && (
+        <DeviceCodeVerifyDialog
+          isOpen={deviceCodeDialogOpen}
+          onClose={(loginOccurred) => {
+            setDeviceCodeDialogOpen(false);
+            if (loginOccurred) {
+              setSyncAllDialogOpen(true);
+            }
+          }}
+        />
+      )}
 
       <SyncAllDialog
         isOpen={syncAllDialogOpen}

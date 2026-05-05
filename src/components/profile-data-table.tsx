@@ -907,6 +907,13 @@ export function ProfilesDataTable({
       }
       setRowSelection(newSelection);
       prevSelectedProfilesRef.current = selectedProfiles;
+      // When the parent clears the selection (e.g. after a bulk action like
+      // delete / move-to-group), collapse the checkbox column back to icons.
+      // Otherwise the row checkboxes stay visible and only revert after the
+      // user clicks one — which the per-checkbox handler resets.
+      if (selectedProfiles.length === 0) {
+        setShowCheckboxes(false);
+      }
     }
   }, [selectedProfiles]);
 

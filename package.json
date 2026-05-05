@@ -2,7 +2,7 @@
   "name": "donutbrowser",
   "private": true,
   "license": "AGPL-3.0",
-  "version": "0.22.6",
+  "version": "0.22.7",
   "type": "module",
   "scripts": {
     "dev": "next dev --turbopack -p 12341",
@@ -16,7 +16,7 @@
     "lint:js": "biome check src/ && tsc --noEmit && cd donut-sync && biome check src/ && tsc --noEmit",
     "lint:rust": "cd src-tauri && cargo clippy --all-targets --all-features -- -D warnings -D clippy::all && cargo fmt --all",
     "lint:spell": "typos .",
-    "tauri": "tauri",
+    "tauri": "node scripts/run-with-env.mjs tauri",
     "shadcn:add": "pnpm dlx shadcn@latest add",
     "prepare": "husky && husky install",
     "format:rust": "cd src-tauri && cargo clippy --fix --allow-dirty --all-targets --all-features -- -D warnings -D clippy::all && cargo fmt --all",

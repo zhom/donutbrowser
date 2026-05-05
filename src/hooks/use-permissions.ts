@@ -159,7 +159,7 @@ export function usePermissions(): UsePermissionsReturn {
 
     intervalRef.current = setInterval(() => {
       void checkPermissions();
-    }, 500);
+    }, 5000);
 
     return () => {
       if (intervalRef.current) {

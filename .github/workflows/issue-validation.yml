@@ -16,6 +16,11 @@ permissions:
   pull-requests: write
   id-token: write
 
+env:
+  # Single source of truth for the model used by both triage and composer.
+  TRIAGE_MODEL: anthropic/claude-opus-4.7
+  COMPOSER_MODEL: anthropic/claude-opus-4.7
+
 jobs:
   analyze-issue:
     if: github.repository == 'zhom/donutbrowser' && github.event_name == 'issues'
@@ -40,41 +45,150 @@ jobs:
             echo "is_first_time=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Build repo context and find related files
+      - name: Parse issue template fields
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          node <<'EOF'
+          const fs = require('node:fs');
+          const body = process.env.ISSUE_BODY || '';
+          // GitHub issue templates render fields as `### Heading\nValue` blocks.
+          // Split on `###` at line start to recover them.
+          const fields = {};
+          const sections = body.split(/^###\s+/m);
+          for (const section of sections.slice(1)) {
+            const nl = section.indexOf('\n');
+            if (nl < 0) continue;
+            const heading = section.slice(0, nl).trim();
+            const value = section.slice(nl + 1).trim();
+            fields[heading] = value === '_No response_' ? '' : value;
+          }
+          fs.writeFileSync('/tmp/issue-fields.json', JSON.stringify(fields, null, 2));
+          // Convenience extractions for the prompt — empty string if missing.
+          const get = (k) => fields[k] || '';
+          fs.writeFileSync('/tmp/issue-os.txt', get('Operating System'));
+          fs.writeFileSync('/tmp/issue-version.txt', get('Donut Browser version'));
+          fs.writeFileSync('/tmp/issue-browser.txt', get('Which browser is affected?'));
+          fs.writeFileSync('/tmp/issue-repro.txt', get('Steps to reproduce'));
+          fs.writeFileSync('/tmp/issue-logs.txt', get('Error logs or screenshots'));
+          fs.writeFileSync('/tmp/issue-what.txt', get('What happened?') || get('What do you want?'));
+          EOF
+          echo "Parsed fields:"
+          cat /tmp/issue-fields.json
+
+      - name: Build repo context
         env:
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
-          # Read project guidelines (contains repo structure)
           cp CLAUDE.md /tmp/repo-context.txt
-
           printf '%s' "$ISSUE_TITLE" > /tmp/issue-title.txt
           printf '%s' "${ISSUE_BODY:-}" > /tmp/issue-body.txt
 
-          # List all source files for the AI to pick from
+          # List all source files for the AI to choose from
           find . -type f \( -name "*.rs" -o -name "*.ts" -o -name "*.tsx" \) \
             ! -path "*/node_modules/*" ! -path "*/target/*" ! -path "*/.next/*" ! -path "*/dist/*" \
             ! -path "*/.git/*" ! -path "*/gen/*" ! -path "*/data/*" \
             | sed 's|^\./||' | sort > /tmp/all-source-files.txt
 
-      - name: Select relevant files with AI
+      - name: Write shared knowledge files (scope + pricing)
+        run: |
+          cat > /tmp/scope-and-pricing.md <<'EOF'
+          # PROJECT SCOPE
+
+          - **Donut Browser** — this repo. A Tauri desktop launcher (Rust + Next.js) that
+            downloads, manages, and launches anti-detect browser profiles. In-scope for bug
+            reports about profile management, downloads, sync, proxy, VPN, the launcher UI,
+            its API, MCP server, and the bundled `donut-sync` self-hosted server.
+          - **Wayfern** — a Chromium fork maintained by zhom (the same maintainer). Wayfern
+            bugs are in-scope here unless they are obviously upstream Chromium issues.
+          - **Camoufox** — a Firefox fork by daijro. The maintainer of THIS repo does NOT
+            contribute to Camoufox and CANNOT fix bugs in it.
+              - Bugs about Camoufox's *internal* behavior (page rendering, JS engine,
+                dropdowns, form widgets, fingerprinting *as Camoufox implements it*,
+                checkbox/radio quirks) are UPSTREAM ONLY. Redirect to
+                https://github.com/daijro/camoufox/issues.
+              - Bugs about how Donut *launches, configures, or downloads* Camoufox are
+                in-scope here.
+          - **Forks of Wayfern or Camoufox** (e.g. CloverLabsAI, VulpineOS) are NOT
+            supported. Feature requests asking for them are out of scope.
+
+          # PAID vs FREE FEATURES
+
+          Source: donutbrowser.com pricing tiers (verbatim from translations).
+
+          ## Free (no account required)
+          - Unlimited local profiles
+          - Chromium (Wayfern) and Firefox (Camoufox) browser engines
+          - Proxy support (HTTP/SOCKS5)
+          - VPN support (WireGuard)
+          - Profile Management API & MCP (list / create / launch / kill / config)
+          - Cookie & Extension Management
+          - Set as default browser
+          - **Profile sync IS FREE if the user self-hosts the `donut-sync` server**
+
+          ## Pro ($16/mo) — adds:
+          - Browser Manipulation API & MCP (`type_text`, `click_element`,
+            `evaluate_javascript`, `screenshot`, `navigate`, etc.)
+          - Cross-OS fingerprinting (e.g. macOS user appearing as Windows)
+          - Profile Synchronizer for Wayfern
+          - 20 cloud profile backup (cloud sync via donutbrowser.com)
+          - Commercial use license
+
+          ## Team ($80/mo) — adds:
+          - 100 cloud profile sync
+          - Team collaboration, profile sharing, unlimited seats
+
+          # ANTI-PATTERNS
+
+          - **Regression**: user explicitly mentions a previous version that worked
+            differently ("worked in 0.21", "went from 2 to 8 false positives"). Do NOT
+            dismiss as "known issue" / "expected" / "false positive in Tauri apps". Ask
+            which exact version was the last working one and what changed.
+          - **Out-of-scope (upstream Camoufox)**: report is about Camoufox's own
+            behavior. Redirect, do not collect logs.
+          - **Fork-support request**: asks the maintainer to support an alternative
+            Wayfern/Camoufox fork. Acknowledge in one neutral sentence — do NOT call it
+            "clear", "reasonable", "well-thought-out", etc.
+          - **AI-generated / template-violating report**: report doesn't follow the
+            template, may cite "official documentation" via context7, deepwiki, or any
+            non-`donutbrowser.com` / non-`github.com/zhom` URL. The only authoritative
+            sources are this GitHub repo and donutbrowser.com.
+          - **Speculation about internals**: never write a "Possible cause" / "Likely
+            cause" / "Root cause" section. Never cite internal file paths or line
+            numbers. Never speculate about how subscription / paid-plan checks work.
+
+          # OS-SPECIFIC LOG PATHS (use ONLY the one matching the user's OS)
+
+          - macOS:   `~/Library/Logs/Donut Browser/`
+          - Linux:   `~/.local/share/DonutBrowser/logs/`
+          - Windows: `%APPDATA%\DonutBrowser\logs\`
+          EOF
+
+      - name: Stage 1 — Triage and file selection
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
+          # The triage call returns ONLY JSON. It classifies the issue and picks a
+          # short list of source files for the composer to read.
           PAYLOAD=$(jq -n \
+            --arg model "$TRIAGE_MODEL" \
             --rawfile title /tmp/issue-title.txt \
             --rawfile body /tmp/issue-body.txt \
+            --rawfile fields /tmp/issue-fields.json \
             --rawfile files /tmp/all-source-files.txt \
+            --rawfile scope /tmp/scope-and-pricing.md \
+            --rawfile guidelines /tmp/repo-context.txt \
             '{
-              model: "anthropic/claude-opus-4.6",
+              model: $model,
               messages: [
                 {
                   role: "system",
-                  content: "You are a file selector for Donut Browser (Tauri + Next.js + Rust anti-detect browser). Given an issue and a list of source files, output ONLY the 10 most likely relevant file paths, one per line. No explanations, no numbering, just paths."
+                  content: ("You are a triage classifier for the Donut Browser GitHub repo. Classify the issue and pick at most 20 source files for a composer to read.\n\n" + $scope + "\n\n# REPO GUIDELINES\n" + $guidelines + "\n\n# OUTPUT\nReturn ONLY valid JSON. No preamble, no code fences. Schema:\n{\n  \"language\": \"en\" or ISO 639-1 code,\n  \"classification\": one of [\"bug-in-scope\", \"bug-upstream-camoufox\", \"bug-template-violation\", \"feature-request\", \"fork-request\", \"regression\", \"ai-generated-junk\", \"question\", \"other\"],\n  \"operating_system\": \"macos\" | \"windows\" | \"linux\" | \"unknown\",\n  \"is_paid_feature\": true | false,\n  \"user_followed_template\": true | false,\n  \"regression_signal\": quoted user snippet or null,\n  \"user_cited_external_docs\": URL string or null,\n  \"files_to_read\": array of at most 20 file paths from the list,\n  \"notes\": one short sentence describing what you observed\n}\n\nClassification guidance:\n- \"bug-upstream-camoufox\": Camoufox-internal behavior (rendering, dropdowns, JS, fingerprint impl). NOT how Donut launches it.\n- \"bug-template-violation\": missing or filled-in nonsense for required template fields.\n- \"ai-generated-junk\": cites fabricated 'official docs' (context7, deepwiki, non-donutbrowser URLs) or has the polished AI-spam shape (long, structured, fabricated certainty).\n- \"fork-request\": asks for support of CloverLabsAI/VulpineOS/etc. forks.\n- \"regression\": user names a prior version that worked.\n\nFile selection: pick files that an experienced reviewer would actually look at to act on this issue. If the issue is upstream-Camoufox, fork-request, or junk, set files_to_read to []. Otherwise pick concrete files relevant to the symptoms.")
                 },
                 {
                   role: "user",
-                  content: ("Issue: " + $title + "\n\n" + $body + "\n\nFiles:\n" + $files)
+                  content: ("Issue title: " + $title + "\n\nBody:\n" + $body + "\n\nParsed template fields:\n" + $fields + "\n\nAll source files:\n" + $files)
                 }
               ]
             }')
@@ -84,64 +198,94 @@ jobs:
             -H "Content-Type: application/json" \
             -d "$PAYLOAD")
 
-          jq -r '.choices[0].message.content // empty' <<< "$RESPONSE" > /tmp/selected-files.txt
+          jq -r '.choices[0].message.content // empty' <<< "$RESPONSE" > /tmp/triage-raw.txt
 
-          # Read the selected files in full (skip binary files)
-          echo "" > /tmp/file-contents.txt
-          while IFS= read -r filepath; do
+          # Strip ```json fences if the model couldn't help itself.
+          sed -E 's/^```(json)?$//; s/```$//' /tmp/triage-raw.txt > /tmp/triage.json
+
+          # Validate; if the model returned junk, fall back to a minimal stub so the
+          # composer still gets called and produces SOMETHING.
+          if ! jq -e . /tmp/triage.json >/dev/null 2>&1; then
+            echo "::warning::Triage returned non-JSON; using fallback classification"
+            cat /tmp/triage-raw.txt
+            jq -n '{
+              language: "en",
+              classification: "bug-in-scope",
+              operating_system: "unknown",
+              is_paid_feature: false,
+              user_followed_template: true,
+              regression_signal: null,
+              user_cited_external_docs: null,
+              files_to_read: [],
+              notes: "triage call failed; defaulting"
+            }' > /tmp/triage.json
+          fi
+
+          echo "Triage result:"
+          cat /tmp/triage.json
+
+      - name: Read files chosen by triage
+        run: |
+          : > /tmp/file-context.txt
+          # files_to_read may be empty (e.g. upstream Camoufox) — that's fine.
+          jq -r '.files_to_read[]? // empty' /tmp/triage.json | while IFS= read -r filepath; do
             filepath=$(echo "$filepath" | xargs)
             [ -z "$filepath" ] && continue
+            # Reject paths that escape the repo or look fishy
+            case "$filepath" in
+              /*|*..*|*$'\n'*) continue ;;
+            esac
             if [ -f "$filepath" ] && file --mime "$filepath" | grep -q "text/"; then
-              echo "=== $filepath ===" >> /tmp/file-contents.txt
-              cat "$filepath" >> /tmp/file-contents.txt
-              echo "" >> /tmp/file-contents.txt
+              echo "=== $filepath ===" >> /tmp/file-context.txt
+              cat "$filepath" >> /tmp/file-context.txt
+              echo "" >> /tmp/file-context.txt
             fi
-          done < /tmp/selected-files.txt
+          done
+          # Cap total context at 100 KB to keep token cost bounded.
+          head -c 100000 /tmp/file-context.txt > /tmp/file-context.capped.txt
+          mv /tmp/file-context.capped.txt /tmp/file-context.txt
+          wc -c /tmp/file-context.txt
 
-          # Cap total context at 100KB
-          head -c 100000 /tmp/file-contents.txt > /tmp/file-context.txt
-
-      - name: Analyze issue with AI
+      - name: Stage 2 — Compose response
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          ISSUE_TITLE: ${{ github.event.issue.title }}
-          ISSUE_BODY: ${{ github.event.issue.body }}
           ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
           IS_FIRST_TIME: ${{ steps.check-first-time.outputs.is_first_time }}
         run: |
           GREETING=""
           if [ "$IS_FIRST_TIME" = "true" ]; then
-            GREETING='This is a first-time contributor. Start your comment with: "Thanks for opening your first issue!"'
+            GREETING='This is the user'\''s first issue — start the comment with "Thanks for opening your first issue!" on its own line.'
           fi
-
-          printf '%s' "$ISSUE_TITLE" > /tmp/issue-title.txt
-          printf '%s' "${ISSUE_BODY:-}" > /tmp/issue-body.txt
-          printf '%s' "$ISSUE_AUTHOR" > /tmp/issue-author.txt
           printf '%s' "$GREETING" > /tmp/greeting.txt
+          printf '%s' "$ISSUE_AUTHOR" > /tmp/issue-author.txt
 
           PAYLOAD=$(jq -n \
+            --arg model "$COMPOSER_MODEL" \
             --rawfile title /tmp/issue-title.txt \
             --rawfile body /tmp/issue-body.txt \
             --rawfile author /tmp/issue-author.txt \
+            --rawfile fields /tmp/issue-fields.json \
+            --rawfile triage /tmp/triage.json \
             --rawfile greeting /tmp/greeting.txt \
-            --rawfile repo_context /tmp/repo-context.txt \
-            --rawfile context /tmp/file-context.txt \
+            --rawfile files /tmp/file-context.txt \
+            --rawfile scope /tmp/scope-and-pricing.md \
+            --rawfile guidelines /tmp/repo-context.txt \
             '{
-              model: "anthropic/claude-opus-4.6",
+              model: $model,
               messages: [
                 {
                   role: "system",
-                  content: ("You are a triage bot for Donut Browser, an open-source anti-detect browser (Tauri desktop app: Rust backend + Next.js frontend).\n\nProject guidelines and structure:\n" + $repo_context + "\n\nYou have access to relevant source files for context.\n\nAnalyze the issue and produce a single comment. Your job is to collect missing information needed to diagnose the issue, NOT to guess the cause.\n\nFormat:\n\n1. One sentence acknowledging the issue.\n2. **Missing information** - Ask specific questions about what is missing from the report. Focus on reproducing the issue. Do NOT speculate about root causes or mention internal code/files — you will almost certainly be wrong without logs. Instead, ask for:\n   - Exact steps to reproduce (if not provided)\n   - Expected vs actual behavior (if unclear)\n   - Error messages or screenshots (if not provided)\n   - OS and app version (if not provided)\n   - For bug reports: if logs are needed, tell the user EXACTLY how to get them:\n     - macOS app logs: `~/Library/Logs/Donut Browser/`\n     - Linux app logs: `~/.local/share/DonutBrowser/logs/`\n     - Windows app logs: `%APPDATA%\\DonutBrowser\\logs\\`\n     - Sync server logs: `docker logs <container>` or check the server console\n     - Provide a ready-to-run shell command when possible.\n   - For self-hosted sync issues: check if the user is using the latest Docker image (`docker pull donutbrowser/donut-sync:latest`).\n   - Only ask for information that is actually missing. If the issue is already detailed, just acknowledge it.\n3. Suggest a label: `Label: bug` or `Label: enhancement` on its own line.\n\nRules:\n- Do NOT include a \"Possible cause\" section. Do not speculate about what code might be causing the issue.\n- Be brief and focused on collecting actionable information from the reporter.\n- If the issue already has everything needed (steps to reproduce, logs, version, OS), just acknowledge it.\n- Never exceed 15 lines.")
+                  content: ("You are a triage assistant for Donut Browser. You compose ONE short GitHub comment in response to a freshly opened issue. The triage step has already classified the issue — use the classification verbatim, do not re-litigate it.\n\n" + $scope + "\n\n# REPO GUIDELINES\n" + $guidelines + "\n\n# RULES — STRICT\n\n## Output shape\n- One sentence acknowledging the report.\n- Then **Missing information** — only if there is anything actually missing. Skip this section if the user already provided OS, version, browser, repro steps, and any logs the situation calls for.\n- Maximum 15 lines.\n- No labels, no `Label:` line, no markdown headings other than `**Missing information**`.\n- No closing pleasantries (\"please let me know\", \"happy to help\", etc.).\n\n## Forbidden — never do these\n- NEVER include a `Possible cause` / `Likely cause` / `Root cause` / `Probably caused by` section. You don't have enough information; speculation is always wrong here.\n- NEVER cite internal file paths or line numbers in the comment. Internal references rot and confuse non-developers.\n- NEVER reference how subscription / paid-plan checks work internally. You don't know whether the user'\''s claim is correct.\n- NEVER call a report \"well-documented\", \"well-structured\", \"clear\", \"thorough\", \"reasonable\", \"well-thought-out\", or any similar evaluation. You are triage, not peer review.\n- NEVER list more than one OS log path. Use ONLY the path matching the user'\''s reported OS. If OS is unknown, ask for it instead of listing all three.\n- NEVER validate a feature request as \"a clear enhancement\" / \"a reasonable request\" / similar. Acknowledge neutrally and ask only the missing info (use case, urgency).\n- NEVER call a report \"a known and expected behavior\" or \"a false positive\" if the user mentions a regression. The triage tells you when this applies.\n\n## Classification handling\nThe triage classification (`triage.classification`) determines the response shape:\n\n- `bug-in-scope`: ask for what'\''s missing using the user'\''s reported OS log path. Be concrete about how to obtain logs.\n- `bug-upstream-camoufox`: redirect ONLY. One sentence acknowledging, then a sentence saying this is a Camoufox-internal issue and the maintainer of this repo does not contribute to Camoufox; ask the user to file at https://github.com/daijro/camoufox/issues. Do NOT ask for Donut logs. Stop after that.\n- `bug-template-violation` or `ai-generated-junk`: politely ask the user to refile using the bug-report template (the Operating System, Donut Browser version, Which browser, Steps to reproduce, Error logs sections). If they cited \"documentation\" from any non-`donutbrowser.com`/non-`github.com/zhom` URL (e.g. context7, deepwiki), gently note that those are AI-generated third-party summaries and the only authoritative sources are this repo and donutbrowser.com.\n- `feature-request`: one neutral sentence acknowledging, then ask only what'\''s genuinely needed (concrete use case, whether a workaround would suffice). Do NOT validate.\n- `fork-request`: one neutral sentence acknowledging the request. Note that this would substantially increase support burden and the maintainer evaluates such requests on a case-by-case basis. Ask whether the alternative fork supports all platforms the user uses (macOS / Windows / Linux). No \"clear enhancement\" language.\n- `regression`: do NOT call known/expected. Ask which exact previous version was the last working one, what changed in the user'\''s environment between then and now, and the specific delta in symptoms.\n- `question`: answer briefly if obvious from repo guidelines / pricing; otherwise ask for clarification.\n\n## Paid-feature awareness\nIf `triage.is_paid_feature` is true, factor the pricing tiers into your reply. For Pro-only features (browser manipulation API/MCP, cross-OS fingerprinting, Wayfern Profile Synchronizer, cloud sync), confirm the user is logged in with an active subscription before asking for logs. If the issue is about cloud sync, mention that self-hosting `donut-sync` makes sync free and is a viable alternative.\n\n## Language\nIf the issue body is not in English, write the comment in English (the maintainer reads English). The FIRST line must politely ask the user to communicate in English so the maintainer can help. Then continue with the normal triage response, in English.\n\n## OS-specific log paths\nUse ONLY the one matching `triage.operating_system`:\n  - macos:   `~/Library/Logs/Donut Browser/`\n  - linux:   `~/.local/share/DonutBrowser/logs/`\n  - windows: `%APPDATA%\\DonutBrowser\\logs\\` (PowerShell-friendly: `Get-ChildItem $env:APPDATA\\DonutBrowser\\logs`)\n  - unknown: ask the user to share their OS first.")
                 },
                 {
                   role: "user",
-                  content: (
-                    (if ($greeting | length) > 0 then $greeting + "\n\n" else "" end) +
-                    "Analyze this issue:\n\nTitle: " + $title +
+                  content: ((if ($greeting | length) > 0 then $greeting + "\n\n" else "" end) +
+                    "Title: " + $title +
                     "\nAuthor: " + $author +
-                    "\n\nBody:\n" + $body +
-                    "\n\nRelevant source files:\n" + $context
-                  )
+                    "\n\n## Triage result\n" + $triage +
+                    "\n\n## Parsed template fields\n" + $fields +
+                    "\n\n## Raw issue body\n" + $body +
+                    "\n\n## Source files (selected by triage)\n" + $files)
                 }
               ]
             }')
@@ -154,27 +298,40 @@ jobs:
           jq -r '.choices[0].message.content // empty' <<< "$RESPONSE" > /tmp/ai-comment.txt
 
           if [ ! -s /tmp/ai-comment.txt ]; then
-            echo "::error::AI response was empty"
+            echo "::error::Composer returned empty response"
             echo "Raw response:"
             echo "$RESPONSE"
             exit 1
           fi
 
-      - name: Post comment and label
+      - name: Strip forbidden sections (defense in depth)
+        run: |
+          # Even with explicit prompt rules, LLMs sometimes still emit "Possible cause"
+          # and friends. Strip any such heading + its block. Also drop any stray
+          # `Label:` lines from earlier prompt iterations.
+          python3 - <<'EOF'
+          import re
+          path = '/tmp/ai-comment.txt'
+          text = open(path).read()
+          # Drop forbidden section headers and everything until a blank line or another header.
+          forbidden = re.compile(
+              r'^\s*\**\s*(?:possible|likely|root|probable)\s+cause\b.*?(?=^\s*$|\n##|\n\*\*[A-Z]|\Z)',
+              re.IGNORECASE | re.MULTILINE | re.DOTALL,
+          )
+          text = forbidden.sub('', text)
+          # Drop stale Label: lines (we don't label anymore).
+          text = re.sub(r'^\s*Label:\s*.*$', '', text, flags=re.MULTILINE)
+          # Collapse 3+ blank lines.
+          text = re.sub(r'\n{3,}', '\n\n', text).strip() + '\n'
+          open(path, 'w').write(text)
+          EOF
+
+      - name: Post comment (no labeling)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          LABEL=$(grep -oP '^Label:\s*\K.*' /tmp/ai-comment.txt | tail -1 | tr '[:upper:]' '[:lower:]' | xargs)
-          sed -i '/^Label:/d' /tmp/ai-comment.txt
-
           gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file /tmp/ai-comment.txt
-
-          if [ "$LABEL" = "bug" ]; then
-            gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --add-label "bug" 2>/dev/null || true
-          elif [ "$LABEL" = "enhancement" ]; then
-            gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --add-label "enhancement" 2>/dev/null || true
-          fi
 
   analyze-pr:
     if: github.repository == 'zhom/donutbrowser' && github.event_name == 'pull_request_target' && github.actor != 'dependabot[bot]'
@@ -204,26 +361,20 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          # Get changed files list
           gh api "/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" \
             --jq '.[] | "- \(.filename) (\(.status)) +\(.additions)/-\(.deletions)"' \
             > /tmp/pr-files.txt
 
-          # Get the actual diff
           gh api "/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" \
             --header "Accept: application/vnd.github.diff" \
             > /tmp/pr-diff-full.txt 2>/dev/null || true
           head -c 20000 /tmp/pr-diff-full.txt > /tmp/pr-diff.txt
 
-          # Get CONTRIBUTING.md and README.md for context
           cat CONTRIBUTING.md > /tmp/contributing.txt 2>/dev/null || echo "Not found" > /tmp/contributing.txt
           head -50 README.md > /tmp/readme.txt 2>/dev/null || echo "Not found" > /tmp/readme.txt
-
-          # Read project guidelines (contains repo structure)
           cp CLAUDE.md /tmp/repo-context.txt
 
-          # Read full contents of all changed files (skip binary)
-          echo "" > /tmp/related-file-contents.txt
+          : > /tmp/related-file-contents.txt
           gh api "/repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --jq '.[].filename' | while IFS= read -r filepath; do
             if [ -f "$filepath" ] && file --mime "$filepath" | grep -q "text/"; then
               echo "=== $filepath (full file) ===" >> /tmp/related-file-contents.txt
@@ -258,6 +409,7 @@ jobs:
           printf '%s' "$GREETING" > /tmp/greeting.txt
 
           PAYLOAD=$(jq -n \
+            --arg model "$COMPOSER_MODEL" \
             --rawfile title /tmp/pr-title.txt \
             --rawfile body /tmp/pr-body.txt \
             --rawfile author /tmp/pr-author.txt \
@@ -270,7 +422,7 @@ jobs:
             --rawfile contributing /tmp/contributing.txt \
             --rawfile file_context /tmp/pr-file-context.txt \
             '{
-              model: "anthropic/claude-opus-4.6",
+              model: $model,
               messages: [
                 {
                   role: "system",

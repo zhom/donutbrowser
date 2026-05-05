@@ -1442,7 +1442,11 @@
     "grantAccessButton": "授予访问",
     "requestSuccessMicrophone": "已请求麦克风访问",
     "requestSuccessCamera": "已请求摄像头访问",
-    "requestFailed": "请求权限失败"
+    "requestFailed": "请求权限失败",
+    "stillNotGrantedMicrophone": "麦克风访问权限仍未授予。您可能需要在系统设置 → 隐私与安全 → 麦克风中手动启用。",
+    "stillNotGrantedCamera": "摄像头访问权限仍未授予。您可能需要在系统设置 → 隐私与安全 → 摄像头中手动启用。",
+    "grantedToastMicrophone": "已授予麦克风访问权限",
+    "grantedToastCamera": "已授予摄像头访问权限"
   },
   "traffic": {
     "title": "流量详情",
