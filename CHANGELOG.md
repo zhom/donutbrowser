@@ -1,6 +1,19 @@
 # Changelog
 
 
+## v0.22.7 (2026-05-05)
+
+### Refactoring
+
+- cleanup
+
+### Maintenance
+
+- chore: version bump
+- chore: copy
+- chore: update flake.nix for v0.22.6 [skip ci] (#337)
+
+
 ## v0.22.6 (2026-05-03)
 
 ### Features
