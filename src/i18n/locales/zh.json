@@ -161,7 +161,7 @@
     "commercial": {
       "title": "商业许可",
       "trialActive": "试用期：剩余 {{days}} 天 {{hours}} 小时",
-      "trialActiveDescription": "试用期内商业使用免费",
+      "trialActiveDescription": "试用期内商业使用免费。试用期结束后，所有功能继续正常使用 — 个人使用仍然免费，只有商业使用需要许可证。",
       "trialExpired": "试用期已过期",
       "trialExpiredDescription": "个人使用仍然免费。商业使用需要许可证。"
     },

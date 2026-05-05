@@ -161,7 +161,7 @@
     "commercial": {
       "title": "Commercial License",
       "trialActive": "Trial: {{days}} days, {{hours}} hours remaining",
-      "trialActiveDescription": "Commercial use is free during the trial period",
+      "trialActiveDescription": "Commercial use is free during the trial. When it ends, all features keep working — personal use stays free, only commercial use will require a license.",
       "trialExpired": "Trial expired",
       "trialExpiredDescription": "Personal use remains free. Commercial use requires a license."
     },

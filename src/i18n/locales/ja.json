@@ -161,7 +161,7 @@
     "commercial": {
       "title": "商用ライセンス",
       "trialActive": "トライアル: 残り {{days}} 日 {{hours}} 時間",
-      "trialActiveDescription": "トライアル期間中は商用利用が無料です",
+      "trialActiveDescription": "トライアル期間中は商用利用が無料です。期間が終了してもすべての機能はそのまま使用できます — 個人利用は引き続き無料で、商用利用のみライセンスが必要になります。",
       "trialExpired": "トライアル期限切れ",
       "trialExpiredDescription": "個人利用は引き続き無料です。商用利用にはライセンスが必要です。"
     },

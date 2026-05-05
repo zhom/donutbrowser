@@ -161,7 +161,7 @@
     "commercial": {
       "title": "Licença Comercial",
       "trialActive": "Teste: {{days}} dias, {{hours}} horas restantes",
-      "trialActiveDescription": "O uso comercial é gratuito durante o período de teste",
+      "trialActiveDescription": "O uso comercial é gratuito durante o teste. Após o término, todos os recursos continuam funcionando — o uso pessoal permanece gratuito, apenas o uso comercial exigirá uma licença.",
       "trialExpired": "Teste expirado",
       "trialExpiredDescription": "O uso pessoal continua gratuito. O uso comercial requer uma licença."
     },
