@@ -165,6 +165,48 @@ jobs:
           - Windows: `%APPDATA%\DonutBrowser\logs\`
           EOF
 
+      - name: Build triage system prompt
+        run: |
+          # The static system prompt has apostrophes ("doesn't", "official docs"
+          # etc.) that collide with shell single-quoting if embedded directly in
+          # the jq filter. Build the full prompt to a file instead, then load it
+          # via --rawfile in the next step.
+          {
+            cat <<'TRIAGE_HEAD'
+          You are a triage classifier for the Donut Browser GitHub repo. Classify the issue and pick at most 20 source files for a composer to read.
+
+          TRIAGE_HEAD
+            cat /tmp/scope-and-pricing.md
+            printf '\n\n# REPO GUIDELINES\n'
+            cat /tmp/repo-context.txt
+            cat <<'TRIAGE_TAIL'
+
+          # OUTPUT
+          Return ONLY valid JSON. No preamble, no code fences. Schema:
+          {
+            "language": "en" or ISO 639-1 code,
+            "classification": one of ["bug-in-scope", "bug-upstream-camoufox", "bug-template-violation", "feature-request", "fork-request", "regression", "ai-generated-junk", "question", "other"],
+            "operating_system": "macos" | "windows" | "linux" | "unknown",
+            "is_paid_feature": true | false,
+            "user_followed_template": true | false,
+            "regression_signal": quoted user snippet or null,
+            "user_cited_external_docs": URL string or null,
+            "files_to_read": array of at most 20 file paths from the list,
+            "notes": one short sentence describing what you observed
+          }
+
+          Classification guidance:
+          - "bug-upstream-camoufox": Camoufox-internal behavior (rendering, dropdowns, JS, fingerprint impl). NOT how Donut launches it.
+          - "bug-template-violation": missing or filled-in nonsense for required template fields.
+          - "ai-generated-junk": cites fabricated "official docs" (context7, deepwiki, non-donutbrowser URLs) or has the polished AI-spam shape (long, structured, fabricated certainty).
+          - "fork-request": asks for support of CloverLabsAI/VulpineOS/etc. forks.
+          - "regression": user names a prior version that worked.
+
+          File selection: pick files that an experienced reviewer would actually look at to act on this issue. If the issue is upstream-Camoufox, fork-request, or junk, set files_to_read to []. Otherwise pick concrete files relevant to the symptoms.
+          TRIAGE_TAIL
+          } > /tmp/triage-system.txt
+          wc -c /tmp/triage-system.txt
+
       - name: Stage 1 — Triage and file selection
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
@@ -173,23 +215,17 @@ jobs:
           # short list of source files for the composer to read.
           PAYLOAD=$(jq -n \
             --arg model "$TRIAGE_MODEL" \
+            --rawfile system_prompt /tmp/triage-system.txt \
             --rawfile title /tmp/issue-title.txt \
             --rawfile body /tmp/issue-body.txt \
             --rawfile fields /tmp/issue-fields.json \
             --rawfile files /tmp/all-source-files.txt \
-            --rawfile scope /tmp/scope-and-pricing.md \
-            --rawfile guidelines /tmp/repo-context.txt \
             '{
               model: $model,
               messages: [
-                {
-                  role: "system",
-                  content: ("You are a triage classifier for the Donut Browser GitHub repo. Classify the issue and pick at most 20 source files for a composer to read.\n\n" + $scope + "\n\n# REPO GUIDELINES\n" + $guidelines + "\n\n# OUTPUT\nReturn ONLY valid JSON. No preamble, no code fences. Schema:\n{\n  \"language\": \"en\" or ISO 639-1 code,\n  \"classification\": one of [\"bug-in-scope\", \"bug-upstream-camoufox\", \"bug-template-violation\", \"feature-request\", \"fork-request\", \"regression\", \"ai-generated-junk\", \"question\", \"other\"],\n  \"operating_system\": \"macos\" | \"windows\" | \"linux\" | \"unknown\",\n  \"is_paid_feature\": true | false,\n  \"user_followed_template\": true | false,\n  \"regression_signal\": quoted user snippet or null,\n  \"user_cited_external_docs\": URL string or null,\n  \"files_to_read\": array of at most 20 file paths from the list,\n  \"notes\": one short sentence describing what you observed\n}\n\nClassification guidance:\n- \"bug-upstream-camoufox\": Camoufox-internal behavior (rendering, dropdowns, JS, fingerprint impl). NOT how Donut launches it.\n- \"bug-template-violation\": missing or filled-in nonsense for required template fields.\n- \"ai-generated-junk\": cites fabricated 'official docs' (context7, deepwiki, non-donutbrowser URLs) or has the polished AI-spam shape (long, structured, fabricated certainty).\n- \"fork-request\": asks for support of CloverLabsAI/VulpineOS/etc. forks.\n- \"regression\": user names a prior version that worked.\n\nFile selection: pick files that an experienced reviewer would actually look at to act on this issue. If the issue is upstream-Camoufox, fork-request, or junk, set files_to_read to []. Otherwise pick concrete files relevant to the symptoms.")
-                },
-                {
-                  role: "user",
-                  content: ("Issue title: " + $title + "\n\nBody:\n" + $body + "\n\nParsed template fields:\n" + $fields + "\n\nAll source files:\n" + $files)
-                }
+                { role: "system", content: $system_prompt },
+                { role: "user",
+                  content: ("Issue title: " + $title + "\n\nBody:\n" + $body + "\n\nParsed template fields:\n" + $fields + "\n\nAll source files:\n" + $files) }
               ]
             }')
 
@@ -246,6 +282,65 @@ jobs:
           mv /tmp/file-context.capped.txt /tmp/file-context.txt
           wc -c /tmp/file-context.txt
 
+      - name: Build composer system prompt
+        run: |
+          # Same reason as the triage prompt: lots of apostrophes, no shell-quoting
+          # gymnastics. Build it to a file, load via --rawfile.
+          {
+            cat <<'COMPOSER_HEAD'
+          You are a triage assistant for Donut Browser. You compose ONE short GitHub comment in response to a freshly opened issue. The triage step has already classified the issue — use the classification verbatim, do not re-litigate it.
+
+          COMPOSER_HEAD
+            cat /tmp/scope-and-pricing.md
+            printf '\n\n# REPO GUIDELINES\n'
+            cat /tmp/repo-context.txt
+            cat <<'COMPOSER_TAIL'
+
+          # RULES — STRICT
+
+          ## Output shape
+          - One sentence acknowledging the report.
+          - Then **Missing information** — only if there is anything actually missing. Skip this section if the user already provided OS, version, browser, repro steps, and any logs the situation calls for.
+          - Maximum 15 lines.
+          - No labels, no `Label:` line, no markdown headings other than `**Missing information**`.
+          - No closing pleasantries ("please let me know", "happy to help", etc.).
+
+          ## Forbidden — never do these
+          - NEVER include a `Possible cause` / `Likely cause` / `Root cause` / `Probably caused by` section. You do not have enough information; speculation is always wrong here.
+          - NEVER cite internal file paths or line numbers in the comment. Internal references rot and confuse non-developers.
+          - NEVER reference how subscription / paid-plan checks work internally. You do not know whether the user's claim is correct.
+          - NEVER call a report "well-documented", "well-structured", "clear", "thorough", "reasonable", "well-thought-out", or any similar evaluation. You are triage, not peer review.
+          - NEVER list more than one OS log path. Use ONLY the path matching the user's reported OS. If OS is unknown, ask for it instead of listing all three.
+          - NEVER validate a feature request as "a clear enhancement" / "a reasonable request" / similar. Acknowledge neutrally and ask only the missing info (use case, urgency).
+          - NEVER call a report "a known and expected behavior" or "a false positive" if the user mentions a regression. The triage tells you when this applies.
+
+          ## Classification handling
+          The triage classification (`triage.classification`) determines the response shape:
+
+          - `bug-in-scope`: ask for what is missing using the user's reported OS log path. Be concrete about how to obtain logs.
+          - `bug-upstream-camoufox`: redirect ONLY. One sentence acknowledging, then a sentence saying this is a Camoufox-internal issue and the maintainer of this repo does not contribute to Camoufox; ask the user to file at https://github.com/daijro/camoufox/issues. Do NOT ask for Donut logs. Stop after that.
+          - `bug-template-violation` or `ai-generated-junk`: politely ask the user to refile using the bug-report template (the Operating System, Donut Browser version, Which browser, Steps to reproduce, Error logs sections). If they cited "documentation" from any non-`donutbrowser.com`/non-`github.com/zhom` URL (e.g. context7, deepwiki), gently note that those are AI-generated third-party summaries and the only authoritative sources are this repo and donutbrowser.com.
+          - `feature-request`: one neutral sentence acknowledging, then ask only what is genuinely needed (concrete use case, whether a workaround would suffice). Do NOT validate.
+          - `fork-request`: one neutral sentence acknowledging the request. Note that this would substantially increase support burden and the maintainer evaluates such requests on a case-by-case basis. Ask whether the alternative fork supports all platforms the user uses (macOS / Windows / Linux). No "clear enhancement" language.
+          - `regression`: do NOT call known/expected. Ask which exact previous version was the last working one, what changed in the user's environment between then and now, and the specific delta in symptoms.
+          - `question`: answer briefly if obvious from repo guidelines / pricing; otherwise ask for clarification.
+
+          ## Paid-feature awareness
+          If `triage.is_paid_feature` is true, factor the pricing tiers into your reply. For Pro-only features (browser manipulation API/MCP, cross-OS fingerprinting, Wayfern Profile Synchronizer, cloud sync), confirm the user is logged in with an active subscription before asking for logs. If the issue is about cloud sync, mention that self-hosting `donut-sync` makes sync free and is a viable alternative.
+
+          ## Language
+          If the issue body is not in English, write the comment in English (the maintainer reads English). The FIRST line must politely ask the user to communicate in English so the maintainer can help. Then continue with the normal triage response, in English.
+
+          ## OS-specific log paths
+          Use ONLY the one matching `triage.operating_system`:
+            - macos:   `~/Library/Logs/Donut Browser/`
+            - linux:   `~/.local/share/DonutBrowser/logs/`
+            - windows: `%APPDATA%\DonutBrowser\logs\` (PowerShell-friendly: `Get-ChildItem $env:APPDATA\DonutBrowser\logs`)
+            - unknown: ask the user to share their OS first.
+          COMPOSER_TAIL
+          } > /tmp/composer-system.txt
+          wc -c /tmp/composer-system.txt
+
       - name: Stage 2 — Compose response
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
@@ -254,13 +349,17 @@ jobs:
         run: |
           GREETING=""
           if [ "$IS_FIRST_TIME" = "true" ]; then
-            GREETING='This is the user'\''s first issue — start the comment with "Thanks for opening your first issue!" on its own line.'
+            # Use printf with %s so the apostrophe inside the string never has to
+            # cross a shell single-quote boundary.
+            printf '%s' 'This is the first issue from this user — start the comment with "Thanks for opening your first issue!" on its own line.' > /tmp/greeting.txt
+          else
+            : > /tmp/greeting.txt
           fi
-          printf '%s' "$GREETING" > /tmp/greeting.txt
           printf '%s' "$ISSUE_AUTHOR" > /tmp/issue-author.txt
 
           PAYLOAD=$(jq -n \
             --arg model "$COMPOSER_MODEL" \
+            --rawfile system_prompt /tmp/composer-system.txt \
             --rawfile title /tmp/issue-title.txt \
             --rawfile body /tmp/issue-body.txt \
             --rawfile author /tmp/issue-author.txt \
@@ -268,25 +367,18 @@ jobs:
             --rawfile triage /tmp/triage.json \
             --rawfile greeting /tmp/greeting.txt \
             --rawfile files /tmp/file-context.txt \
-            --rawfile scope /tmp/scope-and-pricing.md \
-            --rawfile guidelines /tmp/repo-context.txt \
             '{
               model: $model,
               messages: [
-                {
-                  role: "system",
-                  content: ("You are a triage assistant for Donut Browser. You compose ONE short GitHub comment in response to a freshly opened issue. The triage step has already classified the issue — use the classification verbatim, do not re-litigate it.\n\n" + $scope + "\n\n# REPO GUIDELINES\n" + $guidelines + "\n\n# RULES — STRICT\n\n## Output shape\n- One sentence acknowledging the report.\n- Then **Missing information** — only if there is anything actually missing. Skip this section if the user already provided OS, version, browser, repro steps, and any logs the situation calls for.\n- Maximum 15 lines.\n- No labels, no `Label:` line, no markdown headings other than `**Missing information**`.\n- No closing pleasantries (\"please let me know\", \"happy to help\", etc.).\n\n## Forbidden — never do these\n- NEVER include a `Possible cause` / `Likely cause` / `Root cause` / `Probably caused by` section. You don't have enough information; speculation is always wrong here.\n- NEVER cite internal file paths or line numbers in the comment. Internal references rot and confuse non-developers.\n- NEVER reference how subscription / paid-plan checks work internally. You don't know whether the user'\''s claim is correct.\n- NEVER call a report \"well-documented\", \"well-structured\", \"clear\", \"thorough\", \"reasonable\", \"well-thought-out\", or any similar evaluation. You are triage, not peer review.\n- NEVER list more than one OS log path. Use ONLY the path matching the user'\''s reported OS. If OS is unknown, ask for it instead of listing all three.\n- NEVER validate a feature request as \"a clear enhancement\" / \"a reasonable request\" / similar. Acknowledge neutrally and ask only the missing info (use case, urgency).\n- NEVER call a report \"a known and expected behavior\" or \"a false positive\" if the user mentions a regression. The triage tells you when this applies.\n\n## Classification handling\nThe triage classification (`triage.classification`) determines the response shape:\n\n- `bug-in-scope`: ask for what'\''s missing using the user'\''s reported OS log path. Be concrete about how to obtain logs.\n- `bug-upstream-camoufox`: redirect ONLY. One sentence acknowledging, then a sentence saying this is a Camoufox-internal issue and the maintainer of this repo does not contribute to Camoufox; ask the user to file at https://github.com/daijro/camoufox/issues. Do NOT ask for Donut logs. Stop after that.\n- `bug-template-violation` or `ai-generated-junk`: politely ask the user to refile using the bug-report template (the Operating System, Donut Browser version, Which browser, Steps to reproduce, Error logs sections). If they cited \"documentation\" from any non-`donutbrowser.com`/non-`github.com/zhom` URL (e.g. context7, deepwiki), gently note that those are AI-generated third-party summaries and the only authoritative sources are this repo and donutbrowser.com.\n- `feature-request`: one neutral sentence acknowledging, then ask only what'\''s genuinely needed (concrete use case, whether a workaround would suffice). Do NOT validate.\n- `fork-request`: one neutral sentence acknowledging the request. Note that this would substantially increase support burden and the maintainer evaluates such requests on a case-by-case basis. Ask whether the alternative fork supports all platforms the user uses (macOS / Windows / Linux). No \"clear enhancement\" language.\n- `regression`: do NOT call known/expected. Ask which exact previous version was the last working one, what changed in the user'\''s environment between then and now, and the specific delta in symptoms.\n- `question`: answer briefly if obvious from repo guidelines / pricing; otherwise ask for clarification.\n\n## Paid-feature awareness\nIf `triage.is_paid_feature` is true, factor the pricing tiers into your reply. For Pro-only features (browser manipulation API/MCP, cross-OS fingerprinting, Wayfern Profile Synchronizer, cloud sync), confirm the user is logged in with an active subscription before asking for logs. If the issue is about cloud sync, mention that self-hosting `donut-sync` makes sync free and is a viable alternative.\n\n## Language\nIf the issue body is not in English, write the comment in English (the maintainer reads English). The FIRST line must politely ask the user to communicate in English so the maintainer can help. Then continue with the normal triage response, in English.\n\n## OS-specific log paths\nUse ONLY the one matching `triage.operating_system`:\n  - macos:   `~/Library/Logs/Donut Browser/`\n  - linux:   `~/.local/share/DonutBrowser/logs/`\n  - windows: `%APPDATA%\\DonutBrowser\\logs\\` (PowerShell-friendly: `Get-ChildItem $env:APPDATA\\DonutBrowser\\logs`)\n  - unknown: ask the user to share their OS first.")
-                },
-                {
-                  role: "user",
-                  content: ((if ($greeting | length) > 0 then $greeting + "\n\n" else "" end) +
-                    "Title: " + $title +
-                    "\nAuthor: " + $author +
-                    "\n\n## Triage result\n" + $triage +
-                    "\n\n## Parsed template fields\n" + $fields +
-                    "\n\n## Raw issue body\n" + $body +
-                    "\n\n## Source files (selected by triage)\n" + $files)
-                }
+                { role: "system", content: $system_prompt },
+                { role: "user",
+                  content: ((if ($greeting | length) > 0 then $greeting + "\n\n" else "" end)
+                    + "Title: " + $title
+                    + "\nAuthor: " + $author
+                    + "\n\n## Triage result\n" + $triage
+                    + "\n\n## Parsed template fields\n" + $fields
+                    + "\n\n## Raw issue body\n" + $body
+                    + "\n\n## Source files (selected by triage)\n" + $files) }
               ]
             }')
 
