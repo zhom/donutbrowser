@@ -117,7 +117,7 @@ export class SyncController {
   @Get("subscribe")
   @Sse()
   subscribe(@Req() req: Request): Observable<MessageEvent> {
-    return this.syncService.subscribe(this.getUserContext(req), 2000).pipe(
+    return this.syncService.subscribe(this.getUserContext(req), 5000).pipe(
       map((event) => ({
         data: event,
       })),
