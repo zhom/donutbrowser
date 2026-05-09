@@ -51,7 +51,7 @@ directories = "6"
 reqwest = { version = "0.13", default-features = false, features = ["native-tls", "json", "stream", "socks", "charset", "http2", "system-proxy"] }
 tokio = { version = "1", features = ["full", "sync"] }
 tokio-util = "0.7"
-sysinfo = "0.38"
+sysinfo = "0.39"
 lazy_static = "1.5"
 base64 = "0.22"
 libc = "0.2"
@@ -110,7 +110,7 @@ boringtun = "0.7"
 smoltcp = { version = "0.13", default-features = false, features = ["std", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-tcp", "socket-udp"] }
 
 # Daemon dependencies (tray icon)
-tray-icon = "0.23"
+tray-icon = "0.24"
 tao = "0.35"
 image = "0.25"
 dirs = "6"
