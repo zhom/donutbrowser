@@ -160,9 +160,29 @@ jobs:
 
           # OS-SPECIFIC LOG PATHS (use ONLY the one matching the user's OS)
 
-          - macOS:   `~/Library/Logs/Donut Browser/`
+          - macOS:   `~/Library/Logs/com.donutbrowser/`
           - Linux:   `~/.local/share/DonutBrowser/logs/`
           - Windows: `%APPDATA%\DonutBrowser\logs\`
+
+          # KNOWN ERROR SIGNATURES (truth, not guesses — match these
+          # verbatim before suggesting anything else)
+
+          - **`CDP not ready after N attempts on port X: HTTP 5xx ...`** —
+            an HTTP 5xx (503 / 502) response from a freshly-launched
+            browser's `/json/version` endpoint always means *something on
+            the loopback path is intercepting the connection*: a firewall,
+            an antivirus web-shield (Kaspersky, Bitdefender, ESET, Avast /
+            AVG, Yandex Protect on Windows; Little Snitch, LuLu on macOS),
+            a VPN client that hijacks 127.0.0.1, or a corporate MDM /
+            proxy (Zscaler, Cisco AnyConnect, Netskope). Chrome's
+            DevTools endpoint never returns 5xx itself — only synthetic
+            responses from interception layers do. **Do NOT speculate
+            about Gatekeeper, first-launch verification, code signing, or
+            quarantine** — none of those cause a 5xx response, and
+            Gatekeeper never delays a launch long enough to surface as
+            "120 attempts". Lead with: which AV / web-shield / firewall /
+            VPN / MDM is installed, and ask the user to try with the AV's
+            web-shield component temporarily disabled (not the whole AV).
           EOF
 
       - name: Build triage system prompt
@@ -333,10 +353,26 @@ jobs:
 
           ## OS-specific log paths
           Use ONLY the one matching `triage.operating_system`:
-            - macos:   `~/Library/Logs/Donut Browser/`
+            - macos:   `~/Library/Logs/com.donutbrowser/`
             - linux:   `~/.local/share/DonutBrowser/logs/`
             - windows: `%APPDATA%\DonutBrowser\logs\` (PowerShell-friendly: `Get-ChildItem $env:APPDATA\DonutBrowser\logs`)
             - unknown: ask the user to share their OS first.
+
+          ## Known error signatures (apply BEFORE asking generic questions)
+          If the issue body contains any of these, lead with the matching
+          response — do NOT speculate about other causes:
+
+          - `CDP not ready after N attempts on port X: HTTP 5xx ...` —
+            this is loopback interception by a firewall / antivirus
+            web-shield / VPN / MDM. Lead with that question (specifically:
+            Kaspersky, Bitdefender, ESET, Avast/AVG, Yandex Protect on
+            Windows; Little Snitch, LuLu, corporate MDM on macOS; any
+            VPN). Suggest temporarily disabling the AV's web-shield
+            component (NOT the whole AV) and retrying. Do NOT mention
+            Gatekeeper, first-launch verification, code signing, or
+            quarantine — none of those cause an HTTP 5xx response, and
+            Gatekeeper never delays a launch long enough to produce a
+            "120 attempts" failure.
           COMPOSER_TAIL
           } > /tmp/composer-system.txt
           wc -c /tmp/composer-system.txt
