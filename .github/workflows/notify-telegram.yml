@@ -1,0 +1,114 @@
+name: Notify Telegram
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    # Only post for stable releases on the canonical repo. Pre-releases
+    # (rolling builds, RCs) are skipped so the channel stays low-noise.
+    if: github.repository == 'zhom/donutbrowser' && !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Post release announcement to Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TAG: ${{ github.event.release.tag_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "::warning::TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is not set — skipping Telegram notification."
+            exit 0
+          fi
+
+          # Resolve the previous stable tag the same way notify-discord does
+          # so the changelog ranges line up.
+          PREV_TAG=$(git tag --sort=-version:refname \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | grep -v "^${TAG}$" \
+            | head -n 1)
+          if [ -z "$PREV_TAG" ]; then
+            PREV_TAG=$(git rev-list --max-parents=0 HEAD)
+          fi
+
+          strip_prefix() { echo "$1" | sed -E 's/^[a-z]+(\([^)]*\))?: //'; }
+
+          # Build a plain bullet list from feat / fix / refactor commits.
+          # Other commit types (chore, docs, ci, test, deps) are intentionally
+          # filtered out — same convention as the Discord embed.
+          CHANGES=""
+          while IFS= read -r msg; do
+            [ -z "$msg" ] && continue
+            case "$msg" in
+              feat\(*\):*|feat:*|fix\(*\):*|fix:*|refactor\(*\):*|refactor:*)
+                CHANGES="${CHANGES}• $(strip_prefix "$msg")"$'\n'
+                ;;
+            esac
+          done < <(git log --pretty=format:%s "${PREV_TAG}..${TAG}")
+
+          if [ -z "$CHANGES" ]; then
+            CHANGES="• See release notes."$'\n'
+          fi
+
+          # HTML-escape the changelog before injecting into Telegram HTML
+          # mode — commit messages can legitimately contain `<`, `>`, `&`.
+          # The static markup around it (we control it) is left as-is.
+          ESCAPED_CHANGES=$(printf '%s' "$CHANGES" \
+            | python3 -c "import html, sys; sys.stdout.write(html.escape(sys.stdin.read()))")
+
+          VERSION="${TAG}"
+          VERSION_NUM="${TAG#v}"
+          RELEASE_URL="https://github.com/${REPO}/releases/tag/${VERSION}"
+          DL="https://github.com/${REPO}/releases/download/${VERSION}"
+
+          # Build the API payload in one jq pass — keeps every literal
+          # newline, every angle bracket, and every quote correctly escaped
+          # for both shell and JSON.
+          PAYLOAD=$(jq -n \
+            --arg chat_id "$TELEGRAM_CHAT_ID" \
+            --arg version "$VERSION" \
+            --arg changes "$ESCAPED_CHANGES" \
+            --arg dl "$DL" \
+            --arg vnum "$VERSION_NUM" \
+            --arg release_url "$RELEASE_URL" \
+            '{
+              chat_id: $chat_id,
+              parse_mode: "HTML",
+              disable_web_page_preview: true,
+              text: (
+                "<b>Donut Browser " + $version + " released</b>\n\n" +
+                $changes + "\n" +
+                "<b>Download</b>\n" +
+                "<a href=\"" + $dl + "/Donut_" + $vnum + "_aarch64.dmg\">macOS (Apple Silicon)</a> · " +
+                "<a href=\"" + $dl + "/Donut_" + $vnum + "_x64.dmg\">macOS (Intel)</a>\n" +
+                "<a href=\"" + $dl + "/Donut_" + $vnum + "_x64-setup.exe\">Windows x64</a> · " +
+                "<a href=\"" + $dl + "/Donut_" + $vnum + "_amd64.AppImage\">Linux x64</a>\n\n" +
+                "<a href=\"" + $release_url + "\">Full release notes</a>"
+              )
+            }')
+
+          # Use --fail-with-body so we surface Telegram's error JSON on 4xx/5xx
+          # instead of just a curl exit code.
+          RESPONSE=$(curl -sSL --fail-with-body \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage") \
+            || { echo "::error::Telegram API call failed"; echo "$RESPONSE"; exit 1; }
+
+          if [ "$(jq -r .ok <<< "$RESPONSE")" != "true" ]; then
+            echo "::error::Telegram API rejected the message:"
+            jq . <<< "$RESPONSE"
+            exit 1
+          fi
+
+          echo "Posted to Telegram (message_id $(jq -r .result.message_id <<< "$RESPONSE"))"
