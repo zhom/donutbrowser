@@ -16,9 +16,6 @@
   <a style="text-decoration: none;" href="https://github.com/zhom/donutbrowser/blob/main/LICENSE" target="_blank">
     <img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="License">
   </a>
-  <a href="https://app.fossa.com/projects/git%2Bgithub.com%2Fzhom%2Fdonutbrowser?ref=badge_shield&issueType=security" alt="FOSSA Status">
-    <img src="https://app.fossa.com/api/projects/git%2Bgithub.com%2Fzhom%2Fdonutbrowser.svg?type=shield&issueType=security" alt="FOSSA Security Status"/>
-  </a>
   <a style="text-decoration: none;" href="https://github.com/zhom/donutbrowser/network/members" target="_blank">
     <img src="https://img.shields.io/github/forks/zhom/donutbrowser?style=social" alt="GitHub forks">
   </a>
