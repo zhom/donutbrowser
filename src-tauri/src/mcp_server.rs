@@ -112,6 +112,17 @@ impl McpServer {
 
   async fn require_paid_subscription(feature: &str) -> Result<(), McpError> {
     if !CLOUD_AUTH.has_active_paid_subscription().await {
+      // Log the failed gate so customer logs explain why an MCP tool returned
+      // an error. Include enough state (logged-in vs not, plan, status) for
+      // support to diagnose without leaking secrets.
+      let summary = match CLOUD_AUTH.get_user().await {
+        Some(state) => format!(
+          "logged_in=true plan={} status={} period={:?}",
+          state.user.plan, state.user.subscription_status, state.user.plan_period,
+        ),
+        None => "logged_in=false".to_string(),
+      };
+      log::warn!("[mcp] Rejected '{feature}' — paid subscription gate failed ({summary})");
       return Err(McpError {
         code: -32000,
         message: format!("{feature} requires an active paid subscription"),
@@ -1457,6 +1468,16 @@ impl McpServer {
       .get("arguments")
       .cloned()
       .unwrap_or(serde_json::json!({}));
+
+    // Surface the call in logs so customer reports show which tools the MCP
+    // client is actually invoking (and therefore which gate any subsequent
+    // error came from). Log only the tool name and the profile_id arg —
+    // arbitrary URLs / JS / selectors can be sensitive.
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .unwrap_or("<none>");
+    log::info!("[mcp] tools/call name={tool_name} profile_id={profile_id}");
 
     match tool_name {
       "list_profiles" => self.handle_list_profiles().await,

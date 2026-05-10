@@ -1350,18 +1350,31 @@ pub fn run() {
         version_updater::VersionUpdater::run_background_task().await;
       });
 
-      // Auto-start MCP server if it was previously enabled
+      // Auto-start MCP server if it was previously enabled. Always log the
+      // decision so customer logs reveal whether MCP is actually running —
+      // "automation features don't work" is otherwise indistinguishable from
+      // "MCP server isn't enabled" without this line.
       {
         let mcp_handle = app.handle().clone();
         let settings_mgr = settings_manager::SettingsManager::instance();
-        if let Ok(settings) = settings_mgr.load_settings() {
-          if settings.mcp_enabled {
-            tauri::async_runtime::spawn(async move {
-              match mcp_server::McpServer::instance().start(mcp_handle).await {
-                Ok(port) => log::info!("MCP server auto-started on port {port}"),
-                Err(e) => log::warn!("Failed to auto-start MCP server: {e}"),
-              }
-            });
+        match settings_mgr.load_settings() {
+          Ok(settings) => {
+            if settings.mcp_enabled {
+              log::info!("MCP server is enabled in settings, attempting auto-start");
+              tauri::async_runtime::spawn(async move {
+                match mcp_server::McpServer::instance().start(mcp_handle).await {
+                  Ok(port) => log::info!("MCP server auto-started on port {port}"),
+                  Err(e) => log::warn!("Failed to auto-start MCP server: {e}"),
+                }
+              });
+            } else {
+              log::info!(
+                "MCP server is DISABLED in settings (mcp_enabled=false). Browser automation tools will not be available until it's enabled in Settings → Integrations."
+              );
+            }
+          }
+          Err(e) => {
+            log::warn!("Could not read settings to determine MCP state: {e}");
           }
         }
       }

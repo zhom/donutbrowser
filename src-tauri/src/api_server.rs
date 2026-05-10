@@ -401,6 +401,10 @@ impl ApiServer {
       .merge(v1_routes)
       .nest("/ws", ws_routes)
       .route("/openapi.json", get(move || async move { Json(api) }))
+      // Outermost layer: logs every request so customer reports show what
+      // their automation is actually calling, what the response status was,
+      // and how long it took. Never logs request bodies or auth headers.
+      .layer(middleware::from_fn(request_logging_middleware))
       .layer(CorsLayer::permissive())
       .with_state(state);
 
@@ -454,6 +458,8 @@ async fn auth_middleware(
   request: axum::extract::Request,
   next: Next,
 ) -> Result<Response, StatusCode> {
+  let path = request.uri().path().to_string();
+
   // Get the Authorization header
   let auth_header = headers
     .get("Authorization")
@@ -462,24 +468,68 @@ async fn auth_middleware(
 
   let token = match auth_header {
     Some(token) => token,
-    None => return Err(StatusCode::UNAUTHORIZED),
+    None => {
+      log::warn!("[api] Rejected {path}: missing Authorization header");
+      return Err(StatusCode::UNAUTHORIZED);
+    }
   };
 
   // Get the stored token
   let settings_manager = crate::settings_manager::SettingsManager::instance();
   let stored_token = match settings_manager.get_api_token(&state.app_handle).await {
     Ok(Some(stored_token)) => stored_token,
-    Ok(None) => return Err(StatusCode::UNAUTHORIZED),
-    Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+    Ok(None) => {
+      log::warn!(
+        "[api] Rejected {path}: API server has no stored token (was the API toggled off?)"
+      );
+      return Err(StatusCode::UNAUTHORIZED);
+    }
+    Err(e) => {
+      log::error!("[api] Failed to read stored API token: {e}");
+      return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
   };
 
   // Compare tokens
   if token != stored_token {
+    log::warn!("[api] Rejected {path}: token mismatch");
     return Err(StatusCode::UNAUTHORIZED);
   }
 
   // Token is valid, continue with the request
   Ok(next.run(request).await)
+}
+
+/// Logs every request: method, path, query, response status, duration.
+/// Skips Authorization header and request bodies entirely.
+async fn request_logging_middleware(request: axum::extract::Request, next: Next) -> Response {
+  let method = request.method().clone();
+  let path = request.uri().path().to_string();
+  let query = request.uri().query().map(|q| q.to_string());
+  let started = std::time::Instant::now();
+
+  let response = next.run(request).await;
+
+  let status = response.status();
+  let elapsed_ms = started.elapsed().as_millis();
+
+  let level = if status.is_server_error() {
+    log::Level::Error
+  } else if status.is_client_error() {
+    log::Level::Warn
+  } else {
+    log::Level::Info
+  };
+
+  match query {
+    Some(q) => log::log!(
+      level,
+      "[api] {method} {path}?{q} -> {status} ({elapsed_ms} ms)"
+    ),
+    None => log::log!(level, "[api] {method} {path} -> {status} ({elapsed_ms} ms)"),
+  }
+
+  response
 }
 
 // Global API server instance
