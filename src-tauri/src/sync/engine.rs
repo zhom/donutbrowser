@@ -2742,10 +2742,7 @@ pub fn is_group_used_by_synced_profile(group_id: &str) -> bool {
 }
 
 /// Enable sync for proxy if not already enabled
-pub async fn enable_proxy_sync_if_needed(
-  proxy_id: &str,
-  _app_handle: &tauri::AppHandle,
-) -> Result<(), String> {
+pub async fn enable_proxy_sync_if_needed(proxy_id: &str) -> Result<(), String> {
   let proxy_manager = &crate::proxy_manager::PROXY_MANAGER;
   let proxies = proxy_manager.get_stored_proxies();
   let proxy = proxies
@@ -2754,15 +2751,7 @@ pub async fn enable_proxy_sync_if_needed(
     .ok_or_else(|| format!("Proxy with ID '{proxy_id}' not found"))?;
 
   if !proxy.sync_enabled {
-    let mut updated_proxy = proxy.clone();
-    updated_proxy.sync_enabled = true;
-
-    let proxy_file = proxy_manager.get_proxy_file_path(&proxy.id);
-    let json = serde_json::to_string_pretty(&updated_proxy)
-      .map_err(|e| format!("Failed to serialize proxy: {e}"))?;
-    std::fs::write(&proxy_file, &json)
-      .map_err(|e| format!("Failed to update proxy file {}: {e}", proxy_file.display()))?;
-
+    proxy_manager.set_stored_proxy_sync_state(proxy_id, true, proxy.last_sync)?;
     let _ = events::emit("stored-proxies-changed", ());
     log::info!("Auto-enabled sync for proxy {}", proxy_id);
   }
@@ -2783,10 +2772,7 @@ pub fn is_vpn_used_by_synced_profile(vpn_id: &str) -> bool {
 }
 
 /// Enable sync for VPN if not already enabled
-pub async fn enable_vpn_sync_if_needed(
-  vpn_id: &str,
-  _app_handle: &tauri::AppHandle,
-) -> Result<(), String> {
+pub async fn enable_vpn_sync_if_needed(vpn_id: &str) -> Result<(), String> {
   let vpn = {
     let storage = crate::vpn::VPN_STORAGE.lock().unwrap();
     storage
@@ -2808,10 +2794,7 @@ pub async fn enable_vpn_sync_if_needed(
 }
 
 /// Enable sync for group if not already enabled
-pub async fn enable_group_sync_if_needed(
-  group_id: &str,
-  _app_handle: &tauri::AppHandle,
-) -> Result<(), String> {
+pub async fn enable_group_sync_if_needed(group_id: &str) -> Result<(), String> {
   let group = {
     let group_manager = crate::group_manager::GROUP_MANAGER.lock().unwrap();
     let groups = group_manager.get_all_groups().unwrap_or_default();
@@ -2835,6 +2818,66 @@ pub async fn enable_group_sync_if_needed(
 
     let _ = events::emit("groups-changed", ());
     log::info!("Auto-enabled sync for group {}", group_id);
+  }
+
+  Ok(())
+}
+
+/// Enable sync for extension group (and its member extensions) if not
+/// already enabled. Mirrors the proxy/vpn/group helpers — call from any
+/// site where a synced profile gains an `extension_group_id`.
+pub async fn enable_extension_group_sync_if_needed(extension_group_id: &str) -> Result<(), String> {
+  let (group_already_synced, extension_ids) = {
+    let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+    let group = manager
+      .get_group(extension_group_id)
+      .map_err(|e| format!("Extension group with ID '{extension_group_id}' not found: {e}"))?;
+    (group.sync_enabled, group.extension_ids.clone())
+  };
+
+  if !group_already_synced {
+    let mut updated_group = {
+      let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+      manager
+        .get_group(extension_group_id)
+        .map_err(|e| format!("Failed to load extension group: {e}"))?
+    };
+    updated_group.sync_enabled = true;
+    {
+      let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+      manager
+        .update_group_internal(&updated_group)
+        .map_err(|e| format!("Failed to update extension group sync: {e}"))?;
+    }
+    let _ = events::emit("extensions-changed", ());
+    log::info!(
+      "Auto-enabled sync for extension group {}",
+      extension_group_id
+    );
+  }
+
+  // Cascade to every extension referenced by the group so the other device
+  // has the actual extension binaries when it pulls the group.
+  for ext_id in extension_ids {
+    let already_synced = {
+      let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+      manager
+        .get_extension(&ext_id)
+        .ok()
+        .map(|e| e.sync_enabled)
+        .unwrap_or(true)
+    };
+    if !already_synced {
+      let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+      if let Ok(mut ext) = manager.get_extension(&ext_id) {
+        ext.sync_enabled = true;
+        if let Err(e) = manager.update_extension_internal(&ext) {
+          log::warn!("Failed to auto-enable sync for extension {}: {e}", ext_id);
+        } else {
+          log::info!("Auto-enabled sync for extension {}", ext_id);
+        }
+      }
+    }
   }
 
   Ok(())
@@ -2968,24 +3011,37 @@ pub async fn set_profile_sync_mode(
         .await;
 
       if let Some(ref proxy_id) = profile.proxy_id {
-        if let Err(e) = enable_proxy_sync_if_needed(proxy_id, &app_handle).await {
+        if let Err(e) = enable_proxy_sync_if_needed(proxy_id).await {
           log::warn!("Failed to enable sync for proxy {}: {}", proxy_id, e);
         } else {
           scheduler.queue_proxy_sync(proxy_id.clone()).await;
         }
       }
       if let Some(ref group_id) = profile.group_id {
-        if let Err(e) = enable_group_sync_if_needed(group_id, &app_handle).await {
+        if let Err(e) = enable_group_sync_if_needed(group_id).await {
           log::warn!("Failed to enable sync for group {}: {}", group_id, e);
         } else {
           scheduler.queue_group_sync(group_id.clone()).await;
         }
       }
       if let Some(ref vpn_id) = profile.vpn_id {
-        if let Err(e) = enable_vpn_sync_if_needed(vpn_id, &app_handle).await {
+        if let Err(e) = enable_vpn_sync_if_needed(vpn_id).await {
           log::warn!("Failed to enable sync for VPN {}: {}", vpn_id, e);
         } else {
           scheduler.queue_vpn_sync(vpn_id.clone()).await;
+        }
+      }
+      if let Some(ref ext_group_id) = profile.extension_group_id {
+        if let Err(e) = enable_extension_group_sync_if_needed(ext_group_id).await {
+          log::warn!(
+            "Failed to enable sync for extension group {}: {}",
+            ext_group_id,
+            e
+          );
+        } else {
+          scheduler
+            .queue_extension_group_sync(ext_group_id.clone())
+            .await;
         }
       }
     } else {
@@ -3165,18 +3221,8 @@ pub async fn set_proxy_sync_enabled(
     }
   }
 
-  let mut updated_proxy = proxy.clone();
-  updated_proxy.sync_enabled = enabled;
-
-  if !enabled {
-    updated_proxy.last_sync = None;
-  }
-
-  let proxy_file = proxy_manager.get_proxy_file_path(&proxy.id);
-  let json = serde_json::to_string_pretty(&updated_proxy)
-    .map_err(|e| format!("Failed to serialize proxy: {e}"))?;
-  std::fs::write(&proxy_file, &json)
-    .map_err(|e| format!("Failed to update proxy file {}: {e}", proxy_file.display()))?;
+  let new_last_sync = if enabled { proxy.last_sync } else { None };
+  proxy_manager.set_stored_proxy_sync_state(&proxy_id, enabled, new_last_sync)?;
 
   let _ = events::emit("stored-proxies-changed", ());
 

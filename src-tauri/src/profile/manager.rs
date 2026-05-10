@@ -645,7 +645,7 @@ impl ProfileManager {
 
   pub fn assign_profiles_to_group(
     &self,
-    app_handle: &tauri::AppHandle,
+    _app_handle: &tauri::AppHandle,
     profile_ids: Vec<String>,
     group_id: Option<String>,
   ) -> Result<(), Box<dyn std::error::Error>> {
@@ -674,10 +674,8 @@ impl ProfileManager {
       if profile.is_sync_enabled() {
         if let Some(ref new_group_id) = group_id {
           let group_id_clone = new_group_id.clone();
-          let app_handle_clone = app_handle.clone();
           tauri::async_runtime::spawn(async move {
-            let _ =
-              crate::sync::enable_group_sync_if_needed(&group_id_clone, &app_handle_clone).await;
+            let _ = crate::sync::enable_group_sync_if_needed(&group_id_clone).await;
             if let Some(scheduler) = crate::sync::get_global_scheduler() {
               scheduler.queue_group_sync(group_id_clone).await;
             }
@@ -1124,7 +1122,7 @@ impl ProfileManager {
 
   pub async fn update_profile_proxy(
     &self,
-    app_handle: tauri::AppHandle,
+    _app_handle: tauri::AppHandle,
     profile_id: &str,
     proxy_id: Option<String>,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
@@ -1165,7 +1163,7 @@ impl ProfileManager {
     // Auto-enable sync for new proxy if profile has sync enabled
     if profile.is_sync_enabled() {
       if let Some(ref new_proxy_id) = proxy_id {
-        let _ = crate::sync::enable_proxy_sync_if_needed(new_proxy_id, &app_handle).await;
+        let _ = crate::sync::enable_proxy_sync_if_needed(new_proxy_id).await;
         if let Some(scheduler) = crate::sync::get_global_scheduler() {
           scheduler.queue_proxy_sync(new_proxy_id.clone()).await;
         }
@@ -1242,7 +1240,7 @@ impl ProfileManager {
       })?;
 
     // Update VPN and clear proxy (mutual exclusion)
-    profile.vpn_id = vpn_id;
+    profile.vpn_id = vpn_id.clone();
     profile.proxy_id = None;
 
     self
@@ -1250,6 +1248,16 @@ impl ProfileManager {
       .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
         format!("Failed to save profile: {e}").into()
       })?;
+
+    // Auto-enable sync for the new VPN if profile has sync enabled.
+    if profile.is_sync_enabled() {
+      if let Some(ref new_vpn_id) = vpn_id {
+        let _ = crate::sync::enable_vpn_sync_if_needed(new_vpn_id).await;
+        if let Some(scheduler) = crate::sync::get_global_scheduler() {
+          scheduler.queue_vpn_sync(new_vpn_id.clone()).await;
+        }
+      }
+    }
 
     if let Err(e) = events::emit("profile-updated", &profile) {
       log::warn!("Warning: Failed to emit profile update event: {e}");
@@ -1275,8 +1283,22 @@ impl ProfileManager {
       .find(|p| p.id == profile_uuid)
       .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
 
-    profile.extension_group_id = extension_group_id;
+    profile.extension_group_id = extension_group_id.clone();
     self.save_profile(&profile)?;
+
+    // Auto-enable sync for the new extension group if profile has sync
+    // enabled. The helper is sync internally; we fire-and-forget through
+    // the async runtime so any I/O doesn't block this caller.
+    if profile.is_sync_enabled() {
+      if let Some(new_group_id) = extension_group_id {
+        tauri::async_runtime::spawn(async move {
+          let _ = crate::sync::enable_extension_group_sync_if_needed(&new_group_id).await;
+          if let Some(scheduler) = crate::sync::get_global_scheduler() {
+            scheduler.queue_extension_group_sync(new_group_id).await;
+          }
+        });
+      }
+    }
 
     if let Err(e) = events::emit("profile-updated", &profile) {
       log::warn!("Failed to emit profile update event: {e}");

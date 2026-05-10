@@ -1479,103 +1479,128 @@ impl McpServer {
       .unwrap_or("<none>");
     log::info!("[mcp] tools/call name={tool_name} profile_id={profile_id}");
 
+    let started = std::time::Instant::now();
+    let result = self.dispatch_tool_call(tool_name, &arguments).await;
+    let elapsed_ms = started.elapsed().as_millis();
+    match &result {
+      Ok(_) => {
+        log::info!(
+          "[mcp] tools/call name={tool_name} profile_id={profile_id} -> ok ({elapsed_ms} ms)"
+        );
+      }
+      Err(e) => {
+        log::warn!(
+          "[mcp] tools/call name={tool_name} profile_id={profile_id} -> error code={} msg={:?} ({elapsed_ms} ms)",
+          e.code,
+          e.message
+        );
+      }
+    }
+    result
+  }
+
+  async fn dispatch_tool_call(
+    &self,
+    tool_name: &str,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
     match tool_name {
       "list_profiles" => self.handle_list_profiles().await,
-      "get_profile" => self.handle_get_profile(&arguments).await,
+      "get_profile" => self.handle_get_profile(arguments).await,
       "run_profile" => {
         Self::require_paid_subscription("Browser automation").await?;
-        self.handle_run_profile(&arguments).await
+        self.handle_run_profile(arguments).await
       }
-      "kill_profile" => self.handle_kill_profile(&arguments).await,
-      "create_profile" => self.handle_create_profile(&arguments).await,
-      "update_profile" => self.handle_update_profile(&arguments).await,
-      "delete_profile" => self.handle_delete_profile(&arguments).await,
+      "kill_profile" => self.handle_kill_profile(arguments).await,
+      "create_profile" => self.handle_create_profile(arguments).await,
+      "update_profile" => self.handle_update_profile(arguments).await,
+      "delete_profile" => self.handle_delete_profile(arguments).await,
       "list_tags" => self.handle_list_tags().await,
       "list_proxies" => self.handle_list_proxies().await,
-      "get_profile_status" => self.handle_get_profile_status(&arguments).await,
+      "get_profile_status" => self.handle_get_profile_status(arguments).await,
       // Group management
       "list_groups" => self.handle_list_groups().await,
-      "get_group" => self.handle_get_group(&arguments).await,
-      "create_group" => self.handle_create_group(&arguments).await,
-      "update_group" => self.handle_update_group(&arguments).await,
-      "delete_group" => self.handle_delete_group(&arguments).await,
-      "assign_profiles_to_group" => self.handle_assign_profiles_to_group(&arguments).await,
+      "get_group" => self.handle_get_group(arguments).await,
+      "create_group" => self.handle_create_group(arguments).await,
+      "update_group" => self.handle_update_group(arguments).await,
+      "delete_group" => self.handle_delete_group(arguments).await,
+      "assign_profiles_to_group" => self.handle_assign_profiles_to_group(arguments).await,
       // Full proxy management
-      "get_proxy" => self.handle_get_proxy(&arguments).await,
-      "create_proxy" => self.handle_create_proxy(&arguments).await,
-      "update_proxy" => self.handle_update_proxy(&arguments).await,
-      "delete_proxy" => self.handle_delete_proxy(&arguments).await,
+      "get_proxy" => self.handle_get_proxy(arguments).await,
+      "create_proxy" => self.handle_create_proxy(arguments).await,
+      "update_proxy" => self.handle_update_proxy(arguments).await,
+      "delete_proxy" => self.handle_delete_proxy(arguments).await,
       // Proxy import/export
-      "export_proxies" => self.handle_export_proxies(&arguments).await,
-      "import_proxies" => self.handle_import_proxies(&arguments).await,
+      "export_proxies" => self.handle_export_proxies(arguments).await,
+      "import_proxies" => self.handle_import_proxies(arguments).await,
       // VPN management
-      "import_vpn" => self.handle_import_vpn(&arguments).await,
+      "import_vpn" => self.handle_import_vpn(arguments).await,
       "list_vpn_configs" => self.handle_list_vpn_configs().await,
-      "delete_vpn" => self.handle_delete_vpn(&arguments).await,
-      "connect_vpn" => self.handle_connect_vpn(&arguments).await,
-      "disconnect_vpn" => self.handle_disconnect_vpn(&arguments).await,
-      "get_vpn_status" => self.handle_get_vpn_status(&arguments).await,
+      "delete_vpn" => self.handle_delete_vpn(arguments).await,
+      "connect_vpn" => self.handle_connect_vpn(arguments).await,
+      "disconnect_vpn" => self.handle_disconnect_vpn(arguments).await,
+      "get_vpn_status" => self.handle_get_vpn_status(arguments).await,
       // Fingerprint management
-      "get_profile_fingerprint" => self.handle_get_profile_fingerprint(&arguments).await,
-      "update_profile_fingerprint" => self.handle_update_profile_fingerprint(&arguments).await,
+      "get_profile_fingerprint" => self.handle_get_profile_fingerprint(arguments).await,
+      "update_profile_fingerprint" => self.handle_update_profile_fingerprint(arguments).await,
       "update_profile_proxy_bypass_rules" => {
         self
-          .handle_update_profile_proxy_bypass_rules(&arguments)
+          .handle_update_profile_proxy_bypass_rules(arguments)
           .await
       }
       // DNS blocklist management
-      "update_profile_dns_blocklist" => self.handle_update_profile_dns_blocklist(&arguments).await,
+      "update_profile_dns_blocklist" => self.handle_update_profile_dns_blocklist(arguments).await,
       "get_dns_blocklist_status" => self.handle_get_dns_blocklist_status().await,
       // Extension management
       "list_extensions" => self.handle_list_extensions().await,
       "list_extension_groups" => self.handle_list_extension_groups().await,
-      "create_extension_group" => self.handle_create_extension_group(&arguments).await,
-      "delete_extension" => self.handle_delete_extension_mcp(&arguments).await,
-      "delete_extension_group" => self.handle_delete_extension_group_mcp(&arguments).await,
+      "create_extension_group" => self.handle_create_extension_group(arguments).await,
+      "delete_extension" => self.handle_delete_extension_mcp(arguments).await,
+      "delete_extension_group" => self.handle_delete_extension_group_mcp(arguments).await,
       "assign_extension_group_to_profile" => {
         self
-          .handle_assign_extension_group_to_profile(&arguments)
+          .handle_assign_extension_group_to_profile(arguments)
           .await
       }
       // Team lock tools
       "get_team_locks" => self.handle_get_team_locks().await,
-      "get_team_lock_status" => self.handle_get_team_lock_status(&arguments).await,
+      "get_team_lock_status" => self.handle_get_team_lock_status(arguments).await,
       // Synchronizer tools
       "start_sync_session" => {
         Self::require_paid_subscription("Synchronizer").await?;
-        self.handle_start_sync_session(&arguments).await
+        self.handle_start_sync_session(arguments).await
       }
-      "stop_sync_session" => self.handle_stop_sync_session(&arguments).await,
+      "stop_sync_session" => self.handle_stop_sync_session(arguments).await,
       "get_sync_sessions" => self.handle_get_sync_sessions().await,
-      "remove_sync_follower" => self.handle_remove_sync_follower(&arguments).await,
+      "remove_sync_follower" => self.handle_remove_sync_follower(arguments).await,
       // Browser interaction tools (require paid subscription)
       "navigate" => {
         Self::require_paid_subscription("Browser automation").await?;
-        self.handle_navigate(&arguments).await
+        self.handle_navigate(arguments).await
       }
       "screenshot" => {
         Self::require_paid_subscription("Browser automation").await?;
-        self.handle_screenshot(&arguments).await
+        self.handle_screenshot(arguments).await
       }
       "evaluate_javascript" => {
         Self::require_paid_subscription("Browser automation").await?;
-        self.handle_evaluate_javascript(&arguments).await
+        self.handle_evaluate_javascript(arguments).await
       }
       "click_element" => {
         Self::require_paid_subscription("Browser automation").await?;
-        self.handle_click_element(&arguments).await
+        self.handle_click_element(arguments).await
       }
       "type_text" => {
         Self::require_paid_subscription("Browser automation").await?;
-        self.handle_type_text(&arguments).await
+        self.handle_type_text(arguments).await
       }
       "get_page_content" => {
         Self::require_paid_subscription("Browser automation").await?;
-        self.handle_get_page_content(&arguments).await
+        self.handle_get_page_content(arguments).await
       }
       "get_page_info" => {
         Self::require_paid_subscription("Browser automation").await?;
-        self.handle_get_page_info(&arguments).await
+        self.handle_get_page_info(arguments).await
       }
       _ => Err(McpError {
         code: -32602,

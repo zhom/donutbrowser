@@ -830,6 +830,42 @@ impl ProxyManager {
     Ok(updated_proxy)
   }
 
+  /// Update the in-memory `sync_enabled` / `last_sync` fields of a stored
+  /// proxy and persist the change to disk. Returns the updated proxy or
+  /// `Err` if the proxy isn't found / is cloud-managed.
+  ///
+  /// This is the canonical write path for sync-state changes — direct
+  /// `fs::write` from a sync command would leave the in-memory cache
+  /// (`stored_proxies`) stale, and the next `get_stored_proxies()` would
+  /// return the old `sync_enabled`, breaking the UI toggle.
+  pub fn set_stored_proxy_sync_state(
+    &self,
+    proxy_id: &str,
+    sync_enabled: bool,
+    last_sync: Option<u64>,
+  ) -> Result<StoredProxy, String> {
+    let updated_proxy = {
+      let mut stored_proxies = self.stored_proxies.lock().unwrap();
+      let proxy = stored_proxies
+        .get_mut(proxy_id)
+        .ok_or_else(|| format!("Proxy with ID '{proxy_id}' not found"))?;
+
+      if proxy.is_cloud_managed {
+        return Err("Cannot modify sync for a cloud-managed proxy".to_string());
+      }
+
+      proxy.sync_enabled = sync_enabled;
+      proxy.last_sync = last_sync;
+      proxy.clone()
+    };
+
+    self
+      .save_proxy(&updated_proxy)
+      .map_err(|e| format!("Failed to save proxy: {e}"))?;
+
+    Ok(updated_proxy)
+  }
+
   // Delete a stored proxy
   pub fn delete_stored_proxy(
     &self,
