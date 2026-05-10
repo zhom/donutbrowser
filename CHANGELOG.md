@@ -1,6 +1,39 @@
 # Changelog
 
 
+## v0.23.0 (2026-05-10)
+
+### Features
+
+- password protected profiles
+- telegram notifications
+
+### Refactoring
+
+- reduce the number of s3 calls
+
+### Documentation
+
+- remove fossa badge
+
+### Maintenance
+
+- chore: version bump
+- chore: logging
+- chore: copy
+- chore: optimize issue validation
+- chore: linting
+- ci(deps): bump the github-actions group with 3 updates (#348)
+- chore: cleanup issue validation
+- chore: update flake.nix for v0.22.7 [skip ci] (#341)
+
+### Other
+
+- deps(rust)(deps): bump the rust-dependencies group (#349)
+- deps(rust)(deps): bump tauri from 2.11.0 to 2.11.1 in /src-tauri (#346)
+- deps(rust)(deps): bump openssl from 0.10.78 to 0.10.79 in /src-tauri
+
+
 ## v0.22.7 (2026-05-05)
 
 ### Refactoring
