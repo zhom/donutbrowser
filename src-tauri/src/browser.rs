@@ -1218,6 +1218,7 @@ mod tests {
       created_by_id: None,
       created_by_email: None,
       dns_blocklist: None,
+      password_protected: false,
     };
 
     let path = profile.get_profile_data_path(&profiles_dir);

@@ -72,6 +72,11 @@ use profile::manager::{
   update_wayfern_config,
 };
 
+use profile::password::{
+  change_profile_password, is_profile_locked, lock_profile, remove_profile_password,
+  set_profile_password, unlock_profile,
+};
+
 use browser_version_manager::{
   fetch_browser_versions_cached_first, fetch_browser_versions_with_count,
   fetch_browser_versions_with_count_cached_first, get_supported_browsers,
@@ -1133,6 +1138,7 @@ async fn generate_sample_fingerprint(
     created_by_id: None,
     created_by_email: None,
     dns_blocklist: None,
+    password_protected: false,
   };
 
   if browser == "camoufox" {
@@ -1769,6 +1775,13 @@ pub fn run() {
                     }
                   }
 
+                  // Re-encrypt password-protected profiles when the browser
+                  // exits naturally (user closing the window) — the explicit
+                  // kill path in browser_runner.rs handles app-driven stops.
+                  if !is_running && profile.password_protected {
+                    crate::profile::password::complete_after_quit(&profile);
+                  }
+
                   last_running_states.insert(profile_id, is_running);
                 } else {
                   // Update the state even if unchanged to ensure we have it tracked
@@ -2092,6 +2105,13 @@ pub fn run() {
       // DNS blocklist commands
       dns_blocklist::get_dns_blocklist_cache_status,
       dns_blocklist::refresh_dns_blocklists,
+      // Profile password commands
+      set_profile_password,
+      change_profile_password,
+      remove_profile_password,
+      unlock_profile,
+      lock_profile,
+      is_profile_locked,
     ])
     .build(tauri::generate_context!())
     .expect("error while building tauri application")
@@ -2138,6 +2158,7 @@ mod tests {
       "generate_sample_fingerprint",
       "cloud_get_wayfern_token",
       "cloud_refresh_wayfern_token",
+      "lock_profile",
     ];
 
     // Extract command names from the generate_handler! macro in this file

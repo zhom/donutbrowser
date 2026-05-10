@@ -172,7 +172,9 @@
       "clearCacheFailed": "キャッシュのクリアに失敗しました"
     },
     "disableAutoUpdates": "アプリの自動更新を無効にする",
-    "disableAutoUpdatesDescription": "Donut Browserの自動更新確認・インストールを無効にします。ブラウザの更新には影響しません。"
+    "disableAutoUpdatesDescription": "Donut Browserの自動更新確認・インストールを無効にします。ブラウザの更新には影響しません。",
+    "keepDecryptedProfilesInRam": "復号済みプロファイルをRAMに保持",
+    "keepDecryptedProfilesInRamDescription": "起動を高速化するため、パスワード保護されたプロファイルの復号済みコピーをRAMに保持します。ディスク上のコピーは常に暗号化されたままです。"
   },
   "header": {
     "searchPlaceholder": "プロファイルを検索...",
@@ -221,7 +223,10 @@
       "assignToGroup": "グループに割り当て",
       "changeFingerprint": "フィンガープリントを変更",
       "copyCookiesToProfile": "Cookieをプロファイルにコピー",
-      "launchHook": "起動フックURL"
+      "launchHook": "起動フックURL",
+      "setPassword": "パスワードを設定",
+      "changePassword": "パスワードを変更",
+      "removePassword": "パスワードを削除"
     },
     "synchronizer": {
       "launchWithSync": "シンクロナイザーで起動",
@@ -265,7 +270,8 @@
       "assignProxy": "プロキシを割り当て",
       "assignExtensionGroup": "拡張機能グループを割り当て",
       "copyCookies": "Cookieをコピー"
-    }
+    },
+    "passwordProtectedBadge": "パスワード保護"
   },
   "createProfile": {
     "title": "新しいプロファイルを作成",
@@ -312,7 +318,11 @@
     "firefoxLabel": "Firefox",
     "firefoxSubtitle": "Camoufox搭載",
     "camoufoxWarning": "Firefox（Camoufox）はサードパーティの組織によって管理されています。本番環境での使用にはChromiumをご利用ください。",
-    "platformUnavailable": "{{browser}} はまだお使いのプラットフォームで利用できません。"
+    "platformUnavailable": "{{browser}} はまだお使いのプラットフォームで利用できません。",
+    "passwordProtect": {
+      "label": "このプロファイルをパスワードで保護",
+      "description": "ディスク上のプロファイルデータを暗号化します。起動に必要です。"
+    }
   },
   "deleteDialog": {
     "title": "プロファイルを削除",
@@ -892,7 +902,8 @@
     "setupProxyListenersFailed": "プロキシイベントリスナーの設定に失敗しました: {{error}}",
     "loadVpnConfigsFailed": "VPN設定の読み込みに失敗しました: {{error}}",
     "setupVpnListenersFailed": "VPNイベントリスナーの設定に失敗しました: {{error}}",
-    "themeNotFound": "Tokyo Night テーマが見つかりません"
+    "themeNotFound": "Tokyo Night テーマが見つかりません",
+    "setProfilePasswordFailed": "プロファイルのパスワード設定に失敗しました: {{error}}"
   },
   "browser": {
     "camoufox": "Camoufox",
@@ -1589,5 +1600,66 @@
       "upToDateDescription": "すべてのブラウザバージョンは最新です",
       "updateAllFailed": "ブラウザバージョンの更新に失敗しました"
     }
+  },
+  "profilePassword": {
+    "set": {
+      "title": "プロファイルにパスワードを設定",
+      "description": "{{name}} のディスク上のデータを暗号化します。プロファイルを起動するたびにこのパスワードが必要になります。",
+      "button": "プロファイルを暗号化"
+    },
+    "unlock": {
+      "title": "プロファイルを解除",
+      "description": "{{name}} を解除するためのパスワードを入力してください。",
+      "button": "解除"
+    },
+    "change": {
+      "title": "プロファイルのパスワードを変更",
+      "description": "新しいパスワードで {{name}} を再暗号化します。",
+      "button": "パスワードを変更"
+    },
+    "remove": {
+      "title": "プロファイルのパスワードを削除",
+      "description": "{{name}} のディスク上のデータを復号します。プロファイルはパスワード保護されなくなります。",
+      "button": "パスワードを削除"
+    },
+    "fields": {
+      "password": "パスワード",
+      "currentPassword": "現在のパスワード",
+      "newPassword": "新しいパスワード",
+      "confirm": "パスワードの確認"
+    },
+    "errors": {
+      "oldPasswordRequired": "現在のパスワードが必要です",
+      "passwordRequired": "パスワードが必要です",
+      "tooShort": "パスワードは {{min}} 文字以上必要です",
+      "mismatch": "パスワードが一致しません"
+    },
+    "toasts": {
+      "set": "プロファイルがパスワードで保護されました",
+      "changed": "プロファイルのパスワードを変更しました",
+      "removed": "プロファイルのパスワードを削除しました"
+    },
+    "warnings": {
+      "forgetWarningTitle": "重要: このパスワードは復元できません",
+      "forgetWarningBody": "Donut Browserはこのパスワードをリセット、復元、回避することはできません。忘れた場合、このプロファイルのデータへのアクセスは永続的に失われます。"
+    }
+  },
+  "backendErrors": {
+    "incorrectPassword": "パスワードが正しくありません",
+    "lockedOut": "失敗回数が多すぎます。{{duration}}後に再試行してください。",
+    "lockedOutDuration": {
+      "seconds": "{{seconds}}秒",
+      "minutes": "{{minutes}}分",
+      "hours": "{{hours}}時間"
+    },
+    "profileNotFound": "プロファイルが見つかりません",
+    "profileNotProtected": "プロファイルはパスワード保護されていません",
+    "profileAlreadyProtected": "プロファイルはすでにパスワード保護されています",
+    "profileRunning": "プロファイルの実行中はこの操作を実行できません",
+    "profileMissingSalt": "プロファイルに暗号化ソルトがありません",
+    "profileLocked": "プロファイルはロックされています。先にパスワードを入力してください。",
+    "invalidProfileId": "無効なプロファイルIDです",
+    "passwordTooShort": "パスワードは {{min}} 文字以上必要です",
+    "internal": "問題が発生しました: {{detail}}"
   }
 }

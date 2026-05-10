@@ -584,6 +584,7 @@ impl ProfileImporter {
           created_by_id: None,
           created_by_email: None,
           dns_blocklist: None,
+          password_protected: false,
         };
 
         match self
@@ -664,6 +665,7 @@ impl ProfileImporter {
           created_by_id: None,
           created_by_email: None,
           dns_blocklist: None,
+          password_protected: false,
         };
 
         match self
@@ -715,6 +717,7 @@ impl ProfileImporter {
       created_by_id: None,
       created_by_email: None,
       dns_blocklist: None,
+      password_protected: false,
     };
 
     self.profile_manager.save_profile(&profile)?;

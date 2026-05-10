@@ -291,8 +291,12 @@ impl BrowserRunner {
         );
       }
 
-      // Create ephemeral dir for ephemeral profiles
-      let override_profile_path = if profile.ephemeral {
+      // Create ephemeral dir for ephemeral or password-protected profiles
+      let override_profile_path = if profile.password_protected {
+        let dir = crate::profile::password::prepare_for_launch(profile)
+          .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
+        Some(dir)
+      } else if profile.ephemeral {
         let dir = crate::ephemeral_dirs::create_ephemeral_dir(&profile.id.to_string())
           .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
         Some(dir)
@@ -542,8 +546,11 @@ impl BrowserRunner {
         );
       }
 
-      // Create ephemeral dir for ephemeral profiles
-      if profile.ephemeral {
+      // Create ephemeral dir for ephemeral or password-protected profiles
+      if profile.password_protected {
+        crate::profile::password::prepare_for_launch(profile)
+          .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
+      } else if profile.ephemeral {
         crate::ephemeral_dirs::create_ephemeral_dir(&profile.id.to_string())
           .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
       }
@@ -1431,7 +1438,9 @@ impl BrowserRunner {
         );
       }
 
-      if profile.ephemeral {
+      if profile.password_protected {
+        crate::profile::password::complete_after_quit(profile);
+      } else if profile.ephemeral {
         crate::ephemeral_dirs::remove_ephemeral_dir(&profile.id.to_string());
       }
 
@@ -1771,7 +1780,9 @@ impl BrowserRunner {
         );
       }
 
-      if profile.ephemeral {
+      if profile.password_protected {
+        crate::profile::password::complete_after_quit(profile);
+      } else if profile.ephemeral {
         crate::ephemeral_dirs::remove_ephemeral_dir(&profile.id.to_string());
       }
 

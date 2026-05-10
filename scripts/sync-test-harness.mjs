@@ -171,10 +171,21 @@ async function startMinio(minioBin) {
 
 async function buildDonutSync() {
   log("Building donut-sync...");
+  // `nest build` runs incremental tsc, which silently skips emit when
+  // tsconfig.build.tsbuildinfo says nothing changed — even if dist/ was
+  // wiped. Drop the cache so we always produce a fresh dist.
+  const syncDir = path.join(ROOT_DIR, "donut-sync");
+  await rm(path.join(syncDir, "tsconfig.build.tsbuildinfo"), {
+    force: true,
+  });
+  await rm(path.join(syncDir, "dist"), { recursive: true, force: true });
   execSync("pnpm build", {
-    cwd: path.join(ROOT_DIR, "donut-sync"),
+    cwd: syncDir,
     stdio: process.env.VERBOSE ? "inherit" : "ignore",
   });
+  if (!existsSync(path.join(syncDir, "dist", "main.js"))) {
+    throw new Error("donut-sync build did not produce dist/main.js");
+  }
   log("donut-sync built");
 }
 

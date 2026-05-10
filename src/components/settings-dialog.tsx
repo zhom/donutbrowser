@@ -63,6 +63,7 @@ interface AppSettings {
   api_port: number;
   api_token?: string;
   disable_auto_updates?: boolean;
+  keep_decrypted_profiles_in_ram?: boolean;
 }
 
 interface CustomThemeState {
@@ -1128,6 +1129,30 @@ export function SettingsDialog({
                   </div>
                 </div>
               )}
+
+              <div className="flex items-start space-x-3 p-3 rounded-lg border">
+                <Checkbox
+                  id="keep-decrypted-profiles-in-ram"
+                  checked={settings.keep_decrypted_profiles_in_ram ?? false}
+                  onCheckedChange={(checked) => {
+                    updateSetting(
+                      "keep_decrypted_profiles_in_ram",
+                      checked as boolean,
+                    );
+                  }}
+                />
+                <div className="space-y-1">
+                  <Label
+                    htmlFor="keep-decrypted-profiles-in-ram"
+                    className="text-sm font-medium"
+                  >
+                    {t("settings.keepDecryptedProfilesInRam")}
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    {t("settings.keepDecryptedProfilesInRamDescription")}
+                  </p>
+                </div>
+              </div>
 
               <LoadingButton
                 isLoading={isClearingCache}

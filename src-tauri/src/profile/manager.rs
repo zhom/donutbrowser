@@ -184,6 +184,7 @@ impl ProfileManager {
           created_by_id: None,
           created_by_email: None,
           dns_blocklist: None,
+          password_protected: false,
         };
 
         match self
@@ -285,6 +286,7 @@ impl ProfileManager {
           created_by_id: None,
           created_by_email: None,
           dns_blocklist: None,
+          password_protected: false,
         };
 
         match self
@@ -340,6 +342,7 @@ impl ProfileManager {
       created_by_id: None,
       created_by_email: None,
       dns_blocklist,
+      password_protected: false,
     };
 
     // Save profile info
@@ -987,6 +990,7 @@ impl ProfileManager {
       created_by_id: None,
       created_by_email: None,
       dns_blocklist: source.dns_blocklist,
+      password_protected: false,
     };
 
     self.save_profile(&new_profile)?;

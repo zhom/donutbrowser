@@ -172,7 +172,9 @@
       "clearCacheFailed": "Failed to clear cache"
     },
     "disableAutoUpdates": "Disable App Auto Updates",
-    "disableAutoUpdatesDescription": "Prevent the app from automatically checking and installing Donut Browser updates. Browser updates are not affected."
+    "disableAutoUpdatesDescription": "Prevent the app from automatically checking and installing Donut Browser updates. Browser updates are not affected.",
+    "keepDecryptedProfilesInRam": "Keep Decrypted Profiles In RAM",
+    "keepDecryptedProfilesInRamDescription": "Preserve the decrypted in-RAM copy of password-protected profiles between launches for faster startup. The on-disk copy stays encrypted regardless."
   },
   "header": {
     "searchPlaceholder": "Search profiles...",
@@ -221,7 +223,10 @@
       "assignToGroup": "Assign to Group",
       "changeFingerprint": "Change Fingerprint",
       "copyCookiesToProfile": "Copy Cookies to Profile",
-      "launchHook": "Launch Hook URL"
+      "launchHook": "Launch Hook URL",
+      "setPassword": "Set Password",
+      "changePassword": "Change Password",
+      "removePassword": "Remove Password"
     },
     "synchronizer": {
       "launchWithSync": "Launch with Synchronizer",
@@ -265,7 +270,8 @@
       "assignProxy": "Assign Proxy",
       "assignExtensionGroup": "Assign Extension Group",
       "copyCookies": "Copy Cookies"
-    }
+    },
+    "passwordProtectedBadge": "Password Protected"
   },
   "createProfile": {
     "title": "Create New Profile",
@@ -312,7 +318,11 @@
     "firefoxLabel": "Firefox",
     "firefoxSubtitle": "Powered by Camoufox",
     "camoufoxWarning": "Firefox (Camoufox) is maintained by a third-party organization. For production use, please use Chromium.",
-    "platformUnavailable": "{{browser}} is not available on your platform yet."
+    "platformUnavailable": "{{browser}} is not available on your platform yet.",
+    "passwordProtect": {
+      "label": "Password protect this profile",
+      "description": "Encrypts the on-disk profile data. Required to launch."
+    }
   },
   "deleteDialog": {
     "title": "Delete Profile",
@@ -892,7 +902,8 @@
     "setupProxyListenersFailed": "Failed to setup proxy event listeners: {{error}}",
     "loadVpnConfigsFailed": "Failed to load VPN configs: {{error}}",
     "setupVpnListenersFailed": "Failed to setup VPN event listeners: {{error}}",
-    "themeNotFound": "Tokyo Night theme not found"
+    "themeNotFound": "Tokyo Night theme not found",
+    "setProfilePasswordFailed": "Failed to set profile password: {{error}}"
   },
   "browser": {
     "camoufox": "Camoufox",
@@ -1589,5 +1600,66 @@
       "upToDateDescription": "All browser versions are up to date",
       "updateAllFailed": "Failed to update browser versions"
     }
+  },
+  "profilePassword": {
+    "set": {
+      "title": "Set Profile Password",
+      "description": "Encrypt the on-disk data for {{name}}. You will need this password every time you launch the profile.",
+      "button": "Encrypt Profile"
+    },
+    "unlock": {
+      "title": "Unlock Profile",
+      "description": "Enter the password to unlock {{name}}.",
+      "button": "Unlock"
+    },
+    "change": {
+      "title": "Change Profile Password",
+      "description": "Re-encrypt {{name}} with a new password.",
+      "button": "Change Password"
+    },
+    "remove": {
+      "title": "Remove Profile Password",
+      "description": "Decrypt the on-disk data for {{name}}. The profile will no longer be password protected.",
+      "button": "Remove Password"
+    },
+    "fields": {
+      "password": "Password",
+      "currentPassword": "Current password",
+      "newPassword": "New password",
+      "confirm": "Confirm password"
+    },
+    "errors": {
+      "oldPasswordRequired": "Current password is required",
+      "passwordRequired": "Password is required",
+      "tooShort": "Password must be at least {{min}} characters",
+      "mismatch": "Passwords do not match"
+    },
+    "toasts": {
+      "set": "Profile is now password protected",
+      "changed": "Profile password changed",
+      "removed": "Profile password removed"
+    },
+    "warnings": {
+      "forgetWarningTitle": "Important: this password is not recoverable",
+      "forgetWarningBody": "Donut Browser cannot reset, recover, or bypass this password. If you forget it, you will permanently lose access to this profile's data."
+    }
+  },
+  "backendErrors": {
+    "incorrectPassword": "Incorrect password",
+    "lockedOut": "Too many incorrect attempts. Try again in {{duration}}.",
+    "lockedOutDuration": {
+      "seconds": "{{seconds}}s",
+      "minutes": "{{minutes}} min",
+      "hours": "{{hours}} h"
+    },
+    "profileNotFound": "Profile not found",
+    "profileNotProtected": "Profile is not password protected",
+    "profileAlreadyProtected": "Profile is already password protected",
+    "profileRunning": "Cannot perform this action while the profile is running",
+    "profileMissingSalt": "Profile is missing its encryption salt",
+    "profileLocked": "Profile is locked. Enter the password first.",
+    "invalidProfileId": "Invalid profile id",
+    "passwordTooShort": "Password must be at least {{min}} characters",
+    "internal": "Something went wrong: {{detail}}"
   }
 }

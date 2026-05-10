@@ -24,6 +24,10 @@ import { IntegrationsDialog } from "@/components/integrations-dialog";
 import { LaunchOnLoginDialog } from "@/components/launch-on-login-dialog";
 import { PermissionDialog } from "@/components/permission-dialog";
 import { ProfilesDataTable } from "@/components/profile-data-table";
+import {
+  type PasswordDialogMode,
+  ProfilePasswordDialog,
+} from "@/components/profile-password-dialog";
 import { ProfileSelectorDialog } from "@/components/profile-selector-dialog";
 import { ProfileSyncDialog } from "@/components/profile-sync-dialog";
 import { ProxyAssignmentDialog } from "@/components/proxy-assignment-dialog";
@@ -47,6 +51,7 @@ import { useUpdateNotifications } from "@/hooks/use-update-notifications";
 import { useVersionUpdater } from "@/hooks/use-version-updater";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
 import { useWayfernTerms } from "@/hooks/use-wayfern-terms";
+import { translateBackendError } from "@/lib/backend-errors";
 import {
   dismissToast,
   showErrorToast,
@@ -183,6 +188,11 @@ export default function Home() {
   const [currentProfileForCamoufoxConfig, setCurrentProfileForCamoufoxConfig] =
     useState<BrowserProfile | null>(null);
   const [cloneProfile, setCloneProfile] = useState<BrowserProfile | null>(null);
+  const [passwordDialogProfile, setPasswordDialogProfile] =
+    useState<BrowserProfile | null>(null);
+  const [passwordDialogMode, setPasswordDialogMode] =
+    useState<PasswordDialogMode>("set");
+  const pendingLaunchAfterUnlockRef = useRef<BrowserProfile | null>(null);
   const [hasCheckedStartupPrompt, setHasCheckedStartupPrompt] = useState(false);
   const [launchOnLoginDialogOpen, setLaunchOnLoginDialogOpen] = useState(false);
   const [windowResizeWarningOpen, setWindowResizeWarningOpen] = useState(false);
@@ -532,6 +542,7 @@ export default function Home() {
       ephemeral?: boolean;
       dnsBlocklist?: string;
       launchHook?: string;
+      password?: string;
     }) => {
       try {
         const profile = await invoke<BrowserProfile>(
@@ -565,6 +576,21 @@ export default function Home() {
           }
         }
 
+        if (profileData.password && !profileData.ephemeral) {
+          try {
+            await invoke("set_profile_password", {
+              profileId: profile.id,
+              password: profileData.password,
+            });
+          } catch (err) {
+            showErrorToast(
+              t("errors.setProfilePasswordFailed", {
+                error: translateBackendError(t, err),
+              }),
+            );
+          }
+        }
+
         // No need to manually reload - useProfileEvents will handle the update
       } catch (error) {
         showErrorToast(
@@ -580,6 +606,23 @@ export default function Home() {
   const launchProfile = useCallback(
     async (profile: BrowserProfile) => {
       console.log("Starting launch for profile:", profile.name);
+
+      // Password-protected: must be unlocked before launch
+      if (profile.password_protected) {
+        try {
+          const isLocked = await invoke<boolean>("is_profile_locked", {
+            profileId: profile.id,
+          });
+          if (isLocked) {
+            pendingLaunchAfterUnlockRef.current = profile;
+            setPasswordDialogMode("unlock");
+            setPasswordDialogProfile(profile);
+            return;
+          }
+        } catch (err) {
+          console.error("Failed to check profile lock state:", err);
+        }
+      }
 
       // Show one-time warning about window resizing for fingerprinted browsers
       if (profile.browser === "camoufox" || profile.browser === "wayfern") {
@@ -621,6 +664,24 @@ export default function Home() {
 
   const handleCloneProfile = useCallback((profile: BrowserProfile) => {
     setCloneProfile(profile);
+  }, []);
+
+  const handleSetPassword = useCallback((profile: BrowserProfile) => {
+    pendingLaunchAfterUnlockRef.current = null;
+    setPasswordDialogMode("set");
+    setPasswordDialogProfile(profile);
+  }, []);
+
+  const handleChangePassword = useCallback((profile: BrowserProfile) => {
+    pendingLaunchAfterUnlockRef.current = null;
+    setPasswordDialogMode("change");
+    setPasswordDialogProfile(profile);
+  }, []);
+
+  const handleRemovePassword = useCallback((profile: BrowserProfile) => {
+    pendingLaunchAfterUnlockRef.current = null;
+    setPasswordDialogMode("remove");
+    setPasswordDialogProfile(profile);
   }, []);
 
   const handleDeleteProfile = useCallback(
@@ -1110,6 +1171,9 @@ export default function Home() {
             onLaunchProfile={launchProfile}
             onKillProfile={handleKillProfile}
             onCloneProfile={handleCloneProfile}
+            onSetPassword={handleSetPassword}
+            onChangePassword={handleChangePassword}
+            onRemovePassword={handleRemovePassword}
             onDeleteProfile={handleDeleteProfile}
             onRenameProfile={handleRenameProfile}
             onConfigureCamoufox={handleConfigureCamoufox}
@@ -1213,6 +1277,26 @@ export default function Home() {
           setCloneProfile(null);
         }}
         profile={cloneProfile}
+      />
+
+      <ProfilePasswordDialog
+        isOpen={!!passwordDialogProfile}
+        onClose={() => {
+          pendingLaunchAfterUnlockRef.current = null;
+          setPasswordDialogProfile(null);
+        }}
+        profile={passwordDialogProfile}
+        mode={passwordDialogMode}
+        onSuccess={(p) => {
+          if (
+            passwordDialogMode === "unlock" &&
+            pendingLaunchAfterUnlockRef.current?.id === p.id
+          ) {
+            const target = pendingLaunchAfterUnlockRef.current;
+            pendingLaunchAfterUnlockRef.current = null;
+            void launchProfile(target);
+          }
+        }}
       />
 
       <CamoufoxConfigDialog

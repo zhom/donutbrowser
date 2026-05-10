@@ -172,7 +172,9 @@
       "clearCacheFailed": "Не удалось очистить кэш"
     },
     "disableAutoUpdates": "Отключить автообновление приложения",
-    "disableAutoUpdatesDescription": "Запретить автоматическую проверку и установку обновлений Donut Browser. Обновления браузеров не затрагиваются."
+    "disableAutoUpdatesDescription": "Запретить автоматическую проверку и установку обновлений Donut Browser. Обновления браузеров не затрагиваются.",
+    "keepDecryptedProfilesInRam": "Хранить расшифрованные профили в ОЗУ",
+    "keepDecryptedProfilesInRamDescription": "Сохранять расшифрованную копию защищённых паролем профилей в ОЗУ между запусками для ускорения старта. Копия на диске в любом случае остаётся зашифрованной."
   },
   "header": {
     "searchPlaceholder": "Поиск профилей...",
@@ -221,7 +223,10 @@
       "assignToGroup": "Назначить группе",
       "changeFingerprint": "Изменить отпечаток",
       "copyCookiesToProfile": "Копировать Cookie в профиль",
-      "launchHook": "URL хука запуска"
+      "launchHook": "URL хука запуска",
+      "setPassword": "Установить пароль",
+      "changePassword": "Изменить пароль",
+      "removePassword": "Удалить пароль"
     },
     "synchronizer": {
       "launchWithSync": "Запустить с синхронизатором",
@@ -265,7 +270,8 @@
       "assignProxy": "Назначить прокси",
       "assignExtensionGroup": "Назначить группу расширений",
       "copyCookies": "Копировать cookies"
-    }
+    },
+    "passwordProtectedBadge": "Защищено паролем"
   },
   "createProfile": {
     "title": "Создать новый профиль",
@@ -312,7 +318,11 @@
     "firefoxLabel": "Firefox",
     "firefoxSubtitle": "На базе Camoufox",
     "camoufoxWarning": "Firefox (Camoufox) поддерживается сторонней организацией. Для промышленного использования используйте Chromium.",
-    "platformUnavailable": "{{browser}} пока недоступен на вашей платформе."
+    "platformUnavailable": "{{browser}} пока недоступен на вашей платформе.",
+    "passwordProtect": {
+      "label": "Защитить этот профиль паролем",
+      "description": "Шифрует данные профиля на диске. Требуется для запуска."
+    }
   },
   "deleteDialog": {
     "title": "Удалить профиль",
@@ -892,7 +902,8 @@
     "setupProxyListenersFailed": "Не удалось настроить слушатели событий прокси: {{error}}",
     "loadVpnConfigsFailed": "Не удалось загрузить конфигурации VPN: {{error}}",
     "setupVpnListenersFailed": "Не удалось настроить слушатели событий VPN: {{error}}",
-    "themeNotFound": "Тема Tokyo Night не найдена"
+    "themeNotFound": "Тема Tokyo Night не найдена",
+    "setProfilePasswordFailed": "Не удалось установить пароль профиля: {{error}}"
   },
   "browser": {
     "camoufox": "Camoufox",
@@ -1589,5 +1600,66 @@
       "upToDateDescription": "Все версии браузеров актуальны",
       "updateAllFailed": "Не удалось обновить версии браузеров"
     }
+  },
+  "profilePassword": {
+    "set": {
+      "title": "Установить пароль профиля",
+      "description": "Шифрует данные {{name}} на диске. Этот пароль потребуется при каждом запуске профиля.",
+      "button": "Зашифровать профиль"
+    },
+    "unlock": {
+      "title": "Разблокировать профиль",
+      "description": "Введите пароль, чтобы разблокировать {{name}}.",
+      "button": "Разблокировать"
+    },
+    "change": {
+      "title": "Изменить пароль профиля",
+      "description": "Перезашифровать {{name}} с новым паролем.",
+      "button": "Изменить пароль"
+    },
+    "remove": {
+      "title": "Удалить пароль профиля",
+      "description": "Расшифровывает данные {{name}} на диске. Профиль больше не будет защищён паролем.",
+      "button": "Удалить пароль"
+    },
+    "fields": {
+      "password": "Пароль",
+      "currentPassword": "Текущий пароль",
+      "newPassword": "Новый пароль",
+      "confirm": "Подтвердите пароль"
+    },
+    "errors": {
+      "oldPasswordRequired": "Требуется текущий пароль",
+      "passwordRequired": "Требуется пароль",
+      "tooShort": "Пароль должен быть не короче {{min}} символов",
+      "mismatch": "Пароли не совпадают"
+    },
+    "toasts": {
+      "set": "Профиль защищён паролем",
+      "changed": "Пароль профиля изменён",
+      "removed": "Пароль профиля удалён"
+    },
+    "warnings": {
+      "forgetWarningTitle": "Важно: пароль восстановить нельзя",
+      "forgetWarningBody": "Donut Browser не может сбросить, восстановить или обойти этот пароль. Если вы его забудете, доступ к данным этого профиля будет утрачен навсегда."
+    }
+  },
+  "backendErrors": {
+    "incorrectPassword": "Неверный пароль",
+    "lockedOut": "Слишком много неудачных попыток. Повторите через {{duration}}.",
+    "lockedOutDuration": {
+      "seconds": "{{seconds}}с",
+      "minutes": "{{minutes}} мин",
+      "hours": "{{hours}} ч"
+    },
+    "profileNotFound": "Профиль не найден",
+    "profileNotProtected": "Профиль не защищён паролем",
+    "profileAlreadyProtected": "Профиль уже защищён паролем",
+    "profileRunning": "Невозможно выполнить это действие, пока профиль запущен",
+    "profileMissingSalt": "У профиля отсутствует соль шифрования",
+    "profileLocked": "Профиль заблокирован. Сначала введите пароль.",
+    "invalidProfileId": "Недействительный идентификатор профиля",
+    "passwordTooShort": "Пароль должен быть не короче {{min}} символов",
+    "internal": "Что-то пошло не так: {{detail}}"
   }
 }

@@ -854,6 +854,9 @@ interface ProfilesDataTableProps {
       }
     | undefined;
   onLaunchWithSync?: (profile: BrowserProfile) => void;
+  onSetPassword?: (profile: BrowserProfile) => void;
+  onChangePassword?: (profile: BrowserProfile) => void;
+  onRemovePassword?: (profile: BrowserProfile) => void;
 }
 
 export function ProfilesDataTable({
@@ -883,6 +886,9 @@ export function ProfilesDataTable({
   syncUnlocked = false,
   getProfileSyncInfo,
   onLaunchWithSync,
+  onSetPassword,
+  onChangePassword,
+  onRemovePassword,
 }: ProfilesDataTableProps) {
   const { t } = useTranslation();
   const { getTableSorting, updateSorting, isLoaded } = useTableSorting();
@@ -1695,7 +1701,9 @@ export function ProfilesDataTable({
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
           const browser = profile.browser;
-          const IconComponent = getProfileIcon(profile);
+          const IconComponent = profile.password_protected
+            ? LuLock
+            : getProfileIcon(profile);
           const isCrossOs = isCrossOsProfile(profile);
 
           const isSelected = meta.isProfileSelected(profile.id);
@@ -2732,6 +2740,9 @@ export function ProfilesDataTable({
               }}
               onCloneProfile={onCloneProfile}
               onLaunchWithSync={onLaunchWithSync}
+              onSetPassword={onSetPassword}
+              onChangePassword={onChangePassword}
+              onRemovePassword={onRemovePassword}
               onDeleteProfile={(profile) => {
                 setProfileForInfoDialog(null);
                 setProfileToDelete(profile);

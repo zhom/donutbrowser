@@ -69,6 +69,10 @@ pub struct BrowserProfile {
   pub created_by_email: Option<String>,
   #[serde(default)]
   pub dns_blocklist: Option<String>,
+  /// True when the on-disk profile dir is encrypted with a per-profile password.
+  /// Decryption goes to a RAM-backed ephemeral dir, never to disk.
+  #[serde(default)]
+  pub password_protected: bool,
 }
 
 pub fn default_release_type() -> String {

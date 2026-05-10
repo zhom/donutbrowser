@@ -172,7 +172,9 @@
       "clearCacheFailed": "清除缓存失败"
     },
     "disableAutoUpdates": "禁用应用自动更新",
-    "disableAutoUpdatesDescription": "阻止应用程序自动检查和安装 Donut Browser 更新。浏览器更新不受影响。"
+    "disableAutoUpdatesDescription": "阻止应用程序自动检查和安装 Donut Browser 更新。浏览器更新不受影响。",
+    "keepDecryptedProfilesInRam": "在内存中保留已解密的配置文件",
+    "keepDecryptedProfilesInRamDescription": "在启动之间保留密码保护配置文件的已解密内存副本,以便更快地启动。无论如何磁盘上的副本始终保持加密。"
   },
   "header": {
     "searchPlaceholder": "搜索配置文件...",
@@ -221,7 +223,10 @@
       "assignToGroup": "分配到组",
       "changeFingerprint": "更改指纹",
       "copyCookiesToProfile": "复制 Cookies 到配置文件",
-      "launchHook": "启动钩子 URL"
+      "launchHook": "启动钩子 URL",
+      "setPassword": "设置密码",
+      "changePassword": "更改密码",
+      "removePassword": "移除密码"
     },
     "synchronizer": {
       "launchWithSync": "使用同步器启动",
@@ -265,7 +270,8 @@
       "assignProxy": "分配代理",
       "assignExtensionGroup": "分配扩展分组",
       "copyCookies": "复制 Cookie"
-    }
+    },
+    "passwordProtectedBadge": "密码保护"
   },
   "createProfile": {
     "title": "创建新配置文件",
@@ -312,7 +318,11 @@
     "firefoxLabel": "Firefox",
     "firefoxSubtitle": "由 Camoufox 驱动",
     "camoufoxWarning": "Firefox（Camoufox）由第三方组织维护。在生产环境中，请使用 Chromium。",
-    "platformUnavailable": "{{browser}} 在您的平台上尚不可用。"
+    "platformUnavailable": "{{browser}} 在您的平台上尚不可用。",
+    "passwordProtect": {
+      "label": "为此配置文件设置密码保护",
+      "description": "加密磁盘上的配置文件数据。启动时需要密码。"
+    }
   },
   "deleteDialog": {
     "title": "删除配置文件",
@@ -892,7 +902,8 @@
     "setupProxyListenersFailed": "设置代理事件监听器失败: {{error}}",
     "loadVpnConfigsFailed": "加载 VPN 配置失败: {{error}}",
     "setupVpnListenersFailed": "设置 VPN 事件监听器失败: {{error}}",
-    "themeNotFound": "未找到 Tokyo Night 主题"
+    "themeNotFound": "未找到 Tokyo Night 主题",
+    "setProfilePasswordFailed": "设置配置文件密码失败: {{error}}"
   },
   "browser": {
     "camoufox": "Camoufox",
@@ -1589,5 +1600,66 @@
       "upToDateDescription": "所有浏览器版本都是最新的",
       "updateAllFailed": "更新浏览器版本失败"
     }
+  },
+  "profilePassword": {
+    "set": {
+      "title": "设置配置文件密码",
+      "description": "加密 {{name}} 的磁盘数据。每次启动配置文件时都需要输入此密码。",
+      "button": "加密配置文件"
+    },
+    "unlock": {
+      "title": "解锁配置文件",
+      "description": "输入密码以解锁 {{name}}。",
+      "button": "解锁"
+    },
+    "change": {
+      "title": "更改配置文件密码",
+      "description": "使用新密码重新加密 {{name}}。",
+      "button": "更改密码"
+    },
+    "remove": {
+      "title": "移除配置文件密码",
+      "description": "解密 {{name}} 的磁盘数据。配置文件将不再受密码保护。",
+      "button": "移除密码"
+    },
+    "fields": {
+      "password": "密码",
+      "currentPassword": "当前密码",
+      "newPassword": "新密码",
+      "confirm": "确认密码"
+    },
+    "errors": {
+      "oldPasswordRequired": "需要当前密码",
+      "passwordRequired": "需要密码",
+      "tooShort": "密码至少需要 {{min}} 个字符",
+      "mismatch": "密码不匹配"
+    },
+    "toasts": {
+      "set": "配置文件现在受密码保护",
+      "changed": "配置文件密码已更改",
+      "removed": "配置文件密码已移除"
+    },
+    "warnings": {
+      "forgetWarningTitle": "重要:此密码无法恢复",
+      "forgetWarningBody": "Donut Browser 无法重置、恢复或绕过此密码。如果忘记,您将永久无法访问此配置文件的数据。"
+    }
+  },
+  "backendErrors": {
+    "incorrectPassword": "密码不正确",
+    "lockedOut": "尝试次数过多。请在 {{duration}} 后重试。",
+    "lockedOutDuration": {
+      "seconds": "{{seconds}}秒",
+      "minutes": "{{minutes}} 分钟",
+      "hours": "{{hours}} 小时"
+    },
+    "profileNotFound": "未找到配置文件",
+    "profileNotProtected": "配置文件未受密码保护",
+    "profileAlreadyProtected": "配置文件已受密码保护",
+    "profileRunning": "配置文件运行时无法执行此操作",
+    "profileMissingSalt": "配置文件缺少加密盐",
+    "profileLocked": "配置文件已锁定。请先输入密码。",
+    "invalidProfileId": "配置文件 ID 无效",
+    "passwordTooShort": "密码至少需要 {{min}} 个字符",
+    "internal": "出现问题:{{detail}}"
   }
 }

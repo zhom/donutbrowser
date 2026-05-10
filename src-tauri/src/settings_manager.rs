@@ -57,6 +57,11 @@ pub struct AppSettings {
   pub window_resize_warning_dismissed: bool,
   #[serde(default)]
   pub disable_auto_updates: bool,
+  /// When true, the decrypted in-RAM copy of a password-protected profile is
+  /// preserved between launches for faster subsequent startups. The on-disk
+  /// copy is always re-encrypted regardless of this flag.
+  #[serde(default)]
+  pub keep_decrypted_profiles_in_ram: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -92,6 +97,7 @@ impl Default for AppSettings {
       language: None,
       window_resize_warning_dismissed: false,
       disable_auto_updates: false,
+      keep_decrypted_profiles_in_ram: false,
     }
   }
 }
@@ -1070,6 +1076,7 @@ mod tests {
       language: None,
       window_resize_warning_dismissed: false,
       disable_auto_updates: false,
+      keep_decrypted_profiles_in_ram: false,
     };
 
     let save_result = manager.save_settings(&test_settings);

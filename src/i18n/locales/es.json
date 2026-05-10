@@ -172,7 +172,9 @@
       "clearCacheFailed": "Error al limpiar la caché"
     },
     "disableAutoUpdates": "Desactivar Actualizaciones Automáticas de la App",
-    "disableAutoUpdatesDescription": "Evita que la aplicación busque e instale actualizaciones de Donut Browser automáticamente. Las actualizaciones de navegadores no se ven afectadas."
+    "disableAutoUpdatesDescription": "Evita que la aplicación busque e instale actualizaciones de Donut Browser automáticamente. Las actualizaciones de navegadores no se ven afectadas.",
+    "keepDecryptedProfilesInRam": "Mantener Perfiles Descifrados en RAM",
+    "keepDecryptedProfilesInRamDescription": "Conservar la copia descifrada en RAM de los perfiles protegidos por contraseña entre lanzamientos para un inicio más rápido. La copia en disco permanece cifrada en cualquier caso."
   },
   "header": {
     "searchPlaceholder": "Buscar perfiles...",
@@ -221,7 +223,10 @@
       "assignToGroup": "Asignar a Grupo",
       "changeFingerprint": "Cambiar Huella Digital",
       "copyCookiesToProfile": "Copiar Cookies al Perfil",
-      "launchHook": "URL del hook de inicio"
+      "launchHook": "URL del hook de inicio",
+      "setPassword": "Establecer Contraseña",
+      "changePassword": "Cambiar Contraseña",
+      "removePassword": "Quitar Contraseña"
     },
     "synchronizer": {
       "launchWithSync": "Lanzar con Sincronizador",
@@ -265,7 +270,8 @@
       "assignProxy": "Asignar proxy",
       "assignExtensionGroup": "Asignar grupo de extensiones",
       "copyCookies": "Copiar cookies"
-    }
+    },
+    "passwordProtectedBadge": "Protegido por Contraseña"
   },
   "createProfile": {
     "title": "Crear Nuevo Perfil",
@@ -312,7 +318,11 @@
     "firefoxLabel": "Firefox",
     "firefoxSubtitle": "Impulsado por Camoufox",
     "camoufoxWarning": "Firefox (Camoufox) está mantenido por una organización de terceros. Para uso en producción, utilice Chromium.",
-    "platformUnavailable": "{{browser}} aún no está disponible en tu plataforma."
+    "platformUnavailable": "{{browser}} aún no está disponible en tu plataforma.",
+    "passwordProtect": {
+      "label": "Proteger este perfil con contraseña",
+      "description": "Cifra los datos del perfil en disco. Necesario para abrirlo."
+    }
   },
   "deleteDialog": {
     "title": "Eliminar Perfil",
@@ -892,7 +902,8 @@
     "setupProxyListenersFailed": "Error al configurar los listeners de eventos de proxies: {{error}}",
     "loadVpnConfigsFailed": "Error al cargar las configuraciones de VPN: {{error}}",
     "setupVpnListenersFailed": "Error al configurar los listeners de eventos de VPN: {{error}}",
-    "themeNotFound": "Tema Tokyo Night no encontrado"
+    "themeNotFound": "Tema Tokyo Night no encontrado",
+    "setProfilePasswordFailed": "Error al establecer la contraseña del perfil: {{error}}"
   },
   "browser": {
     "camoufox": "Camoufox",
@@ -1589,5 +1600,66 @@
       "upToDateDescription": "Todas las versiones del navegador están actualizadas",
       "updateAllFailed": "Error al actualizar las versiones del navegador"
     }
+  },
+  "profilePassword": {
+    "set": {
+      "title": "Establecer Contraseña del Perfil",
+      "description": "Cifra los datos en disco de {{name}}. Necesitarás esta contraseña cada vez que abras el perfil.",
+      "button": "Cifrar Perfil"
+    },
+    "unlock": {
+      "title": "Desbloquear Perfil",
+      "description": "Introduce la contraseña para desbloquear {{name}}.",
+      "button": "Desbloquear"
+    },
+    "change": {
+      "title": "Cambiar Contraseña del Perfil",
+      "description": "Vuelve a cifrar {{name}} con una nueva contraseña.",
+      "button": "Cambiar Contraseña"
+    },
+    "remove": {
+      "title": "Quitar Contraseña del Perfil",
+      "description": "Descifra los datos en disco de {{name}}. El perfil dejará de estar protegido por contraseña.",
+      "button": "Quitar Contraseña"
+    },
+    "fields": {
+      "password": "Contraseña",
+      "currentPassword": "Contraseña actual",
+      "newPassword": "Nueva contraseña",
+      "confirm": "Confirmar contraseña"
+    },
+    "errors": {
+      "oldPasswordRequired": "Se requiere la contraseña actual",
+      "passwordRequired": "Se requiere la contraseña",
+      "tooShort": "La contraseña debe tener al menos {{min}} caracteres",
+      "mismatch": "Las contraseñas no coinciden"
+    },
+    "toasts": {
+      "set": "El perfil ahora está protegido por contraseña",
+      "changed": "Contraseña del perfil cambiada",
+      "removed": "Contraseña del perfil eliminada"
+    },
+    "warnings": {
+      "forgetWarningTitle": "Importante: esta contraseña no se puede recuperar",
+      "forgetWarningBody": "Donut Browser no puede restablecer, recuperar ni omitir esta contraseña. Si la olvidas, perderás permanentemente el acceso a los datos de este perfil."
+    }
+  },
+  "backendErrors": {
+    "incorrectPassword": "Contraseña incorrecta",
+    "lockedOut": "Demasiados intentos incorrectos. Vuelve a intentar en {{duration}}.",
+    "lockedOutDuration": {
+      "seconds": "{{seconds}}s",
+      "minutes": "{{minutes}} min",
+      "hours": "{{hours}} h"
+    },
+    "profileNotFound": "Perfil no encontrado",
+    "profileNotProtected": "El perfil no está protegido por contraseña",
+    "profileAlreadyProtected": "El perfil ya está protegido por contraseña",
+    "profileRunning": "No se puede realizar esta acción mientras el perfil está en ejecución",
+    "profileMissingSalt": "Al perfil le falta su sal de cifrado",
+    "profileLocked": "El perfil está bloqueado. Introduce la contraseña primero.",
+    "invalidProfileId": "ID de perfil no válido",
+    "passwordTooShort": "La contraseña debe tener al menos {{min}} caracteres",
+    "internal": "Algo salió mal: {{detail}}"
   }
 }

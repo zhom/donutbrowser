@@ -13,7 +13,10 @@ import {
   LuFingerprint,
   LuGlobe,
   LuGroup,
+  LuKey,
   LuLink,
+  LuLock,
+  LuLockOpen,
   LuPlus,
   LuPuzzle,
   LuRefreshCw,
@@ -71,6 +74,9 @@ interface ProfileInfoDialogProps {
   onCloneProfile?: (profile: BrowserProfile) => void;
   onDeleteProfile?: (profile: BrowserProfile) => void;
   onLaunchWithSync?: (profile: BrowserProfile) => void;
+  onSetPassword?: (profile: BrowserProfile) => void;
+  onChangePassword?: (profile: BrowserProfile) => void;
+  onRemovePassword?: (profile: BrowserProfile) => void;
   crossOsUnlocked?: boolean;
   isRunning?: boolean;
   isDisabled?: boolean;
@@ -119,6 +125,9 @@ export function ProfileInfoDialog({
   onCloneProfile,
   onDeleteProfile,
   onLaunchWithSync,
+  onSetPassword,
+  onChangePassword,
+  onRemovePassword,
   crossOsUnlocked = false,
   isRunning = false,
   isDisabled = false,
@@ -355,6 +364,40 @@ export function ProfileInfoDialog({
       hidden: !onOpenLaunchHook,
     },
     {
+      icon: <LuKey className="w-4 h-4" />,
+      label: t("profiles.actions.setPassword"),
+      onClick: () => {
+        handleAction(() => onSetPassword?.(profile));
+      },
+      disabled: isDisabled || isRunning,
+      runningBadge: isRunning,
+      hidden:
+        profile.password_protected === true ||
+        profile.ephemeral === true ||
+        !onSetPassword,
+    },
+    {
+      icon: <LuKey className="w-4 h-4" />,
+      label: t("profiles.actions.changePassword"),
+      onClick: () => {
+        handleAction(() => onChangePassword?.(profile));
+      },
+      disabled: isDisabled || isRunning,
+      runningBadge: isRunning,
+      hidden: profile.password_protected !== true || !onChangePassword,
+    },
+    {
+      icon: <LuLockOpen className="w-4 h-4" />,
+      label: t("profiles.actions.removePassword"),
+      onClick: () => {
+        handleAction(() => onRemovePassword?.(profile));
+      },
+      disabled: isDisabled || isRunning,
+      runningBadge: isRunning,
+      hidden: profile.password_protected !== true || !onRemovePassword,
+      destructive: true,
+    },
+    {
       icon: <LuTrash2 className="w-4 h-4" />,
       label: t("profiles.actions.delete"),
       onClick: () => {
@@ -415,6 +458,12 @@ export function ProfileInfoDialog({
                       {profile.ephemeral && (
                         <Badge variant="outline" className="text-xs">
                           {t("profiles.ephemeralBadge")}
+                        </Badge>
+                      )}
+                      {profile.password_protected && (
+                        <Badge variant="outline" className="text-xs gap-1">
+                          <LuLock className="w-3 h-3" />
+                          {t("profiles.passwordProtectedBadge")}
                         </Badge>
                       )}
                       {showCrossOs && (

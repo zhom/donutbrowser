@@ -701,6 +701,7 @@ mod tests {
       created_by_id: None,
       created_by_email: None,
       dns_blocklist: None,
+      password_protected: false,
     }
   }
 

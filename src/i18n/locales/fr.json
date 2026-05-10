@@ -172,7 +172,9 @@
       "clearCacheFailed": "Échec de la suppression du cache"
     },
     "disableAutoUpdates": "Désactiver les mises à jour automatiques de l'app",
-    "disableAutoUpdatesDescription": "Empêche l'application de vérifier et d'installer automatiquement les mises à jour de Donut Browser. Les mises à jour des navigateurs ne sont pas affectées."
+    "disableAutoUpdatesDescription": "Empêche l'application de vérifier et d'installer automatiquement les mises à jour de Donut Browser. Les mises à jour des navigateurs ne sont pas affectées.",
+    "keepDecryptedProfilesInRam": "Conserver les profils déchiffrés en RAM",
+    "keepDecryptedProfilesInRamDescription": "Conserver en RAM la copie déchiffrée des profils protégés par mot de passe entre les lancements pour un démarrage plus rapide. La copie sur disque reste chiffrée dans tous les cas."
   },
   "header": {
     "searchPlaceholder": "Rechercher des profils...",
@@ -221,7 +223,10 @@
       "assignToGroup": "Assigner au Groupe",
       "changeFingerprint": "Changer l'Empreinte",
       "copyCookiesToProfile": "Copier les Cookies vers le Profil",
-      "launchHook": "URL du hook de lancement"
+      "launchHook": "URL du hook de lancement",
+      "setPassword": "Définir un mot de passe",
+      "changePassword": "Changer le mot de passe",
+      "removePassword": "Supprimer le mot de passe"
     },
     "synchronizer": {
       "launchWithSync": "Lancer avec le synchroniseur",
@@ -265,7 +270,8 @@
       "assignProxy": "Assigner un proxy",
       "assignExtensionGroup": "Assigner un groupe d’extensions",
       "copyCookies": "Copier les cookies"
-    }
+    },
+    "passwordProtectedBadge": "Protégé par mot de passe"
   },
   "createProfile": {
     "title": "Créer un nouveau profil",
@@ -312,7 +318,11 @@
     "firefoxLabel": "Firefox",
     "firefoxSubtitle": "Propulsé par Camoufox",
     "camoufoxWarning": "Firefox (Camoufox) est maintenu par une organisation tierce. Pour une utilisation en production, veuillez utiliser Chromium.",
-    "platformUnavailable": "{{browser}} n'est pas encore disponible sur votre plateforme."
+    "platformUnavailable": "{{browser}} n'est pas encore disponible sur votre plateforme.",
+    "passwordProtect": {
+      "label": "Protéger ce profil par mot de passe",
+      "description": "Chiffre les données du profil sur disque. Requis au lancement."
+    }
   },
   "deleteDialog": {
     "title": "Supprimer le profil",
@@ -892,7 +902,8 @@
     "setupProxyListenersFailed": "Échec de la configuration des écouteurs d’événements de proxies : {{error}}",
     "loadVpnConfigsFailed": "Échec du chargement des configurations VPN : {{error}}",
     "setupVpnListenersFailed": "Échec de la configuration des écouteurs d’événements VPN : {{error}}",
-    "themeNotFound": "Thème Tokyo Night introuvable"
+    "themeNotFound": "Thème Tokyo Night introuvable",
+    "setProfilePasswordFailed": "Échec de la définition du mot de passe du profil : {{error}}"
   },
   "browser": {
     "camoufox": "Camoufox",
@@ -1589,5 +1600,66 @@
       "upToDateDescription": "Toutes les versions des navigateurs sont à jour",
       "updateAllFailed": "Échec de la mise à jour des versions des navigateurs"
     }
+  },
+  "profilePassword": {
+    "set": {
+      "title": "Définir un mot de passe de profil",
+      "description": "Chiffre les données sur disque de {{name}}. Vous devrez saisir ce mot de passe à chaque lancement du profil.",
+      "button": "Chiffrer le profil"
+    },
+    "unlock": {
+      "title": "Déverrouiller le profil",
+      "description": "Saisissez le mot de passe pour déverrouiller {{name}}.",
+      "button": "Déverrouiller"
+    },
+    "change": {
+      "title": "Changer le mot de passe du profil",
+      "description": "Re-chiffre {{name}} avec un nouveau mot de passe.",
+      "button": "Changer le mot de passe"
+    },
+    "remove": {
+      "title": "Supprimer le mot de passe du profil",
+      "description": "Déchiffre les données sur disque de {{name}}. Le profil ne sera plus protégé par mot de passe.",
+      "button": "Supprimer le mot de passe"
+    },
+    "fields": {
+      "password": "Mot de passe",
+      "currentPassword": "Mot de passe actuel",
+      "newPassword": "Nouveau mot de passe",
+      "confirm": "Confirmer le mot de passe"
+    },
+    "errors": {
+      "oldPasswordRequired": "Le mot de passe actuel est requis",
+      "passwordRequired": "Le mot de passe est requis",
+      "tooShort": "Le mot de passe doit comporter au moins {{min}} caractères",
+      "mismatch": "Les mots de passe ne correspondent pas"
+    },
+    "toasts": {
+      "set": "Le profil est maintenant protégé par mot de passe",
+      "changed": "Mot de passe du profil modifié",
+      "removed": "Mot de passe du profil supprimé"
+    },
+    "warnings": {
+      "forgetWarningTitle": "Important : ce mot de passe ne peut pas être récupéré",
+      "forgetWarningBody": "Donut Browser ne peut ni réinitialiser, ni récupérer, ni contourner ce mot de passe. Si vous l'oubliez, vous perdrez définitivement l'accès aux données de ce profil."
+    }
+  },
+  "backendErrors": {
+    "incorrectPassword": "Mot de passe incorrect",
+    "lockedOut": "Trop de tentatives incorrectes. Réessayez dans {{duration}}.",
+    "lockedOutDuration": {
+      "seconds": "{{seconds}}s",
+      "minutes": "{{minutes}} min",
+      "hours": "{{hours}} h"
+    },
+    "profileNotFound": "Profil introuvable",
+    "profileNotProtected": "Le profil n'est pas protégé par mot de passe",
+    "profileAlreadyProtected": "Le profil est déjà protégé par mot de passe",
+    "profileRunning": "Impossible d'effectuer cette action pendant que le profil est en cours d'exécution",
+    "profileMissingSalt": "Le sel de chiffrement du profil est manquant",
+    "profileLocked": "Le profil est verrouillé. Entrez d'abord le mot de passe.",
+    "invalidProfileId": "Identifiant de profil non valide",
+    "passwordTooShort": "Le mot de passe doit comporter au moins {{min}} caractères",
+    "internal": "Une erreur s'est produite : {{detail}}"
   }
 }
