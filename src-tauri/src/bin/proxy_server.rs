@@ -82,9 +82,14 @@ fn build_proxy_url(
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
-  // Initialize logger to write to stderr (which will be redirected to file)
+  // Initialize logger to write to stderr (which will be redirected to file).
+  //
+  // Default filter is Info — Debug pulls in reqwest/hyper internals which
+  // make the per-worker log unreadable on a busy browser session and obscure
+  // the actual lines we care about (binds, accept errors, upstream failures).
+  // RUST_LOG=debug or RUST_LOG=donut_proxy=trace still works for deep dives.
   env_logger::Builder::from_default_env()
-    .filter_level(log::LevelFilter::Debug)
+    .filter_level(log::LevelFilter::Info)
     .format_timestamp_millis()
     .init();
 
@@ -343,8 +348,11 @@ async fn main() {
       // Set high priority so this process is killed last under resource pressure
       set_high_priority();
 
-      log::error!("Proxy worker starting, looking for config id: {}", id);
-      log::error!("Process PID: {}", std::process::id());
+      log::info!(
+        "Proxy worker starting (pid {}, config id {})",
+        std::process::id(),
+        id
+      );
 
       // Retry config loading to handle file system race condition on Windows
       // where the config file may not be immediately visible after being written
@@ -352,7 +360,7 @@ async fn main() {
         let mut attempts = 0;
         loop {
           if let Some(config) = get_proxy_config(id) {
-            log::error!(
+            log::info!(
               "Found config: id={}, port={:?}, upstream={}",
               config.id,
               config.local_port,
@@ -369,20 +377,19 @@ async fn main() {
             );
             process::exit(1);
           }
-          log::error!("Config {} not found yet, retrying ({}/10)...", id, attempts);
+          log::debug!("Config {} not found yet, retrying ({}/10)...", id, attempts);
           std::thread::sleep(std::time::Duration::from_millis(50));
         }
       };
 
       // Run the proxy server - this should never return (infinite loop)
-      log::error!("Starting proxy server for config id: {}", id);
+      log::info!("Starting proxy server for config id: {}", id);
       if let Err(e) = run_proxy_server(config).await {
-        log::error!("Failed to run proxy server: {}", e);
-        log::error!("Error details: {:?}", e);
+        log::error!("Proxy server failed: {} ({:?})", e, e);
         process::exit(1);
       }
       // This should never be reached - run_proxy_server has an infinite loop
-      log::error!("ERROR: Proxy server returned unexpectedly (this should never happen)");
+      log::error!("Proxy server returned unexpectedly (this should never happen)");
       process::exit(1);
     } else {
       log::error!("Invalid action for proxy-worker. Use 'start'");
