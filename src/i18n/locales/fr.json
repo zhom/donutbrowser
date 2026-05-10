@@ -245,9 +245,8 @@
       "flakyTooltip": "Ce profil a une résolution d'écran différente de celle du leader. La mise en page des pages peut différer, ce qui peut causer des clics et interactions erronés."
     },
     "ephemeral": "Éphémère",
-    "ephemeralDescription": "Le navigateur est forcé d'écrire les données du profil en mémoire au lieu du disque. Les données sont supprimées à la fermeture du navigateur.",
+    "ephemeralDescription": "Le navigateur est contraint d'écrire les données du profil en mémoire plutôt que sur le disque. Notez que votre système d'exploitation peut écrire une partie de la mémoire sur le disque (swap) en cas de charge, donc des traces de la session pourraient rester récupérables.",
     "ephemeralBadge": "Éphémère",
-    "ephemeralAlpha": "Alpha",
     "bulkDelete": {
       "title": "Supprimer les profils sélectionnés",
       "description": "Cette action est irréversible. Elle supprimera définitivement {{count}} profil(s) et toutes les données associées.",

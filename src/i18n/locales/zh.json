@@ -245,9 +245,8 @@
       "flakyTooltip": "此配置文件的屏幕分辨率与领导者不同。页面布局可能不同，导致点击和交互可能命中错误的元素。"
     },
     "ephemeral": "临时",
-    "ephemeralDescription": "浏览器被强制将配置数据写入内存而非磁盘。关闭浏览器时数据将被删除。",
+    "ephemeralDescription": "浏览器被强制将配置文件数据写入内存而不是磁盘。请注意,在系统负载较高时,操作系统可能会将部分内存换出到磁盘(swap),因此会话的某些痕迹仍可能被恢复。",
     "ephemeralBadge": "临时",
-    "ephemeralAlpha": "Alpha",
     "bulkDelete": {
       "title": "删除所选配置文件",
       "description": "此操作无法撤销。这将永久删除 {{count}} 个配置文件及其关联的所有数据。",

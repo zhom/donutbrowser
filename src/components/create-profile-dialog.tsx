@@ -740,9 +740,6 @@ export function CreateProfileDialog({
                             <Label htmlFor="ephemeral" className="font-medium">
                               {t("profiles.ephemeral")}
                             </Label>
-                            <span className="px-1 py-0.5 text-[10px] leading-none rounded bg-muted text-muted-foreground font-medium">
-                              {t("profiles.ephemeralAlpha")}
-                            </span>
                           </div>
                           <p className="text-sm text-muted-foreground ml-6">
                             {t("profiles.ephemeralDescription")}

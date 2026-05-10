@@ -245,9 +245,8 @@
       "flakyTooltip": "This profile has a different screen resolution than the leader. Page layouts may differ, causing clicks and interactions to hit the wrong elements."
     },
     "ephemeral": "Ephemeral",
-    "ephemeralDescription": "The browser is forced to write profile data into memory instead of disk. Data is deleted when the browser is closed.",
+    "ephemeralDescription": "The browser is forced to write profile data into memory instead of disk. Note that your operating system can swap parts of memory to disk under load, so traces of the session may still be recoverable.",
     "ephemeralBadge": "Ephemeral",
-    "ephemeralAlpha": "Alpha",
     "bulkDelete": {
       "title": "Delete Selected Profiles",
       "description": "This action cannot be undone. This will permanently delete {{count}} profile(s) and all associated data.",
