@@ -1754,8 +1754,6 @@
       "closeAriaLabel": "Close menu",
       "importProfile": "Import profile",
       "importProfileHint": "Bring profiles from another tool",
-      "vpns": "VPN configs",
-      "vpnsHint": "WireGuard tunnels",
       "integrations": "Integrations",
       "integrationsHint": "Slack, MCP, automations",
       "account": "Account",

@@ -1754,8 +1754,6 @@
       "closeAriaLabel": "关闭菜单",
       "importProfile": "导入配置文件",
       "importProfileHint": "从其他工具导入",
-      "vpns": "VPN 配置",
-      "vpnsHint": "WireGuard 隧道",
       "integrations": "集成",
       "integrationsHint": "Slack、MCP、自动化",
       "account": "账户",

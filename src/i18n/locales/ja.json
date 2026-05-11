@@ -1754,8 +1754,6 @@
       "closeAriaLabel": "メニューを閉じる",
       "importProfile": "プロファイルをインポート",
       "importProfileHint": "別のツールから取り込む",
-      "vpns": "VPN 設定",
-      "vpnsHint": "WireGuard トンネル",
       "integrations": "連携",
       "integrationsHint": "Slack、MCP、自動化",
       "account": "アカウント",
