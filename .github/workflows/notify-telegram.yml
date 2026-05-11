@@ -41,15 +41,28 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           INPUT_TAG: ${{ inputs.tag }}
+          # `head_branch` of a workflow_run trigger is attacker-influenceable
+          # (anyone with push to a tag can choose its name), so we pass it via
+          # env and validate before use rather than splicing it into the
+          # shell script literally. See CodeQL actions/code-injection.
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          REPO: ${{ github.repository }}
         run: |
           if [[ -n "${INPUT_TAG:-}" ]]; then
             TAG="${INPUT_TAG}"
-          elif [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+          elif [[ "${EVENT_NAME}" == "workflow_run" ]]; then
             # The Release workflow runs on `push: tags: v*` so head_branch
-            # of the triggering run is the tag name.
-            TAG="${{ github.event.workflow_run.head_branch }}"
+            # of the triggering run is the tag name. Reject anything that
+            # isn't a plain tag-shaped string to keep this resistant to
+            # shell metacharacters injected via a crafted ref name.
+            if [[ ! "${WORKFLOW_RUN_HEAD_BRANCH}" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+              echo "::error::Refusing tag with unexpected characters: ${WORKFLOW_RUN_HEAD_BRANCH}"
+              exit 1
+            fi
+            TAG="${WORKFLOW_RUN_HEAD_BRANCH}"
           else
-            TAG=$(gh release view --repo "${{ github.repository }}" --json tagName -q .tagName)
+            TAG=$(gh release view --repo "${REPO}" --json tagName -q .tagName)
           fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "Resolved tag: ${TAG}"
