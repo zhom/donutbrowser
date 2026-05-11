@@ -161,8 +161,8 @@ jobs:
           # OS-SPECIFIC LOG PATHS (use ONLY the one matching the user's OS)
 
           - macOS:   `~/Library/Logs/com.donutbrowser/`
-          - Linux:   `~/.local/share/DonutBrowser/logs/`
-          - Windows: `%APPDATA%\DonutBrowser\logs\`
+          - Linux:   `~/.local/share/com.donutbrowser/logs/`
+          - Windows: `%APPDATA%\com.donutbrowser\logs\`
 
           # KNOWN ERROR SIGNATURES (truth, not guesses — match these
           # verbatim before suggesting anything else)
@@ -354,8 +354,8 @@ jobs:
           ## OS-specific log paths
           Use ONLY the one matching `triage.operating_system`:
             - macos:   `~/Library/Logs/com.donutbrowser/`
-            - linux:   `~/.local/share/DonutBrowser/logs/`
-            - windows: `%APPDATA%\DonutBrowser\logs\` (PowerShell-friendly: `Get-ChildItem $env:APPDATA\DonutBrowser\logs`)
+            - linux:   `~/.local/share/com.donutbrowser/logs/`
+            - windows: `%APPDATA%\com.donutbrowser\logs\` (PowerShell-friendly: `Get-ChildItem $env:APPDATA\com.donutbrowser\logs`)
             - unknown: ask the user to share their OS first.
 
           ## Known error signatures (apply BEFORE asking generic questions)
