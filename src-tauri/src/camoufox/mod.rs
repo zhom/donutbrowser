@@ -43,6 +43,7 @@ pub mod fingerprint;
 pub mod fonts;
 pub mod geolocation;
 pub mod launcher;
+pub mod presets;
 pub mod webgl;
 
 // Re-export main types for convenience

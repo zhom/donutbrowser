@@ -12,6 +12,7 @@ use crate::camoufox::env_vars;
 use crate::camoufox::fingerprint::types::*;
 use crate::camoufox::fonts;
 use crate::camoufox::geolocation;
+use crate::camoufox::presets;
 use crate::camoufox::webgl;
 
 /// Browserforge mapping from YAML.
@@ -307,10 +308,59 @@ impl CamoufoxConfigBuilder {
   }
 
   /// Build the complete Camoufox launch configuration.
+  ///
+  /// Prefers a real-fingerprint preset (matched against the Camoufox build's
+  /// Firefox version via `presets::preset_line_for`) when no explicit
+  /// fingerprint was passed. Falls back to the Bayesian network-based
+  /// synthesizer when presets are unavailable, so callers without a known
+  /// Firefox version (or with no preset for the requested OS) still get a
+  /// valid config — matching pre-v150 behaviour byte-for-byte.
   pub fn build(self) -> Result<CamoufoxLaunchConfig, ConfigError> {
-    // Generate or use provided fingerprint
-    let fingerprint = if let Some(fp) = self.fingerprint {
-      fp
+    let mut rng = rand::rng();
+    let ff_version = self.ff_version;
+
+    // 1) The caller supplied a fingerprint outright — honour it and skip
+    //    presets entirely. This is the path tests and advanced consumers
+    //    use to inject deterministic fixtures.
+    // 2) Otherwise, try a bundled preset for the requested OS / FF line.
+    // 3) Fall back to the Bayesian generator. This is also the path that
+    //    runs for users whose Camoufox binary has no readable `version.json`
+    //    (`ff_version == None`), or whose OS has no presets bundled.
+    let (mut config, target_os) = if let Some(fp) = self.fingerprint {
+      let target_os = env_vars::determine_ua_os(&fp.navigator.user_agent);
+      // `from_browserforge` already runs `handle_screen_xy` internally.
+      let config = from_browserforge(&fp, ff_version);
+      (config, target_os)
+    } else if let Some(preset) =
+      presets::get_random_preset(self.operating_system.as_deref(), ff_version)
+    {
+      let mut config = presets::from_preset(&preset, ff_version);
+      let target_os = config
+        .get("navigator.userAgent")
+        .and_then(|v| v.as_str())
+        .map(env_vars::determine_ua_os)
+        .or_else(|| {
+          // Last-resort heuristic from the platform string — keeps target_os
+          // sensible even if a preset somehow omits the user agent.
+          config
+            .get("navigator.platform")
+            .and_then(|v| v.as_str())
+            .map(|p| match p {
+              "Win32" => "windows",
+              "MacIntel" => "macos",
+              _ => "linux",
+            })
+        })
+        .unwrap_or("macos");
+      // Presets don't carry multi-monitor offsets, so default screenX/Y to
+      // (0, 0) — matches what real single-display users send.
+      config
+        .entry("window.screenX".to_string())
+        .or_insert(serde_json::json!(0));
+      config
+        .entry("window.screenY".to_string())
+        .or_insert(serde_json::json!(0));
+      (config, target_os)
     } else {
       let generator = crate::camoufox::fingerprint::FingerprintGenerator::new()?;
       let options = FingerprintOptions {
@@ -320,17 +370,13 @@ impl CamoufoxConfigBuilder {
         screen: self.screen_constraints,
         ..Default::default()
       };
-      generator.get_fingerprint(&options)?.fingerprint
+      let fingerprint = generator.get_fingerprint(&options)?.fingerprint;
+      let target_os = env_vars::determine_ua_os(&fingerprint.navigator.user_agent);
+      let config = from_browserforge(&fingerprint, ff_version);
+      (config, target_os)
     };
 
-    // Determine target OS from user agent
-    let target_os = env_vars::determine_ua_os(&fingerprint.navigator.user_agent);
-
-    // Convert fingerprint to config
-    let mut config = from_browserforge(&fingerprint, self.ff_version);
-
     // Add random window history length
-    let mut rng = rand::rng();
     config.insert(
       "window.history.length".to_string(),
       serde_json::json!(rng.random_range(1..=5)),
