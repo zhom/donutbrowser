@@ -108,6 +108,17 @@ pub fn dns_blocklist_dir() -> PathBuf {
   cache_dir().join("dns_blocklists")
 }
 
+/// Resolve the directory that tauri-plugin-log writes to. Mirrors the
+/// `LogDir` target used in the plugin builder so the path matches what's
+/// actually on disk for this OS.
+pub fn log_dir<R: tauri::Runtime>(handle: &tauri::AppHandle<R>) -> PathBuf {
+  use tauri::Manager;
+  handle
+    .path()
+    .app_log_dir()
+    .unwrap_or_else(|_| std::env::temp_dir())
+}
+
 #[cfg(test)]
 thread_local! {
   static TEST_DATA_DIR: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };

@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -30,6 +29,7 @@ import { WayfernConfigForm } from "@/components/wayfern-config-form";
 import { useBrowserSupport } from "@/hooks/use-browser-support";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { getBrowserDisplayName, getBrowserIcon } from "@/lib/browser-utils";
+import { cn } from "@/lib/utils";
 import type { CamoufoxConfig, DetectedProfile, WayfernConfig } from "@/types";
 import { RippleButton } from "./ui/ripple";
 
@@ -43,12 +43,14 @@ interface ImportProfileDialogProps {
   isOpen: boolean;
   onClose: () => void;
   crossOsUnlocked?: boolean;
+  subPage?: boolean;
 }
 
 export function ImportProfileDialog({
   isOpen,
   onClose,
   crossOsUnlocked,
+  subPage,
 }: ImportProfileDialogProps) {
   const { t } = useTranslation();
   const [detectedProfiles, setDetectedProfiles] = useState<DetectedProfile[]>(
@@ -292,11 +294,13 @@ export function ImportProfileDialog({
   }, [isOpen, loadDetectedProfiles]);
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={onClose} subPage={subPage}>
       <DialogContent className="max-w-2xl max-h-[80vh] my-8 flex flex-col">
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle>{t("importProfile.title")}</DialogTitle>
-        </DialogHeader>
+        {!subPage && (
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle>{t("importProfile.title")}</DialogTitle>
+          </DialogHeader>
+        )}
 
         <div className="overflow-y-auto flex-1 space-y-6 min-h-0">
           {currentStep === "select" && (
@@ -600,12 +604,19 @@ export function ImportProfileDialog({
           )}
         </div>
 
-        <DialogFooter className="flex-shrink-0">
+        <div
+          className={cn(
+            "flex-shrink-0 flex gap-2 items-center justify-end",
+            subPage ? "pt-2 border-t border-border" : undefined,
+          )}
+        >
           {currentStep === "select" ? (
             <>
-              <RippleButton variant="outline" onClick={handleClose}>
-                {t("common.buttons.cancel")}
-              </RippleButton>
+              {!subPage && (
+                <RippleButton variant="outline" onClick={handleClose}>
+                  {t("common.buttons.cancel")}
+                </RippleButton>
+              )}
               <RippleButton
                 disabled={!canProceedToNext}
                 onClick={() => {
@@ -635,7 +646,7 @@ export function ImportProfileDialog({
               </LoadingButton>
             </>
           )}
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

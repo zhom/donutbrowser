@@ -9,6 +9,7 @@ import {
   type SortingState,
   useReactTable,
 } from "@tanstack/react-table";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import type { Dispatch, SetStateAction } from "react";
@@ -23,7 +24,9 @@ import {
   LuCookie,
   LuInfo,
   LuLock,
+  LuPlay,
   LuPuzzle,
+  LuSquare,
   LuTrash2,
   LuTriangleAlert,
   LuUsers,
@@ -51,7 +54,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Table,
   TableBody,
@@ -68,12 +70,12 @@ import {
 import { useBrowserState } from "@/hooks/use-browser-state";
 import { useCloudAuth } from "@/hooks/use-cloud-auth";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
+import { useScrollFade } from "@/hooks/use-scroll-fade";
 import { useTableSorting } from "@/hooks/use-table-sorting";
 import { useTeamLocks } from "@/hooks/use-team-locks";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
 import {
   getBrowserDisplayName,
-  getCurrentOS,
   getOSDisplayName,
   getProfileIcon,
   isCrossOsProfile,
@@ -83,6 +85,7 @@ import { trimName } from "@/lib/name-utils";
 import { cn } from "@/lib/utils";
 import type {
   BrowserProfile,
+  ExtensionGroup,
   LocationItem,
   ProxyCheckResult,
   StoredProxy,
@@ -153,6 +156,15 @@ interface TableMeta {
     profileId: string,
     vpnId: string | null,
   ) => void | Promise<void>;
+
+  // Extension groups (for Ext column lookup)
+  extensionGroups: ExtensionGroup[];
+
+  // Click handlers for inline Ext / DNS cell editing
+  onAssignExtensionGroup?: (profileIds: string[]) => void;
+  setDnsBlocklistProfile: React.Dispatch<
+    React.SetStateAction<BrowserProfile | null>
+  >;
 
   // Selection helpers
   isProfileSelected: (id: string) => boolean;
@@ -296,6 +308,187 @@ function getProfileSyncStatusDot(
     default:
       return null;
   }
+}
+
+// Inline extension-group dropdown for the Ext column. Matches the
+// proxy column's Popover-style picker — no nested dialog.
+function ExtCell({
+  profile,
+  meta,
+}: {
+  profile: BrowserProfile;
+  meta: TableMeta;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [isSaving, setIsSaving] = React.useState(false);
+  const groupId = profile.extension_group_id ?? null;
+  const group = groupId
+    ? meta.extensionGroups.find((g) => g.id === groupId)
+    : undefined;
+  const label = group?.name ?? meta.t("profiles.table.extDefault");
+
+  const onPick = async (nextId: string | null) => {
+    setIsSaving(true);
+    try {
+      await invoke("assign_extension_group_to_profile", {
+        profileId: profile.id,
+        extensionGroupId: nextId,
+      });
+    } catch (err) {
+      console.error("Failed to assign extension group:", err);
+    } finally {
+      setIsSaving(false);
+      setOpen(false);
+    }
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          disabled={isSaving}
+          className="flex items-center gap-1.5 h-7 px-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 rounded transition-colors duration-100 w-full text-left disabled:opacity-50"
+        >
+          <LuPuzzle className="w-3 h-3 shrink-0" />
+          <span className="truncate flex-1" title={label}>
+            {label}
+          </span>
+          <LuChevronDown className="w-3 h-3 shrink-0 text-muted-foreground" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-0" align="start">
+        <Command>
+          <CommandInput placeholder={meta.t("profiles.table.extSearch")} />
+          <CommandList>
+            <CommandEmpty>{meta.t("profiles.table.extEmpty")}</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value="__default__"
+                onSelect={() => {
+                  void onPick(null);
+                }}
+              >
+                {groupId === null && <LuCheck className="mr-2 w-3.5 h-3.5" />}
+                <span className={groupId === null ? "" : "ml-5"}>
+                  {meta.t("profiles.table.extDefault")}
+                </span>
+              </CommandItem>
+              {meta.extensionGroups.map((g) => (
+                <CommandItem
+                  key={g.id}
+                  value={g.name}
+                  onSelect={() => {
+                    void onPick(g.id);
+                  }}
+                >
+                  {groupId === g.id && <LuCheck className="mr-2 w-3.5 h-3.5" />}
+                  <span className={groupId === g.id ? "" : "ml-5"}>
+                    {g.name}
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// Inline DNS blocklist dropdown — same Popover/Command pattern as Ext.
+function DnsCell({
+  profile,
+  meta,
+}: {
+  profile: BrowserProfile;
+  meta: TableMeta;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [isSaving, setIsSaving] = React.useState(false);
+  const level = profile.dns_blocklist ?? null;
+  // Backend levels are: light, normal, pro, pro_plus, ultimate (+ null).
+  // Keep the list ordered from least to most restrictive.
+  const LEVELS: { value: string; labelKey: string }[] = [
+    { value: "light", labelKey: "dnsBlocklist.light" },
+    { value: "normal", labelKey: "dnsBlocklist.normal" },
+    { value: "pro", labelKey: "dnsBlocklist.pro" },
+    { value: "pro_plus", labelKey: "dnsBlocklist.proPlus" },
+    { value: "ultimate", labelKey: "dnsBlocklist.ultimate" },
+  ];
+
+  const onPick = async (nextLevel: string | null) => {
+    setIsSaving(true);
+    try {
+      await invoke("update_profile_dns_blocklist", {
+        profileId: profile.id,
+        level: nextLevel,
+      });
+    } catch (err) {
+      console.error("Failed to update DNS blocklist:", err);
+    } finally {
+      setIsSaving(false);
+      setOpen(false);
+    }
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          disabled={isSaving}
+          className="flex items-center gap-1.5 h-7 px-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 rounded transition-colors duration-100 w-full text-left disabled:opacity-50"
+          title={
+            level
+              ? meta.t("profiles.table.dnsLevel", { level })
+              : meta.t("dnsBlocklist.none")
+          }
+        >
+          <FiWifi className="w-3 h-3 shrink-0" />
+          <span className="flex-1 truncate uppercase text-[10px] font-mono tracking-wide">
+            {level ?? "—"}
+          </span>
+          <LuChevronDown className="w-3 h-3 shrink-0 text-muted-foreground" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-48 p-0" align="start">
+        <Command>
+          <CommandList>
+            <CommandGroup>
+              <CommandItem
+                value="__none__"
+                onSelect={() => {
+                  void onPick(null);
+                }}
+              >
+                {level === null && <LuCheck className="mr-2 w-3.5 h-3.5" />}
+                <span className={level === null ? "" : "ml-5"}>
+                  {meta.t("dnsBlocklist.none")}
+                </span>
+              </CommandItem>
+              {LEVELS.map((l) => (
+                <CommandItem
+                  key={l.value}
+                  value={l.value}
+                  onSelect={() => {
+                    void onPick(l.value);
+                  }}
+                >
+                  {level === l.value && (
+                    <LuCheck className="mr-2 w-3.5 h-3.5" />
+                  )}
+                  <span className={level === l.value ? "" : "ml-5"}>
+                    {meta.t(l.labelKey)}
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 const TagsCell = React.memo<{
@@ -1023,6 +1216,36 @@ export function ProfilesDataTable({
   // Country proxy creation state (for inline proxy creation in dropdown)
   const [countries, setCountries] = React.useState<LocationItem[]>([]);
   const [countriesLoaded, setCountriesLoaded] = React.useState(false);
+
+  // Extension groups for the Ext column lookup. Refreshed when the
+  // backend emits 'extensions-changed' (group rename/create/delete).
+  const [extensionGroups, setExtensionGroups] = React.useState<
+    ExtensionGroup[]
+  >([]);
+
+  React.useEffect(() => {
+    let mounted = true;
+    let unlisten: (() => void) | undefined;
+    const load = async () => {
+      try {
+        const data = await invoke<ExtensionGroup[]>("list_extension_groups");
+        if (mounted) setExtensionGroups(data);
+      } catch (e) {
+        console.error("Failed to load extension groups:", e);
+      }
+    };
+    void load();
+    void listen("extensions-changed", () => {
+      void load();
+    }).then((u) => {
+      if (mounted) unlisten = u;
+      else u();
+    });
+    return () => {
+      mounted = false;
+      unlisten?.();
+    };
+  }, []);
   const canCreateLocationProxy = false;
 
   const loadCountries = React.useCallback(async () => {
@@ -1552,6 +1775,11 @@ export function ProfilesDataTable({
       vpnOverrides,
       handleVpnSelection,
 
+      // Extension groups
+      extensionGroups,
+      onAssignExtensionGroup,
+      setDnsBlocklistProfile,
+
       // Selection helpers
       isProfileSelected: (id: string) => selectedProfiles.includes(id),
       handleToggleAll,
@@ -1643,6 +1871,8 @@ export function ProfilesDataTable({
       vpnConfigs,
       vpnOverrides,
       handleVpnSelection,
+      extensionGroups,
+      onAssignExtensionGroup,
       handleToggleAll,
       handleCheckboxChange,
       handleIconClick,
@@ -1743,7 +1973,7 @@ export function ProfilesDataTable({
                     >
                       <span className="w-4 h-4 group">
                         <OsIcon className="w-4 h-4 text-muted-foreground group-hover:hidden" />
-                        <span className="peer border-input dark:bg-input/30 dark:data-[state=checked]:bg-primary size-4 shrink-0 rounded-[4px] border shadow-xs transition-shadow outline-none w-4 h-4 hidden group-hover:block pointer-events-none items-center justify-center duration-200" />
+                        <span className="peer border-input dark:bg-input/30 dark:data-[state=checked]:bg-primary size-4 shrink-0 rounded-[4px] border shadow-xs transition-shadow outline-none w-4 h-4 hidden group-hover:block pointer-events-none items-center justify-center duration-150" />
                       </span>
                     </button>
                   </span>
@@ -1852,7 +2082,7 @@ export function ProfilesDataTable({
                     {IconComponent && (
                       <IconComponent className="w-4 h-4 group-hover:hidden" />
                     )}
-                    <span className="peer border-input dark:bg-input/30 dark:data-[state=checked]:bg-primary size-4 shrink-0 rounded-[4px] border shadow-xs transition-shadow outline-none w-4 h-4 hidden group-hover:block pointer-events-none items-center justify-center duration-200" />
+                    <span className="peer border-input dark:bg-input/30 dark:data-[state=checked]:bg-primary size-4 shrink-0 rounded-[4px] border shadow-xs transition-shadow outline-none w-4 h-4 hidden group-hover:block pointer-events-none items-center justify-center duration-150" />
                   </span>
                 </button>
               </span>
@@ -1861,11 +2091,11 @@ export function ProfilesDataTable({
         },
         enableSorting: false,
         enableHiding: false,
-        size: 40,
+        size: 28,
       },
       {
         id: "actions",
-        size: 100,
+        size: 48,
         cell: ({ row, table }) => {
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
@@ -1983,11 +2213,18 @@ export function ProfilesDataTable({
                       variant={buttonVariant}
                       size="sm"
                       disabled={!canLaunch || isLaunching || isStopping}
+                      aria-label={
+                        isRunning
+                          ? meta.t("profiles.actions.stop")
+                          : meta.t("profiles.actions.launch")
+                      }
                       className={cn(
-                        "min-w-[80px] h-7 px-3",
+                        "h-7 w-7 p-0 grid place-items-center",
                         !canLaunch && "opacity-50 cursor-not-allowed",
                         canLaunch && "cursor-pointer",
                         isFollower && "border-accent",
+                        isRunning &&
+                          "bg-destructive/10 text-destructive hover:bg-destructive/20",
                       )}
                       onClick={() =>
                         isRunning
@@ -1996,13 +2233,11 @@ export function ProfilesDataTable({
                       }
                     >
                       {isLaunching || isStopping ? (
-                        <div className="flex gap-1 items-center">
-                          <div className="w-3 h-3 rounded-full border border-current animate-spin border-t-transparent" />
-                        </div>
+                        <div className="w-3 h-3 rounded-full border border-current animate-spin border-t-transparent" />
                       ) : isRunning ? (
-                        meta.t("profiles.actions.stop")
+                        <LuSquare className="w-3.5 h-3.5 fill-current" />
                       ) : (
-                        meta.t("profiles.actions.launch")
+                        <LuPlay className="w-3.5 h-3.5 fill-current" />
                       )}
                     </RippleButton>
                   </span>
@@ -2092,11 +2327,15 @@ export function ProfilesDataTable({
 
           const display =
             name.length < 14 ? (
-              <div className="font-medium text-left leading-none">{name}</div>
+              <div className="font-medium text-left leading-none truncate">
+                {name}
+              </div>
             ) : (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="leading-none">{trimName(name, 14)}</span>
+                  <span className="leading-none block truncate">
+                    {trimName(name, 14)}
+                  </span>
                 </TooltipTrigger>
                 <TooltipContent>{name}</TooltipContent>
               </Tooltip>
@@ -2114,11 +2353,11 @@ export function ProfilesDataTable({
           const isLocked = meta.isProfileLockedByAnother(profile.id);
 
           return (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5 min-w-0 max-w-full overflow-hidden">
               <button
                 type="button"
                 className={cn(
-                  "px-2 py-1 mr-auto text-left bg-transparent rounded border-none w-30 h-6",
+                  "px-2 py-1 mr-auto text-left bg-transparent rounded border-none h-6 min-w-0 max-w-full overflow-hidden",
                   isDisabled
                     ? "opacity-60 cursor-not-allowed"
                     : "cursor-pointer hover:bg-accent/50",
@@ -2159,7 +2398,7 @@ export function ProfilesDataTable({
       },
       {
         id: "tags",
-        size: 110,
+        size: 100,
         header: ({ table }) => {
           const meta = table.options.meta as TableMeta;
           return meta.t("profileTable.tagsHeader");
@@ -2192,7 +2431,7 @@ export function ProfilesDataTable({
       },
       {
         id: "note",
-        size: 110,
+        size: 80,
         header: ({ table }) => {
           const meta = table.options.meta as TableMeta;
           return meta.t("profileTable.noteHeader");
@@ -2223,7 +2462,7 @@ export function ProfilesDataTable({
       },
       {
         id: "proxy",
-        size: 130,
+        size: 110,
         header: ({ table }) => {
           const meta = table.options.meta as TableMeta;
           return meta.t("profiles.table.proxy");
@@ -2282,17 +2521,19 @@ export function ProfilesDataTable({
               (snapshot?.current_bytes_received ?? 0);
 
             return (
-              <BandwidthMiniChart
-                key={`${profile.id}-${snapshot?.last_update ?? 0}-${bandwidthData.length}`}
-                data={bandwidthData}
-                currentBandwidth={currentBandwidth}
-                onClick={() => meta.onOpenTrafficDialog?.(profile.id)}
-              />
+              <div className="overflow-hidden min-w-0">
+                <BandwidthMiniChart
+                  key={`${profile.id}-${snapshot?.last_update ?? 0}-${bandwidthData.length}`}
+                  data={bandwidthData}
+                  currentBandwidth={currentBandwidth}
+                  onClick={() => meta.onOpenTrafficDialog?.(profile.id)}
+                />
+              </div>
             );
           }
 
           return (
-            <div className="flex gap-2 items-center">
+            <div className="flex overflow-hidden gap-2 items-center min-w-0">
               <Popover
                 open={isSelectorOpen}
                 onOpenChange={(open) => {
@@ -2499,9 +2740,35 @@ export function ProfilesDataTable({
         },
       },
       {
+        id: "ext",
+        size: 95,
+        header: ({ table }) => {
+          const meta = table.options.meta as TableMeta;
+          return meta.t("profiles.table.ext");
+        },
+        cell: ({ row, table }) => {
+          const meta = table.options.meta as TableMeta;
+          const profile = row.original;
+          return <ExtCell profile={profile} meta={meta} />;
+        },
+      },
+      {
+        id: "dns",
+        size: 95,
+        header: ({ table }) => {
+          const meta = table.options.meta as TableMeta;
+          return meta.t("profiles.table.dns");
+        },
+        cell: ({ row, table }) => {
+          const meta = table.options.meta as TableMeta;
+          const profile = row.original;
+          return <DnsCell profile={profile} meta={meta} />;
+        },
+      },
+      {
         id: "sync",
         header: "",
-        size: 24,
+        size: 28,
         cell: ({ row, table }) => {
           const profile = row.original;
           const meta = table.options.meta as TableMeta;
@@ -2525,7 +2792,7 @@ export function ProfilesDataTable({
           return (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="flex justify-center items-center w-3 h-3">
+                <span className="flex justify-center items-center h-9 w-full">
                   {dot.encrypted ? (
                     <LuLock
                       className={`w-3 h-3 ${dot.color.replace("bg-", "text-")}${dot.animate ? " animate-pulse" : ""}`}
@@ -2544,16 +2811,16 @@ export function ProfilesDataTable({
       },
       {
         id: "settings",
-        size: 40,
+        size: 32,
         cell: ({ row, table }) => {
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
 
           return (
-            <div className="flex justify-end items-center">
+            <div className="flex justify-end items-center h-9 w-full">
               <Button
                 variant="ghost"
-                className="p-0 w-8 h-8"
+                className="p-0 w-7 h-7"
                 disabled={!meta.isClient}
                 onClick={() => {
                   setProfileForInfoDialog(profile);
@@ -2595,98 +2862,136 @@ export function ProfilesDataTable({
     meta: tableMeta,
   });
 
-  const platform = getCurrentOS();
+  const scrollParentRef = React.useRef<HTMLDivElement | null>(null);
+  const sortedRows = table.getRowModel().rows;
+  useScrollFade(scrollParentRef);
+
+  // Compact 36px row from the redesign spec; estimateSize must match the
+  // actual rendered row height or virtualizer placement drifts under scroll.
+  const ROW_HEIGHT = 36;
+
+  const rowVirtualizer = useVirtualizer({
+    count: sortedRows.length,
+    getScrollElement: () => scrollParentRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 8,
+  });
+
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const totalSize = rowVirtualizer.getTotalSize();
+  const paddingTop = virtualRows.length > 0 ? virtualRows[0].start : 0;
+  const paddingBottom =
+    virtualRows.length > 0
+      ? totalSize - virtualRows[virtualRows.length - 1].end
+      : 0;
 
   return (
     <>
-      <ScrollArea
-        className={cn(
-          "rounded-md border [&>div[data-slot='scroll-area-viewport']>div]:overflow-visible",
-          platform === "macos" ? "h-[340px]" : "h-[280px]",
-        )}
-      >
-        <Table className="overflow-visible table-fixed">
-          <TableHeader className="overflow-visible">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id} className="overflow-visible">
-                {headerGroup.headers.map((header) => {
-                  return (
-                    <TableHead
-                      key={header.id}
-                      style={{
-                        width: header.column.columnDef.size
-                          ? `${header.column.getSize()}px`
-                          : undefined,
-                      }}
-                    >
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext(),
-                          )}
-                    </TableHead>
-                  );
-                })}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody className="overflow-visible">
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => {
-                const rowIsCrossOs = isCrossOsProfile(row.original);
-                const crossOsTitle = rowIsCrossOs
-                  ? t("crossOs.viewOnly", {
-                      os: getOSDisplayName(
-                        row.original.host_os ||
-                          row.original.camoufox_config?.os ||
-                          row.original.wayfern_config?.os ||
-                          "",
-                      ),
-                    })
-                  : undefined;
-                return (
-                  <TableRow
-                    key={row.id}
-                    data-state={row.getIsSelected() && "selected"}
-                    title={crossOsTitle}
-                    className={cn(
-                      "overflow-visible hover:bg-accent/50",
-                      rowIsCrossOs && "opacity-60",
-                    )}
-                  >
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell
-                        key={cell.id}
-                        className="overflow-visible"
+      <div className="relative flex-1 min-h-0 flex flex-col">
+        <div
+          ref={scrollParentRef}
+          className="overflow-auto relative flex-1 min-h-0 scroll-fade"
+        >
+          <Table className="table-fixed">
+            <TableHeader className="overflow-visible sticky top-0 z-10 bg-background [&_tr]:border-0">
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow
+                  key={headerGroup.id}
+                  className="overflow-visible !border-0"
+                >
+                  {headerGroup.headers.map((header) => {
+                    return (
+                      <TableHead
+                        key={header.id}
                         style={{
-                          width: cell.column.columnDef.size
-                            ? `${cell.column.getSize()}px`
+                          width: header.column.columnDef.size
+                            ? `${header.column.getSize()}px`
                             : undefined,
                         }}
                       >
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext(),
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(
+                              header.column.columnDef.header,
+                              header.getContext(),
+                            )}
+                      </TableHead>
+                    );
+                  })}
+                </TableRow>
+              ))}
+            </TableHeader>
+            <TableBody className="overflow-visible">
+              {sortedRows.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={columns.length}
+                    className="h-24 text-center"
+                  >
+                    {t("profiles.table.empty")}
+                  </TableCell>
+                </TableRow>
+              ) : (
+                <>
+                  {paddingTop > 0 && (
+                    <tr style={{ height: `${paddingTop}px` }}>
+                      <td colSpan={columns.length} />
+                    </tr>
+                  )}
+                  {virtualRows.map((virtualRow) => {
+                    const row = sortedRows[virtualRow.index];
+                    const rowIsCrossOs = isCrossOsProfile(row.original);
+                    const crossOsTitle = rowIsCrossOs
+                      ? t("crossOs.viewOnly", {
+                          os: getOSDisplayName(
+                            row.original.host_os ||
+                              row.original.camoufox_config?.os ||
+                              row.original.wayfern_config?.os ||
+                              "",
+                          ),
+                        })
+                      : undefined;
+                    return (
+                      <TableRow
+                        key={row.id}
+                        data-state={row.getIsSelected() && "selected"}
+                        title={crossOsTitle}
+                        style={{ height: `${ROW_HEIGHT}px` }}
+                        className={cn(
+                          "overflow-visible hover:bg-accent/50 !border-0",
+                          rowIsCrossOs && "opacity-60",
                         )}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                );
-              })
-            ) : (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center"
-                >
-                  {t("profiles.table.empty")}
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </ScrollArea>
+                      >
+                        {row.getVisibleCells().map((cell) => (
+                          <TableCell
+                            key={cell.id}
+                            className="overflow-visible py-0"
+                            style={{
+                              width: cell.column.columnDef.size
+                                ? `${cell.column.getSize()}px`
+                                : undefined,
+                            }}
+                          >
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext(),
+                            )}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    );
+                  })}
+                  {paddingBottom > 0 && (
+                    <tr style={{ height: `${paddingBottom}px` }}>
+                      <td colSpan={columns.length} />
+                    </tr>
+                  )}
+                </>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
       <DeleteConfirmationDialog
         isOpen={profileToDelete !== null}
         onClose={() => {

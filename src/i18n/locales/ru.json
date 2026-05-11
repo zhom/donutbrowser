@@ -30,7 +30,9 @@
       "saveSettings": "Сохранить настройки",
       "moreInfo": "Подробнее",
       "downloading": "Загрузка...",
-      "minimize": "Свернуть"
+      "minimize": "Свернуть",
+      "saving": "Сохраняем…",
+      "saved": "Сохранено"
     },
     "status": {
       "active": "Активен",
@@ -169,7 +171,11 @@
       "title": "Дополнительно",
       "clearCache": "Очистить весь кэш версий",
       "clearCacheDescription": "Очищает все кэшированные данные версий браузеров и обновляет все версии из источников. Это принудительно загрузит информацию о версиях для всех браузеров.",
-      "clearCacheFailed": "Не удалось очистить кэш"
+      "clearCacheFailed": "Не удалось очистить кэш",
+      "copyLogs": "Скопировать логи",
+      "openLogDir": "Открыть папку логов",
+      "copyLogsSuccess": "Логи скопированы в буфер обмена",
+      "copyLogsDescription": "Собирает последние файлы логов (до 5 МБ) в буфер обмена для прикрепления к багам."
     },
     "disableAutoUpdates": "Отключить автообновление приложения",
     "disableAutoUpdatesDescription": "Запретить автоматическую проверку и установку обновлений Donut Browser. Обновления браузеров не затрагиваются.",
@@ -189,7 +195,11 @@
       "integrations": "Интеграции",
       "importProfile": "Импорт профиля",
       "extensions": "Расширения"
-    }
+    },
+    "newProfile": "Новый",
+    "donutLogo": "Логотип Donut Browser",
+    "scrollGroupsLeft": "Прокрутить группы влево",
+    "scrollGroupsRight": "Прокрутить группы вправо"
   },
   "profiles": {
     "title": "Профили",
@@ -208,7 +218,13 @@
       "proxy": "Прокси / VPN",
       "lastLaunch": "Последний запуск",
       "empty": "Профили не найдены.",
-      "notSelected": "Не выбрано"
+      "notSelected": "Не выбрано",
+      "ext": "РАСШ",
+      "dns": "DNS",
+      "extDefault": "По умолч.",
+      "dnsLevel": "DNS-блок-лист: {{level}}",
+      "extSearch": "Поиск групп…",
+      "extEmpty": "Нет групп расширений"
     },
     "actions": {
       "launch": "Запустить",
@@ -270,7 +286,10 @@
       "assignExtensionGroup": "Назначить группу расширений",
       "copyCookies": "Копировать cookies"
     },
-    "passwordProtectedBadge": "Защищено паролем"
+    "passwordProtectedBadge": "Защищено паролем",
+    "launchHook": {
+      "placeholder": "https://example.com/track-launch"
+    }
   },
   "createProfile": {
     "title": "Создать новый профиль",
@@ -508,7 +527,8 @@
     "loadProfilesFailed": "Не удалось загрузить профили",
     "unknownGroup": "Неизвестная группа",
     "profileGroupsAriaLabel": "Группы профилей",
-    "loading": "Загрузка групп..."
+    "loading": "Загрузка групп...",
+    "all": "Все"
   },
   "sync": {
     "mode": {
@@ -560,6 +580,7 @@
       "openLogin": "Войти",
       "linkCodeLabel": "Код входа",
       "linkCodePlaceholder": "Вставьте код с сайта",
+      "signInTitle": "Войти",
       "verifyAndLogin": "Подтвердить и Войти",
       "loggingIn": "Вход...",
       "connected": "Подключено",
@@ -1060,13 +1081,22 @@
       "lastLaunched": "Последний запуск",
       "hostOs": "ОС хоста",
       "ephemeral": "Эфемерный",
-      "extensionGroup": "Группа расширений"
+      "extensionGroup": "Группа расширений",
+      "totalSessions": "Всего сессий",
+      "syncMode": "Режим синх.",
+      "proxy": "ПРОКСИ",
+      "vpn": "VPN",
+      "cookieCount": "Хранится Cookie",
+      "localDataTransfer": "Локальный трафик"
     },
     "values": {
       "none": "Нет",
       "never": "Никогда",
       "copied": "Скопировано!",
-      "yes": "Да"
+      "yes": "Да",
+      "activeNow": "Сейчас активен",
+      "direct": "Без прокси",
+      "loading": "Загрузка…"
     },
     "network": {
       "bypassRules": "Правила обхода прокси",
@@ -1080,8 +1110,9 @@
     "launchHook": {
       "title": "URL хука запуска",
       "label": "URL хука запуска",
-      "description": "Donut Browser будет отправлять POST-запрос на этот URL при каждом запуске профиля.",
-      "placeholder": "https://example.com/hooks/profile-launch"
+      "description": "Donut Browser будет отправлять GET-запрос на этот URL при каждом запуске профиля.",
+      "placeholder": "https://example.com/hooks/profile-launch",
+      "invalidUrlHint": "Введите корректный URL http:// или https://."
     },
     "actions": {
       "manageCookies": "Управление Cookie",
@@ -1092,6 +1123,48 @@
       "description": "Введите имя для клонированного профиля",
       "namePlaceholder": "Имя профиля",
       "button": "Клонировать"
+    },
+    "duplicate": "Дублировать",
+    "breadcrumbRoot": "Профиль",
+    "openDialog": "Открыть настройки",
+    "sections": {
+      "overview": "Обзор",
+      "fingerprint": "Отпечаток",
+      "network": "Сеть",
+      "cookies": "Cookie",
+      "extensions": "Расширения",
+      "sync": "Синхронизация",
+      "automation": "Автоматизация",
+      "security": "Безопасность",
+      "delete": "Удалить профиль",
+      "activity": "Активность",
+      "launchHook": "Хук запуска"
+    },
+    "sectionDesc": {
+      "fingerprint": "Настройте, как этот профиль выглядит для скриптов отпечатков.",
+      "network": "Управляйте прокси или VPN, используемым этим профилем.",
+      "cookies": "Импортируйте, копируйте или удаляйте cookie этого профиля.",
+      "extensions": "Выберите, какие расширения загружать с этим профилем.",
+      "sync": "Настройте репликацию этого профиля между устройствами.",
+      "automation": "Запускайте команду при старте этого профиля.",
+      "security": "Зашифруйте данные профиля паролем.",
+      "launchHook": "Отправлять GET-запрос на этот URL при каждом запуске профиля."
+    },
+    "badges": {
+      "locked": "ЗАБЛОК.",
+      "active": "АКТИВЕН"
+    },
+    "cookies": {
+      "runningNotice": "Куки нельзя прочитать, пока браузер запущен. Сначала закройте этот профиль.",
+      "domainsHeader": "Домены ({{count}})"
+    },
+    "security": {
+      "protected": "Этот профиль зашифрован паролем.",
+      "unprotected": "Этот профиль не зашифрован. Задайте пароль, чтобы зашифровать его данные.",
+      "cannotWhileRunning": "Остановите профиль перед сменой пароля."
+    },
+    "fingerprint": {
+      "notSupported": "Редактирование отпечатков доступно только для профилей Camoufox и Wayfern."
     }
   },
   "extensions": {
@@ -1625,12 +1698,13 @@
       "password": "Пароль",
       "currentPassword": "Текущий пароль",
       "newPassword": "Новый пароль",
-      "confirm": "Подтвердите пароль"
+      "confirm": "Подтвердите пароль",
+      "confirmPassword": "Подтвердите новый пароль"
     },
     "errors": {
       "oldPasswordRequired": "Требуется текущий пароль",
       "passwordRequired": "Требуется пароль",
-      "tooShort": "Пароль должен быть не короче {{min}} символов",
+      "tooShort": "Пароль должен содержать не менее 8 символов",
       "mismatch": "Пароли не совпадают"
     },
     "toasts": {
@@ -1641,6 +1715,11 @@
     "warnings": {
       "forgetWarningTitle": "Важно: пароль восстановить нельзя",
       "forgetWarningBody": "Donut Browser не может сбросить, восстановить или обойти этот пароль. Если вы его забудете, доступ к данным этого профиля будет утрачен навсегда."
+    },
+    "modes": {
+      "set": "Задать",
+      "change": "Изменить",
+      "remove": "Удалить"
     }
   },
   "backendErrors": {
@@ -1659,6 +1738,77 @@
     "profileLocked": "Профиль заблокирован. Сначала введите пароль.",
     "invalidProfileId": "Недействительный идентификатор профиля",
     "passwordTooShort": "Пароль должен быть не короче {{min}} символов",
-    "internal": "Что-то пошло не так: {{detail}}"
+    "internal": "Что-то пошло не так: {{detail}}",
+    "invalidLaunchHookUrl": "Неверный URL хука запуска. Используйте полный URL http:// или https://.",
+    "cookieDbLocked": "Не удалось прочитать куки — база данных заблокирована. Закройте браузер и попробуйте снова.",
+    "cookieDbUnavailable": "Не удалось прочитать куки — хранилище куки недоступно."
+  },
+  "rail": {
+    "profiles": "Профили",
+    "proxies": "Прокси",
+    "extensions": "Расширения",
+    "groups": "Группы",
+    "settings": "Настройки",
+    "more": {
+      "label": "Ещё",
+      "closeAriaLabel": "Закрыть меню",
+      "importProfile": "Импорт профиля",
+      "importProfileHint": "Перенести профили из другого инструмента",
+      "vpns": "Конфигурации VPN",
+      "vpnsHint": "WireGuard-туннели",
+      "integrations": "Интеграции",
+      "integrationsHint": "Slack, MCP, автоматизации",
+      "account": "Аккаунт",
+      "accountHint": "Облако, оплата, вход"
+    }
+  },
+  "pageTitle": {
+    "proxies": "Прокси",
+    "extensions": "Расширения",
+    "groups": "Группы",
+    "vpns": "VPN",
+    "settings": "Настройки",
+    "integrations": "Интеграции",
+    "account": "Аккаунт",
+    "import": "Импорт профиля"
+  },
+  "encryption": {
+    "required": {
+      "title": "Синхронизация приостановлена — нужен пароль",
+      "description": "Загружены зашифрованные данные, но на этом устройстве не задан E2E-пароль. Откройте Настройки → Шифрование и введите пароль, чтобы продолжить синхронизацию.",
+      "openSettings": "Открыть настройки"
+    },
+    "rollover": {
+      "startedTitle": "Перешифровываем ваши данные",
+      "startedDescription": "Мы заново загружаем каждый синхронизированный элемент под новым паролем. Сначала профили, затем прокси, группы, VPN и расширения.",
+      "progressTitle": "Перешифровка: {{stage}}",
+      "progressDescription": "{{done}} из {{total}}",
+      "completedTitle": "Перешифровка завершена",
+      "completedDescription": "Все синхронизированные данные запечатаны новым паролем.",
+      "stage": {
+        "profiles": "профили",
+        "proxies": "прокси",
+        "groups": "группы",
+        "vpns": "VPN",
+        "extensions": "расширения",
+        "extension_groups": "группы расширений"
+      }
+    }
+  },
+  "account": {
+    "refreshed": "Аккаунт обновлён",
+    "loggedOut": "Вы вышли",
+    "signedOut": "Не выполнен вход",
+    "signedOutDescription": "Войдите, чтобы включить облачную синхронизацию, зашифрованные профили и командные функции.",
+    "plan": "Тариф: {{plan}} · {{period}}",
+    "refresh": "Обновить",
+    "logout": "Выйти",
+    "signIn": "Войти",
+    "fields": {
+      "plan": "Тариф",
+      "status": "Статус",
+      "teamRole": "Роль в команде",
+      "period": "Период"
+    }
   }
 }

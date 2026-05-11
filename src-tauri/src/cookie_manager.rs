@@ -1,6 +1,6 @@
 use crate::profile::manager::ProfileManager;
 use crate::profile::BrowserProfile;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -132,6 +132,24 @@ pub struct CookieReadResult {
   pub browser_type: String,
   pub domains: Vec<DomainCookies>,
   pub total_count: usize,
+}
+
+/// Lightweight cookie metadata for the profile-info dialog. Computed without
+/// decrypting any cookie values, so it stays cheap even for multi-MB Chromium
+/// cookie stores and never blocks the runtime for noticeable time.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CookieStats {
+  pub profile_id: String,
+  pub browser_type: String,
+  pub total_count: usize,
+  /// Every domain the profile has cookies for, sorted by cookie count desc.
+  pub domains: Vec<DomainCount>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DomainCount {
+  pub domain: String,
+  pub count: usize,
 }
 
 /// Request to copy specific cookies
@@ -691,6 +709,135 @@ impl CookieManager {
       browser_type: profile.browser.clone(),
       domains,
       total_count,
+    })
+  }
+
+  /// Open the cookie SQLite database read-only without acquiring any lock.
+  ///
+  /// `immutable=1` tells SQLite the file will not change during the read,
+  /// which causes it to skip all locking. That lets us read metadata even
+  /// while the browser holds an exclusive lock on the cookies database —
+  /// the trade-off is that we may see a slightly stale snapshot, which is
+  /// acceptable for the badge/preview use cases this powers.
+  fn open_cookie_db_readonly(db_path: &Path) -> Result<Connection, String> {
+    let path_str = db_path.to_string_lossy();
+    if path_str.contains('?') || path_str.contains('#') {
+      return Err(
+        serde_json::json!({
+          "code": "COOKIE_DB_UNAVAILABLE",
+          "params": { "detail": "profile path contains a reserved URI character" }
+        })
+        .to_string(),
+      );
+    }
+    let uri = format!("file:{path_str}?mode=ro&immutable=1");
+    Connection::open_with_flags(
+      &uri,
+      OpenFlags::SQLITE_OPEN_READ_ONLY
+        | OpenFlags::SQLITE_OPEN_URI
+        | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .map_err(|e| {
+      let code = if e.to_string().to_lowercase().contains("locked") {
+        "COOKIE_DB_LOCKED"
+      } else {
+        "COOKIE_DB_UNAVAILABLE"
+      };
+      serde_json::json!({
+        "code": code,
+        "params": { "detail": e.to_string() }
+      })
+      .to_string()
+    })
+  }
+
+  /// Public API: read lightweight stats (total count + top 5 domains) for a
+  /// profile's cookie store. Reads from a snapshot view of the SQLite file
+  /// without holding a lock, so this works while the browser is running.
+  pub fn read_stats(profile_id: &str) -> Result<CookieStats, String> {
+    let profile_manager = ProfileManager::instance();
+    let profiles_dir = profile_manager.get_profiles_dir();
+    let profiles = profile_manager.list_profiles().map_err(|e| {
+      serde_json::json!({
+        "code": "COOKIE_DB_UNAVAILABLE",
+        "params": { "detail": e.to_string() }
+      })
+      .to_string()
+    })?;
+
+    let profile = profiles
+      .iter()
+      .find(|p| p.id.to_string() == profile_id)
+      .ok_or_else(|| serde_json::json!({ "code": "PROFILE_NOT_FOUND" }).to_string())?;
+
+    let db_path = Self::get_cookie_db_path(profile, &profiles_dir).map_err(|e| {
+      serde_json::json!({
+        "code": "COOKIE_DB_UNAVAILABLE",
+        "params": { "detail": e }
+      })
+      .to_string()
+    })?;
+
+    let conn = Self::open_cookie_db_readonly(&db_path)?;
+
+    let (count_sql, domain_sql) = match profile.browser.as_str() {
+      "camoufox" => (
+        "SELECT COUNT(*) FROM moz_cookies",
+        "SELECT host, COUNT(*) FROM moz_cookies GROUP BY host ORDER BY COUNT(*) DESC, host ASC",
+      ),
+      "wayfern" => (
+        "SELECT COUNT(*) FROM cookies",
+        "SELECT host_key, COUNT(*) FROM cookies GROUP BY host_key ORDER BY COUNT(*) DESC, host_key ASC",
+      ),
+      _ => {
+        return Err(
+          serde_json::json!({
+            "code": "COOKIE_DB_UNAVAILABLE",
+            "params": { "detail": format!("unsupported browser: {}", profile.browser) }
+          })
+          .to_string(),
+        )
+      }
+    };
+
+    let total_count: usize = conn
+      .query_row(count_sql, [], |row| row.get::<_, i64>(0))
+      .map_err(|e| {
+        serde_json::json!({
+          "code": "COOKIE_DB_UNAVAILABLE",
+          "params": { "detail": e.to_string() }
+        })
+        .to_string()
+      })? as usize;
+
+    let mut stmt = conn.prepare(domain_sql).map_err(|e| {
+      serde_json::json!({
+        "code": "COOKIE_DB_UNAVAILABLE",
+        "params": { "detail": e.to_string() }
+      })
+      .to_string()
+    })?;
+    let domains: Vec<DomainCount> = stmt
+      .query_map([], |row| {
+        Ok(DomainCount {
+          domain: row.get::<_, String>(0)?,
+          count: row.get::<_, i64>(1)? as usize,
+        })
+      })
+      .and_then(|rows| rows.collect::<Result<Vec<_>, _>>())
+      .map_err(|e| {
+        serde_json::json!({
+          "code": "COOKIE_DB_UNAVAILABLE",
+          "params": { "detail": e.to_string() }
+        })
+        .to_string()
+      })?;
+
+    Ok(CookieStats {
+      profile_id: profile_id.to_string(),
+      browser_type: profile.browser.clone(),
+      total_count,
+      domains,
     })
   }
 

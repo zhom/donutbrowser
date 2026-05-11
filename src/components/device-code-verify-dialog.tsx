@@ -3,7 +3,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { LuExternalLink } from "react-icons/lu";
 import { LoadingButton } from "@/components/loading-button";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +17,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCloudAuth } from "@/hooks/use-cloud-auth";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
+
+const DEVICE_LINK_URL = "https://donutbrowser.com/auth/link";
 
 interface DeviceCodeVerifyDialogProps {
   isOpen: boolean;
@@ -36,6 +40,19 @@ export function DeviceCodeVerifyDialog({
   const { exchangeDeviceCode } = useCloudAuth();
   const [linkCode, setLinkCode] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
+  const [isOpeningLogin, setIsOpeningLogin] = useState(false);
+
+  const handleOpenLogin = async () => {
+    setIsOpeningLogin(true);
+    try {
+      await invoke("handle_url_open", { url: DEVICE_LINK_URL });
+    } catch (error) {
+      console.error("Failed to open login link:", error);
+      showErrorToast(String(error));
+    } finally {
+      setIsOpeningLogin(false);
+    }
+  };
 
   // Reset the field when the dialog reopens so a stale code from a
   // previous attempt doesn't auto-populate.
@@ -75,12 +92,22 @@ export function DeviceCodeVerifyDialog({
     >
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{t("sync.cloud.verifyAndLogin")}</DialogTitle>
+          <DialogTitle>{t("sync.cloud.signInTitle")}</DialogTitle>
           <DialogDescription>
             {t("sync.cloud.deviceLinkInstructions")}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void handleOpenLogin()}
+            disabled={isOpeningLogin}
+            className="w-full gap-1.5"
+          >
+            <LuExternalLink className="w-3.5 h-3.5" />
+            {t("sync.cloud.openLogin")}
+          </Button>
           <div className="space-y-2">
             <Label htmlFor="device-link-code">
               {t("sync.cloud.linkCodeLabel")}

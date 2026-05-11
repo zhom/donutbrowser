@@ -83,32 +83,73 @@ impl BrowserRunner {
     Ok(PROXY_MANAGER.get_proxy_settings_by_id(proxy_id))
   }
 
-  async fn resolve_launch_hook_proxy(
-    &self,
-    profile: &BrowserProfile,
-  ) -> Result<Option<ProxySettings>, String> {
-    let Some(url) = profile.launch_hook.as_deref() else {
-      return Ok(None);
+  fn fire_launch_hook(profile: &BrowserProfile) {
+    let Some(raw_url) = profile.launch_hook.as_deref() else {
+      return;
+    };
+    let trimmed = raw_url.trim();
+    if trimmed.is_empty() {
+      return;
+    }
+
+    let parsed = match url::Url::parse(trimmed) {
+      Ok(u) => u,
+      Err(e) => {
+        log::warn!(
+          "Skipping launch hook for profile {} (ID: {}): invalid URL: {e}",
+          profile.name,
+          profile.id
+        );
+        return;
+      }
     };
 
-    log::info!(
-      "Calling launch hook for profile {} (ID: {})",
-      profile.name,
-      profile.id
-    );
+    if !matches!(parsed.scheme(), "http" | "https") {
+      log::warn!(
+        "Skipping launch hook for profile {} (ID: {}): URL must be http or https",
+        profile.name,
+        profile.id
+      );
+      return;
+    }
 
-    PROXY_MANAGER
-      .fetch_proxy_from_url(url, Duration::from_millis(500))
-      .await
+    let url = parsed.to_string();
+    let profile_name = profile.name.clone();
+    let profile_id = profile.id.to_string();
+
+    log::info!("Firing launch hook GET {url} for profile {profile_name} (ID: {profile_id})");
+
+    tokio::spawn(async move {
+      let client = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+      {
+        Ok(c) => c,
+        Err(e) => {
+          log::warn!("Launch hook client build failed for {url}: {e}");
+          return;
+        }
+      };
+
+      match client.get(&url).send().await {
+        Ok(resp) => {
+          log::info!(
+            "Launch hook {url} for profile {profile_name} returned status {}",
+            resp.status()
+          );
+        }
+        Err(e) => {
+          log::warn!("Launch hook {url} for profile {profile_name} failed: {e}");
+        }
+      }
+    });
   }
 
   async fn resolve_launch_proxy(
     &self,
     profile: &BrowserProfile,
   ) -> Result<Option<ProxySettings>, String> {
-    if let Some(proxy_settings) = self.resolve_launch_hook_proxy(profile).await? {
-      return Ok(Some(proxy_settings));
-    }
+    Self::fire_launch_hook(profile);
 
     self
       .resolve_proxy_with_refresh(profile.proxy_id.as_ref(), Some(&profile.id.to_string()))

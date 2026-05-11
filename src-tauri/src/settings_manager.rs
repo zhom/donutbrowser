@@ -820,6 +820,105 @@ pub async fn save_app_settings(
   Ok(settings)
 }
 
+/// Read the most recent N log files concatenated into a single string,
+/// suitable for paste-into-issue-tracker. Newest entries appear LAST so the
+/// reader sees fresh context at the bottom of the buffer. Capped at 5 MB to
+/// keep clipboard payloads sane.
+#[tauri::command]
+pub async fn read_log_files(app_handle: tauri::AppHandle) -> Result<String, String> {
+  let dir = crate::app_dirs::log_dir(&app_handle);
+  if !dir.exists() {
+    return Err("Log directory does not exist yet".to_string());
+  }
+
+  let mut entries: Vec<(std::path::PathBuf, std::time::SystemTime)> = std::fs::read_dir(&dir)
+    .map_err(|e| format!("Failed to read log dir: {e}"))?
+    .filter_map(|r| r.ok())
+    .filter_map(|e| {
+      let p = e.path();
+      let m = e.metadata().ok()?.modified().ok()?;
+      let ext = p.extension().and_then(|s| s.to_str()).unwrap_or("");
+      if p.is_file() && (ext == "log" || ext == "txt") {
+        Some((p, m))
+      } else {
+        None
+      }
+    })
+    .collect();
+
+  entries.sort_by_key(|(_, m)| *m);
+
+  const MAX_BYTES: usize = 5 * 1024 * 1024;
+  let mut out = String::with_capacity(64 * 1024);
+  for (path, _) in entries.iter().rev() {
+    let header = format!("===== {} =====\n", path.display());
+    if out.len() + header.len() >= MAX_BYTES {
+      break;
+    }
+    out.push_str(&header);
+    if let Ok(content) = std::fs::read_to_string(path) {
+      let take = MAX_BYTES.saturating_sub(out.len());
+      if take == 0 {
+        break;
+      }
+      if content.len() > take {
+        // Tail truncation — keep the END of older files so newest data is preserved.
+        out.push_str("[…truncated — older content elided…]\n");
+        out.push_str(&content[content.len() - take + 64..]);
+      } else {
+        out.push_str(&content);
+      }
+      if !out.ends_with('\n') {
+        out.push('\n');
+      }
+    }
+  }
+
+  // Reverse the per-file order so chronological newest is at the bottom.
+  // (We pushed newest-first above to budget the tail; flip now.)
+  let mut sections: Vec<&str> = out.split("===== ").filter(|s| !s.is_empty()).collect();
+  sections.reverse();
+  let final_out = sections
+    .into_iter()
+    .map(|s| format!("===== {s}"))
+    .collect::<String>();
+
+  Ok(final_out)
+}
+
+/// Reveal the log directory in the OS file manager.
+#[tauri::command]
+pub async fn open_log_directory(app_handle: tauri::AppHandle) -> Result<(), String> {
+  let dir = crate::app_dirs::log_dir(&app_handle);
+  if !dir.exists() {
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create log dir: {e}"))?;
+  }
+  let path = dir.to_string_lossy().to_string();
+
+  #[cfg(target_os = "macos")]
+  {
+    std::process::Command::new("open")
+      .arg(&path)
+      .spawn()
+      .map_err(|e| format!("Failed to open log dir: {e}"))?;
+  }
+  #[cfg(target_os = "windows")]
+  {
+    std::process::Command::new("explorer")
+      .arg(&path)
+      .spawn()
+      .map_err(|e| format!("Failed to open log dir: {e}"))?;
+  }
+  #[cfg(target_os = "linux")]
+  {
+    std::process::Command::new("xdg-open")
+      .arg(&path)
+      .spawn()
+      .map_err(|e| format!("Failed to open log dir: {e}"))?;
+  }
+  Ok(())
+}
+
 #[tauri::command]
 pub async fn should_show_launch_on_login_prompt() -> Result<bool, String> {
   let manager = SettingsManager::instance();

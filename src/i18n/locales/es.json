@@ -30,7 +30,9 @@
       "saveSettings": "Guardar Configuración",
       "moreInfo": "Más información",
       "downloading": "Descargando...",
-      "minimize": "Minimizar"
+      "minimize": "Minimizar",
+      "saving": "Guardando…",
+      "saved": "Guardado"
     },
     "status": {
       "active": "Activo",
@@ -169,7 +171,11 @@
       "title": "Avanzado",
       "clearCache": "Limpiar Toda la Caché de Versiones",
       "clearCacheDescription": "Limpia todos los datos de versiones de navegadores en caché y actualiza todas las versiones desde sus fuentes. Esto forzará una descarga nueva de información de versiones para todos los navegadores.",
-      "clearCacheFailed": "Error al limpiar la caché"
+      "clearCacheFailed": "Error al limpiar la caché",
+      "copyLogs": "Copiar registros",
+      "openLogDir": "Abrir carpeta de registros",
+      "copyLogsSuccess": "Registros copiados al portapapeles",
+      "copyLogsDescription": "Une los archivos de registro más recientes (hasta 5 MB) en tu portapapeles para compartirlos en informes de error."
     },
     "disableAutoUpdates": "Desactivar Actualizaciones Automáticas de la App",
     "disableAutoUpdatesDescription": "Evita que la aplicación busque e instale actualizaciones de Donut Browser automáticamente. Las actualizaciones de navegadores no se ven afectadas.",
@@ -189,7 +195,11 @@
       "integrations": "Integraciones",
       "importProfile": "Importar Perfil",
       "extensions": "Extensiones"
-    }
+    },
+    "newProfile": "Nuevo",
+    "donutLogo": "Logotipo de Donut Browser",
+    "scrollGroupsLeft": "Desplazar grupos a la izquierda",
+    "scrollGroupsRight": "Desplazar grupos a la derecha"
   },
   "profiles": {
     "title": "Perfiles",
@@ -208,7 +218,13 @@
       "proxy": "Proxy / VPN",
       "lastLaunch": "Último Inicio",
       "empty": "No se encontraron perfiles.",
-      "notSelected": "No seleccionado"
+      "notSelected": "No seleccionado",
+      "ext": "EXT",
+      "dns": "DNS",
+      "extDefault": "Predet.",
+      "dnsLevel": "Lista DNS: {{level}}",
+      "extSearch": "Buscar grupos…",
+      "extEmpty": "Sin grupos de extensiones"
     },
     "actions": {
       "launch": "Iniciar",
@@ -270,7 +286,10 @@
       "assignExtensionGroup": "Asignar grupo de extensiones",
       "copyCookies": "Copiar cookies"
     },
-    "passwordProtectedBadge": "Protegido por Contraseña"
+    "passwordProtectedBadge": "Protegido por Contraseña",
+    "launchHook": {
+      "placeholder": "https://example.com/track-launch"
+    }
   },
   "createProfile": {
     "title": "Crear Nuevo Perfil",
@@ -508,7 +527,8 @@
     "loadProfilesFailed": "Error al cargar los perfiles",
     "unknownGroup": "Grupo desconocido",
     "profileGroupsAriaLabel": "Grupos de perfiles",
-    "loading": "Cargando grupos..."
+    "loading": "Cargando grupos...",
+    "all": "Todos"
   },
   "sync": {
     "mode": {
@@ -560,6 +580,7 @@
       "openLogin": "Iniciar sesión",
       "linkCodeLabel": "Código de inicio de sesión",
       "linkCodePlaceholder": "Pega el código del sitio web",
+      "signInTitle": "Iniciar Sesión",
       "verifyAndLogin": "Verificar e Iniciar Sesión",
       "loggingIn": "Iniciando sesión...",
       "connected": "Conectado",
@@ -1060,13 +1081,22 @@
       "lastLaunched": "Último Lanzamiento",
       "hostOs": "SO Host",
       "ephemeral": "Efímero",
-      "extensionGroup": "Grupo de Extensiones"
+      "extensionGroup": "Grupo de Extensiones",
+      "totalSessions": "Sesiones totales",
+      "syncMode": "Modo de sinc.",
+      "proxy": "PROXY",
+      "vpn": "VPN",
+      "cookieCount": "Cookies guardadas",
+      "localDataTransfer": "Transferencia de datos local"
     },
     "values": {
       "none": "Ninguno",
       "never": "Nunca",
       "copied": "¡Copiado!",
-      "yes": "Sí"
+      "yes": "Sí",
+      "activeNow": "Activo ahora",
+      "direct": "Directa",
+      "loading": "Cargando…"
     },
     "network": {
       "bypassRules": "Reglas de Omisión de Proxy",
@@ -1080,8 +1110,9 @@
     "launchHook": {
       "title": "URL del hook de inicio",
       "label": "URL del hook de inicio",
-      "description": "Donut Browser enviará una solicitud POST a esta URL cada vez que se inicie el perfil.",
-      "placeholder": "https://example.com/hooks/profile-launch"
+      "description": "Donut Browser enviará una solicitud GET a esta URL cada vez que se inicie el perfil.",
+      "placeholder": "https://example.com/hooks/profile-launch",
+      "invalidUrlHint": "Introduce una URL válida http:// o https://."
     },
     "actions": {
       "manageCookies": "Administrar Cookies",
@@ -1092,6 +1123,48 @@
       "description": "Ingrese un nombre para el perfil clonado",
       "namePlaceholder": "Nombre del perfil",
       "button": "Clonar"
+    },
+    "duplicate": "Duplicar",
+    "breadcrumbRoot": "Perfil",
+    "openDialog": "Abrir ajustes",
+    "sections": {
+      "overview": "Resumen",
+      "fingerprint": "Huella digital",
+      "network": "Red",
+      "cookies": "Cookies",
+      "extensions": "Extensiones",
+      "sync": "Sincronización",
+      "automation": "Automatización",
+      "security": "Seguridad",
+      "delete": "Eliminar perfil",
+      "activity": "Actividad",
+      "launchHook": "Hook de inicio"
+    },
+    "sectionDesc": {
+      "fingerprint": "Configura cómo aparece este perfil para los scripts de fingerprinting.",
+      "network": "Administra el proxy o la VPN que usa este perfil.",
+      "cookies": "Importa, copia o borra cookies de este perfil.",
+      "extensions": "Elige las extensiones que se cargan con este perfil.",
+      "sync": "Configura cómo se replica este perfil entre tus dispositivos.",
+      "automation": "Ejecuta un comando o script al iniciar este perfil.",
+      "security": "Cifra los datos del perfil con una contraseña.",
+      "launchHook": "Envía una solicitud GET a esta URL cada vez que se inicie el perfil."
+    },
+    "badges": {
+      "locked": "BLOQUEADO",
+      "active": "ACTIVO"
+    },
+    "cookies": {
+      "runningNotice": "No se pueden leer las cookies mientras el navegador está en ejecución. Cierra este perfil primero.",
+      "domainsHeader": "Dominios ({{count}})"
+    },
+    "security": {
+      "protected": "Este perfil está cifrado con una contraseña.",
+      "unprotected": "Este perfil no está cifrado. Establece una contraseña para cifrar sus datos.",
+      "cannotWhileRunning": "Detén el perfil antes de cambiar su contraseña."
+    },
+    "fingerprint": {
+      "notSupported": "La edición de huellas digitales solo está disponible para perfiles Camoufox y Wayfern."
     }
   },
   "extensions": {
@@ -1625,12 +1698,13 @@
       "password": "Contraseña",
       "currentPassword": "Contraseña actual",
       "newPassword": "Nueva contraseña",
-      "confirm": "Confirmar contraseña"
+      "confirm": "Confirmar contraseña",
+      "confirmPassword": "Confirmar nueva contraseña"
     },
     "errors": {
       "oldPasswordRequired": "Se requiere la contraseña actual",
       "passwordRequired": "Se requiere la contraseña",
-      "tooShort": "La contraseña debe tener al menos {{min}} caracteres",
+      "tooShort": "La contraseña debe tener al menos 8 caracteres",
       "mismatch": "Las contraseñas no coinciden"
     },
     "toasts": {
@@ -1641,6 +1715,11 @@
     "warnings": {
       "forgetWarningTitle": "Importante: esta contraseña no se puede recuperar",
       "forgetWarningBody": "Donut Browser no puede restablecer, recuperar ni omitir esta contraseña. Si la olvidas, perderás permanentemente el acceso a los datos de este perfil."
+    },
+    "modes": {
+      "set": "Establecer",
+      "change": "Cambiar",
+      "remove": "Quitar"
     }
   },
   "backendErrors": {
@@ -1659,6 +1738,77 @@
     "profileLocked": "El perfil está bloqueado. Introduce la contraseña primero.",
     "invalidProfileId": "ID de perfil no válido",
     "passwordTooShort": "La contraseña debe tener al menos {{min}} caracteres",
-    "internal": "Algo salió mal: {{detail}}"
+    "internal": "Algo salió mal: {{detail}}",
+    "invalidLaunchHookUrl": "URL del hook de inicio no válida. Usa una URL completa http:// o https://.",
+    "cookieDbLocked": "No se pudieron leer las cookies — la base de datos está bloqueada. Cierra el navegador e inténtalo de nuevo.",
+    "cookieDbUnavailable": "No se pudieron leer las cookies — el almacén de cookies no está disponible."
+  },
+  "rail": {
+    "profiles": "Perfiles",
+    "proxies": "Proxies",
+    "extensions": "Extensiones",
+    "groups": "Grupos",
+    "settings": "Ajustes",
+    "more": {
+      "label": "Más",
+      "closeAriaLabel": "Cerrar menú",
+      "importProfile": "Importar perfil",
+      "importProfileHint": "Trae perfiles de otra herramienta",
+      "vpns": "Configuraciones VPN",
+      "vpnsHint": "Túneles WireGuard",
+      "integrations": "Integraciones",
+      "integrationsHint": "Slack, MCP, automatizaciones",
+      "account": "Cuenta",
+      "accountHint": "Nube, facturación, sesión"
+    }
+  },
+  "pageTitle": {
+    "proxies": "Proxies",
+    "extensions": "Extensiones",
+    "groups": "Grupos",
+    "vpns": "VPN",
+    "settings": "Ajustes",
+    "integrations": "Integraciones",
+    "account": "Cuenta",
+    "import": "Importar perfil"
+  },
+  "encryption": {
+    "required": {
+      "title": "Sincronización en pausa — contraseña requerida",
+      "description": "Se descargaron datos cifrados pero no hay contraseña E2E configurada en este dispositivo. Abre Ajustes → Cifrado e introduce la contraseña para reanudar.",
+      "openSettings": "Abrir ajustes"
+    },
+    "rollover": {
+      "startedTitle": "Recifrando tus datos",
+      "startedDescription": "Estamos volviendo a subir cada elemento sincronizado con la nueva contraseña. Primero los perfiles, luego proxies, grupos, VPN y extensiones.",
+      "progressTitle": "Recifrando {{stage}}",
+      "progressDescription": "{{done}} de {{total}}",
+      "completedTitle": "Recifrado completo",
+      "completedDescription": "Todos los datos sincronizados están sellados con la nueva contraseña.",
+      "stage": {
+        "profiles": "perfiles",
+        "proxies": "proxies",
+        "groups": "grupos",
+        "vpns": "VPN",
+        "extensions": "extensiones",
+        "extension_groups": "grupos de extensiones"
+      }
+    }
+  },
+  "account": {
+    "refreshed": "Cuenta actualizada",
+    "loggedOut": "Sesión cerrada",
+    "signedOut": "Sin sesión",
+    "signedOutDescription": "Inicia sesión para activar la sincronización en la nube, perfiles cifrados y funciones de equipo.",
+    "plan": "Plan: {{plan}} · {{period}}",
+    "refresh": "Actualizar",
+    "logout": "Cerrar sesión",
+    "signIn": "Iniciar sesión",
+    "fields": {
+      "plan": "Plan",
+      "status": "Estado",
+      "teamRole": "Rol en el equipo",
+      "period": "Período"
+    }
   }
 }

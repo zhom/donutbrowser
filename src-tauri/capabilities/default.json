@@ -41,6 +41,8 @@
     "macos-permissions:allow-request-camera-permission",
     "macos-permissions:allow-check-microphone-permission",
     "macos-permissions:allow-check-camera-permission",
-    "log:default"
+    "log:default",
+    "clipboard-manager:default",
+    "clipboard-manager:allow-write-text"
   ]
 }

@@ -122,61 +122,25 @@ export function useProfileEvents(): UseProfileEventsReturn {
     };
   }, [loadProfiles, loadGroups]);
 
-  // Sync profile running states periodically to ensure consistency
+  // Hydrate the initial runningProfiles set from the loaded list — every
+  // profile that has a stored process_id is a candidate. The Rust status
+  // checker emits profile-running-changed for any transitions; we then
+  // mutate the Set incrementally instead of fan-out-polling all N profiles
+  // every 30s (which was O(N) sysinfo scans and saturated the runtime for
+  // users with hundreds of profiles).
   useEffect(() => {
-    const syncRunningStates = async () => {
-      if (profiles.length === 0) return;
-
-      try {
-        const statusChecks = profiles.map(async (profile) => {
-          try {
-            const isRunning = await invoke<boolean>("check_browser_status", {
-              profile,
-            });
-            return { id: profile.id, isRunning };
-          } catch (error) {
-            console.error(
-              `Failed to check status for profile ${profile.name}:`,
-              error,
-            );
-            return { id: profile.id, isRunning: false };
-          }
-        });
-
-        const statuses = await Promise.all(statusChecks);
-
-        setRunningProfiles((prev) => {
-          const next = new Set(prev);
-          let hasChanges = false;
-
-          statuses.forEach(({ id, isRunning }) => {
-            if (isRunning && !prev.has(id)) {
-              next.add(id);
-              hasChanges = true;
-            } else if (!isRunning && prev.has(id)) {
-              next.delete(id);
-              hasChanges = true;
-            }
-          });
-
-          return hasChanges ? next : prev;
-        });
-      } catch (error) {
-        console.error("Failed to sync profile running states:", error);
+    setRunningProfiles((prev) => {
+      const next = new Set(prev);
+      for (const p of profiles) {
+        if (p.process_id != null) next.add(p.id);
       }
-    };
-
-    // Initial sync
-    void syncRunningStates();
-
-    // Sync every 30 seconds to catch any missed events
-    const interval = setInterval(() => {
-      void syncRunningStates();
-    }, 30000);
-
-    return () => {
-      clearInterval(interval);
-    };
+      // Drop ids for profiles that no longer exist
+      const valid = new Set(profiles.map((p) => p.id));
+      for (const id of next) {
+        if (!valid.has(id)) next.delete(id);
+      }
+      return next;
+    });
   }, [profiles]);
 
   return {

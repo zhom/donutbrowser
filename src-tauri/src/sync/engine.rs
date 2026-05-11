@@ -716,7 +716,9 @@ impl SyncEngine {
     }
 
     let presign = self.client.presign_download(key).await?;
-    let data = self.client.download_bytes(&presign.url).await?;
+    let raw = self.client.download_bytes(&presign.url).await?;
+    let data = encryption::maybe_unseal_after_download(&raw)
+      .map_err(|e| SyncError::InvalidData(format!("Failed to unseal profile metadata: {e}")))?;
     let profile: BrowserProfile = serde_json::from_slice(&data)
       .map_err(|e| SyncError::SerializationError(format!("Failed to parse metadata: {e}")))?;
 
@@ -794,15 +796,18 @@ impl SyncEngine {
     let json = serde_json::to_string_pretty(&sanitized)
       .map_err(|e| SyncError::SerializationError(format!("Failed to serialize profile: {e}")))?;
 
+    let (payload, content_type) = encryption::maybe_seal_for_upload(json.as_bytes())
+      .map_err(|e| SyncError::InvalidData(format!("Failed to seal profile metadata: {e}")))?;
+
     let remote_key = format!("{}profiles/{}/metadata.json", key_prefix, profile_id);
     let presign = self
       .client
-      .presign_upload(&remote_key, Some("application/json"))
+      .presign_upload(&remote_key, Some(content_type))
       .await?;
 
     self
       .client
-      .upload_bytes(&presign.url, json.as_bytes(), Some("application/json"))
+      .upload_bytes(&presign.url, &payload, Some(content_type))
       .await?;
 
     Ok(())
@@ -1392,17 +1397,20 @@ impl SyncEngine {
     let json = serde_json::to_string_pretty(&updated_proxy)
       .map_err(|e| SyncError::SerializationError(format!("Failed to serialize proxy: {e}")))?;
 
+    let (payload, content_type) = encryption::maybe_seal_for_upload(json.as_bytes())
+      .map_err(|e| SyncError::InvalidData(format!("Failed to seal proxy: {e}")))?;
+
     let remote_key = format!("proxies/{}.json", proxy.id);
     let presign = self
       .client
-      .presign_upload(&remote_key, Some("application/json"))
+      .presign_upload(&remote_key, Some(content_type))
       .await?;
     self
       .client
-      .upload_bytes(&presign.url, json.as_bytes(), Some("application/json"))
+      .upload_bytes(&presign.url, &payload, Some(content_type))
       .await?;
 
-    // Update local proxy with new last_sync
+    // Update local proxy with new last_sync (always write plaintext locally)
     let proxy_manager = &crate::proxy_manager::PROXY_MANAGER;
     let proxy_file = proxy_manager.get_proxy_file_path(&proxy.id);
     fs::write(&proxy_file, &json).map_err(|e| {
@@ -1423,7 +1431,10 @@ impl SyncEngine {
   ) -> SyncResult<()> {
     let remote_key = format!("proxies/{}.json", proxy_id);
     let presign = self.client.presign_download(&remote_key).await?;
-    let data = self.client.download_bytes(&presign.url).await?;
+    let raw = self.client.download_bytes(&presign.url).await?;
+
+    let data = encryption::maybe_unseal_after_download(&raw)
+      .map_err(|e| SyncError::InvalidData(format!("Failed to unseal proxy: {e}")))?;
 
     let mut proxy: crate::proxy_manager::StoredProxy = serde_json::from_slice(&data)
       .map_err(|e| SyncError::SerializationError(format!("Failed to parse proxy JSON: {e}")))?;
@@ -1534,14 +1545,17 @@ impl SyncEngine {
     let json = serde_json::to_string_pretty(&updated_group)
       .map_err(|e| SyncError::SerializationError(format!("Failed to serialize group: {e}")))?;
 
+    let (payload, content_type) = encryption::maybe_seal_for_upload(json.as_bytes())
+      .map_err(|e| SyncError::InvalidData(format!("Failed to seal group: {e}")))?;
+
     let remote_key = format!("groups/{}.json", group.id);
     let presign = self
       .client
-      .presign_upload(&remote_key, Some("application/json"))
+      .presign_upload(&remote_key, Some(content_type))
       .await?;
     self
       .client
-      .upload_bytes(&presign.url, json.as_bytes(), Some("application/json"))
+      .upload_bytes(&presign.url, &payload, Some(content_type))
       .await?;
 
     // Update local group with new last_sync
@@ -1563,7 +1577,10 @@ impl SyncEngine {
   ) -> SyncResult<()> {
     let remote_key = format!("groups/{}.json", group_id);
     let presign = self.client.presign_download(&remote_key).await?;
-    let data = self.client.download_bytes(&presign.url).await?;
+    let raw = self.client.download_bytes(&presign.url).await?;
+
+    let data = encryption::maybe_unseal_after_download(&raw)
+      .map_err(|e| SyncError::InvalidData(format!("Failed to unseal group: {e}")))?;
 
     let mut group: crate::group_manager::ProfileGroup = serde_json::from_slice(&data)
       .map_err(|e| SyncError::SerializationError(format!("Failed to parse group JSON: {e}")))?;
@@ -1738,14 +1755,17 @@ impl SyncEngine {
     let json = serde_json::to_string_pretty(&updated_vpn)
       .map_err(|e| SyncError::SerializationError(format!("Failed to serialize VPN: {e}")))?;
 
+    let (payload, content_type) = encryption::maybe_seal_for_upload(json.as_bytes())
+      .map_err(|e| SyncError::InvalidData(format!("Failed to seal VPN: {e}")))?;
+
     let remote_key = format!("vpns/{}.json", vpn.id);
     let presign = self
       .client
-      .presign_upload(&remote_key, Some("application/json"))
+      .presign_upload(&remote_key, Some(content_type))
       .await?;
     self
       .client
-      .upload_bytes(&presign.url, json.as_bytes(), Some("application/json"))
+      .upload_bytes(&presign.url, &payload, Some(content_type))
       .await?;
 
     // Update local VPN with new last_sync
@@ -1767,7 +1787,10 @@ impl SyncEngine {
   ) -> SyncResult<()> {
     let remote_key = format!("vpns/{}.json", vpn_id);
     let presign = self.client.presign_download(&remote_key).await?;
-    let data = self.client.download_bytes(&presign.url).await?;
+    let raw = self.client.download_bytes(&presign.url).await?;
+
+    let data = encryption::maybe_unseal_after_download(&raw)
+      .map_err(|e| SyncError::InvalidData(format!("Failed to unseal VPN: {e}")))?;
 
     let mut vpn: crate::vpn::VpnConfig = serde_json::from_slice(&data)
       .map_err(|e| SyncError::SerializationError(format!("Failed to parse VPN JSON: {e}")))?;
@@ -1883,17 +1906,21 @@ impl SyncEngine {
     let json = serde_json::to_string_pretty(&updated_ext)
       .map_err(|e| SyncError::SerializationError(format!("Failed to serialize extension: {e}")))?;
 
+    let (meta_payload, meta_content_type) = encryption::maybe_seal_for_upload(json.as_bytes())
+      .map_err(|e| SyncError::InvalidData(format!("Failed to seal extension: {e}")))?;
+
     let remote_key = format!("extensions/{}.json", ext.id);
     let presign = self
       .client
-      .presign_upload(&remote_key, Some("application/json"))
+      .presign_upload(&remote_key, Some(meta_content_type))
       .await?;
     self
       .client
-      .upload_bytes(&presign.url, json.as_bytes(), Some("application/json"))
+      .upload_bytes(&presign.url, &meta_payload, Some(meta_content_type))
       .await?;
 
-    // Also upload the extension file data
+    // Also upload the extension file data — encrypted as a sealed envelope
+    // when E2E is on (the binary is the secret here, not just the metadata).
     let file_path = {
       let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
       let file_dir = manager.get_file_dir_public(&ext.id);
@@ -1908,18 +1935,17 @@ impl SyncEngine {
         ))
       })?;
 
+      let (file_payload, file_content_type) = encryption::maybe_seal_for_upload(&file_data)
+        .map_err(|e| SyncError::InvalidData(format!("Failed to seal extension file: {e}")))?;
+
       let file_remote_key = format!("extensions/{}/file/{}", ext.id, ext.file_name);
       let file_presign = self
         .client
-        .presign_upload(&file_remote_key, Some("application/octet-stream"))
+        .presign_upload(&file_remote_key, Some(file_content_type))
         .await?;
       self
         .client
-        .upload_bytes(
-          &file_presign.url,
-          &file_data,
-          Some("application/octet-stream"),
-        )
+        .upload_bytes(&file_presign.url, &file_payload, Some(file_content_type))
         .await?;
     }
 
@@ -1942,7 +1968,9 @@ impl SyncEngine {
   ) -> SyncResult<()> {
     let remote_key = format!("extensions/{}.json", ext_id);
     let presign = self.client.presign_download(&remote_key).await?;
-    let data = self.client.download_bytes(&presign.url).await?;
+    let raw = self.client.download_bytes(&presign.url).await?;
+    let data = encryption::maybe_unseal_after_download(&raw)
+      .map_err(|e| SyncError::InvalidData(format!("Failed to unseal extension: {e}")))?;
 
     let mut ext: crate::extension_manager::Extension = serde_json::from_slice(&data)
       .map_err(|e| SyncError::SerializationError(format!("Failed to parse extension JSON: {e}")))?;
@@ -1960,7 +1988,9 @@ impl SyncEngine {
     let file_stat = self.client.stat(&file_remote_key).await?;
     if file_stat.exists {
       let file_presign = self.client.presign_download(&file_remote_key).await?;
-      let file_data = self.client.download_bytes(&file_presign.url).await?;
+      let file_raw = self.client.download_bytes(&file_presign.url).await?;
+      let file_data = encryption::maybe_unseal_after_download(&file_raw)
+        .map_err(|e| SyncError::InvalidData(format!("Failed to unseal extension file: {e}")))?;
 
       let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
       let file_dir = manager.get_file_dir_public(&ext.id);
@@ -2085,14 +2115,17 @@ impl SyncEngine {
       SyncError::SerializationError(format!("Failed to serialize extension group: {e}"))
     })?;
 
+    let (payload, content_type) = encryption::maybe_seal_for_upload(json.as_bytes())
+      .map_err(|e| SyncError::InvalidData(format!("Failed to seal extension group: {e}")))?;
+
     let remote_key = format!("extension_groups/{}.json", group.id);
     let presign = self
       .client
-      .presign_upload(&remote_key, Some("application/json"))
+      .presign_upload(&remote_key, Some(content_type))
       .await?;
     self
       .client
-      .upload_bytes(&presign.url, json.as_bytes(), Some("application/json"))
+      .upload_bytes(&presign.url, &payload, Some(content_type))
       .await?;
 
     // Update local group with new last_sync
@@ -2114,7 +2147,10 @@ impl SyncEngine {
   ) -> SyncResult<()> {
     let remote_key = format!("extension_groups/{}.json", group_id);
     let presign = self.client.presign_download(&remote_key).await?;
-    let data = self.client.download_bytes(&presign.url).await?;
+    let raw = self.client.download_bytes(&presign.url).await?;
+
+    let data = encryption::maybe_unseal_after_download(&raw)
+      .map_err(|e| SyncError::InvalidData(format!("Failed to unseal extension group: {e}")))?;
 
     let mut group: crate::extension_manager::ExtensionGroup = serde_json::from_slice(&data)
       .map_err(|e| {
@@ -3686,6 +3722,188 @@ pub async fn set_extension_group_sync_enabled(
     }
   }
 
+  Ok(())
+}
+
+/// Re-upload every sync-enabled entity under the current encryption state.
+/// Called after the user sets, changes, or clears their E2E password —
+/// existing remote bytes are still in the prior state, so without this they'd
+/// remain plaintext (or worse, undecryptable) until the next per-entity edit.
+///
+/// Order: profiles first (so the user can resume work as soon as profile sync
+/// completes), then proxies, groups, VPNs, extensions, extension groups.
+/// Running profiles' associated entities are deferred by 5s so the active
+/// browser session isn't disrupted mid-keystroke.
+///
+/// Progress is emitted via `e2e-rollover-progress` events with `{ stage, done, total }`.
+#[tauri::command]
+pub async fn rollover_encryption_for_all_entities(
+  app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+  let _ = events::emit("e2e-rollover-started", ());
+
+  let profile_manager = ProfileManager::instance();
+  let profiles = profile_manager
+    .list_profiles()
+    .map_err(|e| format!("Failed to list profiles: {e}"))?;
+
+  let synced_profiles: Vec<_> = profiles
+    .iter()
+    .filter(|p| p.sync_mode != SyncMode::Disabled)
+    .collect();
+
+  let total_profiles = synced_profiles.len();
+  let mut running_profile_ids: std::collections::HashSet<uuid::Uuid> =
+    std::collections::HashSet::new();
+
+  for (i, profile) in synced_profiles.iter().enumerate() {
+    if profile.process_id.is_some() {
+      running_profile_ids.insert(profile.id);
+    }
+    let id_str = profile.id.to_string();
+    if let Err(e) = trigger_sync_for_profile(app_handle.clone(), id_str.clone()).await {
+      log::warn!("Rollover: profile {} re-sync failed: {e}", id_str);
+    }
+    let _ = events::emit(
+      "e2e-rollover-progress",
+      serde_json::json!({
+        "stage": "profiles",
+        "done": i + 1,
+        "total": total_profiles,
+      }),
+    );
+  }
+
+  // Determine which entity ids are referenced by running profiles, so we can
+  // defer their re-upload (changing their files mid-session would cause the
+  // running browser to see a different proxy/extension config than what it
+  // launched with).
+  let mut deferred_proxy_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+  let mut deferred_vpn_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+  let mut deferred_group_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+  for p in &profiles {
+    if running_profile_ids.contains(&p.id) {
+      if let Some(id) = &p.proxy_id {
+        deferred_proxy_ids.insert(id.clone());
+      }
+      if let Some(id) = &p.vpn_id {
+        deferred_vpn_ids.insert(id.clone());
+      }
+      if let Some(id) = &p.group_id {
+        deferred_group_ids.insert(id.clone());
+      }
+    }
+  }
+
+  let proxies = crate::proxy_manager::PROXY_MANAGER.get_stored_proxies();
+  let synced_proxies: Vec<_> = proxies.iter().filter(|p| p.sync_enabled).collect();
+  let total_proxies = synced_proxies.len();
+  let mut deferred = Vec::new();
+  for (i, proxy) in synced_proxies.iter().enumerate() {
+    if deferred_proxy_ids.contains(&proxy.id) {
+      deferred.push(proxy.id.clone());
+    } else if let Some(scheduler) = super::get_global_scheduler() {
+      scheduler.queue_proxy_sync(proxy.id.clone()).await;
+    }
+    let _ = events::emit(
+      "e2e-rollover-progress",
+      serde_json::json!({"stage": "proxies", "done": i + 1, "total": total_proxies}),
+    );
+  }
+
+  let groups = {
+    let gm = crate::group_manager::GROUP_MANAGER.lock().unwrap();
+    gm.get_all_groups()
+      .map_err(|e| format!("Failed to get groups: {e}"))?
+  };
+  let synced_groups: Vec<_> = groups.iter().filter(|g| g.sync_enabled).collect();
+  let total_groups = synced_groups.len();
+  let mut deferred_groups = Vec::new();
+  for (i, group) in synced_groups.iter().enumerate() {
+    if deferred_group_ids.contains(&group.id) {
+      deferred_groups.push(group.id.clone());
+    } else if let Some(scheduler) = super::get_global_scheduler() {
+      scheduler.queue_group_sync(group.id.clone()).await;
+    }
+    let _ = events::emit(
+      "e2e-rollover-progress",
+      serde_json::json!({"stage": "groups", "done": i + 1, "total": total_groups}),
+    );
+  }
+
+  let vpns = {
+    let storage = crate::vpn::VPN_STORAGE.lock().unwrap();
+    storage
+      .list_configs()
+      .map_err(|e| format!("Failed to list VPN configs: {e}"))?
+  };
+  let synced_vpns: Vec<_> = vpns.iter().filter(|v| v.sync_enabled).collect();
+  let total_vpns = synced_vpns.len();
+  let mut deferred_vpns = Vec::new();
+  for (i, config) in synced_vpns.iter().enumerate() {
+    if deferred_vpn_ids.contains(&config.id) {
+      deferred_vpns.push(config.id.clone());
+    } else if let Some(scheduler) = super::get_global_scheduler() {
+      scheduler.queue_vpn_sync(config.id.clone()).await;
+    }
+    let _ = events::emit(
+      "e2e-rollover-progress",
+      serde_json::json!({"stage": "vpns", "done": i + 1, "total": total_vpns}),
+    );
+  }
+
+  let extensions = {
+    let em = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+    em.list_extensions()
+      .map_err(|e| format!("Failed to list extensions: {e}"))?
+  };
+  let synced_exts: Vec<_> = extensions.iter().filter(|e| e.sync_enabled).collect();
+  let total_exts = synced_exts.len();
+  for (i, ext) in synced_exts.iter().enumerate() {
+    if let Some(scheduler) = super::get_global_scheduler() {
+      scheduler.queue_extension_sync(ext.id.clone()).await;
+    }
+    let _ = events::emit(
+      "e2e-rollover-progress",
+      serde_json::json!({"stage": "extensions", "done": i + 1, "total": total_exts}),
+    );
+  }
+
+  let ext_groups = {
+    let em = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
+    em.list_groups()
+      .map_err(|e| format!("Failed to list extension groups: {e}"))?
+  };
+  let synced_ext_groups: Vec<_> = ext_groups.iter().filter(|g| g.sync_enabled).collect();
+  let total_eg = synced_ext_groups.len();
+  for (i, group) in synced_ext_groups.iter().enumerate() {
+    if let Some(scheduler) = super::get_global_scheduler() {
+      scheduler.queue_extension_group_sync(group.id.clone()).await;
+    }
+    let _ = events::emit(
+      "e2e-rollover-progress",
+      serde_json::json!({"stage": "extension_groups", "done": i + 1, "total": total_eg}),
+    );
+  }
+
+  if !deferred.is_empty() || !deferred_groups.is_empty() || !deferred_vpns.is_empty() {
+    tauri::async_runtime::spawn(async move {
+      tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+      if let Some(scheduler) = super::get_global_scheduler() {
+        for id in deferred {
+          scheduler.queue_proxy_sync(id).await;
+        }
+        for id in deferred_groups {
+          scheduler.queue_group_sync(id).await;
+        }
+        for id in deferred_vpns {
+          scheduler.queue_vpn_sync(id).await;
+        }
+      }
+    });
+  }
+
+  let _ = events::emit("e2e-rollover-completed", ());
   Ok(())
 }
 

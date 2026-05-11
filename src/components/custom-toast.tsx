@@ -255,7 +255,7 @@ export function UnifiedToast(props: ToastProps) {
               </div>
               <div className="w-full bg-muted rounded-full h-1.5">
                 <div
-                  className="bg-foreground h-1.5 rounded-full transition-all duration-300"
+                  className="bg-foreground h-1.5 rounded-full transition-all duration-150"
                   style={{ width: `${progress.percentage}%` }}
                 />
               </div>
@@ -275,7 +275,7 @@ export function UnifiedToast(props: ToastProps) {
               <div className="flex items-center space-x-2">
                 <div className="flex-1 bg-muted rounded-full h-1.5 min-w-0">
                   <div
-                    className="bg-foreground h-1.5 rounded-full transition-all duration-300"
+                    className="bg-foreground h-1.5 rounded-full transition-all duration-150"
                     style={{
                       width: `${(progress.current / progress.total) * 100}%`,
                     }}

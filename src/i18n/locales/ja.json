@@ -30,7 +30,9 @@
       "saveSettings": "設定を保存",
       "moreInfo": "詳細",
       "downloading": "ダウンロード中...",
-      "minimize": "最小化"
+      "minimize": "最小化",
+      "saving": "保存中…",
+      "saved": "保存しました"
     },
     "status": {
       "active": "アクティブ",
@@ -169,7 +171,11 @@
       "title": "詳細設定",
       "clearCache": "すべてのバージョンキャッシュをクリア",
       "clearCacheDescription": "キャッシュされたすべてのブラウザバージョンデータをクリアし、すべてのブラウザバージョンをソースから更新します。これにより、すべてのブラウザのバージョン情報が強制的に再ダウンロードされます。",
-      "clearCacheFailed": "キャッシュのクリアに失敗しました"
+      "clearCacheFailed": "キャッシュのクリアに失敗しました",
+      "copyLogs": "ログをコピー",
+      "openLogDir": "ログフォルダを開く",
+      "copyLogsSuccess": "ログをクリップボードにコピーしました",
+      "copyLogsDescription": "最新のログファイル（最大 5 MB）をクリップボードにまとめ、不具合報告で共有できるようにします。"
     },
     "disableAutoUpdates": "アプリの自動更新を無効にする",
     "disableAutoUpdatesDescription": "Donut Browserの自動更新確認・インストールを無効にします。ブラウザの更新には影響しません。",
@@ -189,7 +195,11 @@
       "integrations": "統合",
       "importProfile": "プロファイルをインポート",
       "extensions": "拡張機能"
-    }
+    },
+    "newProfile": "新規",
+    "donutLogo": "Donut Browser ロゴ",
+    "scrollGroupsLeft": "グループを左へスクロール",
+    "scrollGroupsRight": "グループを右へスクロール"
   },
   "profiles": {
     "title": "プロファイル",
@@ -208,7 +218,13 @@
       "proxy": "プロキシ / VPN",
       "lastLaunch": "最終起動",
       "empty": "プロファイルが見つかりません。",
-      "notSelected": "未選択"
+      "notSelected": "未選択",
+      "ext": "拡張",
+      "dns": "DNS",
+      "extDefault": "既定",
+      "dnsLevel": "DNS ブロックリスト: {{level}}",
+      "extSearch": "グループを検索…",
+      "extEmpty": "拡張機能グループがありません"
     },
     "actions": {
       "launch": "起動",
@@ -270,7 +286,10 @@
       "assignExtensionGroup": "拡張機能グループを割り当て",
       "copyCookies": "Cookieをコピー"
     },
-    "passwordProtectedBadge": "パスワード保護"
+    "passwordProtectedBadge": "パスワード保護",
+    "launchHook": {
+      "placeholder": "https://example.com/track-launch"
+    }
   },
   "createProfile": {
     "title": "新しいプロファイルを作成",
@@ -508,7 +527,8 @@
     "loadProfilesFailed": "プロファイルの読み込みに失敗しました",
     "unknownGroup": "不明なグループ",
     "profileGroupsAriaLabel": "プロファイルグループ",
-    "loading": "グループを読み込み中..."
+    "loading": "グループを読み込み中...",
+    "all": "すべて"
   },
   "sync": {
     "mode": {
@@ -560,6 +580,7 @@
       "openLogin": "ログイン",
       "linkCodeLabel": "ログインコード",
       "linkCodePlaceholder": "ウェブサイトのコードを貼り付け",
+      "signInTitle": "サインイン",
       "verifyAndLogin": "認証してログイン",
       "loggingIn": "ログイン中...",
       "connected": "接続済み",
@@ -1060,13 +1081,22 @@
       "lastLaunched": "最終起動",
       "hostOs": "ホストOS",
       "ephemeral": "エフェメラル",
-      "extensionGroup": "拡張機能グループ"
+      "extensionGroup": "拡張機能グループ",
+      "totalSessions": "合計セッション",
+      "syncMode": "同期モード",
+      "proxy": "プロキシ",
+      "vpn": "VPN",
+      "cookieCount": "保存された Cookie",
+      "localDataTransfer": "ローカルデータ転送量"
     },
     "values": {
       "none": "なし",
       "never": "なし",
       "copied": "コピーしました！",
-      "yes": "はい"
+      "yes": "はい",
+      "activeNow": "現在アクティブ",
+      "direct": "直接",
+      "loading": "読み込み中…"
     },
     "network": {
       "bypassRules": "プロキシバイパスルール",
@@ -1080,8 +1110,9 @@
     "launchHook": {
       "title": "起動フックURL",
       "label": "起動フックURL",
-      "description": "プロファイルが起動されるたびに、Donut BrowserはこのURLにPOSTリクエストを送信します。",
-      "placeholder": "https://example.com/hooks/profile-launch"
+      "description": "プロファイルが起動するたびに、このURLにGETリクエストが送信されます。",
+      "placeholder": "https://example.com/hooks/profile-launch",
+      "invalidUrlHint": "有効な http:// または https:// URL を入力してください。"
     },
     "actions": {
       "manageCookies": "Cookieを管理",
@@ -1092,6 +1123,48 @@
       "description": "複製されたプロフィールの名前を入力してください",
       "namePlaceholder": "プロフィール名",
       "button": "複製"
+    },
+    "duplicate": "複製",
+    "breadcrumbRoot": "プロファイル",
+    "openDialog": "設定を開く",
+    "sections": {
+      "overview": "概要",
+      "fingerprint": "フィンガープリント",
+      "network": "ネットワーク",
+      "cookies": "Cookie",
+      "extensions": "拡張機能",
+      "sync": "同期",
+      "automation": "自動化",
+      "security": "セキュリティ",
+      "delete": "プロファイルを削除",
+      "activity": "アクティビティ",
+      "launchHook": "起動フック"
+    },
+    "sectionDesc": {
+      "fingerprint": "フィンガープリント対策スクリプトに対するこのプロファイルの表示を設定します。",
+      "network": "このプロファイルが使用するプロキシまたは VPN を管理します。",
+      "cookies": "このプロファイルの Cookie をインポート、コピー、消去します。",
+      "extensions": "このプロファイル起動時に読み込む拡張機能を選択します。",
+      "sync": "他のデバイス間でのこのプロファイルの同期方法を設定します。",
+      "automation": "このプロファイル起動時に実行するコマンドを設定します。",
+      "security": "プロファイルデータをパスワードで暗号化します。",
+      "launchHook": "プロファイルが起動するたびに、このURLにGETリクエストを送信します。"
+    },
+    "badges": {
+      "locked": "ロック中",
+      "active": "有効"
+    },
+    "cookies": {
+      "runningNotice": "ブラウザの実行中は Cookie を読み取れません。先にこのプロファイルを閉じてください。",
+      "domainsHeader": "ドメイン ({{count}})"
+    },
+    "security": {
+      "protected": "このプロファイルはパスワードで暗号化されています。",
+      "unprotected": "このプロファイルは暗号化されていません。パスワードを設定して保護してください。",
+      "cannotWhileRunning": "パスワードを変更する前にプロファイルを停止してください。"
+    },
+    "fingerprint": {
+      "notSupported": "フィンガープリント編集は Camoufox / Wayfern プロファイルでのみ利用できます。"
     }
   },
   "extensions": {
@@ -1625,12 +1698,13 @@
       "password": "パスワード",
       "currentPassword": "現在のパスワード",
       "newPassword": "新しいパスワード",
-      "confirm": "パスワードの確認"
+      "confirm": "パスワードの確認",
+      "confirmPassword": "新しいパスワード（確認）"
     },
     "errors": {
       "oldPasswordRequired": "現在のパスワードが必要です",
       "passwordRequired": "パスワードが必要です",
-      "tooShort": "パスワードは {{min}} 文字以上必要です",
+      "tooShort": "パスワードは 8 文字以上必要です",
       "mismatch": "パスワードが一致しません"
     },
     "toasts": {
@@ -1641,6 +1715,11 @@
     "warnings": {
       "forgetWarningTitle": "重要: このパスワードは復元できません",
       "forgetWarningBody": "Donut Browserはこのパスワードをリセット、復元、回避することはできません。忘れた場合、このプロファイルのデータへのアクセスは永続的に失われます。"
+    },
+    "modes": {
+      "set": "設定",
+      "change": "変更",
+      "remove": "削除"
     }
   },
   "backendErrors": {
@@ -1659,6 +1738,77 @@
     "profileLocked": "プロファイルはロックされています。先にパスワードを入力してください。",
     "invalidProfileId": "無効なプロファイルIDです",
     "passwordTooShort": "パスワードは {{min}} 文字以上必要です",
-    "internal": "問題が発生しました: {{detail}}"
+    "internal": "問題が発生しました: {{detail}}",
+    "invalidLaunchHookUrl": "起動フックURLが無効です。完全な http:// または https:// URL を使用してください。",
+    "cookieDbLocked": "Cookie を読み取れません — データベースがロックされています。ブラウザを閉じてから再試行してください。",
+    "cookieDbUnavailable": "Cookie を読み取れません — Cookie ストアを利用できません。"
+  },
+  "rail": {
+    "profiles": "プロファイル",
+    "proxies": "プロキシ",
+    "extensions": "拡張機能",
+    "groups": "グループ",
+    "settings": "設定",
+    "more": {
+      "label": "その他",
+      "closeAriaLabel": "メニューを閉じる",
+      "importProfile": "プロファイルをインポート",
+      "importProfileHint": "別のツールから取り込む",
+      "vpns": "VPN 設定",
+      "vpnsHint": "WireGuard トンネル",
+      "integrations": "連携",
+      "integrationsHint": "Slack、MCP、自動化",
+      "account": "アカウント",
+      "accountHint": "クラウド、請求、サインイン"
+    }
+  },
+  "pageTitle": {
+    "proxies": "プロキシ",
+    "extensions": "拡張機能",
+    "groups": "グループ",
+    "vpns": "VPN",
+    "settings": "設定",
+    "integrations": "連携",
+    "account": "アカウント",
+    "import": "プロファイルをインポート"
+  },
+  "encryption": {
+    "required": {
+      "title": "同期一時停止 — パスワードが必要です",
+      "description": "暗号化されたデータがダウンロードされましたが、このデバイスにはE2Eパスワードが設定されていません。設定 → 暗号化を開いてパスワードを入力し、同期を再開してください。",
+      "openSettings": "設定を開く"
+    },
+    "rollover": {
+      "startedTitle": "データを再暗号化しています",
+      "startedDescription": "同期済みのすべての項目を新しいパスワードで再アップロードしています。最初にプロファイル、次にプロキシ、グループ、VPN、拡張機能の順です。",
+      "progressTitle": "{{stage}}を再暗号化中",
+      "progressDescription": "{{done}}/{{total}}",
+      "completedTitle": "再暗号化完了",
+      "completedDescription": "同期されたすべてのデータが新しいパスワードで封印されました。",
+      "stage": {
+        "profiles": "プロファイル",
+        "proxies": "プロキシ",
+        "groups": "グループ",
+        "vpns": "VPN",
+        "extensions": "拡張機能",
+        "extension_groups": "拡張機能グループ"
+      }
+    }
+  },
+  "account": {
+    "refreshed": "アカウントを更新しました",
+    "loggedOut": "ログアウトしました",
+    "signedOut": "未ログイン",
+    "signedOutDescription": "クラウド同期、暗号化プロファイル、チーム機能を有効にするにはサインインしてください。",
+    "plan": "プラン: {{plan}} · {{period}}",
+    "refresh": "更新",
+    "logout": "サインアウト",
+    "signIn": "サインイン",
+    "fields": {
+      "plan": "プラン",
+      "status": "ステータス",
+      "teamRole": "チームロール",
+      "period": "請求周期"
+    }
   }
 }

@@ -2082,6 +2082,38 @@ mod tests {
       .unwrap_err();
     assert!(err.to_string().contains("http or https"));
   }
+
+  #[test]
+  fn test_validate_launch_hook_accepts_https_url() {
+    let result = super::validate_launch_hook(Some("https://example.com/track")).unwrap();
+    assert_eq!(result.as_deref(), Some("https://example.com/track"));
+  }
+
+  #[test]
+  fn test_validate_launch_hook_rejects_garbage_with_code() {
+    let err = super::validate_launch_hook(Some("not a url")).unwrap_err();
+    let parsed: serde_json::Value = serde_json::from_str(&err).expect("error must be JSON");
+    assert_eq!(parsed["code"], "INVALID_LAUNCH_HOOK_URL");
+  }
+
+  #[test]
+  fn test_validate_launch_hook_rejects_non_http_scheme_with_code() {
+    let err = super::validate_launch_hook(Some("ftp://example.com/hook")).unwrap_err();
+    let parsed: serde_json::Value = serde_json::from_str(&err).expect("error must be JSON");
+    assert_eq!(parsed["code"], "INVALID_LAUNCH_HOOK_URL");
+  }
+
+  #[test]
+  fn test_validate_launch_hook_empty_clears_hook() {
+    let result = super::validate_launch_hook(Some("")).unwrap();
+    assert!(result.is_none());
+
+    let result_ws = super::validate_launch_hook(Some("   ")).unwrap();
+    assert!(result_ws.is_none());
+
+    let result_none = super::validate_launch_hook(None).unwrap();
+    assert!(result_none.is_none());
+  }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2180,12 +2212,34 @@ pub fn update_profile_note(
     .map_err(|e| format!("Failed to update profile note: {e}"))
 }
 
+/// Validate a launch hook value. Returns `Ok(None)` for "clear the hook"
+/// (`None`, empty, or whitespace-only), `Ok(Some(_))` for a valid http(s)
+/// URL, or `Err` with the `INVALID_LAUNCH_HOOK_URL` code payload.
+pub(crate) fn validate_launch_hook(launch_hook: Option<&str>) -> Result<Option<String>, String> {
+  let Some(raw) = launch_hook else {
+    return Ok(None);
+  };
+  let trimmed = raw.trim();
+  if trimmed.is_empty() {
+    return Ok(None);
+  }
+  let ok = url::Url::parse(trimmed)
+    .ok()
+    .map(|u| matches!(u.scheme(), "http" | "https"))
+    .unwrap_or(false);
+  if !ok {
+    return Err(serde_json::json!({ "code": "INVALID_LAUNCH_HOOK_URL" }).to_string());
+  }
+  Ok(Some(trimmed.to_string()))
+}
+
 #[tauri::command]
 pub fn update_profile_launch_hook(
   app_handle: tauri::AppHandle,
   profile_id: String,
   launch_hook: Option<String>,
 ) -> Result<BrowserProfile, String> {
+  validate_launch_hook(launch_hook.as_deref())?;
   let profile_manager = ProfileManager::instance();
   profile_manager
     .update_profile_launch_hook(&app_handle, &profile_id, launch_hook)

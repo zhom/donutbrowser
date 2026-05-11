@@ -15,6 +15,9 @@ export type BackendErrorCode =
   | "PROFILE_LOCKED"
   | "INVALID_PROFILE_ID"
   | "PASSWORD_TOO_SHORT"
+  | "INVALID_LAUNCH_HOOK_URL"
+  | "COOKIE_DB_LOCKED"
+  | "COOKIE_DB_UNAVAILABLE"
   | "INTERNAL_ERROR";
 
 export interface BackendError {
@@ -81,6 +84,12 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       const min = Number.parseInt(parsed.params?.min ?? "8", 10);
       return t("backendErrors.passwordTooShort", { min });
     }
+    case "INVALID_LAUNCH_HOOK_URL":
+      return t("backendErrors.invalidLaunchHookUrl");
+    case "COOKIE_DB_LOCKED":
+      return t("backendErrors.cookieDbLocked");
+    case "COOKIE_DB_UNAVAILABLE":
+      return t("backendErrors.cookieDbUnavailable");
     case "INTERNAL_ERROR":
       return t("backendErrors.internal", {
         detail: parsed.params?.detail ?? "",

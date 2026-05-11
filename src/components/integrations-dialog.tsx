@@ -36,11 +36,13 @@ interface McpConfig {
 interface IntegrationsDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  subPage?: boolean;
 }
 
 export function IntegrationsDialog({
   isOpen,
   onClose,
+  subPage,
 }: IntegrationsDialogProps) {
   const { t } = useTranslation();
   const [settings, setSettings] = useState<AppSettings>({
@@ -206,11 +208,14 @@ export function IntegrationsDialog({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
+      subPage={subPage}
     >
       <DialogContent className="max-w-xl max-h-[80vh] my-8 flex flex-col">
-        <DialogHeader className="shrink-0">
-          <DialogTitle>{t("integrations.title")}</DialogTitle>
-        </DialogHeader>
+        {!subPage && (
+          <DialogHeader className="shrink-0">
+            <DialogTitle>{t("integrations.title")}</DialogTitle>
+          </DialogHeader>
+        )}
 
         <div className="overflow-y-auto flex-1 min-h-0">
           <Tabs defaultValue="api" className="w-full">

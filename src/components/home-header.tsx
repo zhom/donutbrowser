@@ -1,245 +1,290 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+"use client";
+
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { FaDownload } from "react-icons/fa";
-import { FiWifi } from "react-icons/fi";
-import { GoGear, GoKebabHorizontal, GoPlus } from "react-icons/go";
-import {
-  LuCloud,
-  LuPlug,
-  LuPuzzle,
-  LuSearch,
-  LuUsers,
-  LuX,
-} from "react-icons/lu";
+import { GoPlus } from "react-icons/go";
+import { LuChevronLeft, LuChevronRight, LuSearch, LuX } from "react-icons/lu";
+import { getCurrentOS } from "@/lib/browser-utils";
 import { cn } from "@/lib/utils";
-import { Logo } from "./icons/logo";
+import type { GroupWithCount } from "@/types";
 import { Button } from "./ui/button";
-import { CardTitle } from "./ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
 import { Input } from "./ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
-const CLICK_THRESHOLD = 5;
-const CLICK_WINDOW_MS = 2000;
-const GRAVITY = 2200;
-const BOUNCE_DAMPING = 0.6;
-const INITIAL_HORIZONTAL_SPEED = 350;
-const SPIN_SPEED = 720;
-const MIN_BOUNCE_VELOCITY = 60;
-const LOGO_HIDDEN_KEY = "donut-logo-hidden";
+const HOLD_MS = 150;
+const DRAG_THRESHOLD_PX = 3;
 
-function useLogoEasterEgg() {
-  const clickTimestamps = useRef<number[]>([]);
-  const [isPressed, setIsPressed] = useState(false);
-  const [wobbleKey, setWobbleKey] = useState(0);
-  const [isFalling, setIsFalling] = useState(false);
-  const [isHidden, setIsHidden] = useState(() => {
-    try {
-      return sessionStorage.getItem(LOGO_HIDDEN_KEY) === "1";
-    } catch {
-      return false;
-    }
-  });
-  const logoRef = useRef<HTMLButtonElement>(null);
-  const animFrameRef = useRef<number>(0);
+const isTextInputTarget = (target: EventTarget | null): boolean => {
+  if (!(target instanceof Element)) return false;
+  const el = target.closest(
+    "input, select, textarea, [contenteditable=''], [contenteditable='true']",
+  );
+  return el !== null;
+};
 
-  const triggerFall = useCallback(() => {
-    const el = logoRef.current;
-    if (!el || isFalling) return;
-
-    setIsFalling(true);
-
-    const rect = el.getBoundingClientRect();
-    const startX = rect.left;
-    const startY = rect.top;
-    const floorY = window.innerHeight;
-    const leftWall = 0;
-    const rightWall = window.innerWidth;
-
-    const clone = el.cloneNode(true) as HTMLElement;
-    clone.style.position = "fixed";
-    clone.style.left = `${startX}px`;
-    clone.style.top = `${startY}px`;
-    clone.style.zIndex = "9999";
-    clone.style.pointerEvents = "none";
-    clone.style.margin = "0";
-    document.body.appendChild(clone);
-
-    el.style.visibility = "hidden";
-
-    let x = 0;
-    let y = 0;
-    let vy = -500;
-    let vx = -INITIAL_HORIZONTAL_SPEED;
-    let rotation = 0;
-    let lastTime = performance.now();
-
-    const animate = (time: number) => {
-      const dt = Math.min((time - lastTime) / 1000, 0.05);
-      lastTime = time;
-
-      vy += GRAVITY * dt;
-      x += vx * dt;
-      y += vy * dt;
-      rotation += SPIN_SPEED * dt * (vx > 0 ? 1 : -1);
-
-      // Floor bounce
-      const currentBottom = startY + y + rect.height;
-      if (currentBottom >= floorY && vy > 0) {
-        y = floorY - startY - rect.height;
-        if (Math.abs(vy) > MIN_BOUNCE_VELOCITY) {
-          vy = -Math.abs(vy) * BOUNCE_DAMPING;
-        } else {
-          vy = -MIN_BOUNCE_VELOCITY * 3;
-        }
-      }
-
-      // Left wall bounce only — right wall lets it fly off screen
-      const currentLeft = startX + x;
-      if (currentLeft <= leftWall && vx < 0) {
-        x = leftWall - startX;
-        vx = Math.abs(vx) * 1.1;
-      }
-
-      clone.style.transform = `translate(${x}px, ${y}px) rotate(${rotation}deg)`;
-
-      // Only end when fully off-screen vertically (bounced out the top or flew off bottom somehow)
-      const currentTop = startY + y;
-      const offScreenRight = startX + x > rightWall + 50;
-      const offScreenBottom = currentTop > floorY + 100;
-      const offScreenTop = currentTop + rect.height < -200;
-
-      if (offScreenRight || offScreenBottom || offScreenTop) {
-        clone.remove();
-        try {
-          sessionStorage.setItem(LOGO_HIDDEN_KEY, "1");
-        } catch {
-          // ignore
-        }
-        setIsHidden(true);
-        setIsFalling(false);
-        return;
-      }
-
-      animFrameRef.current = requestAnimationFrame(animate);
-    };
-
-    animFrameRef.current = requestAnimationFrame(animate);
-  }, [isFalling]);
-
-  useEffect(() => {
-    return () => {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    };
-  }, []);
-
-  const handleClick = useCallback(() => {
-    if (isFalling || isHidden) return;
-
-    const now = Date.now();
-    clickTimestamps.current = clickTimestamps.current.filter(
-      (t) => now - t < CLICK_WINDOW_MS,
-    );
-    clickTimestamps.current.push(now);
-
-    if (clickTimestamps.current.length >= CLICK_THRESHOLD) {
-      clickTimestamps.current = [];
-      triggerFall();
-    } else {
-      setWobbleKey((k) => k + 1);
-    }
-  }, [isFalling, isHidden, triggerFall]);
-
-  return {
-    logoRef,
-    isPressed,
-    setIsPressed,
-    wobbleKey,
-    isFalling,
-    isHidden,
-    handleClick,
-  };
-}
+const ALL_FILTER_ID = "__all__";
 
 interface Props {
-  onSettingsDialogOpen: (open: boolean) => void;
-  onProxyManagementDialogOpen: (open: boolean) => void;
-  onGroupManagementDialogOpen: (open: boolean) => void;
-  onImportProfileDialogOpen: (open: boolean) => void;
   onCreateProfileDialogOpen: (open: boolean) => void;
-  onSyncConfigDialogOpen: (open: boolean) => void;
-  onIntegrationsDialogOpen: (open: boolean) => void;
-  onExtensionManagementDialogOpen: (open: boolean) => void;
   searchQuery: string;
   onSearchQueryChange: (query: string) => void;
+  groups: GroupWithCount[];
+  selectedGroupId: string | null;
+  onGroupSelect: (groupId: string) => void;
+  pageTitle?: string;
 }
 
 const HomeHeader = ({
-  onSettingsDialogOpen,
-  onProxyManagementDialogOpen,
-  onGroupManagementDialogOpen,
-  onImportProfileDialogOpen,
   onCreateProfileDialogOpen,
-  onSyncConfigDialogOpen,
-  onIntegrationsDialogOpen,
-  onExtensionManagementDialogOpen,
   searchQuery,
   onSearchQueryChange,
+  groups,
+  selectedGroupId,
+  onGroupSelect,
+  pageTitle,
 }: Props) => {
   const { t } = useTranslation();
-  const {
-    logoRef,
-    isPressed,
-    setIsPressed,
-    wobbleKey,
-    isFalling,
-    isHidden,
-    handleClick,
-  } = useLogoEasterEgg();
+  const [platform, setPlatform] = useState<string>("macos");
+
+  useEffect(() => {
+    setPlatform(getCurrentOS());
+  }, []);
+
+  const isMacOS = platform === "macos";
+  const showProfileToolbar = !pageTitle;
+
+  const totalProfiles = useMemo(
+    () => groups.reduce((sum, g) => sum + g.count, 0),
+    [groups],
+  );
+
+  // Press-and-hold drag: any pixel of the sys-bar becomes a drag handle after
+  // HOLD_MS, but quick clicks still reach buttons/inputs underneath.
+  const holdTimeoutRef = useRef<number | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+  const dragStartedRef = useRef(false);
+  const activePointerIdRef = useRef<number | null>(null);
+  const dragRootRef = useRef<HTMLDivElement | null>(null);
+
+  const clearHold = useCallback(() => {
+    if (holdTimeoutRef.current !== null) {
+      window.clearTimeout(holdTimeoutRef.current);
+      holdTimeoutRef.current = null;
+    }
+  }, []);
+
+  const beginDrag = useCallback(() => {
+    if (dragStartedRef.current) return;
+    dragStartedRef.current = true;
+    clearHold();
+    void getCurrentWindow().startDragging();
+  }, [clearHold]);
+
+  useEffect(() => {
+    return () => {
+      clearHold();
+    };
+  }, [clearHold]);
+
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (e.button !== 0) return;
+      if (isTextInputTarget(e.target)) return;
+
+      dragStartedRef.current = false;
+      dragStartRef.current = { x: e.clientX, y: e.clientY };
+      activePointerIdRef.current = e.pointerId;
+
+      clearHold();
+      holdTimeoutRef.current = window.setTimeout(() => {
+        holdTimeoutRef.current = null;
+        beginDrag();
+      }, HOLD_MS);
+    },
+    [beginDrag, clearHold],
+  );
+
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (
+        dragStartedRef.current ||
+        dragStartRef.current === null ||
+        activePointerIdRef.current !== e.pointerId
+      ) {
+        return;
+      }
+      const dx = e.clientX - dragStartRef.current.x;
+      const dy = e.clientY - dragStartRef.current.y;
+      if (Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) {
+        beginDrag();
+      }
+    },
+    [beginDrag],
+  );
+
+  const handlePointerEnd = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (activePointerIdRef.current !== e.pointerId) return;
+      clearHold();
+      dragStartRef.current = null;
+      activePointerIdRef.current = null;
+      dragStartedRef.current = false;
+    },
+    [clearHold],
+  );
+
+  // Horizontal scroll fades for the group filter strip — when the user
+  // has more groups than fit, the right edge fades to hint at overflow.
+  const groupsScrollRef = useRef<HTMLDivElement | null>(null);
+  const [groupsFadeLeft, setGroupsFadeLeft] = useState(false);
+  const [groupsFadeRight, setGroupsFadeRight] = useState(false);
+  useEffect(() => {
+    const el = groupsScrollRef.current;
+    if (!el) return;
+    const update = () => {
+      setGroupsFadeLeft(el.scrollLeft > 1);
+      setGroupsFadeRight(el.scrollWidth - el.clientWidth - el.scrollLeft > 1);
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", update);
+      ro.disconnect();
+    };
+  }, []);
 
   return (
-    <div className="flex justify-between items-center mt-6">
-      <div className="flex gap-3 items-center">
-        {!isHidden ? (
-          <button
-            ref={logoRef}
-            type="button"
-            className="p-1 cursor-pointer select-none"
-            onClick={handleClick}
-            onPointerDown={() => {
-              setIsPressed(true);
-            }}
-            onPointerUp={() => {
-              setIsPressed(false);
-            }}
-            onPointerLeave={() => {
-              setIsPressed(false);
+    <div
+      ref={dragRootRef}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerEnd}
+      onPointerCancel={handlePointerEnd}
+      className="flex items-center gap-2 h-11 px-3 border-b border-border bg-card select-none"
+    >
+      {isMacOS && (
+        <div
+          aria-hidden="true"
+          className="flex items-center gap-[7px] mr-1 shrink-0"
+        >
+          {/* Reserve space for the macOS native traffic lights — the OS draws
+              the colored buttons here through the transparent titlebar. */}
+          <div className="w-[11px] h-[11px] rounded-full" />
+          <div className="w-[11px] h-[11px] rounded-full" />
+          <div className="w-[11px] h-[11px] rounded-full" />
+        </div>
+      )}
+
+      {pageTitle ? (
+        <span className="text-xs font-semibold text-card-foreground ml-2">
+          {pageTitle}
+        </span>
+      ) : null}
+
+      {showProfileToolbar && (
+        <div className="relative flex-1 min-w-0 flex items-center">
+          {groupsFadeLeft && (
+            <button
+              type="button"
+              aria-label={t("header.scrollGroupsLeft")}
+              onClick={() => {
+                const el = groupsScrollRef.current;
+                if (el)
+                  el.scrollBy({
+                    left: -el.clientWidth * 0.6,
+                    behavior: "smooth",
+                  });
+              }}
+              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 grid place-items-center w-5 h-5 rounded-full bg-card/90 hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shadow-sm"
+            >
+              <LuChevronLeft className="w-3 h-3" />
+            </button>
+          )}
+          <div
+            ref={groupsScrollRef}
+            className="flex items-center gap-3 ml-2 overflow-x-auto scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+            style={{
+              paddingLeft: groupsFadeLeft ? 22 : 0,
+              paddingRight: groupsFadeRight ? 22 : 0,
             }}
           >
-            <Logo
-              key={wobbleKey}
-              className={cn(
-                "w-10 h-10 transition-transform duration-300 ease-out will-change-transform hover:scale-110",
-                isPressed && "scale-90",
-                !isFalling &&
-                  !isPressed &&
-                  wobbleKey > 0 &&
-                  "animate-[wiggle_0.3s_ease-in-out]",
-              )}
-            />
-          </button>
-        ) : (
-          <div className="p-1 w-10 h-10" />
-        )}
-        <CardTitle>Donut</CardTitle>
-      </div>
-      <div className="flex gap-2 items-center">
-        <div className="relative">
+            {/* "All" filter — shows every profile regardless of group. */}
+            {(() => {
+              const active = selectedGroupId === ALL_FILTER_ID;
+              return (
+                <button
+                  key="__all__"
+                  type="button"
+                  onClick={() => {
+                    onGroupSelect(ALL_FILTER_ID);
+                  }}
+                  className={cn(
+                    "flex items-center gap-1.5 h-7 px-1 text-xs transition-colors duration-100 shrink-0",
+                    active
+                      ? "text-foreground font-medium"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <span>{t("groups.all")}</span>
+                  <span className="text-[11px] text-muted-foreground tabular-nums">
+                    {totalProfiles}
+                  </span>
+                </button>
+              );
+            })()}
+            {groups.map((group) => {
+              const active = selectedGroupId === group.id;
+              const label =
+                group.id === "default" ? t("groups.defaultGroup") : group.name;
+              return (
+                <button
+                  key={group.id}
+                  type="button"
+                  onClick={() => {
+                    onGroupSelect(active ? ALL_FILTER_ID : group.id);
+                  }}
+                  className={cn(
+                    "flex items-center gap-1.5 h-7 px-1 text-xs transition-colors duration-100 shrink-0",
+                    active
+                      ? "text-foreground font-medium"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <span>{label}</span>
+                  <span className="text-[11px] text-muted-foreground tabular-nums">
+                    {group.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {groupsFadeRight && (
+            <button
+              type="button"
+              aria-label={t("header.scrollGroupsRight")}
+              onClick={() => {
+                const el = groupsScrollRef.current;
+                if (el)
+                  el.scrollBy({
+                    left: el.clientWidth * 0.6,
+                    behavior: "smooth",
+                  });
+              }}
+              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 grid place-items-center w-5 h-5 rounded-full bg-card/90 hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shadow-sm"
+            >
+              <LuChevronRight className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      )}
+
+      {!showProfileToolbar && <div className="flex-1" />}
+
+      {showProfileToolbar && (
+        <div className="relative shrink-0">
           <Input
             type="text"
             placeholder={t("header.searchPlaceholder")}
@@ -247,122 +292,43 @@ const HomeHeader = ({
             onChange={(e) => {
               onSearchQueryChange(e.target.value);
             }}
-            className="pr-8 pl-10 w-48"
+            className="pr-7 pl-8 w-52 h-7 text-xs"
           />
-          <LuSearch className="absolute left-3 top-1/2 w-4 h-4 transform -translate-y-1/2 text-muted-foreground" />
-          {searchQuery && (
+          <LuSearch className="absolute left-2.5 top-1/2 w-3.5 h-3.5 transform -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          {searchQuery ? (
             <button
               type="button"
               onClick={() => {
                 onSearchQueryChange("");
               }}
-              className="absolute right-2 top-1/2 p-1 rounded-sm transition-colors transform -translate-y-1/2 hover:bg-accent"
+              className="absolute right-1.5 top-1/2 p-0.5 rounded-sm transition-colors transform -translate-y-1/2 hover:bg-accent"
               aria-label={t("header.clearSearch")}
             >
-              <LuX className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+              <LuX className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
             </button>
-          )}
+          ) : null}
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <span>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="flex gap-2 items-center h-[36px] border-foreground/20 hover:text-foreground"
-                    >
-                      <GoKebabHorizontal className="w-4 h-4" />
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>{t("header.moreActions")}</TooltipContent>
-              </Tooltip>
-            </span>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onClick={() => {
-                onSettingsDialogOpen(true);
-              }}
-            >
-              <GoGear className="mr-2 w-4 h-4" />
-              {t("header.menu.settings")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => {
-                onProxyManagementDialogOpen(true);
-              }}
-            >
-              <FiWifi className="mr-2 w-4 h-4" />
-              {t("header.menu.proxies")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => {
-                onGroupManagementDialogOpen(true);
-              }}
-            >
-              <LuUsers className="mr-2 w-4 h-4" />
-              {t("header.menu.groups")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => {
-                onExtensionManagementDialogOpen(true);
-              }}
-            >
-              <LuPuzzle className="mr-2 w-4 h-4" />
-              {t("header.menu.extensions")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => {
-                onSyncConfigDialogOpen(true);
-              }}
-            >
-              <LuCloud className="mr-2 w-4 h-4" />
-              {t("header.menu.syncService")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => {
-                onIntegrationsDialogOpen(true);
-              }}
-            >
-              <LuPlug className="mr-2 w-4 h-4" />
-              {t("header.menu.integrations")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => {
-                onImportProfileDialogOpen(true);
-              }}
-            >
-              <FaDownload className="mr-2 w-4 h-4" />
-              {t("header.menu.importProfile")}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+      )}
+
+      {showProfileToolbar && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <span>
+            <span className="shrink-0">
               <Button
                 size="sm"
                 onClick={() => {
                   onCreateProfileDialogOpen(true);
                 }}
-                className="flex gap-2 items-center h-[36px]"
+                className="flex gap-1.5 items-center h-7 px-2.5 text-xs"
               >
-                <GoPlus className="w-4 h-4" />
+                <GoPlus className="w-3.5 h-3.5" />
+                {t("header.newProfile")}
               </Button>
             </span>
           </TooltipTrigger>
-          <TooltipContent
-            arrowOffset={-8}
-            style={{ transform: "translateX(-8px)" }}
-          >
-            {t("header.createProfile")}
-          </TooltipContent>
+          <TooltipContent>{t("header.createProfile")}</TooltipContent>
         </Tooltip>
-      </div>
+      )}
     </div>
   );
 };

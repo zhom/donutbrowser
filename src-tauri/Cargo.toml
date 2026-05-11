@@ -44,6 +44,7 @@ tauri-plugin-single-instance = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-macos-permissions = "2"
 tauri-plugin-log = "2"
+tauri-plugin-clipboard-manager = "2"
 log = "0.4"
 env_logger = "0.11"
 

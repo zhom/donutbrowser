@@ -93,12 +93,14 @@ interface GroupManagementDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onGroupManagementComplete: () => void;
+  subPage?: boolean;
 }
 
 export function GroupManagementDialog({
   isOpen,
   onClose,
   onGroupManagementComplete,
+  subPage,
 }: GroupManagementDialogProps) {
   const { t } = useTranslation();
   const [groups, setGroups] = useState<GroupWithCount[]>([]);
@@ -249,14 +251,16 @@ export function GroupManagementDialog({
 
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={onClose}>
+      <Dialog open={isOpen} onOpenChange={onClose} subPage={subPage}>
         <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>{t("groups.management")}</DialogTitle>
-            <DialogDescription>
-              {t("groups.noGroupDescription")}
-            </DialogDescription>
-          </DialogHeader>
+          {!subPage && (
+            <DialogHeader>
+              <DialogTitle>{t("groups.management")}</DialogTitle>
+              <DialogDescription>
+                {t("groups.noGroupDescription")}
+              </DialogDescription>
+            </DialogHeader>
+          )}
 
           <div className="space-y-4">
             {/* Create new group button */}
@@ -418,11 +422,13 @@ export function GroupManagementDialog({
             )}
           </div>
 
-          <DialogFooter>
-            <RippleButton variant="outline" onClick={onClose}>
-              {t("common.buttons.close")}
-            </RippleButton>
-          </DialogFooter>
+          {!subPage && (
+            <DialogFooter>
+              <RippleButton variant="outline" onClick={onClose}>
+                {t("common.buttons.close")}
+              </RippleButton>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
 

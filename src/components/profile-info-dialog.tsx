@@ -1,6 +1,7 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { FaApple, FaLinux, FaWindows } from "react-icons/fa";
@@ -27,7 +28,7 @@ import {
   LuUsers,
   LuX,
 } from "react-icons/lu";
-import { Badge } from "@/components/ui/badge";
+import { SharedCamoufoxConfigForm } from "@/components/shared-camoufox-config-form";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -37,9 +38,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { ProBadge } from "@/components/ui/pro-badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { WayfernConfigForm } from "@/components/wayfern-config-form";
+import { translateBackendError } from "@/lib/backend-errors";
 import {
   getBrowserDisplayName,
   getOSDisplayName,
@@ -50,9 +58,11 @@ import { formatRelativeTime } from "@/lib/flag-utils";
 import { cn } from "@/lib/utils";
 import type {
   BrowserProfile,
+  CamoufoxConfig,
   ProfileGroup,
   StoredProxy,
   VpnConfig,
+  WayfernConfig,
 } from "@/types";
 
 interface ProfileInfoDialogProps {
@@ -103,6 +113,66 @@ function InfoCard({ label, value }: { label: string; value: string }) {
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-sm mt-0.5 truncate">{value}</p>
     </div>
+  );
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024)
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+/**
+ * Shows the total bytes routed through Donut's local proxy worker for this
+ * profile. Only counts traffic flowing through the donut-proxy binary — not
+ * the browser's full network usage, hence the "Local" qualifier.
+ */
+function LocalDataTransferCard({
+  profileId,
+  t,
+}: {
+  profileId: string;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  type Snapshot = {
+    total_bytes_sent: number;
+    total_bytes_received: number;
+  };
+  const [value, setValue] = React.useState<string>("—");
+
+  React.useEffect(() => {
+    let mounted = true;
+    const fetchSnapshot = async () => {
+      try {
+        const snap = await invoke<Snapshot | null>(
+          "get_profile_traffic_snapshot",
+          { profileId },
+        );
+        if (!mounted) return;
+        if (!snap) {
+          setValue("0 B");
+          return;
+        }
+        setValue(
+          formatBytes(snap.total_bytes_sent + snap.total_bytes_received),
+        );
+      } catch {
+        if (mounted) setValue("—");
+      }
+    };
+    void fetchSnapshot();
+    const interval = window.setInterval(fetchSnapshot, 5000);
+    return () => {
+      mounted = false;
+      window.clearInterval(interval);
+    };
+  }, [profileId]);
+
+  return (
+    <InfoCard label={t("profileInfo.fields.localDataTransfer")} value={value} />
   );
 }
 
@@ -202,9 +272,6 @@ export function ProfileInfoDialog({
 
   const syncStatus = syncStatuses[profile.id];
   const syncMode = profile.sync_mode ?? "Disabled";
-  const syncLabel = syncStatus
-    ? `${syncMode} (${syncStatus.status})`
-    : syncMode;
 
   const handleCopyId = async () => {
     try {
@@ -417,57 +484,357 @@ export function ProfileInfoDialog({
         if (!open) onClose();
       }}
     >
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{t("profileInfo.title")}</DialogTitle>
-        </DialogHeader>
-        <Tabs defaultValue="info">
-          <TabsList className="w-full">
-            <TabsTrigger value="info" className="flex-1">
-              {t("profileInfo.tabs.info")}
-            </TabsTrigger>
-            <TabsTrigger value="settings" className="flex-1">
-              {t("profileInfo.tabs.settings")}
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="info">
-            <div className="overflow-y-auto max-h-[calc(80vh-12rem)] pr-1">
-              <div className="flex flex-col gap-4 py-3">
-                {/* Hero */}
-                <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-muted p-2.5 shrink-0">
-                    <ProfileIcon className="w-8 h-8 text-foreground" />
-                  </div>
-                  <div className="min-w-0 flex-1">
+      <DialogContent
+        hideClose
+        className="sm:max-w-3xl w-[720px] max-w-[720px] h-[480px] max-h-[480px] flex flex-col p-0 gap-0 overflow-hidden"
+      >
+        <ProfileInfoLayout
+          profile={profile}
+          ProfileIcon={ProfileIcon}
+          releaseLabel={releaseLabel}
+          isRunning={isRunning}
+          isDisabled={isDisabled}
+          showCrossOs={showCrossOs}
+          networkLabel={networkLabel}
+          groupName={groupName}
+          extensionGroupName={extensionGroupName}
+          syncMode={syncMode}
+          syncStatus={syncStatus}
+          storedProxies={storedProxies}
+          vpnConfigs={vpnConfigs}
+          hasTags={hasTags}
+          hasNote={hasNote}
+          copied={copied}
+          handleCopyId={handleCopyId}
+          onClose={onClose}
+          onCloneProfile={onCloneProfile}
+          onKillProfile={undefined}
+          visibleActions={visibleActions}
+          t={t}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface ProfileInfoLayoutProps {
+  profile: BrowserProfile;
+  ProfileIcon: React.ComponentType<{ className?: string }>;
+  releaseLabel: string;
+  isRunning: boolean;
+  isDisabled: boolean;
+  showCrossOs: boolean;
+  networkLabel: string;
+  groupName: string | null;
+  extensionGroupName: string | null;
+  syncMode: string;
+  syncStatus: { status: string; error?: string } | undefined;
+  hasTags: boolean | undefined;
+  hasNote: boolean;
+  copied: boolean;
+  storedProxies: StoredProxy[];
+  vpnConfigs: VpnConfig[];
+  handleCopyId: () => Promise<void>;
+  onClose: () => void;
+  onCloneProfile?: (profile: BrowserProfile) => void;
+  onKillProfile?: (profile: BrowserProfile) => void;
+  visibleActions: {
+    icon: React.ReactNode;
+    label: string;
+    onClick: () => void;
+    disabled?: boolean;
+    destructive?: boolean;
+    proBadge?: boolean;
+    runningBadge?: boolean;
+  }[];
+  t: (key: string, options?: Record<string, unknown>) => string;
+}
+
+type ProfileSection =
+  | "overview"
+  | "fingerprint"
+  | "network"
+  | "cookies"
+  | "extensions"
+  | "sync"
+  | "automation"
+  | "security"
+  | "delete";
+
+function ProfileInfoLayout({
+  profile,
+  ProfileIcon,
+  releaseLabel,
+  isRunning,
+  isDisabled,
+  showCrossOs,
+  networkLabel,
+  groupName,
+  extensionGroupName,
+  syncMode,
+  syncStatus,
+  storedProxies,
+  vpnConfigs,
+  hasTags,
+  hasNote,
+  copied,
+  handleCopyId,
+  onClose,
+  onCloneProfile,
+  visibleActions,
+  t,
+}: ProfileInfoLayoutProps) {
+  const [section, setSection] = React.useState<ProfileSection>("overview");
+
+  // Map sidebar items to existing action labels, so clicking a section
+  // simply triggers the existing dialog handler.
+  const findAction = React.useCallback(
+    (substr: string) =>
+      visibleActions.find((a) => a.label.toLowerCase().includes(substr)),
+    [visibleActions],
+  );
+
+  const deleteAction = findAction("delete");
+  const fingerprintAction = findAction("fingerprint");
+  const cookiesAction =
+    findAction("manage cookies") ?? findAction("copy cookies");
+  const extensionAction = findAction("extension");
+  const syncAction = findAction("sync");
+  const _launchHookAction = findAction("hook") ?? findAction("launch hook");
+  const _networkAction = findAction("network");
+  // Password actions are no longer routed via the legacy action handlers —
+  // SecuritySectionInline writes directly to the backend instead.
+
+  // Cookie count is fetched at the layout level so the sidebar badge can
+  // surface it without waiting for the user to open the Cookies section.
+  // The effect deps must be primitive — `cookiesAction` is a new object
+  // every render and using it directly here caused an infinite re-render
+  // loop that froze the entire app when the dialog opened.
+  // Skipped while running: the cookie DB is held by the browser and we
+  // don't want to compete for its lock from the badge fetch.
+  const cookiesSupported = !!cookiesAction;
+  const [cookieCount, setCookieCount] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    if (!cookiesSupported || isRunning) {
+      setCookieCount(null);
+      return;
+    }
+    let mounted = true;
+    void (async () => {
+      try {
+        const data = await invoke<{ total_count: number }>(
+          "get_profile_cookie_stats",
+          { profileId: profile.id },
+        );
+        if (mounted) setCookieCount(data.total_count);
+      } catch {
+        if (mounted) setCookieCount(null);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [profile.id, cookiesSupported, isRunning]);
+
+  const sidebarItems: {
+    id: ProfileSection;
+    icon: React.ReactNode;
+    label: string;
+    badge?: string;
+    destructive?: boolean;
+    hidden?: boolean;
+  }[] = [
+    {
+      id: "overview",
+      icon: <LuClipboard className="w-3.5 h-3.5" />,
+      label: t("profileInfo.sections.overview"),
+    },
+    {
+      id: "fingerprint",
+      icon: <LuFingerprint className="w-3.5 h-3.5" />,
+      label: t("profileInfo.sections.fingerprint"),
+      badge: profile.password_protected
+        ? t("profileInfo.badges.locked")
+        : undefined,
+      hidden: !fingerprintAction,
+    },
+    {
+      id: "network",
+      icon: <LuGlobe className="w-3.5 h-3.5" />,
+      label: t("profileInfo.sections.network"),
+      badge: profile.proxy_id || profile.vpn_id ? networkLabel : undefined,
+    },
+    {
+      id: "cookies",
+      icon: <LuCookie className="w-3.5 h-3.5" />,
+      label: t("profileInfo.sections.cookies"),
+      badge:
+        cookieCount !== null && cookieCount > 0
+          ? cookieCount.toLocaleString()
+          : undefined,
+      hidden: !cookiesAction,
+    },
+    {
+      id: "extensions",
+      icon: <LuPuzzle className="w-3.5 h-3.5" />,
+      label: t("profileInfo.sections.extensions"),
+      badge: extensionGroupName ?? undefined,
+      hidden: !extensionAction,
+    },
+    {
+      id: "sync",
+      icon: <LuRefreshCw className="w-3.5 h-3.5" />,
+      label: t("profileInfo.sections.sync"),
+      hidden: !syncAction,
+    },
+    {
+      id: "automation",
+      icon: <LuLink className="w-3.5 h-3.5" />,
+      label: t("profileInfo.sections.launchHook"),
+      badge: profile.launch_hook ? t("profileInfo.badges.active") : undefined,
+    },
+    {
+      id: "security",
+      icon: <LuKey className="w-3.5 h-3.5" />,
+      label: t("profileInfo.sections.security"),
+    },
+  ];
+
+  return (
+    <>
+      {/* Top bar */}
+      <div className="flex items-center gap-2 h-11 px-3 border-b border-border shrink-0">
+        <LuUsers className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        <div className="flex items-center gap-1.5 text-xs min-w-0 flex-1">
+          <span className="font-semibold">
+            {t("profileInfo.breadcrumbRoot")}
+          </span>
+          <span className="text-muted-foreground">/</span>
+          <span className="text-muted-foreground truncate">{profile.name}</span>
+        </div>
+        {onCloneProfile && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs gap-1.5"
+            disabled={isDisabled}
+            onClick={() => onCloneProfile(profile)}
+          >
+            <LuCopy className="w-3 h-3" />
+            {t("profileInfo.duplicate")}
+          </Button>
+        )}
+        <button
+          type="button"
+          aria-label={t("common.buttons.close")}
+          onClick={onClose}
+          className="grid place-items-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors duration-100"
+        >
+          <LuX className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="flex flex-1 min-h-0">
+        {/* Sidebar */}
+        <nav className="w-44 shrink-0 border-r border-border p-2 flex flex-col gap-0.5 overflow-y-auto">
+          {sidebarItems
+            .filter((it) => !it.hidden)
+            .map((it) => {
+              const active = section === it.id;
+              return (
+                <button
+                  key={it.id}
+                  type="button"
+                  onClick={() => setSection(it.id)}
+                  className={cn(
+                    "flex items-center gap-2 h-7 px-2 rounded-md text-xs transition-colors duration-100 text-left",
+                    active
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
+                  )}
+                >
+                  <span className="shrink-0">{it.icon}</span>
+                  <span className="flex-1 truncate">{it.label}</span>
+                  {it.badge && (
+                    <span className="text-[9px] uppercase text-muted-foreground tracking-wide truncate max-w-[60px]">
+                      {it.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          {deleteAction && (
+            <>
+              <div className="my-1 h-px bg-border" />
+              <button
+                type="button"
+                onClick={deleteAction.onClick}
+                disabled={deleteAction.disabled}
+                className="flex items-center gap-2 h-7 px-2 rounded-md text-xs transition-colors duration-100 text-destructive hover:bg-destructive/10 disabled:opacity-50 disabled:pointer-events-none"
+              >
+                <LuTrash2 className="w-3.5 h-3.5 shrink-0" />
+                <span className="flex-1 text-left">
+                  {t("profileInfo.sections.delete")}
+                </span>
+              </button>
+            </>
+          )}
+        </nav>
+
+        {/* Main */}
+        <div className="flex-1 min-w-0 overflow-y-auto scroll-fade p-4">
+          {section === "overview" && (
+            <div className="flex flex-col gap-3">
+              {/* Hero */}
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-muted p-2.5 shrink-0">
+                  <ProfileIcon className="w-7 h-7 text-foreground" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
                     <h3 className="text-base font-semibold truncate">
                       {profile.name}
                     </h3>
-                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                      <Badge variant="secondary" className="text-xs">
-                        {getBrowserDisplayName(profile.browser)}{" "}
-                        {profile.version}
-                      </Badge>
-                      <Badge variant="outline" className="text-xs">
-                        {releaseLabel}
-                      </Badge>
-                      {isRunning && (
-                        <Badge className="text-xs bg-primary/15 text-primary border-primary/25">
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[11px]">
+                    <span className="font-mono uppercase text-muted-foreground">
+                      {getBrowserDisplayName(profile.browser)}
+                    </span>
+                    <span className="text-muted-foreground">·</span>
+                    <span className="text-muted-foreground">
+                      {groupName ?? t("profileInfo.values.none")}
+                    </span>
+                    {isRunning && (
+                      <>
+                        <span className="text-muted-foreground">·</span>
+                        <span className="inline-flex items-center gap-1 text-success">
+                          <span className="w-1.5 h-1.5 rounded-full bg-success" />
                           {t("common.status.running")}
-                        </Badge>
-                      )}
-                      {profile.ephemeral && (
-                        <Badge variant="outline" className="text-xs">
+                        </span>
+                      </>
+                    )}
+                    {profile.ephemeral && (
+                      <>
+                        <span className="text-muted-foreground">·</span>
+                        <span className="text-muted-foreground uppercase">
                           {t("profiles.ephemeralBadge")}
-                        </Badge>
-                      )}
-                      {profile.password_protected && (
-                        <Badge variant="outline" className="text-xs gap-1">
+                        </span>
+                      </>
+                    )}
+                    {profile.password_protected && (
+                      <>
+                        <span className="text-muted-foreground">·</span>
+                        <span className="inline-flex items-center gap-1 text-muted-foreground">
                           <LuLock className="w-3 h-3" />
                           {t("profiles.passwordProtectedBadge")}
-                        </Badge>
-                      )}
-                      {showCrossOs && (
-                        <Badge variant="outline" className="text-xs gap-1">
+                        </span>
+                      </>
+                    )}
+                    {showCrossOs && (
+                      <>
+                        <span className="text-muted-foreground">·</span>
+                        <span className="inline-flex items-center gap-1 text-muted-foreground">
                           <OSIcon
                             os={
                               profile.host_os ||
@@ -482,178 +849,1131 @@ export function ProfileInfoDialog({
                               profile.wayfern_config?.os ||
                               "",
                           )}
-                        </Badge>
-                      )}
-                    </div>
+                        </span>
+                      </>
+                    )}
+                    <span className="text-muted-foreground">·</span>
+                    <span className="text-muted-foreground">
+                      {releaseLabel}
+                    </span>
                   </div>
                 </div>
+              </div>
 
-                {/* Profile ID */}
-                <div className="flex items-center gap-2 rounded-md bg-muted/50 border px-3 py-2">
-                  <span className="text-xs text-muted-foreground shrink-0">
-                    ID
-                  </span>
-                  <span className="font-mono text-xs truncate flex-1">
-                    {profile.id}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => void handleCopyId()}
-                    className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
-                  >
-                    {copied ? (
-                      <LuClipboardCheck className="w-3.5 h-3.5" />
-                    ) : (
-                      <LuClipboard className="w-3.5 h-3.5" />
-                    )}
-                  </button>
-                </div>
+              {/* ID */}
+              <div className="flex items-center gap-2 rounded-md bg-muted/40 px-3 py-2 border border-border">
+                <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">
+                  ID
+                </span>
+                <span className="font-mono text-xs truncate flex-1">
+                  {profile.id}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void handleCopyId()}
+                  className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                  aria-label={t("common.buttons.copy")}
+                >
+                  {copied ? (
+                    <LuClipboardCheck className="w-3.5 h-3.5" />
+                  ) : (
+                    <LuClipboard className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              </div>
 
-                {/* Network & Organization */}
+              {/* 2x2 cards */}
+              <div className="grid grid-cols-2 gap-2">
+                <InfoCard
+                  label={t("profileInfo.fields.group")}
+                  value={groupName ?? t("profileInfo.values.none")}
+                />
+                <InfoCard
+                  label={t("profileInfo.fields.proxyVpn")}
+                  value={networkLabel}
+                />
+                <InfoCard
+                  label={t("profileInfo.fields.tags")}
+                  value={
+                    hasTags
+                      ? (profile.tags ?? []).join(", ")
+                      : t("profileInfo.values.none")
+                  }
+                />
+                <InfoCard
+                  label={t("profileInfo.fields.note")}
+                  value={
+                    hasNote
+                      ? (profile.note ?? "")
+                      : t("profileInfo.values.none")
+                  }
+                />
+              </div>
+
+              {/* Activity */}
+              <div className="mt-1 flex flex-col gap-1.5">
+                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  {t("profileInfo.sections.activity")}
+                </span>
                 <div className="grid grid-cols-2 gap-2">
-                  <InfoCard
-                    label={t("profileInfo.fields.proxyVpn")}
-                    value={networkLabel}
-                  />
-                  <InfoCard
-                    label={t("profileInfo.fields.group")}
-                    value={groupName ?? t("profileInfo.values.none")}
-                  />
-                  <InfoCard
-                    label={t("profileInfo.fields.extensionGroup")}
-                    value={extensionGroupName ?? t("profileInfo.values.none")}
-                  />
                   <InfoCard
                     label={t("profileInfo.fields.lastLaunched")}
                     value={
-                      profile.last_launch
-                        ? formatRelativeTime(profile.last_launch)
-                        : t("profileInfo.values.never")
+                      isRunning
+                        ? t("profileInfo.values.activeNow")
+                        : profile.last_launch
+                          ? formatRelativeTime(profile.last_launch)
+                          : t("profileInfo.values.never")
                     }
                   />
-                  <InfoCard
-                    label={t("dnsBlocklist.title")}
-                    value={
-                      profile.dns_blocklist
-                        ? t(
-                            `dnsBlocklist.${profile.dns_blocklist === "pro_plus" ? "proPlus" : profile.dns_blocklist}`,
-                          )
-                        : t("dnsBlocklist.none")
-                    }
-                  />
-                  <InfoCard
-                    label={t("profileInfo.fields.launchHook")}
-                    value={profile.launch_hook || t("profileInfo.values.none")}
-                  />
+                  <LocalDataTransferCard profileId={profile.id} t={t} />
                 </div>
+              </div>
 
-                {/* Sync */}
-                <div className="rounded-md bg-muted/50 border px-3 py-2.5 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      {t("profileInfo.fields.syncStatus")}
-                    </p>
-                    <p className="text-sm mt-0.5">{syncLabel}</p>
-                  </div>
-                  <Badge
-                    variant={syncMode === "Disabled" ? "outline" : "secondary"}
-                    className="text-xs shrink-0"
+              {profile.created_by_email && (
+                <div className="rounded-md bg-muted/40 border border-border px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    {t("sync.team.title")}
+                  </p>
+                  <p className="text-sm mt-0.5">
+                    {t("sync.team.createdBy", {
+                      email: profile.created_by_email,
+                    })}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {section === "fingerprint" && (
+            <FingerprintSectionInline
+              profile={profile}
+              isDisabled={isDisabled}
+              crossOsUnlocked={Boolean(
+                // Re-derive: parent passes crossOsUnlocked but the layout
+                // doesn't get it; we get it implicitly via fingerprintAction's
+                // proBadge state. Default to false if action missing.
+                fingerprintAction && !fingerprintAction.proBadge,
+              )}
+              t={t}
+            />
+          )}
+
+          {section === "network" && (
+            <NetworkSectionInline
+              profile={profile}
+              storedProxies={storedProxies}
+              vpnConfigs={vpnConfigs}
+              isDisabled={isDisabled}
+              t={t}
+            />
+          )}
+
+          {section === "cookies" && (
+            <CookiesSectionInline
+              profile={profile}
+              isRunning={isRunning}
+              isDisabled={isDisabled}
+              t={t}
+            />
+          )}
+
+          {section === "extensions" && (
+            <ExtensionsSectionInline
+              profile={profile}
+              isDisabled={isDisabled}
+              t={t}
+            />
+          )}
+
+          {section === "sync" && (
+            <SyncSectionInline
+              profile={profile}
+              syncMode={syncMode}
+              syncStatus={syncStatus}
+              isDisabled={isDisabled}
+              t={t}
+            />
+          )}
+
+          {section === "automation" && (
+            <LaunchHookEditor profile={profile} t={t} />
+          )}
+
+          {section === "security" && (
+            <SecuritySectionInline
+              profile={profile}
+              isRunning={isRunning}
+              t={t}
+            />
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function _SectionPlaceholder({
+  icon,
+  title,
+  description,
+  actionLabel,
+  onAction,
+  disabled,
+  hint,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  actionLabel: string;
+  onAction: () => void;
+  disabled?: boolean;
+  hint?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        {icon}
+        {title}
+      </div>
+      <p className="text-xs text-muted-foreground">{description}</p>
+      {hint && (
+        <div className="rounded-md bg-muted/40 border border-border px-3 py-2 text-xs">
+          {hint}
+        </div>
+      )}
+      <Button
+        size="sm"
+        onClick={onAction}
+        disabled={disabled}
+        className="self-start h-7 text-xs"
+      >
+        {actionLabel}
+      </Button>
+    </div>
+  );
+}
+
+function _SectionAction({
+  icon,
+  label,
+  onClick,
+  disabled,
+  destructive,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  destructive?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-2 h-9 px-3 rounded-md text-xs transition-colors text-left",
+        destructive
+          ? "text-destructive hover:bg-destructive/10"
+          : "hover:bg-accent",
+        "disabled:opacity-50 disabled:pointer-events-none",
+      )}
+    >
+      {icon}
+      <span className="flex-1">{label}</span>
+      <LuChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+    </button>
+  );
+}
+
+function isValidHttpUrl(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  try {
+    const u = new URL(trimmed);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function LaunchHookEditor({
+  profile,
+  t,
+}: {
+  profile: BrowserProfile;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const { t: tFn } = useTranslation();
+  const [value, setValue] = React.useState(profile.launch_hook ?? "");
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const initial = profile.launch_hook ?? "";
+  const dirty = value !== initial;
+  const trimmed = value.trim();
+  const showInvalidHint = trimmed.length > 0 && !isValidHttpUrl(trimmed);
+
+  const onSave = async () => {
+    setIsSaving(true);
+    setError(null);
+    try {
+      await invoke("update_profile_launch_hook", {
+        profileId: profile.id,
+        launchHook: trimmed ? trimmed : null,
+      });
+    } catch (e) {
+      setError(translateBackendError(tFn, e));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <LuLink className="w-4 h-4" />
+        {t("profileInfo.sections.launchHook")}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {t("profileInfo.sectionDesc.launchHook")}
+      </p>
+      <Input
+        type="url"
+        value={value}
+        onChange={(e) => {
+          setValue(e.target.value);
+        }}
+        placeholder={t("profiles.launchHook.placeholder")}
+        className="text-xs font-mono"
+      />
+      {showInvalidHint && (
+        <p className="text-xs text-warning">
+          {t("profileInfo.launchHook.invalidUrlHint")}
+        </p>
+      )}
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <div className="flex items-center gap-2">
+        <Button
+          size="sm"
+          className="h-7 text-xs"
+          disabled={!dirty || isSaving || showInvalidHint}
+          onClick={() => {
+            void onSave();
+          }}
+        >
+          {isSaving ? t("common.buttons.saving") : t("common.buttons.save")}
+        </Button>
+        {dirty && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs"
+            onClick={() => {
+              setValue(initial);
+              setError(null);
+            }}
+          >
+            {t("common.buttons.cancel")}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SyncSectionInline({
+  profile,
+  syncMode,
+  syncStatus,
+  isDisabled,
+  t,
+}: {
+  profile: BrowserProfile;
+  syncMode: string;
+  syncStatus: { status: string; error?: string } | undefined;
+  isDisabled: boolean;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const onChangeMode = async (mode: string) => {
+    setIsSaving(true);
+    setError(null);
+    try {
+      await invoke("set_profile_sync_mode", {
+        profileId: profile.id,
+        syncMode: mode,
+      });
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <LuRefreshCw className="w-4 h-4" />
+        {t("profileInfo.sections.sync")}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {t("profileInfo.sectionDesc.sync")}
+      </p>
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">
+          {t("profileInfo.fields.syncMode")}
+        </span>
+        <Select
+          value={syncMode}
+          disabled={isDisabled || isSaving}
+          onValueChange={(v) => {
+            void onChangeMode(v);
+          }}
+        >
+          <SelectTrigger className="h-7 text-xs flex-1">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Disabled">{t("sync.mode.disabled")}</SelectItem>
+            <SelectItem value="Regular">{t("sync.mode.regular")}</SelectItem>
+            <SelectItem value="Encrypted">
+              {t("sync.mode.encrypted")}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      {syncStatus && (
+        <div className="rounded-md bg-muted/40 border border-border px-3 py-2">
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            {t("profileInfo.fields.syncStatus")}
+          </p>
+          <p className="text-sm mt-0.5">{syncStatus.status}</p>
+          {syncStatus.error && (
+            <p className="text-xs text-destructive mt-1">{syncStatus.error}</p>
+          )}
+        </div>
+      )}
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+function NetworkSectionInline({
+  profile,
+  storedProxies,
+  vpnConfigs,
+  isDisabled,
+  t,
+}: {
+  profile: BrowserProfile;
+  storedProxies: StoredProxy[];
+  vpnConfigs: VpnConfig[];
+  isDisabled: boolean;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  // Track the effective selection so the dropdown reflects the last save
+  // even before the parent `profile` prop refreshes from a backend event.
+  const [proxyId, setProxyId] = React.useState<string | null>(
+    profile.proxy_id ?? null,
+  );
+  const [vpnId, setVpnId] = React.useState<string | null>(
+    profile.vpn_id ?? null,
+  );
+
+  React.useEffect(() => {
+    setProxyId(profile.proxy_id ?? null);
+    setVpnId(profile.vpn_id ?? null);
+  }, [profile.proxy_id, profile.vpn_id]);
+
+  const onProxyChange = async (value: string) => {
+    const nextId = value === "__none__" ? null : value;
+    setIsSaving(true);
+    setError(null);
+    try {
+      await invoke("update_profile_proxy", {
+        profileId: profile.id,
+        proxyId: nextId,
+      });
+      // Clearing the proxy implicitly clears any VPN binding too on the
+      // backend, but we mirror it locally for an immediate visual.
+      setProxyId(nextId);
+      if (nextId !== null) setVpnId(null);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const onVpnChange = async (value: string) => {
+    const nextId = value === "__none__" ? null : value;
+    setIsSaving(true);
+    setError(null);
+    try {
+      await invoke("update_profile_vpn", {
+        profileId: profile.id,
+        vpnId: nextId,
+      });
+      setVpnId(nextId);
+      if (nextId !== null) setProxyId(null);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <LuGlobe className="w-4 h-4" />
+        {t("profileInfo.sections.network")}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {t("profileInfo.sectionDesc.network")}
+      </p>
+
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0 w-12">
+          {t("profileInfo.fields.proxy")}
+        </span>
+        <Select
+          value={proxyId ?? "__none__"}
+          disabled={isDisabled || isSaving}
+          onValueChange={(v) => {
+            void onProxyChange(v);
+          }}
+        >
+          <SelectTrigger className="h-7 text-xs flex-1">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__none__">
+              {t("profileInfo.values.none")}
+            </SelectItem>
+            {storedProxies.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0 w-12">
+          {t("profileInfo.fields.vpn")}
+        </span>
+        <Select
+          value={vpnId ?? "__none__"}
+          disabled={isDisabled || isSaving}
+          onValueChange={(v) => {
+            void onVpnChange(v);
+          }}
+        >
+          <SelectTrigger className="h-7 text-xs flex-1">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__none__">
+              {t("profileInfo.values.none")}
+            </SelectItem>
+            {vpnConfigs.map((v) => (
+              <SelectItem key={v.id} value={v.id}>
+                {v.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+function ExtensionsSectionInline({
+  profile,
+  isDisabled,
+  t,
+}: {
+  profile: BrowserProfile;
+  isDisabled: boolean;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  type ExtensionGroupOption = { id: string; name: string };
+  const [groups, setGroups] = React.useState<ExtensionGroupOption[]>([]);
+  const [groupId, setGroupId] = React.useState<string | null>(
+    profile.extension_group_id ?? null,
+  );
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    setGroupId(profile.extension_group_id ?? null);
+  }, [profile.extension_group_id]);
+
+  React.useEffect(() => {
+    let mounted = true;
+    let unlisten: (() => void) | undefined;
+    const load = async () => {
+      try {
+        const data = await invoke<ExtensionGroupOption[]>(
+          "list_extension_groups",
+        );
+        if (mounted) setGroups(data);
+      } catch (e) {
+        if (mounted) setError(String(e));
+      }
+    };
+    void load();
+    void listen("extensions-changed", () => {
+      void load();
+    }).then((u) => {
+      if (mounted) unlisten = u;
+      else u();
+    });
+    return () => {
+      mounted = false;
+      unlisten?.();
+    };
+  }, []);
+
+  const onChange = async (value: string) => {
+    const next = value === "__none__" ? null : value;
+    setIsSaving(true);
+    setError(null);
+    try {
+      await invoke("assign_extension_group_to_profile", {
+        profileId: profile.id,
+        extensionGroupId: next,
+      });
+      setGroupId(next);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <LuPuzzle className="w-4 h-4" />
+        {t("profileInfo.sections.extensions")}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {t("profileInfo.sectionDesc.extensions")}
+      </p>
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0 w-16">
+          {t("profileInfo.fields.extensionGroup")}
+        </span>
+        <Select
+          value={groupId ?? "__none__"}
+          disabled={isDisabled || isSaving}
+          onValueChange={(v) => {
+            void onChange(v);
+          }}
+        >
+          <SelectTrigger className="h-7 text-xs flex-1">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__none__">
+              {t("profileInfo.values.none")}
+            </SelectItem>
+            {groups.map((g) => (
+              <SelectItem key={g.id} value={g.id}>
+                {g.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+function CookiesSectionInline({
+  profile,
+  isRunning,
+  t,
+}: {
+  profile: BrowserProfile;
+  isRunning: boolean;
+  isDisabled: boolean;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  type CookieStats = {
+    profile_id: string;
+    browser_type: string;
+    total_count: number;
+    domains: { domain: string; count: number }[];
+  };
+  const [stats, setStats] = React.useState<CookieStats | null>(null);
+  const [isLoading, setIsLoading] = React.useState(!isRunning);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (isRunning) {
+      setStats(null);
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
+    let mounted = true;
+    setIsLoading(true);
+    setError(null);
+    void (async () => {
+      try {
+        const data = await invoke<CookieStats>("get_profile_cookie_stats", {
+          profileId: profile.id,
+        });
+        if (mounted) setStats(data);
+      } catch (e) {
+        if (mounted) setError(translateBackendError(t as never, e));
+      } finally {
+        if (mounted) setIsLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [profile.id, isRunning, t]);
+
+  const domains = stats?.domains ?? [];
+
+  return (
+    <div className="flex flex-col gap-3 min-h-0 flex-1">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <LuCookie className="w-4 h-4" />
+        {t("profileInfo.sections.cookies")}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {t("profileInfo.sectionDesc.cookies")}
+      </p>
+      {isRunning ? (
+        <div className="rounded-md bg-muted/40 border border-border px-3 py-2">
+          <p className="text-xs text-muted-foreground">
+            {t("profileInfo.cookies.runningNotice")}
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="rounded-md bg-muted/40 border border-border px-3 py-2">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              {t("profileInfo.fields.cookieCount")}
+            </p>
+            <p className="text-sm mt-0.5">
+              {isLoading
+                ? t("profileInfo.values.loading")
+                : stats
+                  ? stats.total_count.toLocaleString()
+                  : "—"}
+            </p>
+          </div>
+          {domains.length > 0 && (
+            <div className="rounded-md bg-muted/40 border border-border flex flex-col min-h-0 flex-1 overflow-hidden">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground px-3 py-2 border-b border-border shrink-0">
+                {t("profileInfo.cookies.domainsHeader", {
+                  count: domains.length,
+                })}
+              </p>
+              <ul className="text-xs px-3 py-2 overflow-y-auto flex-1 space-y-1">
+                {domains.map((d) => (
+                  <li
+                    key={d.domain}
+                    className="flex items-center justify-between gap-2"
                   >
-                    {syncMode === "Disabled"
-                      ? t("sync.mode.disabled")
-                      : syncStatus.status === "syncing"
-                        ? t("common.status.syncing")
-                        : t("common.status.synced")}
-                  </Badge>
-                </div>
-
-                {/* Tags */}
-                {hasTags && (
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-xs text-muted-foreground">
-                      {t("profileInfo.fields.tags")}
+                    <span className="truncate font-mono">{d.domain}</span>
+                    <span className="text-muted-foreground tabular-nums">
+                      {d.count}
                     </span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {profile.tags?.map((tag) => (
-                        <Badge
-                          key={tag}
-                          variant="secondary"
-                          className="text-xs"
-                        >
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Note */}
-                {hasNote && (
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-xs text-muted-foreground">
-                      {t("profileInfo.fields.note")}
-                    </span>
-                    <p className="text-sm rounded-md bg-muted/50 border px-3 py-2 whitespace-pre-wrap break-words">
-                      {profile.note}
-                    </p>
-                  </div>
-                )}
-
-                {/* Team */}
-                {profile.created_by_email && (
-                  <div className="rounded-md bg-muted/50 border px-3 py-2.5">
-                    <p className="text-xs text-muted-foreground">
-                      {t("sync.team.title")}
-                    </p>
-                    <p className="text-sm mt-0.5">
-                      {t("sync.team.createdBy", {
-                        email: profile.created_by_email,
-                      })}
-                    </p>
-                  </div>
-                )}
-              </div>
+                  </li>
+                ))}
+              </ul>
             </div>
-          </TabsContent>
-          <TabsContent value="settings">
-            <div className="overflow-y-auto max-h-[calc(80vh-12rem)]">
-              <div className="flex flex-col gap-3 py-1">
-                <div className="flex flex-col">
-                  {visibleActions.map((action) => (
-                    <button
-                      key={action.label}
-                      type="button"
-                      disabled={action.disabled}
-                      onClick={action.onClick}
-                      className={cn(
-                        "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors text-left w-full",
-                        "hover:bg-accent disabled:opacity-50 disabled:pointer-events-none",
-                        action.destructive &&
-                          "text-destructive hover:bg-destructive/10",
-                      )}
-                    >
-                      {action.icon}
-                      <span className="flex-1 flex items-center gap-2">
-                        {action.label}
-                        {action.runningBadge && (
-                          <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-primary/15 text-primary uppercase">
-                            {t("common.status.running")}
-                          </span>
-                        )}
-                        {action.proBadge && !action.runningBadge && (
-                          <ProBadge />
-                        )}
-                      </span>
-                      <LuChevronRight className="w-4 h-4 text-muted-foreground" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </TabsContent>
-        </Tabs>
-      </DialogContent>
-    </Dialog>
+          )}
+          {error && <p className="text-xs text-destructive">{error}</p>}
+        </>
+      )}
+    </div>
+  );
+}
+
+// Inline password set / change / remove form. Replaces three separate
+// nested modal dialogs with one in-page form that branches on the current
+// `password_protected` state of the profile.
+// Inline fingerprint editor. Reuses SharedCamoufoxConfigForm (Camoufox/Firefox
+// engine) and WayfernConfigForm (Chromium engine) so the same field set as
+// the standalone dialog is available without opening a nested modal.
+function FingerprintSectionInline({
+  profile,
+  isDisabled,
+  crossOsUnlocked,
+  t,
+}: {
+  profile: BrowserProfile;
+  isDisabled: boolean;
+  crossOsUnlocked: boolean;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const [camoufoxConfig, setCamoufoxConfig] = React.useState<CamoufoxConfig>(
+    () => profile.camoufox_config ?? {},
+  );
+  const [wayfernConfig, setWayfernConfig] = React.useState<WayfernConfig>(
+    () => profile.wayfern_config ?? {},
+  );
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [success, setSuccess] = React.useState<string | null>(null);
+
+  // When the underlying profile changes (e.g. a different profile is opened
+  // in the dialog) reset the local form state to match.
+  React.useEffect(() => {
+    setCamoufoxConfig(profile.camoufox_config ?? {});
+    setWayfernConfig(profile.wayfern_config ?? {});
+    setError(null);
+    setSuccess(null);
+  }, [profile.camoufox_config, profile.wayfern_config]);
+
+  const isCamoufox = profile.browser === "camoufox";
+  const isWayfern = profile.browser === "wayfern";
+
+  if (!isCamoufox && !isWayfern) {
+    return (
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <LuFingerprint className="w-4 h-4" />
+          {t("profileInfo.sections.fingerprint")}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {t("profileInfo.fingerprint.notSupported")}
+        </p>
+      </div>
+    );
+  }
+
+  const onCamoufoxChange = (key: keyof CamoufoxConfig, value: unknown) => {
+    setCamoufoxConfig((prev) => ({ ...prev, [key]: value }));
+    setSuccess(null);
+  };
+  const onWayfernChange = (key: keyof WayfernConfig, value: unknown) => {
+    setWayfernConfig((prev) => ({ ...prev, [key]: value }));
+    setSuccess(null);
+  };
+
+  const onSave = async () => {
+    setIsSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      if (isCamoufox) {
+        await invoke("update_camoufox_config", {
+          profileId: profile.id,
+          config: camoufoxConfig,
+        });
+      } else {
+        await invoke("update_wayfern_config", {
+          profileId: profile.id,
+          config: wayfernConfig,
+        });
+      }
+      setSuccess(t("common.buttons.saved"));
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const initial = isCamoufox
+    ? JSON.stringify(profile.camoufox_config ?? {})
+    : JSON.stringify(profile.wayfern_config ?? {});
+  const current = isCamoufox
+    ? JSON.stringify(camoufoxConfig)
+    : JSON.stringify(wayfernConfig);
+  const dirty = current !== initial;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <LuFingerprint className="w-4 h-4" />
+        {t("profileInfo.sections.fingerprint")}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {t("profileInfo.sectionDesc.fingerprint")}
+      </p>
+
+      {isCamoufox && (
+        <SharedCamoufoxConfigForm
+          config={camoufoxConfig}
+          onConfigChange={onCamoufoxChange}
+          forceAdvanced={false}
+          readOnly={isDisabled}
+          browserType="camoufox"
+          crossOsUnlocked={crossOsUnlocked}
+          limitedMode={false}
+          profileVersion={profile.version}
+          profileBrowser={profile.browser}
+        />
+      )}
+      {isWayfern && (
+        <WayfernConfigForm
+          config={wayfernConfig}
+          onConfigChange={onWayfernChange}
+          readOnly={isDisabled}
+          crossOsUnlocked={crossOsUnlocked}
+          profileVersion={profile.version}
+          profileBrowser={profile.browser}
+        />
+      )}
+
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      {success && !error && <p className="text-xs text-success">{success}</p>}
+
+      <div className="flex items-center gap-2 sticky bottom-0 bg-background pt-2 -mx-3 px-3 -mb-3 pb-3 border-t border-border">
+        <Button
+          size="sm"
+          className="h-7 text-xs"
+          disabled={!dirty || isSaving || isDisabled}
+          onClick={() => {
+            void onSave();
+          }}
+        >
+          {isSaving ? t("common.buttons.saving") : t("common.buttons.save")}
+        </Button>
+        {dirty && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs"
+            onClick={() => {
+              setCamoufoxConfig(profile.camoufox_config ?? {});
+              setWayfernConfig(profile.wayfern_config ?? {});
+              setError(null);
+              setSuccess(null);
+            }}
+          >
+            {t("common.buttons.cancel")}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SecuritySectionInline({
+  profile,
+  isRunning,
+  t,
+}: {
+  profile: BrowserProfile;
+  isRunning: boolean;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  // Mode is implied by current state: unprotected → "set"; protected →
+  // "change" by default, with a "remove" alternative.
+  type Mode = "set" | "change" | "remove";
+  const initialMode: Mode = profile.password_protected ? "change" : "set";
+  const [mode, setMode] = React.useState<Mode>(initialMode);
+  const [oldPassword, setOldPassword] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [confirm, setConfirm] = React.useState("");
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [success, setSuccess] = React.useState<string | null>(null);
+
+  // Reset the form whenever the underlying profile state changes (e.g. the
+  // user just set a password — flip to "change" mode and clear fields).
+  React.useEffect(() => {
+    setMode(profile.password_protected ? "change" : "set");
+    setOldPassword("");
+    setPassword("");
+    setConfirm("");
+    setError(null);
+    setSuccess(null);
+  }, [profile.password_protected]);
+
+  const reset = () => {
+    setOldPassword("");
+    setPassword("");
+    setConfirm("");
+    setError(null);
+  };
+
+  const validate = (): string | null => {
+    if (mode === "change" || mode === "remove") {
+      if (!oldPassword) return t("profilePassword.errors.passwordRequired");
+    }
+    if (mode === "set" || mode === "change") {
+      if (password.length < 8) return t("profilePassword.errors.tooShort");
+      if (password !== confirm)
+        return t("profilePassword.errors.passwordMismatch");
+    }
+    return null;
+  };
+
+  const onSubmit = async () => {
+    if (isRunning) return;
+    const v = validate();
+    if (v) {
+      setError(v);
+      return;
+    }
+    setIsSubmitting(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      if (mode === "set") {
+        await invoke("set_profile_password", {
+          profileId: profile.id,
+          password,
+        });
+        setSuccess(t("profilePassword.toasts.set"));
+      } else if (mode === "change") {
+        await invoke("change_profile_password", {
+          profileId: profile.id,
+          oldPassword,
+          newPassword: password,
+        });
+        setSuccess(t("profilePassword.toasts.changed"));
+      } else {
+        await invoke("remove_profile_password", {
+          profileId: profile.id,
+          password: oldPassword,
+        });
+        setSuccess(t("profilePassword.toasts.removed"));
+      }
+      reset();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <LuKey className="w-4 h-4" />
+        {t("profileInfo.sections.security")}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {profile.password_protected
+          ? t("profileInfo.security.protected")
+          : t("profileInfo.security.unprotected")}
+      </p>
+
+      {profile.password_protected && (
+        <div className="flex gap-1.5">
+          <button
+            type="button"
+            onClick={() => {
+              setMode("change");
+              reset();
+            }}
+            className={cn(
+              "flex-1 h-7 px-2 text-xs rounded-md border transition-colors",
+              mode === "change"
+                ? "bg-accent text-accent-foreground border-transparent"
+                : "border-border text-muted-foreground hover:text-foreground hover:bg-accent/50",
+            )}
+          >
+            {t("profilePassword.modes.change")}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMode("remove");
+              reset();
+            }}
+            className={cn(
+              "flex-1 h-7 px-2 text-xs rounded-md border transition-colors",
+              mode === "remove"
+                ? "bg-destructive/10 text-destructive border-transparent"
+                : "border-border text-muted-foreground hover:text-foreground hover:bg-accent/50",
+            )}
+          >
+            {t("profilePassword.modes.remove")}
+          </button>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-2">
+        {(mode === "change" || mode === "remove") && (
+          <Input
+            type="password"
+            value={oldPassword}
+            onChange={(e) => {
+              setOldPassword(e.target.value);
+              setError(null);
+            }}
+            placeholder={t("profilePassword.fields.currentPassword")}
+            disabled={isRunning || isSubmitting}
+            className="h-8 text-xs"
+          />
+        )}
+        {(mode === "set" || mode === "change") && (
+          <>
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setError(null);
+              }}
+              placeholder={t("profilePassword.fields.newPassword")}
+              disabled={isRunning || isSubmitting}
+              className="h-8 text-xs"
+            />
+            <Input
+              type="password"
+              value={confirm}
+              onChange={(e) => {
+                setConfirm(e.target.value);
+                setError(null);
+              }}
+              placeholder={t("profilePassword.fields.confirmPassword")}
+              disabled={isRunning || isSubmitting}
+              className="h-8 text-xs"
+            />
+          </>
+        )}
+      </div>
+
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      {success && !error && <p className="text-xs text-success">{success}</p>}
+
+      {isRunning && (
+        <p className="text-xs text-muted-foreground">
+          {t("profileInfo.security.cannotWhileRunning")}
+        </p>
+      )}
+
+      <Button
+        size="sm"
+        variant={mode === "remove" ? "destructive" : "default"}
+        className="self-start h-7 text-xs"
+        disabled={isRunning || isSubmitting}
+        onClick={() => {
+          void onSubmit();
+        }}
+      >
+        {mode === "set"
+          ? t("profilePassword.modes.set")
+          : mode === "change"
+            ? t("profilePassword.modes.change")
+            : t("profilePassword.modes.remove")}
+      </Button>
+    </div>
   );
 }
 

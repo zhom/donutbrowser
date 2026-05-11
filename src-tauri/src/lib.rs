@@ -93,16 +93,16 @@ use downloader::{cancel_download, download_browser};
 use settings_manager::{
   decline_launch_on_login, dismiss_window_resize_warning, enable_launch_on_login, get_app_settings,
   get_sync_settings, get_system_info, get_system_language, get_table_sorting_settings,
-  get_window_resize_warning_dismissed, save_app_settings, save_sync_settings,
-  save_table_sorting_settings, should_show_launch_on_login_prompt,
+  get_window_resize_warning_dismissed, open_log_directory, read_log_files, save_app_settings,
+  save_sync_settings, save_table_sorting_settings, should_show_launch_on_login_prompt,
 };
 
 use sync::{
   check_has_e2e_password, delete_e2e_password, enable_sync_for_all_entities,
   get_unsynced_entity_counts, is_group_in_use_by_synced_profile, is_proxy_in_use_by_synced_profile,
-  is_vpn_in_use_by_synced_profile, request_profile_sync, set_e2e_password,
-  set_extension_group_sync_enabled, set_extension_sync_enabled, set_group_sync_enabled,
-  set_profile_sync_mode, set_proxy_sync_enabled, set_vpn_sync_enabled,
+  is_vpn_in_use_by_synced_profile, request_profile_sync, rollover_encryption_for_all_entities,
+  set_e2e_password, set_extension_group_sync_enabled, set_extension_sync_enabled,
+  set_group_sync_enabled, set_profile_sync_mode, set_proxy_sync_enabled, set_vpn_sync_enabled,
 };
 
 use tag_manager::get_all_tags;
@@ -310,8 +310,21 @@ async fn import_proxies_from_parsed(
 }
 
 #[tauri::command]
-fn read_profile_cookies(profile_id: String) -> Result<cookie_manager::CookieReadResult, String> {
-  cookie_manager::CookieManager::read_cookies(&profile_id)
+async fn read_profile_cookies(
+  profile_id: String,
+) -> Result<cookie_manager::CookieReadResult, String> {
+  tokio::task::spawn_blocking(move || cookie_manager::CookieManager::read_cookies(&profile_id))
+    .await
+    .map_err(|e| format!("Failed to read profile cookies: {e}"))?
+}
+
+#[tauri::command]
+async fn get_profile_cookie_stats(
+  profile_id: String,
+) -> Result<cookie_manager::CookieStats, String> {
+  tokio::task::spawn_blocking(move || cookie_manager::CookieManager::read_stats(&profile_id))
+    .await
+    .map_err(|e| format!("Failed to read profile cookie stats: {e}"))?
 }
 
 #[tauri::command]
@@ -754,6 +767,15 @@ async fn get_all_traffic_snapshots() -> Result<Vec<crate::traffic_stats::Traffic
 }
 
 #[tauri::command]
+async fn get_profile_traffic_snapshot(
+  profile_id: String,
+) -> Result<Option<crate::traffic_stats::TrafficSnapshot>, String> {
+  Ok(crate::traffic_stats::get_traffic_snapshot_for_profile(
+    &profile_id,
+  ))
+}
+
+#[tauri::command]
 async fn clear_all_traffic_stats() -> Result<(), String> {
   crate::traffic_stats::clear_all_traffic_stats()
     .map_err(|e| format!("Failed to clear traffic stats: {e}"))
@@ -1186,7 +1208,11 @@ pub fn run() {
         .target(Target::new(TargetKind::LogDir {
           file_name: Some(log_file_name.to_string()),
         }))
-        .max_file_size(100_000) // 100KB
+        // 5 MB per rotated file × KeepAll — the previous 100 KB limit
+        // truncated useful context in customer support reports; 50 MB
+        // turned out to be excessive disk pressure.
+        .max_file_size(5 * 1024 * 1024)
+        .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
         .level(log::LevelFilter::Info)
         .format(|out, message, record| {
           use chrono::Local;
@@ -1222,6 +1248,7 @@ pub fn run() {
     .plugin(tauri_plugin_shell::init())
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_macos_permissions::init())
+    .plugin(tauri_plugin_clipboard_manager::init())
     .setup(|app| {
       // Recover ephemeral dir mappings from RAM-backed storage (tmpfs/ramdisk)
       ephemeral_dirs::recover_ephemeral_dirs();
@@ -1244,7 +1271,7 @@ pub fn run() {
       #[allow(unused_variables)]
       let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
         .title("Donut Browser")
-        .inner_size(840.0, 500.0)
+        .inner_size(880.0, 500.0)
         .resizable(false)
         .fullscreen(false)
         .center()
@@ -1735,7 +1762,23 @@ pub fn run() {
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
           }
 
-          for profile in profiles {
+          // Only walk profiles that either have a stored PID or that we last
+          // saw as running — for users with hundreds of idle profiles this
+          // turns an O(N) sysinfo scan into an O(running) scan. The Rust
+          // launch path always emits profile-running-changed when a profile
+          // STARTS, so newly-running profiles still get tracked here.
+          let profiles_to_check: Vec<_> = profiles
+            .into_iter()
+            .filter(|p| {
+              p.process_id.is_some()
+                || last_running_states
+                  .get(&p.id.to_string())
+                  .copied()
+                  .unwrap_or(false)
+            })
+            .collect();
+
+          for profile in profiles_to_check {
             // Check browser status and track changes
             match runner
               .check_browser_status(app_handle_status.clone(), &profile)
@@ -1974,6 +2017,8 @@ pub fn run() {
       rename_profile,
       get_app_settings,
       save_app_settings,
+      read_log_files,
+      open_log_directory,
       should_show_launch_on_login_prompt,
       enable_launch_on_login,
       decline_launch_on_login,
@@ -2041,6 +2086,7 @@ pub fn run() {
       stop_api_server,
       get_api_server_status,
       get_all_traffic_snapshots,
+      get_profile_traffic_snapshot,
       clear_all_traffic_stats,
       get_traffic_stats_for_period,
       get_sync_settings,
@@ -2060,7 +2106,9 @@ pub fn run() {
       set_e2e_password,
       check_has_e2e_password,
       delete_e2e_password,
+      rollover_encryption_for_all_entities,
       read_profile_cookies,
+      get_profile_cookie_stats,
       copy_profile_cookies,
       import_cookies_from_file,
       export_profile_cookies,

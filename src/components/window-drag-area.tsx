@@ -43,23 +43,20 @@ export function WindowDragArea() {
     return null;
   }
 
-  // macOS: transparent drag area overlay
+  // macOS: nothing to render here. The transparent native titlebar (set via
+  // `set_transparent_titlebar(true)` in src-tauri/src/lib.rs) lets the OS
+  // handle dragging directly, and the sys-bar inside `home-header.tsx`
+  // declares its own `data-tauri-drag-region` overlay for the WebView area.
+  // The previous full-width fixed z-[999999] button was stealing every
+  // click in the top 40px of the window.
   if (platform === "macos") {
-    return (
-      <button
-        type="button"
-        className="fixed top-0 right-0 left-0 h-10 bg-transparent border-0 z-[999999] select-none"
-        data-window-drag-area="true"
-        onPointerDown={handlePointerDown}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        }}
-      />
-    );
+    return null;
   }
 
-  // Windows: custom title bar with drag area + minimize/close buttons
+  // Windows: minimize/close controls anchored at the top-right corner of
+  // the sys-bar. The HomeHeader's own drag-region overlay handles window
+  // dragging via Tauri 2, so we don't need a separate draggable spacer
+  // covering the whole width.
   const handleMinimize = async () => {
     try {
       await getCurrentWindow().minimize();
@@ -75,64 +72,54 @@ export function WindowDragArea() {
       console.error("Failed to close window:", error);
     }
   };
+  void handlePointerDown; // kept for backwards-compat; not used on Windows now
 
   return (
     <div
-      className="fixed top-0 right-0 left-0 h-10 z-[999999] flex items-center select-none"
-      data-window-drag-area="true"
+      className="fixed top-0 right-0 z-50 flex items-center h-11 select-none"
+      aria-hidden="false"
     >
-      {/* Draggable area */}
       <button
         type="button"
-        className="flex-1 h-full bg-transparent border-0 cursor-default"
-        onPointerDown={handlePointerDown}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
+        onClick={() => {
+          void handleMinimize();
         }}
-      />
-      {/* Window control buttons */}
-      <div className="flex items-center h-full">
-        <button
-          type="button"
-          onClick={() => {
-            void handleMinimize();
-          }}
-          className="flex items-center justify-center w-12 h-full hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
+        className="flex items-center justify-center w-11 h-full hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
+        aria-label={t("common.window.minimize")}
+      >
+        <svg
+          width="10"
+          height="1"
+          viewBox="0 0 10 1"
+          fill="currentColor"
+          role="img"
+          aria-label={t("common.window.minimize")}
         >
-          <svg
-            width="10"
-            height="1"
-            viewBox="0 0 10 1"
-            fill="currentColor"
-            role="img"
-            aria-label={t("common.window.minimize")}
-          >
-            <rect width="10" height="1" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            void handleClose();
-          }}
-          className="flex items-center justify-center w-12 h-full hover:bg-destructive/90 transition-colors text-muted-foreground hover:text-destructive-foreground"
+          <rect width="10" height="1" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          void handleClose();
+        }}
+        className="flex items-center justify-center w-11 h-full hover:bg-destructive/90 transition-colors text-muted-foreground hover:text-destructive-foreground"
+        aria-label={t("common.buttons.close")}
+      >
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 10 10"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          role="img"
+          aria-label={t("common.buttons.close")}
         >
-          <svg
-            width="10"
-            height="10"
-            viewBox="0 0 10 10"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.2"
-            role="img"
-            aria-label={t("common.buttons.close")}
-          >
-            <line x1="1" y1="1" x2="9" y2="9" />
-            <line x1="9" y1="1" x2="1" y2="9" />
-          </svg>
-        </button>
-      </div>
+          <line x1="1" y1="1" x2="9" y2="9" />
+          <line x1="9" y1="1" x2="1" y2="9" />
+        </svg>
+      </button>
     </div>
   );
 }

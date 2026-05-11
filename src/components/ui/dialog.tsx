@@ -14,14 +14,21 @@ import { WindowDragArea } from "../window-drag-area";
 type DialogContextType = {
   isOpen: boolean;
   setIsOpen: DialogProps["onOpenChange"];
+  subPage: boolean;
+  container: HTMLElement | null | undefined;
 };
 
 const [DialogProvider, useDialog] =
   getStrictContext<DialogContextType>("DialogContext");
 
-type DialogProps = React.ComponentProps<typeof DialogPrimitive.Root>;
+type DialogProps = React.ComponentProps<typeof DialogPrimitive.Root> & {
+  /** Render in a portal container as an in-flow sub-page instead of a centered modal. */
+  subPage?: boolean;
+  /** Portal container target. Required when subPage=true; ignored otherwise. */
+  container?: HTMLElement | null;
+};
 
-function Dialog(props: DialogProps) {
+function Dialog({ subPage, container, children, ...props }: DialogProps) {
   const [isOpen, setIsOpen] = useControlledState({
     value: props?.open,
     defaultValue: props?.defaultOpen,
@@ -29,12 +36,27 @@ function Dialog(props: DialogProps) {
   });
 
   return (
-    <DialogProvider value={{ isOpen, setIsOpen }}>
+    <DialogProvider
+      value={{
+        isOpen,
+        setIsOpen,
+        subPage: !!subPage,
+        container: container ?? undefined,
+      }}
+    >
+      {/* In sub-page mode the Dialog isn't a modal — it's an in-flow page.
+          Forcing `modal={false}` prevents Radix from locking pointer-events
+          and aria-hiding everything outside the dialog. Children are passed
+          explicitly (not via spread) so React doesn't have to guess where
+          the JSX subtree should mount. */}
       <DialogPrimitive.Root
         data-slot="dialog"
         {...props}
+        modal={subPage ? false : props.modal}
         onOpenChange={setIsOpen}
-      />
+      >
+        {children}
+      </DialogPrimitive.Root>
     </DialogProvider>
   );
 }
@@ -51,7 +73,7 @@ type DialogPortalProps = Omit<
 >;
 
 function DialogPortal(props: DialogPortalProps) {
-  const { isOpen } = useDialog();
+  const { isOpen, container } = useDialog();
 
   return (
     <AnimatePresence>
@@ -59,6 +81,7 @@ function DialogPortal(props: DialogPortalProps) {
         <DialogPrimitive.Portal
           data-slot="dialog-portal"
           forceMount
+          container={container ?? props.container}
           {...props}
         />
       )}
@@ -102,7 +125,53 @@ type DialogContentProps = Omit<
 > &
   HTMLMotionProps<"div"> & {
     from?: DialogFlipDirection;
+    /**
+     * Suppress the built-in top-right close X. Use when the dialog renders
+     * its own header bar with a custom close control to avoid two X buttons
+     * stacking near the corner.
+     */
+    hideClose?: boolean;
   };
+
+function SubPageContent({
+  children,
+}: {
+  className?: string;
+  children?: React.ReactNode;
+}) {
+  const { isOpen } = useDialog();
+  if (!isOpen) return null;
+  // Inline styles deliberately override any className the caller passed
+  // for the modal mode (max-w-*, max-h-*, my-*). tailwind-merge inside the
+  // shared dialog wrappers turned out to be unreliable when both classnames
+  // and !important variants competed — inline styles guarantee the layout.
+  return (
+    <motion.div
+      data-slot="sub-page"
+      data-sub-page="true"
+      initial={false}
+      animate={{ opacity: 1 }}
+      style={{
+        position: "relative",
+        display: "flex",
+        flexDirection: "column",
+        flex: "1 1 0%",
+        minHeight: 0,
+        width: "100%",
+        maxWidth: "none",
+        height: "100%",
+        maxHeight: "none",
+        margin: 0,
+        padding: 12,
+        gap: 12,
+        overflow: "auto",
+        background: "var(--background)",
+      }}
+    >
+      {children}
+    </motion.div>
+  );
+}
 
 function DialogContent({
   className,
@@ -113,14 +182,25 @@ function DialogContent({
   onEscapeKeyDown,
   onPointerDownOutside,
   onInteractOutside,
-  transition = { type: "spring", stiffness: 150, damping: 25 },
+  transition,
+  hideClose,
   ...props
 }: DialogContentProps) {
   const { t } = useTranslation();
+  const { subPage } = useDialog();
   const initialRotation =
     from === "bottom" || from === "left" ? "20deg" : "-20deg";
   const isVertical = from === "top" || from === "bottom";
   const rotateAxis = isVertical ? "rotateX" : "rotateY";
+  const finalTransition = transition ?? {
+    type: "spring",
+    stiffness: 220,
+    damping: 26,
+  };
+
+  if (subPage) {
+    return <SubPageContent>{children}</SubPageContent>;
+  }
 
   return (
     <DialogPortal data-slot="dialog-portal">
@@ -158,7 +238,7 @@ function DialogContent({
             filter: "blur(4px)",
             transform: `perspective(500px) ${rotateAxis}(${initialRotation}) scale(0.8)`,
           }}
-          transition={transition}
+          transition={finalTransition}
           className={cn(
             "bg-background fixed top-[50%] left-[50%] z-10000 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg",
             className,
@@ -166,10 +246,12 @@ function DialogContent({
           {...props}
         >
           {children}
-          <DialogPrimitive.Close className="cursor-pointer ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
-            <RxCross2 />
-            <span className="sr-only">{t("common.buttons.close")}</span>
-          </DialogPrimitive.Close>
+          {!hideClose && (
+            <DialogPrimitive.Close className="cursor-pointer ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
+              <RxCross2 />
+              <span className="sr-only">{t("common.buttons.close")}</span>
+            </DialogPrimitive.Close>
+          )}
         </motion.div>
       </DialogPrimitive.Content>
     </DialogPortal>

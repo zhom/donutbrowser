@@ -96,12 +96,14 @@ interface ExtensionManagementDialogProps {
   isOpen: boolean;
   onClose: () => void;
   limitedMode: boolean;
+  subPage?: boolean;
 }
 
 export function ExtensionManagementDialog({
   isOpen,
   onClose,
   limitedMode,
+  subPage,
 }: ExtensionManagementDialogProps) {
   const { t } = useTranslation();
   const [extensions, setExtensions] = useState<Extension[]>([]);
@@ -526,18 +528,22 @@ export function ExtensionManagementDialog({
 
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={onClose}>
+      <Dialog open={isOpen} onOpenChange={onClose} subPage={subPage}>
         <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <LuPuzzle className="w-5 h-5" />
-              {t("extensions.title")}
-              {limitedMode && <ProBadge />}
-            </DialogTitle>
-            <DialogDescription>{t("extensions.description")}</DialogDescription>
-          </DialogHeader>
+          {!subPage && (
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <LuPuzzle className="w-5 h-5" />
+                {t("extensions.title")}
+                {limitedMode && <ProBadge />}
+              </DialogTitle>
+              <DialogDescription>
+                {t("extensions.description")}
+              </DialogDescription>
+            </DialogHeader>
+          )}
 
-          <ScrollArea className="overflow-y-auto flex-1">
+          <ScrollArea className="overflow-y-auto flex-1 scroll-fade">
             <div className="relative">
               {limitedMode && (
                 <>
@@ -985,11 +991,13 @@ export function ExtensionManagementDialog({
             </div>
           </ScrollArea>
 
-          <DialogFooter>
-            <RippleButton variant="outline" onClick={onClose}>
-              {t("common.buttons.close")}
-            </RippleButton>
-          </DialogFooter>
+          {!subPage && (
+            <DialogFooter>
+              <RippleButton variant="outline" onClick={onClose}>
+                {t("common.buttons.close")}
+              </RippleButton>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
 

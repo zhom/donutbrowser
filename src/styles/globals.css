@@ -97,29 +97,30 @@
 }
 
 .dark {
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.92 0.004 286.32);
-  --primary-foreground: oklch(0.21 0.006 285.885);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --success: oklch(0.7 0.2 145);
-  --success-foreground: oklch(0.141 0.005 285.823);
-  --warning: oklch(0.8 0.15 75);
-  --warning-foreground: oklch(0.141 0.005 285.823);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.552 0.016 285.938);
+  /* Donut Mono — redesign monochrome palette */
+  --background: #070707;
+  --foreground: #ffffff;
+  --card: #0e0e0e;
+  --card-foreground: #e4e4e4;
+  --popover: #0e0e0e;
+  --popover-foreground: #e4e4e4;
+  --primary: #ffffff;
+  --primary-foreground: #070707;
+  --secondary: #161616;
+  --secondary-foreground: #e4e4e4;
+  --muted: #161616;
+  --muted-foreground: #a0a0a0;
+  --accent: #1f1f1f;
+  --accent-foreground: #ffffff;
+  --destructive: #ec6a5e;
+  --destructive-foreground: #070707;
+  --success: #61c554;
+  --success-foreground: #070707;
+  --warning: #f4be4f;
+  --warning-foreground: #070707;
+  --border: rgba(255, 255, 255, 0.06);
+  --input: rgba(255, 255, 255, 0.1);
+  --ring: #6b6b6b;
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
@@ -154,6 +155,36 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Scroll-fade utility: a vertical mask whose top/bottom 16px fade to
+   transparent ONLY when the matching direction is scrollable. The component
+   sets `data-fade-top` / `data-fade-bottom` attributes on its container as
+   the user scrolls; each attribute toggles its own end of the mask via a
+   CSS variable, so the two edges are independent. */
+.scroll-fade {
+  --top-mask: black;
+  --bottom-mask: black;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    var(--top-mask),
+    black 16px,
+    black calc(100% - 16px),
+    var(--bottom-mask)
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    var(--top-mask),
+    black 16px,
+    black calc(100% - 16px),
+    var(--bottom-mask)
+  );
+}
+.scroll-fade[data-fade-top="true"] {
+  --top-mask: transparent;
+}
+.scroll-fade[data-fade-bottom="true"] {
+  --bottom-mask: transparent;
 }
 
 /* Ensure Sonner toasts appear above all dialogs and remain interactive */

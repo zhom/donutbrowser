@@ -1,6 +1,7 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
+import { writeText as writeClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import Color from "color";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -53,6 +54,7 @@ import {
   THEMES,
 } from "@/lib/themes";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
+import { cn } from "@/lib/utils";
 import { RippleButton } from "./ui/ripple";
 
 interface AppSettings {
@@ -83,12 +85,14 @@ interface SettingsDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onIntegrationsOpen?: () => void;
+  subPage?: boolean;
 }
 
 export function SettingsDialog({
   isOpen,
   onClose,
   onIntegrationsOpen,
+  subPage,
 }: SettingsDialogProps) {
   const [settings, setSettings] = useState<AppSettings>({
     set_as_default_browser: false,
@@ -603,13 +607,20 @@ export function SettingsDialog({
 
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={handleClose}>
+      <Dialog open={isOpen} onOpenChange={handleClose} subPage={subPage}>
         <DialogContent className="max-w-md max-h-[80vh] my-8 flex flex-col">
-          <DialogHeader className="shrink-0">
-            <DialogTitle>{t("settings.title")}</DialogTitle>
-          </DialogHeader>
+          {!subPage && (
+            <DialogHeader className="shrink-0">
+              <DialogTitle>{t("settings.title")}</DialogTitle>
+            </DialogHeader>
+          )}
 
-          <div className="grid overflow-y-auto flex-1 gap-6 py-4 min-h-0">
+          <div
+            className={cn(
+              "grid overflow-y-auto flex-1 gap-6 min-h-0",
+              subPage ? "py-2" : "py-4",
+            )}
+          >
             {/* Appearance Section */}
             <div className="space-y-4">
               <Label className="text-base font-medium">
@@ -1000,6 +1011,7 @@ export function SettingsDialog({
                           await invoke("delete_e2e_password");
                           setHasE2ePassword(false);
                           showSuccessToast(t("settings.encryption.removed"));
+                          void invoke("rollover_encryption_for_all_entities");
                         } catch (error) {
                           showErrorToast(String(error));
                         }
@@ -1056,6 +1068,7 @@ export function SettingsDialog({
                         showSuccessToast(
                           t("settings.encryption.passwordSaved"),
                         );
+                        void invoke("rollover_encryption_for_all_entities");
                       } catch (error) {
                         showErrorToast(String(error));
                       } finally {
@@ -1170,6 +1183,40 @@ export function SettingsDialog({
               <p className="text-xs text-muted-foreground">
                 {t("settings.advanced.clearCacheDescription")}
               </p>
+
+              <div className="grid grid-cols-2 gap-2 pt-2">
+                <RippleButton
+                  variant="outline"
+                  className="text-xs"
+                  onClick={async () => {
+                    try {
+                      const content = await invoke<string>("read_log_files");
+                      await writeClipboardText(content);
+                      showSuccessToast(t("settings.advanced.copyLogsSuccess"));
+                    } catch (err) {
+                      showErrorToast(String(err));
+                    }
+                  }}
+                >
+                  {t("settings.advanced.copyLogs")}
+                </RippleButton>
+                <RippleButton
+                  variant="outline"
+                  className="text-xs"
+                  onClick={async () => {
+                    try {
+                      await invoke("open_log_directory");
+                    } catch (err) {
+                      showErrorToast(String(err));
+                    }
+                  }}
+                >
+                  {t("settings.advanced.openLogDir")}
+                </RippleButton>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t("settings.advanced.copyLogsDescription")}
+              </p>
             </div>
 
             {/* System Info */}
@@ -1182,22 +1229,39 @@ export function SettingsDialog({
             )}
           </div>
 
-          <DialogFooter className="shrink-0">
-            <RippleButton variant="outline" onClick={handleClose}>
-              {t("common.buttons.cancel")}
-            </RippleButton>
-            <LoadingButton
-              isLoading={isSaving}
-              onClick={() => {
-                handleSave().catch((err: unknown) => {
-                  console.error(err);
-                });
-              }}
-              disabled={isLoading || !hasChanges}
-            >
-              {t("common.buttons.saveSettings")}
-            </LoadingButton>
-          </DialogFooter>
+          {subPage ? (
+            <div className="shrink-0 flex items-center justify-end gap-2 pt-2 border-t border-border">
+              <LoadingButton
+                size="sm"
+                isLoading={isSaving}
+                onClick={() => {
+                  handleSave().catch((err: unknown) => {
+                    console.error(err);
+                  });
+                }}
+                disabled={isLoading || !hasChanges}
+              >
+                {t("common.buttons.saveSettings")}
+              </LoadingButton>
+            </div>
+          ) : (
+            <DialogFooter className="shrink-0">
+              <RippleButton variant="outline" onClick={handleClose}>
+                {t("common.buttons.cancel")}
+              </RippleButton>
+              <LoadingButton
+                isLoading={isSaving}
+                onClick={() => {
+                  handleSave().catch((err: unknown) => {
+                    console.error(err);
+                  });
+                }}
+                disabled={isLoading || !hasChanges}
+              >
+                {t("common.buttons.saveSettings")}
+              </LoadingButton>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
       <DnsBlocklistDialog

@@ -30,7 +30,9 @@
       "saveSettings": "Save Settings",
       "moreInfo": "More info",
       "downloading": "Downloading...",
-      "minimize": "Minimize"
+      "minimize": "Minimize",
+      "saving": "Saving…",
+      "saved": "Saved"
     },
     "status": {
       "active": "Active",
@@ -169,7 +171,11 @@
       "title": "Advanced",
       "clearCache": "Clear All Version Cache",
       "clearCacheDescription": "Clear all cached browser version data and refresh all browser versions from their sources. This will force a fresh download of version information for all browsers.",
-      "clearCacheFailed": "Failed to clear cache"
+      "clearCacheFailed": "Failed to clear cache",
+      "copyLogs": "Copy logs",
+      "openLogDir": "Open log folder",
+      "copyLogsSuccess": "Logs copied to clipboard",
+      "copyLogsDescription": "Bundles the most recent log files (up to 5 MB) into your clipboard for sharing in bug reports."
     },
     "disableAutoUpdates": "Disable App Auto Updates",
     "disableAutoUpdatesDescription": "Prevent the app from automatically checking and installing Donut Browser updates. Browser updates are not affected.",
@@ -189,7 +195,11 @@
       "integrations": "Integrations",
       "importProfile": "Import Profile",
       "extensions": "Extensions"
-    }
+    },
+    "newProfile": "New",
+    "donutLogo": "Donut Browser logo",
+    "scrollGroupsLeft": "Scroll groups left",
+    "scrollGroupsRight": "Scroll groups right"
   },
   "profiles": {
     "title": "Profiles",
@@ -208,7 +218,13 @@
       "proxy": "Proxy / VPN",
       "lastLaunch": "Last Launch",
       "empty": "No profiles found.",
-      "notSelected": "Not Selected"
+      "notSelected": "Not Selected",
+      "ext": "EXT",
+      "dns": "DNS",
+      "extDefault": "Default",
+      "dnsLevel": "DNS blocklist: {{level}}",
+      "extSearch": "Search groups…",
+      "extEmpty": "No extension groups"
     },
     "actions": {
       "launch": "Launch",
@@ -270,7 +286,10 @@
       "assignExtensionGroup": "Assign Extension Group",
       "copyCookies": "Copy Cookies"
     },
-    "passwordProtectedBadge": "Password Protected"
+    "passwordProtectedBadge": "Password Protected",
+    "launchHook": {
+      "placeholder": "https://example.com/track-launch"
+    }
   },
   "createProfile": {
     "title": "Create New Profile",
@@ -508,7 +527,8 @@
     "loadProfilesFailed": "Failed to load profiles",
     "unknownGroup": "Unknown Group",
     "profileGroupsAriaLabel": "Profile groups",
-    "loading": "Loading groups..."
+    "loading": "Loading groups...",
+    "all": "All"
   },
   "sync": {
     "mode": {
@@ -560,6 +580,7 @@
       "openLogin": "Login",
       "linkCodeLabel": "Login code",
       "linkCodePlaceholder": "Paste the code from the website",
+      "signInTitle": "Sign in",
       "verifyAndLogin": "Verify & Log In",
       "loggingIn": "Logging in...",
       "connected": "Connected",
@@ -1060,13 +1081,22 @@
       "lastLaunched": "Last Launched",
       "hostOs": "Host OS",
       "ephemeral": "Ephemeral",
-      "extensionGroup": "Extension Group"
+      "extensionGroup": "Extension Group",
+      "totalSessions": "Total sessions",
+      "syncMode": "Sync mode",
+      "proxy": "PROXY",
+      "vpn": "VPN",
+      "cookieCount": "Cookies stored",
+      "localDataTransfer": "Local data transfer"
     },
     "values": {
       "none": "None",
       "never": "Never",
       "copied": "Copied!",
-      "yes": "Yes"
+      "yes": "Yes",
+      "activeNow": "Active now",
+      "direct": "Direct",
+      "loading": "Loading…"
     },
     "network": {
       "bypassRules": "Proxy Bypass Rules",
@@ -1080,8 +1110,9 @@
     "launchHook": {
       "title": "Launch Hook URL",
       "label": "Launch Hook URL",
-      "description": "Donut Browser will POST to this URL whenever the profile is launched.",
-      "placeholder": "https://example.com/hooks/profile-launch"
+      "description": "Donut Browser will send a GET request to this URL whenever the profile is launched.",
+      "placeholder": "https://example.com/hooks/profile-launch",
+      "invalidUrlHint": "Enter a valid http:// or https:// URL."
     },
     "actions": {
       "manageCookies": "Manage Cookies",
@@ -1092,6 +1123,48 @@
       "description": "Enter a name for the cloned profile",
       "namePlaceholder": "Profile name",
       "button": "Clone"
+    },
+    "duplicate": "Duplicate",
+    "breadcrumbRoot": "Profile",
+    "openDialog": "Open settings",
+    "sections": {
+      "overview": "Overview",
+      "fingerprint": "Fingerprint",
+      "network": "Network",
+      "cookies": "Cookies",
+      "extensions": "Extensions",
+      "sync": "Sync",
+      "automation": "Automation",
+      "security": "Security",
+      "delete": "Delete profile",
+      "activity": "Activity",
+      "launchHook": "Launch hook"
+    },
+    "sectionDesc": {
+      "fingerprint": "Configure how this profile appears to fingerprinting scripts.",
+      "network": "Manage the proxy or VPN this profile uses to reach the internet.",
+      "cookies": "Import, copy, or wipe cookies for this profile.",
+      "extensions": "Choose which extensions load when this profile launches.",
+      "sync": "Configure how this profile is mirrored to your other devices.",
+      "automation": "Run a command or script every time this profile launches.",
+      "security": "Encrypt the profile data with a password.",
+      "launchHook": "Send a GET request to this URL every time the profile launches."
+    },
+    "badges": {
+      "locked": "LOCKED",
+      "active": "ACTIVE"
+    },
+    "cookies": {
+      "runningNotice": "Cookies can't be read while the browser is running. Close this profile first.",
+      "domainsHeader": "Domains ({{count}})"
+    },
+    "security": {
+      "protected": "This profile is encrypted with a password.",
+      "unprotected": "This profile is not encrypted. Set a password to encrypt its data at rest.",
+      "cannotWhileRunning": "Stop the profile before changing its password."
+    },
+    "fingerprint": {
+      "notSupported": "Fingerprint editing is only available for Camoufox and Wayfern profiles."
     }
   },
   "extensions": {
@@ -1625,12 +1698,13 @@
       "password": "Password",
       "currentPassword": "Current password",
       "newPassword": "New password",
-      "confirm": "Confirm password"
+      "confirm": "Confirm password",
+      "confirmPassword": "Confirm new password"
     },
     "errors": {
       "oldPasswordRequired": "Current password is required",
       "passwordRequired": "Password is required",
-      "tooShort": "Password must be at least {{min}} characters",
+      "tooShort": "Password must be at least 8 characters",
       "mismatch": "Passwords do not match"
     },
     "toasts": {
@@ -1641,6 +1715,11 @@
     "warnings": {
       "forgetWarningTitle": "Important: this password is not recoverable",
       "forgetWarningBody": "Donut Browser cannot reset, recover, or bypass this password. If you forget it, you will permanently lose access to this profile's data."
+    },
+    "modes": {
+      "set": "Set",
+      "change": "Change",
+      "remove": "Remove"
     }
   },
   "backendErrors": {
@@ -1659,6 +1738,77 @@
     "profileLocked": "Profile is locked. Enter the password first.",
     "invalidProfileId": "Invalid profile id",
     "passwordTooShort": "Password must be at least {{min}} characters",
-    "internal": "Something went wrong: {{detail}}"
+    "internal": "Something went wrong: {{detail}}",
+    "invalidLaunchHookUrl": "Invalid launch hook URL. Use a full http:// or https:// URL.",
+    "cookieDbLocked": "Could not read cookies — the database is locked. Close the browser and try again.",
+    "cookieDbUnavailable": "Could not read cookies — the cookie store is unavailable."
+  },
+  "rail": {
+    "profiles": "Profiles",
+    "proxies": "Proxies",
+    "extensions": "Extensions",
+    "groups": "Groups",
+    "settings": "Settings",
+    "more": {
+      "label": "More",
+      "closeAriaLabel": "Close menu",
+      "importProfile": "Import profile",
+      "importProfileHint": "Bring profiles from another tool",
+      "vpns": "VPN configs",
+      "vpnsHint": "WireGuard tunnels",
+      "integrations": "Integrations",
+      "integrationsHint": "Slack, MCP, automations",
+      "account": "Account",
+      "accountHint": "Cloud, billing, sign-in"
+    }
+  },
+  "pageTitle": {
+    "proxies": "Proxies",
+    "extensions": "Extensions",
+    "groups": "Groups",
+    "vpns": "VPNs",
+    "settings": "Settings",
+    "integrations": "Integrations",
+    "account": "Account",
+    "import": "Import profile"
+  },
+  "encryption": {
+    "required": {
+      "title": "Sync paused — password required",
+      "description": "Encrypted data was downloaded but no E2E password is set on this device. Open Settings → Encryption and enter the password to resume sync.",
+      "openSettings": "Open Settings"
+    },
+    "rollover": {
+      "startedTitle": "Re-encrypting your data",
+      "startedDescription": "We're re-uploading every synced item under the new password. Profiles first, then proxies, groups, VPNs, and extensions.",
+      "progressTitle": "Re-encrypting {{stage}}",
+      "progressDescription": "{{done}} of {{total}}",
+      "completedTitle": "Re-encryption complete",
+      "completedDescription": "All synced data is sealed under the new password.",
+      "stage": {
+        "profiles": "profiles",
+        "proxies": "proxies",
+        "groups": "groups",
+        "vpns": "VPNs",
+        "extensions": "extensions",
+        "extension_groups": "extension groups"
+      }
+    }
+  },
+  "account": {
+    "refreshed": "Account refreshed",
+    "loggedOut": "Logged out",
+    "signedOut": "Signed out",
+    "signedOutDescription": "Sign in to enable cloud sync, encrypted profiles, and team features.",
+    "plan": "Plan: {{plan}} · {{period}}",
+    "refresh": "Refresh",
+    "logout": "Sign out",
+    "signIn": "Sign in",
+    "fields": {
+      "plan": "Plan",
+      "status": "Status",
+      "teamRole": "Team role",
+      "period": "Billing period"
+    }
   }
 }

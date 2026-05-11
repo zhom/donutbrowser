@@ -5,6 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrent } from "@tauri-apps/plugin-deep-link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { AccountPage } from "@/components/account-page";
 import { CamoufoxConfigDialog } from "@/components/camoufox-config-dialog";
 import { CloneProfileDialog } from "@/components/clone-profile-dialog";
 import { CommercialTrialModal } from "@/components/commercial-trial-modal";
@@ -16,7 +17,6 @@ import { DeviceCodeVerifyDialog } from "@/components/device-code-verify-dialog";
 import { ExtensionGroupAssignmentDialog } from "@/components/extension-group-assignment-dialog";
 import { ExtensionManagementDialog } from "@/components/extension-management-dialog";
 import { GroupAssignmentDialog } from "@/components/group-assignment-dialog";
-import { GroupBadges } from "@/components/group-badges";
 import { GroupManagementDialog } from "@/components/group-management-dialog";
 import HomeHeader from "@/components/home-header";
 import { ImportProfileDialog } from "@/components/import-profile-dialog";
@@ -32,6 +32,7 @@ import { ProfileSelectorDialog } from "@/components/profile-selector-dialog";
 import { ProfileSyncDialog } from "@/components/profile-sync-dialog";
 import { ProxyAssignmentDialog } from "@/components/proxy-assignment-dialog";
 import { ProxyManagementDialog } from "@/components/proxy-management-dialog";
+import { type AppPage, RailNav } from "@/components/rail-nav";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { SyncAllDialog } from "@/components/sync-all-dialog";
 import { SyncConfigDialog } from "@/components/sync-config-dialog";
@@ -141,6 +142,13 @@ export default function Home() {
 
   const syncUnlocked = crossOsUnlocked || selfHostedSyncConfigured;
 
+  const [currentPage, setCurrentPage] = useState<AppPage>("profiles");
+  const [accountDialogOpen, setAccountDialogOpen] = useState(false);
+  // Tracks which tab inside the shared proxy-management page should be active.
+  // The VPN rail item routes to the same page but pre-selects the VPN tab.
+  const [proxyManagementInitialTab, setProxyManagementInitialTab] = useState<
+    "proxies" | "vpns"
+  >("proxies");
   const [createProfileDialogOpen, setCreateProfileDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [integrationsDialogOpen, setIntegrationsDialogOpen] = useState(false);
@@ -175,7 +183,7 @@ export default function Home() {
   const [selectedProfilesForCookies, setSelectedProfilesForCookies] = useState<
     string[]
   >([]);
-  const [selectedGroupId, setSelectedGroupId] = useState<string>("default");
+  const [selectedGroupId, setSelectedGroupId] = useState<string>("__all__");
   const [selectedProfilesForGroup, setSelectedProfilesForGroup] = useState<
     string[]
   >([]);
@@ -219,6 +227,53 @@ export default function Home() {
   const handleSelectGroup = useCallback((groupId: string) => {
     setSelectedGroupId(groupId);
     setSelectedProfiles([]);
+  }, []);
+
+  const handleRailNavigate = useCallback((page: AppPage) => {
+    // Always reset every sub-page-able dialog before opening the next one,
+    // so navigating from one rail item to another doesn't stack two
+    // sub-pages on top of each other.
+    setSettingsDialogOpen(false);
+    setProxyManagementDialogOpen(false);
+    setExtensionManagementDialogOpen(false);
+    setGroupManagementDialogOpen(false);
+    setIntegrationsDialogOpen(false);
+    setImportProfileDialogOpen(false);
+    setAccountDialogOpen(false);
+
+    setCurrentPage(page);
+    switch (page) {
+      case "profiles":
+        break;
+      case "settings":
+        setSettingsDialogOpen(true);
+        break;
+      case "proxies":
+        setProxyManagementInitialTab("proxies");
+        setProxyManagementDialogOpen(true);
+        break;
+      case "extensions":
+        setExtensionManagementDialogOpen(true);
+        break;
+      case "groups":
+        setGroupManagementDialogOpen(true);
+        break;
+      case "integrations":
+        setIntegrationsDialogOpen(true);
+        break;
+      case "import":
+        setImportProfileDialogOpen(true);
+        break;
+      case "vpns":
+        // VPNs share the proxy management page; pre-select the VPN tab so
+        // the user lands directly on the right list.
+        setProxyManagementInitialTab("vpns");
+        setProxyManagementDialogOpen(true);
+        break;
+      case "account":
+        setAccountDialogOpen(true);
+        break;
+    }
   }, []);
 
   // Check for missing binaries and offer to download them
@@ -1042,6 +1097,84 @@ export default function Home() {
     profiles.length,
   ]);
 
+  // E2E encryption listeners — surface password-required prompts and rollover
+  // progress so the user isn't left guessing whether sealing finished.
+  useEffect(() => {
+    let unlistenRequired: (() => void) | undefined;
+    let unlistenStarted: (() => void) | undefined;
+    let unlistenProgress: (() => void) | undefined;
+    let unlistenCompleted: (() => void) | undefined;
+
+    void (async () => {
+      unlistenRequired = await listen(
+        "profile-sync-e2e-password-required",
+        () => {
+          showToast({
+            id: "e2e-password-required",
+            type: "error",
+            title: t("encryption.required.title"),
+            description: t("encryption.required.description"),
+            duration: 12000,
+            action: {
+              label: t("encryption.required.openSettings"),
+              onClick: () => {
+                setSettingsDialogOpen(true);
+                setCurrentPage("settings");
+              },
+            },
+          });
+        },
+      );
+
+      unlistenStarted = await listen("e2e-rollover-started", () => {
+        showToast({
+          id: "e2e-rollover",
+          type: "loading",
+          title: t("encryption.rollover.startedTitle"),
+          description: t("encryption.rollover.startedDescription"),
+          duration: Number.POSITIVE_INFINITY,
+        });
+      });
+
+      unlistenProgress = await listen<{
+        stage: string;
+        done: number;
+        total: number;
+      }>("e2e-rollover-progress", (event) => {
+        const { stage, done, total } = event.payload;
+        showToast({
+          id: "e2e-rollover",
+          type: "loading",
+          title: t("encryption.rollover.progressTitle", {
+            stage: t(`encryption.rollover.stage.${stage}`),
+          }),
+          description: t("encryption.rollover.progressDescription", {
+            done,
+            total,
+          }),
+          duration: Number.POSITIVE_INFINITY,
+        });
+      });
+
+      unlistenCompleted = await listen("e2e-rollover-completed", () => {
+        showToast({
+          id: "e2e-rollover",
+          type: "success",
+          title: t("encryption.rollover.completedTitle"),
+          description: t("encryption.rollover.completedDescription"),
+          duration: 5000,
+        });
+      });
+    })();
+
+    return () => {
+      unlistenRequired?.();
+      unlistenStarted?.();
+      unlistenProgress?.();
+      unlistenCompleted?.();
+    };
+  }, [t]);
+
   // Show warning for non-wayfern/camoufox profiles (support ending March 15, 2026)
   useEffect(() => {
     if (profiles.length === 0) return;
@@ -1109,8 +1242,11 @@ export default function Home() {
   const filteredProfiles = useMemo(() => {
     let filtered = profiles;
 
-    // Filter by group
-    if (!selectedGroupId || selectedGroupId === "default") {
+    // Filter by group. "__all__" is a virtual filter that shows every
+    // profile regardless of group; "default" shows ungrouped profiles.
+    if (selectedGroupId === "__all__") {
+      filtered = profiles;
+    } else if (!selectedGroupId || selectedGroupId === "default") {
       filtered = profiles.filter((profile) => !profile.group_id);
     } else {
       filtered = profiles.filter(
@@ -1142,67 +1278,162 @@ export default function Home() {
   // Update loading states
   const isLoading = profilesLoading || groupsLoading || proxiesLoading;
 
+  const subPageTitle =
+    currentPage === "profiles"
+      ? undefined
+      : currentPage === "import"
+        ? t("pageTitle.import")
+        : t(`pageTitle.${currentPage}`);
+
   return (
-    <div className="grid items-center justify-items-center min-h-screen gap-8 font-(family-name:--font-geist-sans) bg-background">
-      <main className="flex flex-col items-center w-full max-w-4xl px-3">
-        <div className="w-full">
-          <HomeHeader
-            onCreateProfileDialogOpen={setCreateProfileDialogOpen}
-            onGroupManagementDialogOpen={setGroupManagementDialogOpen}
-            onImportProfileDialogOpen={setImportProfileDialogOpen}
-            onProxyManagementDialogOpen={setProxyManagementDialogOpen}
-            onSettingsDialogOpen={setSettingsDialogOpen}
-            onSyncConfigDialogOpen={setSyncConfigDialogOpen}
-            onIntegrationsDialogOpen={setIntegrationsDialogOpen}
-            onExtensionManagementDialogOpen={setExtensionManagementDialogOpen}
-            searchQuery={searchQuery}
-            onSearchQueryChange={setSearchQuery}
-          />
-        </div>
-        <div className="w-full mt-2.5">
-          <GroupBadges
-            selectedGroupId={selectedGroupId}
-            onGroupSelect={handleSelectGroup}
-            groups={groupsData}
-            isLoading={isLoading}
-          />
-          <ProfilesDataTable
-            profiles={filteredProfiles}
-            onLaunchProfile={launchProfile}
-            onKillProfile={handleKillProfile}
-            onCloneProfile={handleCloneProfile}
-            onSetPassword={handleSetPassword}
-            onChangePassword={handleChangePassword}
-            onRemovePassword={handleRemovePassword}
-            onDeleteProfile={handleDeleteProfile}
-            onRenameProfile={handleRenameProfile}
-            onConfigureCamoufox={handleConfigureCamoufox}
-            onCopyCookiesToProfile={handleCopyCookiesToProfile}
-            onOpenCookieManagement={handleOpenCookieManagement}
-            runningProfiles={runningProfiles}
-            isUpdating={isUpdating}
-            onDeleteSelectedProfiles={handleDeleteSelectedProfiles}
-            onAssignProfilesToGroup={handleAssignProfilesToGroup}
-            selectedGroupId={selectedGroupId}
-            selectedProfiles={selectedProfiles}
-            onSelectedProfilesChange={setSelectedProfiles}
-            onBulkDelete={handleBulkDelete}
-            onBulkGroupAssignment={handleBulkGroupAssignment}
-            onBulkProxyAssignment={handleBulkProxyAssignment}
-            onBulkCopyCookies={handleBulkCopyCookies}
-            onBulkExtensionGroupAssignment={handleBulkExtensionGroupAssignment}
-            onAssignExtensionGroup={handleAssignExtensionGroup}
-            onOpenProfileSyncDialog={handleOpenProfileSyncDialog}
-            onToggleProfileSync={handleToggleProfileSync}
-            crossOsUnlocked={crossOsUnlocked}
-            syncUnlocked={syncUnlocked}
-            getProfileSyncInfo={getProfileSyncInfo}
-            onLaunchWithSync={(profile) => {
-              setSyncLeaderProfile(profile);
-            }}
-          />
-        </div>
-      </main>
+    <div className="flex flex-col h-screen bg-background font-(family-name:--font-geist-sans)">
+      <HomeHeader
+        onCreateProfileDialogOpen={setCreateProfileDialogOpen}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        groups={groupsData}
+        selectedGroupId={selectedGroupId}
+        onGroupSelect={handleSelectGroup}
+        pageTitle={subPageTitle}
+      />
+      <div className="flex flex-1 min-h-0">
+        <RailNav currentPage={currentPage} onNavigate={handleRailNavigate} />
+        <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
+          {currentPage === "profiles" && (
+            <div className="px-3 pt-2.5 flex flex-col flex-1 min-h-0">
+              {isLoading && groupsData.length === 0 ? null : null}
+              <ProfilesDataTable
+                profiles={filteredProfiles}
+                onLaunchProfile={launchProfile}
+                onKillProfile={handleKillProfile}
+                onCloneProfile={handleCloneProfile}
+                onSetPassword={handleSetPassword}
+                onChangePassword={handleChangePassword}
+                onRemovePassword={handleRemovePassword}
+                onDeleteProfile={handleDeleteProfile}
+                onRenameProfile={handleRenameProfile}
+                onConfigureCamoufox={handleConfigureCamoufox}
+                onCopyCookiesToProfile={handleCopyCookiesToProfile}
+                onOpenCookieManagement={handleOpenCookieManagement}
+                runningProfiles={runningProfiles}
+                isUpdating={isUpdating}
+                onDeleteSelectedProfiles={handleDeleteSelectedProfiles}
+                onAssignProfilesToGroup={handleAssignProfilesToGroup}
+                selectedGroupId={selectedGroupId}
+                selectedProfiles={selectedProfiles}
+                onSelectedProfilesChange={setSelectedProfiles}
+                onBulkDelete={handleBulkDelete}
+                onBulkGroupAssignment={handleBulkGroupAssignment}
+                onBulkProxyAssignment={handleBulkProxyAssignment}
+                onBulkCopyCookies={handleBulkCopyCookies}
+                onBulkExtensionGroupAssignment={
+                  handleBulkExtensionGroupAssignment
+                }
+                onAssignExtensionGroup={handleAssignExtensionGroup}
+                onOpenProfileSyncDialog={handleOpenProfileSyncDialog}
+                onToggleProfileSync={handleToggleProfileSync}
+                crossOsUnlocked={crossOsUnlocked}
+                syncUnlocked={syncUnlocked}
+                getProfileSyncInfo={getProfileSyncInfo}
+                onLaunchWithSync={(profile) => {
+                  setSyncLeaderProfile(profile);
+                }}
+              />
+            </div>
+          )}
+
+          {settingsDialogOpen && (
+            <SettingsDialog
+              isOpen={settingsDialogOpen}
+              onClose={() => {
+                setSettingsDialogOpen(false);
+                setCurrentPage("profiles");
+              }}
+              onIntegrationsOpen={() => {
+                setSettingsDialogOpen(false);
+                setIntegrationsDialogOpen(true);
+                setCurrentPage("integrations");
+              }}
+              subPage={currentPage === "settings"}
+            />
+          )}
+
+          {integrationsDialogOpen && (
+            <IntegrationsDialog
+              isOpen={integrationsDialogOpen}
+              onClose={() => {
+                setIntegrationsDialogOpen(false);
+                setCurrentPage("profiles");
+              }}
+              subPage={currentPage === "integrations"}
+            />
+          )}
+
+          {proxyManagementDialogOpen && (
+            <ProxyManagementDialog
+              isOpen={proxyManagementDialogOpen}
+              onClose={() => {
+                setProxyManagementDialogOpen(false);
+                setCurrentPage("profiles");
+              }}
+              subPage={currentPage === "proxies" || currentPage === "vpns"}
+              initialTab={proxyManagementInitialTab}
+            />
+          )}
+
+          {groupManagementDialogOpen && (
+            <GroupManagementDialog
+              isOpen={groupManagementDialogOpen}
+              onClose={() => {
+                setGroupManagementDialogOpen(false);
+                setCurrentPage("profiles");
+              }}
+              onGroupManagementComplete={handleGroupManagementComplete}
+              subPage={currentPage === "groups"}
+            />
+          )}
+
+          {extensionManagementDialogOpen && (
+            <ExtensionManagementDialog
+              isOpen={extensionManagementDialogOpen}
+              onClose={() => {
+                setExtensionManagementDialogOpen(false);
+                setCurrentPage("profiles");
+              }}
+              limitedMode={false}
+              subPage={currentPage === "extensions"}
+            />
+          )}
+
+          {importProfileDialogOpen && (
+            <ImportProfileDialog
+              isOpen={importProfileDialogOpen}
+              onClose={() => {
+                setImportProfileDialogOpen(false);
+                setCurrentPage("profiles");
+              }}
+              crossOsUnlocked={crossOsUnlocked}
+              subPage={currentPage === "import"}
+            />
+          )}
+
+          {accountDialogOpen && (
+            <AccountPage
+              isOpen={accountDialogOpen}
+              onClose={() => {
+                setAccountDialogOpen(false);
+                setCurrentPage("profiles");
+              }}
+              subPage={currentPage === "account"}
+              onOpenSignIn={() => {
+                setAccountDialogOpen(false);
+                setCurrentPage("profiles");
+                setDeviceCodeDialogOpen(true);
+              }}
+            />
+          )}
+        </main>
+      </div>
 
       <CreateProfileDialog
         isOpen={createProfileDialogOpen}
@@ -1212,39 +1443,6 @@ export default function Home() {
         onCreateProfile={handleCreateProfile}
         selectedGroupId={selectedGroupId}
         crossOsUnlocked={crossOsUnlocked}
-      />
-
-      <SettingsDialog
-        isOpen={settingsDialogOpen}
-        onClose={() => {
-          setSettingsDialogOpen(false);
-        }}
-        onIntegrationsOpen={() => {
-          setSettingsDialogOpen(false);
-          setIntegrationsDialogOpen(true);
-        }}
-      />
-
-      <IntegrationsDialog
-        isOpen={integrationsDialogOpen}
-        onClose={() => {
-          setIntegrationsDialogOpen(false);
-        }}
-      />
-
-      <ImportProfileDialog
-        isOpen={importProfileDialogOpen}
-        onClose={() => {
-          setImportProfileDialogOpen(false);
-        }}
-        crossOsUnlocked={crossOsUnlocked}
-      />
-
-      <ProxyManagementDialog
-        isOpen={proxyManagementDialogOpen}
-        onClose={() => {
-          setProxyManagementDialogOpen(false);
-        }}
       />
 
       {pendingUrls.map((pendingUrl) => (
@@ -1288,6 +1486,7 @@ export default function Home() {
         profile={passwordDialogProfile}
         mode={passwordDialogMode}
         onSuccess={(p) => {
+          // Resume pending launch after unlock.
           if (
             passwordDialogMode === "unlock" &&
             pendingLaunchAfterUnlockRef.current?.id === p.id
@@ -1295,6 +1494,23 @@ export default function Home() {
             const target = pendingLaunchAfterUnlockRef.current;
             pendingLaunchAfterUnlockRef.current = null;
             void launchProfile(target);
+          }
+          // On set/change/remove, the profile's encryption state changed.
+          // Push that state to the sync server immediately so other devices
+          // see the new envelope before they next pull. Skip if the profile
+          // is currently running — its files would be in flux.
+          if (
+            (passwordDialogMode === "set" ||
+              passwordDialogMode === "change" ||
+              passwordDialogMode === "remove") &&
+            !runningProfiles.has(p.id) &&
+            p.sync_mode !== "Disabled"
+          ) {
+            void invoke("request_profile_sync", { profileId: p.id }).catch(
+              (err: unknown) => {
+                console.error("post-password sync failed", err);
+              },
+            );
           }
         }}
       />
@@ -1313,22 +1529,6 @@ export default function Home() {
             : false
         }
         crossOsUnlocked={crossOsUnlocked}
-      />
-
-      <GroupManagementDialog
-        isOpen={groupManagementDialogOpen}
-        onClose={() => {
-          setGroupManagementDialogOpen(false);
-        }}
-        onGroupManagementComplete={handleGroupManagementComplete}
-      />
-
-      <ExtensionManagementDialog
-        isOpen={extensionManagementDialogOpen}
-        onClose={() => {
-          setExtensionManagementDialogOpen(false);
-        }}
-        limitedMode={!crossOsUnlocked}
       />
 
       <GroupAssignmentDialog

@@ -35,6 +35,38 @@ export interface Theme {
 
 export const THEMES: Theme[] = [
   {
+    id: "donut-mono",
+    name: "Donut Mono",
+    colors: {
+      "--background": "#070707",
+      "--foreground": "#ffffff",
+      "--card": "#0e0e0e",
+      "--card-foreground": "#e4e4e4",
+      "--popover": "#0e0e0e",
+      "--popover-foreground": "#e4e4e4",
+      "--primary": "#ffffff",
+      "--primary-foreground": "#070707",
+      "--secondary": "#161616",
+      "--secondary-foreground": "#e4e4e4",
+      "--muted": "#161616",
+      "--muted-foreground": "#a0a0a0",
+      "--accent": "#1f1f1f",
+      "--accent-foreground": "#ffffff",
+      "--destructive": "#ec6a5e",
+      "--destructive-foreground": "#070707",
+      "--success": "#61c554",
+      "--success-foreground": "#070707",
+      "--warning": "#f4be4f",
+      "--warning-foreground": "#070707",
+      "--border": "rgba(255,255,255,0.06)",
+      "--chart-1": "#a0a0a0",
+      "--chart-2": "#6b6b6b",
+      "--chart-3": "#444444",
+      "--chart-4": "#e4e4e4",
+      "--chart-5": "#ffffff",
+    },
+  },
+  {
     id: "tokyo-night",
     name: "Tokyo Night",
     colors: {

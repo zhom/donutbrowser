@@ -30,7 +30,9 @@
       "saveSettings": "保存设置",
       "moreInfo": "了解更多",
       "downloading": "下载中...",
-      "minimize": "最小化"
+      "minimize": "最小化",
+      "saving": "正在保存…",
+      "saved": "已保存"
     },
     "status": {
       "active": "活跃",
@@ -169,7 +171,11 @@
       "title": "高级",
       "clearCache": "清除所有版本缓存",
       "clearCacheDescription": "清除所有缓存的浏览器版本数据并从源刷新所有浏览器版本。这将强制重新下载所有浏览器的版本信息。",
-      "clearCacheFailed": "清除缓存失败"
+      "clearCacheFailed": "清除缓存失败",
+      "copyLogs": "复制日志",
+      "openLogDir": "打开日志文件夹",
+      "copyLogsSuccess": "日志已复制到剪贴板",
+      "copyLogsDescription": "将最近的日志文件（最多 5 MB）合并到剪贴板，便于在反馈问题时分享。"
     },
     "disableAutoUpdates": "禁用应用自动更新",
     "disableAutoUpdatesDescription": "阻止应用程序自动检查和安装 Donut Browser 更新。浏览器更新不受影响。",
@@ -189,7 +195,11 @@
       "integrations": "集成",
       "importProfile": "导入配置文件",
       "extensions": "扩展程序"
-    }
+    },
+    "newProfile": "新建",
+    "donutLogo": "Donut Browser 标识",
+    "scrollGroupsLeft": "向左滚动分组",
+    "scrollGroupsRight": "向右滚动分组"
   },
   "profiles": {
     "title": "配置文件",
@@ -208,7 +218,13 @@
       "proxy": "代理 / VPN",
       "lastLaunch": "最后启动",
       "empty": "未找到配置文件。",
-      "notSelected": "未选择"
+      "notSelected": "未选择",
+      "ext": "扩展",
+      "dns": "DNS",
+      "extDefault": "默认",
+      "dnsLevel": "DNS 屏蔽列表: {{level}}",
+      "extSearch": "搜索分组…",
+      "extEmpty": "没有扩展组"
     },
     "actions": {
       "launch": "启动",
@@ -270,7 +286,10 @@
       "assignExtensionGroup": "分配扩展分组",
       "copyCookies": "复制 Cookie"
     },
-    "passwordProtectedBadge": "密码保护"
+    "passwordProtectedBadge": "密码保护",
+    "launchHook": {
+      "placeholder": "https://example.com/track-launch"
+    }
   },
   "createProfile": {
     "title": "创建新配置文件",
@@ -508,7 +527,8 @@
     "loadProfilesFailed": "加载配置文件失败",
     "unknownGroup": "未知分组",
     "profileGroupsAriaLabel": "配置文件分组",
-    "loading": "正在加载组..."
+    "loading": "正在加载组...",
+    "all": "全部"
   },
   "sync": {
     "mode": {
@@ -560,6 +580,7 @@
       "openLogin": "登录",
       "linkCodeLabel": "登录代码",
       "linkCodePlaceholder": "粘贴网站的代码",
+      "signInTitle": "登录",
       "verifyAndLogin": "验证并登录",
       "loggingIn": "登录中...",
       "connected": "已连接",
@@ -1060,13 +1081,22 @@
       "lastLaunched": "上次启动",
       "hostOs": "主机操作系统",
       "ephemeral": "临时",
-      "extensionGroup": "扩展程序组"
+      "extensionGroup": "扩展程序组",
+      "totalSessions": "总会话",
+      "syncMode": "同步模式",
+      "proxy": "代理",
+      "vpn": "VPN",
+      "cookieCount": "存储的 Cookie",
+      "localDataTransfer": "本地数据传输"
     },
     "values": {
       "none": "无",
       "never": "从未",
       "copied": "已复制！",
-      "yes": "是"
+      "yes": "是",
+      "activeNow": "当前活动",
+      "direct": "直连",
+      "loading": "加载中…"
     },
     "network": {
       "bypassRules": "代理绕过规则",
@@ -1080,8 +1110,9 @@
     "launchHook": {
       "title": "启动钩子 URL",
       "label": "启动钩子 URL",
-      "description": "每次启动配置文件时，Donut Browser 都会向此 URL 发送 POST 请求。",
-      "placeholder": "https://example.com/hooks/profile-launch"
+      "description": "每次启动配置文件时，Donut Browser 都会向此 URL 发送一个 GET 请求。",
+      "placeholder": "https://example.com/hooks/profile-launch",
+      "invalidUrlHint": "请输入有效的 http:// 或 https:// URL。"
     },
     "actions": {
       "manageCookies": "管理 Cookie",
@@ -1092,6 +1123,48 @@
       "description": "输入克隆配置文件的名称",
       "namePlaceholder": "配置文件名称",
       "button": "克隆"
+    },
+    "duplicate": "复制",
+    "breadcrumbRoot": "配置文件",
+    "openDialog": "打开设置",
+    "sections": {
+      "overview": "概览",
+      "fingerprint": "指纹",
+      "network": "网络",
+      "cookies": "Cookie",
+      "extensions": "扩展",
+      "sync": "同步",
+      "automation": "自动化",
+      "security": "安全",
+      "delete": "删除配置文件",
+      "activity": "活动",
+      "launchHook": "启动钩子"
+    },
+    "sectionDesc": {
+      "fingerprint": "配置此配置文件如何对指纹脚本显示。",
+      "network": "管理此配置文件使用的代理或 VPN。",
+      "cookies": "导入、复制或清除此配置文件的 Cookie。",
+      "extensions": "选择启动此配置文件时加载的扩展。",
+      "sync": "配置此配置文件如何在设备间同步。",
+      "automation": "在启动此配置文件时运行命令。",
+      "security": "用密码加密配置文件数据。",
+      "launchHook": "每次启动配置文件时向此 URL 发送一个 GET 请求。"
+    },
+    "badges": {
+      "locked": "已锁",
+      "active": "已启用"
+    },
+    "cookies": {
+      "runningNotice": "浏览器运行时无法读取 Cookie。请先关闭此配置文件。",
+      "domainsHeader": "域 ({{count}})"
+    },
+    "security": {
+      "protected": "此配置文件已用密码加密。",
+      "unprotected": "此配置文件未加密。设置密码以加密其数据。",
+      "cannotWhileRunning": "更改密码前请先停止此配置文件。"
+    },
+    "fingerprint": {
+      "notSupported": "指纹编辑仅适用于 Camoufox 和 Wayfern 配置文件。"
     }
   },
   "extensions": {
@@ -1625,12 +1698,13 @@
       "password": "密码",
       "currentPassword": "当前密码",
       "newPassword": "新密码",
-      "confirm": "确认密码"
+      "confirm": "确认密码",
+      "confirmPassword": "确认新密码"
     },
     "errors": {
       "oldPasswordRequired": "需要当前密码",
       "passwordRequired": "需要密码",
-      "tooShort": "密码至少需要 {{min}} 个字符",
+      "tooShort": "密码至少需要 8 个字符",
       "mismatch": "密码不匹配"
     },
     "toasts": {
@@ -1641,6 +1715,11 @@
     "warnings": {
       "forgetWarningTitle": "重要:此密码无法恢复",
       "forgetWarningBody": "Donut Browser 无法重置、恢复或绕过此密码。如果忘记,您将永久无法访问此配置文件的数据。"
+    },
+    "modes": {
+      "set": "设置",
+      "change": "更改",
+      "remove": "删除"
     }
   },
   "backendErrors": {
@@ -1659,6 +1738,77 @@
     "profileLocked": "配置文件已锁定。请先输入密码。",
     "invalidProfileId": "配置文件 ID 无效",
     "passwordTooShort": "密码至少需要 {{min}} 个字符",
-    "internal": "出现问题:{{detail}}"
+    "internal": "出现问题:{{detail}}",
+    "invalidLaunchHookUrl": "启动钩子 URL 无效。请使用完整的 http:// 或 https:// URL。",
+    "cookieDbLocked": "无法读取 Cookie — 数据库已锁定。请关闭浏览器后重试。",
+    "cookieDbUnavailable": "无法读取 Cookie — Cookie 存储不可用。"
+  },
+  "rail": {
+    "profiles": "配置文件",
+    "proxies": "代理",
+    "extensions": "扩展",
+    "groups": "分组",
+    "settings": "设置",
+    "more": {
+      "label": "更多",
+      "closeAriaLabel": "关闭菜单",
+      "importProfile": "导入配置文件",
+      "importProfileHint": "从其他工具导入",
+      "vpns": "VPN 配置",
+      "vpnsHint": "WireGuard 隧道",
+      "integrations": "集成",
+      "integrationsHint": "Slack、MCP、自动化",
+      "account": "账户",
+      "accountHint": "云、订阅、登录"
+    }
+  },
+  "pageTitle": {
+    "proxies": "代理",
+    "extensions": "扩展",
+    "groups": "分组",
+    "vpns": "VPN",
+    "settings": "设置",
+    "integrations": "集成",
+    "account": "账户",
+    "import": "导入配置文件"
+  },
+  "encryption": {
+    "required": {
+      "title": "同步已暂停 — 需要密码",
+      "description": "已下载加密数据，但此设备未设置 E2E 密码。打开 设置 → 加密 并输入密码以继续同步。",
+      "openSettings": "打开设置"
+    },
+    "rollover": {
+      "startedTitle": "正在重新加密您的数据",
+      "startedDescription": "我们正在使用新密码重新上传每个已同步项。先是配置文件，然后是代理、分组、VPN 和扩展。",
+      "progressTitle": "重新加密 {{stage}}",
+      "progressDescription": "{{done}} / {{total}}",
+      "completedTitle": "重新加密完成",
+      "completedDescription": "所有已同步的数据都已使用新密码封装。",
+      "stage": {
+        "profiles": "配置文件",
+        "proxies": "代理",
+        "groups": "分组",
+        "vpns": "VPN",
+        "extensions": "扩展",
+        "extension_groups": "扩展组"
+      }
+    }
+  },
+  "account": {
+    "refreshed": "账户已刷新",
+    "loggedOut": "已退出",
+    "signedOut": "未登录",
+    "signedOutDescription": "登录以启用云同步、加密配置文件和团队功能。",
+    "plan": "套餐：{{plan}} · {{period}}",
+    "refresh": "刷新",
+    "logout": "退出",
+    "signIn": "登录",
+    "fields": {
+      "plan": "套餐",
+      "status": "状态",
+      "teamRole": "团队角色",
+      "period": "计费周期"
+    }
   }
 }

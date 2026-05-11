@@ -40,6 +40,7 @@ import {
 import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
+import { cn } from "@/lib/utils";
 import type { ProxyCheckResult, StoredProxy, VpnConfig } from "@/types";
 import { ProxyCheckButton } from "./proxy-check-button";
 import { RippleButton } from "./ui/ripple";
@@ -100,11 +101,16 @@ function getSyncStatusDot(
 interface ProxyManagementDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  subPage?: boolean;
+  /** Which tab to display first when the dialog mounts; defaults to "proxies". */
+  initialTab?: "proxies" | "vpns";
 }
 
 export function ProxyManagementDialog({
   isOpen,
   onClose,
+  subPage,
+  initialTab = "proxies",
 }: ProxyManagementDialogProps) {
   const { t } = useTranslation();
   // Proxy state
@@ -391,22 +397,44 @@ export function ProxyManagementDialog({
 
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={onClose}>
+      <Dialog open={isOpen} onOpenChange={onClose} subPage={subPage}>
         <DialogContent className="max-w-[min(95vw,1600px)] max-h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>{t("proxies.management.title")}</DialogTitle>
-            <DialogDescription>
-              {t("proxies.management.description")}
-            </DialogDescription>
-          </DialogHeader>
+          {!subPage && (
+            <DialogHeader>
+              <DialogTitle>{t("proxies.management.title")}</DialogTitle>
+              <DialogDescription>
+                {t("proxies.management.description")}
+              </DialogDescription>
+            </DialogHeader>
+          )}
 
-          <ScrollArea className="overflow-y-auto flex-1">
-            <Tabs defaultValue="proxies">
-              <TabsList className="w-full">
-                <TabsTrigger value="proxies" className="flex-1">
+          <ScrollArea className="overflow-y-auto flex-1 scroll-fade">
+            <Tabs key={initialTab} defaultValue={initialTab}>
+              <TabsList
+                className={cn(
+                  "w-full",
+                  subPage &&
+                    "!bg-transparent !p-0 !h-auto !rounded-none justify-start gap-4",
+                )}
+              >
+                <TabsTrigger
+                  value="proxies"
+                  className={cn(
+                    "flex-1",
+                    subPage &&
+                      "!flex-none !rounded-none !bg-transparent !shadow-none data-[state=active]:!bg-transparent data-[state=active]:!text-foreground data-[state=active]:!shadow-none text-muted-foreground hover:text-foreground !px-1 !py-1 text-xs",
+                  )}
+                >
                   {t("proxies.management.tabProxies")}
                 </TabsTrigger>
-                <TabsTrigger value="vpns" className="flex-1">
+                <TabsTrigger
+                  value="vpns"
+                  className={cn(
+                    "flex-1",
+                    subPage &&
+                      "!flex-none !rounded-none !bg-transparent !shadow-none data-[state=active]:!bg-transparent data-[state=active]:!text-foreground data-[state=active]:!shadow-none text-muted-foreground hover:text-foreground !px-1 !py-1 text-xs",
+                  )}
+                >
                   {t("proxies.management.tabVpns")}
                 </TabsTrigger>
               </TabsList>
@@ -844,11 +872,13 @@ export function ProxyManagementDialog({
             </Tabs>
           </ScrollArea>
 
-          <DialogFooter>
-            <RippleButton variant="outline" onClick={onClose}>
-              {t("common.buttons.close")}
-            </RippleButton>
-          </DialogFooter>
+          {!subPage && (
+            <DialogFooter>
+              <RippleButton variant="outline" onClick={onClose}>
+                {t("common.buttons.close")}
+              </RippleButton>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
 
