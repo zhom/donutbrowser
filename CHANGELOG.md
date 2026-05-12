@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v0.24.1 (2026-05-12)
+
+### Refactoring
+
+- creation button disaster recovery
+
+### Maintenance
+
+- chore: version bump
+- chore: update flake.nix for v0.24.0 [skip ci] (#357)
+
+
 ## v0.24.0 (2026-05-12)
 
 ### Features
