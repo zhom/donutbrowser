@@ -1,6 +1,33 @@
 # Changelog
 
 
+## v0.24.0 (2026-05-12)
+
+### Features
+
+- support latest camoufox
+- full ui refresh
+
+### Bug Fixes
+
+- pass correct parameter for dns list selection
+
+### Refactoring
+
+- better error handling and prevention of creating ephemeral password protected profiles
+- ui cleanup
+- sync cleanup
+- proxy spawn
+
+### Maintenance
+
+- chore: version bump
+- chore: update dependencies
+- chore: fix telegram notifications
+- chore: fix issue validation
+- chore: update flake.nix for v0.23.0 [skip ci] (#351)
+
+
 ## v0.23.0 (2026-05-10)
 
 ### Features
