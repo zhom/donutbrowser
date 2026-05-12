@@ -422,7 +422,7 @@ function DnsCell({
     try {
       await invoke("update_profile_dns_blocklist", {
         profileId: profile.id,
-        level: nextLevel,
+        dnsBlocklist: nextLevel,
       });
     } catch (err) {
       console.error("Failed to update DNS blocklist:", err);
