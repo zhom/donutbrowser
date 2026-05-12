@@ -1931,9 +1931,7 @@ export function ProfilesDataTable({
           const meta = table.options.meta as TableMeta;
           const profile = row.original;
           const browser = profile.browser;
-          const IconComponent = profile.password_protected
-            ? LuLock
-            : getProfileIcon(profile);
+          const IconComponent = getProfileIcon(profile);
           const isCrossOs = isCrossOsProfile(profile);
 
           const isSelected = meta.isProfileSelected(profile.id);

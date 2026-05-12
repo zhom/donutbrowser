@@ -1734,6 +1734,7 @@
     "profileNotProtected": "El perfil no está protegido por contraseña",
     "profileAlreadyProtected": "El perfil ya está protegido por contraseña",
     "profileRunning": "No se puede realizar esta acción mientras el perfil está en ejecución",
+    "profileEphemeral": "Los perfiles efímeros no pueden tener contraseña — sus datos se borran al salir.",
     "profileMissingSalt": "Al perfil le falta su sal de cifrado",
     "profileLocked": "El perfil está bloqueado. Introduce la contraseña primero.",
     "invalidProfileId": "ID de perfil no válido",

@@ -185,6 +185,7 @@ impl ProfileManager {
           created_by_email: None,
           dns_blocklist: None,
           password_protected: false,
+          created_at: None,
         };
 
         match self
@@ -287,6 +288,7 @@ impl ProfileManager {
           created_by_email: None,
           dns_blocklist: None,
           password_protected: false,
+          created_at: None,
         };
 
         match self
@@ -343,6 +345,12 @@ impl ProfileManager {
       created_by_email: None,
       dns_blocklist,
       password_protected: false,
+      created_at: Some(
+        std::time::SystemTime::now()
+          .duration_since(std::time::UNIX_EPOCH)
+          .map(|d| d.as_secs())
+          .unwrap_or(0),
+      ),
     };
 
     // Save profile info
@@ -989,6 +997,12 @@ impl ProfileManager {
       created_by_email: None,
       dns_blocklist: source.dns_blocklist,
       password_protected: false,
+      created_at: Some(
+        std::time::SystemTime::now()
+          .duration_since(std::time::UNIX_EPOCH)
+          .map(|d| d.as_secs())
+          .unwrap_or(0),
+      ),
     };
 
     self.save_profile(&new_profile)?;

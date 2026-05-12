@@ -11,6 +11,7 @@ export type BackendErrorCode =
   | "PROFILE_NOT_PROTECTED"
   | "PROFILE_ALREADY_PROTECTED"
   | "PROFILE_RUNNING"
+  | "PROFILE_EPHEMERAL"
   | "PROFILE_MISSING_SALT"
   | "PROFILE_LOCKED"
   | "INVALID_PROFILE_ID"
@@ -74,6 +75,8 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.profileAlreadyProtected");
     case "PROFILE_RUNNING":
       return t("backendErrors.profileRunning");
+    case "PROFILE_EPHEMERAL":
+      return t("backendErrors.profileEphemeral");
     case "PROFILE_MISSING_SALT":
       return t("backendErrors.profileMissingSalt");
     case "PROFILE_LOCKED":

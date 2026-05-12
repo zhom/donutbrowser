@@ -52,6 +52,10 @@ pub const DEFAULT_EXCLUDE_PATTERNS: &[&str] = &[
   "**/BrowserMetrics*",
   "**/.DS_Store",
   ".donut-sync/**",
+  // Local-only marker recording when Wayfern last refreshed this profile's
+  // fingerprint. Each device decides its own refresh cadence, so syncing
+  // this would cause one device's refresh to silence others.
+  ".last-fp-refresh",
 ];
 
 /// A single file entry in the manifest

@@ -233,6 +233,15 @@ pub async fn set_profile_password(profile_id: String, password: String) -> Resul
     return Err(err_code("PROFILE_ALREADY_PROTECTED"));
   }
 
+  // Ephemeral profiles live in RAM-backed dirs that get wiped on quit, so
+  // there's no on-disk data to encrypt. The two features are mutually
+  // exclusive by design — fail loudly rather than silently producing a
+  // half-broken state where `password_protected` is true but the encrypted
+  // dir vanishes between launches.
+  if profile.ephemeral {
+    return Err(err_code("PROFILE_EPHEMERAL"));
+  }
+
   if profile
     .process_id
     .is_some_and(crate::proxy_storage::is_process_running)

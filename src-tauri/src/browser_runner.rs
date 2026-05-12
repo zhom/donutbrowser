@@ -7,10 +7,78 @@ use crate::platform_browser;
 use crate::profile::{BrowserProfile, ProfileManager};
 use crate::proxy_manager::PROXY_MANAGER;
 use crate::wayfern_manager::{WayfernConfig, WayfernManager};
+use chrono::{Datelike, TimeZone, Utc};
 use serde::Serialize;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use sysinfo::System;
+
+/// Fixed UTC hour at which Wayfern fingerprints rotate. Picked to land in a
+/// low-traffic window for the average user; everyone shares the same UTC
+/// instant so the value here doesn't track any one user's local schedule.
+const FINGERPRINT_ROLLOVER_HOUR_UTC: u32 = 4;
+
+/// File name of the per-profile marker recording the last fingerprint
+/// refresh time. Lives at `<profiles_dir>/<profile_id>/.last-fp-refresh`
+/// and is excluded from cloud sync (see `sync::manifest`) so each device
+/// runs its own refresh schedule.
+const LAST_FP_REFRESH_FILE: &str = ".last-fp-refresh";
+
+/// Most recent rollover instant on or before `now` — used as a staleness
+/// threshold for Wayfern fingerprints. Anything generated before this
+/// timestamp is considered stale and gets regenerated on next launch.
+fn most_recent_rollover_epoch() -> u64 {
+  let now = Utc::now();
+  let today_threshold = Utc
+    .with_ymd_and_hms(
+      now.year(),
+      now.month(),
+      now.day(),
+      FINGERPRINT_ROLLOVER_HOUR_UTC,
+      0,
+      0,
+    )
+    .single()
+    .unwrap_or(now);
+  let threshold = if now >= today_threshold {
+    today_threshold
+  } else {
+    today_threshold - chrono::Duration::days(1)
+  };
+  threshold.timestamp().max(0) as u64
+}
+
+fn last_fp_refresh_path(profile_id: &str, profiles_dir: &std::path::Path) -> PathBuf {
+  profiles_dir.join(profile_id).join(LAST_FP_REFRESH_FILE)
+}
+
+/// Read the epoch-seconds timestamp stored in the per-profile refresh marker.
+/// Returns `None` if the file doesn't exist or its content can't be parsed —
+/// both signal "needs a refresh" to the caller.
+fn read_last_fp_refresh(profile_id: &str, profiles_dir: &std::path::Path) -> Option<u64> {
+  let path = last_fp_refresh_path(profile_id, profiles_dir);
+  let content = std::fs::read_to_string(&path).ok()?;
+  content.trim().parse::<u64>().ok()
+}
+
+/// Record `ts` (epoch seconds) as the most recent fingerprint refresh for
+/// this profile. Failure is logged but never propagated — a missing marker
+/// only costs an extra regen on the next launch, never blocks one.
+fn write_last_fp_refresh(profile_id: &str, profiles_dir: &std::path::Path, ts: u64) {
+  let path = last_fp_refresh_path(profile_id, profiles_dir);
+  if let Some(parent) = path.parent() {
+    if !parent.exists() {
+      if let Err(e) = std::fs::create_dir_all(parent) {
+        log::warn!("Failed to create profile dir for fingerprint refresh marker {profile_id}: {e}");
+        return;
+      }
+    }
+  }
+  if let Err(e) = std::fs::write(&path, ts.to_string()) {
+    log::warn!("Failed to write fingerprint refresh marker for {profile_id}: {e}");
+  }
+}
+
 pub struct BrowserRunner {
   pub profile_manager: &'static ProfileManager,
   pub downloaded_browsers_registry: &'static DownloadedBrowsersRegistry,
@@ -544,12 +612,32 @@ impl BrowserRunner {
         wayfern_config.proxy
       );
 
-      // Check if we need to generate a new fingerprint on every launch
+      // Decide whether to (re)generate the Wayfern fingerprint for this
+      // launch. Two triggers:
+      //
+      // 1. `randomize_fingerprint_on_launch = true` — explicit per-launch
+      //    randomization the user opted into.
+      // 2. The fingerprint hasn't been refreshed since the most recent
+      //    rollover instant. We check the per-profile marker file first
+      //    (`.last-fp-refresh`); if it's absent we fall back to
+      //    `profile.created_at` so brand-new profiles don't immediately
+      //    regenerate the fingerprint they were just created with.
+      //    Profiles with neither (truly legacy) are treated as ancient
+      //    and refresh on next launch — once.
       let mut updated_profile = profile.clone();
-      if wayfern_config.randomize_fingerprint_on_launch == Some(true) {
+      let stale_threshold = most_recent_rollover_epoch();
+      let profile_id_str = profile.id.to_string();
+      let profiles_dir_for_marker = self.profile_manager.get_profiles_dir();
+      let effective_last_refresh =
+        read_last_fp_refresh(&profile_id_str, &profiles_dir_for_marker).or(profile.created_at);
+      let is_stale_profile = effective_last_refresh.is_none_or(|ts| ts < stale_threshold);
+      let randomize_every_launch = wayfern_config.randomize_fingerprint_on_launch == Some(true);
+      if randomize_every_launch || is_stale_profile {
         log::info!(
-          "Generating random fingerprint for Wayfern profile: {}",
-          profile.name
+          "Generating Wayfern fingerprint for profile {} (per-launch={}, rollover={})",
+          profile.name,
+          randomize_every_launch,
+          is_stale_profile
         );
 
         // Create a config copy without the existing fingerprint to force generation of a new one
@@ -571,10 +659,24 @@ impl BrowserRunner {
         // Update the config with the new fingerprint for launching
         wayfern_config.fingerprint = Some(new_fingerprint.clone());
 
-        // Save the updated fingerprint to the profile so it persists
+        // Write the marker so the next launch within the same rollover
+        // window skips this branch. The marker is excluded from cloud
+        // sync (see `sync::manifest::DEFAULT_EXCLUDE_PATTERNS`), so each
+        // device's refresh schedule is independent.
+        let now_epoch = SystemTime::now()
+          .duration_since(UNIX_EPOCH)
+          .map(|d| d.as_secs())
+          .unwrap_or(stale_threshold);
+        write_last_fp_refresh(&profile_id_str, &profiles_dir_for_marker, now_epoch);
+
+        // Save the updated fingerprint to the profile so it persists.
         let mut updated_wayfern_config = updated_profile.wayfern_config.clone().unwrap_or_default();
         updated_wayfern_config.fingerprint = Some(new_fingerprint);
-        updated_wayfern_config.randomize_fingerprint_on_launch = Some(true);
+        // Preserve the user's randomize-on-launch preference rather than
+        // forcing it on. The rollover path must not silently flip this
+        // flag for users who only opted into the scheduled refresh.
+        updated_wayfern_config.randomize_fingerprint_on_launch =
+          wayfern_config.randomize_fingerprint_on_launch;
         if wayfern_config.os.is_some() {
           updated_wayfern_config.os = wayfern_config.os.clone();
         }

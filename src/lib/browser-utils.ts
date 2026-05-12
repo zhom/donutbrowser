@@ -9,6 +9,7 @@ import {
   FaFire,
   FaFirefox,
 } from "react-icons/fa";
+import { LuLock } from "react-icons/lu";
 
 /**
  * Map internal browser names to display names
@@ -42,7 +43,13 @@ export function getBrowserIcon(browserType: string) {
 export function getProfileIcon(profile: {
   browser: string;
   ephemeral?: boolean;
+  password_protected?: boolean;
 }) {
+  // `password_protected` and `ephemeral` are mutually exclusive (the backend
+  // rejects setting a password on an ephemeral profile), so the order here
+  // doesn't matter — checking lock first only matters if the invariant is
+  // ever violated, in which case showing the lock is the safer default.
+  if (profile.password_protected) return LuLock;
   if (profile.ephemeral) return FaFire;
   return getBrowserIcon(profile.browser);
 }

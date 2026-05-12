@@ -1734,6 +1734,7 @@
     "profileNotProtected": "配置文件未受密码保护",
     "profileAlreadyProtected": "配置文件已受密码保护",
     "profileRunning": "配置文件运行时无法执行此操作",
+    "profileEphemeral": "临时配置文件无法设置密码 — 退出时数据会被清除。",
     "profileMissingSalt": "配置文件缺少加密盐",
     "profileLocked": "配置文件已锁定。请先输入密码。",
     "invalidProfileId": "配置文件 ID 无效",

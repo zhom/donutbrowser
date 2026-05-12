@@ -585,6 +585,7 @@ impl ProfileImporter {
           created_by_email: None,
           dns_blocklist: None,
           password_protected: false,
+          created_at: None,
         };
 
         match self
@@ -666,6 +667,7 @@ impl ProfileImporter {
           created_by_email: None,
           dns_blocklist: None,
           password_protected: false,
+          created_at: None,
         };
 
         match self
@@ -718,6 +720,12 @@ impl ProfileImporter {
       created_by_email: None,
       dns_blocklist: None,
       password_protected: false,
+      created_at: Some(
+        std::time::SystemTime::now()
+          .duration_since(std::time::UNIX_EPOCH)
+          .map(|d| d.as_secs())
+          .unwrap_or(0),
+      ),
     };
 
     self.profile_manager.save_profile(&profile)?;
