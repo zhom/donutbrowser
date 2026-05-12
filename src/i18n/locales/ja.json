@@ -165,7 +165,9 @@
       "trialActive": "トライアル: 残り {{days}} 日 {{hours}} 時間",
       "trialActiveDescription": "トライアル期間中は商用利用が無料です。期間が終了してもすべての機能はそのまま使用できます — 個人利用は引き続き無料で、商用利用のみライセンスが必要になります。",
       "trialExpired": "トライアル期限切れ",
-      "trialExpiredDescription": "個人利用は引き続き無料です。商用利用にはライセンスが必要です。"
+      "trialExpiredDescription": "個人利用は引き続き無料です。商用利用にはライセンスが必要です。",
+      "subscriptionActive": "サブスクリプション中 — {{plan}} プラン",
+      "subscriptionActiveDescription": "Donut Browser のサブスクリプションが有効です。プランの期間中、商用利用がライセンスされます。"
     },
     "advanced": {
       "title": "詳細設定",
@@ -1742,7 +1744,8 @@
     "internal": "問題が発生しました: {{detail}}",
     "invalidLaunchHookUrl": "起動フックURLが無効です。完全な http:// または https:// URL を使用してください。",
     "cookieDbLocked": "Cookie を読み取れません — データベースがロックされています。ブラウザを閉じてから再試行してください。",
-    "cookieDbUnavailable": "Cookie を読み取れません — Cookie ストアを利用できません。"
+    "cookieDbUnavailable": "Cookie を読み取れません — Cookie ストアを利用できません。",
+    "selfHostedRequiresLogout": "セルフホストサーバーを設定する前に Donut アカウントからサインアウトしてください。"
   },
   "rail": {
     "profiles": "プロファイル",
@@ -1808,6 +1811,19 @@
       "status": "ステータス",
       "teamRole": "チームロール",
       "period": "請求周期"
+    },
+    "tabs": {
+      "account": "アカウント",
+      "selfHosted": "セルフホスト"
+    },
+    "selfHosted": {
+      "title": "セルフホスト同期サーバー",
+      "description": "Donut を独自の donut-sync サーバーに接続して、ホスト型クラウドを使わずにプロファイル、プロキシ、グループ、拡張機能を同期します。",
+      "disabledWhileLoggedIn": "Donut アカウントにサインインしている間はセルフホスト同期を利用できません。カスタムサーバーを使うにはサインアウトしてください。",
+      "connectionStatus": "接続:",
+      "statusUnknown": "未テスト",
+      "testConnection": "接続をテスト",
+      "disconnect": "切断"
     }
   }
 }

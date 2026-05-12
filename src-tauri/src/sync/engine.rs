@@ -3526,6 +3526,49 @@ pub fn get_unsynced_entity_counts() -> Result<UnsyncedEntityCounts, String> {
 
 #[tauri::command]
 pub async fn enable_sync_for_all_entities(app_handle: tauri::AppHandle) -> Result<(), String> {
+  // Enable sync for all eligible profiles. Without this the user would see
+  // groups/proxies/vpns syncing while their profiles stay local-only — the
+  // long-standing source of issue #352. Encrypted mode wins when an E2E
+  // password is already configured; otherwise we fall back to plain Regular.
+  {
+    let profile_manager = ProfileManager::instance();
+    let profiles = profile_manager
+      .list_profiles()
+      .map_err(|e| format!("Failed to list profiles: {e}"))?;
+    let desired_mode = if encryption::has_e2e_password() {
+      SyncMode::Encrypted
+    } else {
+      SyncMode::Regular
+    };
+    let desired_mode_str = match desired_mode {
+      SyncMode::Encrypted => "Encrypted",
+      SyncMode::Regular => "Regular",
+      SyncMode::Disabled => "Disabled",
+    };
+    for profile in &profiles {
+      // Skip profiles that are already syncing (any non-Disabled mode),
+      // ephemeral profiles (data wipes on quit, sync is meaningless), and
+      // cross-OS profiles (the OS-specific binary isn't installed locally
+      // so a sync round-trip would be one-sided).
+      if profile.sync_mode != SyncMode::Disabled || profile.ephemeral || profile.is_cross_os() {
+        continue;
+      }
+      if let Err(e) = set_profile_sync_mode(
+        app_handle.clone(),
+        profile.id.to_string(),
+        desired_mode_str.to_string(),
+      )
+      .await
+      {
+        log::warn!(
+          "Failed to enable sync for profile {} ({}): {e}",
+          profile.name,
+          profile.id
+        );
+      }
+    }
+  }
+
   // Enable sync for all unsynced proxies
   {
     let proxies = crate::proxy_manager::PROXY_MANAGER.get_stored_proxies();

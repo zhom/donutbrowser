@@ -1215,13 +1215,14 @@ pub async fn cloud_refresh_profile() -> Result<CloudUser, String> {
 pub async fn cloud_logout(app_handle: tauri::AppHandle) -> Result<(), String> {
   CLOUD_AUTH.logout().await?;
 
-  // Clear sync settings if they point to the cloud URL (prevent leak into Self-Hosted tab)
+  // Always clear the stored sync URL and token on cloud logout. While the
+  // user was signed in, the cloud auth flow populated these with the hosted
+  // sync server's URL + a server-issued token — leaving them in place would
+  // pre-fill the Self-Hosted tab with our production URL and a token the
+  // user never typed. The cloud-URL-only check we used to do here missed
+  // trailing-slash / scheme variants and any future cloud endpoint moves.
   let manager = crate::settings_manager::SettingsManager::instance();
-  if let Ok(sync_settings) = manager.get_sync_settings() {
-    if sync_settings.sync_server_url.as_deref() == Some(CLOUD_SYNC_URL) {
-      let _ = manager.save_sync_server_url(None);
-    }
-  }
+  let _ = manager.save_sync_server_url(None);
   let _ = manager.remove_sync_token(&app_handle).await;
 
   // Remove cloud-managed and cloud-derived proxies

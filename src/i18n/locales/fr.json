@@ -165,7 +165,9 @@
       "trialActive": "Essai: {{days}} jours, {{hours}} heures restantes",
       "trialActiveDescription": "L'utilisation commerciale est gratuite pendant l'essai. À l'expiration, toutes les fonctionnalités continuent de fonctionner — l'utilisation personnelle reste gratuite, seule l'utilisation commerciale nécessitera une licence.",
       "trialExpired": "Essai expiré",
-      "trialExpiredDescription": "L'utilisation personnelle reste gratuite. L'utilisation commerciale nécessite une licence."
+      "trialExpiredDescription": "L'utilisation personnelle reste gratuite. L'utilisation commerciale nécessite une licence.",
+      "subscriptionActive": "Abonné — formule {{plan}}",
+      "subscriptionActiveDescription": "Votre abonnement Donut Browser est actif. L'usage commercial est licencié pendant toute la durée de votre formule."
     },
     "advanced": {
       "title": "Avancé",
@@ -1742,7 +1744,8 @@
     "internal": "Une erreur s'est produite : {{detail}}",
     "invalidLaunchHookUrl": "URL du hook de lancement invalide. Utilisez une URL http:// ou https:// complète.",
     "cookieDbLocked": "Impossible de lire les cookies — la base de données est verrouillée. Fermez le navigateur et réessayez.",
-    "cookieDbUnavailable": "Impossible de lire les cookies — le magasin de cookies est indisponible."
+    "cookieDbUnavailable": "Impossible de lire les cookies — le magasin de cookies est indisponible.",
+    "selfHostedRequiresLogout": "Déconnectez-vous de votre compte Donut avant de configurer un serveur auto-hébergé."
   },
   "rail": {
     "profiles": "Profils",
@@ -1808,6 +1811,19 @@
       "status": "Statut",
       "teamRole": "Rôle d’équipe",
       "period": "Période"
+    },
+    "tabs": {
+      "account": "Compte",
+      "selfHosted": "Auto-hébergé"
+    },
+    "selfHosted": {
+      "title": "Serveur de synchronisation auto-hébergé",
+      "description": "Connectez Donut à votre propre serveur donut-sync pour synchroniser profils, proxys, groupes et extensions sans utiliser le cloud hébergé.",
+      "disabledWhileLoggedIn": "La synchronisation auto-hébergée n'est pas disponible lorsque vous êtes connecté à votre compte Donut. Déconnectez-vous pour utiliser un serveur personnalisé.",
+      "connectionStatus": "Connexion :",
+      "statusUnknown": "Non testé",
+      "testConnection": "Tester la connexion",
+      "disconnect": "Déconnecter"
     }
   }
 }

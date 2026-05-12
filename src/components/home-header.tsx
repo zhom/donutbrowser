@@ -156,6 +156,8 @@ const HomeHeader = ({
     };
   }, []);
 
+  const isWindows = platform === "windows";
+
   return (
     <div
       ref={dragRootRef}
@@ -163,7 +165,15 @@ const HomeHeader = ({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerEnd}
       onPointerCancel={handlePointerEnd}
-      className="flex items-center gap-2 h-11 px-3 border-b border-border bg-card select-none"
+      className={cn(
+        "flex items-center gap-2 h-11 pl-3 border-b border-border bg-card select-none",
+        // Windows: WindowDragArea renders two 44px native-style controls
+        // (minimize + close) fixed at top-right with z-50, total 88px wide.
+        // Reserve 100px on the right edge so the "+ New" button and search
+        // input clear them with a few pixels of breathing room — issues
+        // #358, #361, #362 all reported the same overlap before this fix.
+        isWindows ? "pr-[100px]" : "pr-3",
+      )}
     >
       {isMacOS && (
         <div

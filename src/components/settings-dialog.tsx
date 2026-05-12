@@ -131,6 +131,7 @@ export function SettingsDialog({
   const [e2ePasswordConfirm, setE2ePasswordConfirm] = useState("");
   const [e2eError, setE2eError] = useState("");
   const [isSavingE2e, setIsSavingE2e] = useState(false);
+  const [isRemovingE2e, setIsRemovingE2e] = useState(false);
   const [systemInfo, setSystemInfo] = useState<{
     app_version: string;
     os: string;
@@ -994,6 +995,7 @@ export function SettingsDialog({
                     <Button
                       variant="outline"
                       size="sm"
+                      disabled={isRemovingE2e}
                       onClick={() => {
                         setHasE2ePassword(false);
                         setE2ePassword("");
@@ -1003,22 +1005,41 @@ export function SettingsDialog({
                     >
                       {t("settings.encryption.changePassword")}
                     </Button>
-                    <Button
+                    <LoadingButton
                       variant="destructive"
                       size="sm"
+                      isLoading={isRemovingE2e}
                       onClick={async () => {
+                        setIsRemovingE2e(true);
                         try {
+                          // Await the rollover so the user sees an error if
+                          // re-syncing fails. Previously the rollover was
+                          // fire-and-forget (`void invoke(...)`) which left
+                          // half-removed state on screen with no feedback —
+                          // the source of issue #360 "completely bugged".
                           await invoke("delete_e2e_password");
                           setHasE2ePassword(false);
+                          try {
+                            await invoke(
+                              "rollover_encryption_for_all_entities",
+                            );
+                          } catch (rolloverErr) {
+                            console.error(
+                              "Rollover after password removal failed:",
+                              rolloverErr,
+                            );
+                            showErrorToast(String(rolloverErr));
+                          }
                           showSuccessToast(t("settings.encryption.removed"));
-                          void invoke("rollover_encryption_for_all_entities");
                         } catch (error) {
                           showErrorToast(String(error));
+                        } finally {
+                          setIsRemovingE2e(false);
                         }
                       }}
                     >
                       {t("settings.encryption.removePassword")}
-                    </Button>
+                    </LoadingButton>
                   </div>
                 </div>
               ) : (
@@ -1065,10 +1086,22 @@ export function SettingsDialog({
                         setHasE2ePassword(true);
                         setE2ePassword("");
                         setE2ePasswordConfirm("");
+                        try {
+                          // Await rollover so any failure surfaces to the
+                          // user instead of being lost via fire-and-forget.
+                          // Without this, "change password" leaves entities
+                          // half-re-encrypted with no visible error.
+                          await invoke("rollover_encryption_for_all_entities");
+                        } catch (rolloverErr) {
+                          console.error(
+                            "Rollover after password set failed:",
+                            rolloverErr,
+                          );
+                          showErrorToast(String(rolloverErr));
+                        }
                         showSuccessToast(
                           t("settings.encryption.passwordSaved"),
                         );
-                        void invoke("rollover_encryption_for_all_entities");
                       } catch (error) {
                         showErrorToast(String(error));
                       } finally {
@@ -1089,7 +1122,23 @@ export function SettingsDialog({
               </Label>
 
               <div className="flex items-center justify-between p-3 rounded-md border bg-muted/40">
-                {trialStatus?.type === "Active" ? (
+                {cloudUser != null && cloudUser.plan !== "free" ? (
+                  // Paid Donut plan supersedes the local commercial trial —
+                  // the trial only exists to gate commercial use until the
+                  // user subscribes. Showing "Trial expired" to a paying
+                  // customer reads like a billing error, so swap in a
+                  // subscription-active badge instead.
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-success">
+                      {t("settings.commercial.subscriptionActive", {
+                        plan: cloudUser.plan,
+                      })}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings.commercial.subscriptionActiveDescription")}
+                    </p>
+                  </div>
+                ) : trialStatus?.type === "Active" ? (
                   <div className="space-y-1">
                     <p className="text-sm font-medium">
                       {t("settings.commercial.trialActive", {

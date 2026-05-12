@@ -165,7 +165,9 @@
       "trialActive": "Teste: {{days}} dias, {{hours}} horas restantes",
       "trialActiveDescription": "O uso comercial é gratuito durante o teste. Após o término, todos os recursos continuam funcionando — o uso pessoal permanece gratuito, apenas o uso comercial exigirá uma licença.",
       "trialExpired": "Teste expirado",
-      "trialExpiredDescription": "O uso pessoal continua gratuito. O uso comercial requer uma licença."
+      "trialExpiredDescription": "O uso pessoal continua gratuito. O uso comercial requer uma licença.",
+      "subscriptionActive": "Assinado — plano {{plan}}",
+      "subscriptionActiveDescription": "Sua assinatura do Donut Browser está ativa. O uso comercial está licenciado enquanto seu plano estiver vigente."
     },
     "advanced": {
       "title": "Avançado",
@@ -1742,7 +1744,8 @@
     "internal": "Algo deu errado: {{detail}}",
     "invalidLaunchHookUrl": "URL do hook de inicialização inválida. Use uma URL completa http:// ou https://.",
     "cookieDbLocked": "Não foi possível ler os cookies — o banco de dados está bloqueado. Feche o navegador e tente novamente.",
-    "cookieDbUnavailable": "Não foi possível ler os cookies — o repositório de cookies está indisponível."
+    "cookieDbUnavailable": "Não foi possível ler os cookies — o repositório de cookies está indisponível.",
+    "selfHostedRequiresLogout": "Saia da sua conta Donut antes de configurar um servidor auto-hospedado."
   },
   "rail": {
     "profiles": "Perfis",
@@ -1808,6 +1811,19 @@
       "status": "Status",
       "teamRole": "Função na equipe",
       "period": "Período"
+    },
+    "tabs": {
+      "account": "Conta",
+      "selfHosted": "Auto-hospedado"
+    },
+    "selfHosted": {
+      "title": "Servidor de sincronização auto-hospedado",
+      "description": "Conecte o Donut ao seu próprio servidor donut-sync para sincronizar perfis, proxies, grupos e extensões sem usar a nuvem hospedada.",
+      "disabledWhileLoggedIn": "A sincronização auto-hospedada não está disponível enquanto você está conectado à sua conta Donut. Saia para usar um servidor personalizado.",
+      "connectionStatus": "Conexão:",
+      "statusUnknown": "Não testado",
+      "testConnection": "Testar conexão",
+      "disconnect": "Desconectar"
     }
   }
 }
