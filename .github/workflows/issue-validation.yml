@@ -159,10 +159,14 @@ jobs:
             numbers. Never speculate about how subscription / paid-plan checks work.
 
           # OS-SPECIFIC LOG PATHS (use ONLY the one matching the user's OS)
+          # Easiest path for the user: Donut → Settings → Advanced → Copy logs
+          # (puts the latest rotated log on the clipboard). If they prefer to
+          # attach files directly, the active log is `DonutBrowser.log`; older
+          # rotated copies sit next to it (`DonutBrowser.log.YYYY-MM-DD-…`).
 
-          - macOS:   `~/Library/Logs/com.donutbrowser/`
-          - Linux:   `~/.local/share/com.donutbrowser/logs/`
-          - Windows: `%APPDATA%\com.donutbrowser\logs\`
+          - macOS:   `~/Library/Logs/com.donutbrowser/DonutBrowser.log`
+          - Linux:   `~/.local/share/com.donutbrowser/logs/DonutBrowser.log`
+          - Windows: `%LOCALAPPDATA%\com.donutbrowser\logs\DonutBrowser.log`
 
           # KNOWN ERROR SIGNATURES (truth, not guesses — match these
           # verbatim before suggesting anything else)
@@ -352,10 +356,14 @@ jobs:
           If the issue body is not in English, write the comment in English (the maintainer reads English). The FIRST line must politely ask the user to communicate in English so the maintainer can help. Then continue with the normal triage response, in English.
 
           ## OS-specific log paths
-          Use ONLY the one matching `triage.operating_system`:
-            - macos:   `~/Library/Logs/com.donutbrowser/`
-            - linux:   `~/.local/share/com.donutbrowser/logs/`
-            - windows: `%APPDATA%\com.donutbrowser\logs\` (PowerShell-friendly: `Get-ChildItem $env:APPDATA\com.donutbrowser\logs`)
+          Recommend Settings → Advanced → Copy logs first — it bundles the
+          latest rotated log onto the clipboard without the user hunting for
+          a directory. If they want to attach files directly, point at the
+          path that matches `triage.operating_system`. The active log is
+          always `DonutBrowser.log`; rotated copies sit next to it.
+            - macos:   `~/Library/Logs/com.donutbrowser/DonutBrowser.log`
+            - linux:   `~/.local/share/com.donutbrowser/logs/DonutBrowser.log`
+            - windows: `%LOCALAPPDATA%\com.donutbrowser\logs\DonutBrowser.log` (PowerShell: `Get-Content $env:LOCALAPPDATA\com.donutbrowser\logs\DonutBrowser.log -Tail 200`)
             - unknown: ask the user to share their OS first.
 
           ## Known error signatures (apply BEFORE asking generic questions)
