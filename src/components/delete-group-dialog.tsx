@@ -155,13 +155,13 @@ export function DeleteGroupDialog({
                         setDeleteAction(value as "move" | "delete");
                       }}
                     >
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center gap-x-2">
                         <RadioGroupItem value="move" id="move" />
                         <Label htmlFor="move" className="text-sm">
                           {t("groups.moveToDefault")}
                         </Label>
                       </div>
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center gap-x-2">
                         <RadioGroupItem value="delete" id="delete" />
                         <Label
                           htmlFor="delete"

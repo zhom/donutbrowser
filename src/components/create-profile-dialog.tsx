@@ -1,7 +1,14 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { GoPlus } from "react-icons/go";
 import { LuCheck, LuChevronsUpDown } from "react-icons/lu";
@@ -116,6 +123,8 @@ export function CreateProfileDialog({
   crossOsUnlocked = false,
 }: CreateProfileDialogProps) {
   const { t } = useTranslation();
+  const proxyListboxIdAntiDetect = useId();
+  const proxyListboxIdRegular = useId();
   const [profileName, setProfileName] = useState("");
   const [currentStep, setCurrentStep] = useState<
     "browser-selection" | "browser-config"
@@ -605,11 +614,11 @@ export function CreateProfileDialog({
                           className="flex gap-3 justify-start items-center p-4 w-full h-16 border-2 transition-colors hover:border-primary/50"
                           variant="outline"
                         >
-                          <div className="flex justify-center items-center w-8 h-8">
+                          <div className="flex justify-center items-center size-8">
                             {(() => {
                               const IconComponent = getBrowserIcon("wayfern");
                               return IconComponent ? (
-                                <IconComponent className="w-6 h-6" />
+                                <IconComponent className="size-6" />
                               ) : null;
                             })()}
                           </div>
@@ -631,11 +640,11 @@ export function CreateProfileDialog({
                           className="flex gap-3 justify-start items-center p-4 w-full h-16 border-2 transition-colors hover:border-primary/50"
                           variant="outline"
                         >
-                          <div className="flex justify-center items-center w-8 h-8">
+                          <div className="flex justify-center items-center size-8">
                             {(() => {
                               const IconComponent = getBrowserIcon("camoufox");
                               return IconComponent ? (
-                                <IconComponent className="w-6 h-6" />
+                                <IconComponent className="size-6" />
                               ) : null;
                             })()}
                           </div>
@@ -676,9 +685,9 @@ export function CreateProfileDialog({
                                 className="flex gap-3 justify-start items-center p-4 w-full h-16 border-2 transition-colors hover:border-primary/50"
                                 variant="outline"
                               >
-                                <div className="flex justify-center items-center w-8 h-8">
+                                <div className="flex justify-center items-center size-8">
                                   {IconComponent && (
-                                    <IconComponent className="w-6 h-6" />
+                                    <IconComponent className="size-6" />
                                   )}
                                 </div>
                                 <div className="text-left">
@@ -729,7 +738,7 @@ export function CreateProfileDialog({
 
                         {/* Ephemeral Option */}
                         <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center gap-x-2">
                             <Checkbox
                               id="ephemeral"
                               checked={ephemeral}
@@ -749,7 +758,7 @@ export function CreateProfileDialog({
                         {/* Password Option */}
                         {!ephemeral && (
                           <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center gap-x-2">
                               <Checkbox
                                 id="enable-password"
                                 checked={enablePassword}
@@ -814,7 +823,7 @@ export function CreateProfileDialog({
                             {/* Wayfern Download Status */}
                             {isLoadingReleaseTypes && (
                               <div className="flex gap-3 items-center p-3 rounded-md border">
-                                <div className="w-4 h-4 rounded-full border-2 animate-spin border-muted/40 border-t-primary" />
+                                <div className="size-4 rounded-full border-2 animate-spin border-muted/40 border-t-primary" />
                                 <p className="text-sm text-muted-foreground">
                                   {t("createProfile.version.fetching")}
                                 </p>
@@ -922,7 +931,7 @@ export function CreateProfileDialog({
                             {/* Camoufox Download Status */}
                             {isLoadingReleaseTypes && (
                               <div className="flex gap-3 items-center p-3 rounded-md border">
-                                <div className="w-4 h-4 rounded-full border-2 animate-spin border-muted/40 border-t-primary" />
+                                <div className="size-4 rounded-full border-2 animate-spin border-muted/40 border-t-primary" />
                                 <p className="text-sm text-muted-foreground">
                                   {t("createProfile.version.fetching")}
                                 </p>
@@ -1041,7 +1050,7 @@ export function CreateProfileDialog({
                               <div className="space-y-3">
                                 {isLoadingReleaseTypes && (
                                   <div className="flex gap-3 items-center">
-                                    <div className="w-4 h-4 rounded-full border-2 animate-spin border-muted/40 border-t-primary" />
+                                    <div className="size-4 rounded-full border-2 animate-spin border-muted/40 border-t-primary" />
                                     <p className="text-sm text-muted-foreground">
                                       {t("createProfile.version.fetching")}
                                     </p>
@@ -1154,7 +1163,7 @@ export function CreateProfileDialog({
                               }}
                               className="px-2 h-7 text-xs"
                             >
-                              <GoPlus className="mr-1 w-3 h-3" />{" "}
+                              <GoPlus className="mr-1 size-3" />{" "}
                               {t("createProfile.proxy.addProxy")}
                             </RippleButton>
                           </div>
@@ -1168,6 +1177,7 @@ export function CreateProfileDialog({
                                   variant="outline"
                                   role="combobox"
                                   aria-expanded={proxyPopoverOpen}
+                                  aria-controls={proxyListboxIdAntiDetect}
                                   className="w-full justify-between font-normal"
                                 >
                                   {(() => {
@@ -1190,10 +1200,11 @@ export function CreateProfileDialog({
                                       t("createProfile.proxy.noProxy")
                                     );
                                   })()}
-                                  <LuChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                  <LuChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
                                 </Button>
                               </PopoverTrigger>
                               <PopoverContent
+                                id={proxyListboxIdAntiDetect}
                                 className="w-[240px] p-0"
                                 sideOffset={8}
                               >
@@ -1217,7 +1228,7 @@ export function CreateProfileDialog({
                                       >
                                         <LuCheck
                                           className={cn(
-                                            "mr-2 h-4 w-4",
+                                            "mr-2 size-4",
                                             !selectedProxyId
                                               ? "opacity-100"
                                               : "opacity-0",
@@ -1236,7 +1247,7 @@ export function CreateProfileDialog({
                                         >
                                           <LuCheck
                                             className={cn(
-                                              "mr-2 h-4 w-4",
+                                              "mr-2 size-4",
                                               selectedProxyId === proxy.id
                                                 ? "opacity-100"
                                                 : "opacity-0",
@@ -1261,7 +1272,7 @@ export function CreateProfileDialog({
                                           >
                                             <LuCheck
                                               className={cn(
-                                                "mr-2 h-4 w-4",
+                                                "mr-2 size-4",
                                                 selectedProxyId ===
                                                   `vpn-${vpn.id}`
                                                   ? "opacity-100"
@@ -1412,7 +1423,7 @@ export function CreateProfileDialog({
                             <div className="space-y-3">
                               {isLoadingReleaseTypes && (
                                 <div className="flex gap-3 items-center">
-                                  <div className="w-4 h-4 rounded-full border-2 animate-spin border-muted/40 border-t-primary" />
+                                  <div className="size-4 rounded-full border-2 animate-spin border-muted/40 border-t-primary" />
                                   <p className="text-sm text-muted-foreground">
                                     Fetching available versions...
                                   </p>
@@ -1520,7 +1531,7 @@ export function CreateProfileDialog({
                               }}
                               className="px-2 h-7 text-xs"
                             >
-                              <GoPlus className="mr-1 w-3 h-3" />{" "}
+                              <GoPlus className="mr-1 size-3" />{" "}
                               {t("createProfile.proxy.addProxy")}
                             </RippleButton>
                           </div>
@@ -1534,6 +1545,7 @@ export function CreateProfileDialog({
                                   variant="outline"
                                   role="combobox"
                                   aria-expanded={proxyPopoverOpen}
+                                  aria-controls={proxyListboxIdRegular}
                                   className="w-full justify-between font-normal"
                                 >
                                   {(() => {
@@ -1556,10 +1568,11 @@ export function CreateProfileDialog({
                                       t("createProfile.proxy.noProxy")
                                     );
                                   })()}
-                                  <LuChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                  <LuChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
                                 </Button>
                               </PopoverTrigger>
                               <PopoverContent
+                                id={proxyListboxIdRegular}
                                 className="w-[240px] p-0"
                                 sideOffset={8}
                               >
@@ -1583,7 +1596,7 @@ export function CreateProfileDialog({
                                       >
                                         <LuCheck
                                           className={cn(
-                                            "mr-2 h-4 w-4",
+                                            "mr-2 size-4",
                                             !selectedProxyId
                                               ? "opacity-100"
                                               : "opacity-0",
@@ -1602,7 +1615,7 @@ export function CreateProfileDialog({
                                         >
                                           <LuCheck
                                             className={cn(
-                                              "mr-2 h-4 w-4",
+                                              "mr-2 size-4",
                                               selectedProxyId === proxy.id
                                                 ? "opacity-100"
                                                 : "opacity-0",
@@ -1627,7 +1640,7 @@ export function CreateProfileDialog({
                                           >
                                             <LuCheck
                                               className={cn(
-                                                "mr-2 h-4 w-4",
+                                                "mr-2 size-4",
                                                 selectedProxyId ===
                                                   `vpn-${vpn.id}`
                                                   ? "opacity-100"

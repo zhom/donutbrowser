@@ -79,7 +79,7 @@ export function WindowResizeWarningDialog({
 
         <p className="text-sm text-muted-foreground">{description}</p>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-x-2">
           <Checkbox
             id="dont-show-again"
             checked={dontShowAgain}

@@ -137,7 +137,7 @@ export function DnsBlocklistDialog({
           className="w-full"
         >
           <LuRefreshCw
-            className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+            className={`mr-2 size-4 ${isRefreshing ? "animate-spin" : ""}`}
           />
           {t("dnsBlocklist.refreshAll")}
         </Button>

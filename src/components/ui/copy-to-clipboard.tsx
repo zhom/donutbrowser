@@ -55,12 +55,12 @@ export function CopyToClipboard({
         {copied ? t("common.srOnly.copied") : t("common.srOnly.copy")}
       </span>
       <LuCopy
-        className={`h-4 w-4 transition-all duration-150 ${
+        className={`size-4 transition-all duration-150 ${
           copied ? "scale-0" : "scale-100"
         }`}
       />
       <LuCheck
-        className={`absolute inset-0 m-auto h-4 w-4 text-foreground transition-all duration-150 ${
+        className={`absolute inset-0 m-auto size-4 text-foreground transition-all duration-150 ${
           copied ? "scale-100" : "scale-0"
         }`}
       />

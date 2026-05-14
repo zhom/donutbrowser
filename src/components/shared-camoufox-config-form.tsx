@@ -303,7 +303,7 @@ export function SharedCamoufoxConfigForm({
 
       {/* Randomize Fingerprint Option */}
       <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-x-2">
           <Checkbox
             id="randomize-fingerprint"
             checked={config.randomize_fingerprint_on_launch ?? false}
@@ -323,7 +323,7 @@ export function SharedCamoufoxConfigForm({
 
       {/* Automatic Location Configuration */}
       <div className="space-y-3">
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-x-2">
           <Checkbox
             id="auto-location-advanced"
             checked={isAutoLocationEnabled}
@@ -367,7 +367,7 @@ export function SharedCamoufoxConfigForm({
             <div className="space-y-3">
               <Label>{t("fingerprint.blockingOptions")}</Label>
               <div className="space-y-2">
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-x-2">
                   <Checkbox
                     id="block-images"
                     checked={config.block_images ?? false}
@@ -379,7 +379,7 @@ export function SharedCamoufoxConfigForm({
                     {t("fingerprint.blockImages")}
                   </Label>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-x-2">
                   <Checkbox
                     id="block-webrtc"
                     checked={config.block_webrtc ?? false}
@@ -391,7 +391,7 @@ export function SharedCamoufoxConfigForm({
                     {t("fingerprint.blockWebRTC")}
                   </Label>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-x-2">
                   <Checkbox
                     id="block-webgl"
                     checked={config.block_webgl ?? false}
@@ -1025,7 +1025,7 @@ export function SharedCamoufoxConfigForm({
             <Label>{t("fingerprint.battery")}</Label>
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-x-2">
                   <Checkbox
                     id="battery-charging"
                     checked={fingerprintConfig["battery:charging"] ?? false}
@@ -1176,7 +1176,7 @@ export function SharedCamoufoxConfigForm({
 
             {/* Randomize Fingerprint Option */}
             <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-x-2">
                 <Checkbox
                   id="randomize-fingerprint-auto"
                   checked={config.randomize_fingerprint_on_launch ?? false}
@@ -1199,7 +1199,7 @@ export function SharedCamoufoxConfigForm({
 
             {/* Automatic Location Configuration */}
             <div className="space-y-3">
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-x-2">
                 <Checkbox
                   id="auto-location"
                   checked={isAutoLocationEnabled}

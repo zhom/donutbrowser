@@ -36,16 +36,18 @@ export function CloneProfileDialog({
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
-    if (isOpen && profile) {
-      const defaultName = `${profile.name} (Copy)`;
-      setName(defaultName);
-      setTimeout(() => {
-        inputRef.current?.focus();
-        inputRef.current?.select();
-      }, 0);
-    } else {
+    if (!(isOpen && profile)) {
       setIsLoading(false);
+      return;
     }
+    setName(`${profile.name} (Copy)`);
+    const handle = window.setTimeout(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }, 0);
+    return () => {
+      window.clearTimeout(handle);
+    };
   }, [isOpen, profile]);
 
   if (!profile) return null;

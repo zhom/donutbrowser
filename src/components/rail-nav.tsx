@@ -290,7 +290,7 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
           ref={logoRef}
           type="button"
           aria-label={t("header.donutLogo")}
-          className="grid place-items-center w-7 h-7 rounded-md cursor-pointer select-none text-foreground bg-transparent"
+          className="grid place-items-center size-7 rounded-md cursor-pointer select-none text-foreground bg-transparent"
           onClick={handleClick}
           onPointerDown={() => {
             setIsPressed(true);
@@ -322,12 +322,12 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
                   "animate-[wiggle_0.3s_ease-in-out]",
               )}
             >
-              <Logo className="w-5 h-5 will-change-transform" />
+              <Logo className="size-5 will-change-transform" />
             </span>
           </span>
         </button>
       ) : (
-        <div className="w-7 h-7" />
+        <div className="size-7" />
       )}
 
       <div className="w-5 h-px bg-border my-1" />
@@ -345,7 +345,7 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
                 aria-label={t(labelKey)}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "relative grid place-items-center w-7 h-7 rounded-md transition-colors duration-100",
+                  "relative grid place-items-center size-7 rounded-md transition-colors duration-100",
                   active
                     ? "text-foreground bg-accent"
                     : "text-muted-foreground hover:text-card-foreground hover:bg-accent/50",
@@ -357,7 +357,7 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
                     className="absolute left-[-7px] top-1.5 bottom-1.5 w-[2px] rounded-full bg-foreground"
                   />
                 )}
-                <Icon className="w-3.5 h-3.5" />
+                <Icon className="size-3.5" />
               </button>
             </TooltipTrigger>
             <TooltipContent side="right">{t(labelKey)}</TooltipContent>
@@ -377,13 +377,13 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
             aria-label={t("rail.more.label")}
             aria-expanded={moreOpen}
             className={cn(
-              "grid place-items-center w-7 h-7 rounded-md transition-colors duration-100",
+              "grid place-items-center size-7 rounded-md transition-colors duration-100",
               moreOpen
                 ? "text-foreground bg-accent"
                 : "text-muted-foreground hover:text-card-foreground hover:bg-accent/50",
             )}
           >
-            <GoKebabHorizontal className="w-3.5 h-3.5" />
+            <GoKebabHorizontal className="size-3.5" />
           </button>
         </TooltipTrigger>
         <TooltipContent side="right">{t("rail.more.label")}</TooltipContent>
@@ -399,7 +399,7 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
             aria-label={t("rail.settings")}
             aria-current={currentPage === "settings" ? "page" : undefined}
             className={cn(
-              "relative grid place-items-center w-7 h-7 rounded-md transition-colors duration-100",
+              "relative grid place-items-center size-7 rounded-md transition-colors duration-100",
               currentPage === "settings"
                 ? "text-foreground bg-accent"
                 : "text-muted-foreground hover:text-card-foreground hover:bg-accent/50",
@@ -411,7 +411,7 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
                 className="absolute left-[-7px] top-1.5 bottom-1.5 w-[2px] rounded-full bg-foreground"
               />
             )}
-            <GoGear className="w-3.5 h-3.5" />
+            <GoGear className="size-3.5" />
           </button>
         </TooltipTrigger>
         <TooltipContent side="right">{t("rail.settings")}</TooltipContent>
@@ -438,8 +438,8 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
                 }}
                 className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md hover:bg-accent transition-colors duration-100 text-left"
               >
-                <span className="grid place-items-center w-5 h-5 rounded bg-muted text-muted-foreground shrink-0">
-                  <Icon className="w-3 h-3" />
+                <span className="grid place-items-center size-5 rounded bg-muted text-muted-foreground shrink-0">
+                  <Icon className="size-3" />
                 </span>
                 <span className="flex flex-col min-w-0">
                   <span className="text-xs font-medium text-foreground truncate">

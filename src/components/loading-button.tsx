@@ -17,7 +17,7 @@ export const LoadingButton = ({ isLoading, className, ...props }: Props) => {
       disabled={props.disabled || isLoading}
     >
       {isLoading ? (
-        <LuLoaderCircle className="h-4 w-4 animate-spin" />
+        <LuLoaderCircle className="size-4 animate-spin" />
       ) : (
         props.children
       )}

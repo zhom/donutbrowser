@@ -96,7 +96,7 @@ export function SyncAllDialog({ isOpen, onClose }: SyncAllDialogProps) {
 
         {isLoading ? (
           <div className="flex justify-center py-8">
-            <div className="w-6 h-6 rounded-full border-2 border-current animate-spin border-t-transparent" />
+            <div className="size-6 rounded-full border-2 border-current animate-spin border-t-transparent" />
           </div>
         ) : (
           <div className="py-4">

@@ -273,7 +273,7 @@ export function GroupManagementDialog({
                 }}
                 className="flex gap-2 items-center"
               >
-                <GoPlus className="w-4 h-4" />
+                <GoPlus className="size-4" />
                 {t("proxies.management.create")}
               </RippleButton>
             </div>
@@ -326,7 +326,7 @@ export function GroupManagementDialog({
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <div
-                                      className={`w-2 h-2 rounded-full shrink-0 ${syncDot.color} ${
+                                      className={`size-2 rounded-full shrink-0 ${syncDot.color} ${
                                         syncDot.animate ? "animate-pulse" : ""
                                       }`}
                                     />
@@ -383,7 +383,7 @@ export function GroupManagementDialog({
                                         handleEditGroup(group);
                                       }}
                                     >
-                                      <LuPencil className="w-4 h-4" />
+                                      <LuPencil className="size-4" />
                                     </Button>
                                   </TooltipTrigger>
                                   <TooltipContent>
@@ -401,7 +401,7 @@ export function GroupManagementDialog({
                                         handleDeleteGroup(group);
                                       }}
                                     >
-                                      <LuTrash2 className="w-4 h-4" />
+                                      <LuTrash2 className="size-4" />
                                     </Button>
                                   </TooltipTrigger>
                                   <TooltipContent>

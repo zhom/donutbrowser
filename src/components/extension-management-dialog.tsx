@@ -483,7 +483,7 @@ export function ExtensionManagementDialog({
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="inline-flex">
-                <FaChrome className="w-3.5 h-3.5 text-muted-foreground" />
+                <FaChrome className="size-3.5 text-muted-foreground" />
               </span>
             </TooltipTrigger>
             <TooltipContent>
@@ -495,7 +495,7 @@ export function ExtensionManagementDialog({
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="inline-flex">
-                <FaFirefox className="w-3.5 h-3.5 text-muted-foreground" />
+                <FaFirefox className="size-3.5 text-muted-foreground" />
               </span>
             </TooltipTrigger>
             <TooltipContent>
@@ -508,7 +508,7 @@ export function ExtensionManagementDialog({
   };
 
   const renderExtensionIcon = (ext: Extension, size: "sm" | "md" = "md") => {
-    const sizeClass = size === "sm" ? "w-4 h-4" : "w-5 h-5";
+    const sizeClass = size === "sm" ? "size-4" : "size-5";
     if (extensionIcons[ext.id]) {
       return (
         // biome-ignore lint/performance/noImgElement: base64 data URI icons cannot use next/image
@@ -533,7 +533,7 @@ export function ExtensionManagementDialog({
           {!subPage && (
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <LuPuzzle className="w-5 h-5" />
+                <LuPuzzle className="size-5" />
                 {t("extensions.title")}
                 {limitedMode && <ProBadge />}
               </DialogTitle>
@@ -615,7 +615,7 @@ export function ExtensionManagementDialog({
                               document.getElementById("ext-file-input")?.click()
                             }
                           >
-                            <LuUpload className="w-4 h-4" />
+                            <LuUpload className="size-4" />
                             {t("extensions.upload")}
                           </RippleButton>
                         </label>
@@ -697,7 +697,7 @@ export function ExtensionManagementDialog({
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <div
-                                    className={`w-2 h-2 rounded-full shrink-0 ${syncDot.color} ${
+                                    className={`size-2 rounded-full shrink-0 ${syncDot.color} ${
                                       syncDot.animate ? "animate-pulse" : ""
                                     }`}
                                   />
@@ -743,14 +743,14 @@ export function ExtensionManagementDialog({
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      className="h-7 w-7 p-0"
+                                      className="size-7 p-0"
                                       onClick={() => {
                                         setEditingExtension(ext);
                                         setEditExtensionName(ext.name);
                                         setPendingUpdateFile(null);
                                       }}
                                     >
-                                      <LuPencil className="w-3.5 h-3.5" />
+                                      <LuPencil className="size-3.5" />
                                     </Button>
                                   </TooltipTrigger>
                                   <TooltipContent>
@@ -762,12 +762,12 @@ export function ExtensionManagementDialog({
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      className="h-7 w-7 p-0"
+                                      className="size-7 p-0"
                                       onClick={() => {
                                         setExtensionToDelete(ext);
                                       }}
                                     >
-                                      <LuTrash2 className="w-3.5 h-3.5" />
+                                      <LuTrash2 className="size-3.5" />
                                     </Button>
                                   </TooltipTrigger>
                                   <TooltipContent>
@@ -795,7 +795,7 @@ export function ExtensionManagementDialog({
                         className="flex gap-2 items-center"
                         disabled={limitedMode}
                       >
-                        <GoPlus className="w-4 h-4" />
+                        <GoPlus className="size-4" />
                         {t("extensions.createGroup")}
                       </RippleButton>
                     </div>
@@ -865,7 +865,7 @@ export function ExtensionManagementDialog({
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <div
-                                    className={`w-2 h-2 rounded-full shrink-0 ${groupSyncDot.color} ${
+                                    className={`size-2 rounded-full shrink-0 ${groupSyncDot.color} ${
                                       groupSyncDot.animate
                                         ? "animate-pulse"
                                         : ""
@@ -956,7 +956,7 @@ export function ExtensionManagementDialog({
                                         ]);
                                       }}
                                     >
-                                      <LuPencil className="w-4 h-4" />
+                                      <LuPencil className="size-4" />
                                     </Button>
                                   </TooltipTrigger>
                                   <TooltipContent>
@@ -972,7 +972,7 @@ export function ExtensionManagementDialog({
                                         setGroupToDelete(group);
                                       }}
                                     >
-                                      <LuTrash2 className="w-4 h-4" />
+                                      <LuTrash2 className="size-4" />
                                     </Button>
                                   </TooltipTrigger>
                                   <TooltipContent>
@@ -1086,14 +1086,14 @@ export function ExtensionManagementDialog({
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-6 w-6 p-0 shrink-0"
+                            className="size-6 p-0 shrink-0"
                             onClick={() => {
                               setEditGroupExtensionIds((prev) =>
                                 prev.filter((id) => id !== extId),
                               );
                             }}
                           >
-                            <LuTrash2 className="w-3 h-3" />
+                            <LuTrash2 className="size-3" />
                           </Button>
                         </div>
                       );
@@ -1219,7 +1219,7 @@ export function ExtensionManagementDialog({
                           <span className="truncate">
                             {editingExtension.homepage_url}
                           </span>
-                          <LuExternalLink className="w-3 h-3 shrink-0" />
+                          <LuExternalLink className="size-3 shrink-0" />
                         </a>
                       </>
                     )}
@@ -1245,7 +1245,7 @@ export function ExtensionManagementDialog({
                         document.getElementById("ext-edit-file-input")?.click()
                       }
                     >
-                      <LuUpload className="w-3 h-3 mr-1" />
+                      <LuUpload className="size-3 mr-1" />
                       {t("extensions.selectFile")}
                     </RippleButton>
                     <input

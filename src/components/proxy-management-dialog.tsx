@@ -451,7 +451,7 @@ export function ProxyManagementDialog({
                         }}
                         className="flex gap-2 items-center"
                       >
-                        <LuUpload className="w-4 h-4" />
+                        <LuUpload className="size-4" />
                         {t("common.buttons.import")}
                       </RippleButton>
                       <RippleButton
@@ -463,7 +463,7 @@ export function ProxyManagementDialog({
                         className="flex gap-2 items-center"
                         disabled={storedProxies.length === 0}
                       >
-                        <LuDownload className="w-4 h-4" />
+                        <LuDownload className="size-4" />
                         {t("common.buttons.export")}
                       </RippleButton>
                     </div>
@@ -473,7 +473,7 @@ export function ProxyManagementDialog({
                         onClick={handleCreateProxy}
                         className="flex gap-2 items-center"
                       >
-                        <GoPlus className="w-4 h-4" />
+                        <GoPlus className="size-4" />
                         {t("proxies.management.create")}
                       </RippleButton>
                     </div>
@@ -519,7 +519,7 @@ export function ProxyManagementDialog({
                                     <Tooltip>
                                       <TooltipTrigger asChild>
                                         <div
-                                          className={`w-2 h-2 rounded-full shrink-0 ${syncDot.color} ${
+                                          className={`size-2 rounded-full shrink-0 ${syncDot.color} ${
                                             syncDot.animate
                                               ? "animate-pulse"
                                               : ""
@@ -605,7 +605,7 @@ export function ProxyManagementDialog({
                                             handleEditProxy(proxy);
                                           }}
                                         >
-                                          <LuPencil className="w-4 h-4" />
+                                          <LuPencil className="size-4" />
                                         </Button>
                                       </TooltipTrigger>
                                       <TooltipContent>
@@ -627,7 +627,7 @@ export function ProxyManagementDialog({
                                               (proxyUsage[proxy.id] ?? 0) > 0
                                             }
                                           >
-                                            <LuTrash2 className="w-4 h-4" />
+                                            <LuTrash2 className="size-4" />
                                           </Button>
                                         </span>
                                       </TooltipTrigger>
@@ -681,7 +681,7 @@ export function ProxyManagementDialog({
                         }}
                         className="flex gap-2 items-center"
                       >
-                        <LuUpload className="w-4 h-4" />
+                        <LuUpload className="size-4" />
                         {t("common.buttons.import")}
                       </RippleButton>
                     </div>
@@ -690,7 +690,7 @@ export function ProxyManagementDialog({
                       onClick={handleCreateVpn}
                       className="flex gap-2 items-center"
                     >
-                      <GoPlus className="w-4 h-4" />
+                      <GoPlus className="size-4" />
                       {t("proxies.management.create")}
                     </RippleButton>
                   </div>
@@ -738,7 +738,7 @@ export function ProxyManagementDialog({
                                     <Tooltip>
                                       <TooltipTrigger asChild>
                                         <div
-                                          className={`w-2 h-2 rounded-full shrink-0 ${syncDot.color} ${
+                                          className={`size-2 rounded-full shrink-0 ${syncDot.color} ${
                                             syncDot.animate
                                               ? "animate-pulse"
                                               : ""
@@ -814,7 +814,7 @@ export function ProxyManagementDialog({
                                             handleEditVpn(vpn);
                                           }}
                                         >
-                                          <LuPencil className="w-4 h-4" />
+                                          <LuPencil className="size-4" />
                                         </Button>
                                       </TooltipTrigger>
                                       <TooltipContent>
@@ -834,7 +834,7 @@ export function ProxyManagementDialog({
                                               (vpnUsage[vpn.id] ?? 0) > 0
                                             }
                                           >
-                                            <LuTrash2 className="w-4 h-4" />
+                                            <LuTrash2 className="size-4" />
                                           </Button>
                                         </span>
                                       </TooltipTrigger>

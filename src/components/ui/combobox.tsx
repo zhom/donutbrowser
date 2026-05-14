@@ -47,6 +47,7 @@ export function Combobox({
 }: ComboboxProps) {
   const { t } = useTranslation();
   const [open, setOpen] = React.useState(false);
+  const listboxId = React.useId();
 
   const resolvedPlaceholder = placeholder ?? t("common.buttons.select");
   const resolvedSearchPlaceholder =
@@ -59,16 +60,17 @@ export function Combobox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
+          aria-controls={listboxId}
           disabled={disabled}
           className={cn("w-full justify-between", className)}
         >
           {value
             ? options.find((option) => option.value === value)?.label
             : resolvedPlaceholder}
-          <LuChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          <LuChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-full p-0">
+      <PopoverContent id={listboxId} className="w-full p-0">
         <Command>
           <CommandInput placeholder={resolvedSearchPlaceholder} />
           <CommandList>
@@ -85,7 +87,7 @@ export function Combobox({
                 >
                   <LuCheck
                     className={cn(
-                      "mr-2 h-4 w-4",
+                      "mr-2 size-4",
                       value === option.value ? "opacity-100" : "opacity-0",
                     )}
                   />

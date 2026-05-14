@@ -228,7 +228,7 @@ export function WayfernConfigForm({
 
       {/* Randomize Fingerprint Option */}
       <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-x-2">
           <Checkbox
             id="randomize-fingerprint"
             checked={config.randomize_fingerprint_on_launch ?? false}
@@ -248,7 +248,7 @@ export function WayfernConfigForm({
 
       {/* Automatic Location Configuration */}
       <div className="space-y-3">
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-x-2">
           <Checkbox
             id="auto-location-advanced"
             checked={isAutoLocationEnabled}
@@ -954,7 +954,7 @@ export function WayfernConfigForm({
             <Label>{t("fingerprint.battery")}</Label>
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-x-2">
                   <Checkbox
                     id="battery-charging"
                     checked={fingerprintConfig.batteryCharging ?? false}
@@ -1133,7 +1133,7 @@ export function WayfernConfigForm({
 
             {/* Randomize Fingerprint Option */}
             <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-x-2">
                 <Checkbox
                   id="randomize-fingerprint-auto"
                   checked={config.randomize_fingerprint_on_launch ?? false}
@@ -1156,7 +1156,7 @@ export function WayfernConfigForm({
 
             {/* Automatic Location Configuration */}
             <div className="space-y-3">
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-x-2">
                 <Checkbox
                   id="auto-location"
                   checked={isAutoLocationEnabled}

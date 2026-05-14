@@ -429,7 +429,7 @@ export function CookieManagementDialog({
                     }
                   }}
                 >
-                  <LuUpload className="w-10 h-10 text-muted-foreground mb-4" />
+                  <LuUpload className="size-10 text-muted-foreground mb-4" />
                   <p className="text-sm text-muted-foreground text-center">
                     {t("cookies.management.dropPrompt")}
                     <br />
@@ -556,7 +556,7 @@ export function CookieManagementDialog({
 
               {isLoadingExportCookies ? (
                 <div className="flex items-center justify-center h-24">
-                  <div className="animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full" />
+                  <div className="animate-spin size-5 border-2 border-primary border-t-transparent rounded-full" />
                 </div>
               ) : !exportCookieData || exportCookieData.domains.length === 0 ? (
                 <div className="p-4 text-center text-sm text-muted-foreground border rounded-md">
@@ -645,9 +645,9 @@ function ExportDomainRow({
           }}
         >
           {isExpanded ? (
-            <LuChevronDown className="w-3.5 h-3.5" />
+            <LuChevronDown className="size-3.5" />
           ) : (
-            <LuChevronRight className="w-3.5 h-3.5" />
+            <LuChevronRight className="size-3.5" />
           )}
           <span className="font-medium truncate">{domain.domain}</span>
           <span className="text-xs text-muted-foreground shrink-0">

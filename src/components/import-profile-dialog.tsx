@@ -383,7 +383,7 @@ export function ImportProfileDialog({
                                 >
                                   <div className="flex gap-2 items-center">
                                     {IconComponent && (
-                                      <IconComponent className="w-4 h-4" />
+                                      <IconComponent className="size-4" />
                                     )}
                                     <div className="flex flex-col">
                                       <span className="font-medium">
@@ -475,7 +475,7 @@ export function ImportProfileDialog({
                               <SelectItem key={browser} value={browser}>
                                 <div className="flex gap-2 items-center">
                                   {IconComponent && (
-                                    <IconComponent className="w-4 h-4" />
+                                    <IconComponent className="size-4" />
                                   )}
                                   <span>{getBrowserDisplayName(browser)}</span>
                                 </div>
@@ -507,7 +507,7 @@ export function ImportProfileDialog({
                           onClick={() => void handleBrowseFolder()}
                           title={t("importProfile.browseFolderTitle")}
                         >
-                          <FaFolder className="w-4 h-4" />
+                          <FaFolder className="size-4" />
                         </Button>
                       </div>
                       <p className="mt-2 text-xs text-muted-foreground">

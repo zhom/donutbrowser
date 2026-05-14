@@ -335,7 +335,7 @@ export function CookieCopyDialog({
       <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <LuCookie className="w-5 h-5" />
+            <LuCookie className="size-5" />
             {t("cookies.copy.title")}
           </DialogTitle>
           <DialogDescription>
@@ -372,7 +372,7 @@ export function CookieCopyDialog({
                       disabled={isRunning}
                     >
                       <div className="flex items-center gap-2">
-                        {IconComponent && <IconComponent className="w-4 h-4" />}
+                        {IconComponent && <IconComponent className="size-4" />}
                         <span>{profile.name}</span>
                         {isRunning && (
                           <span className="text-xs text-muted-foreground">
@@ -437,7 +437,7 @@ export function CookieCopyDialog({
               </div>
 
               <div className="relative">
-                <LuSearch className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <LuSearch className="absolute left-2 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                 <Input
                   placeholder={t("cookies.copy.searchPlaceholder")}
                   value={searchQuery}
@@ -450,7 +450,7 @@ export function CookieCopyDialog({
 
               {isLoadingCookies ? (
                 <div className="flex items-center justify-center h-40">
-                  <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
+                  <div className="animate-spin size-6 border-2 border-primary border-t-transparent rounded-full" />
                 </div>
               ) : error ? (
                 <div className="p-4 text-center text-destructive bg-destructive/10 rounded-md">
@@ -565,9 +565,9 @@ function DomainRow({
           }}
         >
           {isExpanded ? (
-            <LuChevronDown className="w-4 h-4" />
+            <LuChevronDown className="size-4" />
           ) : (
-            <LuChevronRight className="w-4 h-4" />
+            <LuChevronRight className="size-4" />
           )}
           <span className="font-medium">{domain.domain}</span>
           <span className="text-xs text-muted-foreground">

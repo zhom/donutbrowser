@@ -398,7 +398,7 @@ export function TrafficDetailsDialog({
               <div className="flex items-center justify-center gap-6 mt-2">
                 <div className="flex items-center gap-2">
                   <div
-                    className="w-3 h-3 rounded"
+                    className="size-3 rounded"
                     style={{ backgroundColor: "var(--chart-1)" }}
                   />
                   <span className="text-xs text-muted-foreground">
@@ -407,7 +407,7 @@ export function TrafficDetailsDialog({
                 </div>
                 <div className="flex items-center gap-2">
                   <div
-                    className="w-3 h-3 rounded"
+                    className="size-3 rounded"
                     style={{ backgroundColor: "var(--chart-2)" }}
                   />
                   <span className="text-xs text-muted-foreground">

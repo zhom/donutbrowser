@@ -315,7 +315,7 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
                 }
               }}
             >
-              <LuUpload className="w-10 h-10 text-muted-foreground mb-4" />
+              <LuUpload className="size-10 text-muted-foreground mb-4" />
               <p className="text-sm text-muted-foreground text-center">
                 {t("proxies.importDialog.dropzonePrompt")}
                 <br />

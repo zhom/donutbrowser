@@ -208,9 +208,9 @@ const HomeHeader = ({
                     behavior: "smooth",
                   });
               }}
-              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 grid place-items-center w-5 h-5 rounded-full bg-card/90 hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shadow-sm"
+              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 grid place-items-center size-5 rounded-full bg-card/90 hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shadow-sm"
             >
-              <LuChevronLeft className="w-3 h-3" />
+              <LuChevronLeft className="size-3" />
             </button>
           )}
           <div
@@ -283,9 +283,9 @@ const HomeHeader = ({
                     behavior: "smooth",
                   });
               }}
-              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 grid place-items-center w-5 h-5 rounded-full bg-card/90 hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shadow-sm"
+              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 grid place-items-center size-5 rounded-full bg-card/90 hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shadow-sm"
             >
-              <LuChevronRight className="w-3 h-3" />
+              <LuChevronRight className="size-3" />
             </button>
           )}
         </div>
@@ -304,7 +304,7 @@ const HomeHeader = ({
             }}
             className="pr-7 pl-8 w-52 h-7 text-xs"
           />
-          <LuSearch className="absolute left-2.5 top-1/2 w-3.5 h-3.5 transform -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          <LuSearch className="absolute left-2.5 top-1/2 size-3.5 transform -translate-y-1/2 text-muted-foreground pointer-events-none" />
           {searchQuery ? (
             <button
               type="button"
@@ -314,7 +314,7 @@ const HomeHeader = ({
               className="absolute right-1.5 top-1/2 p-0.5 rounded-sm transition-colors transform -translate-y-1/2 hover:bg-accent"
               aria-label={t("header.clearSearch")}
             >
-              <LuX className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
+              <LuX className="size-3.5 text-muted-foreground hover:text-foreground" />
             </button>
           ) : null}
         </div>
@@ -331,7 +331,7 @@ const HomeHeader = ({
                 }}
                 className="flex gap-1.5 items-center h-7 px-2.5 text-xs"
               >
-                <GoPlus className="w-3.5 h-3.5" />
+                <GoPlus className="size-3.5" />
                 {t("header.newProfile")}
               </Button>
             </span>

@@ -225,7 +225,7 @@ export function IntegrationsDialog({
             </TabsList>
 
             <TabsContent value="api" className="space-y-4 mt-4">
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-x-2">
                 <Checkbox
                   id="api-enabled"
                   checked={apiServerPort !== null}
@@ -251,7 +251,7 @@ export function IntegrationsDialog({
                     <Label className="text-sm font-medium">
                       {t("integrations.apiPortLabel")}
                     </Label>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center gap-x-2">
                       <Button
                         size="sm"
                         disabled={
@@ -336,7 +336,7 @@ export function IntegrationsDialog({
                     <Label className="text-sm font-medium">
                       {t("integrations.apiTokenLabel")}
                     </Label>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center gap-x-2">
                       <div className="relative flex-1">
                         <Input
                           type={showApiToken ? "text" : "password"}
@@ -354,9 +354,9 @@ export function IntegrationsDialog({
                           }}
                         >
                           {showApiToken ? (
-                            <EyeOff className="h-4 w-4" />
+                            <EyeOff className="size-4" />
                           ) : (
-                            <Eye className="h-4 w-4" />
+                            <Eye className="size-4" />
                           )}
                         </Button>
                       </div>
@@ -376,7 +376,7 @@ export function IntegrationsDialog({
             </TabsContent>
 
             <TabsContent value="mcp" className="space-y-4 mt-4">
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-x-2">
                 <Checkbox
                   id="mcp-enabled"
                   checked={settings.mcp_enabled && mcpConfig !== null}
@@ -407,7 +407,7 @@ export function IntegrationsDialog({
                     <Label className="text-sm font-medium">
                       {t("integrations.mcp.url")}
                     </Label>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center gap-x-2">
                       <div className="relative flex-1">
                         <Input
                           type={showMcpToken ? "text" : "password"}
@@ -425,9 +425,9 @@ export function IntegrationsDialog({
                           }}
                         >
                           {showMcpToken ? (
-                            <EyeOff className="h-4 w-4" />
+                            <EyeOff className="size-4" />
                           ) : (
-                            <Eye className="h-4 w-4" />
+                            <Eye className="size-4" />
                           )}
                         </Button>
                       </div>

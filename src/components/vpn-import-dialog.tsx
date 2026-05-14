@@ -219,7 +219,7 @@ export function VpnImportDialog({ isOpen, onClose }: VpnImportDialogProps) {
                 }
               }}
             >
-              <LuUpload className="w-10 h-10 text-muted-foreground mb-4" />
+              <LuUpload className="size-10 text-muted-foreground mb-4" />
               <p className="text-sm text-muted-foreground text-center">
                 {t("vpns.import.dropzonePrompt")}
               </p>
@@ -244,7 +244,7 @@ export function VpnImportDialog({ isOpen, onClose }: VpnImportDialogProps) {
         {step === "vpn-preview" && vpnPreview && (
           <div className="space-y-4">
             <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg">
-              <LuShield className="w-8 h-8 text-primary" />
+              <LuShield className="size-8 text-primary" />
               <div>
                 <div className="font-medium">
                   {t("vpns.import.configurationLabel", {
@@ -292,7 +292,7 @@ export function VpnImportDialog({ isOpen, onClose }: VpnImportDialogProps) {
             >
               {vpnImportResult.success ? (
                 <div className="flex items-center gap-3">
-                  <LuShield className="w-8 h-8 text-success" />
+                  <LuShield className="size-8 text-success" />
                   <div>
                     <div className="font-medium text-success">
                       {t("vpns.import.importedSuccess")}

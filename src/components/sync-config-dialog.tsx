@@ -248,7 +248,7 @@ export function SyncConfigDialog({
         {isLoggedIn && user ? (
           <div className="grid gap-4 py-4">
             <div className="flex gap-2 items-center text-sm">
-              <div className="w-2 h-2 rounded-full bg-success" />
+              <div className="size-2 rounded-full bg-success" />
               {t("sync.cloud.connected")}
             </div>
 
@@ -353,7 +353,7 @@ export function SyncConfigDialog({
             <TabsContent value="cloud">
               {isCloudLoading ? (
                 <div className="flex justify-center py-8">
-                  <div className="w-6 h-6 rounded-full border-2 border-current animate-spin border-t-transparent" />
+                  <div className="size-6 rounded-full border-2 border-current animate-spin border-t-transparent" />
                 </div>
               ) : (
                 <div className="grid gap-4 py-4">
@@ -373,7 +373,7 @@ export function SyncConfigDialog({
             <TabsContent value="self-hosted">
               {isLoading ? (
                 <div className="flex justify-center py-8">
-                  <div className="w-6 h-6 rounded-full border-2 border-current animate-spin border-t-transparent" />
+                  <div className="size-6 rounded-full border-2 border-current animate-spin border-t-transparent" />
                 </div>
               ) : (
                 <div className="grid gap-4 py-4">
@@ -419,9 +419,9 @@ export function SyncConfigDialog({
                             }
                           >
                             {showToken ? (
-                              <LuEyeOff className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+                              <LuEyeOff className="size-4 text-muted-foreground hover:text-foreground" />
                             ) : (
-                              <LuEye className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+                              <LuEye className="size-4 text-muted-foreground hover:text-foreground" />
                             )}
                           </button>
                         </TooltipTrigger>
@@ -434,19 +434,19 @@ export function SyncConfigDialog({
 
                   {connectionStatus === "testing" && (
                     <div className="flex gap-2 items-center text-sm text-muted-foreground">
-                      <div className="w-4 h-4 rounded-full border-2 border-current animate-spin border-t-transparent" />
+                      <div className="size-4 rounded-full border-2 border-current animate-spin border-t-transparent" />
                       {t("sync.status.syncing")}
                     </div>
                   )}
                   {connectionStatus === "connected" && (
                     <div className="flex gap-2 items-center text-sm text-muted-foreground">
-                      <div className="w-2 h-2 rounded-full bg-success" />
+                      <div className="size-2 rounded-full bg-success" />
                       {t("sync.status.connected")}
                     </div>
                   )}
                   {connectionStatus === "error" && (
                     <div className="flex gap-2 items-center text-sm text-muted-foreground">
-                      <div className="w-2 h-2 rounded-full bg-destructive" />
+                      <div className="size-2 rounded-full bg-destructive" />
                       {t("sync.status.disconnected")}
                     </div>
                   )}

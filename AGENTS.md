@@ -69,6 +69,58 @@ donutbrowser/
 - Strings excluded from this rule: `console.log/warn/error`, dev-only debug labels, internal IDs, CSS class names, type names. If unsure whether a string renders to the user, assume it does and translate it.
 - **Never use `t(key, "fallback")` with a default-value second argument.** The 2-arg form is forbidden — every key must exist in every locale file before the call site lands. Fallbacks mask missing translations: a key missing from `ru.json` will silently render the English fallback to Russian users, so the bug never surfaces in CI or review. Only call `t("namespace.key")`. If a translation is missing for any locale, that's a bug to fix at the JSON, not a hole to paper over at the call site.
 - Empty-string values in non-English locales are also forbidden — a locale either has the right translation or it has the same content as English; never `""`. If a particular language doesn't need a particular phrase (e.g. a suffix that doesn't grammatically apply), refactor the JSX to use a single interpolated key (`t("foo.bar", { name })` with `"...{{name}}..."` in each locale) instead of splitting prefix/suffix.
+- When adding or removing keys across all seven locales, use a one-shot Python script in `/tmp/` that loads each `*.json`, mutates it, and writes it back. Seven sequential `Edit` calls drift (typos, ordering differences) and burn tokens; a single script keeps the locales in lockstep and is easy to throw away.
+
+## Backend error codes (mandatory)
+
+User-facing errors returned from a Tauri command MUST be JSON `{ "code": "FOO_BAR", "params": { … } }` strings — never raw English (`format!("Failed to …")`). The frontend resolves the code via `translateBackendError(t, err)` from `src/lib/backend-errors.ts`. Adding a new code requires four parallel edits:
+
+1. Emit the JSON from Rust:
+   ```rust
+   return Err(serde_json::json!({ "code": "FOO_BAR" }).to_string());
+   // or with params:
+   return Err(serde_json::json!({ "code": "FOO_BAR", "params": { "n": "5" } }).to_string());
+   ```
+2. Add `"FOO_BAR"` to the `BackendErrorCode` union in `src/lib/backend-errors.ts`.
+3. Add a `case "FOO_BAR":` in the switch that returns `t("backendErrors.fooBar", …)`.
+4. Add `backendErrors.fooBar` to all seven locale files.
+
+Raw error strings reach the user untranslated; that's the bug pattern this rule blocks.
+
+## Sub-page Dialog mode
+
+A `<Dialog>` becomes a first-class app sub-page (no modal overlay, no center positioning) when `subPage` is passed. Pages like Account, Settings, Proxy Management, and Extension Management use this. The pattern for a sub-page with tabs:
+
+```tsx
+<Dialog open={isOpen} onOpenChange={onClose} subPage={subPage}>
+  <DialogContent className="max-w-2xl flex flex-col">
+    <Tabs defaultValue="account">
+      <TabsList
+        className={cn(
+          "w-full",
+          subPage &&
+            "!bg-transparent !p-0 !h-auto !rounded-none justify-start gap-4",
+        )}
+      >
+        <TabsTrigger
+          value="account"
+          className={cn(
+            "flex-1",
+            subPage &&
+              "!flex-none !rounded-none !bg-transparent !shadow-none data-[state=active]:!bg-transparent data-[state=active]:!text-foreground data-[state=active]:!shadow-none text-muted-foreground hover:text-foreground !px-1 !py-1 text-xs",
+          )}
+        >
+          Account
+        </TabsTrigger>
+        …
+      </TabsList>
+      <TabsContent value="account" className="mt-4">…</TabsContent>
+    </Tabs>
+  </DialogContent>
+</Dialog>
+```
+
+Reference implementations: `src/components/account-page.tsx`, `src/components/proxy-management-dialog.tsx`. Reuse the exact class strings — the overrides are tuned to match the rest of the sub-page chrome.
 
 ## Singletons
 
@@ -92,6 +144,16 @@ donutbrowser/
   - `chart-1` through `chart-5` — data visualization
 - Use these as Tailwind classes: `bg-success`, `text-destructive`, `border-warning`, etc.
 - For lighter variants use opacity: `bg-destructive/10`, `bg-success/10`, `border-warning/50`
+
+## App data directory naming
+
+`src-tauri/src/app_dirs.rs::app_name()` returns `"DonutBrowserDev"` when `cfg!(debug_assertions)` is true, `"DonutBrowser"` otherwise. So release builds (anything built via `tauri build` / `cargo build --release`) write to:
+
+- macOS — `~/Library/Application Support/DonutBrowser/`
+- Linux — `~/.local/share/DonutBrowser/`
+- Windows — `%LOCALAPPDATA%\DonutBrowser\`
+
+Debug builds (`cargo build`, `pnpm tauri dev`) write to the `DonutBrowserDev` sibling at the same root, and a `dev-{version}` `BUILD_VERSION` is injected via `build.rs`. Logs / screenshots referencing `DonutBrowserDev` therefore mean a local dev build is in play, not a release; useful when a bug report seems to disagree with what production users see.
 
 ## Publishing Linux Repositories
 

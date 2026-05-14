@@ -350,11 +350,11 @@ function ExtCell({
           disabled={isSaving}
           className="flex items-center gap-1.5 h-7 px-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 rounded transition-colors duration-100 w-full text-left disabled:opacity-50"
         >
-          <LuPuzzle className="w-3 h-3 shrink-0" />
+          <LuPuzzle className="size-3 shrink-0" />
           <span className="truncate flex-1" title={label}>
             {label}
           </span>
-          <LuChevronDown className="w-3 h-3 shrink-0 text-muted-foreground" />
+          <LuChevronDown className="size-3 shrink-0 text-muted-foreground" />
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-56 p-0" align="start">
@@ -369,7 +369,7 @@ function ExtCell({
                   void onPick(null);
                 }}
               >
-                {groupId === null && <LuCheck className="mr-2 w-3.5 h-3.5" />}
+                {groupId === null && <LuCheck className="mr-2 size-3.5" />}
                 <span className={groupId === null ? "" : "ml-5"}>
                   {meta.t("profiles.table.extDefault")}
                 </span>
@@ -382,7 +382,7 @@ function ExtCell({
                     void onPick(g.id);
                   }}
                 >
-                  {groupId === g.id && <LuCheck className="mr-2 w-3.5 h-3.5" />}
+                  {groupId === g.id && <LuCheck className="mr-2 size-3.5" />}
                   <span className={groupId === g.id ? "" : "ml-5"}>
                     {g.name}
                   </span>
@@ -445,11 +445,11 @@ function DnsCell({
               : meta.t("dnsBlocklist.none")
           }
         >
-          <FiWifi className="w-3 h-3 shrink-0" />
+          <FiWifi className="size-3 shrink-0" />
           <span className="flex-1 truncate uppercase text-[10px] font-mono tracking-wide">
             {level ?? "—"}
           </span>
-          <LuChevronDown className="w-3 h-3 shrink-0 text-muted-foreground" />
+          <LuChevronDown className="size-3 shrink-0 text-muted-foreground" />
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-48 p-0" align="start">
@@ -462,7 +462,7 @@ function DnsCell({
                   void onPick(null);
                 }}
               >
-                {level === null && <LuCheck className="mr-2 w-3.5 h-3.5" />}
+                {level === null && <LuCheck className="mr-2 size-3.5" />}
                 <span className={level === null ? "" : "ml-5"}>
                   {meta.t("dnsBlocklist.none")}
                 </span>
@@ -475,9 +475,7 @@ function DnsCell({
                     void onPick(l.value);
                   }}
                 >
-                  {level === l.value && (
-                    <LuCheck className="mr-2 w-3.5 h-3.5" />
-                  )}
+                  {level === l.value && <LuCheck className="mr-2 size-3.5" />}
                   <span className={level === l.value ? "" : "ml-5"}>
                     {meta.t(l.labelKey)}
                   </span>
@@ -1960,7 +1958,7 @@ export function ProfilesDataTable({
             return (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="flex justify-center items-center w-4 h-4">
+                  <span className="flex justify-center items-center size-4">
                     <button
                       type="button"
                       className="flex justify-center items-center p-0 border-none cursor-pointer"
@@ -1969,9 +1967,9 @@ export function ProfilesDataTable({
                       }}
                       aria-label={t("common.aria.selectProfile")}
                     >
-                      <span className="w-4 h-4 group">
-                        <OsIcon className="w-4 h-4 text-muted-foreground group-hover:hidden" />
-                        <span className="peer border-input dark:bg-input/30 dark:data-[state=checked]:bg-primary size-4 shrink-0 rounded-[4px] border shadow-xs transition-shadow outline-none w-4 h-4 hidden group-hover:block pointer-events-none items-center justify-center duration-150" />
+                      <span className="size-4 group">
+                        <OsIcon className="size-4 text-muted-foreground group-hover:hidden" />
+                        <span className="peer border-input dark:bg-input/30 dark:data-[state=checked]:bg-primary size-4 shrink-0 rounded-[4px] border shadow-xs transition-shadow outline-none size-4 hidden group-hover:block pointer-events-none items-center justify-center duration-150" />
                       </span>
                     </button>
                   </span>
@@ -1999,14 +1997,14 @@ export function ProfilesDataTable({
                 sideOffset={4}
                 horizontalOffset={8}
               >
-                <span className="flex justify-center items-center w-4 h-4">
+                <span className="flex justify-center items-center size-4">
                   <Checkbox
                     checked={isSelected}
                     onCheckedChange={(value) => {
                       meta.handleCheckboxChange(profile.id, !!value);
                     }}
                     aria-label={t("common.aria.selectRow")}
-                    className="w-4 h-4"
+                    className="size-4"
                   />
                 </span>
               </NonHoverableTooltip>
@@ -2025,9 +2023,9 @@ export function ProfilesDataTable({
             return (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="flex justify-center items-center w-4 h-4 cursor-not-allowed">
+                  <span className="flex justify-center items-center size-4 cursor-not-allowed">
                     {IconComponent && (
-                      <IconComponent className="w-4 h-4 opacity-50" />
+                      <IconComponent className="size-4 opacity-50" />
                     )}
                   </span>
                 </TooltipTrigger>
@@ -2047,14 +2045,14 @@ export function ProfilesDataTable({
                 sideOffset={4}
                 horizontalOffset={8}
               >
-                <span className="flex justify-center items-center w-4 h-4">
+                <span className="flex justify-center items-center size-4">
                   <Checkbox
                     checked={isSelected}
                     onCheckedChange={(value) => {
                       meta.handleCheckboxChange(profile.id, !!value);
                     }}
                     aria-label={t("common.aria.selectRow")}
-                    className="w-4 h-4"
+                    className="size-4"
                   />
                 </span>
               </NonHoverableTooltip>
@@ -2067,7 +2065,7 @@ export function ProfilesDataTable({
               sideOffset={4}
               horizontalOffset={8}
             >
-              <span className="flex relative justify-center items-center w-4 h-4">
+              <span className="flex relative justify-center items-center size-4">
                 <button
                   type="button"
                   className="flex justify-center items-center p-0 border-none cursor-pointer"
@@ -2076,11 +2074,11 @@ export function ProfilesDataTable({
                   }}
                   aria-label={t("common.aria.selectProfile")}
                 >
-                  <span className="w-4 h-4 group">
+                  <span className="size-4 group">
                     {IconComponent && (
-                      <IconComponent className="w-4 h-4 group-hover:hidden" />
+                      <IconComponent className="size-4 group-hover:hidden" />
                     )}
-                    <span className="peer border-input dark:bg-input/30 dark:data-[state=checked]:bg-primary size-4 shrink-0 rounded-[4px] border shadow-xs transition-shadow outline-none w-4 h-4 hidden group-hover:block pointer-events-none items-center justify-center duration-150" />
+                    <span className="peer border-input dark:bg-input/30 dark:data-[state=checked]:bg-primary size-4 shrink-0 rounded-[4px] border shadow-xs transition-shadow outline-none size-4 hidden group-hover:block pointer-events-none items-center justify-center duration-150" />
                   </span>
                 </button>
               </span>
@@ -2194,7 +2192,7 @@ export function ProfilesDataTable({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span>
-                      <LuTriangleAlert className="w-4 h-4 text-warning" />
+                      <LuTriangleAlert className="size-4 text-warning" />
                     </span>
                   </TooltipTrigger>
                   <TooltipContent>
@@ -2217,7 +2215,7 @@ export function ProfilesDataTable({
                           : meta.t("profiles.actions.launch")
                       }
                       className={cn(
-                        "h-7 w-7 p-0 grid place-items-center",
+                        "size-7 p-0 grid place-items-center",
                         !canLaunch && "opacity-50 cursor-not-allowed",
                         canLaunch && "cursor-pointer",
                         isFollower && "border-accent",
@@ -2231,11 +2229,11 @@ export function ProfilesDataTable({
                       }
                     >
                       {isLaunching || isStopping ? (
-                        <div className="w-3 h-3 rounded-full border border-current animate-spin border-t-transparent" />
+                        <div className="size-3 rounded-full border border-current animate-spin border-t-transparent" />
                       ) : isRunning ? (
-                        <LuSquare className="w-3.5 h-3.5 fill-current" />
+                        <LuSquare className="size-3.5 fill-current" />
                       ) : (
-                        <LuPlay className="w-3.5 h-3.5 fill-current" />
+                        <LuPlay className="size-3.5 fill-current" />
                       )}
                     </RippleButton>
                   </span>
@@ -2265,9 +2263,9 @@ export function ProfilesDataTable({
             >
               {meta.t("common.labels.name")}
               {column.getIsSorted() === "asc" ? (
-                <LuChevronUp className="ml-2 w-4 h-4" />
+                <LuChevronUp className="ml-2 size-4" />
               ) : column.getIsSorted() === "desc" ? (
-                <LuChevronDown className="ml-2 w-4 h-4" />
+                <LuChevronDown className="ml-2 size-4" />
               ) : null}
             </Button>
           );
@@ -2382,7 +2380,7 @@ export function ProfilesDataTable({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span>
-                      <LuLock className="w-3 h-3 text-muted-foreground" />
+                      <LuLock className="size-3 text-muted-foreground" />
                     </span>
                   </TooltipTrigger>
                   <TooltipContent>
@@ -2606,7 +2604,7 @@ export function ProfilesDataTable({
                           >
                             <LuCheck
                               className={cn(
-                                "mr-2 h-4 w-4",
+                                "mr-2 size-4",
                                 selectedId === null
                                   ? "opacity-100"
                                   : "opacity-0",
@@ -2633,7 +2631,7 @@ export function ProfilesDataTable({
                               >
                                 <LuCheck
                                   className={cn(
-                                    "mr-2 h-4 w-4",
+                                    "mr-2 size-4",
                                     effectiveProxyId === proxy.id &&
                                       !effectiveVpn
                                       ? "opacity-100"
@@ -2659,7 +2657,7 @@ export function ProfilesDataTable({
                               >
                                 <LuCheck
                                   className={cn(
-                                    "mr-2 h-4 w-4",
+                                    "mr-2 size-4",
                                     effectiveVpnId === vpn.id
                                       ? "opacity-100"
                                       : "opacity-0",
@@ -2701,7 +2699,7 @@ export function ProfilesDataTable({
                                       )
                                     }
                                   >
-                                    <span className="mr-2 h-4 w-4" />+{" "}
+                                    <span className="mr-2 size-4" />+{" "}
                                     {country.name}
                                   </CommandItem>
                                 ))}
@@ -2793,11 +2791,11 @@ export function ProfilesDataTable({
                 <span className="flex justify-center items-center h-9 w-full">
                   {dot.encrypted ? (
                     <LuLock
-                      className={`w-3 h-3 ${dot.color.replace("bg-", "text-")}${dot.animate ? " animate-pulse" : ""}`}
+                      className={`size-3 ${dot.color.replace("bg-", "text-")}${dot.animate ? " animate-pulse" : ""}`}
                     />
                   ) : (
                     <span
-                      className={`w-2 h-2 rounded-full ${dot.color}${dot.animate ? " animate-pulse" : ""}`}
+                      className={`size-2 rounded-full ${dot.color}${dot.animate ? " animate-pulse" : ""}`}
                     />
                   )}
                 </span>
@@ -2818,7 +2816,7 @@ export function ProfilesDataTable({
             <div className="flex justify-end items-center h-9 w-full">
               <Button
                 variant="ghost"
-                className="p-0 w-7 h-7"
+                className="p-0 size-7"
                 disabled={!meta.isClient}
                 onClick={() => {
                   setProfileForInfoDialog(profile);
@@ -2827,7 +2825,7 @@ export function ProfilesDataTable({
                 <span className="sr-only">
                   {t("profiles.aria.profileInfo")}
                 </span>
-                <LuInfo className="w-4 h-4" />
+                <LuInfo className="size-4" />
               </Button>
             </div>
           );

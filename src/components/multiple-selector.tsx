@@ -434,7 +434,7 @@ const MultipleSelector = React.forwardRef<
                       handleUnselect(option);
                     }}
                   >
-                    <LuX className="w-3 h-3 text-muted-foreground hover:text-foreground" />
+                    <LuX className="size-3 text-muted-foreground hover:text-foreground" />
                   </button>
                 </Badge>
               );

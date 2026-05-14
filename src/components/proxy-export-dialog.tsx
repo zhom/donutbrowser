@@ -108,13 +108,13 @@ export function ProxyExportDialog({ isOpen, onClose }: ProxyExportDialogProps) {
               }}
               className="flex gap-4"
             >
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-x-2">
                 <RadioGroupItem value="json" id="format-json" />
                 <Label htmlFor="format-json" className="cursor-pointer">
                   {t("proxies.exportDialog.json")}
                 </Label>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-x-2">
                 <RadioGroupItem value="txt" id="format-txt" />
                 <Label htmlFor="format-txt" className="cursor-pointer">
                   {t("proxies.exportDialog.txt")}
@@ -154,9 +154,9 @@ export function ProxyExportDialog({ isOpen, onClose }: ProxyExportDialogProps) {
             className="flex gap-2 items-center"
           >
             {copied ? (
-              <LuCheck className="w-4 h-4" />
+              <LuCheck className="size-4" />
             ) : (
-              <LuCopy className="w-4 h-4" />
+              <LuCopy className="size-4" />
             )}
             {copied
               ? t("proxies.exportDialog.copied")
@@ -167,7 +167,7 @@ export function ProxyExportDialog({ isOpen, onClose }: ProxyExportDialogProps) {
             disabled={!exportContent || isLoading}
             className="flex gap-2 items-center"
           >
-            <LuDownload className="w-4 h-4" />
+            <LuDownload className="size-4" />
             {t("common.buttons.download")}
           </RippleButton>
         </DialogFooter>

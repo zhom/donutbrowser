@@ -108,24 +108,28 @@ export function CustomThemeProvider({ children }: CustomThemeProviderProps) {
 
   // Re-apply custom theme after mount
   useEffect(() => {
-    if (!isLoading && theme === "custom") {
-      const reapplyCustomTheme = async () => {
-        try {
-          const { invoke } = await import("@tauri-apps/api/core");
-          const settings = await invoke<AppSettings>("get_app_settings");
-          if (settings?.theme === "custom" && settings.custom_theme) {
-            applyThemeColors(settings.custom_theme);
-          }
-        } catch (error) {
-          console.warn("Failed to reapply custom theme:", error);
-        }
-      };
-      setTimeout(() => {
-        void reapplyCustomTheme();
-      }, 100);
-    } else if (!isLoading) {
+    if (isLoading) return;
+    if (theme !== "custom") {
       clearThemeColors();
+      return;
     }
+    const reapplyCustomTheme = async () => {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const settings = await invoke<AppSettings>("get_app_settings");
+        if (settings?.theme === "custom" && settings.custom_theme) {
+          applyThemeColors(settings.custom_theme);
+        }
+      } catch (error) {
+        console.warn("Failed to reapply custom theme:", error);
+      }
+    };
+    const handle = window.setTimeout(() => {
+      void reapplyCustomTheme();
+    }, 100);
+    return () => {
+      window.clearTimeout(handle);
+    };
   }, [isLoading, theme]);
 
   // Listen for system theme changes when in "system" mode

@@ -105,7 +105,7 @@ export function DeviceCodeVerifyDialog({
             disabled={isOpeningLogin}
             className="w-full gap-1.5"
           >
-            <LuExternalLink className="w-3.5 h-3.5" />
+            <LuExternalLink className="size-3.5" />
             {t("sync.cloud.openLogin")}
           </Button>
           <div className="space-y-2">

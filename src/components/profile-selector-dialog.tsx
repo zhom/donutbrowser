@@ -237,7 +237,7 @@ export function ProfileSelectorDialog({
                                         profile.browser,
                                       );
                                       return IconComponent ? (
-                                        <IconComponent className="w-4 h-4" />
+                                        <IconComponent className="size-4" />
                                       ) : null;
                                     })()}
                                   </div>

@@ -1582,7 +1582,10 @@ impl BrowserRunner {
       }
 
       if profile.password_protected {
-        crate::profile::password::complete_after_quit(profile);
+        // Await the re-encryption so the queued sync (released later by
+        // `mark_profile_stopped` in `kill_browser`) sees fresh ciphertext on
+        // disk instead of the previous snapshot.
+        crate::profile::password::complete_after_quit_and_wait(profile).await;
       } else if profile.ephemeral {
         crate::ephemeral_dirs::remove_ephemeral_dir(&profile.id.to_string());
       }
@@ -1924,7 +1927,10 @@ impl BrowserRunner {
       }
 
       if profile.password_protected {
-        crate::profile::password::complete_after_quit(profile);
+        // Await the re-encryption so the queued sync (released later by
+        // `mark_profile_stopped` in `kill_browser`) sees fresh ciphertext on
+        // disk instead of the previous snapshot.
+        crate::profile::password::complete_after_quit_and_wait(profile).await;
       } else if profile.ephemeral {
         crate::ephemeral_dirs::remove_ephemeral_dir(&profile.id.to_string());
       }

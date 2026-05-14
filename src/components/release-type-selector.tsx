@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LuCheck, LuChevronsUpDown, LuDownload } from "react-icons/lu";
 import { LoadingButton } from "@/components/loading-button";
@@ -44,6 +44,7 @@ export function ReleaseTypeSelector({
 }: ReleaseTypeSelectorProps) {
   const { t } = useTranslation();
   const [popoverOpen, setPopoverOpen] = useState(false);
+  const listboxId = useId();
   const effectivePlaceholder =
     placeholder ?? t("releaseTypeSelector.placeholder");
 
@@ -91,13 +92,14 @@ export function ReleaseTypeSelector({
               variant="outline"
               role="combobox"
               aria-expanded={popoverOpen}
+              aria-controls={listboxId}
               className="justify-between w-full"
             >
               {selectedDisplayText}
-              <LuChevronsUpDown className="ml-2 w-4 h-4 opacity-50 shrink-0" />
+              <LuChevronsUpDown className="ml-2 size-4 opacity-50 shrink-0" />
             </RippleButton>
           </PopoverTrigger>
-          <PopoverContent className="p-0">
+          <PopoverContent id={listboxId} className="p-0">
             <Command>
               <CommandEmpty>
                 {t("releaseTypeSelector.noReleaseTypes")}
@@ -126,7 +128,7 @@ export function ReleaseTypeSelector({
                       >
                         <LuCheck
                           className={cn(
-                            "mr-2 h-4 w-4",
+                            "mr-2 size-4",
                             selectedReleaseType === option.type
                               ? "opacity-100"
                               : "opacity-0",
@@ -187,7 +189,7 @@ export function ReleaseTypeSelector({
             variant="outline"
             className="w-full"
           >
-            <LuDownload className="mr-2 w-4 h-4" />
+            <LuDownload className="mr-2 size-4" />
             {isDownloading
               ? t("releaseTypeSelector.downloading")
               : t("releaseTypeSelector.downloadBrowser")}

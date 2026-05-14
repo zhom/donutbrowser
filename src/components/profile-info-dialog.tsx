@@ -97,11 +97,11 @@ interface ProfileInfoDialogProps {
 function OSIcon({ os }: { os: string }) {
   switch (os) {
     case "macos":
-      return <FaApple className="w-3.5 h-3.5" />;
+      return <FaApple className="size-3.5" />;
     case "windows":
-      return <FaWindows className="w-3.5 h-3.5" />;
+      return <FaWindows className="size-3.5" />;
     case "linux":
-      return <FaLinux className="w-3.5 h-3.5" />;
+      return <FaLinux className="size-3.5" />;
     default:
       return null;
   }
@@ -317,7 +317,7 @@ export function ProfileInfoDialog({
 
   const actions: ActionItem[] = [
     {
-      icon: <LuGlobe className="w-4 h-4" />,
+      icon: <LuGlobe className="size-4" />,
       label: t("profiles.actions.viewNetwork"),
       onClick: () => {
         handleAction(() => onOpenTrafficDialog?.(profile.id));
@@ -325,7 +325,7 @@ export function ProfileInfoDialog({
       disabled: isCrossOs,
     },
     {
-      icon: <LuRefreshCw className="w-4 h-4" />,
+      icon: <LuRefreshCw className="size-4" />,
       label: t("profiles.actions.syncSettings"),
       onClick: () => {
         handleAction(() => onOpenProfileSyncDialog?.(profile));
@@ -334,7 +334,7 @@ export function ProfileInfoDialog({
       hidden: profile.ephemeral === true,
     },
     {
-      icon: <LuGroup className="w-4 h-4" />,
+      icon: <LuGroup className="size-4" />,
       label: t("profiles.actions.assignToGroup"),
       onClick: () => {
         handleAction(() => onAssignProfilesToGroup?.([profile.id]));
@@ -343,7 +343,7 @@ export function ProfileInfoDialog({
       runningBadge: isRunning,
     },
     {
-      icon: <LuFingerprint className="w-4 h-4" />,
+      icon: <LuFingerprint className="size-4" />,
       label: t("profiles.actions.changeFingerprint"),
       onClick: () => {
         handleAction(() => onConfigureCamoufox?.(profile));
@@ -353,7 +353,7 @@ export function ProfileInfoDialog({
       hidden: !isCamoufoxOrWayfern || !onConfigureCamoufox,
     },
     {
-      icon: <LuUsers className="w-4 h-4" />,
+      icon: <LuUsers className="size-4" />,
       label: t("profiles.synchronizer.launchWithSync"),
       onClick: () => {
         handleAction(() => onLaunchWithSync?.(profile));
@@ -363,7 +363,7 @@ export function ProfileInfoDialog({
       hidden: profile.browser !== "wayfern" || !onLaunchWithSync,
     },
     {
-      icon: <LuCopy className="w-4 h-4" />,
+      icon: <LuCopy className="size-4" />,
       label: t("profiles.actions.copyCookiesToProfile"),
       onClick: () => {
         handleAction(() => onCopyCookiesToProfile?.(profile));
@@ -376,7 +376,7 @@ export function ProfileInfoDialog({
         !onCopyCookiesToProfile,
     },
     {
-      icon: <LuCookie className="w-4 h-4" />,
+      icon: <LuCookie className="size-4" />,
       label: t("profileInfo.actions.manageCookies"),
       onClick: () => {
         handleAction(() => onOpenCookieManagement?.(profile));
@@ -389,7 +389,7 @@ export function ProfileInfoDialog({
         !onOpenCookieManagement,
     },
     {
-      icon: <LuSettings className="w-4 h-4" />,
+      icon: <LuSettings className="size-4" />,
       label: t("profiles.actions.clone"),
       onClick: () => {
         handleAction(() => onCloneProfile?.(profile));
@@ -399,7 +399,7 @@ export function ProfileInfoDialog({
       hidden: profile.ephemeral === true,
     },
     {
-      icon: <LuPuzzle className="w-4 h-4" />,
+      icon: <LuPuzzle className="size-4" />,
       label: t("profileInfo.actions.assignExtensionGroup"),
       onClick: () => {
         handleAction(() => onAssignExtensionGroup?.([profile.id]));
@@ -409,21 +409,21 @@ export function ProfileInfoDialog({
       hidden: profile.ephemeral === true,
     },
     {
-      icon: <LuShieldCheck className="w-4 h-4" />,
+      icon: <LuShieldCheck className="size-4" />,
       label: t("profileInfo.network.bypassRulesTitle"),
       onClick: () => {
         handleAction(() => onOpenBypassRules?.(profile));
       },
     },
     {
-      icon: <LuShield className="w-4 h-4" />,
+      icon: <LuShield className="size-4" />,
       label: t("dnsBlocklist.title"),
       onClick: () => {
         handleAction(() => onOpenDnsBlocklist?.(profile));
       },
     },
     {
-      icon: <LuLink className="w-4 h-4" />,
+      icon: <LuLink className="size-4" />,
       label: t("profiles.actions.launchHook"),
       onClick: () => {
         handleAction(() => onOpenLaunchHook?.(profile));
@@ -431,7 +431,7 @@ export function ProfileInfoDialog({
       hidden: !onOpenLaunchHook,
     },
     {
-      icon: <LuKey className="w-4 h-4" />,
+      icon: <LuKey className="size-4" />,
       label: t("profiles.actions.setPassword"),
       onClick: () => {
         handleAction(() => onSetPassword?.(profile));
@@ -444,7 +444,7 @@ export function ProfileInfoDialog({
         !onSetPassword,
     },
     {
-      icon: <LuKey className="w-4 h-4" />,
+      icon: <LuKey className="size-4" />,
       label: t("profiles.actions.changePassword"),
       onClick: () => {
         handleAction(() => onChangePassword?.(profile));
@@ -454,7 +454,7 @@ export function ProfileInfoDialog({
       hidden: profile.password_protected !== true || !onChangePassword,
     },
     {
-      icon: <LuLockOpen className="w-4 h-4" />,
+      icon: <LuLockOpen className="size-4" />,
       label: t("profiles.actions.removePassword"),
       onClick: () => {
         handleAction(() => onRemovePassword?.(profile));
@@ -465,7 +465,7 @@ export function ProfileInfoDialog({
       destructive: true,
     },
     {
-      icon: <LuTrash2 className="w-4 h-4" />,
+      icon: <LuTrash2 className="size-4" />,
       label: t("profiles.actions.delete"),
       onClick: () => {
         handleAction(() => onDeleteProfile?.(profile));
@@ -646,12 +646,12 @@ function ProfileInfoLayout({
   }[] = [
     {
       id: "overview",
-      icon: <LuClipboard className="w-3.5 h-3.5" />,
+      icon: <LuClipboard className="size-3.5" />,
       label: t("profileInfo.sections.overview"),
     },
     {
       id: "fingerprint",
-      icon: <LuFingerprint className="w-3.5 h-3.5" />,
+      icon: <LuFingerprint className="size-3.5" />,
       label: t("profileInfo.sections.fingerprint"),
       badge: profile.password_protected
         ? t("profileInfo.badges.locked")
@@ -660,13 +660,13 @@ function ProfileInfoLayout({
     },
     {
       id: "network",
-      icon: <LuGlobe className="w-3.5 h-3.5" />,
+      icon: <LuGlobe className="size-3.5" />,
       label: t("profileInfo.sections.network"),
       badge: profile.proxy_id || profile.vpn_id ? networkLabel : undefined,
     },
     {
       id: "cookies",
-      icon: <LuCookie className="w-3.5 h-3.5" />,
+      icon: <LuCookie className="size-3.5" />,
       label: t("profileInfo.sections.cookies"),
       badge:
         cookieCount !== null && cookieCount > 0
@@ -676,26 +676,26 @@ function ProfileInfoLayout({
     },
     {
       id: "extensions",
-      icon: <LuPuzzle className="w-3.5 h-3.5" />,
+      icon: <LuPuzzle className="size-3.5" />,
       label: t("profileInfo.sections.extensions"),
       badge: extensionGroupName ?? undefined,
       hidden: !extensionAction,
     },
     {
       id: "sync",
-      icon: <LuRefreshCw className="w-3.5 h-3.5" />,
+      icon: <LuRefreshCw className="size-3.5" />,
       label: t("profileInfo.sections.sync"),
       hidden: !syncAction,
     },
     {
       id: "automation",
-      icon: <LuLink className="w-3.5 h-3.5" />,
+      icon: <LuLink className="size-3.5" />,
       label: t("profileInfo.sections.launchHook"),
       badge: profile.launch_hook ? t("profileInfo.badges.active") : undefined,
     },
     {
       id: "security",
-      icon: <LuKey className="w-3.5 h-3.5" />,
+      icon: <LuKey className="size-3.5" />,
       label: t("profileInfo.sections.security"),
     },
   ];
@@ -704,7 +704,7 @@ function ProfileInfoLayout({
     <>
       {/* Top bar */}
       <div className="flex items-center gap-2 h-11 px-3 border-b border-border shrink-0">
-        <LuUsers className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        <LuUsers className="size-3.5 text-muted-foreground shrink-0" />
         <div className="flex items-center gap-1.5 text-xs min-w-0 flex-1">
           <span className="font-semibold">
             {t("profileInfo.breadcrumbRoot")}
@@ -720,7 +720,7 @@ function ProfileInfoLayout({
             disabled={isDisabled}
             onClick={() => onCloneProfile(profile)}
           >
-            <LuCopy className="w-3 h-3" />
+            <LuCopy className="size-3" />
             {t("profileInfo.duplicate")}
           </Button>
         )}
@@ -728,9 +728,9 @@ function ProfileInfoLayout({
           type="button"
           aria-label={t("common.buttons.close")}
           onClick={onClose}
-          className="grid place-items-center w-7 h-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors duration-100"
+          className="grid place-items-center size-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors duration-100"
         >
-          <LuX className="w-3.5 h-3.5" />
+          <LuX className="size-3.5" />
         </button>
       </div>
 
@@ -773,7 +773,7 @@ function ProfileInfoLayout({
                 disabled={deleteAction.disabled}
                 className="flex items-center gap-2 h-7 px-2 rounded-md text-xs transition-colors duration-100 text-destructive hover:bg-destructive/10 disabled:opacity-50 disabled:pointer-events-none"
               >
-                <LuTrash2 className="w-3.5 h-3.5 shrink-0" />
+                <LuTrash2 className="size-3.5 shrink-0" />
                 <span className="flex-1 text-left">
                   {t("profileInfo.sections.delete")}
                 </span>
@@ -789,7 +789,7 @@ function ProfileInfoLayout({
               {/* Hero */}
               <div className="flex items-center gap-3">
                 <div className="rounded-lg bg-muted p-2.5 shrink-0">
-                  <ProfileIcon className="w-7 h-7 text-foreground" />
+                  <ProfileIcon className="size-7 text-foreground" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
@@ -809,7 +809,7 @@ function ProfileInfoLayout({
                       <>
                         <span className="text-muted-foreground">·</span>
                         <span className="inline-flex items-center gap-1 text-success">
-                          <span className="w-1.5 h-1.5 rounded-full bg-success" />
+                          <span className="size-1.5 rounded-full bg-success" />
                           {t("common.status.running")}
                         </span>
                       </>
@@ -826,7 +826,7 @@ function ProfileInfoLayout({
                       <>
                         <span className="text-muted-foreground">·</span>
                         <span className="inline-flex items-center gap-1 text-muted-foreground">
-                          <LuLock className="w-3 h-3" />
+                          <LuLock className="size-3" />
                           {t("profiles.passwordProtectedBadge")}
                         </span>
                       </>
@@ -875,9 +875,9 @@ function ProfileInfoLayout({
                   aria-label={t("common.buttons.copy")}
                 >
                   {copied ? (
-                    <LuClipboardCheck className="w-3.5 h-3.5" />
+                    <LuClipboardCheck className="size-3.5" />
                   ) : (
-                    <LuClipboard className="w-3.5 h-3.5" />
+                    <LuClipboard className="size-3.5" />
                   )}
                 </button>
               </div>
@@ -1082,7 +1082,7 @@ function _SectionAction({
     >
       {icon}
       <span className="flex-1">{label}</span>
-      <LuChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+      <LuChevronRight className="size-3.5 text-muted-foreground" />
     </button>
   );
 }
@@ -1132,7 +1132,7 @@ function LaunchHookEditor({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2 text-sm font-semibold">
-        <LuLink className="w-4 h-4" />
+        <LuLink className="size-4" />
         {t("profileInfo.sections.launchHook")}
       </div>
       <p className="text-xs text-muted-foreground">
@@ -1216,7 +1216,7 @@ function SyncSectionInline({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2 text-sm font-semibold">
-        <LuRefreshCw className="w-4 h-4" />
+        <LuRefreshCw className="size-4" />
         {t("profileInfo.sections.sync")}
       </div>
       <p className="text-xs text-muted-foreground">
@@ -1331,7 +1331,7 @@ function NetworkSectionInline({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2 text-sm font-semibold">
-        <LuGlobe className="w-4 h-4" />
+        <LuGlobe className="size-4" />
         {t("profileInfo.sections.network")}
       </div>
       <p className="text-xs text-muted-foreground">
@@ -1464,7 +1464,7 @@ function ExtensionsSectionInline({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2 text-sm font-semibold">
-        <LuPuzzle className="w-4 h-4" />
+        <LuPuzzle className="size-4" />
         {t("profileInfo.sections.extensions")}
       </div>
       <p className="text-xs text-muted-foreground">
@@ -1553,7 +1553,7 @@ function CookiesSectionInline({
   return (
     <div className="flex flex-col gap-3 min-h-0 flex-1">
       <div className="flex items-center gap-2 text-sm font-semibold">
-        <LuCookie className="w-4 h-4" />
+        <LuCookie className="size-4" />
         {t("profileInfo.sections.cookies")}
       </div>
       <p className="text-xs text-muted-foreground">
@@ -1651,7 +1651,7 @@ function FingerprintSectionInline({
     return (
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-2 text-sm font-semibold">
-          <LuFingerprint className="w-4 h-4" />
+          <LuFingerprint className="size-4" />
           {t("profileInfo.sections.fingerprint")}
         </div>
         <p className="text-xs text-muted-foreground">
@@ -1705,7 +1705,7 @@ function FingerprintSectionInline({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2 text-sm font-semibold">
-        <LuFingerprint className="w-4 h-4" />
+        <LuFingerprint className="size-4" />
         {t("profileInfo.sections.fingerprint")}
       </div>
       <p className="text-xs text-muted-foreground">
@@ -1863,7 +1863,7 @@ function SecuritySectionInline({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2 text-sm font-semibold">
-        <LuKey className="w-4 h-4" />
+        <LuKey className="size-4" />
         {t("profileInfo.sections.security")}
       </div>
       <p className="text-xs text-muted-foreground">
@@ -2226,7 +2226,7 @@ export function ProfileBypassRulesDialog({
                 onClick={handleAddRule}
                 disabled={!newRule.trim()}
               >
-                <LuPlus className="w-4 h-4 mr-1" />
+                <LuPlus className="size-4 mr-1" />
                 {t("profileInfo.network.addRule")}
               </Button>
             </div>
@@ -2249,7 +2249,7 @@ export function ProfileBypassRulesDialog({
                       }}
                       className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
                     >
-                      <LuX className="w-3.5 h-3.5" />
+                      <LuX className="size-3.5" />
                     </button>
                   </div>
                 ))}

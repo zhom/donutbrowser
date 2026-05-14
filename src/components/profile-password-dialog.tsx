@@ -53,14 +53,16 @@ export function ProfilePasswordDialog({
   const firstInputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
-    if (isOpen) {
-      setOldPassword("");
-      setPassword("");
-      setConfirm("");
-      setIsSubmitting(false);
-      setLockoutSecondsRemaining(null);
-      setTimeout(() => firstInputRef.current?.focus(), 0);
-    }
+    if (!isOpen) return;
+    setOldPassword("");
+    setPassword("");
+    setConfirm("");
+    setIsSubmitting(false);
+    setLockoutSecondsRemaining(null);
+    const handle = window.setTimeout(() => firstInputRef.current?.focus(), 0);
+    return () => {
+      window.clearTimeout(handle);
+    };
   }, [isOpen]);
 
   // Tick down the lockout timer

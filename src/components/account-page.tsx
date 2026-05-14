@@ -233,8 +233,8 @@ export function AccountPage({
             <TabsContent value="account" className="mt-4">
               <div className="flex flex-col gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="grid place-items-center w-12 h-12 rounded-full bg-accent text-foreground shrink-0">
-                    <LuUser className="w-6 h-6" />
+                  <div className="grid place-items-center size-12 rounded-full bg-accent text-foreground shrink-0">
+                    <LuUser className="size-6" />
                   </div>
                   <div className="min-w-0 flex-1">
                     {isLoggedIn && user ? (
@@ -309,7 +309,7 @@ export function AccountPage({
                         disabled={isRefreshing}
                         className="h-8 text-xs gap-1.5"
                       >
-                        <LuRefreshCw className="w-3 h-3" />
+                        <LuRefreshCw className="size-3" />
                         {t("account.refresh")}
                       </Button>
                       <LoadingButton
@@ -322,7 +322,7 @@ export function AccountPage({
                         }}
                         className="h-8 text-xs gap-1.5"
                       >
-                        <LuLogOut className="w-3 h-3" />
+                        <LuLogOut className="size-3" />
                         {t("account.logout")}
                       </LoadingButton>
                     </>
@@ -332,7 +332,7 @@ export function AccountPage({
                       onClick={onOpenSignIn}
                       className="h-8 text-xs gap-1.5"
                     >
-                      <LuCloud className="w-3 h-3" />
+                      <LuCloud className="size-3" />
                       {t("account.signIn")}
                     </Button>
                   )}
@@ -410,9 +410,9 @@ export function AccountPage({
                         className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
                       >
                         {showToken ? (
-                          <LuEyeOff className="w-3.5 h-3.5" />
+                          <LuEyeOff className="size-3.5" />
                         ) : (
-                          <LuEye className="w-3.5 h-3.5" />
+                          <LuEye className="size-3.5" />
                         )}
                       </button>
                     </div>

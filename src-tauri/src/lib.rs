@@ -1822,6 +1822,19 @@ pub fn run() {
                     );
                   }
 
+                  // Re-encrypt password-protected profiles when the browser
+                  // exits naturally (user closing the window) — the explicit
+                  // kill path in browser_runner.rs handles app-driven stops.
+                  // Must run BEFORE `mark_profile_stopped` because that
+                  // releases any queued sync run, and a sync that picks up
+                  // the on-disk dir before re-encryption finishes uploads
+                  // the previous snapshot (issue: encrypted profiles not
+                  // syncing fresh data).
+                  if !is_running && profile.password_protected {
+                    crate::profile::password::complete_after_quit_and_wait(&profile)
+                      .await;
+                  }
+
                   // Notify sync scheduler of running state changes
                   if let Some(scheduler) = sync::get_global_scheduler() {
                     if is_running {
@@ -1830,13 +1843,6 @@ pub fn run() {
                       // Sync was queued at launch; mark_profile_stopped triggers it
                       scheduler.mark_profile_stopped(&profile_id).await;
                     }
-                  }
-
-                  // Re-encrypt password-protected profiles when the browser
-                  // exits naturally (user closing the window) — the explicit
-                  // kill path in browser_runner.rs handles app-driven stops.
-                  if !is_running && profile.password_protected {
-                    crate::profile::password::complete_after_quit(&profile);
                   }
 
                   last_running_states.insert(profile_id, is_running);

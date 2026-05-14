@@ -2,7 +2,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LuCheck, LuChevronsUpDown } from "react-icons/lu";
 import { toast } from "sonner";
@@ -55,6 +55,7 @@ export function ProxyAssignmentDialog({
   vpnConfigs = [],
 }: ProxyAssignmentDialogProps) {
   const { t } = useTranslation();
+  const proxyListboxId = useId();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectionType, setSelectionType] = useState<"none" | "proxy" | "vpn">(
     "none",
@@ -183,6 +184,7 @@ export function ProxyAssignmentDialog({
                   variant="outline"
                   role="combobox"
                   aria-expanded={proxyPopoverOpen}
+                  aria-controls={proxyListboxId}
                   className="w-full justify-between font-normal"
                 >
                   {(() => {
@@ -199,10 +201,14 @@ export function ProxyAssignmentDialog({
                     );
                     return proxy ? proxy.name : t("proxyAssignment.noneOption");
                   })()}
-                  <LuChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  <LuChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-[240px] p-0" sideOffset={8}>
+              <PopoverContent
+                id={proxyListboxId}
+                className="w-[240px] p-0"
+                sideOffset={8}
+              >
                 <Command>
                   <CommandInput
                     placeholder={t("proxyAssignment.searchPlaceholder")}
@@ -219,7 +225,7 @@ export function ProxyAssignmentDialog({
                       >
                         <LuCheck
                           className={cn(
-                            "mr-2 h-4 w-4",
+                            "mr-2 size-4",
                             selectionType === "none"
                               ? "opacity-100"
                               : "opacity-0",
@@ -243,7 +249,7 @@ export function ProxyAssignmentDialog({
                           >
                             <LuCheck
                               className={cn(
-                                "mr-2 h-4 w-4",
+                                "mr-2 size-4",
                                 selectionType === "proxy" &&
                                   selectedId === proxy.id
                                   ? "opacity-100"
@@ -269,7 +275,7 @@ export function ProxyAssignmentDialog({
                           >
                             <LuCheck
                               className={cn(
-                                "mr-2 h-4 w-4",
+                                "mr-2 size-4",
                                 selectionType === "vpn" && selectedId === vpn.id
                                   ? "opacity-100"
                                   : "opacity-0",

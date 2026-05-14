@@ -165,9 +165,9 @@ export function SettingsDialog({
   const getPermissionIcon = useCallback((type: PermissionType) => {
     switch (type) {
       case "microphone":
-        return <BsMic className="w-4 h-4" />;
+        return <BsMic className="size-4" />;
       case "camera":
-        return <BsCamera className="w-4 h-4" />;
+        return <BsCamera className="size-4" />;
     }
   }, []);
 
@@ -738,7 +738,7 @@ export function SettingsDialog({
                               <button
                                 type="button"
                                 aria-label={label}
-                                className="w-8 h-8 rounded-md border shadow-sm cursor-pointer"
+                                className="size-8 rounded-md border shadow-sm cursor-pointer"
                                 style={{ backgroundColor: colorValue }}
                               />
                             </PopoverTrigger>
@@ -887,7 +887,7 @@ export function SettingsDialog({
                         key={permission.permission_type}
                         className="flex justify-between items-center p-3 rounded-lg border"
                       >
-                        <div className="flex items-center space-x-3">
+                        <div className="flex items-center gap-x-3">
                           {getPermissionIcon(permission.permission_type)}
                           <div>
                             <div className="text-sm font-medium">
@@ -900,7 +900,7 @@ export function SettingsDialog({
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center gap-x-2">
                           {getStatusBadge(permission.isGranted)}
                           {!permission.isGranted && (
                             <LoadingButton
@@ -1170,7 +1170,7 @@ export function SettingsDialog({
               </Label>
 
               {!isLinux && (
-                <div className="flex items-start space-x-3 p-3 rounded-lg border">
+                <div className="flex items-start gap-x-3 p-3 rounded-lg border">
                   <Checkbox
                     id="disable-auto-updates"
                     checked={settings.disable_auto_updates ?? false}
@@ -1192,7 +1192,7 @@ export function SettingsDialog({
                 </div>
               )}
 
-              <div className="flex items-start space-x-3 p-3 rounded-lg border">
+              <div className="flex items-start gap-x-3 p-3 rounded-lg border">
                 <Checkbox
                   id="keep-decrypted-profiles-in-ram"
                   checked={settings.keep_decrypted_profiles_in_ram ?? false}

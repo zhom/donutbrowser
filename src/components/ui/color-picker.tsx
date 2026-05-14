@@ -245,7 +245,7 @@ export const ColorPickerSelection = memo(
         {...props}
       >
         <div
-          className="absolute w-4 h-4 rounded-full border-2 border-white -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+          className="absolute size-4 rounded-full border-2 border-white -translate-x-1/2 -translate-y-1/2 pointer-events-none"
           style={{
             left: `${positionX * 100}%`,
             top: `${positionY * 100}%`,
@@ -281,7 +281,7 @@ export const ColorPickerHue = ({
       <Slider.Track className="relative my-0.5 h-3 w-full grow rounded-full bg-[linear-gradient(90deg,#FF0000,#FFFF00,#00FF00,#00FFFF,#0000FF,#FF00FF,#FF0000)]">
         <Slider.Range className="absolute h-full" />
       </Slider.Track>
-      <Slider.Thumb className="block w-4 h-4 rounded-full border shadow transition-colors border-primary/50 bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50" />
+      <Slider.Thumb className="block size-4 rounded-full border shadow transition-colors border-primary/50 bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50" />
     </Slider.Root>
   );
 };
@@ -315,7 +315,7 @@ export const ColorPickerAlpha = ({
         <div className="absolute inset-0 bg-gradient-to-r from-transparent rounded-full to-black/50" />
         <Slider.Range className="absolute h-full bg-transparent rounded-full" />
       </Slider.Track>
-      <Slider.Thumb className="block w-4 h-4 rounded-full border shadow transition-colors border-primary/50 bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50" />
+      <Slider.Thumb className="block size-4 rounded-full border shadow transition-colors border-primary/50 bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50" />
     </Slider.Root>
   );
 };

@@ -37,7 +37,7 @@ export function AppUpdateToast({
   return (
     <div className="flex items-start p-4 w-full max-w-md rounded-lg border shadow-lg bg-card border-border text-card-foreground">
       <div className="mr-3 mt-0.5">
-        <LuCheckCheck className="flex-shrink-0 w-5 h-5" />
+        <LuCheckCheck className="flex-shrink-0 size-5" />
       </div>
 
       <div className="flex-1 min-w-0">
@@ -59,9 +59,9 @@ export function AppUpdateToast({
             variant="ghost"
             size="sm"
             onClick={onDismiss}
-            className="p-0 w-6 h-6 shrink-0"
+            className="p-0 size-6 shrink-0"
           >
-            <FaTimes className="w-3 h-3" />
+            <FaTimes className="size-3" />
           </Button>
         </div>
 
@@ -72,7 +72,7 @@ export function AppUpdateToast({
               size="sm"
               className="flex gap-2 items-center text-xs"
             >
-              <LuCheckCheck className="w-3 h-3" />
+              <LuCheckCheck className="size-3" />
               {t("appUpdate.toast.restartNow")}
             </RippleButton>
           ) : (
@@ -83,7 +83,7 @@ export function AppUpdateToast({
                 size="sm"
                 className="flex gap-2 items-center text-xs"
               >
-                <FaExternalLinkAlt className="w-3 h-3" />
+                <FaExternalLinkAlt className="size-3" />
                 {t("appUpdate.toast.viewRelease")}
               </RippleButton>
             )

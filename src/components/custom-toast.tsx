@@ -174,42 +174,42 @@ function formatEtaCompact(seconds: number): string {
 function getToastIcon(type: ToastProps["type"], stage?: string) {
   switch (type) {
     case "success":
-      return <LuCheckCheck className="flex-shrink-0 w-4 h-4 text-foreground" />;
+      return <LuCheckCheck className="flex-shrink-0 size-4 text-foreground" />;
     case "error":
       return (
-        <LuTriangleAlert className="flex-shrink-0 w-4 h-4 text-foreground" />
+        <LuTriangleAlert className="flex-shrink-0 size-4 text-foreground" />
       );
     case "download":
       if (stage === "completed") {
         return (
-          <LuCheckCheck className="flex-shrink-0 w-4 h-4 text-foreground" />
+          <LuCheckCheck className="flex-shrink-0 size-4 text-foreground" />
         );
       }
-      return <LuDownload className="flex-shrink-0 w-4 h-4 text-foreground" />;
+      return <LuDownload className="flex-shrink-0 size-4 text-foreground" />;
 
     case "version-update":
       return (
-        <LuRefreshCw className="flex-shrink-0 w-4 h-4 animate-spin text-foreground" />
+        <LuRefreshCw className="flex-shrink-0 size-4 animate-spin text-foreground" />
       );
     case "fetching":
       return (
-        <LuRefreshCw className="flex-shrink-0 w-4 h-4 animate-spin text-foreground" />
+        <LuRefreshCw className="flex-shrink-0 size-4 animate-spin text-foreground" />
       );
     case "twilight-update":
       return (
-        <LuRefreshCw className="flex-shrink-0 w-4 h-4 animate-spin text-foreground" />
+        <LuRefreshCw className="flex-shrink-0 size-4 animate-spin text-foreground" />
       );
     case "sync-progress":
       return (
-        <LuRefreshCw className="flex-shrink-0 w-4 h-4 animate-spin text-foreground" />
+        <LuRefreshCw className="flex-shrink-0 size-4 animate-spin text-foreground" />
       );
     case "loading":
       return (
-        <div className="flex-shrink-0 w-4 h-4 rounded-full border-2 animate-spin border-foreground border-t-transparent" />
+        <div className="flex-shrink-0 size-4 rounded-full border-2 animate-spin border-foreground border-t-transparent" />
       );
     default:
       return (
-        <div className="flex-shrink-0 w-4 h-4 rounded-full border-2 animate-spin border-foreground border-t-transparent" />
+        <div className="flex-shrink-0 size-4 rounded-full border-2 animate-spin border-foreground border-t-transparent" />
       );
   }
 }
@@ -235,7 +235,7 @@ export function UnifiedToast(props: ToastProps) {
               className="ml-2 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
               aria-label={t("common.buttons.cancel")}
             >
-              <LuX className="w-3 h-3" />
+              <LuX className="size-3" />
             </button>
           )}
         </div>
@@ -272,7 +272,7 @@ export function UnifiedToast(props: ToastProps) {
                   <>Looking for updates for {progress.current_browser}</>
                 )}
               </p>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-x-2">
                 <div className="flex-1 bg-muted rounded-full h-1.5 min-w-0">
                   <div
                     className="bg-foreground h-1.5 rounded-full transition-all duration-150"

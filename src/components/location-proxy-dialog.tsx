@@ -26,6 +26,10 @@ interface LocationProxyDialogProps {
   onClose: () => void;
 }
 
+function LoadingSpinner() {
+  return <Loader2 className="size-4 animate-spin text-muted-foreground" />;
+}
+
 export function LocationProxyDialog({
   isOpen,
   onClose,
@@ -218,10 +222,6 @@ export function LocationProxyDialog({
   const regionOptions = regions.map((s) => ({ value: s.code, label: s.name }));
   const cityOptions = cities.map((c) => ({ value: c.code, label: c.name }));
   const ispOptions = isps.map((i) => ({ value: i.code, label: i.name }));
-
-  const LoadingSpinner = () => (
-    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-  );
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>

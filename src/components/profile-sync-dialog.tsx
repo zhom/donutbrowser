@@ -188,7 +188,7 @@ export function ProfileSyncDialog({
 
         {isCheckingConfig ? (
           <div className="flex justify-center py-8">
-            <div className="w-6 h-6 rounded-full border-2 border-current animate-spin border-t-transparent" />
+            <div className="size-6 rounded-full border-2 border-current animate-spin border-t-transparent" />
           </div>
         ) : (
           <div className="grid gap-4 py-4">
@@ -216,7 +216,7 @@ export function ProfileSyncDialog({
                   disabled={isSaving}
                   className="grid gap-3"
                 >
-                  <div className="flex items-start space-x-3">
+                  <div className="flex items-start gap-x-3">
                     <RadioGroupItem value="Disabled" id="sync-disabled" />
                     <Label htmlFor="sync-disabled" className="cursor-pointer">
                       <span className="font-medium">
@@ -228,7 +228,7 @@ export function ProfileSyncDialog({
                     </Label>
                   </div>
 
-                  <div className="flex items-start space-x-3">
+                  <div className="flex items-start gap-x-3">
                     <RadioGroupItem value="Regular" id="sync-regular" />
                     <Label htmlFor="sync-regular" className="cursor-pointer">
                       <span className="font-medium">
@@ -240,7 +240,7 @@ export function ProfileSyncDialog({
                     </Label>
                   </div>
 
-                  <div className="flex items-start space-x-3">
+                  <div className="flex items-start gap-x-3">
                     <RadioGroupItem
                       value="Encrypted"
                       id="sync-encrypted"

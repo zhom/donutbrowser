@@ -70,18 +70,18 @@ export function VpnCheckButton({
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 w-7 p-0"
+          className="size-7 p-0"
           onClick={handleCheck}
           disabled={isCurrentlyChecking || disabled}
         >
           {isCurrentlyChecking ? (
-            <div className="w-3 h-3 rounded-full border border-current animate-spin border-t-transparent" />
+            <div className="size-3 rounded-full border border-current animate-spin border-t-transparent" />
           ) : result?.is_valid ? (
-            <FiCheck className="w-3 h-3 text-success" />
+            <FiCheck className="size-3 text-success" />
           ) : result && !result.is_valid ? (
             <span className="text-destructive text-sm">✕</span>
           ) : (
-            <FiCheck className="w-3 h-3" />
+            <FiCheck className="size-3" />
           )}
         </Button>
       </TooltipTrigger>

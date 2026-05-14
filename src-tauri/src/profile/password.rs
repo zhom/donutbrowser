@@ -637,22 +637,31 @@ pub fn complete_after_quit_blocking(
   result
 }
 
-/// Async re-encrypt of a password-protected profile's ephemeral dir back to
-/// disk, called after the browser process exits. Optionally purges the
-/// ephemeral dir + cached key based on the global setting.
-pub fn complete_after_quit(profile: &crate::profile::BrowserProfile) {
+/// Re-encrypt a password-protected profile's ephemeral dir back to the
+/// on-disk encrypted dir after the browser process exits. Optionally purges
+/// the ephemeral dir + cached key based on the global setting. Returns the
+/// number of files re-encrypted (`None` when nothing to do or the profile
+/// isn't protected).
+///
+/// Callers that release a queued sync run after a browser quit MUST await
+/// this future — releasing sync while re-encryption is still in-flight
+/// uploads the stale on-disk snapshot and leaves the fresh ciphertext
+/// orphaned until the next scheduler tick.
+pub async fn complete_after_quit_and_wait(
+  profile: &crate::profile::BrowserProfile,
+) -> Option<usize> {
   if !profile.password_protected {
-    return;
+    return None;
   }
   let keep_decrypted = read_keep_decrypted_setting();
   let profile = profile.clone();
 
-  tauri::async_runtime::spawn(async move {
-    let _ = tokio::task::spawn_blocking(move || {
-      complete_after_quit_blocking(&profile, keep_decrypted);
+  tokio::task::spawn_blocking(move || complete_after_quit_blocking(&profile, keep_decrypted))
+    .await
+    .unwrap_or_else(|e| {
+      log::error!("complete_after_quit_and_wait join error: {e}");
+      None
     })
-    .await;
-  });
 }
 
 #[cfg(test)]

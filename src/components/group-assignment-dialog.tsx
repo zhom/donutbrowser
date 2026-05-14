@@ -165,7 +165,7 @@ export function GroupAssignmentDialog({
                   setCreateDialogOpen(true);
                 }}
               >
-                <GoPlus className="mr-1 w-3 h-3" />{" "}
+                <GoPlus className="mr-1 size-3" />{" "}
                 {t("groupManagement.createGroup")}
               </RippleButton>
             </div>
