@@ -74,7 +74,7 @@ use profile::manager::{
 
 use profile::password::{
   change_profile_password, is_profile_locked, lock_profile, remove_profile_password,
-  set_profile_password, unlock_profile,
+  set_profile_password, unlock_profile, verify_profile_password,
 };
 
 use browser_version_manager::{
@@ -103,6 +103,7 @@ use sync::{
   is_vpn_in_use_by_synced_profile, request_profile_sync, rollover_encryption_for_all_entities,
   set_e2e_password, set_extension_group_sync_enabled, set_extension_sync_enabled,
   set_group_sync_enabled, set_profile_sync_mode, set_proxy_sync_enabled, set_vpn_sync_enabled,
+  verify_e2e_password,
 };
 
 use tag_manager::get_all_tags;
@@ -2112,6 +2113,7 @@ pub fn run() {
       enable_sync_for_all_entities,
       set_e2e_password,
       check_has_e2e_password,
+      verify_e2e_password,
       delete_e2e_password,
       rollover_encryption_for_all_entities,
       read_profile_cookies,
@@ -2177,6 +2179,7 @@ pub fn run() {
       set_profile_password,
       change_profile_password,
       remove_profile_password,
+      verify_profile_password,
       unlock_profile,
       lock_profile,
       is_profile_locked,

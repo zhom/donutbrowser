@@ -4,6 +4,14 @@ import { invoke } from "@tauri-apps/api/core";
 import { Eye, EyeOff } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { LuPlug } from "react-icons/lu";
+import { AnimatedSwitch } from "@/components/ui/animated-switch";
+import {
+  AnimatedTabs,
+  AnimatedTabsContent,
+  AnimatedTabsList,
+  AnimatedTabsTrigger,
+} from "@/components/ui/animated-tabs";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -14,7 +22,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useWayfernTerms } from "@/hooks/use-wayfern-terms";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { CopyToClipboard } from "./ui/copy-to-clipboard";
@@ -218,172 +225,204 @@ export function IntegrationsDialog({
         )}
 
         <div className="overflow-y-auto flex-1 min-h-0">
-          <Tabs defaultValue="api" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="api">{t("integrations.tabApi")}</TabsTrigger>
-              <TabsTrigger value="mcp">{t("integrations.tabMcp")}</TabsTrigger>
-            </TabsList>
+          <AnimatedTabs defaultValue="api">
+            <AnimatedTabsList>
+              <AnimatedTabsTrigger value="api">
+                {t("integrations.tabApi")}
+              </AnimatedTabsTrigger>
+              <AnimatedTabsTrigger value="mcp">
+                {t("integrations.tabMcp")}
+              </AnimatedTabsTrigger>
+            </AnimatedTabsList>
 
-            <TabsContent value="api" className="space-y-4 mt-4">
-              <div className="flex items-center gap-x-2">
-                <Checkbox
-                  id="api-enabled"
-                  checked={apiServerPort !== null}
-                  disabled={isApiStarting}
-                  onCheckedChange={(checked) => void handleApiToggle(!!checked)}
-                />
-                <div className="grid gap-1.5 leading-none">
-                  <Label
-                    htmlFor="api-enabled"
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                  >
-                    {t("integrations.apiEnableLabel")}
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    {t("integrations.apiEnableDescription")}
-                  </p>
+            <AnimatedTabsContent
+              value="api"
+              className="mt-4 flex flex-col gap-4"
+            >
+              <div className="rounded-md border bg-card p-4 flex flex-col gap-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <LuPlug className="size-5 mt-0.5 text-muted-foreground" />
+                    <div className="flex flex-col gap-1">
+                      <Label className="text-sm font-medium">
+                        {t("integrations.apiEnableLabel")}
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        {t("integrations.apiEnableDescription")}
+                      </p>
+                    </div>
+                  </div>
+                  <AnimatedSwitch
+                    checked={apiServerPort !== null}
+                    disabled={isApiStarting}
+                    onCheckedChange={(checked) => void handleApiToggle(checked)}
+                  />
                 </div>
+
+                {apiServerPort && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="size-1.5 rounded-full bg-success" />
+                    <span className="text-muted-foreground">
+                      {t("integrations.apiRunningOn")}
+                    </span>
+                    <code className="rounded bg-muted px-2 py-1 font-mono text-[11px]">
+                      http://127.0.0.1:{apiServerPort}
+                    </code>
+                  </div>
+                )}
               </div>
 
               {settings.api_enabled && (
-                <div className="space-y-4 p-4 rounded-md border bg-muted/40">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">
-                      {t("integrations.apiPortLabel")}
-                    </Label>
-                    <div className="flex items-center gap-x-2">
-                      <Button
-                        size="sm"
-                        disabled={
-                          isApiStarting || apiServerPort === settings.api_port
-                        }
-                        onClick={async () => {
-                          const port = settings.api_port;
-                          if (port < 1 || port > 65535) {
-                            showErrorToast(t("integrations.apiInvalidPort"), {
-                              description: t(
-                                "integrations.apiInvalidPortDescription",
-                              ),
-                            });
-                            return;
-                          }
-                          setIsApiStarting(true);
-                          try {
-                            await invoke("stop_api_server");
-                            const next = await invoke<AppSettings>(
-                              "save_app_settings",
-                              { settings },
-                            );
-                            setSettings(next);
-                            const actualPort = await invoke<number>(
-                              "start_api_server",
-                              { port },
-                            );
-                            setApiServerPort(actualPort);
-                            if (actualPort !== port) {
-                              showErrorToast(
-                                t("integrations.apiPortInUse", { port }),
-                                {
-                                  description: t(
-                                    "integrations.apiFallbackPort",
-                                    { port: actualPort },
-                                  ),
-                                },
-                              );
-                            } else {
-                              showSuccessToast(
-                                t("integrations.apiRunning", {
-                                  port: actualPort,
-                                }),
-                              );
-                            }
-                          } catch (e) {
-                            showErrorToast(t("integrations.apiStartFailed"), {
-                              description:
-                                e instanceof Error
-                                  ? e.message
-                                  : t("integrations.apiUnknownError"),
-                            });
-                          } finally {
-                            setIsApiStarting(false);
-                          }
-                        }}
-                      >
-                        {t("common.buttons.save")}
-                      </Button>
-                      <Input
-                        type="number"
-                        value={settings.api_port}
-                        onChange={(e) => {
-                          const val = Number.parseInt(e.target.value, 10);
-                          if (!Number.isNaN(val)) {
-                            setSettings({ ...settings, api_port: val });
-                          }
-                        }}
-                        className="w-24 font-mono"
-                        min={1}
-                        max={65535}
-                      />
-                      {apiServerPort && (
-                        <span className="text-xs text-muted-foreground">
-                          {t("common.status.running")}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">
-                      {t("integrations.apiTokenLabel")}
-                    </Label>
-                    <div className="flex items-center gap-x-2">
-                      <div className="relative flex-1">
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="rounded-md border bg-card p-4 flex flex-col gap-2">
+                      <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        {t("integrations.apiPortLabel")}
+                      </Label>
+                      <div className="flex items-center gap-2">
                         <Input
-                          type={showApiToken ? "text" : "password"}
-                          value={settings.api_token ?? ""}
-                          readOnly
-                          className="font-mono pr-10"
+                          type="number"
+                          value={settings.api_port}
+                          onChange={(e) => {
+                            const val = Number.parseInt(e.target.value, 10);
+                            if (!Number.isNaN(val)) {
+                              setSettings({ ...settings, api_port: val });
+                            }
+                          }}
+                          className="w-24 font-mono"
+                          min={1}
+                          max={65535}
                         />
                         <Button
-                          type="button"
-                          variant="ghost"
                           size="sm"
-                          className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                          onClick={() => {
-                            setShowApiToken(!showApiToken);
+                          variant="outline"
+                          disabled={
+                            isApiStarting || apiServerPort === settings.api_port
+                          }
+                          onClick={async () => {
+                            const port = settings.api_port;
+                            if (port < 1 || port > 65535) {
+                              showErrorToast(t("integrations.apiInvalidPort"), {
+                                description: t(
+                                  "integrations.apiInvalidPortDescription",
+                                ),
+                              });
+                              return;
+                            }
+                            setIsApiStarting(true);
+                            try {
+                              await invoke("stop_api_server");
+                              const next = await invoke<AppSettings>(
+                                "save_app_settings",
+                                { settings },
+                              );
+                              setSettings(next);
+                              const actualPort = await invoke<number>(
+                                "start_api_server",
+                                { port },
+                              );
+                              setApiServerPort(actualPort);
+                              if (actualPort !== port) {
+                                showErrorToast(
+                                  t("integrations.apiPortInUse", { port }),
+                                  {
+                                    description: t(
+                                      "integrations.apiFallbackPort",
+                                      { port: actualPort },
+                                    ),
+                                  },
+                                );
+                              } else {
+                                showSuccessToast(
+                                  t("integrations.apiRunning", {
+                                    port: actualPort,
+                                  }),
+                                );
+                              }
+                            } catch (e) {
+                              showErrorToast(t("integrations.apiStartFailed"), {
+                                description:
+                                  e instanceof Error
+                                    ? e.message
+                                    : t("integrations.apiUnknownError"),
+                              });
+                            } finally {
+                              setIsApiStarting(false);
+                            }
                           }}
                         >
-                          {showApiToken ? (
-                            <EyeOff className="size-4" />
-                          ) : (
-                            <Eye className="size-4" />
-                          )}
+                          {t("common.buttons.save")}
                         </Button>
                       </div>
+                    </div>
+
+                    <div className="rounded-md border bg-card p-4 flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                          {t("integrations.apiTokenLabel")}
+                        </Label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-1">
+                          <Input
+                            type={showApiToken ? "text" : "password"}
+                            value={settings.api_token ?? ""}
+                            readOnly
+                            className="font-mono pr-10"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                            onClick={() => {
+                              setShowApiToken(!showApiToken);
+                            }}
+                          >
+                            {showApiToken ? (
+                              <EyeOff className="size-4" />
+                            ) : (
+                              <Eye className="size-4" />
+                            )}
+                          </Button>
+                        </div>
+                        <CopyToClipboard
+                          text={settings.api_token ?? ""}
+                          successMessage={t("integrations.tokenCopied")}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-md border bg-card p-4 flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        {t("integrations.apiExampleRequest")}
+                      </Label>
                       <CopyToClipboard
-                        text={settings.api_token ?? ""}
-                        successMessage={t("integrations.tokenCopied")}
+                        text={`curl -H "Authorization: Bearer ${settings.api_token ?? "${TOKEN}"}" \\\n     http://127.0.0.1:${apiServerPort ?? settings.api_port}/v1/profiles`}
+                        successMessage={t("common.buttons.copied")}
                       />
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      {t("integrations.apiTokenHint", {
-                        tokenSlot: "<token>",
-                      })}
-                    </p>
+                    <pre className="font-mono text-[11px] whitespace-pre overflow-x-auto bg-background rounded p-3">
+                      {`curl -H "Authorization: Bearer \${TOKEN}" \\
+     http://127.0.0.1:${apiServerPort ?? settings.api_port}/v1/profiles`}
+                    </pre>
                   </div>
-                </div>
+                </>
               )}
-            </TabsContent>
+            </AnimatedTabsContent>
 
-            <TabsContent value="mcp" className="space-y-4 mt-4">
-              <div className="flex items-center gap-x-2">
+            <AnimatedTabsContent value="mcp" className="mt-4">
+              <div className="flex items-start gap-x-3">
                 <Checkbox
                   id="mcp-enabled"
                   checked={settings.mcp_enabled && mcpConfig !== null}
                   disabled={!termsAccepted || isMcpStarting}
                   onCheckedChange={(checked) => void handleMcpToggle(!!checked)}
+                  className="mt-0.5"
                 />
-                <div className="grid gap-1.5 leading-none">
+                <div className="grid gap-1 leading-none">
                   <Label
                     htmlFor="mcp-enabled"
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
@@ -402,9 +441,9 @@ export function IntegrationsDialog({
               </div>
 
               {mcpConfig && (
-                <div className="space-y-4 p-4 rounded-md border bg-muted/40">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">
+                <div className="mt-6 flex flex-col gap-5 pt-5 border-t">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
                       {t("integrations.mcp.url")}
                     </Label>
                     <div className="flex items-center gap-x-2">
@@ -438,99 +477,99 @@ export function IntegrationsDialog({
                     </div>
                   </div>
 
-                  <div className="space-y-2 pt-1 border-t">
-                    <p className="text-xs font-medium text-muted-foreground">
-                      {t("integrations.mcp.claudeDesktopTitle")}
-                    </p>
-                    {mcpInClaudeDesktop ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                        onClick={async () => {
-                          try {
-                            await invoke("remove_mcp_from_claude_desktop");
-                            setMcpInClaudeDesktop(false);
-                            showSuccessToast(
-                              t("integrations.mcp.removedFromClaudeDesktop"),
-                            );
-                          } catch (e) {
-                            showErrorToast(String(e));
-                          }
-                        }}
-                      >
-                        {t("integrations.mcp.removeFromClaudeDesktop")}
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                        onClick={async () => {
-                          try {
-                            await invoke("add_mcp_to_claude_desktop");
-                            setMcpInClaudeDesktop(true);
-                            showSuccessToast(
-                              t("integrations.mcp.addedToClaudeDesktop"),
-                            );
-                          } catch (e) {
-                            showErrorToast(String(e));
-                          }
-                        }}
-                      >
-                        {t("integrations.mcp.addToClaudeDesktop")}
-                      </Button>
-                    )}
-                  </div>
-
-                  <div className="space-y-2 pt-1 border-t">
-                    <p className="text-xs font-medium text-muted-foreground">
-                      {t("integrations.mcp.claudeCodeTitle")}
-                    </p>
-                    {mcpInClaudeCode ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                        onClick={async () => {
-                          try {
-                            await invoke("remove_mcp_from_claude_code");
-                            setMcpInClaudeCode(false);
-                            showSuccessToast(
-                              t("integrations.mcp.removedFromClaudeCode"),
-                            );
-                          } catch (e) {
-                            showErrorToast(String(e));
-                          }
-                        }}
-                      >
-                        {t("integrations.mcp.removeFromClaudeCode")}
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                        onClick={async () => {
-                          try {
-                            await invoke("add_mcp_to_claude_code");
-                            setMcpInClaudeCode(true);
-                            showSuccessToast(
-                              t("integrations.mcp.addedToClaudeCode"),
-                            );
-                          } catch (e) {
-                            showErrorToast(String(e));
-                          }
-                        }}
-                      >
-                        {t("integrations.mcp.addToClaudeCode")}
-                      </Button>
-                    )}
+                  <div className="flex flex-col gap-2">
+                    <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                      {t("integrations.mcp.clientsLabel")}
+                    </Label>
+                    <div className="flex items-center justify-between gap-x-3 py-1">
+                      <span className="text-sm">
+                        {t("integrations.mcp.claudeDesktopTitle")}
+                      </span>
+                      {mcpInClaudeDesktop ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              await invoke("remove_mcp_from_claude_desktop");
+                              setMcpInClaudeDesktop(false);
+                              showSuccessToast(
+                                t("integrations.mcp.removedFromClaudeDesktop"),
+                              );
+                            } catch (e) {
+                              showErrorToast(String(e));
+                            }
+                          }}
+                        >
+                          {t("integrations.mcp.removeFromClaudeDesktop")}
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              await invoke("add_mcp_to_claude_desktop");
+                              setMcpInClaudeDesktop(true);
+                              showSuccessToast(
+                                t("integrations.mcp.addedToClaudeDesktop"),
+                              );
+                            } catch (e) {
+                              showErrorToast(String(e));
+                            }
+                          }}
+                        >
+                          {t("integrations.mcp.addToClaudeDesktop")}
+                        </Button>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between gap-x-3 py-1">
+                      <span className="text-sm">
+                        {t("integrations.mcp.claudeCodeTitle")}
+                      </span>
+                      {mcpInClaudeCode ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              await invoke("remove_mcp_from_claude_code");
+                              setMcpInClaudeCode(false);
+                              showSuccessToast(
+                                t("integrations.mcp.removedFromClaudeCode"),
+                              );
+                            } catch (e) {
+                              showErrorToast(String(e));
+                            }
+                          }}
+                        >
+                          {t("integrations.mcp.removeFromClaudeCode")}
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              await invoke("add_mcp_to_claude_code");
+                              setMcpInClaudeCode(true);
+                              showSuccessToast(
+                                t("integrations.mcp.addedToClaudeCode"),
+                              );
+                            } catch (e) {
+                              showErrorToast(String(e));
+                            }
+                          }}
+                        >
+                          {t("integrations.mcp.addToClaudeCode")}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
-            </TabsContent>
-          </Tabs>
+            </AnimatedTabsContent>
+          </AnimatedTabs>
         </div>
       </DialogContent>
     </Dialog>

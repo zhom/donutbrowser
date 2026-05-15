@@ -347,6 +347,14 @@ pub fn check_has_e2e_password() -> bool {
 }
 
 #[tauri::command]
+pub fn verify_e2e_password(password: String) -> Result<bool, String> {
+  match load_e2e_password()? {
+    Some(stored) => Ok(stored == password),
+    None => Err(serde_json::json!({ "code": "NO_E2E_PASSWORD_SET" }).to_string()),
+  }
+}
+
+#[tauri::command]
 pub async fn delete_e2e_password() -> Result<(), String> {
   enforce_team_owner_for_encryption_change().await?;
   remove_e2e_password()

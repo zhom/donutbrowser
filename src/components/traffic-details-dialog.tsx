@@ -23,6 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { FadingScrollArea } from "@/components/ui/fading-scroll-area";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
@@ -590,7 +591,7 @@ export function TrafficDetailsDialog({
                 <h3 className="text-sm font-medium mb-2">
                   {t("traffic.uniqueIps", { count: stats.unique_ips.length })}
                 </h3>
-                <div className="border rounded-md p-3 max-h-[120px] overflow-y-auto">
+                <FadingScrollArea className="p-3 max-h-[120px]">
                   <div className="flex flex-wrap gap-1.5">
                     {stats.unique_ips.map((ip) => (
                       <span
@@ -601,7 +602,7 @@ export function TrafficDetailsDialog({
                       </span>
                     ))}
                   </div>
-                </div>
+                </FadingScrollArea>
               </div>
             )}
 

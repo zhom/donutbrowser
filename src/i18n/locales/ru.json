@@ -32,7 +32,8 @@
       "downloading": "Загрузка...",
       "minimize": "Свернуть",
       "saving": "Сохраняем…",
-      "saved": "Сохранено"
+      "saved": "Сохранено",
+      "copied": "Скопировано"
     },
     "status": {
       "active": "Активен",
@@ -158,7 +159,15 @@
       "passwordSaved": "Пароль шифрования установлен",
       "passwordMismatch": "Пароли не совпадают",
       "passwordTooShort": "Пароль должен содержать не менее 8 символов",
-      "requiresProOrOwner": "Шифрование профилей доступно для пользователей Pro и владельцев команд."
+      "requiresProOrOwner": "Шифрование профилей доступно для пользователей Pro и владельцев команд.",
+      "validatePassword": "Проверить",
+      "validateDialog": {
+        "title": "Проверка пароля шифрования",
+        "description": "Введите пароль шифрования, чтобы убедиться, что он совпадает с сохранённым на этом устройстве.",
+        "submit": "Проверить",
+        "matchToast": "Пароль верен",
+        "mismatchToast": "Пароль не совпадает"
+      }
     },
     "commercial": {
       "title": "Коммерческая лицензия",
@@ -376,6 +385,9 @@
       "deleteFailed": "Не удалось удалить прокси",
       "deleteTitle": "Удалить прокси",
       "deleteDescription": "Это действие нельзя отменить. Прокси «{{name}}» будет удален навсегда.",
+      "newProxy": "Новый прокси",
+      "newVpn": "Новый VPN",
+      "protocolCol": "Протокол",
       "title": "Прокси и VPN"
     },
     "add": "Добавить прокси",
@@ -480,6 +492,13 @@
       "continueButton": "Продолжить",
       "doneButton": "Готово",
       "failed": "Не удалось импортировать прокси"
+    },
+    "bulkDelete": {
+      "proxiesTitle": "Удалить выбранные прокси",
+      "proxiesDescription": "Это действие нельзя отменить. Будет безвозвратно удалено прокси: {{count}} — {{names}}.",
+      "vpnsTitle": "Удалить выбранные VPN",
+      "vpnsDescription": "Это действие нельзя отменить. Будет безвозвратно удалено VPN: {{count}} — {{names}}.",
+      "confirmButton": "Удалить {{count}}"
     }
   },
   "groups": {
@@ -488,10 +507,8 @@
     "add": "Добавить группу",
     "edit": "Редактировать группу",
     "delete": "Удалить группу",
-    "defaultGroup": "По умолчанию",
-    "defaultGroupNoGroup": "По умолчанию (Без группы)",
-    "moveToDefault": "Переместить профили в группу по умолчанию",
-    "noGroupDescription": "Профили без группы будут отображаться в группе «По умолчанию».",
+    "moveToDefault": "Убрать профили из группы",
+    "noGroupDescription": "Профили без группы отображаются в фильтре «Все».",
     "assignSuccess": "Успешно назначено {{count}} профиль(ей) в {{group}}",
     "noGroups": "Группы не созданы",
     "noGroupsDescription": "Создайте группу для организации профилей.",
@@ -521,7 +538,6 @@
     "loadingProfiles": "Загрузка связанных профилей...",
     "associatedProfiles": "Связанные профили ({{count}})",
     "whatToDoWithProfiles": "Что сделать с этими профилями?",
-    "moveToDefaultOption": "Переместить профили в группу По умолчанию",
     "deleteAlongWithGroup": "Удалить профили вместе с группой",
     "noAssociatedProfiles": "У этой группы нет связанных профилей.",
     "deleteGroup": "Удалить группу",
@@ -530,7 +546,10 @@
     "unknownGroup": "Неизвестная группа",
     "profileGroupsAriaLabel": "Группы профилей",
     "loading": "Загрузка групп...",
-    "all": "Все"
+    "all": "Все",
+    "noGroup": "Без группы",
+    "pageTitle": "Группы профилей",
+    "pageDescription": "Группы профилей позволяют организовать браузеры по клиенту, окружению или сценарию использования. Синхронизируйте группы между устройствами, чтобы делиться ими."
   },
   "sync": {
     "mode": {
@@ -649,7 +668,8 @@
       "addedToClaudeCode": "Добавлено в Claude Code",
       "removedFromClaudeCode": "Удалено из Claude Code",
       "config": "Конфигурация MCP",
-      "copyConfig": "Копировать конфигурацию"
+      "copyConfig": "Копировать конфигурацию",
+      "clientsLabel": "Клиенты"
     },
     "tabApi": "Локальный API",
     "tabMcp": "MCP (ИИ-ассистенты)",
@@ -675,7 +695,9 @@
     "mcpStarted": "MCP сервер запущен на порту {{port}}",
     "mcpStopped": "MCP сервер остановлен",
     "mcpToggleFailed": "Не удалось переключить MCP сервер",
-    "openSettings": "Открыть настройки интеграций"
+    "openSettings": "Открыть настройки интеграций",
+    "apiRunningOn": "Запущен на",
+    "apiExampleRequest": "Пример запроса"
   },
   "import": {
     "title": "Импорт профиля",
@@ -1181,6 +1203,7 @@
     "empty": "Расширения ещё не загружены.",
     "noGroups": "Группы расширений ещё не созданы.",
     "createGroup": "Создать группу",
+    "newGroup": "Новая группа",
     "addToGroup": "Добавить расширение...",
     "removeFromGroup": "Удалить из группы",
     "deleteGroup": "Удалить группу",
@@ -1228,7 +1251,14 @@
     "syncEnableTooltip": "Включить синхронизацию",
     "syncDisableTooltip": "Отключить синхронизацию",
     "loadGroupsFailed": "Не удалось загрузить группы расширений",
-    "assignGroupFailed": "Не удалось назначить группу расширений"
+    "assignGroupFailed": "Не удалось назначить группу расширений",
+    "bulkDelete": {
+      "extensionsTitle": "Удалить расширения",
+      "extensionsDescription": "Удалить {{count}} расширений? {{names}}",
+      "groupsTitle": "Удалить группы расширений",
+      "groupsDescription": "Удалить {{count}} групп расширений? {{names}}",
+      "confirmButton": "Удалить"
+    }
   },
   "pro": {
     "badge": "PRO",
@@ -1373,7 +1403,11 @@
     "waiting": "Ожидание синхронизации",
     "errorWith": "Ошибка синхронизации: {{error}}",
     "error": "Ошибка синхронизации",
-    "notSynced": "Не синхронизировано"
+    "notSynced": "Не синхронизировано",
+    "enable": "Включить синхронизацию",
+    "disable": "Отключить синхронизацию",
+    "lockedInUse": "Синхронизация заблокирована, пока используется синхронизируемым профилем",
+    "bulkToggle": "Переключить синхронизацию"
   },
   "groupManagement": {
     "description": "Управляйте группами профилей",
@@ -1387,7 +1421,13 @@
     "syncCannotDisable": "Нельзя отключить синхронизацию, пока эта группа используется синхронизированными профилями",
     "editGroupTooltip": "Редактировать группу",
     "deleteGroupTooltip": "Удалить группу",
-    "loadFailed": "Не удалось загрузить группы"
+    "loadFailed": "Не удалось загрузить группы",
+    "bulkDelete": {
+      "title": "Удалить группы",
+      "description": "Вы уверены, что хотите удалить {{count}} групп? {{names}}. Профили будут перемещены в группу по умолчанию.",
+      "description_one": "Вы уверены, что хотите удалить {{count}} группу? {{names}}. Профили будут перемещены в группу по умолчанию.",
+      "confirmButton": "Удалить группы"
+    }
   },
   "proxyAssignment": {
     "title": "Назначить прокси / VPN",
@@ -1721,7 +1761,14 @@
     "modes": {
       "set": "Задать",
       "change": "Изменить",
-      "remove": "Удалить"
+      "remove": "Удалить",
+      "validate": "Проверить"
+    },
+    "verifyDialog": {
+      "title": "Проверка пароля профиля",
+      "description": "Введите пароль профиля, чтобы убедиться, что он совпадает с сохранённым на диске.",
+      "submit": "Проверить",
+      "matchToast": "Пароль верен"
     }
   },
   "backendErrors": {
@@ -1749,7 +1796,6 @@
   },
   "rail": {
     "profiles": "Профили",
-    "proxies": "Прокси",
     "extensions": "Расширения",
     "groups": "Группы",
     "settings": "Настройки",
@@ -1757,18 +1803,17 @@
       "label": "Ещё",
       "closeAriaLabel": "Закрыть меню",
       "importProfile": "Импорт профиля",
-      "importProfileHint": "Перенести профили из другого инструмента",
-      "integrations": "Интеграции",
-      "integrationsHint": "Slack, MCP, автоматизации",
-      "account": "Аккаунт",
-      "accountHint": "Облако, оплата, вход"
-    }
+      "importProfileHint": "Перенести профили из другого инструмента"
+    },
+    "network": "Сеть",
+    "integrations": "Интеграции",
+    "account": "Аккаунт"
   },
   "pageTitle": {
-    "proxies": "Прокси",
+    "proxies": "Сеть",
     "extensions": "Расширения",
     "groups": "Группы",
-    "vpns": "VPN",
+    "vpns": "Сеть",
     "settings": "Настройки",
     "integrations": "Интеграции",
     "account": "Аккаунт",

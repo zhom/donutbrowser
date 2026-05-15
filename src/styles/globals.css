@@ -157,26 +157,41 @@
   }
 }
 
-/* Scroll-fade utility: a vertical mask whose top/bottom 16px fade to
-   transparent ONLY when the matching direction is scrollable. The component
-   sets `data-fade-top` / `data-fade-bottom` attributes on its container as
-   the user scrolls; each attribute toggles its own end of the mask via a
-   CSS variable, so the two edges are independent. */
+/* Scroll-fade utility: a vertical mask that thins the alpha of the top and
+   bottom 24px of the scroll container ONLY when that direction is actually
+   scrollable. useScrollFade() writes `data-fade-top` / `data-fade-bottom`
+   on the container as the user scrolls; each attribute toggles its own
+   end of the mask via a CSS variable.
+
+   Mask is preferred over a colored gradient overlay: an overlay paints
+   bg-color over content, which leaves a visible band wherever content
+   passes through it. Mask just fades alpha — content gracefully fades to
+   nothing at the edges.
+
+   `--scroll-fade-top-offset` pushes the top-edge fade band down by N
+   pixels so a sticky table header stays fully opaque and only the body
+   rows scrolling past it fade. Set it inline on a scroll container whose
+   first N px are occupied by sticky chrome. */
 .scroll-fade {
   --top-mask: black;
   --bottom-mask: black;
+  --scroll-fade-top-offset: 0px;
   -webkit-mask-image: linear-gradient(
     to bottom,
-    var(--top-mask),
-    black 16px,
-    black calc(100% - 16px),
+    black 0,
+    black var(--scroll-fade-top-offset),
+    var(--top-mask) var(--scroll-fade-top-offset),
+    black calc(var(--scroll-fade-top-offset) + 24px),
+    black calc(100% - 24px),
     var(--bottom-mask)
   );
   mask-image: linear-gradient(
     to bottom,
-    var(--top-mask),
-    black 16px,
-    black calc(100% - 16px),
+    black 0,
+    black var(--scroll-fade-top-offset),
+    var(--top-mask) var(--scroll-fade-top-offset),
+    black calc(var(--scroll-fade-top-offset) + 24px),
+    black calc(100% - 24px),
     var(--bottom-mask)
   );
 }

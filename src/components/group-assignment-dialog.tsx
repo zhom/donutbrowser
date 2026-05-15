@@ -77,7 +77,7 @@ export function GroupAssignmentDialog({
       const groupName = selectedGroupId
         ? groups.find((g) => g.id === selectedGroupId)?.name ||
           t("groups.unknownGroup")
-        : t("groups.defaultGroup");
+        : t("groups.noGroup");
 
       toast.success(
         t("groups.assignSuccess", {
@@ -175,17 +175,17 @@ export function GroupAssignmentDialog({
               </div>
             ) : (
               <Select
-                value={selectedGroupId ?? "default"}
+                value={selectedGroupId ?? "__none__"}
                 onValueChange={(value) => {
-                  setSelectedGroupId(value === "default" ? null : value);
+                  setSelectedGroupId(value === "__none__" ? null : value);
                 }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder={t("groupAssignment.placeholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="default">
-                    {t("groups.defaultGroupNoGroup")}
+                  <SelectItem value="__none__">
+                    {t("groups.noGroup")}
                   </SelectItem>
                   {groups.map((group) => (
                     <SelectItem key={group.id} value={group.id}>

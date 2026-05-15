@@ -9,6 +9,12 @@ import { toast } from "sonner";
 import { LoadingButton } from "@/components/loading-button";
 import { SharedCamoufoxConfigForm } from "@/components/shared-camoufox-config-form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  AnimatedTabs,
+  AnimatedTabsContent,
+  AnimatedTabsList,
+  AnimatedTabsTrigger,
+} from "@/components/ui/animated-tabs";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -304,31 +310,23 @@ export function ImportProfileDialog({
 
         <div className="overflow-y-auto flex-1 space-y-6 min-h-0">
           {currentStep === "select" && (
-            <>
-              <div className="flex gap-2">
-                <RippleButton
-                  variant={importMode === "auto-detect" ? "default" : "outline"}
-                  onClick={() => {
-                    setImportMode("auto-detect");
-                  }}
-                  className="flex-1"
-                  disabled={isLoading}
-                >
+            <AnimatedTabs
+              value={importMode}
+              onValueChange={(v) =>
+                setImportMode(v as "auto-detect" | "manual")
+              }
+              className="flex flex-col gap-6"
+            >
+              <AnimatedTabsList>
+                <AnimatedTabsTrigger value="auto-detect" disabled={isLoading}>
                   {t("importProfile.autoDetect")}
-                </RippleButton>
-                <RippleButton
-                  variant={importMode === "manual" ? "default" : "outline"}
-                  onClick={() => {
-                    setImportMode("manual");
-                  }}
-                  className="flex-1"
-                  disabled={isLoading}
-                >
+                </AnimatedTabsTrigger>
+                <AnimatedTabsTrigger value="manual" disabled={isLoading}>
                   {t("importProfile.manualImport")}
-                </RippleButton>
-              </div>
+                </AnimatedTabsTrigger>
+              </AnimatedTabsList>
 
-              {importMode === "auto-detect" && (
+              <AnimatedTabsContent value="auto-detect">
                 <div className="space-y-4">
                   <h3 className="text-lg font-medium">
                     {t("importProfile.detectedProfilesTitle")}
@@ -439,9 +437,9 @@ export function ImportProfileDialog({
                     </div>
                   )}
                 </div>
-              )}
+              </AnimatedTabsContent>
 
-              {importMode === "manual" && (
+              <AnimatedTabsContent value="manual">
                 <div className="space-y-4">
                   <h3 className="text-lg font-medium">
                     {t("importProfile.manualTitle")}
@@ -539,8 +537,8 @@ export function ImportProfileDialog({
                     </div>
                   </div>
                 </div>
-              )}
-            </>
+              </AnimatedTabsContent>
+            </AnimatedTabs>
           )}
 
           {currentStep === "configure" && currentMappedBrowser && (

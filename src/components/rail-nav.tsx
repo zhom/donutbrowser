@@ -236,9 +236,11 @@ interface RailItem {
 
 const TOP_ITEMS: RailItem[] = [
   { page: "profiles", Icon: LuUser, labelKey: "rail.profiles" },
-  { page: "proxies", Icon: FiWifi, labelKey: "rail.proxies" },
+  { page: "proxies", Icon: FiWifi, labelKey: "rail.network" },
   { page: "extensions", Icon: LuPuzzle, labelKey: "rail.extensions" },
   { page: "groups", Icon: LuUsers, labelKey: "rail.groups" },
+  { page: "integrations", Icon: LuPlug, labelKey: "rail.integrations" },
+  { page: "account", Icon: LuCloud, labelKey: "rail.account" },
 ];
 
 interface MoreMenuItem {
@@ -254,18 +256,6 @@ const MORE_ITEMS: MoreMenuItem[] = [
     Icon: FaDownload,
     labelKey: "rail.more.importProfile",
     hintKey: "rail.more.importProfileHint",
-  },
-  {
-    page: "integrations",
-    Icon: LuPlug,
-    labelKey: "rail.more.integrations",
-    hintKey: "rail.more.integrationsHint",
-  },
-  {
-    page: "account",
-    Icon: LuCloud,
-    labelKey: "rail.more.account",
-    hintKey: "rail.more.accountHint",
   },
 ];
 

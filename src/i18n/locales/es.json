@@ -32,7 +32,8 @@
       "downloading": "Descargando...",
       "minimize": "Minimizar",
       "saving": "Guardando…",
-      "saved": "Guardado"
+      "saved": "Guardado",
+      "copied": "Copiado"
     },
     "status": {
       "active": "Activo",
@@ -158,7 +159,15 @@
       "passwordSaved": "Contraseña de cifrado establecida",
       "passwordMismatch": "Las contraseñas no coinciden",
       "passwordTooShort": "La contraseña debe tener al menos 8 caracteres",
-      "requiresProOrOwner": "El cifrado de perfiles está disponible para usuarios Pro y propietarios de equipos."
+      "requiresProOrOwner": "El cifrado de perfiles está disponible para usuarios Pro y propietarios de equipos.",
+      "validatePassword": "Validar",
+      "validateDialog": {
+        "title": "Validar contraseña de cifrado",
+        "description": "Introduce tu contraseña de cifrado para verificar que coincide con la almacenada en este dispositivo.",
+        "submit": "Validar",
+        "matchToast": "La contraseña es correcta",
+        "mismatchToast": "La contraseña no coincide"
+      }
     },
     "commercial": {
       "title": "Licencia Comercial",
@@ -376,6 +385,9 @@
       "deleteFailed": "Error al eliminar el proxy",
       "deleteTitle": "Eliminar proxy",
       "deleteDescription": "Esta acción no se puede deshacer. Se eliminará permanentemente el proxy \"{{name}}\".",
+      "newProxy": "Nuevo proxy",
+      "newVpn": "Nueva VPN",
+      "protocolCol": "Protocolo",
       "title": "Proxies y VPN"
     },
     "add": "Agregar Proxy",
@@ -480,6 +492,13 @@
       "continueButton": "Continuar",
       "doneButton": "Hecho",
       "failed": "Error al importar los proxies"
+    },
+    "bulkDelete": {
+      "proxiesTitle": "Eliminar proxies seleccionados",
+      "proxiesDescription": "Esta acción no se puede deshacer. Se eliminarán permanentemente {{count}} proxy(s): {{names}}.",
+      "vpnsTitle": "Eliminar VPN seleccionadas",
+      "vpnsDescription": "Esta acción no se puede deshacer. Se eliminarán permanentemente {{count}} VPN(s): {{names}}.",
+      "confirmButton": "Eliminar {{count}}"
     }
   },
   "groups": {
@@ -488,10 +507,8 @@
     "add": "Agregar Grupo",
     "edit": "Editar Grupo",
     "delete": "Eliminar Grupo",
-    "defaultGroup": "Predeterminado",
-    "defaultGroupNoGroup": "Predeterminado (Sin Grupo)",
-    "moveToDefault": "Mover perfiles al grupo Predeterminado",
-    "noGroupDescription": "Los perfiles sin grupo aparecerán en el grupo \"Predeterminado\".",
+    "moveToDefault": "Quitar perfiles del grupo",
+    "noGroupDescription": "Los perfiles sin grupo aparecen en el filtro «Todos».",
     "assignSuccess": "Se asignaron {{count}} perfil(es) a {{group}} exitosamente",
     "noGroups": "No hay grupos creados",
     "noGroupsDescription": "Crea un grupo para organizar tus perfiles.",
@@ -521,7 +538,6 @@
     "loadingProfiles": "Cargando perfiles asociados...",
     "associatedProfiles": "Perfiles Asociados ({{count}})",
     "whatToDoWithProfiles": "¿Qué hacer con estos perfiles?",
-    "moveToDefaultOption": "Mover perfiles al grupo Predeterminado",
     "deleteAlongWithGroup": "Eliminar perfiles junto con el grupo",
     "noAssociatedProfiles": "Este grupo no tiene perfiles asociados.",
     "deleteGroup": "Eliminar Grupo",
@@ -530,7 +546,10 @@
     "unknownGroup": "Grupo desconocido",
     "profileGroupsAriaLabel": "Grupos de perfiles",
     "loading": "Cargando grupos...",
-    "all": "Todos"
+    "all": "Todos",
+    "noGroup": "Sin grupo",
+    "pageTitle": "Grupos de perfiles",
+    "pageDescription": "Los grupos de perfiles te permiten organizar los navegadores por cliente, entorno o caso de uso. Sincroniza los grupos entre dispositivos para compartirlos."
   },
   "sync": {
     "mode": {
@@ -649,7 +668,8 @@
       "addedToClaudeCode": "Agregado a Claude Code",
       "removedFromClaudeCode": "Eliminado de Claude Code",
       "config": "Configuración MCP",
-      "copyConfig": "Copiar Configuración"
+      "copyConfig": "Copiar Configuración",
+      "clientsLabel": "Clientes"
     },
     "tabApi": "API local",
     "tabMcp": "MCP (asistentes IA)",
@@ -675,7 +695,9 @@
     "mcpStarted": "Servidor MCP iniciado en puerto {{port}}",
     "mcpStopped": "Servidor MCP detenido",
     "mcpToggleFailed": "Error al alternar el servidor MCP",
-    "openSettings": "Abrir configuración de integraciones"
+    "openSettings": "Abrir configuración de integraciones",
+    "apiRunningOn": "Ejecutándose en",
+    "apiExampleRequest": "Solicitud de ejemplo"
   },
   "import": {
     "title": "Importar Perfil",
@@ -1181,6 +1203,7 @@
     "empty": "No se han subido extensiones aún.",
     "noGroups": "No se han creado grupos de extensiones aún.",
     "createGroup": "Crear Grupo",
+    "newGroup": "Nuevo grupo",
     "addToGroup": "Agregar extensión...",
     "removeFromGroup": "Eliminar del grupo",
     "deleteGroup": "Eliminar grupo",
@@ -1228,7 +1251,14 @@
     "syncEnableTooltip": "Habilitar sincronización",
     "syncDisableTooltip": "Deshabilitar sincronización",
     "loadGroupsFailed": "Error al cargar grupos de extensiones",
-    "assignGroupFailed": "Error al asignar grupo de extensiones"
+    "assignGroupFailed": "Error al asignar grupo de extensiones",
+    "bulkDelete": {
+      "extensionsTitle": "Eliminar extensiones",
+      "extensionsDescription": "¿Eliminar {{count}} extensiones? {{names}}",
+      "groupsTitle": "Eliminar grupos de extensiones",
+      "groupsDescription": "¿Eliminar {{count}} grupos de extensiones? {{names}}",
+      "confirmButton": "Eliminar"
+    }
   },
   "pro": {
     "badge": "PRO",
@@ -1373,7 +1403,11 @@
     "waiting": "En espera de sincronización",
     "errorWith": "Error de sincronización: {{error}}",
     "error": "Error de sincronización",
-    "notSynced": "Sin sincronizar"
+    "notSynced": "Sin sincronizar",
+    "enable": "Activar sincronización",
+    "disable": "Desactivar sincronización",
+    "lockedInUse": "La sincronización está bloqueada mientras un perfil sincronizado lo use",
+    "bulkToggle": "Alternar sincronización"
   },
   "groupManagement": {
     "description": "Administra tus grupos de perfiles",
@@ -1387,7 +1421,13 @@
     "syncCannotDisable": "No se puede desactivar la sincronización mientras este grupo esté en uso por perfiles sincronizados",
     "editGroupTooltip": "Editar grupo",
     "deleteGroupTooltip": "Eliminar grupo",
-    "loadFailed": "Error al cargar los grupos"
+    "loadFailed": "Error al cargar los grupos",
+    "bulkDelete": {
+      "title": "Eliminar grupos",
+      "description": "¿Estás seguro de que quieres eliminar {{count}} grupos? {{names}}. Los perfiles se moverán a Predeterminado.",
+      "description_one": "¿Estás seguro de que quieres eliminar {{count}} grupo? {{names}}. Los perfiles se moverán a Predeterminado.",
+      "confirmButton": "Eliminar grupos"
+    }
   },
   "proxyAssignment": {
     "title": "Asignar proxy / VPN",
@@ -1721,7 +1761,14 @@
     "modes": {
       "set": "Establecer",
       "change": "Cambiar",
-      "remove": "Quitar"
+      "remove": "Quitar",
+      "validate": "Validar"
+    },
+    "verifyDialog": {
+      "title": "Validar contraseña del perfil",
+      "description": "Introduce la contraseña del perfil para confirmar que coincide con la almacenada en disco.",
+      "submit": "Validar",
+      "matchToast": "La contraseña es correcta"
     }
   },
   "backendErrors": {
@@ -1749,7 +1796,6 @@
   },
   "rail": {
     "profiles": "Perfiles",
-    "proxies": "Proxies",
     "extensions": "Extensiones",
     "groups": "Grupos",
     "settings": "Ajustes",
@@ -1757,18 +1803,17 @@
       "label": "Más",
       "closeAriaLabel": "Cerrar menú",
       "importProfile": "Importar perfil",
-      "importProfileHint": "Trae perfiles de otra herramienta",
-      "integrations": "Integraciones",
-      "integrationsHint": "Slack, MCP, automatizaciones",
-      "account": "Cuenta",
-      "accountHint": "Nube, facturación, sesión"
-    }
+      "importProfileHint": "Trae perfiles de otra herramienta"
+    },
+    "network": "Red",
+    "integrations": "Integraciones",
+    "account": "Cuenta"
   },
   "pageTitle": {
-    "proxies": "Proxies",
+    "proxies": "Red",
     "extensions": "Extensiones",
     "groups": "Grupos",
-    "vpns": "VPN",
+    "vpns": "Red",
     "settings": "Ajustes",
     "integrations": "Integraciones",
     "account": "Cuenta",

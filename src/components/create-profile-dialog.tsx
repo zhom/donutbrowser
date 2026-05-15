@@ -431,7 +431,9 @@ export function CreateProfileDialog({
             vpnId: resolvedVpnId,
             wayfernConfig: finalWayfernConfig,
             groupId:
-              selectedGroupId !== "default" ? selectedGroupId : undefined,
+              selectedGroupId && selectedGroupId !== "__all__"
+                ? selectedGroupId
+                : undefined,
             extensionGroupId: selectedExtensionGroupId,
             ephemeral,
             dnsBlocklist: dnsBlocklist || undefined,
@@ -459,7 +461,9 @@ export function CreateProfileDialog({
             vpnId: resolvedVpnId,
             camoufoxConfig: finalCamoufoxConfig,
             groupId:
-              selectedGroupId !== "default" ? selectedGroupId : undefined,
+              selectedGroupId && selectedGroupId !== "__all__"
+                ? selectedGroupId
+                : undefined,
             extensionGroupId: selectedExtensionGroupId,
             ephemeral,
             dnsBlocklist: dnsBlocklist || undefined,
@@ -487,7 +491,10 @@ export function CreateProfileDialog({
           version: bestVersion.version,
           releaseType: bestVersion.releaseType,
           proxyId: selectedProxyId,
-          groupId: selectedGroupId !== "default" ? selectedGroupId : undefined,
+          groupId:
+            selectedGroupId && selectedGroupId !== "__all__"
+              ? selectedGroupId
+              : undefined,
           dnsBlocklist: dnsBlocklist || undefined,
           launchHook: launchHook.trim() || undefined,
           password: passwordToSet,

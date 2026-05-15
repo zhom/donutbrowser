@@ -32,7 +32,8 @@
       "downloading": "Downloading...",
       "minimize": "Minimize",
       "saving": "Saving…",
-      "saved": "Saved"
+      "saved": "Saved",
+      "copied": "Copied"
     },
     "status": {
       "active": "Active",
@@ -158,7 +159,15 @@
       "passwordSaved": "Encryption password set",
       "passwordMismatch": "Passwords do not match",
       "passwordTooShort": "Password must be at least 8 characters",
-      "requiresProOrOwner": "Profile encryption is available for Pro users and team owners."
+      "requiresProOrOwner": "Profile encryption is available for Pro users and team owners.",
+      "validatePassword": "Validate",
+      "validateDialog": {
+        "title": "Validate Encryption Password",
+        "description": "Enter your encryption password to verify it matches the one stored on this device.",
+        "submit": "Validate",
+        "matchToast": "Password is correct",
+        "mismatchToast": "Password does not match"
+      }
     },
     "commercial": {
       "title": "Commercial License",
@@ -376,6 +385,9 @@
       "deleteFailed": "Failed to delete proxy",
       "deleteTitle": "Delete Proxy",
       "deleteDescription": "This action cannot be undone. This will permanently delete the proxy \"{{name}}\".",
+      "newProxy": "New proxy",
+      "newVpn": "New VPN",
+      "protocolCol": "Protocol",
       "title": "Proxies & VPNs"
     },
     "add": "Add Proxy",
@@ -480,6 +492,13 @@
       "continueButton": "Continue",
       "doneButton": "Done",
       "failed": "Failed to import proxies"
+    },
+    "bulkDelete": {
+      "proxiesTitle": "Delete Selected Proxies",
+      "proxiesDescription": "This action cannot be undone. This will permanently delete {{count}} proxy(s): {{names}}.",
+      "vpnsTitle": "Delete Selected VPNs",
+      "vpnsDescription": "This action cannot be undone. This will permanently delete {{count}} VPN(s): {{names}}.",
+      "confirmButton": "Delete {{count}}"
     }
   },
   "groups": {
@@ -488,10 +507,8 @@
     "add": "Add Group",
     "edit": "Edit Group",
     "delete": "Delete Group",
-    "defaultGroup": "Default",
-    "defaultGroupNoGroup": "Default (No Group)",
-    "moveToDefault": "Move profiles to Default group",
-    "noGroupDescription": "Profiles without a group will appear in the \"Default\" group.",
+    "moveToDefault": "Remove profiles from group",
+    "noGroupDescription": "Profiles without a group appear in the \"All\" filter.",
     "assignSuccess": "Successfully assigned {{count}} profile(s) to {{group}}",
     "noGroups": "No groups created",
     "noGroupsDescription": "Create a group to organize your profiles.",
@@ -521,7 +538,6 @@
     "loadingProfiles": "Loading associated profiles...",
     "associatedProfiles": "Associated Profiles ({{count}})",
     "whatToDoWithProfiles": "What should happen to these profiles?",
-    "moveToDefaultOption": "Move profiles to Default group",
     "deleteAlongWithGroup": "Delete profiles along with the group",
     "noAssociatedProfiles": "This group has no associated profiles.",
     "deleteGroup": "Delete Group",
@@ -530,7 +546,10 @@
     "unknownGroup": "Unknown Group",
     "profileGroupsAriaLabel": "Profile groups",
     "loading": "Loading groups...",
-    "all": "All"
+    "all": "All",
+    "noGroup": "No group",
+    "pageTitle": "Profile groups",
+    "pageDescription": "Profile groups let you organize browsers by client, environment, or use case. Sync groups across devices to share them."
   },
   "sync": {
     "mode": {
@@ -649,7 +668,8 @@
       "addedToClaudeCode": "Added to Claude Code",
       "removedFromClaudeCode": "Removed from Claude Code",
       "config": "MCP Configuration",
-      "copyConfig": "Copy Configuration"
+      "copyConfig": "Copy Configuration",
+      "clientsLabel": "Clients"
     },
     "tabApi": "Local API",
     "tabMcp": "MCP (AI Assistants)",
@@ -675,7 +695,9 @@
     "mcpStarted": "MCP server started on port {{port}}",
     "mcpStopped": "MCP server stopped",
     "mcpToggleFailed": "Failed to toggle MCP server",
-    "openSettings": "Open Integrations Settings"
+    "openSettings": "Open Integrations Settings",
+    "apiRunningOn": "Running on",
+    "apiExampleRequest": "Example request"
   },
   "import": {
     "title": "Import Profile",
@@ -1181,6 +1203,7 @@
     "empty": "No extensions uploaded yet.",
     "noGroups": "No extension groups created yet.",
     "createGroup": "Create Group",
+    "newGroup": "New group",
     "addToGroup": "Add extension...",
     "removeFromGroup": "Remove from group",
     "deleteGroup": "Delete group",
@@ -1228,7 +1251,14 @@
     "syncEnableTooltip": "Enable sync",
     "syncDisableTooltip": "Disable sync",
     "loadGroupsFailed": "Failed to load extension groups",
-    "assignGroupFailed": "Failed to assign extension group"
+    "assignGroupFailed": "Failed to assign extension group",
+    "bulkDelete": {
+      "extensionsTitle": "Delete extensions",
+      "extensionsDescription": "Delete {{count}} extensions? {{names}}",
+      "groupsTitle": "Delete extension groups",
+      "groupsDescription": "Delete {{count}} extension groups? {{names}}",
+      "confirmButton": "Delete"
+    }
   },
   "pro": {
     "badge": "PRO",
@@ -1373,7 +1403,11 @@
     "waiting": "Waiting to sync",
     "errorWith": "Sync error: {{error}}",
     "error": "Sync error",
-    "notSynced": "Not synced"
+    "notSynced": "Not synced",
+    "enable": "Enable sync",
+    "disable": "Disable sync",
+    "lockedInUse": "Sync is locked while in use by a synced profile",
+    "bulkToggle": "Toggle sync"
   },
   "groupManagement": {
     "description": "Manage your profile groups",
@@ -1387,7 +1421,13 @@
     "syncCannotDisable": "Sync cannot be disabled while this group is used by synced profiles",
     "editGroupTooltip": "Edit group",
     "deleteGroupTooltip": "Delete group",
-    "loadFailed": "Failed to load groups"
+    "loadFailed": "Failed to load groups",
+    "bulkDelete": {
+      "title": "Delete groups",
+      "description": "Are you sure you want to delete {{count}} groups? {{names}}. Profiles will be moved to Default.",
+      "description_one": "Are you sure you want to delete {{count}} group? {{names}}. Profiles will be moved to Default.",
+      "confirmButton": "Delete groups"
+    }
   },
   "proxyAssignment": {
     "title": "Assign Proxy / VPN",
@@ -1721,7 +1761,14 @@
     "modes": {
       "set": "Set",
       "change": "Change",
-      "remove": "Remove"
+      "remove": "Remove",
+      "validate": "Validate"
+    },
+    "verifyDialog": {
+      "title": "Validate Profile Password",
+      "description": "Enter the profile password to confirm it matches the one stored on disk.",
+      "submit": "Validate",
+      "matchToast": "Password is correct"
     }
   },
   "backendErrors": {
@@ -1749,7 +1796,6 @@
   },
   "rail": {
     "profiles": "Profiles",
-    "proxies": "Proxies",
     "extensions": "Extensions",
     "groups": "Groups",
     "settings": "Settings",
@@ -1757,18 +1803,17 @@
       "label": "More",
       "closeAriaLabel": "Close menu",
       "importProfile": "Import profile",
-      "importProfileHint": "Bring profiles from another tool",
-      "integrations": "Integrations",
-      "integrationsHint": "Slack, MCP, automations",
-      "account": "Account",
-      "accountHint": "Cloud, billing, sign-in"
-    }
+      "importProfileHint": "Bring profiles from another tool"
+    },
+    "network": "Network",
+    "integrations": "Integrations",
+    "account": "Account"
   },
   "pageTitle": {
-    "proxies": "Proxies",
+    "proxies": "Network",
     "extensions": "Extensions",
     "groups": "Groups",
-    "vpns": "VPNs",
+    "vpns": "Network",
     "settings": "Settings",
     "integrations": "Integrations",
     "account": "Account",

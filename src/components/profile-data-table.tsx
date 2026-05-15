@@ -416,6 +416,10 @@ function DnsCell({
     { value: "pro_plus", labelKey: "dnsBlocklist.proPlus" },
     { value: "ultimate", labelKey: "dnsBlocklist.ultimate" },
   ];
+  const currentLabel =
+    level === null
+      ? null
+      : (LEVELS.find((l) => l.value === level)?.labelKey ?? null);
 
   const onPick = async (nextLevel: string | null) => {
     setIsSaving(true);
@@ -446,8 +450,8 @@ function DnsCell({
           }
         >
           <FiWifi className="size-3 shrink-0" />
-          <span className="flex-1 truncate uppercase text-[10px] font-mono tracking-wide">
-            {level ?? "—"}
+          <span className="flex-1 truncate text-[11px] tracking-wide">
+            {currentLabel ? meta.t(currentLabel) : "—"}
           </span>
           <LuChevronDown className="size-3 shrink-0 text-muted-foreground" />
         </button>
@@ -2887,6 +2891,14 @@ export function ProfilesDataTable({
         <div
           ref={scrollParentRef}
           className="overflow-auto relative flex-1 min-h-0 scroll-fade"
+          style={
+            {
+              // Sticky table header is 32px tall (h-8); shift the top
+              // fade band below it so the header stays fully opaque and
+              // only body rows fade as they scroll past.
+              "--scroll-fade-top-offset": "32px",
+            } as React.CSSProperties
+          }
         >
           <Table className="table-fixed">
             <TableHeader className="overflow-visible sticky top-0 z-10 bg-background [&_tr]:border-0">
@@ -3003,7 +3015,9 @@ export function ProfilesDataTable({
       />
       {profileForInfoDialog &&
         (() => {
-          const infoProfile = profileForInfoDialog;
+          const infoProfile =
+            profiles.find((p) => p.id === profileForInfoDialog.id) ??
+            profileForInfoDialog;
           const infoIsRunning =
             browserState.isClient && runningProfiles.has(infoProfile.id);
           const infoIsLaunching = launchingProfiles.has(infoProfile.id);

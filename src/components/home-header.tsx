@@ -1,7 +1,7 @@
 "use client";
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { GoPlus } from "react-icons/go";
 import { LuChevronLeft, LuChevronRight, LuSearch, LuX } from "react-icons/lu";
@@ -30,6 +30,7 @@ interface Props {
   searchQuery: string;
   onSearchQueryChange: (query: string) => void;
   groups: GroupWithCount[];
+  totalProfiles: number;
   selectedGroupId: string | null;
   onGroupSelect: (groupId: string) => void;
   pageTitle?: string;
@@ -40,6 +41,7 @@ const HomeHeader = ({
   searchQuery,
   onSearchQueryChange,
   groups,
+  totalProfiles,
   selectedGroupId,
   onGroupSelect,
   pageTitle,
@@ -53,11 +55,6 @@ const HomeHeader = ({
 
   const isMacOS = platform === "macos";
   const showProfileToolbar = !pageTitle;
-
-  const totalProfiles = useMemo(
-    () => groups.reduce((sum, g) => sum + g.count, 0),
-    [groups],
-  );
 
   // Press-and-hold drag: any pixel of the sys-bar becomes a drag handle after
   // HOLD_MS, but quick clicks still reach buttons/inputs underneath.
@@ -247,8 +244,6 @@ const HomeHeader = ({
             })()}
             {groups.map((group) => {
               const active = selectedGroupId === group.id;
-              const label =
-                group.id === "default" ? t("groups.defaultGroup") : group.name;
               return (
                 <button
                   key={group.id}
@@ -263,7 +258,7 @@ const HomeHeader = ({
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  <span>{label}</span>
+                  <span>{group.name}</span>
                   <span className="text-[11px] text-muted-foreground tabular-nums">
                     {group.count}
                   </span>

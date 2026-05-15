@@ -32,7 +32,8 @@
       "downloading": "ダウンロード中...",
       "minimize": "最小化",
       "saving": "保存中…",
-      "saved": "保存しました"
+      "saved": "保存しました",
+      "copied": "コピーしました"
     },
     "status": {
       "active": "アクティブ",
@@ -158,7 +159,15 @@
       "passwordSaved": "暗号化パスワードが設定されました",
       "passwordMismatch": "パスワードが一致しません",
       "passwordTooShort": "パスワードは8文字以上である必要があります",
-      "requiresProOrOwner": "プロファイルの暗号化はProユーザーとチームオーナーのみ利用できます。"
+      "requiresProOrOwner": "プロファイルの暗号化はProユーザーとチームオーナーのみ利用できます。",
+      "validatePassword": "確認",
+      "validateDialog": {
+        "title": "暗号化パスワードを確認",
+        "description": "このデバイスに保存されているパスワードと一致するか、暗号化パスワードを入力してください。",
+        "submit": "確認",
+        "matchToast": "パスワードが一致しました",
+        "mismatchToast": "パスワードが一致しません"
+      }
     },
     "commercial": {
       "title": "商用ライセンス",
@@ -376,6 +385,9 @@
       "deleteFailed": "プロキシの削除に失敗しました",
       "deleteTitle": "プロキシを削除",
       "deleteDescription": "この操作は取り消せません。プロキシ「{{name}}」は完全に削除されます。",
+      "newProxy": "新しいプロキシ",
+      "newVpn": "新しいVPN",
+      "protocolCol": "プロトコル",
       "title": "プロキシと VPN"
     },
     "add": "プロキシを追加",
@@ -480,6 +492,13 @@
       "continueButton": "続ける",
       "doneButton": "完了",
       "failed": "プロキシのインポートに失敗しました"
+    },
+    "bulkDelete": {
+      "proxiesTitle": "選択したプロキシを削除",
+      "proxiesDescription": "この操作は取り消せません。{{count}} 件のプロキシを完全に削除します: {{names}}",
+      "vpnsTitle": "選択したVPNを削除",
+      "vpnsDescription": "この操作は取り消せません。{{count}} 件のVPNを完全に削除します: {{names}}",
+      "confirmButton": "{{count}} 件を削除"
     }
   },
   "groups": {
@@ -488,10 +507,8 @@
     "add": "グループを追加",
     "edit": "グループを編集",
     "delete": "グループを削除",
-    "defaultGroup": "デフォルト",
-    "defaultGroupNoGroup": "デフォルト（グループなし）",
-    "moveToDefault": "プロファイルをデフォルトグループに移動",
-    "noGroupDescription": "グループに属していないプロファイルは「デフォルト」グループに表示されます。",
+    "moveToDefault": "プロファイルをグループから外す",
+    "noGroupDescription": "グループに属さないプロファイルは「すべて」フィルターに表示されます。",
     "assignSuccess": "{{count}} 件のプロファイルを {{group}} に割り当てました",
     "noGroups": "グループがありません",
     "noGroupsDescription": "プロファイルを整理するためのグループを作成してください。",
@@ -521,7 +538,6 @@
     "loadingProfiles": "関連するプロファイルを読み込んでいます...",
     "associatedProfiles": "関連プロファイル ({{count}})",
     "whatToDoWithProfiles": "これらのプロファイルをどうしますか？",
-    "moveToDefaultOption": "プロファイルをデフォルトグループに移動",
     "deleteAlongWithGroup": "プロファイルもグループと一緒に削除",
     "noAssociatedProfiles": "このグループには関連するプロファイルがありません。",
     "deleteGroup": "グループを削除",
@@ -530,7 +546,10 @@
     "unknownGroup": "不明なグループ",
     "profileGroupsAriaLabel": "プロファイルグループ",
     "loading": "グループを読み込み中...",
-    "all": "すべて"
+    "all": "すべて",
+    "noGroup": "グループなし",
+    "pageTitle": "プロファイルグループ",
+    "pageDescription": "プロファイルグループを使うと、クライアント、環境、用途ごとにブラウザを整理できます。デバイス間でグループを同期して共有しましょう。"
   },
   "sync": {
     "mode": {
@@ -649,7 +668,8 @@
       "addedToClaudeCode": "Claude Code に追加しました",
       "removedFromClaudeCode": "Claude Code から削除しました",
       "config": "MCP設定",
-      "copyConfig": "設定をコピー"
+      "copyConfig": "設定をコピー",
+      "clientsLabel": "クライアント"
     },
     "tabApi": "ローカル API",
     "tabMcp": "MCP (AI アシスタント)",
@@ -675,7 +695,9 @@
     "mcpStarted": "MCP サーバーをポート {{port}} で起動しました",
     "mcpStopped": "MCP サーバーを停止しました",
     "mcpToggleFailed": "MCP サーバーの切り替えに失敗しました",
-    "openSettings": "統合設定を開く"
+    "openSettings": "統合設定を開く",
+    "apiRunningOn": "実行中",
+    "apiExampleRequest": "リクエスト例"
   },
   "import": {
     "title": "プロファイルをインポート",
@@ -1181,6 +1203,7 @@
     "empty": "まだ拡張機能がアップロードされていません。",
     "noGroups": "まだ拡張機能グループが作成されていません。",
     "createGroup": "グループを作成",
+    "newGroup": "新しいグループ",
     "addToGroup": "拡張機能を追加...",
     "removeFromGroup": "グループから削除",
     "deleteGroup": "グループを削除",
@@ -1228,7 +1251,14 @@
     "syncEnableTooltip": "同期を有効にする",
     "syncDisableTooltip": "同期を無効にする",
     "loadGroupsFailed": "拡張機能グループの読み込みに失敗しました",
-    "assignGroupFailed": "拡張機能グループの割り当てに失敗しました"
+    "assignGroupFailed": "拡張機能グループの割り当てに失敗しました",
+    "bulkDelete": {
+      "extensionsTitle": "拡張機能を削除",
+      "extensionsDescription": "{{count}}件の拡張機能を削除しますか？ {{names}}",
+      "groupsTitle": "拡張機能グループを削除",
+      "groupsDescription": "{{count}}件の拡張機能グループを削除しますか？ {{names}}",
+      "confirmButton": "削除"
+    }
   },
   "pro": {
     "badge": "PRO",
@@ -1373,7 +1403,11 @@
     "waiting": "同期待ち",
     "errorWith": "同期エラー: {{error}}",
     "error": "同期エラー",
-    "notSynced": "未同期"
+    "notSynced": "未同期",
+    "enable": "同期を有効化",
+    "disable": "同期を無効化",
+    "lockedInUse": "同期されたプロファイルが使用中のため、同期は無効化できません",
+    "bulkToggle": "同期を切り替え"
   },
   "groupManagement": {
     "description": "プロファイルのグループを管理します",
@@ -1387,7 +1421,13 @@
     "syncCannotDisable": "このグループが同期されたプロファイルで使用されている間は同期を無効にできません",
     "editGroupTooltip": "グループを編集",
     "deleteGroupTooltip": "グループを削除",
-    "loadFailed": "グループの読み込みに失敗しました"
+    "loadFailed": "グループの読み込みに失敗しました",
+    "bulkDelete": {
+      "title": "グループを削除",
+      "description": "{{count}} 個のグループを削除してもよろしいですか？{{names}}。プロファイルはデフォルトに移動されます。",
+      "description_one": "{{count}} 個のグループを削除してもよろしいですか？{{names}}。プロファイルはデフォルトに移動されます。",
+      "confirmButton": "グループを削除"
+    }
   },
   "proxyAssignment": {
     "title": "プロキシ / VPN を割り当てる",
@@ -1721,7 +1761,14 @@
     "modes": {
       "set": "設定",
       "change": "変更",
-      "remove": "削除"
+      "remove": "削除",
+      "validate": "確認"
+    },
+    "verifyDialog": {
+      "title": "プロファイルパスワードを確認",
+      "description": "ディスクに保存されているプロファイルパスワードと一致するか入力してください。",
+      "submit": "確認",
+      "matchToast": "パスワードが一致しました"
     }
   },
   "backendErrors": {
@@ -1749,7 +1796,6 @@
   },
   "rail": {
     "profiles": "プロファイル",
-    "proxies": "プロキシ",
     "extensions": "拡張機能",
     "groups": "グループ",
     "settings": "設定",
@@ -1757,18 +1803,17 @@
       "label": "その他",
       "closeAriaLabel": "メニューを閉じる",
       "importProfile": "プロファイルをインポート",
-      "importProfileHint": "別のツールから取り込む",
-      "integrations": "連携",
-      "integrationsHint": "Slack、MCP、自動化",
-      "account": "アカウント",
-      "accountHint": "クラウド、請求、サインイン"
-    }
+      "importProfileHint": "別のツールから取り込む"
+    },
+    "network": "ネットワーク",
+    "integrations": "連携",
+    "account": "アカウント"
   },
   "pageTitle": {
-    "proxies": "プロキシ",
+    "proxies": "ネットワーク",
     "extensions": "拡張機能",
     "groups": "グループ",
-    "vpns": "VPN",
+    "vpns": "ネットワーク",
     "settings": "設定",
     "integrations": "連携",
     "account": "アカウント",

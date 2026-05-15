@@ -24,6 +24,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -132,6 +133,9 @@ export function SettingsDialog({
   const [e2eError, setE2eError] = useState("");
   const [isSavingE2e, setIsSavingE2e] = useState(false);
   const [isRemovingE2e, setIsRemovingE2e] = useState(false);
+  const [isVerifyE2eOpen, setIsVerifyE2eOpen] = useState(false);
+  const [verifyE2ePassword, setVerifyE2ePassword] = useState("");
+  const [isVerifyingE2e, setIsVerifyingE2e] = useState(false);
   const [systemInfo, setSystemInfo] = useState<{
     app_version: string;
     os: string;
@@ -991,7 +995,18 @@ export function SettingsDialog({
                       {t("settings.encryption.passwordSetDescription")}
                     </span>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={isRemovingE2e}
+                      onClick={() => {
+                        setVerifyE2ePassword("");
+                        setIsVerifyE2eOpen(true);
+                      }}
+                    >
+                      {t("settings.encryption.validatePassword")}
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"
@@ -1317,6 +1332,104 @@ export function SettingsDialog({
         isOpen={dnsBlocklistDialogOpen}
         onClose={() => setDnsBlocklistDialogOpen(false)}
       />
+      <Dialog
+        open={isVerifyE2eOpen}
+        onOpenChange={(open) => {
+          if (!isVerifyingE2e) {
+            setIsVerifyE2eOpen(open);
+            if (!open) setVerifyE2ePassword("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {t("settings.encryption.validateDialog.title")}
+            </DialogTitle>
+            <DialogDescription>
+              {t("settings.encryption.validateDialog.description")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              type="password"
+              placeholder={t("settings.encryption.passwordPlaceholder")}
+              value={verifyE2ePassword}
+              autoFocus
+              onChange={(e) => setVerifyE2ePassword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && verifyE2ePassword.length > 0) {
+                  e.preventDefault();
+                  void (async () => {
+                    setIsVerifyingE2e(true);
+                    try {
+                      const ok = await invoke<boolean>("verify_e2e_password", {
+                        password: verifyE2ePassword,
+                      });
+                      if (ok) {
+                        showSuccessToast(
+                          t("settings.encryption.validateDialog.matchToast"),
+                        );
+                        setIsVerifyE2eOpen(false);
+                        setVerifyE2ePassword("");
+                      } else {
+                        showErrorToast(
+                          t("settings.encryption.validateDialog.mismatchToast"),
+                        );
+                      }
+                    } catch (error) {
+                      showErrorToast(String(error));
+                    } finally {
+                      setIsVerifyingE2e(false);
+                    }
+                  })();
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={isVerifyingE2e}
+              onClick={() => {
+                setIsVerifyE2eOpen(false);
+                setVerifyE2ePassword("");
+              }}
+            >
+              {t("common.buttons.cancel")}
+            </Button>
+            <LoadingButton
+              isLoading={isVerifyingE2e}
+              disabled={verifyE2ePassword.length === 0}
+              onClick={async () => {
+                setIsVerifyingE2e(true);
+                try {
+                  const ok = await invoke<boolean>("verify_e2e_password", {
+                    password: verifyE2ePassword,
+                  });
+                  if (ok) {
+                    showSuccessToast(
+                      t("settings.encryption.validateDialog.matchToast"),
+                    );
+                    setIsVerifyE2eOpen(false);
+                    setVerifyE2ePassword("");
+                  } else {
+                    showErrorToast(
+                      t("settings.encryption.validateDialog.mismatchToast"),
+                    );
+                  }
+                } catch (error) {
+                  showErrorToast(String(error));
+                } finally {
+                  setIsVerifyingE2e(false);
+                }
+              }}
+            >
+              {t("settings.encryption.validateDialog.submit")}
+            </LoadingButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

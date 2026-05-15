@@ -32,7 +32,8 @@
       "downloading": "Baixando...",
       "minimize": "Minimizar",
       "saving": "Salvando…",
-      "saved": "Salvo"
+      "saved": "Salvo",
+      "copied": "Copiado"
     },
     "status": {
       "active": "Ativo",
@@ -158,7 +159,15 @@
       "passwordSaved": "Senha de criptografia definida",
       "passwordMismatch": "As senhas não coincidem",
       "passwordTooShort": "A senha deve ter pelo menos 8 caracteres",
-      "requiresProOrOwner": "A criptografia de perfis está disponível para usuários Pro e proprietários de equipe."
+      "requiresProOrOwner": "A criptografia de perfis está disponível para usuários Pro e proprietários de equipe.",
+      "validatePassword": "Validar",
+      "validateDialog": {
+        "title": "Validar senha de criptografia",
+        "description": "Digite sua senha de criptografia para verificar se corresponde à armazenada neste dispositivo.",
+        "submit": "Validar",
+        "matchToast": "A senha está correta",
+        "mismatchToast": "A senha não corresponde"
+      }
     },
     "commercial": {
       "title": "Licença Comercial",
@@ -376,6 +385,9 @@
       "deleteFailed": "Falha ao excluir proxy",
       "deleteTitle": "Excluir proxy",
       "deleteDescription": "Esta ação não pode ser desfeita. O proxy \"{{name}}\" será excluído permanentemente.",
+      "newProxy": "Novo proxy",
+      "newVpn": "Nova VPN",
+      "protocolCol": "Protocolo",
       "title": "Proxies e VPNs"
     },
     "add": "Adicionar Proxy",
@@ -480,6 +492,13 @@
       "continueButton": "Continuar",
       "doneButton": "Concluído",
       "failed": "Falha ao importar proxies"
+    },
+    "bulkDelete": {
+      "proxiesTitle": "Excluir proxies selecionados",
+      "proxiesDescription": "Esta ação não pode ser desfeita. Isso excluirá permanentemente {{count}} proxy(s): {{names}}.",
+      "vpnsTitle": "Excluir VPNs selecionadas",
+      "vpnsDescription": "Esta ação não pode ser desfeita. Isso excluirá permanentemente {{count}} VPN(s): {{names}}.",
+      "confirmButton": "Excluir {{count}}"
     }
   },
   "groups": {
@@ -488,10 +507,8 @@
     "add": "Adicionar Grupo",
     "edit": "Editar Grupo",
     "delete": "Excluir Grupo",
-    "defaultGroup": "Padrão",
-    "defaultGroupNoGroup": "Padrão (Sem Grupo)",
-    "moveToDefault": "Mover perfis para o grupo Padrão",
-    "noGroupDescription": "Perfis sem grupo aparecerão no grupo \"Padrão\".",
+    "moveToDefault": "Remover perfis do grupo",
+    "noGroupDescription": "Perfis sem grupo aparecem no filtro \"Todos\".",
     "assignSuccess": "{{count}} perfil(s) atribuído(s) a {{group}} com sucesso",
     "noGroups": "Nenhum grupo criado",
     "noGroupsDescription": "Crie um grupo para organizar seus perfis.",
@@ -521,7 +538,6 @@
     "loadingProfiles": "Carregando perfis associados...",
     "associatedProfiles": "Perfis Associados ({{count}})",
     "whatToDoWithProfiles": "O que fazer com esses perfis?",
-    "moveToDefaultOption": "Mover perfis para o grupo Padrão",
     "deleteAlongWithGroup": "Excluir perfis junto com o grupo",
     "noAssociatedProfiles": "Este grupo não tem perfis associados.",
     "deleteGroup": "Excluir Grupo",
@@ -530,7 +546,10 @@
     "unknownGroup": "Grupo desconhecido",
     "profileGroupsAriaLabel": "Grupos de perfis",
     "loading": "Carregando grupos...",
-    "all": "Todos"
+    "all": "Todos",
+    "noGroup": "Sem grupo",
+    "pageTitle": "Grupos de perfis",
+    "pageDescription": "Os grupos de perfis permitem organizar os navegadores por cliente, ambiente ou caso de uso. Sincronize grupos entre dispositivos para compartilhá-los."
   },
   "sync": {
     "mode": {
@@ -649,7 +668,8 @@
       "addedToClaudeCode": "Adicionado ao Claude Code",
       "removedFromClaudeCode": "Removido do Claude Code",
       "config": "Configuração MCP",
-      "copyConfig": "Copiar Configuração"
+      "copyConfig": "Copiar Configuração",
+      "clientsLabel": "Clientes"
     },
     "tabApi": "API local",
     "tabMcp": "MCP (Assistentes de IA)",
@@ -675,7 +695,9 @@
     "mcpStarted": "Servidor MCP iniciado na porta {{port}}",
     "mcpStopped": "Servidor MCP parado",
     "mcpToggleFailed": "Falha ao alternar o servidor MCP",
-    "openSettings": "Abrir configurações de integrações"
+    "openSettings": "Abrir configurações de integrações",
+    "apiRunningOn": "Em execução em",
+    "apiExampleRequest": "Exemplo de solicitação"
   },
   "import": {
     "title": "Importar Perfil",
@@ -1181,6 +1203,7 @@
     "empty": "Nenhuma extensão enviada ainda.",
     "noGroups": "Nenhum grupo de extensões criado ainda.",
     "createGroup": "Criar Grupo",
+    "newGroup": "Novo grupo",
     "addToGroup": "Adicionar extensão...",
     "removeFromGroup": "Remover do grupo",
     "deleteGroup": "Excluir grupo",
@@ -1228,7 +1251,14 @@
     "syncEnableTooltip": "Ativar sincronização",
     "syncDisableTooltip": "Desativar sincronização",
     "loadGroupsFailed": "Falha ao carregar grupos de extensões",
-    "assignGroupFailed": "Falha ao atribuir grupo de extensões"
+    "assignGroupFailed": "Falha ao atribuir grupo de extensões",
+    "bulkDelete": {
+      "extensionsTitle": "Excluir extensões",
+      "extensionsDescription": "Excluir {{count}} extensões? {{names}}",
+      "groupsTitle": "Excluir grupos de extensões",
+      "groupsDescription": "Excluir {{count}} grupos de extensões? {{names}}",
+      "confirmButton": "Excluir"
+    }
   },
   "pro": {
     "badge": "PRO",
@@ -1373,7 +1403,11 @@
     "waiting": "Aguardando sincronização",
     "errorWith": "Erro de sincronização: {{error}}",
     "error": "Erro de sincronização",
-    "notSynced": "Não sincronizado"
+    "notSynced": "Não sincronizado",
+    "enable": "Ativar sincronização",
+    "disable": "Desativar sincronização",
+    "lockedInUse": "A sincronização está bloqueada enquanto um perfil sincronizado a usar",
+    "bulkToggle": "Alternar sincronização"
   },
   "groupManagement": {
     "description": "Gerencie seus grupos de perfis",
@@ -1387,7 +1421,13 @@
     "syncCannotDisable": "A sincronização não pode ser desativada enquanto este grupo estiver em uso por perfis sincronizados",
     "editGroupTooltip": "Editar grupo",
     "deleteGroupTooltip": "Excluir grupo",
-    "loadFailed": "Falha ao carregar grupos"
+    "loadFailed": "Falha ao carregar grupos",
+    "bulkDelete": {
+      "title": "Excluir grupos",
+      "description": "Tem certeza que deseja excluir {{count}} grupos? {{names}}. Os perfis serão movidos para Padrão.",
+      "description_one": "Tem certeza que deseja excluir {{count}} grupo? {{names}}. Os perfis serão movidos para Padrão.",
+      "confirmButton": "Excluir grupos"
+    }
   },
   "proxyAssignment": {
     "title": "Atribuir proxy / VPN",
@@ -1721,7 +1761,14 @@
     "modes": {
       "set": "Definir",
       "change": "Alterar",
-      "remove": "Remover"
+      "remove": "Remover",
+      "validate": "Validar"
+    },
+    "verifyDialog": {
+      "title": "Validar senha do perfil",
+      "description": "Digite a senha do perfil para confirmar se corresponde à armazenada em disco.",
+      "submit": "Validar",
+      "matchToast": "A senha está correta"
     }
   },
   "backendErrors": {
@@ -1749,7 +1796,6 @@
   },
   "rail": {
     "profiles": "Perfis",
-    "proxies": "Proxies",
     "extensions": "Extensões",
     "groups": "Grupos",
     "settings": "Configurações",
@@ -1757,18 +1803,17 @@
       "label": "Mais",
       "closeAriaLabel": "Fechar menu",
       "importProfile": "Importar perfil",
-      "importProfileHint": "Trazer perfis de outra ferramenta",
-      "integrations": "Integrações",
-      "integrationsHint": "Slack, MCP, automações",
-      "account": "Conta",
-      "accountHint": "Nuvem, cobrança, login"
-    }
+      "importProfileHint": "Trazer perfis de outra ferramenta"
+    },
+    "network": "Rede",
+    "integrations": "Integrações",
+    "account": "Conta"
   },
   "pageTitle": {
-    "proxies": "Proxies",
+    "proxies": "Rede",
     "extensions": "Extensões",
     "groups": "Grupos",
-    "vpns": "VPN",
+    "vpns": "Rede",
     "settings": "Configurações",
     "integrations": "Integrações",
     "account": "Conta",

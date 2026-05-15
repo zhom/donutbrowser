@@ -292,8 +292,43 @@ pub async fn set_profile_password(profile_id: String, password: String) -> Resul
     .map_err(err_internal)?;
 
   cache_key(id, key);
+  crate::sync::queue_profile_sync_if_eligible(&profile);
   emit_profiles_changed();
   Ok(())
+}
+
+/// Verify a profile password without unlocking. Used by the Settings UI's
+/// "Validate" button so users can confirm they remember the password without
+/// performing a destructive change. Honors the same lockout schedule as
+/// `unlock_profile` so a brute-force attacker can't bypass rate-limiting by
+/// hammering this command.
+#[tauri::command]
+pub async fn verify_profile_password(profile_id: String, password: String) -> Result<(), String> {
+  let id = parse_uuid(&profile_id)?;
+  let profile = load_profile(&id)?;
+  if !profile.password_protected {
+    return Err(err_code("PROFILE_NOT_PROTECTED"));
+  }
+  if let Err(secs) = check_lockout(&id) {
+    return Err(err_with("LOCKED_OUT", &[("seconds", secs.to_string())]));
+  }
+  let salt = profile
+    .encryption_salt
+    .as_deref()
+    .ok_or_else(|| err_code("PROFILE_MISSING_SALT"))?;
+  let key = derive_profile_key(&password, salt).map_err(err_internal)?;
+  let dir = profile_data_dir(&profile);
+  match verify_key_against_dir(&key, &dir) {
+    Ok(()) => {
+      clear_failed_attempts(&id);
+      Ok(())
+    }
+    Err(crate::profile::encryption::PasswordError::WrongPassword) => {
+      record_failed_attempt(id);
+      Err(err_code("INCORRECT_PASSWORD"))
+    }
+    Err(other) => Err(err_internal(other)),
+  }
 }
 
 #[tauri::command]
@@ -396,6 +431,7 @@ pub async fn change_profile_password(
 
   drop_cached_key(&id);
   cache_key(id, new_key);
+  crate::sync::queue_profile_sync_if_eligible(&profile);
   emit_profiles_changed();
   Ok(())
 }
@@ -464,6 +500,7 @@ pub async fn remove_profile_password(profile_id: String, password: String) -> Re
     .map_err(err_internal)?;
 
   drop_cached_key(&id);
+  crate::sync::queue_profile_sync_if_eligible(&profile);
   emit_profiles_changed();
   Ok(())
 }

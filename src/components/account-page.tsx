@@ -12,16 +12,20 @@ import {
   LuUser,
 } from "react-icons/lu";
 import { LoadingButton } from "@/components/loading-button";
+import {
+  AnimatedTabs,
+  AnimatedTabsContent,
+  AnimatedTabsList,
+  AnimatedTabsTrigger,
+} from "@/components/ui/animated-tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCloudAuth } from "@/hooks/use-cloud-auth";
 import { translateBackendError } from "@/lib/backend-errors";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
-import { cn } from "@/lib/utils";
 import type { SyncSettings } from "@/types";
 
 interface AccountPageProps {
@@ -194,25 +198,12 @@ export function AccountPage({
     <Dialog open={isOpen} onOpenChange={onClose} subPage={subPage}>
       <DialogContent className="max-w-2xl flex flex-col">
         <div className="flex flex-col gap-4 p-4">
-          <Tabs defaultValue="account">
-            <TabsList
-              className={cn(
-                "w-full",
-                subPage &&
-                  "!bg-transparent !p-0 !h-auto !rounded-none justify-start gap-4",
-              )}
-            >
-              <TabsTrigger
-                value="account"
-                className={cn(
-                  "flex-1",
-                  subPage &&
-                    "!flex-none !rounded-none !bg-transparent !shadow-none data-[state=active]:!bg-transparent data-[state=active]:!text-foreground data-[state=active]:!shadow-none text-muted-foreground hover:text-foreground !px-1 !py-1 text-xs",
-                )}
-              >
+          <AnimatedTabs defaultValue="account">
+            <AnimatedTabsList>
+              <AnimatedTabsTrigger value="account">
                 {t("account.tabs.account")}
-              </TabsTrigger>
-              <TabsTrigger
+              </AnimatedTabsTrigger>
+              <AnimatedTabsTrigger
                 value="self-hosted"
                 disabled={selfHostedDisabled}
                 title={
@@ -220,17 +211,12 @@ export function AccountPage({
                     ? t("account.selfHosted.disabledWhileLoggedIn")
                     : undefined
                 }
-                className={cn(
-                  "flex-1",
-                  subPage &&
-                    "!flex-none !rounded-none !bg-transparent !shadow-none data-[state=active]:!bg-transparent data-[state=active]:!text-foreground data-[state=active]:!shadow-none text-muted-foreground hover:text-foreground !px-1 !py-1 text-xs disabled:opacity-50 disabled:hover:text-muted-foreground",
-                )}
               >
                 {t("account.tabs.selfHosted")}
-              </TabsTrigger>
-            </TabsList>
+              </AnimatedTabsTrigger>
+            </AnimatedTabsList>
 
-            <TabsContent value="account" className="mt-4">
+            <AnimatedTabsContent value="account" className="mt-4">
               <div className="flex flex-col gap-4">
                 <div className="flex items-center gap-3">
                   <div className="grid place-items-center size-12 rounded-full bg-accent text-foreground shrink-0">
@@ -338,9 +324,9 @@ export function AccountPage({
                   )}
                 </div>
               </div>
-            </TabsContent>
+            </AnimatedTabsContent>
 
-            <TabsContent value="self-hosted" className="mt-4">
+            <AnimatedTabsContent value="self-hosted" className="mt-4">
               {selfHostedDisabled ? (
                 // Defensive: the tab trigger is disabled while the user is
                 // logged in, so this branch shouldn't be reachable via UI —
@@ -481,8 +467,8 @@ export function AccountPage({
                   </div>
                 </div>
               )}
-            </TabsContent>
-          </Tabs>
+            </AnimatedTabsContent>
+          </AnimatedTabs>
         </div>
       </DialogContent>
     </Dialog>

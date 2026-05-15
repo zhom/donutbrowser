@@ -15,9 +15,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { FadingScrollArea } from "@/components/ui/fading-scroll-area";
 import { Label } from "@/components/ui/label";
 import { RippleButton } from "@/components/ui/ripple";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -563,7 +563,7 @@ export function CookieManagementDialog({
                   {t("cookies.management.noCookies")}
                 </div>
               ) : (
-                <ScrollArea className="h-[200px] border rounded-md">
+                <FadingScrollArea className="h-[200px]">
                   <div className="p-2 space-y-1">
                     {exportCookieData.domains.map((domain) => (
                       <ExportDomainRow
@@ -577,7 +577,7 @@ export function CookieManagementDialog({
                       />
                     ))}
                   </div>
-                </ScrollArea>
+                </FadingScrollArea>
               )}
             </div>
 

@@ -613,7 +613,9 @@ export default function Home() {
             wayfernConfig: profileData.wayfernConfig,
             groupId:
               profileData.groupId ??
-              (selectedGroupId !== "default" ? selectedGroupId : undefined),
+              (selectedGroupId && selectedGroupId !== "__all__"
+                ? selectedGroupId
+                : undefined),
             ephemeral: profileData.ephemeral,
             dnsBlocklist: profileData.dnsBlocklist,
             launchHook: profileData.launchHook,
@@ -1243,11 +1245,10 @@ export default function Home() {
     let filtered = profiles;
 
     // Filter by group. "__all__" is a virtual filter that shows every
-    // profile regardless of group; "default" shows ungrouped profiles.
-    if (selectedGroupId === "__all__") {
+    // profile (including ungrouped ones). Any other value is a real
+    // group id; ungrouped profiles only show through "All".
+    if (!selectedGroupId || selectedGroupId === "__all__") {
       filtered = profiles;
-    } else if (!selectedGroupId || selectedGroupId === "default") {
-      filtered = profiles.filter((profile) => !profile.group_id);
     } else {
       filtered = profiles.filter(
         (profile) => profile.group_id === selectedGroupId,
@@ -1292,6 +1293,7 @@ export default function Home() {
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
         groups={groupsData}
+        totalProfiles={profiles.length}
         selectedGroupId={selectedGroupId}
         onGroupSelect={handleSelectGroup}
         pageTitle={subPageTitle}

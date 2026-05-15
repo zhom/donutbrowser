@@ -16,7 +16,6 @@ import {
   LuGroup,
   LuKey,
   LuLink,
-  LuLock,
   LuLockOpen,
   LuPlus,
   LuPuzzle,
@@ -33,6 +32,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -48,13 +48,9 @@ import {
 } from "@/components/ui/select";
 import { WayfernConfigForm } from "@/components/wayfern-config-form";
 import { translateBackendError } from "@/lib/backend-errors";
-import {
-  getBrowserDisplayName,
-  getOSDisplayName,
-  getProfileIcon,
-  isCrossOsProfile,
-} from "@/lib/browser-utils";
+import { getProfileIcon } from "@/lib/browser-utils";
 import { formatRelativeTime } from "@/lib/flag-utils";
+import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { cn } from "@/lib/utils";
 import type {
   BrowserProfile,
@@ -94,7 +90,7 @@ interface ProfileInfoDialogProps {
   syncStatuses: Record<string, { status: string; error?: string }>;
 }
 
-function OSIcon({ os }: { os: string }) {
+function _OSIcon({ os }: { os: string }) {
   switch (os) {
     case "macos":
       return <FaApple className="size-3.5" />;
@@ -290,12 +286,8 @@ export function ProfileInfoDialog({
     action();
   };
 
-  const releaseLabel =
-    profile.release_type.charAt(0).toUpperCase() +
-    profile.release_type.slice(1);
   const hasTags = profile.tags && profile.tags.length > 0;
   const hasNote = !!profile.note;
-  const showCrossOs = isCrossOsProfile(profile);
 
   // Items in the settings tab `actions` list MUST only open another dialog
   // (or trigger a navigation/action that closes this one). Do NOT put inline
@@ -491,10 +483,8 @@ export function ProfileInfoDialog({
         <ProfileInfoLayout
           profile={profile}
           ProfileIcon={ProfileIcon}
-          releaseLabel={releaseLabel}
           isRunning={isRunning}
           isDisabled={isDisabled}
-          showCrossOs={showCrossOs}
           networkLabel={networkLabel}
           groupName={groupName}
           extensionGroupName={extensionGroupName}
@@ -520,10 +510,8 @@ export function ProfileInfoDialog({
 interface ProfileInfoLayoutProps {
   profile: BrowserProfile;
   ProfileIcon: React.ComponentType<{ className?: string }>;
-  releaseLabel: string;
   isRunning: boolean;
   isDisabled: boolean;
-  showCrossOs: boolean;
   networkLabel: string;
   groupName: string | null;
   extensionGroupName: string | null;
@@ -564,10 +552,8 @@ type ProfileSection =
 function ProfileInfoLayout({
   profile,
   ProfileIcon,
-  releaseLabel,
   isRunning,
   isDisabled,
-  showCrossOs,
   networkLabel,
   groupName,
   extensionGroupName,
@@ -798,63 +784,8 @@ function ProfileInfoLayout({
                     </h3>
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[11px]">
-                    <span className="font-mono uppercase text-muted-foreground">
-                      {getBrowserDisplayName(profile.browser)}
-                    </span>
-                    <span className="text-muted-foreground">·</span>
-                    <span className="text-muted-foreground">
-                      {groupName ?? t("profileInfo.values.none")}
-                    </span>
-                    {isRunning && (
-                      <>
-                        <span className="text-muted-foreground">·</span>
-                        <span className="inline-flex items-center gap-1 text-success">
-                          <span className="size-1.5 rounded-full bg-success" />
-                          {t("common.status.running")}
-                        </span>
-                      </>
-                    )}
-                    {profile.ephemeral && (
-                      <>
-                        <span className="text-muted-foreground">·</span>
-                        <span className="text-muted-foreground uppercase">
-                          {t("profiles.ephemeralBadge")}
-                        </span>
-                      </>
-                    )}
-                    {profile.password_protected && (
-                      <>
-                        <span className="text-muted-foreground">·</span>
-                        <span className="inline-flex items-center gap-1 text-muted-foreground">
-                          <LuLock className="size-3" />
-                          {t("profiles.passwordProtectedBadge")}
-                        </span>
-                      </>
-                    )}
-                    {showCrossOs && (
-                      <>
-                        <span className="text-muted-foreground">·</span>
-                        <span className="inline-flex items-center gap-1 text-muted-foreground">
-                          <OSIcon
-                            os={
-                              profile.host_os ||
-                              profile.camoufox_config?.os ||
-                              profile.wayfern_config?.os ||
-                              ""
-                            }
-                          />
-                          {getOSDisplayName(
-                            profile.host_os ||
-                              profile.camoufox_config?.os ||
-                              profile.wayfern_config?.os ||
-                              "",
-                          )}
-                        </span>
-                      </>
-                    )}
-                    <span className="text-muted-foreground">·</span>
-                    <span className="text-muted-foreground">
-                      {releaseLabel}
+                    <span className="font-mono text-muted-foreground">
+                      {profile.version}
                     </span>
                   </div>
                 </div>
@@ -1716,7 +1647,7 @@ function FingerprintSectionInline({
         <SharedCamoufoxConfigForm
           config={camoufoxConfig}
           onConfigChange={onCamoufoxChange}
-          forceAdvanced={false}
+          forceAdvanced={true}
           readOnly={isDisabled}
           browserType="camoufox"
           crossOsUnlocked={crossOsUnlocked}
@@ -1729,6 +1660,7 @@ function FingerprintSectionInline({
         <WayfernConfigForm
           config={wayfernConfig}
           onConfigChange={onWayfernChange}
+          forceAdvanced={true}
           readOnly={isDisabled}
           crossOsUnlocked={crossOsUnlocked}
           profileVersion={profile.version}
@@ -1739,7 +1671,7 @@ function FingerprintSectionInline({
       {error && <p className="text-xs text-destructive">{error}</p>}
       {success && !error && <p className="text-xs text-success">{success}</p>}
 
-      <div className="flex items-center gap-2 sticky bottom-0 bg-background pt-2 -mx-3 px-3 -mb-3 pb-3 border-t border-border">
+      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border">
         <Button
           size="sm"
           className="h-7 text-xs"
@@ -1790,6 +1722,30 @@ function SecuritySectionInline({
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState<string | null>(null);
+  const [isVerifyOpen, setIsVerifyOpen] = React.useState(false);
+  const [verifyPassword, setVerifyPassword] = React.useState("");
+  const [isVerifying, setIsVerifying] = React.useState(false);
+
+  const onVerify = async () => {
+    setIsVerifying(true);
+    try {
+      await invoke("verify_profile_password", {
+        profileId: profile.id,
+        password: verifyPassword,
+      });
+      showSuccessToast(t("profilePassword.verifyDialog.matchToast"));
+      setIsVerifyOpen(false);
+      setVerifyPassword("");
+    } catch (e) {
+      const message = translateBackendError(
+        t as unknown as Parameters<typeof translateBackendError>[0],
+        e,
+      );
+      showErrorToast(message);
+    } finally {
+      setIsVerifying(false);
+    }
+  };
 
   // Reset the form whenever the underlying profile state changes (e.g. the
   // user just set a password — flip to "change" mode and clear fields).
@@ -1837,24 +1793,29 @@ function SecuritySectionInline({
           profileId: profile.id,
           password,
         });
-        setSuccess(t("profilePassword.toasts.set"));
+        showSuccessToast(t("profilePassword.toasts.set"));
       } else if (mode === "change") {
         await invoke("change_profile_password", {
           profileId: profile.id,
           oldPassword,
           newPassword: password,
         });
-        setSuccess(t("profilePassword.toasts.changed"));
+        showSuccessToast(t("profilePassword.toasts.changed"));
       } else {
         await invoke("remove_profile_password", {
           profileId: profile.id,
           password: oldPassword,
         });
-        setSuccess(t("profilePassword.toasts.removed"));
+        showSuccessToast(t("profilePassword.toasts.removed"));
       }
       reset();
     } catch (e) {
-      setError(String(e));
+      const message = translateBackendError(
+        t as unknown as Parameters<typeof translateBackendError>[0],
+        e,
+      );
+      setError(message);
+      showErrorToast(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -1874,6 +1835,19 @@ function SecuritySectionInline({
 
       {profile.password_protected && (
         <div className="flex gap-1.5">
+          <button
+            type="button"
+            onClick={() => {
+              setVerifyPassword("");
+              setIsVerifyOpen(true);
+            }}
+            className={cn(
+              "flex-1 h-7 px-2 text-xs rounded-md border transition-colors",
+              "border-border text-muted-foreground hover:text-foreground hover:bg-accent/50",
+            )}
+          >
+            {t("profilePassword.modes.validate")}
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -1973,6 +1947,58 @@ function SecuritySectionInline({
             ? t("profilePassword.modes.change")
             : t("profilePassword.modes.remove")}
       </Button>
+
+      <Dialog
+        open={isVerifyOpen}
+        onOpenChange={(open) => {
+          if (!isVerifying) {
+            setIsVerifyOpen(open);
+            if (!open) setVerifyPassword("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("profilePassword.verifyDialog.title")}</DialogTitle>
+            <DialogDescription>
+              {t("profilePassword.verifyDialog.description")}
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            type="password"
+            placeholder={t("profilePassword.fields.currentPassword")}
+            value={verifyPassword}
+            autoFocus
+            onChange={(e) => setVerifyPassword(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && verifyPassword.length > 0) {
+                e.preventDefault();
+                void onVerify();
+              }
+            }}
+          />
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={isVerifying}
+              onClick={() => {
+                setIsVerifyOpen(false);
+                setVerifyPassword("");
+              }}
+            >
+              {t("common.buttons.cancel")}
+            </Button>
+            <Button
+              disabled={isVerifying || verifyPassword.length === 0}
+              onClick={() => void onVerify()}
+            >
+              {isVerifying
+                ? t("common.buttons.loading")
+                : t("profilePassword.verifyDialog.submit")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

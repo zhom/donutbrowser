@@ -32,7 +32,8 @@
       "downloading": "Téléchargement...",
       "minimize": "Réduire",
       "saving": "Enregistrement…",
-      "saved": "Enregistré"
+      "saved": "Enregistré",
+      "copied": "Copié"
     },
     "status": {
       "active": "Actif",
@@ -158,7 +159,15 @@
       "passwordSaved": "Mot de passe de chiffrement défini",
       "passwordMismatch": "Les mots de passe ne correspondent pas",
       "passwordTooShort": "Le mot de passe doit contenir au moins 8 caractères",
-      "requiresProOrOwner": "Le chiffrement des profils est disponible pour les utilisateurs Pro et les propriétaires d'équipe."
+      "requiresProOrOwner": "Le chiffrement des profils est disponible pour les utilisateurs Pro et les propriétaires d'équipe.",
+      "validatePassword": "Valider",
+      "validateDialog": {
+        "title": "Valider le mot de passe de chiffrement",
+        "description": "Saisissez votre mot de passe de chiffrement pour vérifier qu'il correspond à celui enregistré sur cet appareil.",
+        "submit": "Valider",
+        "matchToast": "Le mot de passe est correct",
+        "mismatchToast": "Le mot de passe ne correspond pas"
+      }
     },
     "commercial": {
       "title": "Licence commerciale",
@@ -376,6 +385,9 @@
       "deleteFailed": "Échec de la suppression du proxy",
       "deleteTitle": "Supprimer le proxy",
       "deleteDescription": "Cette action est irréversible. Le proxy « {{name}} » sera supprimé définitivement.",
+      "newProxy": "Nouveau proxy",
+      "newVpn": "Nouveau VPN",
+      "protocolCol": "Protocole",
       "title": "Proxys et VPN"
     },
     "add": "Ajouter un proxy",
@@ -480,6 +492,13 @@
       "continueButton": "Continuer",
       "doneButton": "Terminé",
       "failed": "Échec de l'import des proxys"
+    },
+    "bulkDelete": {
+      "proxiesTitle": "Supprimer les proxys sélectionnés",
+      "proxiesDescription": "Cette action est irréversible. {{count}} proxy(s) seront définitivement supprimés : {{names}}.",
+      "vpnsTitle": "Supprimer les VPN sélectionnés",
+      "vpnsDescription": "Cette action est irréversible. {{count}} VPN(s) seront définitivement supprimés : {{names}}.",
+      "confirmButton": "Supprimer {{count}}"
     }
   },
   "groups": {
@@ -488,10 +507,8 @@
     "add": "Ajouter un groupe",
     "edit": "Modifier le groupe",
     "delete": "Supprimer le groupe",
-    "defaultGroup": "Par défaut",
-    "defaultGroupNoGroup": "Par défaut (Aucun groupe)",
-    "moveToDefault": "Déplacer les profils vers le groupe Par défaut",
-    "noGroupDescription": "Les profils sans groupe apparaîtront dans le groupe « Par défaut ».",
+    "moveToDefault": "Retirer les profils du groupe",
+    "noGroupDescription": "Les profils sans groupe apparaissent dans le filtre « Tous ».",
     "assignSuccess": "{{count}} profil(s) assigné(s) à {{group}} avec succès",
     "noGroups": "Aucun groupe créé",
     "noGroupsDescription": "Créez un groupe pour organiser vos profils.",
@@ -521,7 +538,6 @@
     "loadingProfiles": "Chargement des profils associés...",
     "associatedProfiles": "Profils Associés ({{count}})",
     "whatToDoWithProfiles": "Que faire de ces profils ?",
-    "moveToDefaultOption": "Déplacer les profils vers le groupe Par défaut",
     "deleteAlongWithGroup": "Supprimer les profils avec le groupe",
     "noAssociatedProfiles": "Ce groupe n'a pas de profils associés.",
     "deleteGroup": "Supprimer le Groupe",
@@ -530,7 +546,10 @@
     "unknownGroup": "Groupe inconnu",
     "profileGroupsAriaLabel": "Groupes de profils",
     "loading": "Chargement des groupes...",
-    "all": "Tous"
+    "all": "Tous",
+    "noGroup": "Aucun groupe",
+    "pageTitle": "Groupes de profils",
+    "pageDescription": "Les groupes de profils vous permettent d'organiser les navigateurs par client, environnement ou cas d'usage. Synchronisez les groupes entre appareils pour les partager."
   },
   "sync": {
     "mode": {
@@ -649,7 +668,8 @@
       "addedToClaudeCode": "Ajouté à Claude Code",
       "removedFromClaudeCode": "Supprimé de Claude Code",
       "config": "Configuration MCP",
-      "copyConfig": "Copier la configuration"
+      "copyConfig": "Copier la configuration",
+      "clientsLabel": "Clients"
     },
     "tabApi": "API locale",
     "tabMcp": "MCP (Assistants IA)",
@@ -675,7 +695,9 @@
     "mcpStarted": "Serveur MCP démarré sur le port {{port}}",
     "mcpStopped": "Serveur MCP arrêté",
     "mcpToggleFailed": "Échec du basculement du serveur MCP",
-    "openSettings": "Ouvrir les paramètres d'intégrations"
+    "openSettings": "Ouvrir les paramètres d'intégrations",
+    "apiRunningOn": "En cours sur",
+    "apiExampleRequest": "Exemple de requête"
   },
   "import": {
     "title": "Importer un profil",
@@ -1181,6 +1203,7 @@
     "empty": "Aucune extension téléchargée pour l'instant.",
     "noGroups": "Aucun groupe d'extensions créé pour l'instant.",
     "createGroup": "Créer un Groupe",
+    "newGroup": "Nouveau groupe",
     "addToGroup": "Ajouter une extension...",
     "removeFromGroup": "Retirer du groupe",
     "deleteGroup": "Supprimer le groupe",
@@ -1228,7 +1251,14 @@
     "syncEnableTooltip": "Activer la synchronisation",
     "syncDisableTooltip": "Désactiver la synchronisation",
     "loadGroupsFailed": "Échec du chargement des groupes d'extensions",
-    "assignGroupFailed": "Échec de l'attribution du groupe d'extensions"
+    "assignGroupFailed": "Échec de l'attribution du groupe d'extensions",
+    "bulkDelete": {
+      "extensionsTitle": "Supprimer les extensions",
+      "extensionsDescription": "Supprimer {{count}} extensions ? {{names}}",
+      "groupsTitle": "Supprimer les groupes d'extensions",
+      "groupsDescription": "Supprimer {{count}} groupes d'extensions ? {{names}}",
+      "confirmButton": "Supprimer"
+    }
   },
   "pro": {
     "badge": "PRO",
@@ -1373,7 +1403,11 @@
     "waiting": "En attente de synchronisation",
     "errorWith": "Erreur de synchronisation : {{error}}",
     "error": "Erreur de synchronisation",
-    "notSynced": "Non synchronisé"
+    "notSynced": "Non synchronisé",
+    "enable": "Activer la synchronisation",
+    "disable": "Désactiver la synchronisation",
+    "lockedInUse": "La synchronisation est verrouillée tant qu'un profil synchronisé l'utilise",
+    "bulkToggle": "Basculer la synchronisation"
   },
   "groupManagement": {
     "description": "Gérez vos groupes de profils",
@@ -1387,7 +1421,13 @@
     "syncCannotDisable": "La sync ne peut pas être désactivée tant que ce groupe est utilisé par des profils synchronisés",
     "editGroupTooltip": "Modifier le groupe",
     "deleteGroupTooltip": "Supprimer le groupe",
-    "loadFailed": "Échec du chargement des groupes"
+    "loadFailed": "Échec du chargement des groupes",
+    "bulkDelete": {
+      "title": "Supprimer les groupes",
+      "description": "Êtes-vous sûr de vouloir supprimer {{count}} groupes ? {{names}}. Les profils seront déplacés vers Par défaut.",
+      "description_one": "Êtes-vous sûr de vouloir supprimer {{count}} groupe ? {{names}}. Les profils seront déplacés vers Par défaut.",
+      "confirmButton": "Supprimer les groupes"
+    }
   },
   "proxyAssignment": {
     "title": "Assigner un proxy / VPN",
@@ -1721,7 +1761,14 @@
     "modes": {
       "set": "Définir",
       "change": "Modifier",
-      "remove": "Supprimer"
+      "remove": "Supprimer",
+      "validate": "Valider"
+    },
+    "verifyDialog": {
+      "title": "Valider le mot de passe du profil",
+      "description": "Saisissez le mot de passe du profil pour vérifier qu'il correspond à celui enregistré sur le disque.",
+      "submit": "Valider",
+      "matchToast": "Le mot de passe est correct"
     }
   },
   "backendErrors": {
@@ -1749,7 +1796,6 @@
   },
   "rail": {
     "profiles": "Profils",
-    "proxies": "Proxys",
     "extensions": "Extensions",
     "groups": "Groupes",
     "settings": "Paramètres",
@@ -1757,18 +1803,17 @@
       "label": "Plus",
       "closeAriaLabel": "Fermer le menu",
       "importProfile": "Importer un profil",
-      "importProfileHint": "Importer depuis un autre outil",
-      "integrations": "Intégrations",
-      "integrationsHint": "Slack, MCP, automatisations",
-      "account": "Compte",
-      "accountHint": "Cloud, facturation, connexion"
-    }
+      "importProfileHint": "Importer depuis un autre outil"
+    },
+    "network": "Réseau",
+    "integrations": "Intégrations",
+    "account": "Compte"
   },
   "pageTitle": {
-    "proxies": "Proxys",
+    "proxies": "Réseau",
     "extensions": "Extensions",
     "groups": "Groupes",
-    "vpns": "VPN",
+    "vpns": "Réseau",
     "settings": "Paramètres",
     "integrations": "Intégrations",
     "account": "Compte",

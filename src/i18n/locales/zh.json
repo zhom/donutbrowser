@@ -32,7 +32,8 @@
       "downloading": "下载中...",
       "minimize": "最小化",
       "saving": "正在保存…",
-      "saved": "已保存"
+      "saved": "已保存",
+      "copied": "已复制"
     },
     "status": {
       "active": "活跃",
@@ -158,7 +159,15 @@
       "passwordSaved": "加密密码已设置",
       "passwordMismatch": "密码不匹配",
       "passwordTooShort": "密码必须至少8个字符",
-      "requiresProOrOwner": "配置文件加密仅适用于Pro用户和团队所有者。"
+      "requiresProOrOwner": "配置文件加密仅适用于Pro用户和团队所有者。",
+      "validatePassword": "验证",
+      "validateDialog": {
+        "title": "验证加密密码",
+        "description": "输入加密密码以验证它是否与此设备上存储的密码匹配。",
+        "submit": "验证",
+        "matchToast": "密码正确",
+        "mismatchToast": "密码不匹配"
+      }
     },
     "commercial": {
       "title": "商业许可",
@@ -376,6 +385,9 @@
       "deleteFailed": "删除代理失败",
       "deleteTitle": "删除代理",
       "deleteDescription": "此操作无法撤消。代理「{{name}}」将被永久删除。",
+      "newProxy": "新建代理",
+      "newVpn": "新建 VPN",
+      "protocolCol": "协议",
       "title": "代理和 VPN"
     },
     "add": "添加代理",
@@ -480,6 +492,13 @@
       "continueButton": "继续",
       "doneButton": "完成",
       "failed": "导入代理失败"
+    },
+    "bulkDelete": {
+      "proxiesTitle": "删除所选代理",
+      "proxiesDescription": "此操作无法撤销。将永久删除 {{count}} 个代理：{{names}}。",
+      "vpnsTitle": "删除所选 VPN",
+      "vpnsDescription": "此操作无法撤销。将永久删除 {{count}} 个 VPN：{{names}}。",
+      "confirmButton": "删除 {{count}}"
     }
   },
   "groups": {
@@ -488,10 +507,8 @@
     "add": "添加分组",
     "edit": "编辑分组",
     "delete": "删除分组",
-    "defaultGroup": "默认",
-    "defaultGroupNoGroup": "默认（无分组）",
-    "moveToDefault": "将配置文件移至默认分组",
-    "noGroupDescription": "未分组的配置文件将显示在「默认」分组中。",
+    "moveToDefault": "将配置文件移出分组",
+    "noGroupDescription": "未分组的配置文件显示在「全部」筛选中。",
     "assignSuccess": "已成功将 {{count}} 个配置文件分配到 {{group}}",
     "noGroups": "暂无分组",
     "noGroupsDescription": "创建分组来组织您的配置文件。",
@@ -521,7 +538,6 @@
     "loadingProfiles": "正在加载关联的配置文件...",
     "associatedProfiles": "关联的配置文件 ({{count}})",
     "whatToDoWithProfiles": "这些配置文件应该怎么办？",
-    "moveToDefaultOption": "将配置文件移至默认组",
     "deleteAlongWithGroup": "将配置文件与组一起删除",
     "noAssociatedProfiles": "此组没有关联的配置文件。",
     "deleteGroup": "删除组",
@@ -530,7 +546,10 @@
     "unknownGroup": "未知分组",
     "profileGroupsAriaLabel": "配置文件分组",
     "loading": "正在加载组...",
-    "all": "全部"
+    "all": "全部",
+    "noGroup": "无分组",
+    "pageTitle": "配置文件分组",
+    "pageDescription": "配置文件分组可让您按客户端、环境或使用场景整理浏览器。在多台设备之间同步分组以便共享。"
   },
   "sync": {
     "mode": {
@@ -649,7 +668,8 @@
       "addedToClaudeCode": "已添加到 Claude Code",
       "removedFromClaudeCode": "已从 Claude Code 移除",
       "config": "MCP 配置",
-      "copyConfig": "复制配置"
+      "copyConfig": "复制配置",
+      "clientsLabel": "客户端"
     },
     "tabApi": "本地 API",
     "tabMcp": "MCP (AI 助手)",
@@ -675,7 +695,9 @@
     "mcpStarted": "MCP 服务器已在端口 {{port}} 上启动",
     "mcpStopped": "MCP 服务器已停止",
     "mcpToggleFailed": "切换 MCP 服务器失败",
-    "openSettings": "打开集成设置"
+    "openSettings": "打开集成设置",
+    "apiRunningOn": "运行于",
+    "apiExampleRequest": "示例请求"
   },
   "import": {
     "title": "导入配置文件",
@@ -1181,6 +1203,7 @@
     "empty": "尚未上传任何扩展程序。",
     "noGroups": "尚未创建任何扩展程序组。",
     "createGroup": "创建分组",
+    "newGroup": "新建分组",
     "addToGroup": "添加扩展程序...",
     "removeFromGroup": "从分组中移除",
     "deleteGroup": "删除分组",
@@ -1228,7 +1251,14 @@
     "syncEnableTooltip": "启用同步",
     "syncDisableTooltip": "禁用同步",
     "loadGroupsFailed": "加载扩展组失败",
-    "assignGroupFailed": "分配扩展组失败"
+    "assignGroupFailed": "分配扩展组失败",
+    "bulkDelete": {
+      "extensionsTitle": "删除扩展",
+      "extensionsDescription": "删除 {{count}} 个扩展？{{names}}",
+      "groupsTitle": "删除扩展组",
+      "groupsDescription": "删除 {{count}} 个扩展组？{{names}}",
+      "confirmButton": "删除"
+    }
   },
   "pro": {
     "badge": "PRO",
@@ -1373,7 +1403,11 @@
     "waiting": "等待同步",
     "errorWith": "同步错误: {{error}}",
     "error": "同步错误",
-    "notSynced": "未同步"
+    "notSynced": "未同步",
+    "enable": "启用同步",
+    "disable": "禁用同步",
+    "lockedInUse": "同步配置文件正在使用，无法禁用同步",
+    "bulkToggle": "切换同步"
   },
   "groupManagement": {
     "description": "管理你的配置文件分组",
@@ -1387,7 +1421,13 @@
     "syncCannotDisable": "此分组被同步的配置文件使用时无法禁用同步",
     "editGroupTooltip": "编辑分组",
     "deleteGroupTooltip": "删除分组",
-    "loadFailed": "加载分组失败"
+    "loadFailed": "加载分组失败",
+    "bulkDelete": {
+      "title": "删除分组",
+      "description": "确定要删除 {{count}} 个分组吗？{{names}}。配置文件将被移至默认分组。",
+      "description_one": "确定要删除 {{count}} 个分组吗？{{names}}。配置文件将被移至默认分组。",
+      "confirmButton": "删除分组"
+    }
   },
   "proxyAssignment": {
     "title": "分配代理 / VPN",
@@ -1721,7 +1761,14 @@
     "modes": {
       "set": "设置",
       "change": "更改",
-      "remove": "删除"
+      "remove": "删除",
+      "validate": "验证"
+    },
+    "verifyDialog": {
+      "title": "验证配置文件密码",
+      "description": "输入配置文件密码以确认它与磁盘上存储的密码匹配。",
+      "submit": "验证",
+      "matchToast": "密码正确"
     }
   },
   "backendErrors": {
@@ -1749,7 +1796,6 @@
   },
   "rail": {
     "profiles": "配置文件",
-    "proxies": "代理",
     "extensions": "扩展",
     "groups": "分组",
     "settings": "设置",
@@ -1757,18 +1803,17 @@
       "label": "更多",
       "closeAriaLabel": "关闭菜单",
       "importProfile": "导入配置文件",
-      "importProfileHint": "从其他工具导入",
-      "integrations": "集成",
-      "integrationsHint": "Slack、MCP、自动化",
-      "account": "账户",
-      "accountHint": "云、订阅、登录"
-    }
+      "importProfileHint": "从其他工具导入"
+    },
+    "network": "网络",
+    "integrations": "集成",
+    "account": "账号"
   },
   "pageTitle": {
-    "proxies": "代理",
+    "proxies": "网络",
     "extensions": "扩展",
     "groups": "分组",
-    "vpns": "VPN",
+    "vpns": "网络",
     "settings": "设置",
     "integrations": "集成",
     "account": "账户",

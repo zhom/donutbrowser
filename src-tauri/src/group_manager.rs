@@ -268,7 +268,9 @@ impl GroupManager {
       }
     }
 
-    // Create result including all groups (even those with 0 count)
+    // Create result including all groups (even those with 0 count).
+    // The "Default" pseudo-group is intentionally not returned: profiles
+    // without a group_id are surfaced through the "All" filter instead.
     let mut result = Vec::new();
     for group in groups {
       let count = group_counts.get(&group.id).copied().unwrap_or(0);
@@ -280,18 +282,6 @@ impl GroupManager {
         last_sync: group.last_sync,
       });
     }
-
-    // Add default group count (profiles without group_id), always include even if 0
-    let default_count = profiles.iter().filter(|p| p.group_id.is_none()).count();
-    let default_group = GroupWithCount {
-      id: "default".to_string(),
-      name: "Default".to_string(),
-      count: default_count,
-      sync_enabled: false,
-      last_sync: None,
-    };
-    // Insert at the beginning for consistent ordering with UI expectations
-    result.insert(0, default_group);
 
     Ok(result)
   }

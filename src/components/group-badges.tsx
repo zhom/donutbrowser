@@ -183,9 +183,7 @@ export function GroupBadges({
               }
             }}
           >
-            <span>
-              {group.id === "default" ? t("groups.defaultGroup") : group.name}
-            </span>
+            <span>{group.name}</span>
             <span className="bg-background/20 text-xs px-1.5 py-0.5 rounded-sm">
               {group.count}
             </span>

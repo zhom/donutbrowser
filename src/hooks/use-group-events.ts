@@ -38,6 +38,7 @@ export function useGroupEvents() {
   // Initial load and event listeners setup
   useEffect(() => {
     let groupsUnlisten: (() => void) | undefined;
+    let profilesUnlisten: (() => void) | undefined;
 
     const setupListeners = async () => {
       try {
@@ -51,18 +52,12 @@ export function useGroupEvents() {
         });
 
         // Also listen for profile changes since groups show profile counts
-        const profilesUnlisten = await listen("profiles-changed", () => {
+        profilesUnlisten = await listen("profiles-changed", () => {
           console.log(
             "Received profiles-changed event, reloading groups for updated counts",
           );
           void loadGroups();
         });
-
-        // Store both listeners for cleanup
-        groupsUnlisten = () => {
-          groupsUnlisten?.();
-          profilesUnlisten();
-        };
 
         console.log("Group event listeners set up successfully");
       } catch (err) {
@@ -79,9 +74,17 @@ export function useGroupEvents() {
 
     void setupListeners();
 
-    // Cleanup listeners on unmount
+    // Cleanup listeners on unmount.
+    // NOTE: the previous version stored both unlisten fns by reassigning
+    // `groupsUnlisten` to a wrapper that called itself, which produced a
+    // `Maximum call stack size exceeded` crash whenever this effect tore
+    // down. React's reconciler then bailed out mid-commit and left stale
+    // overlay nodes in the DOM, blocking every subsequent click in the
+    // window. Holding the two unlisten fns in separate locals avoids both
+    // problems.
     return () => {
       if (groupsUnlisten) groupsUnlisten();
+      if (profilesUnlisten) profilesUnlisten();
     };
   }, [loadGroups]);
 

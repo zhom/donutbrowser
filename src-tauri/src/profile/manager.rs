@@ -473,6 +473,8 @@ impl ProfileManager {
     // Save profile with new name
     self.save_profile(&profile)?;
 
+    crate::sync::queue_profile_sync_if_eligible(&profile);
+
     // Keep tag suggestions up to date after name change (rebuild from all profiles)
     let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
       let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
@@ -678,6 +680,8 @@ impl ProfileManager {
       profile.group_id = group_id.clone();
       self.save_profile(&profile)?;
 
+      crate::sync::queue_profile_sync_if_eligible(&profile);
+
       // Auto-enable sync for new group if profile has sync enabled
       if profile.is_sync_enabled() {
         if let Some(ref new_group_id) = group_id {
@@ -732,6 +736,8 @@ impl ProfileManager {
     // Save profile
     self.save_profile(&profile)?;
 
+    crate::sync::queue_profile_sync_if_eligible(&profile);
+
     // Update global tag suggestions from all profiles
     let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
       let _ = tm.rebuild_from_profiles(&self.list_profiles().unwrap_or_default());
@@ -766,6 +772,8 @@ impl ProfileManager {
     // Save profile
     self.save_profile(&profile)?;
 
+    crate::sync::queue_profile_sync_if_eligible(&profile);
+
     // Emit profile note update event
     if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Warning: Failed to emit profiles-changed event: {e}");
@@ -791,6 +799,8 @@ impl ProfileManager {
     profile.launch_hook = Self::normalize_launch_hook(launch_hook)?;
 
     self.save_profile(&profile)?;
+
+    crate::sync::queue_profile_sync_if_eligible(&profile);
 
     if let Err(e) = events::emit("profile-updated", &profile) {
       log::warn!("Warning: Failed to emit profile update event: {e}");
@@ -821,6 +831,8 @@ impl ProfileManager {
 
     self.save_profile(&profile)?;
 
+    crate::sync::queue_profile_sync_if_eligible(&profile);
+
     if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Warning: Failed to emit profiles-changed event: {e}");
     }
@@ -844,6 +856,8 @@ impl ProfileManager {
     profile.dns_blocklist = dns_blocklist;
 
     self.save_profile(&profile)?;
+
+    crate::sync::queue_profile_sync_if_eligible(&profile);
 
     if let Err(e) = events::emit_empty("profiles-changed") {
       log::warn!("Warning: Failed to emit profiles-changed event: {e}");
@@ -1060,6 +1074,8 @@ impl ProfileManager {
         format!("Failed to save profile: {e}").into()
       })?;
 
+    crate::sync::queue_profile_sync_if_eligible(&profile);
+
     log::info!(
       "Camoufox configuration updated for profile '{}' (ID: {}).",
       profile.name,
@@ -1120,6 +1136,8 @@ impl ProfileManager {
         format!("Failed to save profile: {e}").into()
       })?;
 
+    crate::sync::queue_profile_sync_if_eligible(&profile);
+
     log::info!(
       "Wayfern configuration updated for profile '{}' (ID: {}).",
       profile.name,
@@ -1173,6 +1191,8 @@ impl ProfileManager {
       .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
         format!("Failed to save profile: {e}").into()
       })?;
+
+    crate::sync::queue_profile_sync_if_eligible(&profile);
 
     // Auto-enable sync for new proxy if profile has sync enabled
     if profile.is_sync_enabled() {
@@ -1263,6 +1283,8 @@ impl ProfileManager {
         format!("Failed to save profile: {e}").into()
       })?;
 
+    crate::sync::queue_profile_sync_if_eligible(&profile);
+
     // Auto-enable sync for the new VPN if profile has sync enabled.
     if profile.is_sync_enabled() {
       if let Some(ref new_vpn_id) = vpn_id {
@@ -1299,6 +1321,8 @@ impl ProfileManager {
 
     profile.extension_group_id = extension_group_id.clone();
     self.save_profile(&profile)?;
+
+    crate::sync::queue_profile_sync_if_eligible(&profile);
 
     // Auto-enable sync for the new extension group if profile has sync
     // enabled. The helper is sync internally; we fire-and-forget through
