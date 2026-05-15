@@ -1513,9 +1513,13 @@ impl ProfileManager {
 
       if let Some(pid) = found_pid {
         if merged.process_id != Some(pid) {
+          let old_pid = merged.process_id;
           merged.process_id = Some(pid);
           if let Err(e) = self.save_profile(&merged) {
             log::warn!("Warning: Failed to update profile with new PID: {e}");
+          }
+          if let Some(prev) = old_pid {
+            let _ = crate::proxy_manager::PROXY_MANAGER.update_proxy_pid(prev, pid);
           }
         }
       } else if merged.process_id.is_some() {
@@ -1576,9 +1580,13 @@ impl ProfileManager {
           };
 
           if latest.process_id != camoufox_process.processId {
+            let old_pid = latest.process_id;
             latest.process_id = camoufox_process.processId;
             if let Err(e) = self.save_profile(&latest) {
               log::warn!("Warning: Failed to update Camoufox profile with process info: {e}");
+            }
+            if let (Some(prev), Some(new)) = (old_pid, camoufox_process.processId) {
+              let _ = crate::proxy_manager::PROXY_MANAGER.update_proxy_pid(prev, new);
             }
 
             // Emit profile update event to frontend
@@ -1712,9 +1720,13 @@ impl ProfileManager {
           };
 
           if latest.process_id != wayfern_process.processId {
+            let old_pid = latest.process_id;
             latest.process_id = wayfern_process.processId;
             if let Err(e) = self.save_profile(&latest) {
               log::warn!("Warning: Failed to update Wayfern profile with process info: {e}");
+            }
+            if let (Some(prev), Some(new)) = (old_pid, wayfern_process.processId) {
+              let _ = crate::proxy_manager::PROXY_MANAGER.update_proxy_pid(prev, new);
             }
 
             // Emit profile update event to frontend
