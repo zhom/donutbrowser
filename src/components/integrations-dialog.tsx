@@ -4,7 +4,15 @@ import { invoke } from "@tauri-apps/api/core";
 import { Eye, EyeOff } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LuPlug } from "react-icons/lu";
+import {
+  LuAppWindow,
+  LuCheck,
+  LuCodeXml,
+  LuPlug,
+  LuTerminal,
+  LuTrash2,
+  LuZap,
+} from "react-icons/lu";
 import { AnimatedSwitch } from "@/components/ui/animated-switch";
 import {
   AnimatedTabs,
@@ -13,7 +21,6 @@ import {
   AnimatedTabsTrigger,
 } from "@/components/ui/animated-tabs";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +30,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useWayfernTerms } from "@/hooks/use-wayfern-terms";
+import { translateBackendError } from "@/lib/backend-errors";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { CopyToClipboard } from "./ui/copy-to-clipboard";
 
@@ -40,10 +48,50 @@ interface McpConfig {
   token: string;
 }
 
+type AgentCategory = "desktop-app" | "cli" | "editor" | "editor-ext";
+
+interface McpAgentInfo {
+  id: string;
+  display_name: string;
+  category: AgentCategory;
+  connected: boolean;
+  detected: boolean;
+}
+
 interface IntegrationsDialogProps {
   isOpen: boolean;
   onClose: () => void;
   subPage?: boolean;
+}
+
+function AgentIcon({ category }: { category: AgentCategory }) {
+  const className = "size-4 text-muted-foreground";
+  switch (category) {
+    case "desktop-app":
+      return <LuAppWindow className={className} />;
+    case "editor":
+      return <LuCodeXml className={className} />;
+    case "editor-ext":
+      return <LuPlug className={className} />;
+    case "cli":
+      return <LuTerminal className={className} />;
+  }
+}
+
+function categoryLabel(
+  t: (k: string) => string,
+  category: AgentCategory,
+): string {
+  switch (category) {
+    case "desktop-app":
+      return t("integrations.mcp.category.desktopApp");
+    case "editor":
+      return t("integrations.mcp.category.editor");
+    case "editor-ext":
+      return t("integrations.mcp.category.editorExt");
+    case "cli":
+      return t("integrations.mcp.category.cli");
+  }
 }
 
 export function IntegrationsDialog({
@@ -64,11 +112,11 @@ export function IntegrationsDialog({
   const [mcpConfig, setMcpConfig] = useState<McpConfig | null>(null);
   const [, setMcpRunning] = useState(false);
   const [showApiToken, setShowApiToken] = useState(false);
-  const [showMcpToken, setShowMcpToken] = useState(false);
+  const [showMcpUrl, setShowMcpUrl] = useState(false);
   const [isApiStarting, setIsApiStarting] = useState(false);
   const [isMcpStarting, setIsMcpStarting] = useState(false);
-  const [mcpInClaudeDesktop, setMcpInClaudeDesktop] = useState(false);
-  const [mcpInClaudeCode, setMcpInClaudeCode] = useState(false);
+  const [agents, setAgents] = useState<McpAgentInfo[]>([]);
+  const [busyAgentIds, setBusyAgentIds] = useState<Set<string>>(new Set());
 
   const { termsAccepted } = useWayfernTerms();
 
@@ -108,21 +156,12 @@ export function IntegrationsDialog({
     }
   }, []);
 
-  const loadClaudeDesktopStatus = useCallback(async () => {
+  const loadAgents = useCallback(async () => {
     try {
-      const exists = await invoke<boolean>("is_mcp_in_claude_desktop");
-      setMcpInClaudeDesktop(exists);
-    } catch {
-      // Not critical
-    }
-  }, []);
-
-  const loadClaudeCodeStatus = useCallback(async () => {
-    try {
-      const exists = await invoke<boolean>("is_mcp_in_claude_code");
-      setMcpInClaudeCode(exists);
-    } catch {
-      // Claude CLI may not be installed
+      const list = await invoke<McpAgentInfo[]>("list_mcp_agents");
+      setAgents(list);
+    } catch (e) {
+      console.error("Failed to list MCP agents:", e);
     }
   }, []);
 
@@ -132,8 +171,7 @@ export function IntegrationsDialog({
       void loadApiServerStatus();
       void loadMcpConfig();
       void loadMcpServerStatus();
-      void loadClaudeDesktopStatus();
-      void loadClaudeCodeStatus();
+      void loadAgents();
     }
   }, [
     isOpen,
@@ -141,8 +179,7 @@ export function IntegrationsDialog({
     loadApiServerStatus,
     loadMcpConfig,
     loadMcpServerStatus,
-    loadClaudeDesktopStatus,
-    loadClaudeCodeStatus,
+    loadAgents,
   ]);
 
   const handleApiToggle = async (enabled: boolean) => {
@@ -188,6 +225,7 @@ export function IntegrationsDialog({
         });
         setSettings(next);
         void loadMcpConfig();
+        void loadAgents();
         showSuccessToast(t("integrations.mcpStarted", { port }));
       } else {
         await invoke("stop_mcp_server");
@@ -209,6 +247,53 @@ export function IntegrationsDialog({
     }
   };
 
+  const markAgentBusy = (id: string, busy: boolean) => {
+    setBusyAgentIds((prev) => {
+      const next = new Set(prev);
+      if (busy) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const handleAddAgent = async (agent: McpAgentInfo) => {
+    markAgentBusy(agent.id, true);
+    try {
+      await invoke("add_mcp_to_agent", { agentId: agent.id });
+      showSuccessToast(
+        t("integrations.mcp.addedToClient", { name: agent.display_name }),
+      );
+      void loadAgents();
+    } catch (e) {
+      showErrorToast(translateBackendError(t, e), {
+        description: agent.display_name,
+      });
+    } finally {
+      markAgentBusy(agent.id, false);
+    }
+  };
+
+  const handleRemoveAgent = async (agent: McpAgentInfo) => {
+    markAgentBusy(agent.id, true);
+    try {
+      await invoke("remove_mcp_from_agent", { agentId: agent.id });
+      showSuccessToast(
+        t("integrations.mcp.removedFromClient", { name: agent.display_name }),
+      );
+      void loadAgents();
+    } catch (e) {
+      showErrorToast(translateBackendError(t, e), {
+        description: agent.display_name,
+      });
+    } finally {
+      markAgentBusy(agent.id, false);
+    }
+  };
+
+  const mcpUrl = mcpConfig
+    ? `http://127.0.0.1:${mcpConfig.port}/mcp/${mcpConfig.token}`
+    : "";
+
   return (
     <Dialog
       open={isOpen}
@@ -217,7 +302,7 @@ export function IntegrationsDialog({
       }}
       subPage={subPage}
     >
-      <DialogContent className="max-w-xl max-h-[80vh] my-8 flex flex-col">
+      <DialogContent className="max-w-3xl max-h-[85vh] my-8 flex flex-col">
         {!subPage && (
           <DialogHeader className="shrink-0">
             <DialogTitle>{t("integrations.title")}</DialogTitle>
@@ -413,44 +498,47 @@ export function IntegrationsDialog({
               )}
             </AnimatedTabsContent>
 
-            <AnimatedTabsContent value="mcp" className="mt-4">
-              <div className="flex items-start gap-x-3">
-                <Checkbox
-                  id="mcp-enabled"
-                  checked={settings.mcp_enabled && mcpConfig !== null}
-                  disabled={!termsAccepted || isMcpStarting}
-                  onCheckedChange={(checked) => void handleMcpToggle(!!checked)}
-                  className="mt-0.5"
-                />
-                <div className="grid gap-1 leading-none">
-                  <Label
-                    htmlFor="mcp-enabled"
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                  >
-                    {t("integrations.mcpEnableLabel")}
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    {t("integrations.mcpEnableDescription")}
-                    {!termsAccepted && (
-                      <span className="ml-1 text-warning">
-                        {t("integrations.mcpAcceptTermsFirst")}
-                      </span>
-                    )}
-                  </p>
+            <AnimatedTabsContent
+              value="mcp"
+              className="mt-4 flex flex-col gap-5"
+            >
+              <div className="rounded-md border bg-card p-4 flex flex-col gap-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <LuZap className="size-5 mt-0.5 text-muted-foreground" />
+                    <div className="flex flex-col gap-1">
+                      <Label className="text-sm font-medium">
+                        {t("integrations.mcpEnableLabel")}
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        {t("integrations.mcpEnableDescription")}
+                        {!termsAccepted && (
+                          <span className="ml-1 text-warning">
+                            {t("integrations.mcpAcceptTermsFirst")}
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <AnimatedSwitch
+                    checked={settings.mcp_enabled && mcpConfig !== null}
+                    disabled={!termsAccepted || isMcpStarting}
+                    onCheckedChange={(checked) => void handleMcpToggle(checked)}
+                  />
                 </div>
               </div>
 
               {mcpConfig && (
-                <div className="mt-6 flex flex-col gap-5 pt-5 border-t">
-                  <div className="flex flex-col gap-1.5">
+                <>
+                  <div className="rounded-md border bg-card p-4 flex flex-col gap-2">
                     <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
                       {t("integrations.mcp.url")}
                     </Label>
                     <div className="flex items-center gap-x-2">
                       <div className="relative flex-1">
                         <Input
-                          type={showMcpToken ? "text" : "password"}
-                          value={`http://127.0.0.1:${mcpConfig.port}/mcp/${mcpConfig.token}`}
+                          type={showMcpUrl ? "text" : "password"}
+                          value={mcpUrl}
                           readOnly
                           className="font-mono text-xs pr-10"
                         />
@@ -460,10 +548,10 @@ export function IntegrationsDialog({
                           size="sm"
                           className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
                           onClick={() => {
-                            setShowMcpToken(!showMcpToken);
+                            setShowMcpUrl(!showMcpUrl);
                           }}
                         >
-                          {showMcpToken ? (
+                          {showMcpUrl ? (
                             <EyeOff className="size-4" />
                           ) : (
                             <Eye className="size-4" />
@@ -471,102 +559,74 @@ export function IntegrationsDialog({
                         </Button>
                       </div>
                       <CopyToClipboard
-                        text={`http://127.0.0.1:${mcpConfig.port}/mcp/${mcpConfig.token}`}
+                        text={mcpUrl}
                         successMessage={t("integrations.mcp.urlCopied")}
                       />
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-3">
                     <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
                       {t("integrations.mcp.clientsLabel")}
                     </Label>
-                    <div className="flex items-center justify-between gap-x-3 py-1">
-                      <span className="text-sm">
-                        {t("integrations.mcp.claudeDesktopTitle")}
-                      </span>
-                      {mcpInClaudeDesktop ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={async () => {
-                            try {
-                              await invoke("remove_mcp_from_claude_desktop");
-                              setMcpInClaudeDesktop(false);
-                              showSuccessToast(
-                                t("integrations.mcp.removedFromClaudeDesktop"),
-                              );
-                            } catch (e) {
-                              showErrorToast(String(e));
-                            }
-                          }}
-                        >
-                          {t("integrations.mcp.removeFromClaudeDesktop")}
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={async () => {
-                            try {
-                              await invoke("add_mcp_to_claude_desktop");
-                              setMcpInClaudeDesktop(true);
-                              showSuccessToast(
-                                t("integrations.mcp.addedToClaudeDesktop"),
-                              );
-                            } catch (e) {
-                              showErrorToast(String(e));
-                            }
-                          }}
-                        >
-                          {t("integrations.mcp.addToClaudeDesktop")}
-                        </Button>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between gap-x-3 py-1">
-                      <span className="text-sm">
-                        {t("integrations.mcp.claudeCodeTitle")}
-                      </span>
-                      {mcpInClaudeCode ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={async () => {
-                            try {
-                              await invoke("remove_mcp_from_claude_code");
-                              setMcpInClaudeCode(false);
-                              showSuccessToast(
-                                t("integrations.mcp.removedFromClaudeCode"),
-                              );
-                            } catch (e) {
-                              showErrorToast(String(e));
-                            }
-                          }}
-                        >
-                          {t("integrations.mcp.removeFromClaudeCode")}
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={async () => {
-                            try {
-                              await invoke("add_mcp_to_claude_code");
-                              setMcpInClaudeCode(true);
-                              showSuccessToast(
-                                t("integrations.mcp.addedToClaudeCode"),
-                              );
-                            } catch (e) {
-                              showErrorToast(String(e));
-                            }
-                          }}
-                        >
-                          {t("integrations.mcp.addToClaudeCode")}
-                        </Button>
-                      )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {agents.map((agent) => {
+                        const busy = busyAgentIds.has(agent.id);
+                        return (
+                          <div
+                            key={agent.id}
+                            className="rounded-md border bg-card px-3 py-2.5 flex items-center gap-3"
+                          >
+                            <div className="grid place-items-center size-8 rounded-md bg-muted shrink-0">
+                              <AgentIcon category={agent.category} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium truncate">
+                                {agent.display_name}
+                              </p>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                {categoryLabel(t, agent.category)}
+                              </p>
+                            </div>
+                            {agent.connected ? (
+                              <div className="flex items-center gap-1">
+                                <span className="inline-flex items-center gap-1 rounded-md border bg-muted px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-foreground">
+                                  <LuCheck className="size-3" />
+                                  {t("integrations.mcp.connected")}
+                                </span>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-8 text-muted-foreground hover:text-destructive"
+                                  disabled={busy}
+                                  onClick={() => void handleRemoveAgent(agent)}
+                                  aria-label={t(
+                                    "integrations.mcp.removeAriaLabel",
+                                    {
+                                      name: agent.display_name,
+                                    },
+                                  )}
+                                >
+                                  <LuTrash2 className="size-4" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={busy}
+                                onClick={() => void handleAddAgent(agent)}
+                              >
+                                {t("integrations.mcp.add")}
+                              </Button>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                </div>
+                </>
               )}
             </AnimatedTabsContent>
           </AnimatedTabs>

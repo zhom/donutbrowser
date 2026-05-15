@@ -52,6 +52,7 @@ pub mod daemon_client;
 mod daemon_spawn;
 pub mod daemon_ws;
 pub mod events;
+mod mcp_integrations;
 mod mcp_server;
 mod tag_manager;
 mod team_lock;
@@ -504,20 +505,20 @@ fn claude_desktop_extension_dir() -> Option<std::path::PathBuf> {
   }
 }
 
-#[tauri::command]
-fn is_mcp_in_claude_desktop() -> Result<bool, String> {
-  let dir = claude_desktop_extension_dir().ok_or("Unsupported platform")?;
-  Ok(dir.join("manifest.json").exists())
+fn is_mcp_in_claude_desktop_internal() -> bool {
+  let Some(dir) = claude_desktop_extension_dir() else {
+    return false;
+  };
+  dir.join("manifest.json").exists()
 }
 
-#[tauri::command]
-async fn add_mcp_to_claude_desktop(app_handle: tauri::AppHandle) -> Result<(), String> {
+async fn add_mcp_to_claude_desktop_internal(app_handle: &tauri::AppHandle) -> Result<(), String> {
   let mcp_server = mcp_server::McpServer::instance();
   let port = mcp_server.get_port().ok_or("MCP server is not running")?;
 
   let settings_manager = settings_manager::SettingsManager::instance();
   let token = settings_manager
-    .get_mcp_token(&app_handle)
+    .get_mcp_token(app_handle)
     .await
     .map_err(|e| format!("Failed to get MCP token: {e}"))?
     .ok_or("MCP token not found")?;
@@ -606,8 +607,7 @@ rl.on("close", () => setTimeout(() => process.exit(0), 500));
   Ok(())
 }
 
-#[tauri::command]
-fn remove_mcp_from_claude_desktop() -> Result<(), String> {
+fn remove_mcp_from_claude_desktop_internal() -> Result<(), String> {
   let ext_dir = claude_desktop_extension_dir().ok_or("Unsupported platform")?;
   if ext_dir.exists() {
     std::fs::remove_dir_all(&ext_dir).map_err(|e| format!("Failed to remove extension: {e}"))?;
@@ -669,91 +669,48 @@ fn update_claude_extensions_registry(
   Ok(())
 }
 
-fn find_claude_cli() -> Option<std::path::PathBuf> {
-  let mut candidates: Vec<std::path::PathBuf> = vec![
-    std::path::PathBuf::from("/usr/local/bin/claude"),
-    std::path::PathBuf::from("/opt/homebrew/bin/claude"),
-  ];
-  if let Some(home) = dirs::home_dir() {
-    candidates.insert(0, home.join(".local/bin/claude"));
-    candidates.push(home.join(".claude/local/claude"));
-  }
-  #[cfg(windows)]
-  if let Ok(appdata) = std::env::var("APPDATA") {
-    candidates.insert(
-      0,
-      std::path::PathBuf::from(appdata).join("Claude/claude.exe"),
-    );
-  }
-  for p in &candidates {
-    if p.exists() {
-      return Some(p.clone());
-    }
-  }
-  None
-}
-
-#[tauri::command]
-async fn is_mcp_in_claude_code() -> Result<bool, String> {
-  let cli = find_claude_cli().ok_or("Claude Code CLI not found")?;
-  // `claude mcp list` health-checks every registered MCP server, so a
-  // missing or stalled server can hang the call for many seconds. Cap it
-  // — for this dialog, a slow `claude` is treated the same as "not registered".
-  let fut = tokio::process::Command::new(&cli)
-    .args(["mcp", "list"])
-    .output();
-  let output = tokio::time::timeout(std::time::Duration::from_secs(2), fut)
-    .await
-    .map_err(|_| "claude mcp list timed out".to_string())?
-    .map_err(|e| format!("Failed to run claude: {e}"))?;
-  let stdout = String::from_utf8_lossy(&output.stdout);
-  Ok(stdout.contains("donut-browser"))
-}
-
-#[tauri::command]
-async fn add_mcp_to_claude_code(app_handle: tauri::AppHandle) -> Result<(), String> {
-  let cli = find_claude_cli().ok_or("Claude Code CLI not found")?;
-
+async fn current_mcp_url(app_handle: &tauri::AppHandle) -> Result<String, String> {
   let mcp_server = mcp_server::McpServer::instance();
   let port = mcp_server.get_port().ok_or("MCP server is not running")?;
-
   let settings_manager = settings_manager::SettingsManager::instance();
   let token = settings_manager
-    .get_mcp_token(&app_handle)
+    .get_mcp_token(app_handle)
     .await
     .map_err(|e| format!("Failed to get MCP token: {e}"))?
     .ok_or("MCP token not found")?;
-
-  let url = format!("http://127.0.0.1:{port}/mcp/{token}");
-
-  let _ = std::process::Command::new(&cli)
-    .args(["mcp", "remove", "donut-browser"])
-    .output();
-
-  let output = std::process::Command::new(&cli)
-    .args(["mcp", "add", "--transport", "http", "donut-browser", &url])
-    .output()
-    .map_err(|e| format!("Failed to run claude: {e}"))?;
-
-  if !output.status.success() {
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    return Err(format!("Failed to add MCP to Claude Code: {stderr}"));
-  }
-  Ok(())
+  Ok(format!("http://127.0.0.1:{port}/mcp/{token}"))
 }
 
 #[tauri::command]
-fn remove_mcp_from_claude_code() -> Result<(), String> {
-  let cli = find_claude_cli().ok_or("Claude Code CLI not found")?;
-  let output = std::process::Command::new(&cli)
-    .args(["mcp", "remove", "donut-browser"])
-    .output()
-    .map_err(|e| format!("Failed to run claude: {e}"))?;
-  if !output.status.success() {
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    return Err(format!("Failed to remove MCP from Claude Code: {stderr}"));
+async fn list_mcp_agents() -> Result<Vec<mcp_integrations::McpAgentInfo>, String> {
+  let claude_desktop_connected = is_mcp_in_claude_desktop_internal();
+  Ok(mcp_integrations::list_agents_with_status(&[(
+    "claude-desktop",
+    claude_desktop_connected,
+  )]))
+}
+
+#[tauri::command]
+async fn add_mcp_to_agent(app_handle: tauri::AppHandle, agent_id: String) -> Result<(), String> {
+  if !mcp_integrations::agent_exists(&agent_id) {
+    return Err(format!("Unknown agent: {agent_id}"));
   }
-  Ok(())
+  if agent_id == "claude-desktop" {
+    return add_mcp_to_claude_desktop_internal(&app_handle).await;
+  }
+  let url = current_mcp_url(&app_handle).await?;
+  mcp_integrations::install_generic(&agent_id, &url)
+}
+
+#[tauri::command]
+async fn remove_mcp_from_agent(agent_id: String) -> Result<(), String> {
+  if !mcp_integrations::agent_exists(&agent_id) {
+    return Err(format!("Unknown agent: {agent_id}"));
+  }
+  if agent_id == "claude-desktop" {
+    return remove_mcp_from_claude_desktop_internal();
+  }
+  mcp_integrations::uninstall_generic(&agent_id)
 }
 
 #[tauri::command]
@@ -2131,12 +2088,9 @@ pub fn run() {
       stop_mcp_server,
       get_mcp_server_status,
       get_mcp_config,
-      is_mcp_in_claude_desktop,
-      add_mcp_to_claude_desktop,
-      remove_mcp_from_claude_desktop,
-      is_mcp_in_claude_code,
-      add_mcp_to_claude_code,
-      remove_mcp_from_claude_code,
+      list_mcp_agents,
+      add_mcp_to_agent,
+      remove_mcp_from_agent,
       // VPN commands
       import_vpn_config,
       list_vpn_configs,

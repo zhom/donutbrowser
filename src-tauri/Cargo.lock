@@ -1858,6 +1858,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "tokio-util",
+ "toml 0.9.12+spec-1.1.0",
  "tower",
  "tower-http",
  "tray-icon 0.24.0",

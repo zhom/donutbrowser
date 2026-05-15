@@ -12,6 +12,20 @@ use std::path::{Path, PathBuf};
 use sysinfo::{Pid, ProcessRefreshKind, RefreshKind, System};
 use url::Url;
 
+fn atomic_write(path: &Path, data: &[u8]) -> std::io::Result<()> {
+  let tmp = path.with_extension(match path.extension().and_then(|e| e.to_str()) {
+    Some(ext) => format!("{ext}.tmp"),
+    None => "tmp".to_string(),
+  });
+  {
+    let mut f = fs::File::create(&tmp)?;
+    use std::io::Write;
+    f.write_all(data)?;
+    f.sync_all()?;
+  }
+  fs::rename(&tmp, path)
+}
+
 pub struct ProfileManager {
   camoufox_manager: &'static crate::camoufox_manager::CamoufoxManager,
   wayfern_manager: &'static crate::wayfern_manager::WayfernManager,
@@ -396,7 +410,7 @@ impl ProfileManager {
     create_dir_all(&profile_uuid_dir)?;
 
     let json = serde_json::to_string_pretty(profile)?;
-    fs::write(profile_file, json)?;
+    atomic_write(&profile_file, json.as_bytes())?;
 
     // Update tag suggestions after any save
     let _ = crate::tag_manager::TAG_MANAGER.lock().map(|tm| {
@@ -421,8 +435,26 @@ impl ProfileManager {
       if path.is_dir() {
         let metadata_file = path.join("metadata.json");
         if metadata_file.exists() {
-          let content = fs::read_to_string(&metadata_file)?;
-          let mut profile: BrowserProfile = serde_json::from_str(&content)?;
+          let content = match fs::read_to_string(&metadata_file) {
+            Ok(c) => c,
+            Err(e) => {
+              log::warn!(
+                "Skipping profile at {}: failed to read metadata.json: {e}",
+                path.display()
+              );
+              continue;
+            }
+          };
+          let mut profile: BrowserProfile = match serde_json::from_str(&content) {
+            Ok(p) => p,
+            Err(e) => {
+              log::warn!(
+                "Skipping profile at {}: invalid metadata.json: {e}",
+                path.display()
+              );
+              continue;
+            }
+          };
 
           // Backfill host_os from browser config for profiles created before
           // the field existed (or synced without it).
@@ -431,7 +463,7 @@ impl ProfileManager {
             if let Some(os) = inferred_os {
               profile.host_os = Some(os);
               if let Ok(json) = serde_json::to_string_pretty(&profile) {
-                let _ = fs::write(&metadata_file, json);
+                let _ = atomic_write(&metadata_file, json.as_bytes());
               }
             }
           }
