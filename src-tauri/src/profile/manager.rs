@@ -1509,6 +1509,7 @@ impl ProfileManager {
       };
 
       let mut merged = latest_profile.clone();
+      let mut detected_stop = false;
 
       if let Some(pid) = found_pid {
         if merged.process_id != Some(pid) {
@@ -1522,6 +1523,15 @@ impl ProfileManager {
         merged.process_id = None;
         if let Err(e) = self.save_profile(&merged) {
           log::warn!("Warning: Failed to clear profile PID: {e}");
+        }
+        detected_stop = true;
+      }
+
+      if detected_stop {
+        if let Some(updated) = crate::auto_updater::AutoUpdater::instance()
+          .update_profile_to_latest_installed(&app_handle, &merged)
+        {
+          merged = updated;
         }
       }
 
@@ -1537,7 +1547,7 @@ impl ProfileManager {
   // Check Camoufox status using CamoufoxManager
   async fn check_camoufox_status(
     &self,
-    _app_handle: &tauri::AppHandle,
+    app_handle: &tauri::AppHandle,
     profile: &BrowserProfile,
   ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
     let launcher = self.camoufox_manager;
@@ -1611,6 +1621,12 @@ impl ProfileManager {
               log::warn!("Warning: Failed to clear Camoufox profile process info: {e}");
             }
 
+            if let Some(updated) = crate::auto_updater::AutoUpdater::instance()
+              .update_profile_to_latest_installed(app_handle, &latest)
+            {
+              latest = updated;
+            }
+
             if let Err(e) = events::emit("profile-updated", &latest) {
               log::warn!("Warning: Failed to emit profile update event: {e}");
             }
@@ -1647,6 +1663,12 @@ impl ProfileManager {
               );
             }
 
+            if let Some(updated) = crate::auto_updater::AutoUpdater::instance()
+              .update_profile_to_latest_installed(app_handle, &latest)
+            {
+              latest = updated;
+            }
+
             // Emit profile update event to frontend
             if let Err(e3) = events::emit("profile-updated", &latest) {
               log::warn!("Warning: Failed to emit profile update event: {e3}");
@@ -1661,7 +1683,7 @@ impl ProfileManager {
   // Check Wayfern status using WayfernManager
   async fn check_wayfern_status(
     &self,
-    _app_handle: &tauri::AppHandle,
+    app_handle: &tauri::AppHandle,
     profile: &BrowserProfile,
   ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
     let manager = self.wayfern_manager;
@@ -1733,6 +1755,12 @@ impl ProfileManager {
             latest.process_id = None;
             if let Err(e) = self.save_profile(&latest) {
               log::warn!("Warning: Failed to clear Wayfern profile process info: {e}");
+            }
+
+            if let Some(updated) = crate::auto_updater::AutoUpdater::instance()
+              .update_profile_to_latest_installed(app_handle, &latest)
+            {
+              latest = updated;
             }
 
             if let Err(e) = events::emit("profile-updated", &latest) {

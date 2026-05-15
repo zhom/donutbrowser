@@ -290,24 +290,45 @@ impl DownloadedBrowsersRegistry {
       }
     }
 
-    // Filter out versions that would leave a browser with zero versions in the registry
+    // For each browser where every registered version would be removed (no
+    // profile uses any), keep the newest one by semver. Without this, the
+    // version preserved depends on HashMap iteration order, so a freshly
+    // downloaded version can be deleted in favor of an older orphan — leaving
+    // the UI stuck on "needs to be downloaded".
     {
       let data = self.data.lock().unwrap();
-      let mut removal_counts: std::collections::HashMap<String, usize> =
+      let mut removal_versions_by_browser: std::collections::HashMap<String, Vec<String>> =
         std::collections::HashMap::new();
-      for (browser, _) in &to_remove {
-        *removal_counts.entry(browser.clone()).or_insert(0) += 1;
+      for (browser, version) in &to_remove {
+        removal_versions_by_browser
+          .entry(browser.clone())
+          .or_default()
+          .push(version.clone());
       }
-      to_remove.retain(|(browser, version)| {
+      let mut keep_per_browser: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+      for (browser, versions) in &removal_versions_by_browser {
         let total = data
           .browsers
           .get(browser.as_str())
           .map(|v| v.len())
           .unwrap_or(0);
-        let removing = *removal_counts.get(browser.as_str()).unwrap_or(&0);
-        if removing >= total {
-          log::info!("Keeping last available version: {browser} {version}");
-          *removal_counts.get_mut(browser.as_str()).unwrap() -= 1;
+        if versions.len() >= total {
+          if let Some(latest) = versions
+            .iter()
+            .max_by(|a, b| crate::api_client::compare_versions(a, b))
+          {
+            keep_per_browser.insert(browser.clone(), latest.clone());
+          }
+        }
+      }
+      drop(data);
+      to_remove.retain(|(browser, version)| {
+        if keep_per_browser
+          .get(browser)
+          .is_some_and(|keep| keep == version)
+        {
+          log::info!("Keeping latest available version: {browser} {version}");
           return false;
         }
         true
