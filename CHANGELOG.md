@@ -1,6 +1,29 @@
 # Changelog
 
 
+## v0.24.2 (2026-05-16)
+
+### Features
+
+- more mcp integrations
+
+### Bug Fixes
+
+- camoufox proxy pid connection
+
+### Refactoring
+
+- browser update
+- ui cleanup
+- cleanup
+
+### Maintenance
+
+- chore: version bump
+- chore: cleanup
+- chore: update flake.nix for v0.24.1 [skip ci] (#364)
+
+
 ## v0.24.1 (2026-05-12)
 
 ### Refactoring
