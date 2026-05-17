@@ -662,23 +662,38 @@ impl CamoufoxManager {
       }
     }
 
-    // Write explicit proxy prefs to user.js so Firefox always uses the local
-    // donut-proxy and never falls back to stale proxy settings baked into prefs.js
-    // from a previous session. user.js values override prefs.js on every launch.
+    // Write explicit proxy + extension prefs to user.js so Camoufox always
+    // uses the local donut-proxy and picks up sideloaded extensions. user.js
+    // values override prefs.js on every launch, so this is always canonical.
     if let Some(proxy_str) = &config.proxy {
       let user_js_path = profile_path.join("user.js");
       let mut prefs = String::new();
 
-      // Preserve existing user.js content (ephemeral prefs, etc.)
+      // Preserve existing user.js lines, but strip any keys we're about to
+      // re-emit so they never duplicate.
+      let managed_keys = [
+        "network.proxy.",
+        "xpinstall.signatures.required",
+        "extensions.startupScanScopes",
+      ];
       if let Ok(existing) = std::fs::read_to_string(&user_js_path) {
-        // Strip old proxy prefs so we don't duplicate
         for line in existing.lines() {
-          if !line.contains("network.proxy.") {
+          if !managed_keys.iter().any(|k| line.contains(k)) {
             prefs.push_str(line);
             prefs.push('\n');
           }
         }
       }
+
+      // Required for sideloaded extensions:
+      // - signatures.required=false accepts unsigned .xpi (Camoufox is built
+      //   without MOZ_REQUIRE_SIGNING so this is honored).
+      // - startupScanScopes=1 rescans SCOPE_PROFILE on each launch so newly
+      //   dropped .xpi files in <profile>/extensions/ get registered.
+      prefs.push_str(
+        "user_pref(\"xpinstall.signatures.required\", false);\n\
+         user_pref(\"extensions.startupScanScopes\", 1);\n",
+      );
 
       if let Ok(parsed) = url::Url::parse(proxy_str) {
         let host = parsed.host_str().unwrap_or("127.0.0.1");
@@ -707,7 +722,7 @@ impl CamoufoxManager {
         }
 
         if let Err(e) = std::fs::write(&user_js_path, prefs) {
-          log::warn!("Failed to write proxy prefs to user.js: {e}");
+          log::warn!("Failed to write user.js: {e}");
         }
       }
     }

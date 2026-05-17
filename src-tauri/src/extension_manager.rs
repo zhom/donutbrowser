@@ -27,6 +27,11 @@ pub struct Extension {
   pub author: Option<String>,
   #[serde(default)]
   pub homepage_url: Option<String>,
+  /// Firefox extension ID from `browser_specific_settings.gecko.id` (or
+  /// `applications.gecko.id` in old manifests). Firefox refuses to load a
+  /// sideloaded .xpi unless the filename matches this value.
+  #[serde(default)]
+  pub gecko_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -157,6 +162,32 @@ fn extract_manifest_metadata(
   (name, version, description, author, homepage_url)
 }
 
+/// Read `browser_specific_settings.gecko.id` (or the legacy
+/// `applications.gecko.id`) from the extension's manifest.json. Firefox uses
+/// this value as the canonical add-on ID; sideloaded .xpi files must be named
+/// `<gecko_id>.xpi` to be picked up.
+fn extract_gecko_id(file_data: &[u8], file_type: &str) -> Option<String> {
+  let zip_start = if file_type == "crx" {
+    find_zip_start(file_data)
+  } else {
+    0
+  };
+  let cursor = std::io::Cursor::new(&file_data[zip_start..]);
+  let mut archive = zip::ZipArchive::new(cursor).ok()?;
+  let mut manifest_content = String::new();
+  std::io::Read::read_to_string(
+    &mut archive.by_name("manifest.json").ok()?,
+    &mut manifest_content,
+  )
+  .ok()?;
+  let manifest: serde_json::Value = serde_json::from_str(&manifest_content).ok()?;
+  manifest
+    .pointer("/browser_specific_settings/gecko/id")
+    .or_else(|| manifest.pointer("/applications/gecko/id"))
+    .and_then(|v| v.as_str())
+    .map(|s| s.to_string())
+}
+
 fn extract_icon_from_archive(file_data: &[u8], file_type: &str) -> Option<(Vec<u8>, String)> {
   let zip_start = if file_type == "crx" {
     find_zip_start(file_data)
@@ -285,6 +316,7 @@ impl ExtensionManager {
       name
     };
 
+    let gecko_id = extract_gecko_id(&file_data, &file_type);
     let ext = Extension {
       id: uuid::Uuid::new_v4().to_string(),
       name: final_name,
@@ -299,6 +331,7 @@ impl ExtensionManager {
       description,
       author,
       homepage_url,
+      gecko_id,
     };
 
     let file_dir = self.get_file_dir(&ext.id);
@@ -415,6 +448,7 @@ impl ExtensionManager {
           ext.name = mn;
         }
       }
+      ext.gecko_id = extract_gecko_id(&data, &new_file_type);
 
       if let Some((icon_data, icon_ext)) = extract_icon_from_archive(&data, &new_file_type) {
         let icon_path = self.get_extension_dir(id).join(format!("icon.{icon_ext}"));
@@ -893,24 +927,33 @@ impl ExtensionManager {
               continue;
             }
             let src_file = self.get_file_dir(ext_id).join(&ext.file_name);
-            if src_file.exists() {
-              // Firefox expects .xpi files in extensions dir
-              let dest_name = if ext.file_type == "zip" {
-                format!(
-                  "{}.xpi",
-                  ext
-                    .file_name
-                    .rsplit('.')
-                    .next_back()
-                    .unwrap_or(&ext.file_name)
-                )
-              } else {
-                ext.file_name.clone()
-              };
-              let dest = extensions_dir.join(&dest_name);
-              fs::copy(&src_file, &dest)?;
-              extension_paths.push(dest.to_string_lossy().to_string());
+            if !src_file.exists() {
+              continue;
             }
+
+            // Firefox/Camoufox only loads sideloaded .xpi files whose filename
+            // matches `browser_specific_settings.gecko.id` from the manifest.
+            // Prefer the cached value; fall back to reading the manifest now
+            // for extensions added before the field existed.
+            let gecko_id = if let Some(ref id) = ext.gecko_id {
+              Some(id.clone())
+            } else if let Ok(data) = fs::read(&src_file) {
+              extract_gecko_id(&data, &ext.file_type)
+            } else {
+              None
+            };
+
+            let Some(gecko_id) = gecko_id else {
+              log::warn!(
+                "Skipping Firefox extension '{}': could not determine gecko id from manifest.json",
+                ext.name
+              );
+              continue;
+            };
+
+            let dest = extensions_dir.join(format!("{gecko_id}.xpi"));
+            fs::copy(&src_file, &dest)?;
+            extension_paths.push(dest.to_string_lossy().to_string());
           }
         }
       }
@@ -1022,30 +1065,49 @@ impl ExtensionManager {
         }
       }
 
-      if ext.version.is_none() && ext.description.is_none() {
+      let needs_meta_backfill = ext.version.is_none() && ext.description.is_none();
+      let needs_gecko_backfill =
+        ext.gecko_id.is_none() && ext.browser_compatibility.iter().any(|b| b == "firefox");
+
+      if needs_meta_backfill || needs_gecko_backfill {
         let file_path = file_dir.join(&ext.file_name);
         if let Ok(file_data) = fs::read(&file_path) {
-          let (manifest_name, version, description, author, homepage_url) =
-            extract_manifest_metadata(&file_data, &ext.file_type);
-          if version.is_some()
-            || description.is_some()
-            || author.is_some()
-            || homepage_url.is_some()
-            || manifest_name.is_some()
-          {
-            let mut updated_ext = ext.clone();
-            if let Some(v) = version {
-              updated_ext.version = Some(v);
+          let mut updated_ext = ext.clone();
+          let mut changed = false;
+
+          if needs_meta_backfill {
+            let (manifest_name, version, description, author, homepage_url) =
+              extract_manifest_metadata(&file_data, &ext.file_type);
+            if version.is_some()
+              || description.is_some()
+              || author.is_some()
+              || homepage_url.is_some()
+              || manifest_name.is_some()
+            {
+              if let Some(v) = version {
+                updated_ext.version = Some(v);
+              }
+              if let Some(d) = description {
+                updated_ext.description = Some(d);
+              }
+              if let Some(a) = author {
+                updated_ext.author = Some(a);
+              }
+              if let Some(h) = homepage_url {
+                updated_ext.homepage_url = Some(h);
+              }
+              changed = true;
             }
-            if let Some(d) = description {
-              updated_ext.description = Some(d);
+          }
+
+          if needs_gecko_backfill {
+            if let Some(gid) = extract_gecko_id(&file_data, &ext.file_type) {
+              updated_ext.gecko_id = Some(gid);
+              changed = true;
             }
-            if let Some(a) = author {
-              updated_ext.author = Some(a);
-            }
-            if let Some(h) = homepage_url {
-              updated_ext.homepage_url = Some(h);
-            }
+          }
+
+          if changed {
             let metadata_path = self.get_metadata_path(&ext.id);
             if let Ok(json) = serde_json::to_string_pretty(&updated_ext) {
               let _ = fs::write(metadata_path, json);

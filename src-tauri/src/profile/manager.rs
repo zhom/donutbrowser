@@ -1799,10 +1799,17 @@ impl ProfileManager {
       "user_pref(\"startup.homepage_welcome_url\", \"\");".to_string(),
       "user_pref(\"startup.homepage_welcome_url.additional\", \"\");".to_string(),
       "user_pref(\"startup.homepage_override_url\", \"\");".to_string(),
-      // Keep extension updates enabled and allow sideloaded extensions
+      // Keep extension updates enabled and allow sideloaded extensions.
+      // - autoDisableScopes=0: profile-installed extensions are enabled by default.
+      // - startupScanScopes=1: rescan SCOPE_PROFILE on each launch so freshly
+      //   dropped .xpi files in <profile>/extensions/ get registered.
+      // - signatures.required=false: accept unsigned/dev .xpi files. Camoufox
+      //   is built without MOZ_REQUIRE_SIGNING so this is honored.
       "user_pref(\"extensions.update.enabled\", true);".to_string(),
       "user_pref(\"extensions.update.autoUpdateDefault\", true);".to_string(),
       "user_pref(\"extensions.autoDisableScopes\", 0);".to_string(),
+      "user_pref(\"extensions.startupScanScopes\", 1);".to_string(),
+      "user_pref(\"xpinstall.signatures.required\", false);".to_string(),
       // Completely disable browser update checking
       "user_pref(\"app.update.enabled\", false);".to_string(),
       "user_pref(\"app.update.auto\", false);".to_string(),
