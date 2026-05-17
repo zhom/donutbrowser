@@ -1,0 +1,306 @@
+name: Duplicate Issue Check
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  MODEL: z-ai/glm-5.1
+
+jobs:
+  check-duplicates:
+    if: github.repository == 'zhom/donutbrowser' && github.event.action == 'opened'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Gather context
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          printf '%s' "$ISSUE_TITLE" > /tmp/issue-title.txt
+          printf '%s' "${ISSUE_BODY:-}" > /tmp/issue-body.txt
+
+          # Pull up to 150 open/closed issues for the LLM to compare against.
+          # Exclude the issue under inspection and any PRs (gh issue list does
+          # this naturally).
+          gh issue list \
+            --repo "$GITHUB_REPOSITORY" \
+            --state all \
+            --limit 150 \
+            --json number,title,state,body \
+            --jq "[.[] | select(.number != $ISSUE_NUMBER) | {number, title, state, body: (.body[:400] // \"\")}]" \
+            > /tmp/existing-issues.json
+
+      - name: Build prompt
+        run: |
+          cat > /tmp/system.txt <<'PROMPT'
+          You are reviewing a new GitHub issue for two things — template compliance and possible duplicates. Return ONLY a single JSON object, no prose, no markdown fences.
+
+          Project: Donut Browser. There are three valid templates:
+          - Bug Report (Description + Operating System + Donut Browser version + Which browser is affected + Steps to reproduce + Error logs/screenshots fields)
+          - Feature Request (description + verification checkbox)
+          - Question (free form)
+
+          ## Compliance — flag NON-compliant ONLY when at least one of these is true
+          - The issue body is empty or contains only placeholder text from the template
+          - The issue is an obvious AI-generated wall of text with no real specifics
+          - A bug report has no reproduction information or no error description
+          - A feature request gives no use case at all
+          - The author left required fields empty (Operating System, Donut Browser version, Which browser is affected, Steps to reproduce on bug reports)
+
+          Do NOT flag for missing optional fields, missing screenshots, short titles, or stylistic issues. Be conservative.
+
+          ## Duplicates — flag candidates ONLY when at least one of these is true
+          - Same error message, exception, or symptom
+          - Same feature being requested
+          - Same root cause area (e.g. "proxy disconnects on Camoufox/Windows")
+
+          Prefer false negatives over false positives. Two issues about Wayfern are not duplicates if they are about different features.
+
+          ## Output schema
+          {
+            "is_compliant": true | false,
+            "non_compliance_reasons": ["short bullet", ...],
+            "duplicates": [{"number": 123, "reason": "short reason"}]
+          }
+
+          Empty arrays are fine. If there is nothing to flag, return:
+          {"is_compliant": true, "non_compliance_reasons": [], "duplicates": []}
+          PROMPT
+
+      - name: Call OpenRouter
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          PAYLOAD=$(jq -n \
+            --arg model "$MODEL" \
+            --rawfile system_prompt /tmp/system.txt \
+            --rawfile title /tmp/issue-title.txt \
+            --rawfile body /tmp/issue-body.txt \
+            --rawfile existing /tmp/existing-issues.json \
+            '{
+              model: $model,
+              messages: [
+                { role: "system", content: $system_prompt },
+                { role: "user",
+                  content: ("New issue title: " + $title + "\n\nNew issue body:\n" + $body + "\n\nExisting issues (JSON array):\n" + $existing) }
+              ],
+              response_format: { type: "json_object" }
+            }')
+
+          RESPONSE=$(curl -fsSL https://openrouter.ai/api/v1/chat/completions \
+            -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+
+          jq -r '.choices[0].message.content // empty' <<< "$RESPONSE" > /tmp/raw.txt
+
+          # Strip accidental markdown fences and parse. On parse failure, fall back
+          # to a noop result so the workflow doesn't fail the issue author's run.
+          sed -E 's/^```(json)?$//; s/```$//' /tmp/raw.txt > /tmp/result.json
+          if ! jq -e . /tmp/result.json >/dev/null 2>&1; then
+            echo "::warning::Model returned non-JSON; treating as no-op"
+            cat /tmp/raw.txt
+            echo '{"is_compliant": true, "non_compliance_reasons": [], "duplicates": []}' > /tmp/result.json
+          fi
+          echo "Result:"
+          cat /tmp/result.json
+
+      - name: Build comment
+        run: |
+          python3 - <<'EOF'
+          import json, os
+          r = json.load(open('/tmp/result.json'))
+          compliant = bool(r.get('is_compliant', True))
+          reasons = r.get('non_compliance_reasons') or []
+          dups = r.get('duplicates') or []
+
+          parts = []
+          if not compliant:
+              parts.append('<!-- issue-compliance -->')
+              parts.append("This issue doesn't fully meet our [contributing guidelines](../blob/main/CONTRIBUTING.md).")
+              parts.append('')
+              parts.append('**What needs to be fixed:**')
+              for reason in reasons:
+                  parts.append(f'- {reason}')
+              parts.append('')
+              parts.append('Please edit this issue to address the above within **24 hours**, or it will be automatically closed.')
+
+          if dups:
+              if parts:
+                  parts.append('')
+                  parts.append('---')
+              parts.append('This issue might duplicate existing reports. Please check:')
+              for d in dups:
+                  num = d.get('number')
+                  reason = d.get('reason', '').strip()
+                  if num:
+                      parts.append(f'- #{num}{" — " + reason if reason else ""}')
+
+          if not compliant:
+              parts.append('')
+              parts.append('If you believe this was flagged incorrectly, please let a maintainer know.')
+
+          comment = '\n'.join(parts).strip()
+          open('/tmp/comment.md', 'w').write(comment)
+          # Expose flags for downstream steps via GITHUB_OUTPUT-style write.
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
+              fh.write(f'has_comment={"true" if comment else "false"}\n')
+              fh.write(f'non_compliant={"true" if not compliant else "false"}\n')
+          EOF
+        id: build
+
+      - name: Post comment
+        if: steps.build.outputs.has_comment == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file /tmp/comment.md
+
+      - name: Apply needs:compliance label
+        if: steps.build.outputs.non_compliant == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --add-label "needs:compliance"
+
+  recheck-compliance:
+    # When a flagged issue is edited, re-check. If now compliant: remove label,
+    # delete the previous compliance comment, and thank the author. If still
+    # non-compliant: leave label and post an updated note.
+    if: >
+      github.repository == 'zhom/donutbrowser' &&
+      github.event.action == 'edited' &&
+      contains(github.event.issue.labels.*.name, 'needs:compliance')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Gather context
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          printf '%s' "$ISSUE_TITLE" > /tmp/issue-title.txt
+          printf '%s' "${ISSUE_BODY:-}" > /tmp/issue-body.txt
+
+      - name: Build prompt
+        run: |
+          cat > /tmp/system.txt <<'PROMPT'
+          You are re-checking a GitHub issue that was previously flagged as not meeting template requirements. Return ONLY a single JSON object, no prose, no markdown fences.
+
+          Project: Donut Browser. There are three valid templates:
+          - Bug Report (Description + Operating System + Donut Browser version + Which browser is affected + Steps to reproduce + Error logs/screenshots fields)
+          - Feature Request (description + verification checkbox)
+          - Question (free form)
+
+          ## Flag NON-compliant ONLY when at least one of these is true
+          - The issue body is empty or contains only placeholder text from the template
+          - The issue is an obvious AI-generated wall of text with no real specifics
+          - A bug report has no reproduction information or no error description
+          - A feature request gives no use case at all
+          - The author left required fields empty (Operating System, Donut Browser version, Which browser is affected, Steps to reproduce on bug reports)
+
+          Do NOT flag for missing optional fields, missing screenshots, short titles, or stylistic issues. Be conservative.
+
+          ## Output schema
+          {
+            "is_compliant": true | false,
+            "non_compliance_reasons": ["short bullet", ...]
+          }
+          PROMPT
+
+      - name: Call OpenRouter
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          PAYLOAD=$(jq -n \
+            --arg model "$MODEL" \
+            --rawfile system_prompt /tmp/system.txt \
+            --rawfile title /tmp/issue-title.txt \
+            --rawfile body /tmp/issue-body.txt \
+            '{
+              model: $model,
+              messages: [
+                { role: "system", content: $system_prompt },
+                { role: "user", content: ("Title: " + $title + "\n\nBody:\n" + $body) }
+              ],
+              response_format: { type: "json_object" }
+            }')
+
+          RESPONSE=$(curl -fsSL https://openrouter.ai/api/v1/chat/completions \
+            -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+
+          jq -r '.choices[0].message.content // empty' <<< "$RESPONSE" > /tmp/raw.txt
+          sed -E 's/^```(json)?$//; s/```$//' /tmp/raw.txt > /tmp/result.json
+          if ! jq -e . /tmp/result.json >/dev/null 2>&1; then
+            echo "::warning::Model returned non-JSON; assuming still non-compliant"
+            echo '{"is_compliant": false, "non_compliance_reasons": ["unable to parse model output"]}' > /tmp/result.json
+          fi
+
+      - name: Resolve compliance state
+        id: resolve
+        run: |
+          IS_COMPLIANT=$(jq -r '.is_compliant // false' /tmp/result.json)
+          echo "is_compliant=$IS_COMPLIANT" >> "$GITHUB_OUTPUT"
+
+      - name: Clear compliance label and acknowledge fix
+        if: steps.resolve.outputs.is_compliant == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label "needs:compliance" || true
+
+          # Delete the previous <!-- issue-compliance --> sentinel comment so
+          # the thread is clean once the author has addressed the issue.
+          COMMENT_ID=$(gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER/comments" \
+            --jq '[.[] | select(.body | contains("<!-- issue-compliance -->"))][-1].id // empty')
+          if [ -n "$COMMENT_ID" ]; then
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID" || true
+          fi
+
+          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --body "Thanks for updating the issue."
+
+      - name: Build follow-up comment
+        if: steps.resolve.outputs.is_compliant != 'true'
+        run: |
+          python3 - <<'EOF'
+          import json
+          r = json.load(open('/tmp/result.json'))
+          reasons = r.get('non_compliance_reasons') or []
+          parts = [
+            '<!-- issue-compliance -->',
+            'This issue still does not meet our [contributing guidelines](../blob/main/CONTRIBUTING.md).',
+            '',
+            '**What still needs to be fixed:**',
+          ]
+          for reason in reasons:
+              parts.append(f'- {reason}')
+          parts.append('')
+          parts.append('Please edit this issue to address the above within **24 hours**, or it will be automatically closed.')
+          open('/tmp/comment.md', 'w').write('\n'.join(parts))
+          EOF
+
+      - name: Post follow-up comment
+        if: steps.resolve.outputs.is_compliant != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file /tmp/comment.md

@@ -18,8 +18,8 @@ permissions:
 
 env:
   # Single source of truth for the model used by both triage and composer.
-  TRIAGE_MODEL: anthropic/claude-opus-4.7
-  COMPOSER_MODEL: anthropic/claude-opus-4.7
+  TRIAGE_MODEL: z-ai/glm-5.1
+  COMPOSER_MODEL: z-ai/glm-5.1
 
 jobs:
   analyze-issue:
