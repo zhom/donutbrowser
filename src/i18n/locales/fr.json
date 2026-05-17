@@ -1803,7 +1803,9 @@
       "label": "Plus",
       "closeAriaLabel": "Fermer le menu",
       "importProfile": "Importer un profil",
-      "importProfileHint": "Importer depuis un autre outil"
+      "importProfileHint": "Importer depuis un autre outil",
+      "keyboardShortcuts": "Raccourcis clavier",
+      "keyboardShortcutsHint": "Voir tous les raccourcis"
     },
     "network": "Réseau",
     "integrations": "Intégrations",
@@ -1817,7 +1819,8 @@
     "settings": "Paramètres",
     "integrations": "Intégrations",
     "account": "Compte",
-    "import": "Importer un profil"
+    "import": "Importer un profil",
+    "shortcuts": "Raccourcis clavier"
   },
   "encryption": {
     "required": {
@@ -1870,5 +1873,36 @@
       "testConnection": "Tester la connexion",
       "disconnect": "Déconnecter"
     }
+  },
+  "shortcutsPage": {
+    "title": "Raccourcis clavier",
+    "description": "Accélérez votre flux de travail avec ces raccourcis."
+  },
+  "commandPalette": {
+    "placeholder": "Tapez une commande ou recherchez...",
+    "empty": "Aucun résultat trouvé.",
+    "groups": {
+      "navigation": "Navigation",
+      "profiles": "Profils",
+      "actions": "Actions",
+      "profileGroups": "Groupes de profils"
+    },
+    "actions": {
+      "launchProfile": "Lancer {{name}}",
+      "stopProfile": "Arrêter {{name}}",
+      "profileInfo": "Informations — {{name}}"
+    }
+  },
+  "shortcuts": {
+    "openPalette": "Ouvrir la palette de commandes",
+    "openShortcuts": "Voir les raccourcis clavier",
+    "importProfile": "Importer un profil",
+    "goProfiles": "Aller à Profils",
+    "goProxies": "Aller à Réseau",
+    "goExtensions": "Aller à Extensions",
+    "goGroups": "Aller à Groupes",
+    "goIntegrations": "Aller à Intégrations",
+    "goAccount": "Aller à Compte",
+    "goSettings": "Aller à Paramètres"
   }
 }

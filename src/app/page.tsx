@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import { AccountPage } from "@/components/account-page";
 import { CamoufoxConfigDialog } from "@/components/camoufox-config-dialog";
 import { CloneProfileDialog } from "@/components/clone-profile-dialog";
+import { CommandPalette } from "@/components/command-palette";
 import { CommercialTrialModal } from "@/components/commercial-trial-modal";
 import { CookieCopyDialog } from "@/components/cookie-copy-dialog";
 import { CookieManagementDialog } from "@/components/cookie-management-dialog";
@@ -34,6 +35,7 @@ import { ProxyAssignmentDialog } from "@/components/proxy-assignment-dialog";
 import { ProxyManagementDialog } from "@/components/proxy-management-dialog";
 import { type AppPage, RailNav } from "@/components/rail-nav";
 import { SettingsDialog } from "@/components/settings-dialog";
+import { ShortcutsPage } from "@/components/shortcuts-page";
 import { SyncAllDialog } from "@/components/sync-all-dialog";
 import { SyncConfigDialog } from "@/components/sync-config-dialog";
 import { SyncFollowerDialog } from "@/components/sync-follower-dialog";
@@ -53,6 +55,12 @@ import { useVersionUpdater } from "@/hooks/use-version-updater";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
 import { useWayfernTerms } from "@/hooks/use-wayfern-terms";
 import { translateBackendError } from "@/lib/backend-errors";
+import {
+  matchesGroupDigit,
+  matchesShortcut,
+  SHORTCUTS,
+  type ShortcutId,
+} from "@/lib/shortcuts";
 import {
   dismissToast,
   showErrorToast,
@@ -149,6 +157,11 @@ export default function Home() {
   const [proxyManagementInitialTab, setProxyManagementInitialTab] = useState<
     "proxies" | "vpns"
   >("proxies");
+  const [extensionManagementInitialTab, setExtensionManagementInitialTab] =
+    useState<"extensions" | "groups">("extensions");
+  const [integrationsInitialTab, setIntegrationsInitialTab] = useState<
+    "api" | "mcp"
+  >("api");
   const [createProfileDialogOpen, setCreateProfileDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [integrationsDialogOpen, setIntegrationsDialogOpen] = useState(false);
@@ -221,6 +234,11 @@ export default function Home() {
   const [profileSyncDialogOpen, setProfileSyncDialogOpen] = useState(false);
   const [currentProfileForSync, setCurrentProfileForSync] =
     useState<BrowserProfile | null>(null);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  // Owned by page.tsx so the command palette can request opening the profile
+  // info dialog. ProfilesDataTable consumes it through controlled props.
+  const [profileInfoDialog, setProfileInfoDialog] =
+    useState<BrowserProfile | null>(null);
   const { isMicrophoneAccessGranted, isCameraAccessGranted, isInitialized } =
     usePermissions();
 
@@ -273,8 +291,133 @@ export default function Home() {
       case "account":
         setAccountDialogOpen(true);
         break;
+      case "shortcuts":
+        // Plain page render — nothing else to open.
+        break;
     }
   }, []);
+
+  const runShortcut = useCallback(
+    (id: ShortcutId) => {
+      switch (id) {
+        case "openPalette":
+          setCommandPaletteOpen(true);
+          break;
+        case "openShortcuts":
+          handleRailNavigate("shortcuts");
+          break;
+        case "importProfile":
+          handleRailNavigate("import");
+          break;
+        case "goProfiles":
+          handleRailNavigate("profiles");
+          break;
+        case "goProxies": {
+          // Mod+N: navigate first time; flip proxies↔vpns on subsequent presses.
+          // handleRailNavigate("proxies"|"vpns") already updates the dialog's
+          // initialTab, so we just pick the right destination.
+          if (currentPage === "proxies") {
+            handleRailNavigate("vpns");
+          } else if (currentPage === "vpns") {
+            handleRailNavigate("proxies");
+          } else {
+            handleRailNavigate(
+              proxyManagementInitialTab === "vpns" ? "vpns" : "proxies",
+            );
+          }
+          break;
+        }
+        case "goExtensions": {
+          // Mod+E: flip extensions↔groups tab inside the dialog when already there.
+          if (currentPage === "extensions") {
+            setExtensionManagementInitialTab((cur) =>
+              cur === "extensions" ? "groups" : "extensions",
+            );
+          } else {
+            handleRailNavigate("extensions");
+          }
+          break;
+        }
+        case "goGroups":
+          handleRailNavigate("groups");
+          break;
+        case "goIntegrations": {
+          // Mod+I: flip api↔mcp tab when already on integrations.
+          if (currentPage === "integrations") {
+            setIntegrationsInitialTab((cur) => (cur === "api" ? "mcp" : "api"));
+          } else {
+            handleRailNavigate("integrations");
+          }
+          break;
+        }
+        case "goAccount":
+          handleRailNavigate("account");
+          break;
+        case "goSettings":
+          handleRailNavigate("settings");
+          break;
+      }
+    },
+    [handleRailNavigate, currentPage, proxyManagementInitialTab],
+  );
+
+  // Ordered list the digit shortcuts and palette consume. "__all__" is index 1
+  // so Mod+1 always lands on the unfiltered view; the user's groups follow.
+  const orderedGroupTargets = useMemo(
+    () => [
+      { id: "__all__", name: t("rail.profiles") },
+      ...groupsData.map((g) => ({ id: g.id, name: g.name })),
+    ],
+    [groupsData, t],
+  );
+
+  const selectGroupByDigit = useCallback(
+    (digit: number) => {
+      const target = orderedGroupTargets[digit - 1];
+      if (!target) return;
+      handleRailNavigate("profiles");
+      handleSelectGroup(target.id);
+    },
+    [orderedGroupTargets, handleRailNavigate, handleSelectGroup],
+  );
+
+  useEffect(() => {
+    // Global keydown — handles Mod+1..9 group jumps first, then falls back to
+    // the static SHORTCUTS table. Skipped while typing in an input, EXCEPT
+    // ⌘K and ⌘/ which are meta-level shortcuts and should always be reachable.
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      const isTyping =
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        target?.isContentEditable === true;
+
+      const digit = matchesGroupDigit(e);
+      if (digit !== null) {
+        if (isTyping) return;
+        if (digit - 1 >= orderedGroupTargets.length) return;
+        e.preventDefault();
+        selectGroupByDigit(digit);
+        return;
+      }
+
+      for (const s of SHORTCUTS) {
+        if (!matchesShortcut(s, e)) continue;
+        if (isTyping && s.id !== "openPalette" && s.id !== "openShortcuts") {
+          return;
+        }
+        e.preventDefault();
+        runShortcut(s.id);
+        return;
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [runShortcut, selectGroupByDigit, orderedGroupTargets.length]);
 
   // Check for missing binaries and offer to download them
   const checkMissingBinaries = useCallback(async () => {
@@ -1306,6 +1449,8 @@ export default function Home() {
               {isLoading && groupsData.length === 0 ? null : null}
               <ProfilesDataTable
                 profiles={filteredProfiles}
+                infoDialogProfile={profileInfoDialog}
+                onInfoDialogProfileChange={setProfileInfoDialog}
                 onLaunchProfile={launchProfile}
                 onKillProfile={handleKillProfile}
                 onCloneProfile={handleCloneProfile}
@@ -1344,6 +1489,10 @@ export default function Home() {
             </div>
           )}
 
+          {currentPage === "shortcuts" && (
+            <ShortcutsPage groupTargets={orderedGroupTargets} />
+          )}
+
           {settingsDialogOpen && (
             <SettingsDialog
               isOpen={settingsDialogOpen}
@@ -1368,6 +1517,7 @@ export default function Home() {
                 setCurrentPage("profiles");
               }}
               subPage={currentPage === "integrations"}
+              initialTab={integrationsInitialTab}
             />
           )}
 
@@ -1404,6 +1554,7 @@ export default function Home() {
               }}
               limitedMode={false}
               subPage={currentPage === "extensions"}
+              initialTab={extensionManagementInitialTab}
             />
           )}
 
@@ -1445,6 +1596,29 @@ export default function Home() {
         onCreateProfile={handleCreateProfile}
         selectedGroupId={selectedGroupId}
         crossOsUnlocked={crossOsUnlocked}
+      />
+
+      <CommandPalette
+        open={commandPaletteOpen}
+        onOpenChange={setCommandPaletteOpen}
+        onAction={runShortcut}
+        groupTargets={orderedGroupTargets}
+        onSelectGroup={(id) => {
+          handleRailNavigate("profiles");
+          handleSelectGroup(id);
+        }}
+        profiles={profiles}
+        runningProfileIds={runningProfiles}
+        onLaunchProfile={(profile) => {
+          void launchProfile(profile);
+        }}
+        onKillProfile={(profile) => {
+          void handleKillProfile(profile);
+        }}
+        onShowProfileInfo={(profile) => {
+          handleRailNavigate("profiles");
+          setProfileInfoDialog(profile);
+        }}
       />
 
       {pendingUrls.map((pendingUrl) => (

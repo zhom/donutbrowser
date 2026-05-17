@@ -1803,7 +1803,9 @@
       "label": "More",
       "closeAriaLabel": "Close menu",
       "importProfile": "Import profile",
-      "importProfileHint": "Bring profiles from another tool"
+      "importProfileHint": "Bring profiles from another tool",
+      "keyboardShortcuts": "Keyboard shortcuts",
+      "keyboardShortcutsHint": "View all shortcuts"
     },
     "network": "Network",
     "integrations": "Integrations",
@@ -1817,7 +1819,8 @@
     "settings": "Settings",
     "integrations": "Integrations",
     "account": "Account",
-    "import": "Import profile"
+    "import": "Import profile",
+    "shortcuts": "Keyboard shortcuts"
   },
   "encryption": {
     "required": {
@@ -1870,5 +1873,36 @@
       "testConnection": "Test connection",
       "disconnect": "Disconnect"
     }
+  },
+  "shortcutsPage": {
+    "title": "Keyboard shortcuts",
+    "description": "Speed up your workflow with these shortcuts."
+  },
+  "commandPalette": {
+    "placeholder": "Type a command or search...",
+    "empty": "No results found.",
+    "groups": {
+      "navigation": "Navigation",
+      "profiles": "Profiles",
+      "actions": "Actions",
+      "profileGroups": "Profile groups"
+    },
+    "actions": {
+      "launchProfile": "Launch {{name}}",
+      "stopProfile": "Stop {{name}}",
+      "profileInfo": "Info — {{name}}"
+    }
+  },
+  "shortcuts": {
+    "openPalette": "Open command palette",
+    "openShortcuts": "View keyboard shortcuts",
+    "importProfile": "Import profile",
+    "goProfiles": "Go to Profiles",
+    "goProxies": "Go to Network",
+    "goExtensions": "Go to Extensions",
+    "goGroups": "Go to Groups",
+    "goIntegrations": "Go to Integrations",
+    "goAccount": "Go to Account",
+    "goSettings": "Go to Settings"
   }
 }

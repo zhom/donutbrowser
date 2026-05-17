@@ -124,6 +124,34 @@ A `<Dialog>` becomes a first-class app sub-page (no modal overlay, no center pos
 
 Reference implementations: `src/components/account-page.tsx`, `src/components/proxy-management-dialog.tsx`. Reuse the exact class strings — the overrides are tuned to match the rest of the sub-page chrome.
 
+### Cross-component tab control
+
+When a tabbed sub-page dialog needs to be opened to a specific tab by an external trigger (e.g. a keyboard shortcut that toggles `proxies` ↔ `vpns`), expose an `initialTab` prop and key the `Tabs` component off it. The `key` change forces a remount so the new tab is selected even though the internal `activeTab` state is otherwise sticky:
+
+```tsx
+<AnimatedTabs key={initialTab} defaultValue={initialTab} ...>
+```
+
+Reference implementations: `proxy-management-dialog.tsx`, `extension-management-dialog.tsx`, `integrations-dialog.tsx`. The owning page in `src/app/page.tsx` keeps one piece of `useState` per dialog (`proxyManagementInitialTab`, `extensionManagementInitialTab`, `integrationsInitialTab`) and flips it on repeated shortcut presses.
+
+## Keyboard shortcuts
+
+All app-wide shortcuts live in `src/lib/shortcuts.ts`:
+
+- `SHORTCUTS[]` — one entry per shortcut (id, label translation key, group, key, modifier flags). The label key must exist in all seven locales.
+- `formatShortcut(s)` returns platform-correct token strings (`["⌘", "K"]` on mac, `["Ctrl", "K"]` elsewhere) — used by both the shortcuts page and the command palette.
+- `matchesShortcut(s, event)` matches a real `KeyboardEvent` and rejects the wrong-platform modifier so Ctrl+K on macOS never fires a `mod: true` shortcut.
+- `matchesGroupDigit(event)` returns 1–9 if Mod+digit was pressed — group switching is dynamic (driven by `orderedGroupTargets` in `page.tsx`) and isn't in the `SHORTCUTS` table.
+
+Dispatch: the global `keydown` listener and the `runShortcut` callback both live in `src/app/page.tsx`. To add a new static shortcut:
+
+1. Append to `SHORTCUTS` in `src/lib/shortcuts.ts`. Add the `ShortcutId` variant.
+2. Add a `case "yourId":` in `runShortcut` in `page.tsx`.
+3. Add the icon mapping in `src/components/command-palette.tsx::ICONS`.
+4. Add `shortcuts.yourId` (label) to all seven locale files.
+
+The command palette (Mod+K) is built on the shadcn `Command` primitive with a token-AND fuzzy filter — `fuzzyFilter` in `command-palette.tsx`. The `CommandDialog` wrapper now forwards `filter`/`shouldFilter` to the inner `Command` for callers that need custom matching.
+
 ## Singletons
 
 - If there is a global singleton of a struct, only use it inside a method while properly initializing it, unless explicitly specified otherwise

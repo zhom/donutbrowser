@@ -1052,6 +1052,13 @@ interface ProfilesDataTableProps {
   onSetPassword?: (profile: BrowserProfile) => void;
   onChangePassword?: (profile: BrowserProfile) => void;
   onRemovePassword?: (profile: BrowserProfile) => void;
+  /**
+   * When provided, the info dialog is controlled by the parent. Allows the
+   * command palette in page.tsx to open the dialog directly without lifting
+   * every other piece of internal table state.
+   */
+  infoDialogProfile?: BrowserProfile | null;
+  onInfoDialogProfileChange?: (profile: BrowserProfile | null) => void;
 }
 
 export function ProfilesDataTable({
@@ -1084,6 +1091,8 @@ export function ProfilesDataTable({
   onSetPassword,
   onChangePassword,
   onRemovePassword,
+  infoDialogProfile,
+  onInfoDialogProfileChange,
 }: ProfilesDataTableProps) {
   const { t } = useTranslation();
   const { getTableSorting, updateSorting, isLoaded } = useTableSorting();
@@ -1155,8 +1164,22 @@ export function ProfilesDataTable({
   const [profileToDelete, setProfileToDelete] =
     React.useState<BrowserProfile | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
-  const [profileForInfoDialog, setProfileForInfoDialog] =
+  const [internalInfoDialogProfile, setInternalInfoDialogProfile] =
     React.useState<BrowserProfile | null>(null);
+  const isInfoDialogControlled = onInfoDialogProfileChange !== undefined;
+  const profileForInfoDialog = isInfoDialogControlled
+    ? (infoDialogProfile ?? null)
+    : internalInfoDialogProfile;
+  const setProfileForInfoDialog = React.useCallback(
+    (p: BrowserProfile | null) => {
+      if (isInfoDialogControlled) {
+        onInfoDialogProfileChange?.(p);
+      } else {
+        setInternalInfoDialogProfile(p);
+      }
+    },
+    [isInfoDialogControlled, onInfoDialogProfileChange],
+  );
   const [bypassRulesProfile, setBypassRulesProfile] =
     React.useState<BrowserProfile | null>(null);
   const [dnsBlocklistProfile, setDnsBlocklistProfile] =
@@ -2836,7 +2859,7 @@ export function ProfilesDataTable({
         },
       },
     ],
-    [t],
+    [t, setProfileForInfoDialog],
   );
 
   const table = useReactTable({

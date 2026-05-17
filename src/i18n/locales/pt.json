@@ -1803,7 +1803,9 @@
       "label": "Mais",
       "closeAriaLabel": "Fechar menu",
       "importProfile": "Importar perfil",
-      "importProfileHint": "Trazer perfis de outra ferramenta"
+      "importProfileHint": "Trazer perfis de outra ferramenta",
+      "keyboardShortcuts": "Atalhos de teclado",
+      "keyboardShortcutsHint": "Ver todos os atalhos"
     },
     "network": "Rede",
     "integrations": "Integrações",
@@ -1817,7 +1819,8 @@
     "settings": "Configurações",
     "integrations": "Integrações",
     "account": "Conta",
-    "import": "Importar perfil"
+    "import": "Importar perfil",
+    "shortcuts": "Atalhos de teclado"
   },
   "encryption": {
     "required": {
@@ -1870,5 +1873,36 @@
       "testConnection": "Testar conexão",
       "disconnect": "Desconectar"
     }
+  },
+  "shortcutsPage": {
+    "title": "Atalhos de teclado",
+    "description": "Acelere seu fluxo de trabalho com estes atalhos."
+  },
+  "commandPalette": {
+    "placeholder": "Digite um comando ou pesquise...",
+    "empty": "Nenhum resultado encontrado.",
+    "groups": {
+      "navigation": "Navegação",
+      "profiles": "Perfis",
+      "actions": "Ações",
+      "profileGroups": "Grupos de perfis"
+    },
+    "actions": {
+      "launchProfile": "Iniciar {{name}}",
+      "stopProfile": "Parar {{name}}",
+      "profileInfo": "Informações — {{name}}"
+    }
+  },
+  "shortcuts": {
+    "openPalette": "Abrir paleta de comandos",
+    "openShortcuts": "Ver atalhos de teclado",
+    "importProfile": "Importar perfil",
+    "goProfiles": "Ir para Perfis",
+    "goProxies": "Ir para Rede",
+    "goExtensions": "Ir para Extensões",
+    "goGroups": "Ir para Grupos",
+    "goIntegrations": "Ir para Integrações",
+    "goAccount": "Ir para Conta",
+    "goSettings": "Ir para Configurações"
   }
 }

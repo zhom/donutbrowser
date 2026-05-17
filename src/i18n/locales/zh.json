@@ -1803,7 +1803,9 @@
       "label": "更多",
       "closeAriaLabel": "关闭菜单",
       "importProfile": "导入配置文件",
-      "importProfileHint": "从其他工具导入"
+      "importProfileHint": "从其他工具导入",
+      "keyboardShortcuts": "键盘快捷键",
+      "keyboardShortcutsHint": "查看所有快捷键"
     },
     "network": "网络",
     "integrations": "集成",
@@ -1817,7 +1819,8 @@
     "settings": "设置",
     "integrations": "集成",
     "account": "账户",
-    "import": "导入配置文件"
+    "import": "导入配置文件",
+    "shortcuts": "键盘快捷键"
   },
   "encryption": {
     "required": {
@@ -1870,5 +1873,36 @@
       "testConnection": "测试连接",
       "disconnect": "断开连接"
     }
+  },
+  "shortcutsPage": {
+    "title": "键盘快捷键",
+    "description": "使用这些快捷键加速您的工作流程。"
+  },
+  "commandPalette": {
+    "placeholder": "输入命令或搜索...",
+    "empty": "未找到结果。",
+    "groups": {
+      "navigation": "导航",
+      "profiles": "配置文件",
+      "actions": "操作",
+      "profileGroups": "配置文件分组"
+    },
+    "actions": {
+      "launchProfile": "启动 {{name}}",
+      "stopProfile": "停止 {{name}}",
+      "profileInfo": "信息 — {{name}}"
+    }
+  },
+  "shortcuts": {
+    "openPalette": "打开命令面板",
+    "openShortcuts": "查看键盘快捷键",
+    "importProfile": "导入配置文件",
+    "goProfiles": "转到配置文件",
+    "goProxies": "转到网络",
+    "goExtensions": "转到扩展程序",
+    "goGroups": "转到分组",
+    "goIntegrations": "转到集成",
+    "goAccount": "转到账户",
+    "goSettings": "转到设置"
   }
 }

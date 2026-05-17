@@ -5,7 +5,14 @@ import { useTranslation } from "react-i18next";
 import { FaDownload } from "react-icons/fa";
 import { FiWifi } from "react-icons/fi";
 import { GoGear, GoKebabHorizontal } from "react-icons/go";
-import { LuCloud, LuPlug, LuPuzzle, LuUser, LuUsers } from "react-icons/lu";
+import {
+  LuCloud,
+  LuKeyboard,
+  LuPlug,
+  LuPuzzle,
+  LuUser,
+  LuUsers,
+} from "react-icons/lu";
 import { cn } from "@/lib/utils";
 import { Logo } from "./icons/logo";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
@@ -19,7 +26,8 @@ export type AppPage =
   | "settings"
   | "integrations"
   | "account"
-  | "import";
+  | "import"
+  | "shortcuts";
 
 const CLICK_THRESHOLD = 5;
 const CLICK_WINDOW_MS = 2000;
@@ -256,6 +264,12 @@ const MORE_ITEMS: MoreMenuItem[] = [
     Icon: FaDownload,
     labelKey: "rail.more.importProfile",
     hintKey: "rail.more.importProfileHint",
+  },
+  {
+    page: "shortcuts",
+    Icon: LuKeyboard,
+    labelKey: "rail.more.keyboardShortcuts",
+    hintKey: "rail.more.keyboardShortcutsHint",
   },
 ];
 

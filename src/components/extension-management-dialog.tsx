@@ -130,6 +130,8 @@ interface ExtensionManagementDialogProps {
   onClose: () => void;
   limitedMode: boolean;
   subPage?: boolean;
+  /** Which tab is displayed when the dialog mounts; defaults to "extensions". */
+  initialTab?: "extensions" | "groups";
 }
 
 export function ExtensionManagementDialog({
@@ -137,6 +139,7 @@ export function ExtensionManagementDialog({
   onClose,
   limitedMode,
   subPage,
+  initialTab = "extensions",
 }: ExtensionManagementDialogProps) {
   const { t } = useTranslation();
   const [extensions, setExtensions] = useState<Extension[]>([]);
@@ -208,9 +211,10 @@ export function ExtensionManagementDialog({
     Record<string, boolean>
   >({});
 
-  // Tab
+  // Tab — keyed off `initialTab` so remounting the dialog with a new initial
+  // tab (e.g. via the Mod+E shortcut toggle) jumps to that tab.
   const [activeTab, setActiveTab] = useState<"extensions" | "groups">(
-    "extensions",
+    initialTab,
   );
 
   const loadData = useCallback(async () => {
@@ -1120,6 +1124,7 @@ export function ExtensionManagementDialog({
             )}
 
             <AnimatedTabs
+              key={initialTab}
               value={activeTab}
               onValueChange={(v) => setActiveTab(v as "extensions" | "groups")}
               className="flex-1 min-h-0 flex flex-col"

@@ -1803,7 +1803,9 @@
       "label": "Más",
       "closeAriaLabel": "Cerrar menú",
       "importProfile": "Importar perfil",
-      "importProfileHint": "Trae perfiles de otra herramienta"
+      "importProfileHint": "Trae perfiles de otra herramienta",
+      "keyboardShortcuts": "Atajos de teclado",
+      "keyboardShortcutsHint": "Ver todos los atajos"
     },
     "network": "Red",
     "integrations": "Integraciones",
@@ -1817,7 +1819,8 @@
     "settings": "Ajustes",
     "integrations": "Integraciones",
     "account": "Cuenta",
-    "import": "Importar perfil"
+    "import": "Importar perfil",
+    "shortcuts": "Atajos de teclado"
   },
   "encryption": {
     "required": {
@@ -1870,5 +1873,36 @@
       "testConnection": "Probar conexión",
       "disconnect": "Desconectar"
     }
+  },
+  "shortcutsPage": {
+    "title": "Atajos de teclado",
+    "description": "Agiliza tu flujo de trabajo con estos atajos."
+  },
+  "commandPalette": {
+    "placeholder": "Escribe un comando o busca...",
+    "empty": "No se encontraron resultados.",
+    "groups": {
+      "navigation": "Navegación",
+      "profiles": "Perfiles",
+      "actions": "Acciones",
+      "profileGroups": "Grupos de perfiles"
+    },
+    "actions": {
+      "launchProfile": "Iniciar {{name}}",
+      "stopProfile": "Detener {{name}}",
+      "profileInfo": "Información — {{name}}"
+    }
+  },
+  "shortcuts": {
+    "openPalette": "Abrir paleta de comandos",
+    "openShortcuts": "Ver atajos de teclado",
+    "importProfile": "Importar perfil",
+    "goProfiles": "Ir a Perfiles",
+    "goProxies": "Ir a Red",
+    "goExtensions": "Ir a Extensiones",
+    "goGroups": "Ir a Grupos",
+    "goIntegrations": "Ir a Integraciones",
+    "goAccount": "Ir a Cuenta",
+    "goSettings": "Ir a Configuración"
   }
 }

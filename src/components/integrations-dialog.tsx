@@ -62,6 +62,8 @@ interface IntegrationsDialogProps {
   isOpen: boolean;
   onClose: () => void;
   subPage?: boolean;
+  /** Which tab is displayed when the dialog mounts; defaults to "api". */
+  initialTab?: "api" | "mcp";
 }
 
 function AgentIcon({ category }: { category: AgentCategory }) {
@@ -98,6 +100,7 @@ export function IntegrationsDialog({
   isOpen,
   onClose,
   subPage,
+  initialTab = "api",
 }: IntegrationsDialogProps) {
   const { t } = useTranslation();
   const [settings, setSettings] = useState<AppSettings>({
@@ -310,7 +313,7 @@ export function IntegrationsDialog({
         )}
 
         <div className="overflow-y-auto flex-1 min-h-0">
-          <AnimatedTabs defaultValue="api">
+          <AnimatedTabs key={initialTab} defaultValue={initialTab}>
             <AnimatedTabsList>
               <AnimatedTabsTrigger value="api">
                 {t("integrations.tabApi")}

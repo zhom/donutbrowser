@@ -1803,7 +1803,9 @@
       "label": "Ещё",
       "closeAriaLabel": "Закрыть меню",
       "importProfile": "Импорт профиля",
-      "importProfileHint": "Перенести профили из другого инструмента"
+      "importProfileHint": "Перенести профили из другого инструмента",
+      "keyboardShortcuts": "Сочетания клавиш",
+      "keyboardShortcutsHint": "Показать все сочетания"
     },
     "network": "Сеть",
     "integrations": "Интеграции",
@@ -1817,7 +1819,8 @@
     "settings": "Настройки",
     "integrations": "Интеграции",
     "account": "Аккаунт",
-    "import": "Импорт профиля"
+    "import": "Импорт профиля",
+    "shortcuts": "Сочетания клавиш"
   },
   "encryption": {
     "required": {
@@ -1870,5 +1873,36 @@
       "testConnection": "Проверить соединение",
       "disconnect": "Отключить"
     }
+  },
+  "shortcutsPage": {
+    "title": "Сочетания клавиш",
+    "description": "Ускорьте работу с помощью этих сочетаний клавиш."
+  },
+  "commandPalette": {
+    "placeholder": "Введите команду или поиск...",
+    "empty": "Ничего не найдено.",
+    "groups": {
+      "navigation": "Навигация",
+      "profiles": "Профили",
+      "actions": "Действия",
+      "profileGroups": "Группы профилей"
+    },
+    "actions": {
+      "launchProfile": "Запустить {{name}}",
+      "stopProfile": "Остановить {{name}}",
+      "profileInfo": "Информация — {{name}}"
+    }
+  },
+  "shortcuts": {
+    "openPalette": "Открыть командную палитру",
+    "openShortcuts": "Показать сочетания клавиш",
+    "importProfile": "Импортировать профиль",
+    "goProfiles": "Перейти к Профилям",
+    "goProxies": "Перейти к Сети",
+    "goExtensions": "Перейти к Расширениям",
+    "goGroups": "Перейти к Группам",
+    "goIntegrations": "Перейти к Интеграциям",
+    "goAccount": "Перейти к Аккаунту",
+    "goSettings": "Перейти к Настройкам"
   }
 }

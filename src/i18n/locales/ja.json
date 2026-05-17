@@ -1803,7 +1803,9 @@
       "label": "その他",
       "closeAriaLabel": "メニューを閉じる",
       "importProfile": "プロファイルをインポート",
-      "importProfileHint": "別のツールから取り込む"
+      "importProfileHint": "別のツールから取り込む",
+      "keyboardShortcuts": "キーボードショートカット",
+      "keyboardShortcutsHint": "すべてのショートカットを表示"
     },
     "network": "ネットワーク",
     "integrations": "連携",
@@ -1817,7 +1819,8 @@
     "settings": "設定",
     "integrations": "連携",
     "account": "アカウント",
-    "import": "プロファイルをインポート"
+    "import": "プロファイルをインポート",
+    "shortcuts": "キーボードショートカット"
   },
   "encryption": {
     "required": {
@@ -1870,5 +1873,36 @@
       "testConnection": "接続をテスト",
       "disconnect": "切断"
     }
+  },
+  "shortcutsPage": {
+    "title": "キーボードショートカット",
+    "description": "これらのショートカットでワークフローを高速化できます。"
+  },
+  "commandPalette": {
+    "placeholder": "コマンドを入力するか検索...",
+    "empty": "結果が見つかりませんでした。",
+    "groups": {
+      "navigation": "ナビゲーション",
+      "profiles": "プロファイル",
+      "actions": "アクション",
+      "profileGroups": "プロファイルグループ"
+    },
+    "actions": {
+      "launchProfile": "{{name}} を起動",
+      "stopProfile": "{{name}} を停止",
+      "profileInfo": "情報 — {{name}}"
+    }
+  },
+  "shortcuts": {
+    "openPalette": "コマンドパレットを開く",
+    "openShortcuts": "キーボードショートカットを表示",
+    "importProfile": "プロファイルをインポート",
+    "goProfiles": "プロファイルへ移動",
+    "goProxies": "ネットワークへ移動",
+    "goExtensions": "拡張機能へ移動",
+    "goGroups": "グループへ移動",
+    "goIntegrations": "統合へ移動",
+    "goAccount": "アカウントへ移動",
+    "goSettings": "設定へ移動"
   }
 }
