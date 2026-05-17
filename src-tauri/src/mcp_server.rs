@@ -33,6 +33,48 @@ pub struct McpTool {
   pub input_schema: serde_json::Value,
 }
 
+/// JavaScript executed in the target page to enumerate visible interactive
+/// elements. Returns a JSON string `{elements, count, truncated}` where
+/// `elements` is the newline-joined labeled list. Live references are stashed
+/// on `window.__donut_interactive` so subsequent `click_by_index` /
+/// `type_by_index` calls can resolve `index → Element` without round-tripping
+/// a selector. `__MAX_CHARS__` is substituted at call time.
+const INTERACTIVE_ELEMENTS_JS: &str = r#"(() => {
+  const SELECTORS = 'a, button, input, select, textarea, [role="button"], [role="link"], [role="checkbox"], [role="radio"], [role="tab"], [role="menuitem"], [role="combobox"], [role="option"], [contenteditable=""], [contenteditable="true"], [tabindex]:not([tabindex="-1"])';
+  const ATTRS = ['type','name','id','role','aria-label','aria-checked','aria-expanded','placeholder','title','value','href','alt'];
+  const MAX_CHARS = __MAX_CHARS__;
+  const interactive = [];
+  const lines = [];
+  let truncated = false;
+  let total = 0;
+  const nodes = document.querySelectorAll(SELECTORS);
+  for (const el of nodes) {
+    if (el.disabled) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) continue;
+    const style = window.getComputedStyle(el);
+    if (style.visibility === 'hidden' || style.display === 'none' || style.opacity === '0') continue;
+    const tag = el.tagName.toLowerCase();
+    const parts = [];
+    for (const a of ATTRS) {
+      const v = el.getAttribute(a);
+      if (v) parts.push(a + '="' + String(v).slice(0,100).replace(/"/g,'\\"') + '"');
+    }
+    let text = '';
+    if (!['INPUT','TEXTAREA','SELECT'].includes(el.tagName)) {
+      text = (el.innerText || el.textContent || '').trim().replace(/\s+/g,' ').slice(0,100);
+    }
+    const idx = interactive.length;
+    const line = '[' + idx + ']<' + tag + (parts.length ? ' ' + parts.join(' ') : '') + '>' + text + '</' + tag + '>';
+    if (total + line.length + 1 > MAX_CHARS) { truncated = true; break; }
+    total += line.length + 1;
+    interactive.push(el);
+    lines.push(line);
+  }
+  window.__donut_interactive = interactive;
+  return JSON.stringify({ elements: lines.join('\n'), count: interactive.length, truncated: truncated });
+})()"#;
+
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
 pub struct McpRequest {
@@ -1354,6 +1396,76 @@ impl McpServer {
           "required": ["profile_id"]
         }),
       },
+      McpTool {
+        name: "get_interactive_elements".to_string(),
+        description: "Enumerate visible interactive elements on the page (buttons, links, inputs, etc.) as a compact indexed list. The returned indices are stable for the current page and can be used with click_by_index and type_by_index instead of guessing CSS selectors. Call this before click_by_index / type_by_index, and re-call after any navigation or major DOM change. Far cheaper in tokens than get_page_content for agentic browsing.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the running profile"
+            },
+            "max_chars": {
+              "type": "integer",
+              "description": "Cap on the serialized output length (default: 40000). The response carries a `truncated` flag if the list was cut off — narrow the viewport or scroll if you need elements past the cutoff."
+            }
+          },
+          "required": ["profile_id"]
+        }),
+      },
+      McpTool {
+        name: "click_by_index".to_string(),
+        description: "Click the element at the given index from the last get_interactive_elements call. Indices are valid until the next navigation. If the click triggers navigation, waits for the new page to load before returning.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the running profile"
+            },
+            "index": {
+              "type": "integer",
+              "description": "Zero-based index from the last get_interactive_elements response"
+            }
+          },
+          "required": ["profile_id", "index"]
+        }),
+      },
+      McpTool {
+        name: "type_by_index".to_string(),
+        description: "Focus the element at the given index from the last get_interactive_elements call and type text into it. Same human-like-typing defaults as type_text; only set instant=true when you're sure the target lacks bot detection.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the running profile"
+            },
+            "index": {
+              "type": "integer",
+              "description": "Zero-based index from the last get_interactive_elements response"
+            },
+            "text": {
+              "type": "string",
+              "description": "Text to type into the element"
+            },
+            "clear_first": {
+              "type": "boolean",
+              "description": "Clear the input before typing (default: true)"
+            },
+            "instant": {
+              "type": "boolean",
+              "description": "Paste all text at once instead of human typing. WARNING: only use on targets without bot detection."
+            },
+            "wpm": {
+              "type": "number",
+              "description": "Target words per minute for human typing (default: 80)"
+            }
+          },
+          "required": ["profile_id", "index", "text"]
+        }),
+      },
     ]
   }
 
@@ -1601,6 +1713,18 @@ impl McpServer {
       "get_page_info" => {
         Self::require_paid_subscription("Browser automation").await?;
         self.handle_get_page_info(arguments).await
+      }
+      "get_interactive_elements" => {
+        Self::require_paid_subscription("Browser automation").await?;
+        self.handle_get_interactive_elements(arguments).await
+      }
+      "click_by_index" => {
+        Self::require_paid_subscription("Browser automation").await?;
+        self.handle_click_by_index(arguments).await
+      }
+      "type_by_index" => {
+        Self::require_paid_subscription("Browser automation").await?;
+        self.handle_type_by_index(arguments).await
       }
       _ => Err(McpError {
         code: -32602,
@@ -4263,6 +4387,11 @@ impl McpServer {
       .and_then(|v| v.as_str())
       .unwrap_or("text");
     let selector = arguments.get("selector").and_then(|v| v.as_str());
+    let max_chars = arguments
+      .get("max_chars")
+      .and_then(|v| v.as_u64())
+      .map(|n| n as usize)
+      .unwrap_or(40_000);
 
     let profile = self.get_running_profile(profile_id)?;
     let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
@@ -4310,10 +4439,28 @@ impl McpServer {
       .and_then(|v| v.as_str())
       .unwrap_or("");
 
+    // Cap output so a 500 KB DOM dump doesn't blow out the agent's context.
+    // Slice on character boundaries (chars().take().collect()) rather than
+    // byte indices, since the latter would panic on multi-byte boundaries.
+    let total_chars = content.chars().count();
+    let (text, truncated) = if total_chars > max_chars {
+      (content.chars().take(max_chars).collect::<String>(), true)
+    } else {
+      (content.to_string(), false)
+    };
+
+    let payload = if truncated {
+      format!(
+        "{text}\n\n[truncated: showing {max_chars} of {total_chars} chars — call with a larger max_chars or use get_interactive_elements for an indexed view]"
+      )
+    } else {
+      text
+    };
+
     Ok(serde_json::json!({
       "content": [{
         "type": "text",
-        "text": content
+        "text": payload
       }]
     }))
   }
@@ -4357,6 +4504,267 @@ impl McpServer {
       "content": [{
         "type": "text",
         "text": serde_json::to_string_pretty(&info).unwrap_or_default()
+      }]
+    }))
+  }
+
+  async fn handle_get_interactive_elements(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?;
+    let max_chars = arguments
+      .get("max_chars")
+      .and_then(|v| v.as_u64())
+      .map(|n| n as usize)
+      .unwrap_or(40_000);
+
+    let profile = self.get_running_profile(profile_id)?;
+    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
+    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+
+    // Walk the DOM for visible, non-disabled interactive elements, label them
+    // with a zero-based index, and cache the live references on
+    // `window.__donut_interactive` so click_by_index / type_by_index can
+    // resolve the index → Element without round-tripping a selector.
+    let js = INTERACTIVE_ELEMENTS_JS.replace("__MAX_CHARS__", &max_chars.to_string());
+
+    let result = self
+      .send_cdp(
+        &ws_url,
+        "Runtime.evaluate",
+        serde_json::json!({
+          "expression": js,
+          "returnByValue": true,
+        }),
+      )
+      .await?;
+
+    if let Some(exception) = result.get("exceptionDetails") {
+      let msg = exception
+        .get("exception")
+        .and_then(|e| e.get("description"))
+        .or_else(|| exception.get("text"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("Enumeration failed");
+      return Err(McpError {
+        code: -32000,
+        message: msg.to_string(),
+      });
+    }
+
+    let payload_str = result
+      .get("result")
+      .and_then(|r| r.get("value"))
+      .and_then(|v| v.as_str())
+      .unwrap_or("{}");
+
+    let payload: serde_json::Value =
+      serde_json::from_str(payload_str).unwrap_or(serde_json::json!({}));
+    let elements = payload
+      .get("elements")
+      .and_then(|v| v.as_str())
+      .unwrap_or("");
+    let count = payload.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
+    let truncated = payload
+      .get("truncated")
+      .and_then(|v| v.as_bool())
+      .unwrap_or(false);
+
+    let header = if truncated {
+      format!("{count} interactive elements (truncated at {max_chars} chars — re-call with a larger max_chars or scroll the page):")
+    } else {
+      format!("{count} interactive elements:")
+    };
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!("{header}\n{elements}")
+      }]
+    }))
+  }
+
+  async fn handle_click_by_index(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?;
+    let index = arguments
+      .get("index")
+      .and_then(|v| v.as_u64())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing index".to_string(),
+      })?;
+
+    let profile = self.get_running_profile(profile_id)?;
+    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
+    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+
+    let js = format!(
+      r#"(() => {{
+        const arr = window.__donut_interactive;
+        if (!arr || !arr[{index}]) throw new Error('No element at index {index}. Call get_interactive_elements first or after navigation.');
+        const el = arr[{index}];
+        el.scrollIntoView({{block: 'center'}});
+        el.click();
+        return true;
+      }})()"#
+    );
+
+    let result = self
+      .send_cdp_and_wait_for_load(
+        &ws_url,
+        "Runtime.evaluate",
+        serde_json::json!({
+          "expression": js,
+          "returnByValue": true,
+        }),
+        10,
+      )
+      .await?;
+
+    if let Some(exception) = result.get("exceptionDetails") {
+      let msg = exception
+        .get("exception")
+        .and_then(|e| e.get("description"))
+        .or_else(|| exception.get("text"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("Click failed");
+      return Err(McpError {
+        code: -32000,
+        message: msg.to_string(),
+      });
+    }
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!("Clicked element at index {index}")
+      }]
+    }))
+  }
+
+  async fn handle_type_by_index(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?;
+    let index = arguments
+      .get("index")
+      .and_then(|v| v.as_u64())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing index".to_string(),
+      })?;
+    let text = arguments
+      .get("text")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing text".to_string(),
+      })?;
+    let clear_first = arguments
+      .get("clear_first")
+      .and_then(|v| v.as_bool())
+      .unwrap_or(true);
+    let instant = arguments
+      .get("instant")
+      .and_then(|v| v.as_bool())
+      .unwrap_or(false);
+    let wpm = arguments.get("wpm").and_then(|v| v.as_f64());
+
+    let profile = self.get_running_profile(profile_id)?;
+    let cdp_port = self.get_cdp_port_for_profile(&profile).await?;
+    let ws_url = self.get_cdp_ws_url(cdp_port).await?;
+
+    // Mirrors handle_type_text's focus step but resolves the element via the
+    // cached index instead of a CSS selector.
+    let focus_js = if clear_first {
+      format!(
+        r#"(() => {{
+          const arr = window.__donut_interactive;
+          if (!arr || !arr[{index}]) throw new Error('No element at index {index}. Call get_interactive_elements first or after navigation.');
+          const el = arr[{index}];
+          el.scrollIntoView({{block: 'center'}});
+          el.focus();
+          el.value = '';
+          el.dispatchEvent(new Event('input', {{bubbles: true}}));
+          return true;
+        }})()"#
+      )
+    } else {
+      format!(
+        r#"(() => {{
+          const arr = window.__donut_interactive;
+          if (!arr || !arr[{index}]) throw new Error('No element at index {index}. Call get_interactive_elements first or after navigation.');
+          const el = arr[{index}];
+          el.scrollIntoView({{block: 'center'}});
+          el.focus();
+          return true;
+        }})()"#
+      )
+    };
+
+    let focus_result = self
+      .send_cdp(
+        &ws_url,
+        "Runtime.evaluate",
+        serde_json::json!({
+          "expression": focus_js,
+          "returnByValue": true,
+        }),
+      )
+      .await?;
+
+    if let Some(exception) = focus_result.get("exceptionDetails") {
+      let msg = exception
+        .get("exception")
+        .and_then(|e| e.get("description"))
+        .or_else(|| exception.get("text"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("Focus failed");
+      return Err(McpError {
+        code: -32000,
+        message: msg.to_string(),
+      });
+    }
+
+    if instant {
+      self
+        .send_cdp(
+          &ws_url,
+          "Input.insertText",
+          serde_json::json!({ "text": text }),
+        )
+        .await?;
+    } else {
+      self.send_human_keystrokes(&ws_url, text, wpm).await?;
+    }
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!("Typed text into element at index {index}")
       }]
     }))
   }
