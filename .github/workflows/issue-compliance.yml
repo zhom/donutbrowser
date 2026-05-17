@@ -1,4 +1,4 @@
-name: Duplicate Issue Check
+name: Issue Compliance Check
 
 on:
   issues:
@@ -12,7 +12,7 @@ env:
   MODEL: z-ai/glm-5.1
 
 jobs:
-  check-duplicates:
+  check-compliance:
     if: github.repository == 'zhom/donutbrowser' && github.event.action == 'opened'
     runs-on: ubuntu-latest
     steps:
@@ -21,29 +21,16 @@ jobs:
 
       - name: Gather context
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
           printf '%s' "$ISSUE_TITLE" > /tmp/issue-title.txt
           printf '%s' "${ISSUE_BODY:-}" > /tmp/issue-body.txt
 
-          # Pull up to 150 open/closed issues for the LLM to compare against.
-          # Exclude the issue under inspection and any PRs (gh issue list does
-          # this naturally).
-          gh issue list \
-            --repo "$GITHUB_REPOSITORY" \
-            --state all \
-            --limit 150 \
-            --json number,title,state,body \
-            --jq "[.[] | select(.number != $ISSUE_NUMBER) | {number, title, state, body: (.body[:400] // \"\")}]" \
-            > /tmp/existing-issues.json
-
       - name: Build prompt
         run: |
           cat > /tmp/system.txt <<'PROMPT'
-          You are reviewing a new GitHub issue for two things — template compliance and possible duplicates. Return ONLY a single JSON object, no prose, no markdown fences.
+          You are reviewing a new GitHub issue for template compliance. Return ONLY a single JSON object, no prose, no markdown fences.
 
           Project: Donut Browser. There are three valid templates:
           - Bug Report (Description + Operating System + Donut Browser version + Which browser is affected + Steps to reproduce + Error logs/screenshots fields)
@@ -59,22 +46,14 @@ jobs:
 
           Do NOT flag for missing optional fields, missing screenshots, short titles, or stylistic issues. Be conservative.
 
-          ## Duplicates — flag candidates ONLY when at least one of these is true
-          - Same error message, exception, or symptom
-          - Same feature being requested
-          - Same root cause area (e.g. "proxy disconnects on Camoufox/Windows")
-
-          Prefer false negatives over false positives. Two issues about Wayfern are not duplicates if they are about different features.
-
           ## Output schema
           {
             "is_compliant": true | false,
-            "non_compliance_reasons": ["short bullet", ...],
-            "duplicates": [{"number": 123, "reason": "short reason"}]
+            "non_compliance_reasons": ["short bullet", ...]
           }
 
-          Empty arrays are fine. If there is nothing to flag, return:
-          {"is_compliant": true, "non_compliance_reasons": [], "duplicates": []}
+          If there is nothing to flag, return:
+          {"is_compliant": true, "non_compliance_reasons": []}
           PROMPT
 
       - name: Call OpenRouter
@@ -86,13 +65,12 @@ jobs:
             --rawfile system_prompt /tmp/system.txt \
             --rawfile title /tmp/issue-title.txt \
             --rawfile body /tmp/issue-body.txt \
-            --rawfile existing /tmp/existing-issues.json \
             '{
               model: $model,
               messages: [
                 { role: "system", content: $system_prompt },
                 { role: "user",
-                  content: ("New issue title: " + $title + "\n\nNew issue body:\n" + $body + "\n\nExisting issues (JSON array):\n" + $existing) }
+                  content: ("New issue title: " + $title + "\n\nNew issue body:\n" + $body) }
               ],
               response_format: { type: "json_object" }
             }')
@@ -108,9 +86,9 @@ jobs:
           # to a noop result so the workflow doesn't fail the issue author's run.
           sed -E 's/^```(json)?$//; s/```$//' /tmp/raw.txt > /tmp/result.json
           if ! jq -e . /tmp/result.json >/dev/null 2>&1; then
-            echo "::warning::Model returned non-JSON; treating as no-op"
+            echo "::warning::Model returned non-JSON; treating as compliant"
             cat /tmp/raw.txt
-            echo '{"is_compliant": true, "non_compliance_reasons": [], "duplicates": []}' > /tmp/result.json
+            echo '{"is_compliant": true, "non_compliance_reasons": []}' > /tmp/result.json
           fi
           echo "Result:"
           cat /tmp/result.json
@@ -122,7 +100,6 @@ jobs:
           r = json.load(open('/tmp/result.json'))
           compliant = bool(r.get('is_compliant', True))
           reasons = r.get('non_compliance_reasons') or []
-          dups = r.get('duplicates') or []
 
           parts = []
           if not compliant:
@@ -134,25 +111,11 @@ jobs:
                   parts.append(f'- {reason}')
               parts.append('')
               parts.append('Please edit this issue to address the above within **24 hours**, or it will be automatically closed.')
-
-          if dups:
-              if parts:
-                  parts.append('')
-                  parts.append('---')
-              parts.append('This issue might duplicate existing reports. Please check:')
-              for d in dups:
-                  num = d.get('number')
-                  reason = d.get('reason', '').strip()
-                  if num:
-                      parts.append(f'- #{num}{" — " + reason if reason else ""}')
-
-          if not compliant:
               parts.append('')
               parts.append('If you believe this was flagged incorrectly, please let a maintainer know.')
 
           comment = '\n'.join(parts).strip()
           open('/tmp/comment.md', 'w').write(comment)
-          # Expose flags for downstream steps via GITHUB_OUTPUT-style write.
           with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
               fh.write(f'has_comment={"true" if comment else "false"}\n')
               fh.write(f'non_compliant={"true" if not compliant else "false"}\n')

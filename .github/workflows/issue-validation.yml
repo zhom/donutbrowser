@@ -102,12 +102,14 @@ jobs:
             its API, MCP server, and the bundled `donut-sync` self-hosted server.
           - **Wayfern** — a Chromium fork maintained by zhom (the same maintainer). Wayfern
             bugs are in-scope here unless they are obviously upstream Chromium issues.
-          - **Camoufox** — a Firefox fork by daijro. The maintainer of THIS repo does NOT
-            contribute to Camoufox and CANNOT fix bugs in it.
+          - **Camoufox** — a Firefox fork by daijro, used by Donut but maintained in a
+            separate repository. Bugs about Camoufox's *internal* behavior are outside
+            the scope of this project.
               - Bugs about Camoufox's *internal* behavior (page rendering, JS engine,
                 dropdowns, form widgets, fingerprinting *as Camoufox implements it*,
-                checkbox/radio quirks) are UPSTREAM ONLY. Redirect to
-                https://github.com/daijro/camoufox/issues.
+                checkbox/radio quirks) are out of scope here. Ask the user to first
+                search https://github.com/daijro/camoufox/issues for a matching report,
+                and if they don't find one, to open it there themselves.
               - Bugs about how Donut *launches, configures, or downloads* Camoufox are
                 in-scope here.
           - **Forks of Wayfern or Camoufox** (e.g. CloverLabsAI, VulpineOS) are NOT
@@ -146,7 +148,10 @@ jobs:
             dismiss as "known issue" / "expected" / "false positive in Tauri apps". Ask
             which exact version was the last working one and what changed.
           - **Out-of-scope (upstream Camoufox)**: report is about Camoufox's own
-            behavior. Redirect, do not collect logs.
+            behavior. Tell the user it's outside the scope of this project and ask
+            them to search the Camoufox repo and, if no matching issue exists, file
+            one there. Do NOT say the maintainer doesn't contribute / can't fix it
+            — keep it strictly about project scope. Do not collect logs.
           - **Fork-support request**: asks the maintainer to support an alternative
             Wayfern/Camoufox fork. Acknowledge in one neutral sentence — do NOT call it
             "clear", "reasonable", "well-thought-out", etc.
@@ -342,7 +347,7 @@ jobs:
           The triage classification (`triage.classification`) determines the response shape:
 
           - `bug-in-scope`: ask for what is missing using the user's reported OS log path. Be concrete about how to obtain logs.
-          - `bug-upstream-camoufox`: redirect ONLY. One sentence acknowledging, then a sentence saying this is a Camoufox-internal issue and the maintainer of this repo does not contribute to Camoufox; ask the user to file at https://github.com/daijro/camoufox/issues. Do NOT ask for Donut logs. Stop after that.
+          - `bug-upstream-camoufox`: redirect ONLY. One sentence acknowledging, then say this is outside the scope of this project — ask the user to first search https://github.com/daijro/camoufox/issues for a matching report and, if none exists, to open one there themselves. Do NOT phrase it as "the maintainer does not contribute" or anything personal — keep it strictly about scope. Do NOT ask for Donut logs. Stop after that.
           - `bug-template-violation` or `ai-generated-junk`: politely ask the user to refile using the bug-report template (the Operating System, Donut Browser version, Which browser, Steps to reproduce, Error logs sections). If they cited "documentation" from any non-`donutbrowser.com`/non-`github.com/zhom` URL (e.g. context7, deepwiki), gently note that those are AI-generated third-party summaries and the only authoritative sources are this repo and donutbrowser.com.
           - `feature-request`: one neutral sentence acknowledging, then ask only what is genuinely needed (concrete use case, whether a workaround would suffice). Do NOT validate.
           - `fork-request`: one neutral sentence acknowledging the request. Note that this would substantially increase support burden and the maintainer evaluates such requests on a case-by-case basis. Ask whether the alternative fork supports all platforms the user uses (macOS / Windows / Linux). No "clear enhancement" language.
