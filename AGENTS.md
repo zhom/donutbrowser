@@ -53,6 +53,8 @@ donutbrowser/
 - After making changes, run `pnpm format && pnpm lint && pnpm test` at the root of the project
 - Always run this command before finishing a task to ensure the application isn't broken
 - `pnpm lint` includes spellcheck via [typos](https://github.com/crate-ci/typos). False positives can be allowlisted in `_typos.toml`
+- The full `pnpm test` output dumps every test name (≈400+ lines) which burns context for no signal. Filter:
+  `pnpm test 2>&1 | grep -E "test result|panicked|FAILED"` — four "test result: ok" lines means everything passed.
 
 ## Code Quality
 
