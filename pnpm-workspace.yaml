@@ -26,3 +26,10 @@ overrides:
   fast-xml-parser@<5.7.0: '>=5.7.2'
   fast-uri@<3.1.2: '>=3.1.2'
   fast-xml-builder@<1.2.0: '>=1.2.0'
+  qs@>=6.11.1 <6.15.2: '>=6.15.2'
+  js-cookie@<3.0.7: '>=3.0.7'
+
+allowBuilds:
+  '@nestjs/core': true
+  sharp: true
+  unrs-resolver: true
