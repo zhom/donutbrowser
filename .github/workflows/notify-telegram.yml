@@ -22,6 +22,7 @@ on:
 
 permissions:
   contents: read
+  models: read
 
 jobs:
   notify:
@@ -105,21 +106,12 @@ jobs:
           fi
           echo "skip=false" >> "$GITHUB_OUTPUT"
 
-      - name: Post release announcement to Telegram
+      - name: Collect commits between previous tag and current tag
+        id: commits
         if: steps.gate.outputs.skip != 'true'
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TAG: ${{ steps.tag.outputs.tag }}
-          REPO: ${{ github.repository }}
         run: |
-          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
-            echo "::warning::TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is not set — skipping Telegram notification."
-            exit 0
-          fi
-
-          # Find the previous stable tag (skip the current one) so the
-          # changelog range is well-defined.
           PREV_TAG=$(git tag --sort=-version:refname \
             | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
             | grep -v "^${TAG}$" \
@@ -127,29 +119,52 @@ jobs:
           if [ -z "$PREV_TAG" ]; then
             PREV_TAG=$(git rev-list --max-parents=0 HEAD)
           fi
+          git log --pretty=format:"- %s (%h)" "${PREV_TAG}..${TAG}" --no-merges > commits.txt
+          echo "previous-tag=${PREV_TAG}" >> "$GITHUB_OUTPUT"
+          echo "Collected $(wc -l < commits.txt) commits between ${PREV_TAG} and ${TAG}."
 
-          strip_prefix() { echo "$1" | sed -E 's/^[a-z]+(\([^)]*\))?: //'; }
+      - name: Generate summary with AI
+        id: ai
+        if: steps.gate.outputs.skip != 'true'
+        uses: actions/ai-inference@17ff458cb182449bbb2e43701fcd98f6af8f6570 # v2.1.0
+        with:
+          prompt-file: .github/prompts/telegram-release-summary.prompt.yml
+          input: |
+            version: ${{ steps.tag.outputs.tag }}
+          file_input: |
+            commits: ./commits.txt
+          max-tokens: 1024
 
-          # Build a plain bullet list from feat / fix / refactor commits.
-          # Other commit types (chore, docs, ci, test, deps) are intentionally
-          # filtered out to keep the channel focused on user-visible changes.
-          CHANGES=""
-          while IFS= read -r msg; do
-            [ -z "$msg" ] && continue
-            case "$msg" in
-              feat\(*\):*|feat:*|fix\(*\):*|fix:*|refactor\(*\):*|refactor:*)
-                CHANGES="${CHANGES}• $(strip_prefix "$msg")"$'\n'
-                ;;
-            esac
-          done < <(git log --pretty=format:%s "${PREV_TAG}..${TAG}")
-
-          if [ -z "$CHANGES" ]; then
-            CHANGES="• See release notes."$'\n'
+      - name: Post release announcement to Telegram
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          REPO: ${{ github.repository }}
+          AI_RESPONSE_FILE: ${{ steps.ai.outputs.response-file }}
+          AI_RESPONSE: ${{ steps.ai.outputs.response }}
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "::warning::TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is not set — skipping Telegram notification."
+            exit 0
           fi
 
-          # HTML-escape the changelog before injecting into Telegram HTML
-          # mode — commit messages can legitimately contain `<`, `>`, `&`.
-          ESCAPED_CHANGES=$(printf '%s' "$CHANGES" \
+          # Prefer the file output — `response` can be truncated for longer summaries.
+          if [ -n "$AI_RESPONSE_FILE" ] && [ -f "$AI_RESPONSE_FILE" ]; then
+            SUMMARY=$(cat "$AI_RESPONSE_FILE")
+          else
+            SUMMARY="$AI_RESPONSE"
+          fi
+
+          if [ -z "${SUMMARY//[[:space:]]/}" ]; then
+            echo "::error::AI summary is empty"
+            exit 1
+          fi
+
+          # HTML-escape the AI summary before injecting into Telegram HTML mode —
+          # commit messages can legitimately contain `<`, `>`, `&` and the AI may echo them.
+          ESCAPED_CHANGES=$(printf '%s' "$SUMMARY" \
             | python3 -c "import html, sys; sys.stdout.write(html.escape(sys.stdin.read()))")
 
           VERSION="${TAG}"
