@@ -52,7 +52,7 @@ pub struct AppSettings {
   #[serde(default)]
   pub launch_on_login_declined: bool, // User permanently declined the launch-on-login prompt
   #[serde(default)]
-  pub language: Option<String>, // ISO 639-1: "en", "es", "pt", "fr", "zh", "ja", "ru", or None for system default
+  pub language: Option<String>, // ISO 639-1: "en", "es", "pt", "fr", "zh", "ja", "ko", "ru", or None for system default
   #[serde(default)]
   pub window_resize_warning_dismissed: bool,
   #[serde(default)]

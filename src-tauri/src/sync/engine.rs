@@ -10,10 +10,47 @@ use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Instant;
 use tokio::sync::{Mutex as TokioMutex, Semaphore};
+
+lazy_static::lazy_static! {
+  static ref SYNC_CANCEL_FLAGS: StdMutex<HashMap<String, Arc<AtomicBool>>> =
+    StdMutex::new(HashMap::new());
+}
+
+fn register_sync_cancel(profile_id: &str) -> Arc<AtomicBool> {
+  let mut map = SYNC_CANCEL_FLAGS.lock().unwrap();
+  let flag = Arc::new(AtomicBool::new(false));
+  map.insert(profile_id.to_string(), flag.clone());
+  flag
+}
+
+fn clear_sync_cancel(profile_id: &str) {
+  SYNC_CANCEL_FLAGS.lock().unwrap().remove(profile_id);
+}
+
+pub fn request_sync_cancel(profile_id: &str) -> bool {
+  if let Some(flag) = SYNC_CANCEL_FLAGS.lock().unwrap().get(profile_id) {
+    flag.store(true, Ordering::SeqCst);
+    true
+  } else {
+    false
+  }
+}
+
+struct SyncCancelGuard(String);
+impl Drop for SyncCancelGuard {
+  fn drop(&mut self) {
+    clear_sync_cancel(&self.0);
+  }
+}
+
+#[tauri::command]
+pub async fn cancel_profile_sync(profile_id: String) -> Result<bool, String> {
+  Ok(request_sync_cancel(&profile_id))
+}
 
 /// Upload/download concurrency limit
 const SYNC_CONCURRENCY: usize = 32;
@@ -391,6 +428,9 @@ impl SyncEngine {
     let profile_dir = profiles_dir.join(profile.id.to_string());
     let profile_id = profile.id.to_string();
 
+    let cancel_flag = register_sync_cancel(&profile_id);
+    let _cancel_guard = SyncCancelGuard(profile_id.clone());
+
     // Determine team key prefix for team profiles
     let key_prefix = Self::get_team_key_prefix(profile).await;
 
@@ -514,8 +554,14 @@ impl SyncEngine {
           &diff.files_to_upload,
           encryption_key.as_ref(),
           &key_prefix,
+          &cancel_flag,
         )
         .await?;
+    }
+
+    if cancel_flag.load(Ordering::Relaxed) {
+      log::info!("Sync cancelled for profile {} after uploads", profile_id);
+      return Err(SyncError::Cancelled);
     }
 
     // Perform downloads
@@ -529,8 +575,14 @@ impl SyncEngine {
           &diff.files_to_download,
           encryption_key.as_ref(),
           &key_prefix,
+          &cancel_flag,
         )
         .await?;
+    }
+
+    if cancel_flag.load(Ordering::Relaxed) {
+      log::info!("Sync cancelled for profile {} after downloads", profile_id);
+      return Err(SyncError::Cancelled);
     }
 
     // Delete local files that don't exist remotely (when remote is newer)
@@ -823,6 +875,7 @@ impl SyncEngine {
     files: &[super::manifest::ManifestFileEntry],
     encryption_key: Option<&[u8; 32]>,
     key_prefix: &str,
+    cancel_flag: &Arc<AtomicBool>,
   ) -> SyncResult<()> {
     if files.is_empty() {
       return Ok(());
@@ -930,6 +983,13 @@ impl SyncEngine {
     let save_counter = Arc::new(AtomicU64::new(0));
 
     for file in &files_to_process {
+      if cancel_flag.load(Ordering::Relaxed) {
+        log::info!(
+          "Upload cancelled for profile {} before scheduling more files",
+          profile_id_owned
+        );
+        break;
+      }
       let sem = semaphore.clone();
       let file_path = profile_dir.join(&file.path);
       let relative_path = file.path.clone();
@@ -958,12 +1018,17 @@ impl SyncEngine {
       let resume_state = resume_state.clone();
       let save_counter = save_counter.clone();
       let profile_dir_clone = profile_dir.clone();
+      let cancel_flag_task = cancel_flag.clone();
       let content_type = mime_guess::from_path(&file.path)
         .first()
         .map(|m| m.to_string());
 
       handles.push(tokio::spawn(async move {
         let _permit = sem.acquire().await.unwrap();
+
+        if cancel_flag_task.load(Ordering::Relaxed) {
+          return Err((relative_path, "cancelled".to_string(), false));
+        }
 
         let data = match fs::read(&file_path) {
           Ok(d) => d,
@@ -1095,6 +1160,7 @@ impl SyncEngine {
     files: &[super::manifest::ManifestFileEntry],
     encryption_key: Option<&[u8; 32]>,
     key_prefix: &str,
+    cancel_flag: &Arc<AtomicBool>,
   ) -> SyncResult<()> {
     if files.is_empty() {
       return Ok(());
@@ -1194,6 +1260,13 @@ impl SyncEngine {
     let save_counter = Arc::new(AtomicU64::new(0));
 
     for file in &files_to_process {
+      if cancel_flag.load(Ordering::Relaxed) {
+        log::info!(
+          "Download cancelled for profile {} before scheduling more files",
+          profile_id_owned
+        );
+        break;
+      }
       let sem = semaphore.clone();
       let file_path = profile_dir.join(&file.path);
       let relative_path = file.path.clone();
@@ -1222,13 +1295,21 @@ impl SyncEngine {
       let resume_state = resume_state.clone();
       let save_counter = save_counter.clone();
       let profile_dir_clone = profile_dir.clone();
+      let cancel_flag_task = cancel_flag.clone();
 
       handles.push(tokio::spawn(async move {
         let _permit = sem.acquire().await.unwrap();
 
+        if cancel_flag_task.load(Ordering::Relaxed) {
+          return Err((relative_path, "cancelled".to_string(), false));
+        }
+
         // Retry loop for network downloads
         let mut last_err = String::new();
         for attempt in 0..MAX_FILE_RETRIES {
+          if cancel_flag_task.load(Ordering::Relaxed) {
+            return Err((relative_path, "cancelled".to_string(), false));
+          }
           match client.download_bytes(&url).await {
             Ok(data) => {
               let write_data = if let Some(ref key) = enc_key {
@@ -2361,6 +2442,8 @@ impl SyncEngine {
       );
     }
     if !manifest.files.is_empty() {
+      let cancel_flag = register_sync_cancel(profile_id);
+      let _cancel_guard = SyncCancelGuard(profile_id.to_string());
       self
         .download_profile_files(
           app_handle,
@@ -2370,6 +2453,7 @@ impl SyncEngine {
           &manifest.files,
           encryption_key.as_ref(),
           key_prefix,
+          &cancel_flag,
         )
         .await?;
     }
@@ -2506,8 +2590,46 @@ impl SyncEngine {
       profiles_to_check.len()
     );
 
-    // For each remote profile, check if it exists locally and download if missing
+    // For each remote profile, check if it exists locally and download if missing.
+    // Skip any profile that has a tombstone — a leftover manifest under a
+    // tombstoned id means delete_prefix raced or partially failed, and
+    // re-downloading it here is what surfaced the "Browsing keeps re-syncing"
+    // bug after a delete.
     for (profile_id, key_prefix) in &profiles_to_check {
+      let personal_tombstone = format!("tombstones/profiles/{}.json", profile_id);
+      let has_personal_tombstone = matches!(
+        self.client.stat(&personal_tombstone).await,
+        Ok(stat) if stat.exists
+      );
+      let team_tombstone_key = if key_prefix.is_empty() {
+        None
+      } else {
+        Some(format!(
+          "{}tombstones/profiles/{}.json",
+          key_prefix, profile_id
+        ))
+      };
+      let has_team_tombstone = if let Some(ref tk) = team_tombstone_key {
+        matches!(self.client.stat(tk).await, Ok(stat) if stat.exists)
+      } else {
+        false
+      };
+      if has_personal_tombstone || has_team_tombstone {
+        log::info!(
+          "Skipping download of tombstoned profile {} (clearing leftover remote files)",
+          profile_id
+        );
+        let prefix = format!("{}profiles/{}/", key_prefix, profile_id);
+        if let Err(e) = self.client.delete_prefix(&prefix, None).await {
+          log::warn!(
+            "Failed to clear stale remote files for tombstoned profile {}: {}",
+            profile_id,
+            e
+          );
+        }
+        continue;
+      }
+
       match self
         .download_profile_if_missing(app_handle, profile_id, key_prefix)
         .await
@@ -2571,6 +2693,24 @@ impl SyncEngine {
         };
 
         if has_personal_tombstone || has_team_tombstone {
+          // Originator guard: re-read the profile right before deleting. If the
+          // local user disabled sync between the snapshot above and this stat
+          // call, they're the one who wrote this tombstone — keep their local
+          // copy. Tombstones must delete remote-originated changes, never the
+          // sender's own data. (Caused mass local deletion in v0.24.x.)
+          let still_sync_enabled = profile_manager
+            .list_profiles()
+            .unwrap_or_default()
+            .iter()
+            .find(|p| p.id.to_string() == *pid)
+            .is_some_and(|p| p.is_sync_enabled());
+          if !still_sync_enabled {
+            log::info!(
+              "Profile {} has a tombstone but sync is no longer enabled locally — keeping local copy (originating device)",
+              pid
+            );
+            continue;
+          }
           log::info!(
             "Profile {} has remote tombstone, deleting locally (deleted on another device)",
             pid
@@ -2948,6 +3088,11 @@ pub async fn set_profile_sync_mode(
     return Err("Cannot modify sync settings for a cross-OS profile".to_string());
   }
 
+  let enabling_now = new_mode != SyncMode::Disabled;
+  if enabling_now && profile.process_id.is_some() {
+    return Err(serde_json::json!({ "code": "PROFILE_RUNNING" }).to_string());
+  }
+
   if profile.ephemeral {
     return Err("Cannot enable sync for an ephemeral profile".to_string());
   }
@@ -3029,6 +3174,22 @@ pub async fn set_profile_sync_mode(
 
   let _ = events::emit("profiles-changed", ());
 
+  // When (re-)enabling sync, clear any stale tombstone from a previous
+  // disable on this device. Otherwise the next reconcile on another
+  // device — or even a race on this one — would see the tombstone and
+  // delete the freshly re-uploaded data.
+  if enabling {
+    if let Ok(engine) = SyncEngine::create_from_settings(&app_handle).await {
+      let key_prefix = SyncEngine::get_team_key_prefix(&profile).await;
+      let personal_tombstone = format!("tombstones/profiles/{}.json", profile_id);
+      let _ = engine.client.delete(&personal_tombstone, None).await;
+      if !key_prefix.is_empty() {
+        let team_tombstone = format!("{}tombstones/profiles/{}.json", key_prefix, profile_id);
+        let _ = engine.client.delete(&team_tombstone, None).await;
+      }
+    }
+  }
+
   if enabling {
     let is_running = profile.process_id.is_some();
 
@@ -3084,28 +3245,25 @@ pub async fn set_profile_sync_mode(
       log::warn!("Scheduler not initialized, sync will not start");
     }
   } else {
-    // Delete remote data when disabling sync
+    // Delete remote data when disabling sync. Awaited (not spawned) so the
+    // tombstone write completes before this command returns. A previous
+    // tokio::spawn here allowed the tombstone-write to land *after* a fast
+    // user-triggered re-enable's tombstone-clear, re-introducing the
+    // tombstone and tripping the reconcile-pass deletion of a profile the
+    // user had just re-enabled (e.g. Personal (z.ai) on 2026-05-20).
     if old_mode != SyncMode::Disabled {
-      let profile_id_clone = profile_id.clone();
-      let app_handle_clone = app_handle.clone();
-      tokio::spawn(async move {
-        match SyncEngine::create_from_settings(&app_handle_clone).await {
-          Ok(engine) => {
-            if let Err(e) = engine.delete_profile(&profile_id_clone).await {
-              log::warn!(
-                "Failed to delete profile {} from sync: {}",
-                profile_id_clone,
-                e
-              );
-            } else {
-              log::info!("Profile {} deleted from sync service", profile_id_clone);
-            }
-          }
-          Err(e) => {
-            log::debug!("Sync not configured, skipping remote deletion: {}", e);
+      match SyncEngine::create_from_settings(&app_handle).await {
+        Ok(engine) => {
+          if let Err(e) = engine.delete_profile(&profile_id).await {
+            log::warn!("Failed to delete profile {} from sync: {}", profile_id, e);
+          } else {
+            log::info!("Profile {} deleted from sync service", profile_id);
           }
         }
-      });
+        Err(e) => {
+          log::debug!("Sync not configured, skipping remote deletion: {}", e);
+        }
+      }
     }
 
     let _ = events::emit(
@@ -3183,6 +3341,28 @@ pub async fn sync_profile(app_handle: tauri::AppHandle, profile_id: String) -> R
   trigger_sync_for_profile(app_handle, profile_id).await
 }
 
+/// Ensure the device has either a cloud login or a self-hosted server URL + token.
+/// Returns a JSON error code string consumable by the frontend translator.
+async fn ensure_sync_configured(app_handle: &tauri::AppHandle) -> Result<(), String> {
+  let cloud_logged_in = crate::cloud_auth::CLOUD_AUTH.is_logged_in().await;
+  if cloud_logged_in {
+    return Ok(());
+  }
+  let manager = SettingsManager::instance();
+  let settings = manager.load_settings().map_err(|e| {
+    serde_json::json!({ "code": "INTERNAL_ERROR", "params": { "detail": e.to_string() } })
+      .to_string()
+  })?;
+  if settings.sync_server_url.is_none() {
+    return Err(serde_json::json!({ "code": "SYNC_NOT_CONFIGURED" }).to_string());
+  }
+  let token = manager.get_sync_token(app_handle).await.ok().flatten();
+  if token.is_none() {
+    return Err(serde_json::json!({ "code": "SYNC_NOT_CONFIGURED" }).to_string());
+  }
+  Ok(())
+}
+
 pub async fn trigger_sync_for_profile(
   app_handle: tauri::AppHandle,
   profile_id: String,
@@ -3222,43 +3402,29 @@ pub async fn set_proxy_sync_enabled(
   let proxy = proxies
     .iter()
     .find(|p| p.id == proxy_id)
-    .ok_or_else(|| format!("Proxy with ID '{proxy_id}' not found"))?;
+    .ok_or_else(|| serde_json::json!({ "code": "PROXY_NOT_FOUND" }).to_string())?;
 
   // Block modifying sync for cloud-managed proxies
   if proxy.is_cloud_managed {
-    return Err("Cannot modify sync for a cloud-managed proxy".to_string());
+    return Err(serde_json::json!({ "code": "CANNOT_MODIFY_CLOUD_MANAGED_PROXY" }).to_string());
   }
 
   // If disabling, check if proxy is used by any synced profile
   if !enabled && is_proxy_used_by_synced_profile(&proxy_id) {
-    return Err("Sync cannot be disabled while this proxy is used by synced profiles".to_string());
+    return Err(serde_json::json!({ "code": "SYNC_LOCKED_BY_PROFILE" }).to_string());
   }
 
   // If enabling, check that sync settings are configured
   if enabled {
-    let cloud_logged_in = crate::cloud_auth::CLOUD_AUTH.is_logged_in().await;
-
-    if !cloud_logged_in {
-      let manager = SettingsManager::instance();
-      let settings = manager
-        .load_settings()
-        .map_err(|e| format!("Failed to load settings: {e}"))?;
-
-      if settings.sync_server_url.is_none() {
-        return Err(
-          "Sync server not configured. Please configure sync settings first.".to_string(),
-        );
-      }
-
-      let token = manager.get_sync_token(&app_handle).await.ok().flatten();
-      if token.is_none() {
-        return Err("Sync token not configured. Please configure sync settings first.".to_string());
-      }
-    }
+    ensure_sync_configured(&app_handle).await?;
   }
 
   let new_last_sync = if enabled { proxy.last_sync } else { None };
-  proxy_manager.set_stored_proxy_sync_state(&proxy_id, enabled, new_last_sync)?;
+  proxy_manager
+    .set_stored_proxy_sync_state(&proxy_id, enabled, new_last_sync)
+    .map_err(|e| {
+      serde_json::json!({ "code": "INTERNAL_ERROR", "params": { "detail": e } }).to_string()
+    })?;
 
   let _ = events::emit("stored-proxies-changed", ());
 
@@ -3299,36 +3465,18 @@ pub async fn set_group_sync_enabled(
     groups
       .iter()
       .find(|g| g.id == group_id)
-      .ok_or_else(|| format!("Group with ID '{group_id}' not found"))?
+      .ok_or_else(|| serde_json::json!({ "code": "GROUP_NOT_FOUND" }).to_string())?
       .clone()
   };
 
   // If disabling, check if group is used by any synced profile
   if !enabled && is_group_used_by_synced_profile(&group_id) {
-    return Err("Sync cannot be disabled while this group is used by synced profiles".to_string());
+    return Err(serde_json::json!({ "code": "SYNC_LOCKED_BY_PROFILE" }).to_string());
   }
 
   // If enabling, check that sync settings are configured
   if enabled {
-    let cloud_logged_in = crate::cloud_auth::CLOUD_AUTH.is_logged_in().await;
-
-    if !cloud_logged_in {
-      let manager = SettingsManager::instance();
-      let settings = manager
-        .load_settings()
-        .map_err(|e| format!("Failed to load settings: {e}"))?;
-
-      if settings.sync_server_url.is_none() {
-        return Err(
-          "Sync server not configured. Please configure sync settings first.".to_string(),
-        );
-      }
-
-      let token = manager.get_sync_token(&app_handle).await.ok().flatten();
-      if token.is_none() {
-        return Err("Sync token not configured. Please configure sync settings first.".to_string());
-      }
-    }
+    ensure_sync_configured(&app_handle).await?;
   }
 
   let mut updated_group = group.clone();
@@ -3341,7 +3489,10 @@ pub async fn set_group_sync_enabled(
   {
     let group_manager = crate::group_manager::GROUP_MANAGER.lock().unwrap();
     if let Err(e) = group_manager.update_group_internal(&updated_group) {
-      return Err(format!("Failed to update group: {e}"));
+      return Err(
+        serde_json::json!({ "code": "INTERNAL_ERROR", "params": { "detail": e.to_string() } })
+          .to_string(),
+      );
     }
   }
 
@@ -3392,35 +3543,17 @@ pub async fn set_vpn_sync_enabled(
     let storage = crate::vpn::VPN_STORAGE.lock().unwrap();
     storage
       .load_config(&vpn_id)
-      .map_err(|e| format!("VPN with ID '{vpn_id}' not found: {e}"))?
+      .map_err(|_| serde_json::json!({ "code": "VPN_NOT_FOUND" }).to_string())?
   };
 
   // If disabling, check if VPN is used by any synced profile
   if !enabled && is_vpn_used_by_synced_profile(&vpn_id) {
-    return Err("Sync cannot be disabled while this VPN is used by synced profiles".to_string());
+    return Err(serde_json::json!({ "code": "SYNC_LOCKED_BY_PROFILE" }).to_string());
   }
 
   // If enabling, check that sync settings are configured
   if enabled {
-    let cloud_logged_in = crate::cloud_auth::CLOUD_AUTH.is_logged_in().await;
-
-    if !cloud_logged_in {
-      let manager = SettingsManager::instance();
-      let settings = manager
-        .load_settings()
-        .map_err(|e| format!("Failed to load settings: {e}"))?;
-
-      if settings.sync_server_url.is_none() {
-        return Err(
-          "Sync server not configured. Please configure sync settings first.".to_string(),
-        );
-      }
-
-      let token = manager.get_sync_token(&app_handle).await.ok().flatten();
-      if token.is_none() {
-        return Err("Sync token not configured. Please configure sync settings first.".to_string());
-      }
-    }
+    ensure_sync_configured(&app_handle).await?;
   }
 
   let last_sync = if enabled { vpn.last_sync } else { None };
@@ -3429,7 +3562,10 @@ pub async fn set_vpn_sync_enabled(
     let storage = crate::vpn::VPN_STORAGE.lock().unwrap();
     storage
       .update_sync_fields(&vpn_id, enabled, last_sync)
-      .map_err(|e| format!("Failed to update VPN sync: {e}"))?;
+      .map_err(|e| {
+        serde_json::json!({ "code": "INTERNAL_ERROR", "params": { "detail": e.to_string() } })
+          .to_string()
+      })?;
   }
 
   let _ = events::emit("vpn-configs-changed", ());
@@ -3526,48 +3662,10 @@ pub fn get_unsynced_entity_counts() -> Result<UnsyncedEntityCounts, String> {
 
 #[tauri::command]
 pub async fn enable_sync_for_all_entities(app_handle: tauri::AppHandle) -> Result<(), String> {
-  // Enable sync for all eligible profiles. Without this the user would see
-  // groups/proxies/vpns syncing while their profiles stay local-only — the
-  // long-standing source of issue #352. Encrypted mode wins when an E2E
-  // password is already configured; otherwise we fall back to plain Regular.
-  {
-    let profile_manager = ProfileManager::instance();
-    let profiles = profile_manager
-      .list_profiles()
-      .map_err(|e| format!("Failed to list profiles: {e}"))?;
-    let desired_mode = if encryption::has_e2e_password() {
-      SyncMode::Encrypted
-    } else {
-      SyncMode::Regular
-    };
-    let desired_mode_str = match desired_mode {
-      SyncMode::Encrypted => "Encrypted",
-      SyncMode::Regular => "Regular",
-      SyncMode::Disabled => "Disabled",
-    };
-    for profile in &profiles {
-      // Skip profiles that are already syncing (any non-Disabled mode),
-      // ephemeral profiles (data wipes on quit, sync is meaningless), and
-      // cross-OS profiles (the OS-specific binary isn't installed locally
-      // so a sync round-trip would be one-sided).
-      if profile.sync_mode != SyncMode::Disabled || profile.ephemeral || profile.is_cross_os() {
-        continue;
-      }
-      if let Err(e) = set_profile_sync_mode(
-        app_handle.clone(),
-        profile.id.to_string(),
-        desired_mode_str.to_string(),
-      )
-      .await
-      {
-        log::warn!(
-          "Failed to enable sync for profile {} ({}): {e}",
-          profile.name,
-          profile.id
-        );
-      }
-    }
-  }
+  // Intentionally excludes profiles: enabling profile sync uploads the entire
+  // browser data dir per profile, which is destructive if the user expected
+  // an opt-in. Profile sync stays under explicit per-profile control via
+  // set_profile_sync_mode. This command only touches metadata-sized entities.
 
   // Enable sync for all unsynced proxies
   {
@@ -3664,26 +3762,11 @@ pub async fn set_extension_sync_enabled(
     let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
     manager
       .get_extension(&extension_id)
-      .map_err(|e| format!("Extension with ID '{extension_id}' not found: {e}"))?
+      .map_err(|_| serde_json::json!({ "code": "EXTENSION_NOT_FOUND" }).to_string())?
   };
 
   if enabled {
-    let cloud_logged_in = crate::cloud_auth::CLOUD_AUTH.is_logged_in().await;
-    if !cloud_logged_in {
-      let manager = SettingsManager::instance();
-      let settings = manager
-        .load_settings()
-        .map_err(|e| format!("Failed to load settings: {e}"))?;
-      if settings.sync_server_url.is_none() {
-        return Err(
-          "Sync server not configured. Please configure sync settings first.".to_string(),
-        );
-      }
-      let token = manager.get_sync_token(&app_handle).await.ok().flatten();
-      if token.is_none() {
-        return Err("Sync token not configured. Please configure sync settings first.".to_string());
-      }
-    }
+    ensure_sync_configured(&app_handle).await?;
   }
 
   let mut updated_ext = ext;
@@ -3696,7 +3779,10 @@ pub async fn set_extension_sync_enabled(
     let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
     manager
       .update_extension_internal(&updated_ext)
-      .map_err(|e| format!("Failed to update extension sync: {e}"))?;
+      .map_err(|e| {
+        serde_json::json!({ "code": "INTERNAL_ERROR", "params": { "detail": e.to_string() } })
+          .to_string()
+      })?;
   }
 
   let _ = events::emit("extensions-changed", ());
@@ -3720,26 +3806,11 @@ pub async fn set_extension_group_sync_enabled(
     let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
     manager
       .get_group(&extension_group_id)
-      .map_err(|e| format!("Extension group with ID '{extension_group_id}' not found: {e}"))?
+      .map_err(|_| serde_json::json!({ "code": "EXTENSION_GROUP_NOT_FOUND" }).to_string())?
   };
 
   if enabled {
-    let cloud_logged_in = crate::cloud_auth::CLOUD_AUTH.is_logged_in().await;
-    if !cloud_logged_in {
-      let manager = SettingsManager::instance();
-      let settings = manager
-        .load_settings()
-        .map_err(|e| format!("Failed to load settings: {e}"))?;
-      if settings.sync_server_url.is_none() {
-        return Err(
-          "Sync server not configured. Please configure sync settings first.".to_string(),
-        );
-      }
-      let token = manager.get_sync_token(&app_handle).await.ok().flatten();
-      if token.is_none() {
-        return Err("Sync token not configured. Please configure sync settings first.".to_string());
-      }
-    }
+    ensure_sync_configured(&app_handle).await?;
   }
 
   let mut updated_group = group;
@@ -3750,9 +3821,10 @@ pub async fn set_extension_group_sync_enabled(
 
   {
     let manager = crate::extension_manager::EXTENSION_MANAGER.lock().unwrap();
-    manager
-      .update_group_internal(&updated_group)
-      .map_err(|e| format!("Failed to update extension group sync: {e}"))?;
+    manager.update_group_internal(&updated_group).map_err(|e| {
+      serde_json::json!({ "code": "INTERNAL_ERROR", "params": { "detail": e.to_string() } })
+        .to_string()
+    })?;
   }
 
   let _ = events::emit("extensions-changed", ());

@@ -1174,7 +1174,7 @@ export default function Home() {
                 failed_count: payload.failed_count ?? 0,
                 phase: payload.phase,
               },
-              { id: toastId },
+              { id: toastId, profileId: payload.profile_id },
             );
           }
         });

@@ -120,6 +120,7 @@ export function IntegrationsDialog({
   const [isMcpStarting, setIsMcpStarting] = useState(false);
   const [agents, setAgents] = useState<McpAgentInfo[]>([]);
   const [busyAgentIds, setBusyAgentIds] = useState<Set<string>>(new Set());
+  const [apiPortDraft, setApiPortDraft] = useState<string>("10108");
 
   const { termsAccepted } = useWayfernTerms();
 
@@ -127,6 +128,7 @@ export function IntegrationsDialog({
     try {
       const loaded = await invoke<AppSettings>("get_app_settings");
       setSettings(loaded);
+      setApiPortDraft(String(loaded.api_port ?? ""));
     } catch (e) {
       console.error("Failed to load settings:", e);
     }
@@ -370,11 +372,22 @@ export function IntegrationsDialog({
                       <div className="flex items-center gap-2">
                         <Input
                           type="number"
-                          value={settings.api_port}
+                          value={apiPortDraft}
                           onChange={(e) => {
+                            setApiPortDraft(e.target.value);
                             const val = Number.parseInt(e.target.value, 10);
-                            if (!Number.isNaN(val)) {
+                            if (
+                              !Number.isNaN(val) &&
+                              val >= 1 &&
+                              val <= 65535
+                            ) {
                               setSettings({ ...settings, api_port: val });
+                            }
+                          }}
+                          onBlur={() => {
+                            const val = Number.parseInt(apiPortDraft, 10);
+                            if (Number.isNaN(val) || val < 1 || val > 65535) {
+                              setApiPortDraft(String(settings.api_port));
                             }
                           }}
                           className="w-24 font-mono"

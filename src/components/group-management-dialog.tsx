@@ -57,6 +57,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { parseBackendError, translateBackendError } from "@/lib/backend-errors";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import type { GroupWithCount, ProfileGroup } from "@/types";
 import { RippleButton } from "./ui/ripple";
@@ -262,8 +263,8 @@ export function GroupManagementDialog({
       } catch (error) {
         console.error("Failed to toggle sync:", error);
         showErrorToast(
-          error instanceof Error
-            ? error.message
+          parseBackendError(error)
+            ? translateBackendError(t, error)
             : t("proxies.management.updateSyncFailed"),
         );
       } finally {
@@ -529,9 +530,15 @@ export function GroupManagementDialog({
         }),
       ),
     );
-    const failed = results.filter((r) => r.status === "rejected").length;
-    if (failed > 0) {
-      showErrorToast(t("proxies.management.updateSyncFailed"));
+    const firstRejection = results.find((r) => r.status === "rejected") as
+      | PromiseRejectedResult
+      | undefined;
+    if (firstRejection) {
+      showErrorToast(
+        parseBackendError(firstRejection.reason)
+          ? translateBackendError(t, firstRejection.reason)
+          : t("proxies.management.updateSyncFailed"),
+      );
     } else {
       showSuccessToast(
         targetEnabled

@@ -1070,16 +1070,16 @@
   "syncAll": {
     "title": "Activar sincronización para elementos existentes",
     "description": "Tienes elementos que no se están sincronizando. ¿Te gustaría activar la sincronización para todos?",
-    "itemsList": "Elementos no sincronizados: {{items}}",
-    "proxies": "{{count}} proxy",
-    "proxies_plural": "{{count}} proxies",
-    "groups": "{{count}} grupo",
-    "groups_plural": "{{count}} grupos",
-    "vpns": "{{count}} VPN",
-    "vpns_plural": "{{count}} VPNs",
     "enableAll": "Activar todos",
     "skip": "Omitir",
-    "success": "Sincronización activada para todos los elementos"
+    "success": "Sincronización activada para todos los elementos",
+    "labels": {
+      "proxies": "Proxies",
+      "vpns": "VPN",
+      "groups": "Grupos",
+      "extensions": "Extensiones",
+      "extensionGroups": "Grupos de extensiones"
+    }
   },
   "crossOs": {
     "viewOnly": "Este perfil fue creado en {{os}} y no es compatible con este sistema",
@@ -1788,6 +1788,14 @@
     "profileLocked": "El perfil está bloqueado. Introduce la contraseña primero.",
     "invalidProfileId": "ID de perfil no válido",
     "passwordTooShort": "La contraseña debe tener al menos {{min}} caracteres",
+    "proxyNotFound": "Proxy no encontrado",
+    "groupNotFound": "Grupo no encontrado",
+    "vpnNotFound": "VPN no encontrada",
+    "extensionNotFound": "Extensión no encontrada",
+    "extensionGroupNotFound": "Grupo de extensiones no encontrado",
+    "cannotModifyCloudManagedProxy": "No se puede modificar la sincronización de un proxy gestionado en la nube",
+    "syncLockedByProfile": "No se puede desactivar la sincronización mientras se usa en perfiles sincronizados",
+    "syncNotConfigured": "La sincronización no está configurada. Inicia sesión o configura un servidor propio.",
     "internal": "Algo salió mal: {{detail}}",
     "invalidLaunchHookUrl": "URL del hook de inicio no válida. Usa una URL completa http:// o https://.",
     "cookieDbLocked": "No se pudieron leer las cookies — la base de datos está bloqueada. Cierra el navegador e inténtalo de nuevo.",

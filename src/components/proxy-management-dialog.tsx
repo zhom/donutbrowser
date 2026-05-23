@@ -67,6 +67,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
+import { parseBackendError, translateBackendError } from "@/lib/backend-errors";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import { cn } from "@/lib/utils";
 import type { ProxyCheckResult, StoredProxy, VpnConfig } from "@/types";
@@ -394,8 +395,8 @@ export function ProxyManagementDialog({
       } catch (error) {
         console.error("Failed to toggle sync:", error);
         showErrorToast(
-          error instanceof Error
-            ? error.message
+          parseBackendError(error)
+            ? translateBackendError(t, error)
             : t("proxies.management.updateSyncFailed"),
         );
       } finally {
@@ -458,8 +459,8 @@ export function ProxyManagementDialog({
       } catch (error) {
         console.error("Failed to toggle VPN sync:", error);
         showErrorToast(
-          error instanceof Error
-            ? error.message
+          parseBackendError(error)
+            ? translateBackendError(t, error)
             : t("proxies.management.updateSyncFailed"),
         );
       } finally {
@@ -1010,9 +1011,15 @@ export function ProxyManagementDialog({
         }),
       ),
     );
-    const failed = results.filter((r) => r.status === "rejected").length;
-    if (failed > 0) {
-      showErrorToast(t("proxies.management.updateSyncFailed"));
+    const firstRejection = results.find((r) => r.status === "rejected") as
+      | PromiseRejectedResult
+      | undefined;
+    if (firstRejection) {
+      showErrorToast(
+        parseBackendError(firstRejection.reason)
+          ? translateBackendError(t, firstRejection.reason)
+          : t("proxies.management.updateSyncFailed"),
+      );
     } else {
       showSuccessToast(
         targetEnabled
@@ -1039,9 +1046,15 @@ export function ProxyManagementDialog({
         }),
       ),
     );
-    const failed = results.filter((r) => r.status === "rejected").length;
-    if (failed > 0) {
-      showErrorToast(t("vpns.management.updateSyncFailed"));
+    const firstRejection = results.find((r) => r.status === "rejected") as
+      | PromiseRejectedResult
+      | undefined;
+    if (firstRejection) {
+      showErrorToast(
+        parseBackendError(firstRejection.reason)
+          ? translateBackendError(t, firstRejection.reason)
+          : t("proxies.management.updateSyncFailed"),
+      );
     } else {
       showSuccessToast(
         targetEnabled
@@ -1055,7 +1068,7 @@ export function ProxyManagementDialog({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose} subPage={subPage}>
-        <DialogContent className="max-w-[min(95vw,1600px)] max-h-[90vh] flex flex-col">
+        <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
           {!subPage && (
             <DialogHeader>
               <DialogTitle>{t("proxies.management.title")}</DialogTitle>
@@ -1170,7 +1183,7 @@ export function ProxyManagementDialog({
                       } as React.CSSProperties
                     }
                   >
-                    <Table className="min-w-max">
+                    <Table className="w-full">
                       <TableHeader className="sticky top-0 z-10 bg-background">
                         {proxiesTable.getHeaderGroups().map((headerGroup) => (
                           <TableRow key={headerGroup.id}>
@@ -1251,7 +1264,7 @@ export function ProxyManagementDialog({
                       } as React.CSSProperties
                     }
                   >
-                    <Table className="min-w-max">
+                    <Table className="w-full">
                       <TableHeader className="sticky top-0 z-10 bg-background">
                         {vpnsTable.getHeaderGroups().map((headerGroup) => (
                           <TableRow key={headerGroup.id}>

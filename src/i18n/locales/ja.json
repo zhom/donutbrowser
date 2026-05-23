@@ -1070,16 +1070,16 @@
   "syncAll": {
     "title": "既存アイテムの同期を有効にする",
     "description": "同期されていないアイテムがあります。すべての同期を有効にしますか？",
-    "itemsList": "未同期アイテム: {{items}}",
-    "proxies": "{{count}}個のプロキシ",
-    "proxies_plural": "{{count}}個のプロキシ",
-    "groups": "{{count}}個のグループ",
-    "groups_plural": "{{count}}個のグループ",
-    "vpns": "{{count}}個のVPN",
-    "vpns_plural": "{{count}}個のVPN",
     "enableAll": "すべて有効にする",
     "skip": "スキップ",
-    "success": "すべてのアイテムの同期が有効になりました"
+    "success": "すべてのアイテムの同期が有効になりました",
+    "labels": {
+      "proxies": "プロキシ",
+      "vpns": "VPN",
+      "groups": "グループ",
+      "extensions": "拡張機能",
+      "extensionGroups": "拡張機能グループ"
+    }
   },
   "crossOs": {
     "viewOnly": "このプロファイルは{{os}}で作成されたもので、このシステムではサポートされていません",
@@ -1788,6 +1788,14 @@
     "profileLocked": "プロファイルはロックされています。先にパスワードを入力してください。",
     "invalidProfileId": "無効なプロファイルIDです",
     "passwordTooShort": "パスワードは {{min}} 文字以上必要です",
+    "proxyNotFound": "プロキシが見つかりません",
+    "groupNotFound": "グループが見つかりません",
+    "vpnNotFound": "VPNが見つかりません",
+    "extensionNotFound": "拡張機能が見つかりません",
+    "extensionGroupNotFound": "拡張機能グループが見つかりません",
+    "cannotModifyCloudManagedProxy": "クラウド管理のプロキシの同期は変更できません",
+    "syncLockedByProfile": "同期済みプロファイルで使用中のため、同期を無効にできません",
+    "syncNotConfigured": "同期が設定されていません。サインインするか、セルフホストサーバーを設定してください。",
     "internal": "問題が発生しました: {{detail}}",
     "invalidLaunchHookUrl": "起動フックURLが無効です。完全な http:// または https:// URL を使用してください。",
     "cookieDbLocked": "Cookie を読み取れません — データベースがロックされています。ブラウザを閉じてから再試行してください。",

@@ -20,6 +20,14 @@ export type BackendErrorCode =
   | "COOKIE_DB_LOCKED"
   | "COOKIE_DB_UNAVAILABLE"
   | "SELF_HOSTED_REQUIRES_LOGOUT"
+  | "PROXY_NOT_FOUND"
+  | "GROUP_NOT_FOUND"
+  | "VPN_NOT_FOUND"
+  | "EXTENSION_NOT_FOUND"
+  | "EXTENSION_GROUP_NOT_FOUND"
+  | "CANNOT_MODIFY_CLOUD_MANAGED_PROXY"
+  | "SYNC_LOCKED_BY_PROFILE"
+  | "SYNC_NOT_CONFIGURED"
   | "INTERNAL_ERROR";
 
 export interface BackendError {
@@ -96,6 +104,22 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.cookieDbUnavailable");
     case "SELF_HOSTED_REQUIRES_LOGOUT":
       return t("backendErrors.selfHostedRequiresLogout");
+    case "PROXY_NOT_FOUND":
+      return t("backendErrors.proxyNotFound");
+    case "GROUP_NOT_FOUND":
+      return t("backendErrors.groupNotFound");
+    case "VPN_NOT_FOUND":
+      return t("backendErrors.vpnNotFound");
+    case "EXTENSION_NOT_FOUND":
+      return t("backendErrors.extensionNotFound");
+    case "EXTENSION_GROUP_NOT_FOUND":
+      return t("backendErrors.extensionGroupNotFound");
+    case "CANNOT_MODIFY_CLOUD_MANAGED_PROXY":
+      return t("backendErrors.cannotModifyCloudManagedProxy");
+    case "SYNC_LOCKED_BY_PROFILE":
+      return t("backendErrors.syncLockedByProfile");
+    case "SYNC_NOT_CONFIGURED":
+      return t("backendErrors.syncNotConfigured");
     case "INTERNAL_ERROR":
       return t("backendErrors.internal", {
         detail: parsed.params?.detail ?? "",

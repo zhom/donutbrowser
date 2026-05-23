@@ -87,6 +87,8 @@ pub struct UpdateProfileRequest {
   pub tags: Option<Vec<String>>,
   pub extension_group_id: Option<String>,
   pub proxy_bypass_rules: Option<Vec<String>>,
+  /// One of "Disabled", "Regular", "Encrypted".
+  pub sync_mode: Option<String>,
 }
 
 #[derive(Clone)]
@@ -397,10 +399,15 @@ impl ApiServer {
       .route("/events", get(ws_handler))
       .with_state(ws_state);
 
+    let api_for_v1 = api.clone();
     let app = Router::new()
       .merge(v1_routes)
       .nest("/ws", ws_routes)
       .route("/openapi.json", get(move || async move { Json(api) }))
+      .route(
+        "/v1/openapi.json",
+        get(move || async move { Json(api_for_v1) }),
+      )
       // Outermost layer: logs every request so customer reports show what
       // their automation is actually calling, what the response status was,
       // and how long it took. Never logs request bodies or auth headers.
@@ -923,6 +930,15 @@ async fn update_profile(
   if let Some(proxy_bypass_rules) = request.proxy_bypass_rules {
     if profile_manager
       .update_profile_proxy_bypass_rules(&state.app_handle, &id, proxy_bypass_rules)
+      .is_err()
+    {
+      return Err(StatusCode::BAD_REQUEST);
+    }
+  }
+
+  if let Some(sync_mode) = request.sync_mode {
+    if crate::sync::set_profile_sync_mode(state.app_handle.clone(), id.clone(), sync_mode)
+      .await
       .is_err()
     {
       return Err(StatusCode::BAD_REQUEST);

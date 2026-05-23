@@ -464,6 +464,7 @@ export function SettingsDialog({
                 | "fr"
                 | "zh"
                 | "ja"
+                | "ko"
                 | "ru"),
         );
         setOriginalLanguage(selectedLanguage);

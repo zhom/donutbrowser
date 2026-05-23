@@ -73,6 +73,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { parseBackendError, translateBackendError } from "@/lib/backend-errors";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import type { Extension, ExtensionGroup } from "@/types";
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
@@ -308,7 +309,11 @@ export function ExtensionManagementDialog({
         );
         void loadData();
       } catch (err) {
-        showErrorToast(err instanceof Error ? err.message : String(err));
+        showErrorToast(
+          parseBackendError(err)
+            ? translateBackendError(t, err)
+            : t("proxies.management.updateSyncFailed"),
+        );
       } finally {
         setIsTogglingExtSync((prev) => ({ ...prev, [ext.id]: false }));
       }
@@ -331,7 +336,11 @@ export function ExtensionManagementDialog({
         );
         void loadData();
       } catch (err) {
-        showErrorToast(err instanceof Error ? err.message : String(err));
+        showErrorToast(
+          parseBackendError(err)
+            ? translateBackendError(t, err)
+            : t("proxies.management.updateSyncFailed"),
+        );
       } finally {
         setIsTogglingGroupSync((prev) => ({ ...prev, [group.id]: false }));
       }
@@ -589,9 +598,15 @@ export function ExtensionManagementDialog({
         }),
       ),
     );
-    const failed = results.filter((r) => r.status === "rejected").length;
-    if (failed > 0) {
-      showErrorToast(t("proxies.management.updateSyncFailed"));
+    const firstRejection = results.find((r) => r.status === "rejected") as
+      | PromiseRejectedResult
+      | undefined;
+    if (firstRejection) {
+      showErrorToast(
+        parseBackendError(firstRejection.reason)
+          ? translateBackendError(t, firstRejection.reason)
+          : t("proxies.management.updateSyncFailed"),
+      );
     } else {
       showSuccessToast(
         targetEnabled
@@ -614,9 +629,15 @@ export function ExtensionManagementDialog({
         }),
       ),
     );
-    const failed = results.filter((r) => r.status === "rejected").length;
-    if (failed > 0) {
-      showErrorToast(t("proxies.management.updateSyncFailed"));
+    const firstRejection = results.find((r) => r.status === "rejected") as
+      | PromiseRejectedResult
+      | undefined;
+    if (firstRejection) {
+      showErrorToast(
+        parseBackendError(firstRejection.reason)
+          ? translateBackendError(t, firstRejection.reason)
+          : t("proxies.management.updateSyncFailed"),
+      );
     } else {
       showSuccessToast(
         targetEnabled

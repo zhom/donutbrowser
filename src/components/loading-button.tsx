@@ -12,7 +12,7 @@ type Props = ButtonProps & {
 export const LoadingButton = ({ isLoading, className, ...props }: Props) => {
   return (
     <UIButton
-      className={cn("grid place-items-center", className)}
+      className={cn("inline-flex items-center justify-center", className)}
       {...props}
       disabled={props.disabled || isLoading}
     >

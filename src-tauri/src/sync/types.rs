@@ -166,6 +166,7 @@ pub enum SyncError {
   SerializationError(String),
   ConflictError(String),
   InvalidData(String),
+  Cancelled,
 }
 
 impl std::fmt::Display for SyncError {
@@ -178,6 +179,7 @@ impl std::fmt::Display for SyncError {
       SyncError::SerializationError(msg) => write!(f, "Serialization error: {msg}"),
       SyncError::ConflictError(msg) => write!(f, "Conflict error: {msg}"),
       SyncError::InvalidData(msg) => write!(f, "Invalid data: {msg}"),
+      SyncError::Cancelled => write!(f, "Sync cancelled by user"),
     }
   }
 }

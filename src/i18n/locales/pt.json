@@ -1070,16 +1070,16 @@
   "syncAll": {
     "title": "Ativar sincronização para itens existentes",
     "description": "Você tem itens que não estão sendo sincronizados. Gostaria de ativar a sincronização para todos?",
-    "itemsList": "Itens não sincronizados: {{items}}",
-    "proxies": "{{count}} proxy",
-    "proxies_plural": "{{count}} proxies",
-    "groups": "{{count}} grupo",
-    "groups_plural": "{{count}} grupos",
-    "vpns": "{{count}} VPN",
-    "vpns_plural": "{{count}} VPNs",
     "enableAll": "Ativar todos",
     "skip": "Pular",
-    "success": "Sincronização ativada para todos os itens"
+    "success": "Sincronização ativada para todos os itens",
+    "labels": {
+      "proxies": "Proxies",
+      "vpns": "VPNs",
+      "groups": "Grupos",
+      "extensions": "Extensões",
+      "extensionGroups": "Grupos de extensões"
+    }
   },
   "crossOs": {
     "viewOnly": "Este perfil foi criado em {{os}} e não é compatível com este sistema",
@@ -1788,6 +1788,14 @@
     "profileLocked": "O perfil está bloqueado. Digite a senha primeiro.",
     "invalidProfileId": "ID de perfil inválido",
     "passwordTooShort": "A senha deve ter pelo menos {{min}} caracteres",
+    "proxyNotFound": "Proxy não encontrado",
+    "groupNotFound": "Grupo não encontrado",
+    "vpnNotFound": "VPN não encontrada",
+    "extensionNotFound": "Extensão não encontrada",
+    "extensionGroupNotFound": "Grupo de extensões não encontrado",
+    "cannotModifyCloudManagedProxy": "Não é possível modificar a sincronização de um proxy gerenciado na nuvem",
+    "syncLockedByProfile": "A sincronização não pode ser desativada enquanto estiver em uso por perfis sincronizados",
+    "syncNotConfigured": "A sincronização não está configurada. Faça login ou configure um servidor auto-hospedado.",
     "internal": "Algo deu errado: {{detail}}",
     "invalidLaunchHookUrl": "URL do hook de inicialização inválida. Use uma URL completa http:// ou https://.",
     "cookieDbLocked": "Não foi possível ler os cookies — o banco de dados está bloqueado. Feche o navegador e tente novamente.",

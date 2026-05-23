@@ -287,7 +287,7 @@ impl CamoufoxManager {
       }
     }
 
-    let child = command
+    let mut child = command
       .spawn()
       .map_err(|e| format!("Failed to spawn Camoufox process: {e}"))?;
 
@@ -295,6 +295,34 @@ impl CamoufoxManager {
     let instance_id = format!("camoufox_{}", process_id.unwrap_or(0));
 
     log::info!("Camoufox launched with PID: {:?}", process_id);
+
+    // Watch the child so its exit status (signal / non-zero code) lands in
+    // the log. Without this, all we see is "PID X is no longer running" via
+    // the periodic sysinfo poll, with no clue why it died.
+    let watch_profile_path = profile_path.to_string();
+    tokio::spawn(async move {
+      match child.wait().await {
+        Ok(status) => {
+          if status.success() {
+            log::info!(
+              "Camoufox PID {:?} for {} exited cleanly (status=0)",
+              process_id,
+              watch_profile_path
+            );
+          } else {
+            log::warn!(
+              "Camoufox PID {:?} for {} exited abnormally: {}",
+              process_id,
+              watch_profile_path,
+              status
+            );
+          }
+        }
+        Err(e) => {
+          log::warn!("Failed to await Camoufox PID {:?} exit: {}", process_id, e);
+        }
+      }
+    });
 
     // Store the instance
     let instance = CamoufoxInstance {
@@ -557,28 +585,28 @@ impl CamoufoxManager {
 
       for (id, instance) in inner.instances.iter() {
         if let Some(process_id) = instance.process_id {
-          // Check if the process is still alive
           if !self.is_server_running(process_id).await {
-            // Process is dead
-            // Camoufox instance is no longer running
+            log::info!(
+              "Camoufox instance {} (PID {}) is no longer running; profile_path={:?}",
+              id,
+              process_id,
+              instance.profile_path
+            );
             dead_instances.push(id.clone());
             instances_to_remove.push(id.clone());
           }
         } else {
-          // No process_id means it's likely a dead instance
-          // Camoufox instance has no PID, marking as dead
+          log::info!("Camoufox instance {} has no PID, marking as dead", id);
           dead_instances.push(id.clone());
           instances_to_remove.push(id.clone());
         }
       }
     }
 
-    // Remove dead instances
     if !instances_to_remove.is_empty() {
       let mut inner = self.inner.lock().await;
       for id in &instances_to_remove {
         inner.instances.remove(id);
-        // Removed dead Camoufox instance
       }
     }
 

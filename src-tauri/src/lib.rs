@@ -99,7 +99,7 @@ use settings_manager::{
 };
 
 use sync::{
-  check_has_e2e_password, delete_e2e_password, enable_sync_for_all_entities,
+  cancel_profile_sync, check_has_e2e_password, delete_e2e_password, enable_sync_for_all_entities,
   get_unsynced_entity_counts, is_group_in_use_by_synced_profile, is_proxy_in_use_by_synced_profile,
   is_vpn_in_use_by_synced_profile, request_profile_sync, rollover_encryption_for_all_entities,
   set_e2e_password, set_extension_group_sync_enabled, set_extension_sync_enabled,
@@ -2057,6 +2057,7 @@ pub fn run() {
       get_sync_settings,
       save_sync_settings,
       set_profile_sync_mode,
+      cancel_profile_sync,
       request_profile_sync,
       set_proxy_sync_enabled,
       set_group_sync_enabled,

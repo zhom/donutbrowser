@@ -1070,16 +1070,16 @@
   "syncAll": {
     "title": "Enable Sync for Existing Items",
     "description": "You have items that are not being synced. Would you like to enable sync for all of them?",
-    "itemsList": "Items not synced: {{items}}",
-    "proxies": "{{count}} proxy",
-    "proxies_plural": "{{count}} proxies",
-    "groups": "{{count}} group",
-    "groups_plural": "{{count}} groups",
-    "vpns": "{{count}} VPN",
-    "vpns_plural": "{{count}} VPNs",
     "enableAll": "Enable All",
     "skip": "Skip",
-    "success": "Sync enabled for all items"
+    "success": "Sync enabled for all items",
+    "labels": {
+      "proxies": "Proxies",
+      "vpns": "VPNs",
+      "groups": "Groups",
+      "extensions": "Extensions",
+      "extensionGroups": "Extension Groups"
+    }
   },
   "crossOs": {
     "viewOnly": "This profile was created on {{os}} and is not supported on this system",
@@ -1788,6 +1788,14 @@
     "profileLocked": "Profile is locked. Enter the password first.",
     "invalidProfileId": "Invalid profile id",
     "passwordTooShort": "Password must be at least {{min}} characters",
+    "proxyNotFound": "Proxy not found",
+    "groupNotFound": "Group not found",
+    "vpnNotFound": "VPN not found",
+    "extensionNotFound": "Extension not found",
+    "extensionGroupNotFound": "Extension group not found",
+    "cannotModifyCloudManagedProxy": "Cannot modify sync for a cloud-managed proxy",
+    "syncLockedByProfile": "Sync cannot be disabled while this is used by synced profiles",
+    "syncNotConfigured": "Sync is not configured. Sign in or configure a self-hosted server first.",
     "internal": "Something went wrong: {{detail}}",
     "invalidLaunchHookUrl": "Invalid launch hook URL. Use a full http:// or https:// URL.",
     "cookieDbLocked": "Could not read cookies — the database is locked. Close the browser and try again.",

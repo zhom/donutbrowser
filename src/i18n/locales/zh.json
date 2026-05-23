@@ -1070,16 +1070,16 @@
   "syncAll": {
     "title": "为现有项目启用同步",
     "description": "您有未同步的项目。是否要为所有项目启用同步？",
-    "itemsList": "未同步项目: {{items}}",
-    "proxies": "{{count}} 个代理",
-    "proxies_plural": "{{count}} 个代理",
-    "groups": "{{count}} 个分组",
-    "groups_plural": "{{count}} 个分组",
-    "vpns": "{{count}} 个 VPN",
-    "vpns_plural": "{{count}} 个 VPN",
     "enableAll": "全部启用",
     "skip": "跳过",
-    "success": "已为所有项目启用同步"
+    "success": "已为所有项目启用同步",
+    "labels": {
+      "proxies": "代理",
+      "vpns": "VPN",
+      "groups": "分组",
+      "extensions": "扩展",
+      "extensionGroups": "扩展分组"
+    }
   },
   "crossOs": {
     "viewOnly": "此配置文件在 {{os}} 上创建，不受此系统支持",
@@ -1788,6 +1788,14 @@
     "profileLocked": "配置文件已锁定。请先输入密码。",
     "invalidProfileId": "配置文件 ID 无效",
     "passwordTooShort": "密码至少需要 {{min}} 个字符",
+    "proxyNotFound": "未找到代理",
+    "groupNotFound": "未找到分组",
+    "vpnNotFound": "未找到 VPN",
+    "extensionNotFound": "未找到扩展",
+    "extensionGroupNotFound": "未找到扩展分组",
+    "cannotModifyCloudManagedProxy": "无法修改云管理代理的同步",
+    "syncLockedByProfile": "在被已同步的配置文件使用时无法禁用同步",
+    "syncNotConfigured": "同步未配置。请先登录或配置自托管服务器。",
     "internal": "出现问题:{{detail}}",
     "invalidLaunchHookUrl": "启动钩子 URL 无效。请使用完整的 http:// 或 https:// URL。",
     "cookieDbLocked": "无法读取 Cookie — 数据库已锁定。请关闭浏览器后重试。",

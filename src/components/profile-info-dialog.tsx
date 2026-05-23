@@ -582,8 +582,9 @@ function ProfileInfoLayout({
 
   const deleteAction = findAction("delete");
   const fingerprintAction = findAction("fingerprint");
-  const cookiesAction =
-    findAction("manage cookies") ?? findAction("copy cookies");
+  const cookiesManageAction = findAction("manage cookies");
+  const cookiesCopyAction = findAction("copy cookies");
+  const cookiesAction = cookiesManageAction ?? cookiesCopyAction;
   const extensionAction = findAction("extension");
   const syncAction = findAction("sync");
   const _launchHookAction = findAction("hook") ?? findAction("launch hook");
@@ -905,6 +906,7 @@ function ProfileInfoLayout({
               profile={profile}
               isRunning={isRunning}
               isDisabled={isDisabled}
+              onCopyCookies={cookiesCopyAction?.onClick}
               t={t}
             />
           )}
@@ -1435,11 +1437,14 @@ function ExtensionsSectionInline({
 function CookiesSectionInline({
   profile,
   isRunning,
+  isDisabled,
+  onCopyCookies,
   t,
 }: {
   profile: BrowserProfile;
   isRunning: boolean;
   isDisabled: boolean;
+  onCopyCookies?: () => void;
   t: (key: string, options?: Record<string, unknown>) => string;
 }) {
   type CookieStats = {
@@ -1483,9 +1488,23 @@ function CookiesSectionInline({
 
   return (
     <div className="flex flex-col gap-3 min-h-0 flex-1">
-      <div className="flex items-center gap-2 text-sm font-semibold">
-        <LuCookie className="size-4" />
-        {t("profileInfo.sections.cookies")}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <LuCookie className="size-4" />
+          {t("profileInfo.sections.cookies")}
+        </div>
+        {onCopyCookies && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1.5"
+            disabled={isDisabled}
+            onClick={onCopyCookies}
+          >
+            <LuCopy className="size-3.5" />
+            {t("profiles.actions.copyCookies")}
+          </Button>
+        )}
       </div>
       <p className="text-xs text-muted-foreground">
         {t("profileInfo.sectionDesc.cookies")}

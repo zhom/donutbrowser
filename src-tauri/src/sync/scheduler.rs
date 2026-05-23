@@ -716,16 +716,18 @@ impl SyncScheduler {
       match entity_type.as_str() {
         "profile" => {
           let profile_manager = ProfileManager::instance();
-          let has_profile = {
+          let local_sync_enabled = {
             if let Ok(profiles) = profile_manager.list_profiles() {
               let profile_uuid = uuid::Uuid::parse_str(&entity_id).ok();
-              profile_uuid.is_some_and(|uuid| profiles.iter().any(|p| p.id == uuid))
+              profile_uuid
+                .and_then(|uuid| profiles.into_iter().find(|p| p.id == uuid))
+                .is_some_and(|p| p.is_sync_enabled())
             } else {
               false
             }
           };
 
-          if has_profile {
+          if local_sync_enabled {
             log::info!(
               "Profile {} was deleted remotely, deleting locally",
               entity_id
@@ -733,6 +735,11 @@ impl SyncScheduler {
             if let Err(e) = profile_manager.delete_profile_local_only(&entity_id) {
               log::warn!("Failed to delete tombstoned profile {}: {}", entity_id, e);
             }
+          } else {
+            log::info!(
+              "Profile {} has a tombstone but sync is no longer enabled locally — keeping local copy",
+              entity_id
+            );
           }
         }
         "proxy" => {

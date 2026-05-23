@@ -5,6 +5,7 @@ import en from "./locales/en.json";
 import es from "./locales/es.json";
 import fr from "./locales/fr.json";
 import ja from "./locales/ja.json";
+import ko from "./locales/ko.json";
 import pt from "./locales/pt.json";
 import ru from "./locales/ru.json";
 import zh from "./locales/zh.json";
@@ -16,6 +17,7 @@ export const SUPPORTED_LANGUAGES = [
   { code: "fr", name: "French", nativeName: "Français" },
   { code: "zh", name: "Chinese", nativeName: "中文" },
   { code: "ja", name: "Japanese", nativeName: "日本語" },
+  { code: "ko", name: "Korean", nativeName: "한국어" },
   { code: "ru", name: "Russian", nativeName: "Русский" },
 ] as const;
 
@@ -61,6 +63,7 @@ const resources = {
   fr: { translation: fr },
   zh: { translation: zh },
   ja: { translation: ja },
+  ko: { translation: ko },
   ru: { translation: ru },
 };
 

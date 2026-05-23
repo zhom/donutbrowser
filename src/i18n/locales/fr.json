@@ -1070,16 +1070,16 @@
   "syncAll": {
     "title": "Activer la synchronisation pour les éléments existants",
     "description": "Vous avez des éléments qui ne sont pas synchronisés. Voulez-vous activer la synchronisation pour tous ?",
-    "itemsList": "Éléments non synchronisés : {{items}}",
-    "proxies": "{{count}} proxy",
-    "proxies_plural": "{{count}} proxies",
-    "groups": "{{count}} groupe",
-    "groups_plural": "{{count}} groupes",
-    "vpns": "{{count}} VPN",
-    "vpns_plural": "{{count}} VPNs",
     "enableAll": "Tout activer",
     "skip": "Ignorer",
-    "success": "Synchronisation activée pour tous les éléments"
+    "success": "Synchronisation activée pour tous les éléments",
+    "labels": {
+      "proxies": "Proxies",
+      "vpns": "VPN",
+      "groups": "Groupes",
+      "extensions": "Extensions",
+      "extensionGroups": "Groupes d'extensions"
+    }
   },
   "crossOs": {
     "viewOnly": "Ce profil a été créé sur {{os}} et n'est pas pris en charge sur ce système",
@@ -1788,6 +1788,14 @@
     "profileLocked": "Le profil est verrouillé. Entrez d'abord le mot de passe.",
     "invalidProfileId": "Identifiant de profil non valide",
     "passwordTooShort": "Le mot de passe doit comporter au moins {{min}} caractères",
+    "proxyNotFound": "Proxy introuvable",
+    "groupNotFound": "Groupe introuvable",
+    "vpnNotFound": "VPN introuvable",
+    "extensionNotFound": "Extension introuvable",
+    "extensionGroupNotFound": "Groupe d'extensions introuvable",
+    "cannotModifyCloudManagedProxy": "Impossible de modifier la synchronisation d'un proxy géré dans le cloud",
+    "syncLockedByProfile": "La synchronisation ne peut pas être désactivée tant qu'elle est utilisée par des profils synchronisés",
+    "syncNotConfigured": "La synchronisation n'est pas configurée. Connectez-vous ou configurez un serveur auto-hébergé.",
     "internal": "Une erreur s'est produite : {{detail}}",
     "invalidLaunchHookUrl": "URL du hook de lancement invalide. Utilisez une URL http:// ou https:// complète.",
     "cookieDbLocked": "Impossible de lire les cookies — la base de données est verrouillée. Fermez le navigateur et réessayez.",
