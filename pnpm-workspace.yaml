@@ -11,3 +11,18 @@ onlyBuiltDependencies:
   - sharp
   - sqlite3
   - unrs-resolver
+
+# Husky and lint-staged shell out to pnpm without a TTY, so the interactive
+# "purge modules dir?" prompt errors out (ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY)
+# and aborts the commit. Skipping the prompt lets the hook proceed.
+confirmModulesPurge: false
+
+# Pinned for security. Moved from package.json#pnpm.overrides — pnpm 11
+# no longer reads that field; settings live here now.
+overrides:
+  picomatch@>=4.0.0 <4.0.4: '>=4.0.4'
+  path-to-regexp@>=8.0.0 <8.4.0: '>=8.4.0'
+  postcss@<8.5.10: '>=8.5.12'
+  fast-xml-parser@<5.7.0: '>=5.7.2'
+  fast-uri@<3.1.2: '>=3.1.2'
+  fast-xml-builder@<1.2.0: '>=1.2.0'
