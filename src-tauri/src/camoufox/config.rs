@@ -376,11 +376,12 @@ impl CamoufoxConfigBuilder {
       (config, target_os)
     };
 
-    // Add random window history length
-    config.insert(
-      "window.history.length".to_string(),
-      serde_json::json!(rng.random_range(1..=5)),
-    );
+    // Note: we used to spoof `window.history.length` to a random value in
+    // [1, 5] here. Newer Camoufox builds clamp the docShell session history
+    // to this value, which disables the toolbar back/forward buttons when
+    // the spoof rolls a small number. The fingerprint value drifts on every
+    // user navigation anyway, so a constant spoof is detectable and not
+    // worth the broken navigation UX.
 
     // Add fonts
     if !self.custom_fonts_only {

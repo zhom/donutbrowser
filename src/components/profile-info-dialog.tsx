@@ -24,6 +24,7 @@ import {
   LuShield,
   LuShieldCheck,
   LuTrash2,
+  LuUpload,
   LuUsers,
   LuX,
 } from "react-icons/lu";
@@ -907,6 +908,7 @@ function ProfileInfoLayout({
               isRunning={isRunning}
               isDisabled={isDisabled}
               onCopyCookies={cookiesCopyAction?.onClick}
+              onImportCookies={cookiesManageAction?.onClick}
               t={t}
             />
           )}
@@ -1439,12 +1441,14 @@ function CookiesSectionInline({
   isRunning,
   isDisabled,
   onCopyCookies,
+  onImportCookies,
   t,
 }: {
   profile: BrowserProfile;
   isRunning: boolean;
   isDisabled: boolean;
   onCopyCookies?: () => void;
+  onImportCookies?: () => void;
   t: (key: string, options?: Record<string, unknown>) => string;
 }) {
   type CookieStats = {
@@ -1493,18 +1497,32 @@ function CookiesSectionInline({
           <LuCookie className="size-4" />
           {t("profileInfo.sections.cookies")}
         </div>
-        {onCopyCookies && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 gap-1.5"
-            disabled={isDisabled}
-            onClick={onCopyCookies}
-          >
-            <LuCopy className="size-3.5" />
-            {t("profiles.actions.copyCookies")}
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {onImportCookies && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1.5"
+              disabled={isDisabled || isRunning}
+              onClick={onImportCookies}
+            >
+              <LuUpload className="size-3.5" />
+              {t("cookies.import.title")}
+            </Button>
+          )}
+          {onCopyCookies && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1.5"
+              disabled={isDisabled}
+              onClick={onCopyCookies}
+            >
+              <LuCopy className="size-3.5" />
+              {t("profiles.actions.copyCookies")}
+            </Button>
+          )}
+        </div>
       </div>
       <p className="text-xs text-muted-foreground">
         {t("profileInfo.sectionDesc.cookies")}

@@ -691,7 +691,7 @@ const TagsCell = React.memo<{
       );
 
       return (
-        <div className="w-40 h-6 cursor-pointer">
+        <div className="w-full h-6 cursor-pointer">
           <Tooltip>
             <TooltipTrigger asChild>{ButtonContent}</TooltipTrigger>
             {hiddenCount > 0 && (
@@ -717,7 +717,7 @@ const TagsCell = React.memo<{
     return (
       <div
         className={cn(
-          "w-40 h-6 relative",
+          "w-full h-6 relative",
           isDisabled && "opacity-60 pointer-events-none",
         )}
       >
@@ -925,19 +925,17 @@ const NoteCell = React.memo<{
     }, [openNoteEditorFor, profile.id]);
 
     const displayNote = effectiveNote ?? "";
-    const trimmedNote =
-      displayNote.length > 12 ? `${displayNote.slice(0, 12)}...` : displayNote;
-    const showTooltip = displayNote.length > 12 || displayNote.length > 0;
+    const showTooltip = displayNote.length > 0;
 
     if (openNoteEditorFor !== profile.id) {
       return (
-        <div className="w-24 min-h-6">
+        <div className="w-full min-h-6">
           <Tooltip>
             <TooltipTrigger asChild>
               <button
                 type="button"
                 className={cn(
-                  "flex items-start px-2 py-1 min-h-6 w-full bg-transparent rounded border-none text-left",
+                  "flex items-center px-2 py-1 min-h-6 w-full min-w-0 bg-transparent rounded border-none text-left",
                   isDisabled
                     ? "opacity-60 cursor-not-allowed"
                     : "cursor-pointer hover:bg-accent/50",
@@ -951,11 +949,11 @@ const NoteCell = React.memo<{
               >
                 <span
                   className={cn(
-                    "text-sm wrap-break-word",
+                    "text-sm truncate block w-full",
                     !effectiveNote && "text-muted-foreground",
                   )}
                 >
-                  {effectiveNote ? trimmedNote : t("profiles.note.empty")}
+                  {effectiveNote ? displayNote : t("profiles.note.empty")}
                 </span>
               </button>
             </TooltipTrigger>
@@ -974,7 +972,7 @@ const NoteCell = React.memo<{
     return (
       <div
         className={cn(
-          "w-24 relative",
+          "w-full relative",
           isDisabled && "opacity-60 pointer-events-none",
         )}
       >

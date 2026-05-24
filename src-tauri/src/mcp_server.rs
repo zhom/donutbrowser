@@ -1145,6 +1145,25 @@ impl McpServer {
           "required": ["profile_id"]
         }),
       },
+      // Cookie management tools
+      McpTool {
+        name: "import_profile_cookies".to_string(),
+        description: "Import cookies into a Wayfern or Camoufox profile from a JSON array (Puppeteer / EditThisCookie format) or a Netscape cookies.txt. Format is auto-detected. The browser must not be running.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_id": {
+              "type": "string",
+              "description": "The UUID of the target profile"
+            },
+            "content": {
+              "type": "string",
+              "description": "Raw cookie file content (JSON array or Netscape cookies.txt)"
+            }
+          },
+          "required": ["profile_id", "content"]
+        }),
+      },
       // Team lock tools
       McpTool {
         name: "get_team_locks".to_string(),
@@ -1674,6 +1693,8 @@ impl McpServer {
           .handle_assign_extension_group_to_profile(arguments)
           .await
       }
+      // Cookie management
+      "import_profile_cookies" => self.handle_import_profile_cookies(arguments).await,
       // Team lock tools
       "get_team_locks" => self.handle_get_team_locks().await,
       "get_team_lock_status" => self.handle_get_team_lock_status(arguments).await,
@@ -2849,6 +2870,74 @@ impl McpServer {
           "Import complete: {} imported, {} skipped, {} errors",
           result.imported_count,
           result.skipped_count,
+          result.errors.len()
+        )
+      }]
+    }))
+  }
+
+  // Cookie management handlers
+  async fn handle_import_profile_cookies(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    let profile_id = arguments
+      .get("profile_id")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_id".to_string(),
+      })?;
+
+    let content = arguments
+      .get("content")
+      .and_then(|v| v.as_str())
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing content".to_string(),
+      })?;
+
+    let app_handle = {
+      let inner = self.inner.lock().await;
+      inner
+        .app_handle
+        .as_ref()
+        .ok_or_else(|| McpError {
+          code: -32000,
+          message: "MCP server not properly initialized".to_string(),
+        })?
+        .clone()
+    };
+
+    let result =
+      crate::cookie_manager::CookieManager::import_cookies(&app_handle, profile_id, content)
+        .await
+        .map_err(|e| McpError {
+          code: -32000,
+          message: format!("Failed to import cookies: {e}"),
+        })?;
+
+    if let Some(scheduler) = crate::sync::get_global_scheduler() {
+      let profile_manager = crate::profile::manager::ProfileManager::instance();
+      if let Ok(profiles) = profile_manager.list_profiles() {
+        if let Some(profile) = profiles.iter().find(|p| p.id.to_string() == profile_id) {
+          if profile.is_sync_enabled() {
+            let pid = profile_id.to_string();
+            tauri::async_runtime::spawn(async move {
+              scheduler.queue_profile_sync(pid).await;
+            });
+          }
+        }
+      }
+    }
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!(
+          "Import complete: {} imported, {} replaced, {} parse error(s)",
+          result.cookies_imported,
+          result.cookies_replaced,
           result.errors.len()
         )
       }]
@@ -4968,6 +5057,8 @@ mod tests {
     assert!(tool_names.contains(&"delete_extension"));
     assert!(tool_names.contains(&"delete_extension_group"));
     assert!(tool_names.contains(&"assign_extension_group_to_profile"));
+    // Cookie tools
+    assert!(tool_names.contains(&"import_profile_cookies"));
     // Team lock tools
     assert!(tool_names.contains(&"get_team_locks"));
     assert!(tool_names.contains(&"get_team_lock_status"));

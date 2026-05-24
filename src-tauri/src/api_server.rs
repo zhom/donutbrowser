@@ -217,6 +217,20 @@ struct OpenUrlRequest {
   url: String,
 }
 
+#[derive(Debug, Deserialize, ToSchema)]
+struct ImportCookiesRequest {
+  /// Raw cookie file content. Format is auto-detected: a JSON array
+  /// (Puppeteer / EditThisCookie style) or a Netscape `cookies.txt`.
+  content: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+struct ImportCookiesResponse {
+  cookies_imported: usize,
+  cookies_replaced: usize,
+  errors: Vec<String>,
+}
+
 #[derive(OpenApi)]
 #[openapi(
   paths(
@@ -228,6 +242,7 @@ struct OpenUrlRequest {
     run_profile,
     open_url_in_profile,
     kill_profile,
+    import_profile_cookies,
     get_groups,
     get_group,
     create_group,
@@ -270,6 +285,8 @@ struct OpenUrlRequest {
     RunProfileResponse,
     RunProfileRequest,
     OpenUrlRequest,
+    ImportCookiesRequest,
+    ImportCookiesResponse,
     ProxySettings,
   )),
   tags(
@@ -279,6 +296,7 @@ struct OpenUrlRequest {
     (name = "proxies", description = "Proxy management endpoints"),
     (name = "vpns", description = "VPN management endpoints"),
     (name = "browsers", description = "Browser management endpoints"),
+    (name = "cookies", description = "Cookie management endpoints"),
   ),
   modifiers(&SecurityAddon),
 )]
@@ -365,6 +383,7 @@ impl ApiServer {
       .routes(routes!(run_profile))
       .routes(routes!(open_url_in_profile))
       .routes(routes!(kill_profile))
+      .routes(routes!(import_profile_cookies))
       .routes(routes!(get_groups, create_group))
       .routes(routes!(get_group, update_group, delete_group))
       .routes(routes!(get_tags))
@@ -1832,6 +1851,77 @@ async fn kill_profile(
   crate::team_lock::release_team_lock_if_needed(profile).await;
 
   Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(
+  post,
+  path = "/v1/profiles/{id}/cookies/import",
+  params(
+    ("id" = String, Path, description = "Profile ID")
+  ),
+  request_body = ImportCookiesRequest,
+  responses(
+    (status = 200, description = "Cookies imported successfully", body = ImportCookiesResponse),
+    (status = 400, description = "Invalid cookie file or unsupported browser"),
+    (status = 401, description = "Unauthorized"),
+    (status = 404, description = "Profile not found"),
+    (status = 409, description = "Browser is currently running"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "cookies"
+)]
+async fn import_profile_cookies(
+  Path(id): Path<String>,
+  State(state): State<ApiServerState>,
+  Json(request): Json<ImportCookiesRequest>,
+) -> Result<Json<ImportCookiesResponse>, StatusCode> {
+  let profile_manager = ProfileManager::instance();
+  let profiles = profile_manager
+    .list_profiles()
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+  if !profiles.iter().any(|p| p.id.to_string() == id) {
+    return Err(StatusCode::NOT_FOUND);
+  }
+
+  match crate::cookie_manager::CookieManager::import_cookies(
+    &state.app_handle,
+    &id,
+    &request.content,
+  )
+  .await
+  {
+    Ok(result) => {
+      if let Some(scheduler) = crate::sync::get_global_scheduler() {
+        if let Some(profile) = profiles.iter().find(|p| p.id.to_string() == id) {
+          if profile.is_sync_enabled() {
+            let pid = id.clone();
+            tauri::async_runtime::spawn(async move {
+              scheduler.queue_profile_sync(pid).await;
+            });
+          }
+        }
+      }
+      Ok(Json(ImportCookiesResponse {
+        cookies_imported: result.cookies_imported,
+        cookies_replaced: result.cookies_replaced,
+        errors: result.errors,
+      }))
+    }
+    Err(e) => {
+      let msg = e.to_lowercase();
+      if msg.contains("running") {
+        Err(StatusCode::CONFLICT)
+      } else if msg.contains("no valid cookies") || msg.contains("unsupported browser") {
+        Err(StatusCode::BAD_REQUEST)
+      } else {
+        Err(StatusCode::INTERNAL_SERVER_ERROR)
+      }
+    }
+  }
 }
 
 // API Handler - Download Browser

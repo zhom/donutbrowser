@@ -222,9 +222,15 @@ impl CamoufoxManager {
       .map_err(|e| format!("Failed to get Camoufox executable path: {e}"))?;
 
     // Parse the fingerprint config JSON
-    let fingerprint_config: HashMap<String, serde_json::Value> =
+    let mut fingerprint_config: HashMap<String, serde_json::Value> =
       serde_json::from_str(&custom_config)
         .map_err(|e| format!("Failed to parse fingerprint config: {e}"))?;
+
+    // Strip `window.history.length` even when present in a previously-saved
+    // fingerprint. Newer Camoufox clamps the docShell session history to the
+    // spoofed value, which disables the toolbar back/forward buttons. See
+    // the matching note in camoufox/config.rs.
+    fingerprint_config.remove("window.history.length");
 
     // Convert to environment variables using CAMOU_CONFIG chunking
     let env_vars = crate::camoufox::env_vars::config_to_env_vars(&fingerprint_config)
@@ -690,10 +696,11 @@ impl CamoufoxManager {
       }
     }
 
-    // Write explicit proxy + extension prefs to user.js so Camoufox always
-    // uses the local donut-proxy and picks up sideloaded extensions. user.js
-    // values override prefs.js on every launch, so this is always canonical.
-    if let Some(proxy_str) = &config.proxy {
+    // Patch user.js with Camoufox-specific overrides on every launch. This
+    // always runs (not gated on the proxy being set) because Camoufox's
+    // bundled camoufox.cfg ships defaults that break basic browser features
+    // and we need to override them per-profile.
+    {
       let user_js_path = profile_path.join("user.js");
       let mut prefs = String::new();
 
@@ -703,6 +710,8 @@ impl CamoufoxManager {
         "network.proxy.",
         "xpinstall.signatures.required",
         "extensions.startupScanScopes",
+        "browser.sessionhistory.max_entries",
+        "browser.sessionhistory.max_total_viewers",
       ];
       if let Ok(existing) = std::fs::read_to_string(&user_js_path) {
         for line in existing.lines() {
@@ -712,6 +721,15 @@ impl CamoufoxManager {
           }
         }
       }
+
+      // Camoufox's bundled camoufox.cfg sets these to 0, which makes
+      // docShell remember zero prior pages and leaves the toolbar
+      // back/forward buttons permanently disabled no matter how much
+      // the user navigates. Restore Firefox defaults.
+      prefs.push_str(
+        "user_pref(\"browser.sessionhistory.max_entries\", 50);\n\
+         user_pref(\"browser.sessionhistory.max_total_viewers\", -1);\n",
+      );
 
       // Required for sideloaded extensions:
       // - signatures.required=false accepts unsigned .xpi (Camoufox is built
@@ -723,35 +741,37 @@ impl CamoufoxManager {
          user_pref(\"extensions.startupScanScopes\", 1);\n",
       );
 
-      if let Ok(parsed) = url::Url::parse(proxy_str) {
-        let host = parsed.host_str().unwrap_or("127.0.0.1");
-        let port = parsed.port().unwrap_or(8080);
-        let scheme = parsed.scheme();
+      if let Some(proxy_str) = &config.proxy {
+        if let Ok(parsed) = url::Url::parse(proxy_str) {
+          let host = parsed.host_str().unwrap_or("127.0.0.1");
+          let port = parsed.port().unwrap_or(8080);
+          let scheme = parsed.scheme();
 
-        if scheme == "socks5" || scheme == "socks4" {
-          prefs.push_str(&format!(
-            "user_pref(\"network.proxy.type\", 1);\n\
-             user_pref(\"network.proxy.socks\", \"{host}\");\n\
-             user_pref(\"network.proxy.socks_port\", {port});\n\
-             user_pref(\"network.proxy.socks_version\", {});\n\
-             user_pref(\"network.proxy.socks_remote_dns\", true);\n",
-            if scheme == "socks5" { 5 } else { 4 }
-          ));
-        } else {
-          // HTTP/HTTPS proxy
-          prefs.push_str(&format!(
-            "user_pref(\"network.proxy.type\", 1);\n\
-             user_pref(\"network.proxy.http\", \"{host}\");\n\
-             user_pref(\"network.proxy.http_port\", {port});\n\
-             user_pref(\"network.proxy.ssl\", \"{host}\");\n\
-             user_pref(\"network.proxy.ssl_port\", {port});\n\
-             user_pref(\"network.proxy.no_proxies_on\", \"\");\n"
-          ));
+          if scheme == "socks5" || scheme == "socks4" {
+            prefs.push_str(&format!(
+              "user_pref(\"network.proxy.type\", 1);\n\
+               user_pref(\"network.proxy.socks\", \"{host}\");\n\
+               user_pref(\"network.proxy.socks_port\", {port});\n\
+               user_pref(\"network.proxy.socks_version\", {});\n\
+               user_pref(\"network.proxy.socks_remote_dns\", true);\n",
+              if scheme == "socks5" { 5 } else { 4 }
+            ));
+          } else {
+            // HTTP/HTTPS proxy
+            prefs.push_str(&format!(
+              "user_pref(\"network.proxy.type\", 1);\n\
+               user_pref(\"network.proxy.http\", \"{host}\");\n\
+               user_pref(\"network.proxy.http_port\", {port});\n\
+               user_pref(\"network.proxy.ssl\", \"{host}\");\n\
+               user_pref(\"network.proxy.ssl_port\", {port});\n\
+               user_pref(\"network.proxy.no_proxies_on\", \"\");\n"
+            ));
+          }
         }
+      }
 
-        if let Err(e) = std::fs::write(&user_js_path, prefs) {
-          log::warn!("Failed to write user.js: {e}");
-        }
+      if let Err(e) = std::fs::write(&user_js_path, prefs) {
+        log::warn!("Failed to write user.js: {e}");
       }
     }
 
