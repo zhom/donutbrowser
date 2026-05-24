@@ -1255,21 +1255,23 @@ impl ProxyManager {
 
   // Try to parse URL format: protocol://username:password@host:port
   fn try_parse_url_format(line: &str) -> Option<ProxyParseResult> {
-    // Check for protocol prefix using strip_prefix
-    let (protocol, rest) = if let Some(rest) = line.strip_prefix("http://") {
-      ("http", rest)
-    } else if let Some(rest) = line.strip_prefix("https://") {
-      ("https", rest)
-    } else if let Some(rest) = line.strip_prefix("socks4://") {
-      ("socks4", rest)
-    } else if let Some(rest) = line.strip_prefix("socks5://") {
-      ("socks5", rest)
-    } else if let Some(rest) = line.strip_prefix("socks://") {
-      ("socks5", rest) // Default socks to socks5
-    } else if let Some(rest) = line.strip_prefix("ss://") {
-      ("ss", rest)
-    } else if let Some(rest) = line.strip_prefix("shadowsocks://") {
-      ("ss", rest)
+    let lower_line = line.to_ascii_lowercase();
+
+    // Check for protocol prefix using case-insensitive URL schemes
+    let (protocol, rest) = if lower_line.starts_with("http://") {
+      ("http", &line["http://".len()..])
+    } else if lower_line.starts_with("https://") {
+      ("https", &line["https://".len()..])
+    } else if lower_line.starts_with("socks4://") {
+      ("socks4", &line["socks4://".len()..])
+    } else if lower_line.starts_with("socks5://") {
+      ("socks5", &line["socks5://".len()..])
+    } else if lower_line.starts_with("socks://") {
+      ("socks5", &line["socks://".len()..]) // Default socks to socks5
+    } else if lower_line.starts_with("ss://") {
+      ("ss", &line["ss://".len()..])
+    } else if lower_line.starts_with("shadowsocks://") {
+      ("ss", &line["shadowsocks://".len()..])
     } else {
       return None;
     };
@@ -3294,6 +3296,19 @@ mod tests {
     // URL format
     let results = ProxyManager::parse_txt_proxies("http://user:pass@proxy.com:8080\n");
     assert_eq!(results.len(), 1);
+    match &results[0] {
+      ProxyParseResult::Parsed(p) => {
+        assert_eq!(p.proxy_type, "http");
+        assert_eq!(p.host, "proxy.com");
+        assert_eq!(p.port, 8080);
+        assert_eq!(p.username.as_deref(), Some("user"));
+        assert_eq!(p.password.as_deref(), Some("pass"));
+      }
+      _ => panic!("Expected Parsed result"),
+    }
+
+    // URL schemes are case-insensitive
+    let results = ProxyManager::parse_txt_proxies("HTTP://user:pass@proxy.com:8080\n");
     match &results[0] {
       ProxyParseResult::Parsed(p) => {
         assert_eq!(p.proxy_type, "http");
