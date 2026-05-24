@@ -19,9 +19,6 @@
   <a style="text-decoration: none;" href="https://github.com/zhom/donutbrowser/network/members" target="_blank">
     <img src="https://img.shields.io/github/forks/zhom/donutbrowser?style=social" alt="GitHub forks">
   </a>
-  <a style="text-decoration: none;" href="https://github.com/zhom/donutbrowser/releases" target="_blank">
-    <img src="https://img.shields.io/github/downloads/zhom/donutbrowser/total" alt="Downloads">
-  </a>
 </p>
 
 <img alt="Donut Browser Preview" src="assets/donut-preview.png" />
@@ -30,6 +27,7 @@
 
 - **Unlimited browser profiles** — each fully isolated with its own fingerprint, cookies, extensions, and data
 - **Chromium & Firefox engines** — Chromium powered by [Wayfern](https://wayfern.com), Firefox powered by [Camoufox](https://camoufox.com), both with advanced fingerprint spoofing
+- **DNS AdBlocker** - block ads, trackers, and other unwanted content with per-profile DNS blocking
 - **Proxy support** — HTTP, HTTPS, SOCKS4, SOCKS5 per profile, with dynamic proxy URLs
 - **VPN support** — WireGuard configs per profile
 - **Local API & MCP** — REST API and [Model Context Protocol](https://modelcontextprotocol.io) server for integration with Claude, automation tools, and custom workflows
