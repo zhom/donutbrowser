@@ -1,6 +1,41 @@
 # Changelog
 
 
+## v0.24.3 (2026-05-25)
+
+### Features
+
+- add shortcuts
+
+### Bug Fixes
+
+- track gecko_id for extension groups
+
+### Refactoring
+
+- cleanup
+- cleanup, korean translation
+- reduce token usage
+
+### Maintenance
+
+- chore: version bump
+- chore: linting
+- chore: update pnpm
+- chore: make telegram releases ai-generated
+- chore: workflow cleanup
+- ci(deps): bump the github-actions group with 6 updates
+- chore: use less tokens
+- chore: improve issue validation
+- ci(deps): bump the github-actions group across 1 directory with 6 updates
+- chore: update flake.nix for v0.24.2 [skip ci] (#370)
+
+### Other
+
+- deps(rust)(deps): bump the rust-dependencies group
+- deps(rust)(deps): bump the rust-dependencies group
+
+
 ## v0.24.2 (2026-05-16)
 
 ### Features
