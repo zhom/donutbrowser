@@ -14,7 +14,7 @@
 
 ### Maintenance
 
-- chore: versiom bump
+- chore: version bump
 - chore: update flake.nix for v0.24.3 [skip ci] (#383)
 
 

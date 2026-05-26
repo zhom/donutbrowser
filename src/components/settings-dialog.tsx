@@ -2,6 +2,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { writeText as writeClipboardText } from "@tauri-apps/plugin-clipboard-manager";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import Color from "color";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -368,19 +369,36 @@ export function SettingsDialog({
     async (permissionType: PermissionType) => {
       setRequestingPermission(permissionType);
       try {
-        await requestPermission(permissionType);
-        showSuccessToast(
-          t("settings.permissions.accessRequested", {
-            permission: getPermissionDisplayName(permissionType),
-          }),
+        const granted = await requestPermission(permissionType);
+        if (granted) {
+          showSuccessToast(
+            permissionType === "microphone"
+              ? t("permissionDialog.grantedToastMicrophone")
+              : t("permissionDialog.grantedToastCamera"),
+          );
+          return;
+        }
+
+        await openUrl(
+          `x-apple.systempreferences:com.apple.preference.security?${
+            permissionType === "microphone"
+              ? "Privacy_Microphone"
+              : "Privacy_Camera"
+          }`,
+        );
+        showErrorToast(
+          permissionType === "microphone"
+            ? t("permissionDialog.stillNotGrantedMicrophone")
+            : t("permissionDialog.stillNotGrantedCamera"),
         );
       } catch (error) {
         console.error("Failed to request permission:", error);
+        showErrorToast(t("permissionDialog.requestFailed"));
       } finally {
         setRequestingPermission(null);
       }
     },
-    [getPermissionDisplayName, requestPermission, t],
+    [requestPermission, t],
   );
 
   const handleSave = useCallback(async () => {

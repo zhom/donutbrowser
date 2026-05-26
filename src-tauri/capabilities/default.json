@@ -21,6 +21,17 @@
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
     "opener:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+        },
+        {
+          "url": "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera"
+        }
+      ]
+    },
     "fs:default",
     "shell:allow-execute",
     "shell:allow-kill",
