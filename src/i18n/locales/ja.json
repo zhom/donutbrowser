@@ -1796,6 +1796,7 @@
     "cannotModifyCloudManagedProxy": "クラウド管理のプロキシの同期は変更できません",
     "syncLockedByProfile": "同期済みプロファイルで使用中のため、同期を無効にできません",
     "syncNotConfigured": "同期が設定されていません。サインインするか、セルフホストサーバーを設定してください。",
+    "unsupportedPermissionType": "サポートされていない権限タイプ: {{type}}",
     "internal": "問題が発生しました: {{detail}}",
     "invalidLaunchHookUrl": "起動フックURLが無効です。完全な http:// または https:// URL を使用してください。",
     "cookieDbLocked": "Cookie を読み取れません — データベースがロックされています。ブラウザを閉じてから再試行してください。",

@@ -1796,6 +1796,7 @@
     "cannotModifyCloudManagedProxy": "No se puede modificar la sincronización de un proxy gestionado en la nube",
     "syncLockedByProfile": "No se puede desactivar la sincronización mientras se usa en perfiles sincronizados",
     "syncNotConfigured": "La sincronización no está configurada. Inicia sesión o configura un servidor propio.",
+    "unsupportedPermissionType": "Tipo de permiso no compatible: {{type}}",
     "internal": "Algo salió mal: {{detail}}",
     "invalidLaunchHookUrl": "URL del hook de inicio no válida. Usa una URL completa http:// o https://.",
     "cookieDbLocked": "No se pudieron leer las cookies — la base de datos está bloqueada. Cierra el navegador e inténtalo de nuevo.",

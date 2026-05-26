@@ -48,6 +48,7 @@ import { useCommercialTrial } from "@/hooks/use-commercial-trial";
 import { useLanguage } from "@/hooks/use-language";
 import type { PermissionType } from "@/hooks/use-permissions";
 import { usePermissions } from "@/hooks/use-permissions";
+import { translateBackendError } from "@/lib/backend-errors";
 import {
   getThemeByColors,
   getThemeById,
@@ -368,19 +369,34 @@ export function SettingsDialog({
     async (permissionType: PermissionType) => {
       setRequestingPermission(permissionType);
       try {
-        await requestPermission(permissionType);
-        showSuccessToast(
-          t("settings.permissions.accessRequested", {
-            permission: getPermissionDisplayName(permissionType),
-          }),
+        const granted = await requestPermission(permissionType);
+        if (granted) {
+          showSuccessToast(
+            permissionType === "microphone"
+              ? t("permissionDialog.grantedToastMicrophone")
+              : t("permissionDialog.grantedToastCamera"),
+          );
+          return;
+        }
+
+        await invoke("open_macos_permission_settings", {
+          permissionType,
+        });
+        showErrorToast(
+          permissionType === "microphone"
+            ? t("permissionDialog.stillNotGrantedMicrophone")
+            : t("permissionDialog.stillNotGrantedCamera"),
         );
       } catch (error) {
         console.error("Failed to request permission:", error);
+        showErrorToast(t("permissionDialog.requestFailed"), {
+          description: translateBackendError(t, error),
+        });
       } finally {
         setRequestingPermission(null);
       }
     },
-    [getPermissionDisplayName, requestPermission, t],
+    [requestPermission, t],
   );
 
   const handleSave = useCallback(async () => {

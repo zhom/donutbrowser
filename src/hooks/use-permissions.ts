@@ -21,7 +21,7 @@ const loadMacOSPermissions = async () => {
 export type PermissionType = "microphone" | "camera";
 
 interface UsePermissionsReturn {
-  requestPermission: (type: PermissionType) => Promise<void>;
+  requestPermission: (type: PermissionType) => Promise<boolean>;
   isMicrophoneAccessGranted: boolean;
   isCameraAccessGranted: boolean;
   isInitialized: boolean;
@@ -34,6 +34,32 @@ export function usePermissions(): UsePermissionsReturn {
   const [currentPlatform, setCurrentPlatform] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const updatePermissionState = useCallback(
+    (type: PermissionType, granted: boolean) => {
+      if (type === "microphone") {
+        setIsMicrophoneAccessGranted(granted);
+      } else {
+        setIsCameraAccessGranted(granted);
+      }
+    },
+    [],
+  );
+
+  const readPermission = useCallback(
+    async (
+      permissions: typeof import("tauri-plugin-macos-permissions-api"),
+      type: PermissionType,
+    ) => {
+      const granted =
+        type === "microphone"
+          ? await permissions.checkMicrophonePermission()
+          : await permissions.checkCameraPermission();
+      updatePermissionState(type, granted);
+      return granted;
+    },
+    [updatePermissionState],
+  );
 
   // Check permissions status
   const checkPermissions = useCallback(async () => {
@@ -68,54 +94,33 @@ export function usePermissions(): UsePermissionsReturn {
 
   // Request permission
   const requestPermission = useCallback(
-    async (type: PermissionType): Promise<void> => {
-      if (!currentPlatform || currentPlatform !== "macos") return;
+    async (type: PermissionType): Promise<boolean> => {
+      if (!currentPlatform || currentPlatform !== "macos") return true;
 
       // macOS - use the permissions API
       try {
         const permissions = await loadMacOSPermissions();
-        if (!permissions) return;
+        if (!permissions) return false;
 
         if (type === "microphone") {
           await permissions.requestMicrophonePermission();
-
-          // Poll for permission status change
-          const pollMicPermission = async () => {
-            const granted = await permissions.checkMicrophonePermission();
-            setIsMicrophoneAccessGranted(granted);
-
-            if (!granted) {
-              setTimeout(() => {
-                void pollMicPermission();
-              }, 1000);
-            }
-          };
-
-          await pollMicPermission();
-        }
-
-        if (type === "camera") {
+        } else {
           await permissions.requestCameraPermission();
-
-          // Poll for permission status change
-          const pollCamPermission = async () => {
-            const granted = await permissions.checkCameraPermission();
-            setIsCameraAccessGranted(granted);
-
-            if (!granted) {
-              setTimeout(() => {
-                void pollCamPermission();
-              }, 1000);
-            }
-          };
-
-          await pollCamPermission();
         }
+
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          const granted = await readPermission(permissions, type);
+          if (granted) return true;
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+
+        return readPermission(permissions, type);
       } catch (error) {
         console.error(`Failed to request ${type} permission on macOS:`, error);
+        return false;
       }
     },
-    [currentPlatform],
+    [currentPlatform, readPermission],
   );
 
   // Initialize platform detection and start interval checking

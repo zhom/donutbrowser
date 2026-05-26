@@ -1796,6 +1796,7 @@
     "cannotModifyCloudManagedProxy": "无法修改云管理代理的同步",
     "syncLockedByProfile": "在被已同步的配置文件使用时无法禁用同步",
     "syncNotConfigured": "同步未配置。请先登录或配置自托管服务器。",
+    "unsupportedPermissionType": "不支持的权限类型: {{type}}",
     "internal": "出现问题:{{detail}}",
     "invalidLaunchHookUrl": "启动钩子 URL 无效。请使用完整的 http:// 或 https:// URL。",
     "cookieDbLocked": "无法读取 Cookie — 数据库已锁定。请关闭浏览器后重试。",

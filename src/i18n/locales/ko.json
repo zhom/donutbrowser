@@ -1796,6 +1796,7 @@
     "cannotModifyCloudManagedProxy": "클라우드 관리 프록시의 동기화는 수정할 수 없습니다",
     "syncLockedByProfile": "동기화된 프로필에서 사용 중인 동안에는 동기화를 비활성화할 수 없습니다",
     "syncNotConfigured": "동기화가 구성되지 않았습니다. 먼저 로그인하거나 자체 호스팅 서버를 구성하세요.",
+    "unsupportedPermissionType": "지원되지 않는 권한 유형: {{type}}",
     "internal": "오류가 발생했습니다: {{detail}}",
     "invalidLaunchHookUrl": "잘못된 실행 후크 URL입니다. 전체 http:// 또는 https:// URL을 사용하세요.",
     "cookieDbLocked": "쿠키를 읽을 수 없습니다 — 데이터베이스가 잠겨 있습니다. 브라우저를 닫고 다시 시도하세요.",

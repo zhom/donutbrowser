@@ -29,6 +29,7 @@ mod geoip_downloader;
 mod group_manager;
 mod human_typing;
 mod ip_utils;
+mod permissions;
 mod platform_browser;
 mod profile;
 mod profile_importer;
@@ -2006,6 +2007,7 @@ pub fn run() {
       check_for_app_updates_manual,
       download_and_prepare_app_update,
       restart_application,
+      permissions::open_macos_permission_settings,
       detect_existing_profiles,
       import_browser_profile,
       check_missing_binaries,

@@ -1796,6 +1796,7 @@
     "cannotModifyCloudManagedProxy": "Cannot modify sync for a cloud-managed proxy",
     "syncLockedByProfile": "Sync cannot be disabled while this is used by synced profiles",
     "syncNotConfigured": "Sync is not configured. Sign in or configure a self-hosted server first.",
+    "unsupportedPermissionType": "Unsupported permission type: {{type}}",
     "internal": "Something went wrong: {{detail}}",
     "invalidLaunchHookUrl": "Invalid launch hook URL. Use a full http:// or https:// URL.",
     "cookieDbLocked": "Could not read cookies — the database is locked. Close the browser and try again.",

@@ -28,6 +28,7 @@ export type BackendErrorCode =
   | "CANNOT_MODIFY_CLOUD_MANAGED_PROXY"
   | "SYNC_LOCKED_BY_PROFILE"
   | "SYNC_NOT_CONFIGURED"
+  | "UNSUPPORTED_PERMISSION_TYPE"
   | "INTERNAL_ERROR";
 
 export interface BackendError {
@@ -120,6 +121,10 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.syncLockedByProfile");
     case "SYNC_NOT_CONFIGURED":
       return t("backendErrors.syncNotConfigured");
+    case "UNSUPPORTED_PERMISSION_TYPE":
+      return t("backendErrors.unsupportedPermissionType", {
+        type: parsed.params?.type ?? "",
+      });
     case "INTERNAL_ERROR":
       return t("backendErrors.internal", {
         detail: parsed.params?.detail ?? "",
