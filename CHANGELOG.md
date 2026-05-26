@@ -1,6 +1,23 @@
 # Changelog
 
 
+## v0.24.4 (2026-05-26)
+
+### Refactoring
+
+- more robust camoufox proxy handling
+
+### Documentation
+
+- update CHANGELOG.md and README.md for v0.24.3 [skip ci] (#382)
+- readme
+
+### Maintenance
+
+- chore: versiom bump
+- chore: update flake.nix for v0.24.3 [skip ci] (#383)
+
+
 ## v0.24.3 (2026-05-25)
 
 ### Features
