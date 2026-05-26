@@ -270,13 +270,33 @@ impl CamoufoxManager {
       args
     );
 
-    // Spawn the browser process
+    // Spawn the browser process. Camoufox prints NSS/PSM and proxy failures
+    // to stderr (e.g. cert errors, CONNECT failures) and the user otherwise
+    // sees only an opaque "Secure Connection Failed" page — capture stderr
+    // to a per-launch file so diagnostics survive without a TTY.
+    let stderr_log_path = std::env::temp_dir().join(format!("camoufox-stderr-{}.log", profile.id));
     let mut command = TokioCommand::new(&executable_path);
     command
       .args(&args)
       .stdin(Stdio::null())
-      .stdout(Stdio::null())
-      .stderr(Stdio::null());
+      .stdout(Stdio::null());
+
+    match std::fs::File::create(&stderr_log_path) {
+      Ok(file) => {
+        log::info!(
+          "Camoufox stderr will be logged to: {}",
+          stderr_log_path.display()
+        );
+        command.stderr(Stdio::from(file));
+      }
+      Err(e) => {
+        log::warn!(
+          "Failed to open Camoufox stderr log {}: {e}",
+          stderr_log_path.display()
+        );
+        command.stderr(Stdio::null());
+      }
+    }
 
     // Add environment variables
     for (key, value) in &env_vars {
@@ -708,6 +728,8 @@ impl CamoufoxManager {
       // re-emit so they never duplicate.
       let managed_keys = [
         "network.proxy.",
+        "network.http.http3.enable",
+        "network.http.http3.enabled",
         "xpinstall.signatures.required",
         "extensions.startupScanScopes",
         "browser.sessionhistory.max_entries",
@@ -739,6 +761,19 @@ impl CamoufoxManager {
       prefs.push_str(
         "user_pref(\"xpinstall.signatures.required\", false);\n\
          user_pref(\"extensions.startupScanScopes\", 1);\n",
+      );
+
+      // Disable HTTP/3 / QUIC. Camoufox always sits behind the local
+      // donut-proxy, and Firefox-150's QUIC stack bypasses configured HTTP
+      // proxies and goes direct UDP to the remote host. With an upstream
+      // proxy that's the only allowed egress, that traffic silently fails
+      // and pages won't load. (Chromium suppresses QUIC under a proxy on
+      // its own, so Wayfern doesn't need the equivalent toggle.) Both
+      // pref names are emitted because they've been renamed across FF
+      // versions and either could be the active one at runtime.
+      prefs.push_str(
+        "user_pref(\"network.http.http3.enable\", false);\n\
+         user_pref(\"network.http.http3.enabled\", false);\n",
       );
 
       if let Some(proxy_str) = &config.proxy {

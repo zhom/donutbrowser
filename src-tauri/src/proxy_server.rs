@@ -1147,14 +1147,17 @@ pub async fn handle_proxy_connection(
           }
         }
 
-        let _ = handle_connect_from_buffer(
+        if let Err(e) = handle_connect_from_buffer(
           stream,
           full_request,
           upstream_url,
           bypass_matcher,
           blocklist_matcher,
         )
-        .await;
+        .await
+        {
+          log::warn!("CONNECT tunnel ended with error: {e}");
+        }
         return;
       }
 
@@ -1449,6 +1452,13 @@ async fn handle_connect_from_buffer(
     tracker.record_request(&domain, 0, 0);
   }
 
+  log::info!(
+    "CONNECT {}:{} (upstream={})",
+    target_host,
+    target_port,
+    upstream_url.as_deref().unwrap_or("DIRECT")
+  );
+
   // Connect to target (directly or via upstream proxy).
   // Returns a BoxedAsyncStream so all upstream types (plain TCP, SOCKS,
   // Shadowsocks) share the same bidirectional-copy tunnel code below.
@@ -1503,11 +1513,45 @@ async fn handle_connect_from_buffer(
 
           let mut buffer = [0u8; 4096];
           let n = proxy_stream.read(&mut buffer).await?;
-          let response = String::from_utf8_lossy(&buffer[..n]);
+          let response_full = String::from_utf8_lossy(&buffer[..n]).to_string();
+          let status_line = response_full.lines().next().unwrap_or("").to_string();
 
-          if !response.starts_with("HTTP/1.1 200") && !response.starts_with("HTTP/1.0 200") {
-            return Err(format!("Upstream proxy CONNECT failed: {}", response).into());
+          if !response_full.starts_with("HTTP/1.1 200")
+            && !response_full.starts_with("HTTP/1.0 200")
+          {
+            log::warn!(
+              "Upstream CONNECT to {}:{} via {}:{} rejected: {}",
+              target_host,
+              target_port,
+              proxy_host,
+              proxy_port,
+              status_line
+            );
+            return Err(format!("Upstream proxy CONNECT failed: {response_full}").into());
           }
+
+          // Detect the buffer-drop race where the upstream returned the
+          // 200 response coalesced with destination bytes — those bytes
+          // would otherwise be silently discarded and the browser would
+          // see a TLS stream missing its first record.
+          let header_end_in_buffer = response_full.find("\r\n\r\n").map(|i| i + 4);
+          if let Some(end) = header_end_in_buffer {
+            if end < n {
+              log::warn!(
+                "Upstream CONNECT response coalesced {} byte(s) of payload — these would be dropped without forwarding",
+                n - end
+              );
+            }
+          }
+
+          log::info!(
+            "Upstream CONNECT to {}:{} via {}:{} accepted ({})",
+            target_host,
+            target_port,
+            proxy_host,
+            proxy_port,
+            status_line
+          );
 
           Box::new(proxy_stream)
         }

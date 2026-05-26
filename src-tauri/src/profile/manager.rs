@@ -377,9 +377,18 @@ impl ProfileManager {
 
     log::info!("Profile '{name}' created successfully with ID: {profile_id}");
 
-    // Create user.js with common Firefox preferences and apply proxy settings if provided
-    // Skip for ephemeral profiles since the data dir is created at launch time
-    if !ephemeral {
+    // `apply_proxy_settings_to_profile` writes a Firefox-style user.js
+    // with the upstream proxy host. That is wrong for both supported
+    // browser types:
+    // - Camoufox: camoufox_manager rewrites user.js at every launch with
+    //   the local donut-proxy host; writing the upstream here leaves a
+    //   stale, wrong proxy in user.js until the next launch.
+    // - Wayfern: Chromium gets its proxy via `--proxy-pac-url=` at launch
+    //   (see wayfern_manager.rs) and never reads user.js.
+    // So we only call it for any unrecognized browser type that might be
+    // a true Firefox-family target (none currently). Ephemeral profiles
+    // skip regardless because their data dir is created at launch time.
+    if !ephemeral && !matches!(browser, "camoufox" | "wayfern") {
       if let Some(proxy_id_ref) = &proxy_id {
         if let Some(proxy_settings) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id_ref) {
           self.apply_proxy_settings_to_profile(&profile_data_dir, &proxy_settings, None)?;
@@ -1236,18 +1245,34 @@ impl ProfileManager {
       }
     }
 
-    // Update on-disk browser profile config immediately
-    if let Some(proxy_id_ref) = &proxy_id {
-      if let Some(proxy_settings) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id_ref) {
-        let profiles_dir = self.get_profiles_dir();
-        let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
-        self
-          .apply_proxy_settings_to_profile(&profile_path, &proxy_settings, None)
-          .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
-            format!("Failed to apply proxy settings: {e}").into()
-          })?;
+    // Update on-disk browser profile config immediately.
+    // Both supported browser types ignore this write (Camoufox rewrites
+    // user.js at launch with the local donut-proxy host, Wayfern takes its
+    // proxy via `--proxy-pac-url=` and never reads user.js), and for
+    // Camoufox specifically writing the upstream host here would leave a
+    // stale, wrong proxy in user.js until the next launch.
+    if !matches!(profile.browser.as_str(), "camoufox" | "wayfern") {
+      if let Some(proxy_id_ref) = &proxy_id {
+        if let Some(proxy_settings) = PROXY_MANAGER.get_proxy_settings_by_id(proxy_id_ref) {
+          let profiles_dir = self.get_profiles_dir();
+          let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
+          self
+            .apply_proxy_settings_to_profile(&profile_path, &proxy_settings, None)
+            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+              format!("Failed to apply proxy settings: {e}").into()
+            })?;
+        } else {
+          // Proxy ID provided but proxy not found, disable proxy
+          let profiles_dir = self.get_profiles_dir();
+          let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
+          self
+            .disable_proxy_settings_in_profile(&profile_path)
+            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+              format!("Failed to disable proxy settings: {e}").into()
+            })?;
+        }
       } else {
-        // Proxy ID provided but proxy not found, disable proxy
+        // No proxy ID provided, disable proxy
         let profiles_dir = self.get_profiles_dir();
         let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
         self
@@ -1256,15 +1281,6 @@ impl ProfileManager {
             format!("Failed to disable proxy settings: {e}").into()
           })?;
       }
-    } else {
-      // No proxy ID provided, disable proxy
-      let profiles_dir = self.get_profiles_dir();
-      let profile_path = profiles_dir.join(profile.id.to_string()).join("profile");
-      self
-        .disable_proxy_settings_in_profile(&profile_path)
-        .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
-          format!("Failed to disable proxy settings: {e}").into()
-        })?;
     }
 
     // Emit profile update event so frontend UIs can refresh immediately (e.g. proxy manager)
