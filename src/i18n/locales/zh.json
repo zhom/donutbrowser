@@ -1912,5 +1912,11 @@
     "goIntegrations": "转到集成",
     "goAccount": "转到账户",
     "goSettings": "转到设置"
+  },
+  "closeConfirm": {
+    "title": "关闭 Donut Browser？",
+    "description": "您想将应用最小化到系统托盘还是退出？",
+    "minimize": "最小化到托盘",
+    "quit": "退出"
   }
 }

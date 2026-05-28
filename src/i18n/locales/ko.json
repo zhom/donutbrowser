@@ -1912,5 +1912,11 @@
     "goIntegrations": "통합으로 이동",
     "goAccount": "계정으로 이동",
     "goSettings": "설정으로 이동"
+  },
+  "closeConfirm": {
+    "title": "Donut Browser를 닫으시겠습니까?",
+    "description": "앱을 시스템 트레이로 보내시겠습니까, 아니면 종료하시겠습니까?",
+    "minimize": "트레이로 최소화",
+    "quit": "종료"
   }
 }

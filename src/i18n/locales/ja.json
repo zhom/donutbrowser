@@ -1912,5 +1912,11 @@
     "goIntegrations": "統合へ移動",
     "goAccount": "アカウントへ移動",
     "goSettings": "設定へ移動"
+  },
+  "closeConfirm": {
+    "title": "Donut Browser を閉じますか？",
+    "description": "アプリをシステムトレイに格納しますか、それとも終了しますか？",
+    "minimize": "トレイに格納",
+    "quit": "終了"
   }
 }

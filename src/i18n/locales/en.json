@@ -1912,5 +1912,11 @@
     "goIntegrations": "Go to Integrations",
     "goAccount": "Go to Account",
     "goSettings": "Go to Settings"
+  },
+  "closeConfirm": {
+    "title": "Close Donut Browser?",
+    "description": "Would you like to send the app to the system tray or quit?",
+    "minimize": "Minimize to Tray",
+    "quit": "Quit"
   }
 }
