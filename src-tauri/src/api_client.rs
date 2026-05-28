@@ -1163,7 +1163,17 @@ impl ApiClient {
           }
         }
         Err(e) => {
-          log::warn!("Wayfern fetch attempt {attempt}/3 failed: {e}");
+          use std::error::Error as StdError;
+          let mut parts = vec![e.to_string()];
+          let mut source = e.source();
+          while let Some(s) = source {
+            parts.push(s.to_string());
+            source = s.source();
+          }
+          log::warn!(
+            "Wayfern fetch attempt {attempt}/3 failed: {}",
+            parts.join(": ")
+          );
           last_err = Some(e.to_string());
         }
       }
@@ -1181,11 +1191,10 @@ impl ApiClient {
     })?;
     log::info!("Fetched Wayfern version: {}", version_info.version);
 
-    // Cache the results (unless bypassing cache)
-    if !no_caching {
-      if let Err(e) = self.save_cached_wayfern_version(&version_info) {
-        log::error!("Failed to cache Wayfern version: {e}");
-      }
+    // Always persist a freshly-fetched version so subsequent calls within the
+    // same download flow can read from cache instead of hitting the network again.
+    if let Err(e) = self.save_cached_wayfern_version(&version_info) {
+      log::error!("Failed to cache Wayfern version: {e}");
     }
 
     Ok(version_info)

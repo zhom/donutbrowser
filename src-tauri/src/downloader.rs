@@ -146,10 +146,12 @@ impl Downloader {
         Ok(asset_url)
       }
       BrowserType::Wayfern => {
-        // For Wayfern, get the download URL from version.json
+        // For Wayfern, get the download URL from version.json.
+        // download_browser_full already fetched the version and wrote it to
+        // cache, so we can read from cache here to avoid a redundant request.
         let version_info = self
           .api_client
-          .fetch_wayfern_version_with_caching(true)
+          .fetch_wayfern_version_with_caching(false)
           .await?;
 
         if version_info.version != version {
