@@ -1832,7 +1832,7 @@ impl McpServer {
       })?;
 
     let url = arguments.get("url").and_then(|v| v.as_str());
-    let _headless = arguments
+    let headless = arguments
       .get("headless")
       .and_then(|v| v.as_bool())
       .unwrap_or(false);
@@ -1876,19 +1876,21 @@ impl McpServer {
       message: "MCP server not properly initialized".to_string(),
     })?;
 
-    // Launch the browser
-    crate::browser_runner::BrowserRunner::instance()
-      .launch_browser(
-        app_handle.clone(),
-        profile,
-        url.map(|s| s.to_string()),
-        None,
-      )
-      .await
-      .map_err(|e| McpError {
-        code: -32000,
-        message: format!("Failed to launch browser: {e}"),
-      })?;
+    // Launch a fresh instance, honoring the requested headless mode. The CDP
+    // port is self-allocated and discovered later via get_cdp_port_for_profile.
+    crate::browser_runner::launch_browser_profile_impl(
+      app_handle.clone(),
+      profile.clone(),
+      url.map(|s| s.to_string()),
+      None,
+      headless,
+      true,
+    )
+    .await
+    .map_err(|e| McpError {
+      code: -32000,
+      message: format!("Failed to launch browser: {e}"),
+    })?;
 
     Ok(serde_json::json!({
       "content": [{

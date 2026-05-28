@@ -1750,13 +1750,15 @@ async fn run_profile(
     port
   };
 
-  // Use the same launch method as the main app, but with remote debugging enabled
-  match crate::browser_runner::launch_browser_profile_with_debugging(
+  // Use the same launch path as the main app, but force a fresh instance with
+  // remote debugging enabled so the returned port is the one the browser binds.
+  match crate::browser_runner::launch_browser_profile_impl(
     state.app_handle.clone(),
     profile.clone(),
     url,
     Some(remote_debugging_port),
     headless,
+    true,
   )
   .await
   {
