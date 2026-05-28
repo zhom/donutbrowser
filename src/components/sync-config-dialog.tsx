@@ -1,6 +1,7 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LuEye, LuEyeOff } from "react-icons/lu";
@@ -206,7 +207,7 @@ export function SyncConfigDialog({
 
   const handleOpenLogin = useCallback(async () => {
     try {
-      await invoke("handle_url_open", { url: DEVICE_LINK_URL });
+      await openUrl(DEVICE_LINK_URL);
       // Hand off the verify step to its own dialog so the user has a
       // focused place to paste the code, and so it doesn't visually
       // stack with this dialog or any other modal currently on screen.

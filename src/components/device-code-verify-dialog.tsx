@@ -1,6 +1,7 @@
 "use client";
 
 import { invoke } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LuExternalLink } from "react-icons/lu";
@@ -45,7 +46,7 @@ export function DeviceCodeVerifyDialog({
   const handleOpenLogin = async () => {
     setIsOpeningLogin(true);
     try {
-      await invoke("handle_url_open", { url: DEVICE_LINK_URL });
+      await openUrl(DEVICE_LINK_URL);
     } catch (error) {
       console.error("Failed to open login link:", error);
       showErrorToast(String(error));
