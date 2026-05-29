@@ -136,6 +136,13 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
                 </a>
             </td>
             <td align="center">
+                <a href="https://github.com/webees">
+                    <img src="https://avatars.githubusercontent.com/u/5155291?v=4" width="100;" alt="webees"/>
+                    <br />
+                    <sub><b>JockLee</b></sub>
+                </a>
+            </td>
+            <td align="center">
                 <a href="https://github.com/yb403">
                     <img src="https://avatars.githubusercontent.com/u/87396571?v=4" width="100;" alt="yb403"/>
                     <br />
@@ -147,13 +154,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
                     <img src="https://avatars.githubusercontent.com/u/9677471?v=4" width="100;" alt="drunkod"/>
                     <br />
                     <sub><b>drunkod</b></sub>
-                </a>
-            </td>
-            <td align="center">
-                <a href="https://github.com/webees">
-                    <img src="https://avatars.githubusercontent.com/u/5155291?v=4" width="100;" alt="webees"/>
-                    <br />
-                    <sub><b>JockLee</b></sub>
                 </a>
             </td>
             <td align="center">
