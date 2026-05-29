@@ -31,7 +31,7 @@ const isWindows = TARGET.includes("windows");
 
 // Determine source directory
 let srcDir;
-if (TARGET === HOST_TARGET || TARGET === "unknown") {
+if ((!process.env.TARGET && TARGET === HOST_TARGET) || TARGET === "unknown") {
   srcDir = join(MANIFEST_DIR, "target", PROFILE === "release" ? "release" : "debug");
 } else {
   srcDir = join(MANIFEST_DIR, "target", TARGET, PROFILE === "release" ? "release" : "debug");
@@ -57,7 +57,7 @@ function copyBinary(baseName) {
 
     const buildArgs = ["build", "--bin", baseName];
     if (PROFILE === "release") buildArgs.push("--release");
-    if (TARGET !== "unknown" && TARGET !== HOST_TARGET) {
+    if (TARGET !== "unknown" && (process.env.TARGET || TARGET !== HOST_TARGET)) {
       buildArgs.push("--target", TARGET);
     }
 
