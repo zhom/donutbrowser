@@ -73,7 +73,7 @@ codeql database analyze /tmp/codeql-rust --format=sarifv2.1.0 --output=/tmp/rust
 
 ## Key Rules
 
-- **Translations**: Any UI text changes must be reflected in all 7 locale files (`src/i18n/locales/`)
+- **Translations**: Any UI text changes must be reflected in all 9 locale files (`src/i18n/locales/`)
 - **Tauri commands**: If you modify Tauri commands, the `test_no_unused_tauri_commands` test will catch unused ones
 - **No hardcoded colors**: Use theme CSS variables (see `src/lib/themes.ts`), never Tailwind color classes like `text-red-500`
 - **No lock file changes**: Don't update `pnpm-lock.yaml` or `Cargo.lock` unless updating dependencies is the purpose of the PR

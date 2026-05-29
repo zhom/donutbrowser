@@ -11,7 +11,7 @@ donutbrowser/
 │   ├── app/                          # App router (page.tsx, layout.tsx)
 │   ├── components/                   # 50+ React components (dialogs, tables, UI)
 │   ├── hooks/                        # Event-driven React hooks
-│   ├── i18n/locales/                 # Translations (en, es, fr, ja, pt, ru, zh)
+│   ├── i18n/locales/                 # Translations (en, es, fr, ja, ko, pt, ru, vi, zh)
 │   ├── lib/                          # Utilities (themes, toast, browser-utils)
 │   └── types.ts                      # Shared TypeScript interfaces
 ├── src-tauri/                        # Rust backend (Tauri)
@@ -66,12 +66,12 @@ donutbrowser/
 
 - Never write user-facing strings as raw English literals in JSX, toast messages, dialog titles/descriptions, button labels, placeholders, table headers, tooltips, or empty-state text. Always go through `t("namespace.key")` from `useTranslation()`.
 - This applies to every component under `src/` — including new ones. If a component doesn't already import `useTranslation`, add it.
-- Adding a new string means adding the key to ALL seven locale files in `src/i18n/locales/` (en, es, fr, ja, pt, ru, zh) — not just `en.json`. The English version alone is incomplete work.
+- Adding a new string means adding the key to ALL nine locale files in `src/i18n/locales/` (en, es, fr, ja, ko, pt, ru, vi, zh) — not just `en.json`. The English version alone is incomplete work.
 - Reuse existing keys (`common.buttons.*`, `common.labels.*`, `createProfile.*`, etc.) before creating new namespaces. Check `en.json` first.
 - Strings excluded from this rule: `console.log/warn/error`, dev-only debug labels, internal IDs, CSS class names, type names. If unsure whether a string renders to the user, assume it does and translate it.
 - **Never use `t(key, "fallback")` with a default-value second argument.** The 2-arg form is forbidden — every key must exist in every locale file before the call site lands. Fallbacks mask missing translations: a key missing from `ru.json` will silently render the English fallback to Russian users, so the bug never surfaces in CI or review. Only call `t("namespace.key")`. If a translation is missing for any locale, that's a bug to fix at the JSON, not a hole to paper over at the call site.
 - Empty-string values in non-English locales are also forbidden — a locale either has the right translation or it has the same content as English; never `""`. If a particular language doesn't need a particular phrase (e.g. a suffix that doesn't grammatically apply), refactor the JSX to use a single interpolated key (`t("foo.bar", { name })` with `"...{{name}}..."` in each locale) instead of splitting prefix/suffix.
-- When adding or removing keys across all seven locales, use a one-shot Python script in `/tmp/` that loads each `*.json`, mutates it, and writes it back. Seven sequential `Edit` calls drift (typos, ordering differences) and burn tokens; a single script keeps the locales in lockstep and is easy to throw away.
+- When adding or removing keys across all nine locales, use a one-shot Python script in `/tmp/` that loads each `*.json`, mutates it, and writes it back. Nine sequential `Edit` calls drift (typos, ordering differences) and burn tokens; a single script keeps the locales in lockstep and is easy to throw away.
 
 ## Backend error codes (mandatory)
 
@@ -85,7 +85,7 @@ User-facing errors returned from a Tauri command MUST be JSON `{ "code": "FOO_BA
    ```
 2. Add `"FOO_BAR"` to the `BackendErrorCode` union in `src/lib/backend-errors.ts`.
 3. Add a `case "FOO_BAR":` in the switch that returns `t("backendErrors.fooBar", …)`.
-4. Add `backendErrors.fooBar` to all seven locale files.
+4. Add `backendErrors.fooBar` to all nine locale files.
 
 Raw error strings reach the user untranslated; that's the bug pattern this rule blocks.
 
@@ -138,7 +138,7 @@ Reference implementations: `proxy-management-dialog.tsx`, `extension-management-
 
 All app-wide shortcuts live in `src/lib/shortcuts.ts`:
 
-- `SHORTCUTS[]` — one entry per shortcut (id, label translation key, group, key, modifier flags). The label key must exist in all seven locales.
+- `SHORTCUTS[]` — one entry per shortcut (id, label translation key, group, key, modifier flags). The label key must exist in all nine locales.
 - `formatShortcut(s)` returns platform-correct token strings (`["⌘", "K"]` on mac, `["Ctrl", "K"]` elsewhere) — used by both the shortcuts page and the command palette.
 - `matchesShortcut(s, event)` matches a real `KeyboardEvent` and rejects the wrong-platform modifier so Ctrl+K on macOS never fires a `mod: true` shortcut.
 - `matchesGroupDigit(event)` returns 1–9 if Mod+digit was pressed — group switching is dynamic (driven by `orderedGroupTargets` in `page.tsx`) and isn't in the `SHORTCUTS` table.
@@ -148,7 +148,7 @@ Dispatch: the global `keydown` listener and the `runShortcut` callback both live
 1. Append to `SHORTCUTS` in `src/lib/shortcuts.ts`. Add the `ShortcutId` variant.
 2. Add a `case "yourId":` in `runShortcut` in `page.tsx`.
 3. Add the icon mapping in `src/components/command-palette.tsx::ICONS`.
-4. Add `shortcuts.yourId` (label) to all seven locale files.
+4. Add `shortcuts.yourId` (label) to all nine locale files.
 
 The command palette (Mod+K) is built on the shadcn `Command` primitive with a token-AND fuzzy filter — `fuzzyFilter` in `command-palette.tsx`. The `CommandDialog` wrapper now forwards `filter`/`shouldFilter` to the inner `Command` for callers that need custom matching.
 
