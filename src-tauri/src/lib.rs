@@ -196,7 +196,6 @@ impl<R: Runtime> WindowExt for WebviewWindow<R> {
   }
 }
 
-#[tauri::command]
 async fn handle_url_open(app: tauri::AppHandle, url: String) -> Result<(), String> {
   log::info!("handle_url_open called with URL: {url}");
 
@@ -2216,7 +2215,6 @@ pub fn run() {
       disconnect_vpn,
       get_vpn_status,
       list_active_vpn_connections,
-      handle_url_open,
       // Cloud auth commands
       cloud_auth::cloud_exchange_device_code,
       cloud_auth::cloud_get_user,
