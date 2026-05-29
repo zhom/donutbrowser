@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import { AccountPage } from "@/components/account-page";
 import { CamoufoxConfigDialog } from "@/components/camoufox-config-dialog";
 import { CloneProfileDialog } from "@/components/clone-profile-dialog";
+import { CloseConfirmDialog } from "@/components/close-confirm-dialog";
 import { CommandPalette } from "@/components/command-palette";
 import { CommercialTrialModal } from "@/components/commercial-trial-modal";
 import { CookieCopyDialog } from "@/components/cookie-copy-dialog";
@@ -1431,6 +1432,7 @@ export default function Home() {
 
   return (
     <div className="flex flex-col h-screen bg-background font-(family-name:--font-geist-sans)">
+      <CloseConfirmDialog />
       <HomeHeader
         onCreateProfileDialogOpen={setCreateProfileDialogOpen}
         searchQuery={searchQuery}

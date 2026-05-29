@@ -1912,5 +1912,11 @@
     "goIntegrations": "Ir para Integrações",
     "goAccount": "Ir para Conta",
     "goSettings": "Ir para Configurações"
+  },
+  "closeConfirm": {
+    "title": "Fechar Donut Browser?",
+    "description": "Você deseja enviar o aplicativo para a bandeja do sistema ou sair?",
+    "minimize": "Minimizar para a bandeja",
+    "quit": "Sair"
   }
 }

@@ -1,12 +1,18 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 use std::env;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use tauri::{Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{Emitter, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_log::{Target, TargetKind};
 
 // Store pending URLs that need to be handled when the window is ready
 static PENDING_URLS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+// Set to true once the user has confirmed they want to quit, so the close
+// interceptor lets the next CloseRequested through instead of looping back
+// to the confirmation dialog.
+static QUIT_CONFIRMED: AtomicBool = AtomicBool::new(false);
 
 mod api_client;
 mod api_server;
@@ -1145,6 +1151,30 @@ async fn generate_sample_fingerprint(
   }
 }
 
+/// Confirm a quit chosen from the close-confirmation dialog and exit the app.
+#[tauri::command]
+fn confirm_quit(app_handle: tauri::AppHandle) {
+  QUIT_CONFIRMED.store(true, Ordering::SeqCst);
+  app_handle.exit(0);
+}
+
+/// Hide the main window so the app keeps running behind its tray icon.
+#[tauri::command]
+fn hide_to_tray(app_handle: tauri::AppHandle) -> Result<(), String> {
+  if let Some(window) = app_handle.get_webview_window("main") {
+    window.hide().map_err(|e| e.to_string())?;
+  }
+  Ok(())
+}
+
+fn show_main_window(app_handle: &tauri::AppHandle) {
+  if let Some(window) = app_handle.get_webview_window("main") {
+    let _ = window.show();
+    let _ = window.unminimize();
+    let _ = window.set_focus();
+  }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   let args: Vec<String> = env::args().collect();
@@ -1242,6 +1272,86 @@ pub fn run() {
 
       #[allow(unused_variables)]
       let window = win_builder.build().unwrap();
+
+      // System tray so the user can keep the app running after the close
+      // dialog's "Minimize" action hides the window.
+      {
+        use tauri::menu::{MenuBuilder, MenuItemBuilder};
+        use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+        let show_item = MenuItemBuilder::with_id("tray_show", "Show Donut Browser")
+          .build(app)
+          .map_err(|e| format!("Failed to build tray show item: {e}"))?;
+        let quit_item = MenuItemBuilder::with_id("tray_quit", "Quit")
+          .build(app)
+          .map_err(|e| format!("Failed to build tray quit item: {e}"))?;
+        let tray_menu = MenuBuilder::new(app)
+          .item(&show_item)
+          .separator()
+          .item(&quit_item)
+          .build()
+          .map_err(|e| format!("Failed to build tray menu: {e}"))?;
+
+        // Tray-specific icons. macOS/Linux get a template (black + alpha)
+        // version so the OS can tint it for light/dark menu bars; Windows
+        // gets the full-color variant. Decode through the `image` crate so
+        // we hand Tauri raw RGBA — `Image::from_bytes` can fail silently on
+        // bitmaps that don't match the size Tauri expects.
+        #[cfg(target_os = "windows")]
+        let tray_icon_bytes: &[u8] = include_bytes!("../icons/tray-icon-win-44.png");
+        #[cfg(not(target_os = "windows"))]
+        let tray_icon_bytes: &[u8] = include_bytes!("../icons/tray-icon-44.png");
+        let tray_rgba = image::load_from_memory(tray_icon_bytes)
+          .map_err(|e| format!("Failed to decode tray icon: {e}"))?
+          .into_rgba8();
+        let (tray_w, tray_h) = tray_rgba.dimensions();
+        let tray_image = tauri::image::Image::new_owned(tray_rgba.into_raw(), tray_w, tray_h);
+
+        let _tray = TrayIconBuilder::with_id("main")
+          .icon(tray_image)
+          .icon_as_template(cfg!(not(target_os = "windows")))
+          .tooltip("Donut Browser")
+          .menu(&tray_menu)
+          .show_menu_on_left_click(false)
+          .on_menu_event(|app_handle, event| match event.id().as_ref() {
+            "tray_show" => show_main_window(app_handle),
+            "tray_quit" => {
+              QUIT_CONFIRMED.store(true, Ordering::SeqCst);
+              app_handle.exit(0);
+            }
+            _ => {}
+          })
+          .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+              button: MouseButton::Left,
+              button_state: MouseButtonState::Up,
+              ..
+            } = event
+            {
+              show_main_window(tray.app_handle());
+            }
+          })
+          .build(app)
+          .map_err(|e| format!("Failed to build tray icon: {e}"))?;
+      }
+
+      // Intercept the window close so the frontend can ask the user whether
+      // to minimize or quit. The app exits when `confirm_quit` flips
+      // QUIT_CONFIRMED — until then, every CloseRequested is held back.
+      {
+        let app_handle = app.handle().clone();
+        window.on_window_event(move |event| {
+          if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            if QUIT_CONFIRMED.load(Ordering::SeqCst) {
+              return;
+            }
+            api.prevent_close();
+            if let Err(e) = app_handle.emit("close-confirm-requested", ()) {
+              log::warn!("Failed to emit close-confirm-requested: {e}");
+            }
+          }
+        });
+      }
 
       // Set transparent titlebar for macOS
       #[cfg(target_os = "macos")]
@@ -1954,6 +2064,8 @@ pub fn run() {
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
+      confirm_quit,
+      hide_to_tray,
       get_supported_browsers,
       is_browser_supported_on_platform,
       download_browser,

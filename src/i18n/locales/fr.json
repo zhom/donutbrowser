@@ -1912,5 +1912,11 @@
     "goIntegrations": "Aller à Intégrations",
     "goAccount": "Aller à Compte",
     "goSettings": "Aller à Paramètres"
+  },
+  "closeConfirm": {
+    "title": "Fermer Donut Browser ?",
+    "description": "Voulez-vous envoyer l'application dans la zone de notification ou quitter ?",
+    "minimize": "Réduire dans la barre d'état",
+    "quit": "Quitter"
   }
 }

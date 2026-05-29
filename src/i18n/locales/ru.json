@@ -1912,5 +1912,11 @@
     "goIntegrations": "Перейти к Интеграциям",
     "goAccount": "Перейти к Аккаунту",
     "goSettings": "Перейти к Настройкам"
+  },
+  "closeConfirm": {
+    "title": "Закрыть Donut Browser?",
+    "description": "Свернуть приложение в системный трей или выйти?",
+    "minimize": "Свернуть в трей",
+    "quit": "Выйти"
   }
 }
