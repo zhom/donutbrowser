@@ -160,8 +160,7 @@ jobs:
         shell: bash
         working-directory: ./src-tauri
         run: |
-          cargo build --bin donut-proxy --target ${{ matrix.target }} --release
-          cargo build --bin donut-daemon --target ${{ matrix.target }} --release
+          cargo build --bin donut-proxy --bin donut-daemon --target ${{ matrix.target }} --release
 
       - name: Copy sidecar binaries to Tauri binaries
         shell: bash

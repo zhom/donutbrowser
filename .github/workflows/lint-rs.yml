@@ -87,8 +87,7 @@ jobs:
         shell: bash
         working-directory: ./src-tauri
         run: |
-          cargo build --bin donut-proxy --release
-          cargo build --bin donut-daemon --release
+          cargo build --bin donut-proxy --bin donut-daemon --release
 
       - name: Copy sidecar binaries to Tauri binaries
         shell: bash

@@ -75,8 +75,13 @@ jobs:
               response_format: { type: "json_object" }
             }')
 
+          umask 077
+          CURL_AUTH_CONFIG="$(mktemp)"
+          trap 'rm -f "$CURL_AUTH_CONFIG"' EXIT
+          printf 'header = "Authorization: Bearer %s"\n' "$OPENROUTER_API_KEY" > "$CURL_AUTH_CONFIG"
+
           RESPONSE=$(curl -fsSL https://openrouter.ai/api/v1/chat/completions \
-            -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+            --config "$CURL_AUTH_CONFIG" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD")
 
@@ -203,8 +208,13 @@ jobs:
               response_format: { type: "json_object" }
             }')
 
+          umask 077
+          CURL_AUTH_CONFIG="$(mktemp)"
+          trap 'rm -f "$CURL_AUTH_CONFIG"' EXIT
+          printf 'header = "Authorization: Bearer %s"\n' "$OPENROUTER_API_KEY" > "$CURL_AUTH_CONFIG"
+
           RESPONSE=$(curl -fsSL https://openrouter.ai/api/v1/chat/completions \
-            -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+            --config "$CURL_AUTH_CONFIG" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD")
 
