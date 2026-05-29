@@ -33,7 +33,8 @@
       "minimize": "Свернуть",
       "saving": "Сохраняем…",
       "saved": "Сохранено",
-      "copied": "Скопировано"
+      "copied": "Скопировано",
+      "learnMore": "Подробнее"
     },
     "status": {
       "active": "Активен",
@@ -99,6 +100,9 @@
     "srOnly": {
       "copy": "Скопировать",
       "copied": "Скопировано"
+    },
+    "placeholders": {
+      "example": "напр., {{value}}"
     }
   },
   "settings": {
@@ -1524,17 +1528,6 @@
     "creatingButton": "Создание...",
     "createButton": "Создать"
   },
-  "launchOnLogin": {
-    "title": "Запускать при входе?",
-    "description": "Работа в фоновом режиме помогает поддерживать прокси и браузеры активными.",
-    "declineButton": "Больше не спрашивать",
-    "declining": "...",
-    "enableButton": "Включить",
-    "enableSuccess": "Запуск при входе включен",
-    "enableFailed": "Не удалось включить запуск при входе",
-    "declineFailed": "Не удалось сохранить настройку",
-    "tryAgain": "Пожалуйста, попробуйте снова"
-  },
   "wayfernTerms": {
     "title": "Условия использования Wayfern",
     "description": "Прежде чем использовать Donut Browser, необходимо прочитать и согласиться с Условиями использования Wayfern.",
@@ -1680,7 +1673,8 @@
       "viewRelease": "Посмотреть релиз",
       "later": "Позже",
       "uploading": "Загрузка",
-      "downloading": "Скачивание"
+      "downloading": "Скачивание",
+      "startingUpdate": "Запуск обновления..."
     }
   },
   "browserDownload": {
@@ -1694,7 +1688,9 @@
       "extractionFailedDescription": "Повреждённый файл удалён. Он будет повторно загружен при следующей попытке.",
       "extracting": "Распаковка файлов браузера... Не закрывайте приложение.",
       "verifying": "Проверка файлов браузера...",
-      "downloadingRolling": "Загрузка rolling release сборки..."
+      "downloadingRolling": "Загрузка rolling release сборки...",
+      "geoipDownloading": "Загрузка базы данных GeoIP",
+      "geoipDownloaded": "База данных GeoIP успешно загружена!"
     }
   },
   "versionUpdater": {
@@ -1712,7 +1708,12 @@
       "updateSuccessDescription": "Найдено {{newVersions}} новых версий для {{successfulUpdates}} браузеров. Автоматическая загрузка начнётся в ближайшее время.",
       "upToDate": "Новых версий браузеров не найдено",
       "upToDateDescription": "Все версии браузеров актуальны",
-      "updateAllFailed": "Не удалось обновить версии браузеров"
+      "updateAllFailed": "Не удалось обновить версии браузеров",
+      "updateStarted": "Обновление {{browser}} началось",
+      "updateStartedDescription": "Загрузка версии {{version}} скоро начнётся. Запуск браузера отключён до завершения обновления.",
+      "downloadStarting": "Запуск загрузки {{browser}} {{version}}",
+      "downloadProgressBelow": "Прогресс загрузки будет показан ниже...",
+      "autoDownloadStarted": "Автоматическая загрузка {{browser}} {{version}}. Прогресс будет показан ниже."
     }
   },
   "profilePassword": {
@@ -1918,5 +1919,13 @@
     "description": "Свернуть приложение в системный трей или выйти?",
     "minimize": "Свернуть в трей",
     "quit": "Выйти"
+  },
+  "tray": {
+    "show": "Показать Donut Browser",
+    "quit": "Выход"
+  },
+  "browserSupport": {
+    "endingSoonTitle": "Поддержка браузера скоро завершится",
+    "endingSoonDescription": "Поддержка следующих профилей будет прекращена 15 марта 2026 г.: {{profiles}}. Перейдите на профили Wayfern или Camoufox."
   }
 }

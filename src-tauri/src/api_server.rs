@@ -1,6 +1,5 @@
 use crate::browser::ProxySettings;
 use crate::camoufox_manager::CamoufoxConfig;
-use crate::daemon_ws::{ws_handler, WsState};
 use crate::events;
 use crate::group_manager::GROUP_MANAGER;
 use crate::profile::manager::ProfileManager;
@@ -412,16 +411,9 @@ impl ApiServer {
       ))
       .layer(middleware::from_fn(terms_check_middleware));
 
-    // Create WebSocket route with its own state (no auth required for daemon IPC)
-    let ws_state = WsState::new();
-    let ws_routes = Router::new()
-      .route("/events", get(ws_handler))
-      .with_state(ws_state);
-
     let api_for_v1 = api.clone();
     let app = Router::new()
       .merge(v1_routes)
-      .nest("/ws", ws_routes)
       .route("/openapi.json", get(move || async move { Json(api) }))
       .route(
         "/v1/openapi.json",

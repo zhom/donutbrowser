@@ -24,10 +24,6 @@ path = "src/main.rs"
 name = "donut-proxy"
 path = "src/bin/proxy_server.rs"
 
-[[bin]]
-name = "donut-daemon"
-path = "src/bin/donut_daemon.rs"
-
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 resvg = "0.47"
@@ -111,9 +107,7 @@ quick-xml = { version = "0.40", features = ["serialize"] }
 boringtun = "0.7"
 smoltcp = { version = "0.13", default-features = false, features = ["std", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-tcp", "socket-udp"] }
 
-# Daemon dependencies (tray icon)
-tray-icon = "0.24"
-tao = "0.35"
+# Tray icon decoding (main-process system tray)
 image = "0.25"
 dirs = "6"
 crossbeam-channel = "0.5"

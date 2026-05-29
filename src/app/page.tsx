@@ -23,7 +23,6 @@ import { GroupManagementDialog } from "@/components/group-management-dialog";
 import HomeHeader from "@/components/home-header";
 import { ImportProfileDialog } from "@/components/import-profile-dialog";
 import { IntegrationsDialog } from "@/components/integrations-dialog";
-import { LaunchOnLoginDialog } from "@/components/launch-on-login-dialog";
 import { PermissionDialog } from "@/components/permission-dialog";
 import { ProfilesDataTable } from "@/components/profile-data-table";
 import {
@@ -215,8 +214,6 @@ export default function Home() {
   const [passwordDialogMode, setPasswordDialogMode] =
     useState<PasswordDialogMode>("set");
   const pendingLaunchAfterUnlockRef = useRef<BrowserProfile | null>(null);
-  const [hasCheckedStartupPrompt, setHasCheckedStartupPrompt] = useState(false);
-  const [launchOnLoginDialogOpen, setLaunchOnLoginDialogOpen] = useState(false);
   const [windowResizeWarningOpen, setWindowResizeWarningOpen] = useState(false);
   const [windowResizeWarningBrowserType, setWindowResizeWarningBrowserType] =
     useState<string | undefined>(undefined);
@@ -545,24 +542,6 @@ export default function Home() {
       setHasCheckedStartupUrl(true);
     }
   }, [handleUrlOpen, hasCheckedStartupUrl]);
-
-  const checkStartupPrompt = useCallback(async () => {
-    // Only check once during app startup to prevent reopening after dismissing notifications
-    if (hasCheckedStartupPrompt) return;
-
-    try {
-      const shouldShow = await invoke<boolean>(
-        "should_show_launch_on_login_prompt",
-      );
-      if (shouldShow) {
-        setLaunchOnLoginDialogOpen(true);
-      }
-    } catch (error) {
-      console.error("Failed to check startup prompt:", error);
-    } finally {
-      setHasCheckedStartupPrompt(true);
-    }
-  }, [hasCheckedStartupPrompt]);
 
   // Handle profile errors from useProfileEvents hook
   useEffect(() => {
@@ -1190,9 +1169,6 @@ export default function Home() {
   }, [profiles, t]);
 
   useEffect(() => {
-    // Check for startup default browser prompt
-    void checkStartupPrompt();
-
     // Listen for URL open events and get cleanup function
     const setupListeners = async () => {
       const cleanup = await listenForUrlEvents();
@@ -1235,7 +1211,6 @@ export default function Home() {
     };
   }, [
     checkForUpdates,
-    checkStartupPrompt,
     listenForUrlEvents,
     checkCurrentUrl,
     checkMissingBinaries,
@@ -1337,11 +1312,13 @@ export default function Home() {
       showToast({
         id: "browser-support-ending-warning",
         type: "error",
-        title: "Browser support ending soon",
-        description: `Support for the following profiles will be removed on March 15, 2026: ${unsupportedNames}. Please migrate to Wayfern or Camoufox profiles.`,
+        title: t("browserSupport.endingSoonTitle"),
+        description: t("browserSupport.endingSoonDescription", {
+          profiles: unsupportedNames,
+        }),
         duration: 15000,
         action: {
-          label: "Learn more",
+          label: t("common.buttons.learnMore"),
           onClick: () => {
             const event = new CustomEvent("url-open-request", {
               detail: "https://github.com/zhom/donutbrowser/discussions",
@@ -1351,7 +1328,7 @@ export default function Home() {
         },
       });
     }
-  }, [profiles]);
+  }, [profiles, t]);
 
   // Re-check Wayfern terms when a browser download completes
   useEffect(() => {
@@ -1849,14 +1826,6 @@ export default function Home() {
           !crossOsUnlocked
         }
         onClose={checkTrialStatus}
-      />
-
-      {/* Launch on Login Dialog - shown on every startup until enabled or declined */}
-      <LaunchOnLoginDialog
-        isOpen={launchOnLoginDialogOpen}
-        onClose={() => {
-          setLaunchOnLoginDialogOpen(false);
-        }}
       />
 
       <WindowResizeWarningDialog

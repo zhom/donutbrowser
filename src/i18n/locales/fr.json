@@ -33,7 +33,8 @@
       "minimize": "Réduire",
       "saving": "Enregistrement…",
       "saved": "Enregistré",
-      "copied": "Copié"
+      "copied": "Copié",
+      "learnMore": "En savoir plus"
     },
     "status": {
       "active": "Actif",
@@ -99,6 +100,9 @@
     "srOnly": {
       "copy": "Copier",
       "copied": "Copié"
+    },
+    "placeholders": {
+      "example": "p. ex. {{value}}"
     }
   },
   "settings": {
@@ -1524,17 +1528,6 @@
     "creatingButton": "Création...",
     "createButton": "Créer"
   },
-  "launchOnLogin": {
-    "title": "Activer le démarrage à la connexion ?",
-    "description": "Tourner en arrière-plan permet de garder vos proxys et navigateurs actifs.",
-    "declineButton": "Ne plus demander",
-    "declining": "...",
-    "enableButton": "Activer",
-    "enableSuccess": "Démarrage à la connexion activé",
-    "enableFailed": "Échec de l'activation du démarrage à la connexion",
-    "declineFailed": "Échec de l'enregistrement de la préférence",
-    "tryAgain": "Veuillez réessayer"
-  },
   "wayfernTerms": {
     "title": "Conditions générales de Wayfern",
     "description": "Avant d'utiliser Donut Browser, vous devez lire et accepter les Conditions Générales de Wayfern.",
@@ -1680,7 +1673,8 @@
       "viewRelease": "Voir la version",
       "later": "Plus tard",
       "uploading": "Envoi",
-      "downloading": "Téléchargement"
+      "downloading": "Téléchargement",
+      "startingUpdate": "Démarrage de la mise à jour..."
     }
   },
   "browserDownload": {
@@ -1694,7 +1688,9 @@
       "extractionFailedDescription": "Le fichier corrompu a été supprimé. Il sera retéléchargé lors de la prochaine tentative.",
       "extracting": "Extraction des fichiers du navigateur... Ne fermez pas l'application.",
       "verifying": "Vérification des fichiers du navigateur...",
-      "downloadingRolling": "Téléchargement de la version rolling release..."
+      "downloadingRolling": "Téléchargement de la version rolling release...",
+      "geoipDownloading": "Téléchargement de la base de données GeoIP",
+      "geoipDownloaded": "Base de données GeoIP téléchargée avec succès !"
     }
   },
   "versionUpdater": {
@@ -1712,7 +1708,12 @@
       "updateSuccessDescription": "{{newVersions}} nouvelles versions trouvées sur {{successfulUpdates}} navigateurs. Les téléchargements automatiques commenceront sous peu.",
       "upToDate": "Aucune nouvelle version de navigateur trouvée",
       "upToDateDescription": "Toutes les versions des navigateurs sont à jour",
-      "updateAllFailed": "Échec de la mise à jour des versions des navigateurs"
+      "updateAllFailed": "Échec de la mise à jour des versions des navigateurs",
+      "updateStarted": "Mise à jour de {{browser}} démarrée",
+      "updateStartedDescription": "Le téléchargement de la version {{version}} va bientôt commencer. Le lancement du navigateur est désactivé jusqu'à la fin de la mise à jour.",
+      "downloadStarting": "Démarrage du téléchargement de {{browser}} {{version}}",
+      "downloadProgressBelow": "La progression du téléchargement sera affichée ci-dessous...",
+      "autoDownloadStarted": "Téléchargement automatique de {{browser}} {{version}}. La progression sera affichée ci-dessous."
     }
   },
   "profilePassword": {
@@ -1918,5 +1919,13 @@
     "description": "Voulez-vous envoyer l'application dans la zone de notification ou quitter ?",
     "minimize": "Réduire dans la barre d'état",
     "quit": "Quitter"
+  },
+  "tray": {
+    "show": "Afficher Donut Browser",
+    "quit": "Quitter"
+  },
+  "browserSupport": {
+    "endingSoonTitle": "La prise en charge du navigateur prend bientôt fin",
+    "endingSoonDescription": "La prise en charge des profils suivants sera supprimée le 15 mars 2026 : {{profiles}}. Veuillez migrer vers des profils Wayfern ou Camoufox."
   }
 }

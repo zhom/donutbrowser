@@ -162,7 +162,6 @@ jobs:
         working-directory: ./src-tauri
         run: |
           cargo build --bin donut-proxy --target ${{ matrix.target }} --release
-          cargo build --bin donut-daemon --target ${{ matrix.target }} --release
 
       - name: Copy sidecar binaries to Tauri binaries
         shell: bash
@@ -170,12 +169,9 @@ jobs:
           mkdir -p src-tauri/binaries
           if [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
             cp src-tauri/target/${{ matrix.target }}/release/donut-proxy.exe src-tauri/binaries/donut-proxy-${{ matrix.target }}.exe
-            cp src-tauri/target/${{ matrix.target }}/release/donut-daemon.exe src-tauri/binaries/donut-daemon-${{ matrix.target }}.exe
           else
             cp src-tauri/target/${{ matrix.target }}/release/donut-proxy src-tauri/binaries/donut-proxy-${{ matrix.target }}
-            cp src-tauri/target/${{ matrix.target }}/release/donut-daemon src-tauri/binaries/donut-daemon-${{ matrix.target }}
             chmod +x src-tauri/binaries/donut-proxy-${{ matrix.target }}
-            chmod +x src-tauri/binaries/donut-daemon-${{ matrix.target }}
           fi
 
       - name: Import Apple certificate

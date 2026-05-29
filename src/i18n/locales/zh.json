@@ -33,7 +33,8 @@
       "minimize": "最小化",
       "saving": "正在保存…",
       "saved": "已保存",
-      "copied": "已复制"
+      "copied": "已复制",
+      "learnMore": "了解更多"
     },
     "status": {
       "active": "活跃",
@@ -99,6 +100,9 @@
     "srOnly": {
       "copy": "复制",
       "copied": "已复制"
+    },
+    "placeholders": {
+      "example": "例如：{{value}}"
     }
   },
   "settings": {
@@ -1524,17 +1528,6 @@
     "creatingButton": "正在创建...",
     "createButton": "创建"
   },
-  "launchOnLogin": {
-    "title": "启用登录时启动?",
-    "description": "在后台运行有助于保持代理和浏览器存活。",
-    "declineButton": "不再询问",
-    "declining": "...",
-    "enableButton": "启用",
-    "enableSuccess": "已启用登录时启动",
-    "enableFailed": "启用登录时启动失败",
-    "declineFailed": "保存偏好失败",
-    "tryAgain": "请重试"
-  },
   "wayfernTerms": {
     "title": "Wayfern 条款和条件",
     "description": "在使用 Donut Browser 之前,你必须阅读并同意 Wayfern 的条款和条件。",
@@ -1680,7 +1673,8 @@
       "viewRelease": "查看版本",
       "later": "稍后",
       "uploading": "上传中",
-      "downloading": "下载中"
+      "downloading": "下载中",
+      "startingUpdate": "正在开始更新..."
     }
   },
   "browserDownload": {
@@ -1694,7 +1688,9 @@
       "extractionFailedDescription": "损坏的文件已删除。下次尝试时将重新下载。",
       "extracting": "正在提取浏览器文件...请不要关闭应用。",
       "verifying": "正在验证浏览器文件...",
-      "downloadingRolling": "正在下载滚动发布版本..."
+      "downloadingRolling": "正在下载滚动发布版本...",
+      "geoipDownloading": "正在下载 GeoIP 数据库",
+      "geoipDownloaded": "GeoIP 数据库下载成功！"
     }
   },
   "versionUpdater": {
@@ -1712,7 +1708,12 @@
       "updateSuccessDescription": "在 {{successfulUpdates}} 个浏览器中发现 {{newVersions}} 个新版本。自动下载即将开始。",
       "upToDate": "未发现新的浏览器版本",
       "upToDateDescription": "所有浏览器版本都是最新的",
-      "updateAllFailed": "更新浏览器版本失败"
+      "updateAllFailed": "更新浏览器版本失败",
+      "updateStarted": "{{browser}} 更新已开始",
+      "updateStartedDescription": "版本 {{version}} 即将开始下载。更新完成前浏览器启动将被禁用。",
+      "downloadStarting": "正在开始下载 {{browser}} {{version}}",
+      "downloadProgressBelow": "下载进度将显示在下方...",
+      "autoDownloadStarted": "正在自动下载 {{browser}} {{version}}。进度将显示在下方。"
     }
   },
   "profilePassword": {
@@ -1918,5 +1919,13 @@
     "description": "您想将应用最小化到系统托盘还是退出？",
     "minimize": "最小化到托盘",
     "quit": "退出"
+  },
+  "tray": {
+    "show": "显示 Donut Browser",
+    "quit": "退出"
+  },
+  "browserSupport": {
+    "endingSoonTitle": "浏览器支持即将结束",
+    "endingSoonDescription": "以下配置文件的支持将于 2026 年 3 月 15 日移除：{{profiles}}。请迁移到 Wayfern 或 Camoufox 配置文件。"
   }
 }

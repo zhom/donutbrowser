@@ -88,7 +88,6 @@ jobs:
         working-directory: ./src-tauri
         run: |
           cargo build --bin donut-proxy --release
-          cargo build --bin donut-daemon --release
 
       - name: Copy sidecar binaries to Tauri binaries
         shell: bash
@@ -97,12 +96,9 @@ jobs:
           HOST_TARGET="${{ steps.host_target.outputs.target }}"
           if [[ "$HOST_TARGET" == *"windows"* ]]; then
             cp src-tauri/target/release/donut-proxy.exe src-tauri/binaries/donut-proxy-${HOST_TARGET}.exe
-            cp src-tauri/target/release/donut-daemon.exe src-tauri/binaries/donut-daemon-${HOST_TARGET}.exe
           else
             cp src-tauri/target/release/donut-proxy src-tauri/binaries/donut-proxy-${HOST_TARGET}
-            cp src-tauri/target/release/donut-daemon src-tauri/binaries/donut-daemon-${HOST_TARGET}
             chmod +x src-tauri/binaries/donut-proxy-${HOST_TARGET}
-            chmod +x src-tauri/binaries/donut-daemon-${HOST_TARGET}
           fi
 
       - name: Run rustfmt check

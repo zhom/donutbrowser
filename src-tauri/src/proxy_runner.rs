@@ -28,7 +28,6 @@ fn unsuffixed_binary_name(base_name: &str) -> String {
   {
     match base_name {
       "donut-proxy" => "donut-proxy.exe".to_string(),
-      "donut-daemon" => "donut-daemon.exe".to_string(),
       _ => String::new(),
     }
   }

@@ -52,11 +52,6 @@ mod wayfern_terms;
 pub mod cloud_auth;
 mod commercial_license;
 mod cookie_manager;
-pub mod daemon;
-pub mod daemon_client;
-#[allow(dead_code)]
-mod daemon_spawn;
-pub mod daemon_ws;
 pub mod events;
 mod mcp_integrations;
 mod mcp_server;
@@ -98,10 +93,10 @@ use downloaded_browsers_registry::{
 use downloader::{cancel_download, download_browser};
 
 use settings_manager::{
-  decline_launch_on_login, dismiss_window_resize_warning, enable_launch_on_login, get_app_settings,
-  get_sync_settings, get_system_info, get_system_language, get_table_sorting_settings,
-  get_window_resize_warning_dismissed, open_log_directory, read_log_files, save_app_settings,
-  save_sync_settings, save_table_sorting_settings, should_show_launch_on_login_prompt,
+  dismiss_window_resize_warning, get_app_settings, get_sync_settings, get_system_info,
+  get_system_language, get_table_sorting_settings, get_window_resize_warning_dismissed,
+  open_log_directory, read_log_files, save_app_settings, save_sync_settings,
+  save_table_sorting_settings,
 };
 
 use sync::{
@@ -196,7 +191,8 @@ impl<R: Runtime> WindowExt for WebviewWindow<R> {
   }
 }
 
-#[tauri::command]
+// Called internally for deep-link / startup URL handling — not invoked from the
+// frontend, so it is intentionally not a `#[tauri::command]`.
 async fn handle_url_open(app: tauri::AppHandle, url: String) -> Result<(), String> {
   log::info!("handle_url_open called with URL: {url}");
 
@@ -1175,6 +1171,34 @@ fn show_main_window(app_handle: &tauri::AppHandle) {
   }
 }
 
+/// Update the tray menu labels with localized strings pushed from the frontend
+/// (which owns the active language). The item ids are unchanged so the existing
+/// menu-event handler keeps matching.
+#[tauri::command]
+fn update_tray_menu(
+  app_handle: tauri::AppHandle,
+  show_label: String,
+  quit_label: String,
+) -> Result<(), String> {
+  use tauri::menu::{MenuBuilder, MenuItemBuilder};
+  if let Some(tray) = app_handle.tray_by_id("main") {
+    let show_item = MenuItemBuilder::with_id("tray_show", show_label)
+      .build(&app_handle)
+      .map_err(|e| e.to_string())?;
+    let quit_item = MenuItemBuilder::with_id("tray_quit", quit_label)
+      .build(&app_handle)
+      .map_err(|e| e.to_string())?;
+    let menu = MenuBuilder::new(&app_handle)
+      .item(&show_item)
+      .separator()
+      .item(&quit_item)
+      .build()
+      .map_err(|e| e.to_string())?;
+    tray.set_menu(Some(menu)).map_err(|e| e.to_string())?;
+  }
+  Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   let args: Vec<String> = env::args().collect();
@@ -1248,14 +1272,6 @@ pub fn run() {
         mgr.ensure_icons_extracted();
       }
 
-      // Daemon (tray icon) is currently disabled — clean up any existing autostart
-      if daemon::autostart::is_autostart_enabled() {
-        log::info!("Removing daemon autostart (daemon is disabled)");
-        if let Err(e) = daemon::autostart::disable_autostart() {
-          log::warn!("Failed to remove daemon autostart: {e}");
-        }
-      }
-
       // Create the main window programmatically
       #[allow(unused_variables)]
       let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
@@ -1275,6 +1291,12 @@ pub fn run() {
 
       // System tray so the user can keep the app running after the close
       // dialog's "Minimize" action hides the window.
+      //
+      // These initial labels are bootstrap defaults only — the frontend pushes
+      // localized labels via `update_tray_menu` on mount and on every language
+      // change (the active language lives in the webview). The tray menu is only
+      // ever opened after the user minimizes to tray, by which point the
+      // frontend has already localized it, so these strings are never shown.
       {
         use tauri::menu::{MenuBuilder, MenuItemBuilder};
         use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -2066,6 +2088,7 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       confirm_quit,
       hide_to_tray,
+      update_tray_menu,
       get_supported_browsers,
       is_browser_supported_on_platform,
       download_browser,
@@ -2096,9 +2119,6 @@ pub fn run() {
       save_app_settings,
       read_log_files,
       open_log_directory,
-      should_show_launch_on_login_prompt,
-      enable_launch_on_login,
-      decline_launch_on_login,
       get_table_sorting_settings,
       save_table_sorting_settings,
       get_system_language,
@@ -2216,7 +2236,6 @@ pub fn run() {
       disconnect_vpn,
       get_vpn_status,
       list_active_vpn_connections,
-      handle_url_open,
       // Cloud auth commands
       cloud_auth::cloud_exchange_device_code,
       cloud_auth::cloud_get_user,

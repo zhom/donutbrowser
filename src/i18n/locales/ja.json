@@ -33,7 +33,8 @@
       "minimize": "最小化",
       "saving": "保存中…",
       "saved": "保存しました",
-      "copied": "コピーしました"
+      "copied": "コピーしました",
+      "learnMore": "詳細"
     },
     "status": {
       "active": "アクティブ",
@@ -99,6 +100,9 @@
     "srOnly": {
       "copy": "コピー",
       "copied": "コピーしました"
+    },
+    "placeholders": {
+      "example": "例: {{value}}"
     }
   },
   "settings": {
@@ -1524,17 +1528,6 @@
     "creatingButton": "作成中...",
     "createButton": "作成"
   },
-  "launchOnLogin": {
-    "title": "ログイン時に起動しますか?",
-    "description": "バックグラウンドで実行することで、プロキシとブラウザを維持できます。",
-    "declineButton": "今後は表示しない",
-    "declining": "...",
-    "enableButton": "有効にする",
-    "enableSuccess": "ログイン時の起動を有効にしました",
-    "enableFailed": "ログイン時の起動を有効にできませんでした",
-    "declineFailed": "設定の保存に失敗しました",
-    "tryAgain": "もう一度お試しください"
-  },
   "wayfernTerms": {
     "title": "Wayfern 利用規約",
     "description": "Donut Browser を使用する前に、Wayfern の利用規約を読み、同意する必要があります。",
@@ -1680,7 +1673,8 @@
       "viewRelease": "リリースを見る",
       "later": "後で",
       "uploading": "アップロード中",
-      "downloading": "ダウンロード中"
+      "downloading": "ダウンロード中",
+      "startingUpdate": "更新を開始しています..."
     }
   },
   "browserDownload": {
@@ -1694,7 +1688,9 @@
       "extractionFailedDescription": "破損したファイルは削除されました。次回の試行時に再ダウンロードされます。",
       "extracting": "ブラウザファイルを展開中... アプリを閉じないでください。",
       "verifying": "ブラウザファイルを検証中...",
-      "downloadingRolling": "ローリングリリースビルドをダウンロード中..."
+      "downloadingRolling": "ローリングリリースビルドをダウンロード中...",
+      "geoipDownloading": "GeoIP データベースをダウンロード中",
+      "geoipDownloaded": "GeoIP データベースのダウンロードが完了しました！"
     }
   },
   "versionUpdater": {
@@ -1712,7 +1708,12 @@
       "updateSuccessDescription": "{{successfulUpdates}} 個のブラウザに {{newVersions}} 個の新しいバージョンが見つかりました。自動ダウンロードがまもなく開始します。",
       "upToDate": "新しいブラウザのバージョンは見つかりませんでした",
       "upToDateDescription": "すべてのブラウザバージョンは最新です",
-      "updateAllFailed": "ブラウザバージョンの更新に失敗しました"
+      "updateAllFailed": "ブラウザバージョンの更新に失敗しました",
+      "updateStarted": "{{browser}} の更新を開始しました",
+      "updateStartedDescription": "バージョン {{version}} のダウンロードがまもなく開始されます。更新が完了するまでブラウザの起動は無効になります。",
+      "downloadStarting": "{{browser}} {{version}} のダウンロードを開始しています",
+      "downloadProgressBelow": "ダウンロードの進行状況は下に表示されます...",
+      "autoDownloadStarted": "{{browser}} {{version}} を自動的にダウンロードしています。進行状況は下に表示されます。"
     }
   },
   "profilePassword": {
@@ -1918,5 +1919,13 @@
     "description": "アプリをシステムトレイに格納しますか、それとも終了しますか？",
     "minimize": "トレイに格納",
     "quit": "終了"
+  },
+  "tray": {
+    "show": "Donut Browser を表示",
+    "quit": "終了"
+  },
+  "browserSupport": {
+    "endingSoonTitle": "ブラウザのサポートが間もなく終了します",
+    "endingSoonDescription": "次のプロファイルのサポートは 2026 年 3 月 15 日に削除されます: {{profiles}}。Wayfern または Camoufox のプロファイルに移行してください。"
   }
 }

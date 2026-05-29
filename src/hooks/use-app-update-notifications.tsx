@@ -71,7 +71,7 @@ export function useAppUpdateNotifications() {
           percentage: 0,
           speed: undefined,
           eta: undefined,
-          message: "Starting update...",
+          message: t("appUpdate.toast.startingUpdate"),
         });
 
         await invoke("download_and_prepare_app_update", {

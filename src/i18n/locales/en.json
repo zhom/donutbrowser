@@ -33,7 +33,8 @@
       "minimize": "Minimize",
       "saving": "Saving…",
       "saved": "Saved",
-      "copied": "Copied"
+      "copied": "Copied",
+      "learnMore": "Learn more"
     },
     "status": {
       "active": "Active",
@@ -99,6 +100,9 @@
     "srOnly": {
       "copy": "Copy",
       "copied": "Copied"
+    },
+    "placeholders": {
+      "example": "e.g., {{value}}"
     }
   },
   "settings": {
@@ -1524,17 +1528,6 @@
     "creatingButton": "Creating...",
     "createButton": "Create"
   },
-  "launchOnLogin": {
-    "title": "Enable Launch on Login?",
-    "description": "Running in the background helps keep your proxies and browsers alive.",
-    "declineButton": "Don't Ask Again",
-    "declining": "...",
-    "enableButton": "Enable",
-    "enableSuccess": "Launch on login enabled",
-    "enableFailed": "Failed to enable launch on login",
-    "declineFailed": "Failed to save preference",
-    "tryAgain": "Please try again"
-  },
   "wayfernTerms": {
     "title": "Wayfern Terms and Conditions",
     "description": "Before using Donut Browser, you must read and agree to Wayfern's Terms and Conditions.",
@@ -1680,7 +1673,8 @@
       "viewRelease": "View Release",
       "later": "Later",
       "uploading": "Uploading",
-      "downloading": "Downloading"
+      "downloading": "Downloading",
+      "startingUpdate": "Starting update..."
     }
   },
   "browserDownload": {
@@ -1694,7 +1688,9 @@
       "extractionFailedDescription": "The corrupt file was deleted. It will be re-downloaded on next attempt.",
       "extracting": "Extracting browser files... Please do not close the app.",
       "verifying": "Verifying browser files...",
-      "downloadingRolling": "Downloading rolling release build..."
+      "downloadingRolling": "Downloading rolling release build...",
+      "geoipDownloading": "Downloading GeoIP database",
+      "geoipDownloaded": "GeoIP database downloaded successfully!"
     }
   },
   "versionUpdater": {
@@ -1712,7 +1708,12 @@
       "updateSuccessDescription": "Found {{newVersions}} new versions across {{successfulUpdates}} browsers. Auto-downloads will start shortly.",
       "upToDate": "No new browser versions found",
       "upToDateDescription": "All browser versions are up to date",
-      "updateAllFailed": "Failed to update browser versions"
+      "updateAllFailed": "Failed to update browser versions",
+      "updateStarted": "{{browser}} update started",
+      "updateStartedDescription": "Version {{version}} download will begin shortly. Browser launch is disabled until update completes.",
+      "downloadStarting": "Starting {{browser}} {{version}} download",
+      "downloadProgressBelow": "Download progress will be shown below...",
+      "autoDownloadStarted": "Downloading {{browser}} {{version}} automatically. Progress will be shown below."
     }
   },
   "profilePassword": {
@@ -1918,5 +1919,13 @@
     "description": "Would you like to send the app to the system tray or quit?",
     "minimize": "Minimize to Tray",
     "quit": "Quit"
+  },
+  "tray": {
+    "show": "Show Donut Browser",
+    "quit": "Quit"
+  },
+  "browserSupport": {
+    "endingSoonTitle": "Browser support ending soon",
+    "endingSoonDescription": "Support for the following profiles will be removed on March 15, 2026: {{profiles}}. Please migrate to Wayfern or Camoufox profiles."
   }
 }

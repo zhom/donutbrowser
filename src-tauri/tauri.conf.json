@@ -19,7 +19,7 @@
     "active": true,
     "targets": ["app", "dmg", "nsis", "deb", "rpm", "appimage"],
     "category": "Productivity",
-    "externalBin": ["binaries/donut-proxy", "binaries/donut-daemon"],
+    "externalBin": ["binaries/donut-proxy"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

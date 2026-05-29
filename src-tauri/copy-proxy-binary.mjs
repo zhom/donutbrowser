@@ -77,4 +77,3 @@ function copyBinary(baseName) {
 }
 
 copyBinary("donut-proxy");
-copyBinary("donut-daemon");

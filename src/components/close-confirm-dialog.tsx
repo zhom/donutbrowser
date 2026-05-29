@@ -15,7 +15,7 @@ import {
 import { RippleButton } from "./ui/ripple";
 
 export function CloseConfirmDialog() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
@@ -28,6 +28,24 @@ export function CloseConfirmDialog() {
       });
     };
   }, []);
+
+  // The native tray menu is built in Rust and cannot read the active language,
+  // so push localized labels to it on mount and whenever the language changes.
+  useEffect(() => {
+    const syncTrayMenu = () => {
+      void invoke("update_tray_menu", {
+        showLabel: t("tray.show"),
+        quitLabel: t("tray.quit"),
+      }).catch(() => {
+        // Tray is desktop-only; ignore on platforms without one.
+      });
+    };
+    syncTrayMenu();
+    i18n.on("languageChanged", syncTrayMenu);
+    return () => {
+      i18n.off("languageChanged", syncTrayMenu);
+    };
+  }, [t, i18n]);
 
   const handleMinimize = async () => {
     setIsOpen(false);
