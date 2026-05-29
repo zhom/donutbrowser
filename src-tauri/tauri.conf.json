@@ -42,11 +42,11 @@
     "linux": {
       "deb": {
         "desktopTemplate": "donutbrowser.desktop",
-        "depends": ["xdg-utils", "libxdo3"]
+        "depends": ["xdg-utils", "libxdo3", "libayatana-appindicator3-1"]
       },
       "rpm": {
         "desktopTemplate": "donutbrowser.desktop",
-        "depends": ["xdg-utils", "libxdo"]
+        "depends": ["xdg-utils", "libxdo", "libayatana-appindicator-gtk3"]
       },
       "appimage": {
         "files": {

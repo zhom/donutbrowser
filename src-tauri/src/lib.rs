@@ -1199,6 +1199,68 @@ fn update_tray_menu(
   Ok(())
 }
 
+/// Build the system tray. Best-effort: on Linux the tray depends on
+/// libayatana-appindicator at runtime, so any failure here must not abort app
+/// startup — the caller logs and continues without a tray.
+fn setup_system_tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+  use std::sync::atomic::Ordering;
+  use tauri::menu::{MenuBuilder, MenuItemBuilder};
+  use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+  // Bootstrap labels only — the frontend pushes localized labels via
+  // `update_tray_menu` on mount and on language change, and the menu is only
+  // opened after a minimize-to-tray (post-mount), so these are never shown.
+  let show_item = MenuItemBuilder::with_id("tray_show", "Show Donut Browser").build(app)?;
+  let quit_item = MenuItemBuilder::with_id("tray_quit", "Quit").build(app)?;
+  let tray_menu = MenuBuilder::new(app)
+    .item(&show_item)
+    .separator()
+    .item(&quit_item)
+    .build()?;
+
+  // macOS uses a black template icon (the OS tints it for light/dark menu
+  // bars). Windows and Linux use the full-color icon, because neither tints a
+  // template — a black template would be invisible on dark Linux panels.
+  #[cfg(target_os = "macos")]
+  let tray_icon_bytes: &[u8] = include_bytes!("../icons/tray-icon-44.png");
+  #[cfg(not(target_os = "macos"))]
+  let tray_icon_bytes: &[u8] = include_bytes!("../icons/tray-icon-win-44.png");
+  let tray_rgba = image::load_from_memory(tray_icon_bytes)?.into_rgba8();
+  let (tray_w, tray_h) = tray_rgba.dimensions();
+  let tray_image = tauri::image::Image::new_owned(tray_rgba.into_raw(), tray_w, tray_h);
+
+  TrayIconBuilder::with_id("main")
+    .icon(tray_image)
+    .icon_as_template(cfg!(target_os = "macos"))
+    .tooltip("Donut Browser")
+    .menu(&tray_menu)
+    .show_menu_on_left_click(false)
+    .on_menu_event(|app_handle, event| match event.id().as_ref() {
+      "tray_show" => show_main_window(app_handle),
+      "tray_quit" => {
+        QUIT_CONFIRMED.store(true, Ordering::SeqCst);
+        app_handle.exit(0);
+      }
+      _ => {}
+    })
+    .on_tray_icon_event(|tray, event| {
+      // Click events are not delivered on Linux (AppIndicator/SNI only drives
+      // the menu), so left-click-to-restore is macOS/Windows only — Linux users
+      // restore via the "Show Donut Browser" menu item.
+      if let TrayIconEvent::Click {
+        button: MouseButton::Left,
+        button_state: MouseButtonState::Up,
+        ..
+      } = event
+      {
+        show_main_window(tray.app_handle());
+      }
+    })
+    .build(app)?;
+
+  Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   let args: Vec<String> = env::args().collect();
@@ -1290,71 +1352,11 @@ pub fn run() {
       let window = win_builder.build().unwrap();
 
       // System tray so the user can keep the app running after the close
-      // dialog's "Minimize" action hides the window.
-      //
-      // These initial labels are bootstrap defaults only — the frontend pushes
-      // localized labels via `update_tray_menu` on mount and on every language
-      // change (the active language lives in the webview). The tray menu is only
-      // ever opened after the user minimizes to tray, by which point the
-      // frontend has already localized it, so these strings are never shown.
-      {
-        use tauri::menu::{MenuBuilder, MenuItemBuilder};
-        use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-
-        let show_item = MenuItemBuilder::with_id("tray_show", "Show Donut Browser")
-          .build(app)
-          .map_err(|e| format!("Failed to build tray show item: {e}"))?;
-        let quit_item = MenuItemBuilder::with_id("tray_quit", "Quit")
-          .build(app)
-          .map_err(|e| format!("Failed to build tray quit item: {e}"))?;
-        let tray_menu = MenuBuilder::new(app)
-          .item(&show_item)
-          .separator()
-          .item(&quit_item)
-          .build()
-          .map_err(|e| format!("Failed to build tray menu: {e}"))?;
-
-        // Tray-specific icons. macOS/Linux get a template (black + alpha)
-        // version so the OS can tint it for light/dark menu bars; Windows
-        // gets the full-color variant. Decode through the `image` crate so
-        // we hand Tauri raw RGBA — `Image::from_bytes` can fail silently on
-        // bitmaps that don't match the size Tauri expects.
-        #[cfg(target_os = "windows")]
-        let tray_icon_bytes: &[u8] = include_bytes!("../icons/tray-icon-win-44.png");
-        #[cfg(not(target_os = "windows"))]
-        let tray_icon_bytes: &[u8] = include_bytes!("../icons/tray-icon-44.png");
-        let tray_rgba = image::load_from_memory(tray_icon_bytes)
-          .map_err(|e| format!("Failed to decode tray icon: {e}"))?
-          .into_rgba8();
-        let (tray_w, tray_h) = tray_rgba.dimensions();
-        let tray_image = tauri::image::Image::new_owned(tray_rgba.into_raw(), tray_w, tray_h);
-
-        let _tray = TrayIconBuilder::with_id("main")
-          .icon(tray_image)
-          .icon_as_template(cfg!(not(target_os = "windows")))
-          .tooltip("Donut Browser")
-          .menu(&tray_menu)
-          .show_menu_on_left_click(false)
-          .on_menu_event(|app_handle, event| match event.id().as_ref() {
-            "tray_show" => show_main_window(app_handle),
-            "tray_quit" => {
-              QUIT_CONFIRMED.store(true, Ordering::SeqCst);
-              app_handle.exit(0);
-            }
-            _ => {}
-          })
-          .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click {
-              button: MouseButton::Left,
-              button_state: MouseButtonState::Up,
-              ..
-            } = event
-            {
-              show_main_window(tray.app_handle());
-            }
-          })
-          .build(app)
-          .map_err(|e| format!("Failed to build tray icon: {e}"))?;
+      // dialog's "Minimize" action hides the window. Best-effort: a tray
+      // failure (e.g. missing libayatana-appindicator on Linux) must never
+      // prevent the app from launching, so we log and continue without it.
+      if let Err(e) = setup_system_tray(app.handle()) {
+        log::warn!("System tray unavailable, continuing without it: {e}");
       }
 
       // Intercept the window close so the frontend can ask the user whether
