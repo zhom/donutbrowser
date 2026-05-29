@@ -21,7 +21,7 @@ const loadMacOSPermissions = async () => {
 export type PermissionType = "microphone" | "camera";
 
 interface UsePermissionsReturn {
-  requestPermission: (type: PermissionType) => Promise<void>;
+  requestPermission: (type: PermissionType) => Promise<boolean>;
   isMicrophoneAccessGranted: boolean;
   isCameraAccessGranted: boolean;
   isInitialized: boolean;
@@ -68,51 +68,44 @@ export function usePermissions(): UsePermissionsReturn {
 
   // Request permission
   const requestPermission = useCallback(
-    async (type: PermissionType): Promise<void> => {
-      if (!currentPlatform || currentPlatform !== "macos") return;
+    async (type: PermissionType): Promise<boolean> => {
+      // Non-macOS platforms do not require this permission gate.
+      if (!currentPlatform || currentPlatform !== "macos") return true;
 
       // macOS - use the permissions API
       try {
         const permissions = await loadMacOSPermissions();
-        if (!permissions) return;
+        if (!permissions) return false;
+
+        const readPermission = async () => {
+          const granted =
+            type === "microphone"
+              ? await permissions.checkMicrophonePermission()
+              : await permissions.checkCameraPermission();
+          if (type === "microphone") {
+            setIsMicrophoneAccessGranted(granted);
+          } else {
+            setIsCameraAccessGranted(granted);
+          }
+          return granted;
+        };
 
         if (type === "microphone") {
           await permissions.requestMicrophonePermission();
-
-          // Poll for permission status change
-          const pollMicPermission = async () => {
-            const granted = await permissions.checkMicrophonePermission();
-            setIsMicrophoneAccessGranted(granted);
-
-            if (!granted) {
-              setTimeout(() => {
-                void pollMicPermission();
-              }, 1000);
-            }
-          };
-
-          await pollMicPermission();
-        }
-
-        if (type === "camera") {
+        } else {
           await permissions.requestCameraPermission();
-
-          // Poll for permission status change
-          const pollCamPermission = async () => {
-            const granted = await permissions.checkCameraPermission();
-            setIsCameraAccessGranted(granted);
-
-            if (!granted) {
-              setTimeout(() => {
-                void pollCamPermission();
-              }, 1000);
-            }
-          };
-
-          await pollCamPermission();
         }
+
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          const granted = await readPermission();
+          if (granted) return true;
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+
+        return readPermission();
       } catch (error) {
         console.error(`Failed to request ${type} permission on macOS:`, error);
+        return false;
       }
     },
     [currentPlatform],
