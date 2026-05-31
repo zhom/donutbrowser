@@ -131,9 +131,9 @@ export function PermissionDialog({
   const getPermissionIcon = (type: PermissionType) => {
     switch (type) {
       case "microphone":
-        return <BsMic className="size-8" />;
+        return <BsMic className="size-5 shrink-0" />;
       case "camera":
-        return <BsCamera className="size-8" />;
+        return <BsCamera className="size-5 shrink-0" />;
     }
   };
 
@@ -195,13 +195,11 @@ export function PermissionDialog({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md">
         <DialogHeader className="text-center">
-          <div className="flex justify-center items-center mx-auto mb-4 size-16 bg-primary/15 rounded-full">
+          <DialogTitle className="flex items-center justify-center gap-2 text-xl">
             {getPermissionIcon(permissionType)}
-          </div>
-          <DialogTitle className="text-xl">
             {getPermissionTitle(permissionType)}
           </DialogTitle>
-          <DialogDescription className="text-base">
+          <DialogDescription className="text-base text-pretty">
             {getPermissionDescription(permissionType)}
           </DialogDescription>
         </DialogHeader>

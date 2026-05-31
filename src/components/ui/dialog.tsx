@@ -111,26 +111,39 @@ function DialogOverlay({
         className={cn("fixed inset-0 z-9999 bg-background/50", className)}
         {...props}
       >
+        {/* Keep the OS title-bar zone draggable while a modal is open — the
+            overlay otherwise covers the native drag region. `data-window-drag-area`
+            stops Radix from treating a drag here as an outside-click dismiss. */}
+        <div
+          data-tauri-drag-region
+          data-window-drag-area="true"
+          aria-hidden="true"
+          className="absolute inset-x-0 top-0 h-11"
+        />
         <WindowDragArea />
       </motion.div>
     </DialogPrimitive.Overlay>
   );
 }
 
-type DialogFlipDirection = "top" | "bottom" | "left" | "right";
-
 type DialogContentProps = Omit<
   React.ComponentProps<typeof DialogPrimitive.Content>,
   "forceMount" | "asChild"
 > &
   HTMLMotionProps<"div"> & {
-    from?: DialogFlipDirection;
     /**
      * Suppress the built-in top-right close X. Use when the dialog renders
      * its own header bar with a custom close control to avoid two X buttons
      * stacking near the corner.
      */
     hideClose?: boolean;
+    /**
+     * When false, the user cannot dismiss the dialog — Escape and outside
+     * clicks are ignored and the close X is hidden. Use for steps the user
+     * must complete to progress (e.g. required onboarding, a blocking
+     * download). The dialog can still be closed programmatically via `open`.
+     */
+    dismissible?: boolean;
   };
 
 function SubPageContent({
@@ -176,7 +189,6 @@ function SubPageContent({
 function DialogContent({
   className,
   children,
-  from = "top",
   onOpenAutoFocus,
   onCloseAutoFocus,
   onEscapeKeyDown,
@@ -184,19 +196,11 @@ function DialogContent({
   onInteractOutside,
   transition,
   hideClose,
+  dismissible = true,
   ...props
 }: DialogContentProps) {
   const { t } = useTranslation();
   const { subPage } = useDialog();
-  const initialRotation =
-    from === "bottom" || from === "left" ? "20deg" : "-20deg";
-  const isVertical = from === "top" || from === "bottom";
-  const rotateAxis = isVertical ? "rotateX" : "rotateY";
-  const finalTransition = transition ?? {
-    type: "spring",
-    stiffness: 220,
-    damping: 26,
-  };
 
   if (subPage) {
     return <SubPageContent>{children}</SubPageContent>;
@@ -210,9 +214,16 @@ function DialogContent({
         forceMount
         onOpenAutoFocus={onOpenAutoFocus}
         onCloseAutoFocus={onCloseAutoFocus}
-        onEscapeKeyDown={onEscapeKeyDown}
+        onEscapeKeyDown={(event) => {
+          if (!dismissible) event.preventDefault();
+          onEscapeKeyDown?.(event);
+        }}
         onPointerDownOutside={onPointerDownOutside}
         onInteractOutside={(event) => {
+          if (!dismissible) {
+            event.preventDefault();
+            return;
+          }
           const target = event.target as HTMLElement | null;
           if (target?.closest('[data-window-drag-area="true"]')) {
             event.preventDefault();
@@ -223,22 +234,25 @@ function DialogContent({
         <motion.div
           key="dialog-content"
           data-slot="dialog-content"
-          initial={{
-            opacity: 0,
-            filter: "blur(4px)",
-            transform: `perspective(500px) ${rotateAxis}(${initialRotation}) scale(0.8)`,
-          }}
-          animate={{
-            opacity: 1,
-            filter: "blur(0px)",
-            transform: `perspective(500px) ${rotateAxis}(0deg) scale(1)`,
-          }}
+          // Open/close motion modeled on transitions.dev's modal: a subtle
+          // scale from 0.96 → 1 with opacity, eased with cubic-bezier(0.22, 1,
+          // 0.36, 1). Open is 250ms; close is a quicker 150ms. The centering
+          // translate stays in `style` so `scale` animates around the center
+          // without fighting the transform-based positioning.
+          style={{ transformOrigin: "center" }}
+          initial={{ opacity: 0, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1 }}
           exit={{
             opacity: 0,
-            filter: "blur(4px)",
-            transform: `perspective(500px) ${rotateAxis}(${initialRotation}) scale(0.8)`,
+            scale: 0.96,
+            transition: transition ?? {
+              duration: 0.15,
+              ease: [0.22, 1, 0.36, 1],
+            },
           }}
-          transition={finalTransition}
+          transition={
+            transition ?? { duration: 0.25, ease: [0.22, 1, 0.36, 1] }
+          }
           className={cn(
             "bg-background fixed top-[50%] left-[50%] z-10000 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg",
             className,
@@ -246,7 +260,7 @@ function DialogContent({
           {...props}
         >
           {children}
-          {!hideClose && (
+          {!hideClose && dismissible && (
             <DialogPrimitive.Close className="cursor-pointer ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
               <RxCross2 />
               <span className="sr-only">{t("common.buttons.close")}</span>

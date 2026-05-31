@@ -344,7 +344,8 @@
       "downloading": "Baixando versão do {{browser}} ({{version}})...",
       "latestNeedsDownload": "A versão mais recente ({{version}}) precisa ser baixada",
       "latestAvailable": "A versão mais recente ({{version}}) está disponível",
-      "latestDownloading": "Baixando versão ({{version}})..."
+      "latestDownloading": "Baixando versão ({{version}})...",
+      "upgradeAvailable": "Uma versão mais recente ({{version}}) do {{browser}} está disponível."
     },
     "chromiumLabel": "Chromium",
     "chromiumSubtitle": "Desenvolvido com Wayfern",
@@ -355,7 +356,9 @@
     "passwordProtect": {
       "label": "Proteger este perfil com senha",
       "description": "Criptografa os dados do perfil em disco. Necessário para iniciar."
-    }
+    },
+    "downloadingSubtitle": "Baixando…",
+    "browsersDownloading": "Os navegadores ainda estão sendo baixados. A criação de perfis ficará disponível assim que um download terminar."
   },
   "deleteDialog": {
     "title": "Excluir Perfil",
@@ -1192,7 +1195,9 @@
       "cannotWhileRunning": "Pare o perfil antes de alterar a senha."
     },
     "fingerprint": {
-      "notSupported": "A edição de impressão digital só está disponível para perfis Camoufox e Wayfern."
+      "notSupported": "A edição de impressão digital só está disponível para perfis Camoufox e Wayfern.",
+      "lockedTitle": "A impressão digital é um recurso Pro",
+      "lockedDescription": "Visualizar e editar a impressão digital de um perfil requer um plano pago ativo. Faça upgrade para desbloquear a proteção contra fingerprint."
     }
   },
   "extensions": {
@@ -1801,7 +1806,11 @@
     "invalidLaunchHookUrl": "URL do hook de inicialização inválida. Use uma URL completa http:// ou https://.",
     "cookieDbLocked": "Não foi possível ler os cookies — o banco de dados está bloqueado. Feche o navegador e tente novamente.",
     "cookieDbUnavailable": "Não foi possível ler os cookies — o repositório de cookies está indisponível.",
-    "selfHostedRequiresLogout": "Saia da sua conta Donut antes de configurar um servidor auto-hospedado."
+    "selfHostedRequiresLogout": "Saia da sua conta Donut antes de configurar um servidor auto-hospedado.",
+    "fingerprintRequiresPro": "A proteção contra fingerprint requer um plano pago ativo.",
+    "proxyNotWorking": "O proxy selecionado não está funcionando, então o perfil não foi criado.",
+    "proxyPaymentRequired": "O proxy selecionado exige pagamento (402) — sua assinatura pode ter expirado — então o perfil não foi criado.",
+    "vpnNotWorking": "A VPN selecionada não está funcionando, então o perfil não foi criado."
   },
   "rail": {
     "profiles": "Perfis",
@@ -1867,7 +1876,8 @@
       "plan": "Plano",
       "status": "Status",
       "teamRole": "Função na equipe",
-      "period": "Período"
+      "period": "Período",
+      "device": "Dispositivo"
     },
     "tabs": {
       "account": "Conta",
@@ -1881,7 +1891,10 @@
       "statusUnknown": "Não testado",
       "testConnection": "Testar conexão",
       "disconnect": "Desconectar"
-    }
+    },
+    "deviceOrdinal": "{{ordinal}} de {{count}}",
+    "automationPrimaryOnly": "A automação do navegador funciona apenas no seu dispositivo principal (Dispositivo 1). Saia da conta nele para usá-la aqui.",
+    "automationActiveHere": "A automação do navegador está ativa neste dispositivo."
   },
   "shortcutsPage": {
     "title": "Atalhos de teclado",
@@ -1927,5 +1940,82 @@
   "browserSupport": {
     "endingSoonTitle": "O suporte ao navegador terminará em breve",
     "endingSoonDescription": "O suporte aos seguintes perfis será removido em 15 de março de 2026: {{profiles}}. Migre para perfis Wayfern ou Camoufox."
+  },
+  "onboarding": {
+    "steps": {
+      "createProfile": {
+        "title": "Crie seu primeiro perfil",
+        "content": "Clique aqui para criar seu primeiro perfil. Escolha o Wayfern como navegador: o Chromium recomendado e protegido contra fingerprint."
+      },
+      "dnsBlocking": {
+        "title": "Bloqueio de DNS",
+        "content": "Use este menu para definir o nível da lista de bloqueio DNS do perfil — ele bloqueia anúncios, rastreadores e malware no nível da rede. Níveis mais altos bloqueiam mais."
+      }
+    },
+    "buttons": {
+      "skip": "Pular",
+      "back": "Voltar",
+      "next": "Próximo",
+      "finish": "Concluir"
+    },
+    "thankYou": {
+      "title": "Obrigado por escolher o Donut Browser",
+      "body": "Com sorte, deixará sua navegação mais privada: cada identidade separada e nada saindo do seu dispositivo. Boa navegação!",
+      "cta": "Começar a navegar"
+    }
+  },
+  "welcome": {
+    "title": "Boas-vindas ao Donut Browser",
+    "tagline": "Um navegador anti-detecção de código aberto para gerenciar várias identidades ao mesmo tempo.",
+    "skip": "Pular",
+    "next": "Próximo",
+    "permissions": {
+      "title": "Permitir microfone e câmera",
+      "desc": "Conceda acesso para que sites que precisam de microfone ou câmera funcionem nos seus perfis de navegador. O macOS pergunta uma vez; cada site ainda pedirá individualmente.",
+      "skip": "Agora não",
+      "grant": "Permitir acesso",
+      "requesting": "Solicitando…"
+    },
+    "ready": {
+      "title": "Preparando tudo",
+      "descDownloading": "Baixando seu primeiro navegador (Wayfern). Esta configuração única é executada em segundo plano — aguarde um momento.",
+      "descReady": "Seu navegador está pronto. Vamos criar seu primeiro perfil.",
+      "cta": "Criar meu primeiro perfil",
+      "downloading": "Baixando…",
+      "extracting": "Extraindo…",
+      "stats": "{{downloaded}} de {{total}}",
+      "speed": "{{speed}}/s",
+      "timeLeft": "{{time}} restante",
+      "descExtracting": "Extraindo seu navegador. Esta configuração única é executada em segundo plano — aguarde.",
+      "almostFinished": "Quase terminando…",
+      "errorTitle": "Falha na configuração",
+      "errorDownload": "Não foi possível baixar o {{browser}}. Verifique sua conexão e tente novamente.",
+      "errorExtraction": "Não foi possível extrair o {{browser}}. Tente novamente.",
+      "errorGeneric": "Algo deu errado ao configurar o {{browser}}. Tente novamente.",
+      "retry": "Tentar novamente"
+    },
+    "features": {
+      "title": "Recursos",
+      "items": {
+        "setDefault": "Definir como navegador padrão",
+        "proxy": "Suporte a proxy (HTTP/SOCKS5)",
+        "vpn": "Suporte a VPN (WireGuard)",
+        "profiles": "Perfis locais ilimitados",
+        "api": "API de gerenciamento de perfis e MCP",
+        "openSource": "Código aberto",
+        "groups": "Grupos de perfis",
+        "cookies": "Importar e exportar cookies"
+      }
+    },
+    "license": {
+      "title": "Licenciamento",
+      "body": "O Donut Browser é de código aberto e gratuito.",
+      "agree": "Entendi",
+      "personalTitle": "Uso pessoal",
+      "personalDesc": "Gratuito para sempre.",
+      "commercialTitle": "Uso comercial",
+      "trialBadge": "2 semanas grátis",
+      "commercialDesc": "Gratuito durante uma avaliação de 2 semanas. Depois, um plano pago mantém o projeto ativo e próspero."
+    }
   }
 }

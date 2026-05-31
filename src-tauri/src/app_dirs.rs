@@ -26,6 +26,23 @@ pub fn is_portable() -> bool {
   portable_dir().is_some()
 }
 
+/// Optional single-root override for all on-disk state. Set
+/// `DONUTBROWSER_DATA_ROOT=/path` (e.g. a tmpfs mount) to relocate
+/// data/cache/logs under `<root>/{data,cache,logs}` without touching the real
+/// dev/prod directories. The more specific `DONUTBROWSER_DATA_DIR` /
+/// `DONUTBROWSER_CACHE_DIR` overrides still take precedence over this.
+fn data_root() -> Option<PathBuf> {
+  std::env::var_os("DONUTBROWSER_DATA_ROOT")
+    .filter(|v| !v.is_empty())
+    .map(PathBuf::from)
+}
+
+/// Log directory when `DONUTBROWSER_DATA_ROOT` is set (`<root>/logs`); `None`
+/// otherwise, in which case the platform default app log dir is used.
+pub fn log_dir_override() -> Option<PathBuf> {
+  data_root().map(|root| root.join("logs"))
+}
+
 pub fn app_name() -> &'static str {
   if cfg!(debug_assertions) {
     "DonutBrowserDev"
@@ -46,6 +63,10 @@ pub fn data_dir() -> PathBuf {
     return PathBuf::from(dir);
   }
 
+  if let Some(root) = data_root() {
+    return root.join("data");
+  }
+
   if let Some(dir) = portable_dir() {
     return dir.join("data");
   }
@@ -63,6 +84,10 @@ pub fn cache_dir() -> PathBuf {
 
   if let Ok(dir) = std::env::var("DONUTBROWSER_CACHE_DIR") {
     return PathBuf::from(dir);
+  }
+
+  if let Some(root) = data_root() {
+    return root.join("cache");
   }
 
   if let Some(dir) = portable_dir() {
@@ -112,6 +137,9 @@ pub fn dns_blocklist_dir() -> PathBuf {
 /// `LogDir` target used in the plugin builder so the path matches what's
 /// actually on disk for this OS.
 pub fn log_dir<R: tauri::Runtime>(handle: &tauri::AppHandle<R>) -> PathBuf {
+  if let Some(dir) = log_dir_override() {
+    return dir;
+  }
   use tauri::Manager;
   handle
     .path()

@@ -103,6 +103,11 @@ pub struct StoredProxy {
   pub sync_enabled: bool,
   #[serde(default)]
   pub last_sync: Option<u64>,
+  /// Unix seconds of the last meaningful user edit. Source of truth for sync
+  /// conflict resolution (last-write-wins) — bumped on config edits only, never
+  /// by sync bookkeeping. `None` on legacy files is treated as 0.
+  #[serde(default)]
+  pub updated_at: Option<u64>,
   #[serde(default)]
   pub is_cloud_managed: bool,
   #[serde(default)]
@@ -124,6 +129,14 @@ pub struct StoredProxy {
   pub dynamic_proxy_format: Option<String>,
 }
 
+/// Current unix time in whole seconds. Used to stamp `updated_at` on edits.
+pub fn now_secs() -> u64 {
+  SystemTime::now()
+    .duration_since(UNIX_EPOCH)
+    .unwrap_or_default()
+    .as_secs()
+}
+
 impl StoredProxy {
   pub fn new(name: String, proxy_settings: ProxySettings) -> Self {
     let sync_enabled = crate::sync::is_sync_configured();
@@ -133,6 +146,7 @@ impl StoredProxy {
       proxy_settings,
       sync_enabled,
       last_sync: None,
+      updated_at: Some(now_secs()),
       is_cloud_managed: false,
       is_cloud_derived: false,
       geo_country: None,
@@ -159,10 +173,12 @@ impl StoredProxy {
 
   pub fn update_settings(&mut self, proxy_settings: ProxySettings) {
     self.proxy_settings = proxy_settings;
+    self.updated_at = Some(now_secs());
   }
 
   pub fn update_name(&mut self, name: String) {
     self.name = name;
+    self.updated_at = Some(now_secs());
   }
 }
 
@@ -455,6 +471,7 @@ impl ProxyManager {
         proxy_settings,
         sync_enabled: false,
         last_sync: None,
+        updated_at: Some(now_secs()),
         is_cloud_managed: true,
         is_cloud_derived: false,
         geo_country: None,
@@ -646,6 +663,7 @@ impl ProxyManager {
       proxy_settings,
       sync_enabled: false,
       last_sync: None,
+      updated_at: Some(now_secs()),
       is_cloud_managed: false,
       is_cloud_derived: true,
       geo_country: Some(country),
@@ -710,6 +728,7 @@ impl ProxyManager {
         &proxy.geo_isp,
       );
 
+      proxy.updated_at = Some(now_secs());
       proxy.proxy_settings.username = Some(geo_username);
       proxy.proxy_settings.password = base_proxy.proxy_settings.password.clone();
       proxy.proxy_settings.host = base_proxy.proxy_settings.host.clone();
@@ -3154,6 +3173,7 @@ mod tests {
       },
       sync_enabled: false,
       last_sync: None,
+      updated_at: None,
       is_cloud_managed: false,
       is_cloud_derived: false,
       geo_country: Some("US".to_string()),

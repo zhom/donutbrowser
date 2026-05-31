@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { I18nProvider } from "@/components/i18n-provider";
+import { OnboardingProvider } from "@/components/onboarding-provider";
 import { CustomThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -17,7 +18,9 @@ export function ClientProviders({ children }: { children: React.ReactNode }) {
     <I18nProvider>
       <CustomThemeProvider>
         <WindowDragArea />
-        <TooltipProvider>{children}</TooltipProvider>
+        <TooltipProvider>
+          <OnboardingProvider>{children}</OnboardingProvider>
+        </TooltipProvider>
         <Toaster />
       </CustomThemeProvider>
     </I18nProvider>

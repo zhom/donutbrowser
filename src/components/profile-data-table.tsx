@@ -441,6 +441,7 @@ function DnsCell({
       <PopoverTrigger asChild>
         <button
           type="button"
+          data-onborda="dns-blocklist"
           disabled={isSaving}
           className="flex items-center gap-1.5 h-7 px-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 rounded transition-colors duration-100 w-full text-left disabled:opacity-50"
           title={

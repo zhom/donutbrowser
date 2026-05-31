@@ -15,12 +15,12 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--normal-bg": "var(--card)",
           "--normal-text": "var(--card-foreground)",
           "--normal-border": "var(--border)",
-          zIndex: 99999,
+          zIndex: 10001,
         } as React.CSSProperties
       }
       toastOptions={{
         style: {
-          zIndex: 99999,
+          zIndex: 10001,
           pointerEvents: "auto",
           backdropFilter: "saturate(1.2)",
         },

@@ -1671,9 +1671,15 @@ impl McpServer {
       "connect_vpn" => self.handle_connect_vpn(arguments).await,
       "disconnect_vpn" => self.handle_disconnect_vpn(arguments).await,
       "get_vpn_status" => self.handle_get_vpn_status(arguments).await,
-      // Fingerprint management
-      "get_profile_fingerprint" => self.handle_get_profile_fingerprint(arguments).await,
-      "update_profile_fingerprint" => self.handle_update_profile_fingerprint(arguments).await,
+      // Fingerprint management — viewing and editing both require a paid plan.
+      "get_profile_fingerprint" => {
+        Self::require_paid_subscription("Fingerprint").await?;
+        self.handle_get_profile_fingerprint(arguments).await
+      }
+      "update_profile_fingerprint" => {
+        Self::require_paid_subscription("Fingerprint").await?;
+        self.handle_update_profile_fingerprint(arguments).await
+      }
       "update_profile_proxy_bypass_rules" => {
         self
           .handle_update_profile_proxy_bypass_rules(arguments)

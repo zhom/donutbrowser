@@ -54,6 +54,8 @@ pub struct AppSettings {
   #[serde(default)]
   pub window_resize_warning_dismissed: bool,
   #[serde(default)]
+  pub onboarding_completed: bool, // First-launch onboarding has been shown/handled (one-shot)
+  #[serde(default)]
   pub disable_auto_updates: bool,
   /// When true, the decrypted in-RAM copy of a password-protected profile is
   /// preserved between launches for faster subsequent startups. The on-disk
@@ -93,6 +95,7 @@ impl Default for AppSettings {
       mcp_token: None,
       language: None,
       window_resize_warning_dismissed: false,
+      onboarding_completed: false,
       disable_auto_updates: false,
       keep_decrypted_profiles_in_ram: false,
     }
@@ -1011,6 +1014,27 @@ pub async fn get_window_resize_warning_dismissed() -> Result<bool, String> {
 }
 
 #[tauri::command]
+pub async fn get_onboarding_completed() -> Result<bool, String> {
+  let manager = SettingsManager::instance();
+  let settings = manager
+    .load_settings()
+    .map_err(|e| format!("Failed to load settings: {e}"))?;
+  Ok(settings.onboarding_completed)
+}
+
+#[tauri::command]
+pub async fn complete_onboarding() -> Result<(), String> {
+  let manager = SettingsManager::instance();
+  let mut settings = manager
+    .load_settings()
+    .map_err(|e| format!("Failed to load settings: {e}"))?;
+  settings.onboarding_completed = true;
+  manager
+    .save_settings(&settings)
+    .map_err(|e| format!("Failed to save settings: {e}"))
+}
+
+#[tauri::command]
 pub fn get_system_language() -> String {
   sys_locale::get_locale()
     .map(|locale| {
@@ -1147,6 +1171,7 @@ mod tests {
       mcp_token: None,
       language: None,
       window_resize_warning_dismissed: false,
+      onboarding_completed: false,
       disable_auto_updates: false,
       keep_decrypted_profiles_in_ram: false,
     };

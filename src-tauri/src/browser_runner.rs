@@ -656,6 +656,24 @@ impl BrowserRunner {
       let process_id = wayfern_result.processId.unwrap_or(0);
       log::info!("Wayfern launched successfully with PID: {process_id}");
 
+      // Wayfern.setFingerprint echoes back the fingerprint the browser actually
+      // applied, which may be UPGRADED from the stored one (e.g. when the
+      // stored fingerprint targets an older browser version). Persist it so the
+      // next launch starts from the upgraded value — saved below via
+      // save_process_info(&updated_profile).
+      if let Some(used_fp) = wayfern_result.used_fingerprint.clone() {
+        let mut cfg = updated_profile.wayfern_config.clone().unwrap_or_default();
+        if cfg.fingerprint.as_deref() != Some(used_fp.as_str()) {
+          log::info!(
+            "Persisting upgraded fingerprint from Wayfern.setFingerprint for profile: {} (len {})",
+            profile.name,
+            used_fp.len()
+          );
+          cfg.fingerprint = Some(used_fp);
+          updated_profile.wayfern_config = Some(cfg);
+        }
+      }
+
       // Update profile with the process info
       updated_profile.process_id = Some(process_id);
       updated_profile.last_launch = Some(SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs());

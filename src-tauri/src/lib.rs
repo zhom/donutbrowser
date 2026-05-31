@@ -93,10 +93,10 @@ use downloaded_browsers_registry::{
 use downloader::{cancel_download, download_browser};
 
 use settings_manager::{
-  dismiss_window_resize_warning, get_app_settings, get_sync_settings, get_system_info,
-  get_system_language, get_table_sorting_settings, get_window_resize_warning_dismissed,
-  open_log_directory, read_log_files, save_app_settings, save_sync_settings,
-  save_table_sorting_settings,
+  complete_onboarding, dismiss_window_resize_warning, get_app_settings, get_onboarding_completed,
+  get_sync_settings, get_system_info, get_system_language, get_table_sorting_settings,
+  get_window_resize_warning_dismissed, open_log_directory, read_log_files, save_app_settings,
+  save_sync_settings, save_table_sorting_settings,
 };
 
 use sync::{
@@ -930,14 +930,20 @@ async fn update_vpn_config(vpn_id: String, name: String) -> Result<vpn::VpnConfi
 async fn check_vpn_validity(
   vpn_id: String,
 ) -> Result<crate::proxy_manager::ProxyCheckResult, String> {
+  check_vpn_validity_core(&vpn_id).await
+}
+
+pub async fn check_vpn_validity_core(
+  vpn_id: &str,
+) -> Result<crate::proxy_manager::ProxyCheckResult, String> {
   let now = std::time::SystemTime::now()
     .duration_since(std::time::UNIX_EPOCH)
     .unwrap_or_default()
     .as_secs();
 
-  let had_existing_worker = vpn_worker_storage::find_vpn_worker_by_vpn_id(&vpn_id).is_some();
+  let had_existing_worker = vpn_worker_storage::find_vpn_worker_by_vpn_id(vpn_id).is_some();
 
-  let vpn_worker = vpn_worker_runner::start_vpn_worker(&vpn_id)
+  let vpn_worker = vpn_worker_runner::start_vpn_worker(vpn_id)
     .await
     .map_err(|e| format!("Failed to start VPN worker: {e}"))?;
 
@@ -1012,6 +1018,53 @@ async fn check_vpn_validity(
   });
 
   Ok(result)
+}
+
+/// Validate that a profile's selected proxy or VPN actually works before the
+/// profile is created. Shared by the Tauri command, REST API, and MCP create
+/// paths so a dead/unreachable proxy or VPN (or a 402 from an expired proxy
+/// subscription) fails creation identically everywhere. Returns structured
+/// `{ "code": ... }` error strings the frontend translates via backend-errors.ts.
+pub async fn validate_profile_network(
+  proxy_id: Option<&str>,
+  vpn_id: Option<&str>,
+) -> Result<(), String> {
+  if let Some(vpn_id) = vpn_id.filter(|s| !s.is_empty()) {
+    let result = check_vpn_validity_core(vpn_id).await?;
+    if !result.is_valid {
+      return Err(serde_json::json!({ "code": "VPN_NOT_WORKING" }).to_string());
+    }
+    return Ok(());
+  }
+
+  if let Some(proxy_id) = proxy_id.filter(|s| !s.is_empty()) {
+    // The cloud-included proxy is managed infrastructure; its only failure mode
+    // is the user hitting their usage limit, which surfaces as a 402 at request
+    // time. There's nothing to pre-validate here.
+    if proxy_id == crate::proxy_manager::CLOUD_PROXY_ID {
+      return Ok(());
+    }
+    let settings = crate::proxy_manager::PROXY_MANAGER
+      .get_proxy_settings_by_id(proxy_id)
+      .ok_or_else(|| format!("Proxy '{proxy_id}' not found"))?;
+    match crate::proxy_manager::PROXY_MANAGER
+      .check_proxy_validity(proxy_id, &settings)
+      .await
+    {
+      Ok(result) if result.is_valid => {}
+      Ok(_) => {
+        return Err(serde_json::json!({ "code": "PROXY_NOT_WORKING" }).to_string());
+      }
+      Err(err) if err.contains("402") => {
+        return Err(serde_json::json!({ "code": "PROXY_PAYMENT_REQUIRED" }).to_string());
+      }
+      Err(_) => {
+        return Err(serde_json::json!({ "code": "PROXY_NOT_WORKING" }).to_string());
+      }
+    }
+  }
+
+  Ok(())
 }
 
 #[tauri::command]
@@ -1122,6 +1175,7 @@ async fn generate_sample_fingerprint(
     dns_blocklist: None,
     password_protected: false,
     created_at: None,
+    updated_at: None,
   };
 
   if browser == "camoufox" {
@@ -1274,15 +1328,25 @@ pub fn run() {
 
   let log_file_name = app_dirs::app_name();
 
+  // Honor DONUTBROWSER_DATA_ROOT: when set, logs go to <root>/logs instead of
+  // the platform default app log dir, so all on-disk state lives under one root.
+  let file_log_target = match app_dirs::log_dir_override() {
+    Some(path) => Target::new(TargetKind::Folder {
+      path,
+      file_name: Some(log_file_name.to_string()),
+    }),
+    None => Target::new(TargetKind::LogDir {
+      file_name: Some(log_file_name.to_string()),
+    }),
+  };
+
   tauri::Builder::default()
     .plugin(
       tauri_plugin_log::Builder::new()
         .clear_targets() // Clear default targets to avoid duplicates
         .target(Target::new(TargetKind::Stdout))
         .target(Target::new(TargetKind::Webview))
-        .target(Target::new(TargetKind::LogDir {
-          file_name: Some(log_file_name.to_string()),
-        }))
+        .target(file_log_target)
         // 5 MB per rotated file × KeepAll — the previous 100 KB limit
         // truncated useful context in customer support reports; 50 MB
         // turned out to be excessive disk pressure.
@@ -2127,6 +2191,8 @@ pub fn run() {
       get_system_info,
       dismiss_window_resize_warning,
       get_window_resize_warning_dismissed,
+      get_onboarding_completed,
+      complete_onboarding,
       clear_all_version_cache_and_refetch,
       is_default_browser,
       open_url_with_profile,

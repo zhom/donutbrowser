@@ -148,10 +148,10 @@ export function GroupBadges({
   return (
     <div className="relative mb-4">
       {showLeftFade && (
-        <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-background to-transparent pointer-events-none z-10" />
+        <div className="absolute left-0 top-0 bottom-0 w-8 bg-linear-to-r from-background to-transparent pointer-events-none z-10" />
       )}
       {showRightFade && (
-        <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none z-10" />
+        <div className="absolute right-0 top-0 bottom-0 w-8 bg-linear-to-l from-background to-transparent pointer-events-none z-10" />
       )}
       <div
         ref={scrollContainerRef}
@@ -165,7 +165,7 @@ export function GroupBadges({
           <Badge
             key={group.id}
             variant={selectedGroupId === group.id ? "default" : "secondary"}
-            className="flex gap-2 items-center px-3 py-1 transition-colors cursor-pointer dark:hover:bg-primary/60 hover:bg-primary/80 flex-shrink-0"
+            className="flex gap-2 items-center px-3 py-1 transition-colors cursor-pointer dark:hover:bg-primary/60 hover:bg-primary/80 shrink-0"
             onClick={(e) => {
               if (hasMovedRef.current || clickBlockedRef.current) {
                 e.preventDefault();

@@ -303,7 +303,7 @@ export function ImportProfileDialog({
     <Dialog open={isOpen} onOpenChange={onClose} subPage={subPage}>
       <DialogContent className="max-w-2xl max-h-[80vh] my-8 flex flex-col">
         {!subPage && (
-          <DialogHeader className="flex-shrink-0">
+          <DialogHeader className="shrink-0">
             <DialogTitle>{t("importProfile.title")}</DialogTitle>
           </DialogHeader>
         )}
@@ -604,7 +604,7 @@ export function ImportProfileDialog({
 
         <div
           className={cn(
-            "flex-shrink-0 flex gap-2 items-center justify-end",
+            "shrink-0 flex gap-2 items-center justify-end",
             subPage ? "pt-2 border-t border-border" : undefined,
           )}
         >

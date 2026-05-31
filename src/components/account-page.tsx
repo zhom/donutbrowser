@@ -280,8 +280,39 @@ export function AccountPage({
                         <p className="mt-0.5">{user.planPeriod}</p>
                       </div>
                     )}
+                    {typeof user.deviceOrdinal === "number" && (
+                      <div className="rounded-md bg-muted/40 border border-border px-3 py-2">
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                          {t("account.fields.device")}
+                        </p>
+                        <p className="mt-0.5">
+                          {t("account.deviceOrdinal", {
+                            ordinal: user.deviceOrdinal,
+                            count: user.deviceCount ?? user.deviceOrdinal,
+                          })}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
+
+                {isLoggedIn &&
+                  user &&
+                  user.plan !== "free" &&
+                  user.isPrimaryDevice === false && (
+                    <p className="text-xs text-warning">
+                      {t("account.automationPrimaryOnly")}
+                    </p>
+                  )}
+                {isLoggedIn &&
+                  user &&
+                  user.plan !== "free" &&
+                  user.isPrimaryDevice === true &&
+                  (user.deviceCount ?? 1) > 1 && (
+                    <p className="text-xs text-success">
+                      {t("account.automationActiveHere")}
+                    </p>
+                  )}
 
                 <div className="flex flex-wrap gap-2 mt-2">
                   {isLoggedIn ? (

@@ -11,7 +11,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { GoPlus } from "react-icons/go";
-import { LuCheck, LuChevronsUpDown } from "react-icons/lu";
+import { LuCheck, LuChevronsUpDown, LuLoaderCircle } from "react-icons/lu";
 import { LoadingButton } from "@/components/loading-button";
 import { ProxyFormDialog } from "@/components/proxy-form-dialog";
 import { SharedCamoufoxConfigForm } from "@/components/shared-camoufox-config-form";
@@ -307,6 +307,10 @@ export function CreateProfileDialog({
   useEffect(() => {
     if (isOpen) {
       void loadSupportedBrowsers();
+      // Load downloaded versions for both anti-detect browsers up front so the
+      // selection-screen availability gate is accurate before either is picked.
+      void loadDownloadedVersions("wayfern");
+      void loadDownloadedVersions("camoufox");
       // Load release types when a browser is selected
       if (selectedBrowser) {
         void loadReleaseTypes(selectedBrowser);
@@ -320,6 +324,7 @@ export function CreateProfileDialog({
     isOpen,
     loadSupportedBrowsers,
     loadReleaseTypes,
+    loadDownloadedVersions,
     checkAndDownloadGeoIPDatabase,
     selectedBrowser,
   ]);
@@ -405,6 +410,7 @@ export function CreateProfileDialog({
     const resolvedProxyId = isVpnSelection ? undefined : selectedProxyId;
     const resolvedVpnId =
       isVpnSelection && selectedProxyId ? selectedProxyId.slice(4) : undefined;
+
     const passwordToSet =
       enablePassword && !ephemeral && password.length >= PASSWORD_MIN_LEN
         ? password
@@ -585,7 +591,7 @@ export function CreateProfileDialog({
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="w-[380px] max-w-[380px] max-h-[90vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
+        <DialogHeader className="shrink-0">
           <DialogTitle>
             {currentStep === "browser-selection"
               ? t("createProfile.title")
@@ -618,23 +624,30 @@ export function CreateProfileDialog({
                           onClick={() => {
                             handleBrowserSelect("wayfern");
                           }}
+                          disabled={!getCreatableVersion("wayfern")}
                           className="flex gap-3 justify-start items-center p-4 w-full h-16 border-2 transition-colors hover:border-primary/50"
                           variant="outline"
                         >
                           <div className="flex justify-center items-center size-8">
-                            {(() => {
-                              const IconComponent = getBrowserIcon("wayfern");
-                              return IconComponent ? (
-                                <IconComponent className="size-6" />
-                              ) : null;
-                            })()}
+                            {isBrowserCurrentlyDownloading("wayfern") ? (
+                              <LuLoaderCircle className="size-6 animate-spin" />
+                            ) : (
+                              (() => {
+                                const IconComponent = getBrowserIcon("wayfern");
+                                return IconComponent ? (
+                                  <IconComponent className="size-6" />
+                                ) : null;
+                              })()
+                            )}
                           </div>
                           <div className="text-left">
                             <div className="font-medium">
                               {t("createProfile.chromiumLabel")}
                             </div>
                             <div className="text-sm text-muted-foreground">
-                              {t("createProfile.chromiumSubtitle")}
+                              {isBrowserCurrentlyDownloading("wayfern")
+                                ? t("createProfile.downloadingSubtitle")
+                                : t("createProfile.chromiumSubtitle")}
                             </div>
                           </div>
                         </Button>
@@ -644,26 +657,41 @@ export function CreateProfileDialog({
                           onClick={() => {
                             handleBrowserSelect("camoufox");
                           }}
+                          disabled={!getCreatableVersion("camoufox")}
                           className="flex gap-3 justify-start items-center p-4 w-full h-16 border-2 transition-colors hover:border-primary/50"
                           variant="outline"
                         >
                           <div className="flex justify-center items-center size-8">
-                            {(() => {
-                              const IconComponent = getBrowserIcon("camoufox");
-                              return IconComponent ? (
-                                <IconComponent className="size-6" />
-                              ) : null;
-                            })()}
+                            {isBrowserCurrentlyDownloading("camoufox") ? (
+                              <LuLoaderCircle className="size-6 animate-spin" />
+                            ) : (
+                              (() => {
+                                const IconComponent =
+                                  getBrowserIcon("camoufox");
+                                return IconComponent ? (
+                                  <IconComponent className="size-6" />
+                                ) : null;
+                              })()
+                            )}
                           </div>
                           <div className="text-left">
                             <div className="font-medium">
                               {t("createProfile.firefoxLabel")}
                             </div>
                             <div className="text-sm text-muted-foreground">
-                              {t("createProfile.firefoxSubtitle")}
+                              {isBrowserCurrentlyDownloading("camoufox")
+                                ? t("createProfile.downloadingSubtitle")
+                                : t("createProfile.firefoxSubtitle")}
                             </div>
                           </div>
                         </Button>
+
+                        {!getCreatableVersion("wayfern") &&
+                          !getCreatableVersion("camoufox") && (
+                            <p className="pt-2 text-sm text-center text-muted-foreground">
+                              {t("createProfile.browsersDownloading")}
+                            </p>
+                          )}
                       </div>
                     </TabsContent>
 
@@ -867,7 +895,7 @@ export function CreateProfileDialog({
                             {!isLoadingReleaseTypes &&
                               !releaseTypesError &&
                               !isBrowserCurrentlyDownloading("wayfern") &&
-                              !isBrowserVersionAvailable("wayfern") &&
+                              !getCreatableVersion("wayfern") &&
                               getBestAvailableVersion("wayfern") && (
                                 <div className="flex gap-3 items-center p-3 rounded-md border">
                                   <p className="text-sm text-muted-foreground">
@@ -899,15 +927,51 @@ export function CreateProfileDialog({
                             {!isLoadingReleaseTypes &&
                               !releaseTypesError &&
                               !isBrowserCurrentlyDownloading("wayfern") &&
-                              isBrowserVersionAvailable("wayfern") && (
+                              getCreatableVersion("wayfern") && (
                                 <div className="p-3 text-sm rounded-md border text-muted-foreground">
                                   ✓{" "}
                                   {t("createProfile.version.available", {
                                     browser: "Wayfern",
                                     version:
-                                      getBestAvailableVersion("wayfern")
-                                        ?.version,
+                                      getCreatableVersion("wayfern")?.version,
                                   })}
+                                </div>
+                              )}
+                            {!isLoadingReleaseTypes &&
+                              !releaseTypesError &&
+                              !isBrowserCurrentlyDownloading("wayfern") &&
+                              getCreatableVersion("wayfern") &&
+                              !isBrowserVersionAvailable("wayfern") &&
+                              getBestAvailableVersion("wayfern") && (
+                                <div className="flex gap-3 items-center p-3 rounded-md border">
+                                  <p className="flex-1 text-sm text-muted-foreground">
+                                    {t(
+                                      "createProfile.version.upgradeAvailable",
+                                      {
+                                        browser: "Wayfern",
+                                        version:
+                                          getBestAvailableVersion("wayfern")
+                                            ?.version,
+                                      },
+                                    )}
+                                  </p>
+                                  <LoadingButton
+                                    onClick={() => {
+                                      void handleDownload("wayfern");
+                                    }}
+                                    isLoading={isBrowserCurrentlyDownloading(
+                                      "wayfern",
+                                    )}
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={isBrowserCurrentlyDownloading(
+                                      "wayfern",
+                                    )}
+                                  >
+                                    {isBrowserCurrentlyDownloading("wayfern")
+                                      ? t("common.buttons.downloading")
+                                      : t("common.buttons.download")}
+                                  </LoadingButton>
                                 </div>
                               )}
                             {isBrowserCurrentlyDownloading("wayfern") && (
@@ -927,7 +991,7 @@ export function CreateProfileDialog({
                               crossOsUnlocked={crossOsUnlocked}
                               limitedMode={!crossOsUnlocked}
                               profileVersion={
-                                getBestAvailableVersion("wayfern")?.version
+                                getCreatableVersion("wayfern")?.version
                               }
                               profileBrowser="wayfern"
                             />
@@ -975,7 +1039,7 @@ export function CreateProfileDialog({
                             {!isLoadingReleaseTypes &&
                               !releaseTypesError &&
                               !isBrowserCurrentlyDownloading("camoufox") &&
-                              !isBrowserVersionAvailable("camoufox") &&
+                              !getCreatableVersion("camoufox") &&
                               getBestAvailableVersion("camoufox") && (
                                 <div className="flex gap-3 items-center p-3 rounded-md border">
                                   <p className="text-sm text-muted-foreground">
@@ -1007,15 +1071,51 @@ export function CreateProfileDialog({
                             {!isLoadingReleaseTypes &&
                               !releaseTypesError &&
                               !isBrowserCurrentlyDownloading("camoufox") &&
-                              isBrowserVersionAvailable("camoufox") && (
+                              getCreatableVersion("camoufox") && (
                                 <div className="p-3 text-sm rounded-md border text-muted-foreground">
                                   ✓{" "}
                                   {t("createProfile.version.available", {
                                     browser: "Camoufox",
                                     version:
-                                      getBestAvailableVersion("camoufox")
-                                        ?.version,
+                                      getCreatableVersion("camoufox")?.version,
                                   })}
+                                </div>
+                              )}
+                            {!isLoadingReleaseTypes &&
+                              !releaseTypesError &&
+                              !isBrowserCurrentlyDownloading("camoufox") &&
+                              getCreatableVersion("camoufox") &&
+                              !isBrowserVersionAvailable("camoufox") &&
+                              getBestAvailableVersion("camoufox") && (
+                                <div className="flex gap-3 items-center p-3 rounded-md border">
+                                  <p className="flex-1 text-sm text-muted-foreground">
+                                    {t(
+                                      "createProfile.version.upgradeAvailable",
+                                      {
+                                        browser: "Camoufox",
+                                        version:
+                                          getBestAvailableVersion("camoufox")
+                                            ?.version,
+                                      },
+                                    )}
+                                  </p>
+                                  <LoadingButton
+                                    onClick={() => {
+                                      void handleDownload("camoufox");
+                                    }}
+                                    isLoading={isBrowserCurrentlyDownloading(
+                                      "camoufox",
+                                    )}
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={isBrowserCurrentlyDownloading(
+                                      "camoufox",
+                                    )}
+                                  >
+                                    {isBrowserCurrentlyDownloading("camoufox")
+                                      ? t("common.buttons.downloading")
+                                      : t("common.buttons.download")}
+                                  </LoadingButton>
                                 </div>
                               )}
                             {isBrowserCurrentlyDownloading("camoufox") && (
@@ -1045,7 +1145,7 @@ export function CreateProfileDialog({
                               crossOsUnlocked={crossOsUnlocked}
                               limitedMode={!crossOsUnlocked}
                               profileVersion={
-                                getBestAvailableVersion("camoufox")?.version
+                                getCreatableVersion("camoufox")?.version
                               }
                               profileBrowser="camoufox"
                             />
@@ -1077,7 +1177,7 @@ export function CreateProfileDialog({
                                         size="sm"
                                         variant="outline"
                                       >
-                                        Retry
+                                        {t("common.buttons.retry")}
                                       </RippleButton>
                                     </div>
                                   )}
@@ -1086,7 +1186,7 @@ export function CreateProfileDialog({
                                   !isBrowserCurrentlyDownloading(
                                     selectedBrowser,
                                   ) &&
-                                  !isBrowserVersionAvailable(selectedBrowser) &&
+                                  !getCreatableVersion(selectedBrowser) &&
                                   getBestAvailableVersion(selectedBrowser) && (
                                     <div className="flex gap-3 items-center">
                                       <p className="text-sm text-muted-foreground">
@@ -1122,18 +1222,15 @@ export function CreateProfileDialog({
                                   !isBrowserCurrentlyDownloading(
                                     selectedBrowser,
                                   ) &&
-                                  isBrowserVersionAvailable(
-                                    selectedBrowser,
-                                  ) && (
+                                  getCreatableVersion(selectedBrowser) && (
                                     <div className="text-sm text-muted-foreground">
                                       ✓{" "}
                                       {t(
                                         "createProfile.version.latestAvailable",
                                         {
                                           version:
-                                            getBestAvailableVersion(
-                                              selectedBrowser,
-                                            )?.version,
+                                            getCreatableVersion(selectedBrowser)
+                                              ?.version,
                                         },
                                       )}
                                     </div>
@@ -1432,7 +1529,7 @@ export function CreateProfileDialog({
                                 <div className="flex gap-3 items-center">
                                   <div className="size-4 rounded-full border-2 animate-spin border-muted/40 border-t-primary" />
                                   <p className="text-sm text-muted-foreground">
-                                    Fetching available versions...
+                                    {t("createProfile.version.fetching")}
                                   </p>
                                 </div>
                               )}
@@ -1458,7 +1555,7 @@ export function CreateProfileDialog({
                                 !isBrowserCurrentlyDownloading(
                                   selectedBrowser,
                                 ) &&
-                                !isBrowserVersionAvailable(selectedBrowser) &&
+                                !getCreatableVersion(selectedBrowser) &&
                                 getBestAvailableVersion(selectedBrowser) && (
                                   <div className="flex gap-3 items-center">
                                     <p className="text-sm text-muted-foreground">
@@ -1494,16 +1591,15 @@ export function CreateProfileDialog({
                                 !isBrowserCurrentlyDownloading(
                                   selectedBrowser,
                                 ) &&
-                                isBrowserVersionAvailable(selectedBrowser) && (
+                                getCreatableVersion(selectedBrowser) && (
                                   <div className="text-sm text-muted-foreground">
                                     ✓{" "}
                                     {t(
                                       "createProfile.version.latestAvailable",
                                       {
                                         version:
-                                          getBestAvailableVersion(
-                                            selectedBrowser,
-                                          )?.version,
+                                          getCreatableVersion(selectedBrowser)
+                                            ?.version,
                                       },
                                     )}
                                   </div>
@@ -1701,7 +1797,7 @@ export function CreateProfileDialog({
           </ScrollArea>
         </Tabs>
 
-        <DialogFooter className="flex-shrink-0 pt-4 border-t">
+        <DialogFooter className="shrink-0 pt-4 border-t">
           {currentStep === "browser-config" ? (
             <>
               <RippleButton variant="outline" onClick={handleBack}>

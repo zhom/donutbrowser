@@ -37,7 +37,7 @@ export function AppUpdateToast({
   return (
     <div className="flex items-start p-4 w-full max-w-md rounded-lg border shadow-lg bg-card border-border text-card-foreground">
       <div className="mr-3 mt-0.5">
-        <LuCheckCheck className="flex-shrink-0 size-5" />
+        <LuCheckCheck className="shrink-0 size-5" />
       </div>
 
       <div className="flex-1 min-w-0">

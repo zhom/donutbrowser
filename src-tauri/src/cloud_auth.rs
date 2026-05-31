@@ -46,6 +46,16 @@ pub struct CloudUser {
   pub team_name: Option<String>,
   #[serde(rename = "teamRole", default)]
   pub team_role: Option<String>,
+  // This desktop session's position among the user's active devices, oldest
+  // first. Ordinal 1 is the primary device — the only one that can run browser
+  // automation. `default` keeps older login/state payloads (which lack these
+  // fields) deserializing cleanly.
+  #[serde(rename = "deviceOrdinal", default)]
+  pub device_ordinal: Option<i64>,
+  #[serde(rename = "deviceCount", default)]
+  pub device_count: Option<i64>,
+  #[serde(rename = "isPrimaryDevice", default)]
+  pub is_primary_device: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -413,7 +423,18 @@ impl CloudAuthManager {
     if !response.status().is_success() {
       let status = response.status();
       let body = response.text().await.unwrap_or_default();
-      return Err(format!("Login failed ({status}): {body}"));
+      // The backend returns { message, code, … } for 4xx (e.g. the 3-device
+      // limit or a temporary security block). Surface the human-readable
+      // message rather than the raw JSON so the sign-in screen is clear.
+      let message = serde_json::from_str::<serde_json::Value>(&body)
+        .ok()
+        .and_then(|v| {
+          v.get("message")
+            .and_then(|m| m.as_str())
+            .map(std::string::ToString::to_string)
+        })
+        .unwrap_or_else(|| format!("Login failed ({status})"));
+      return Err(message);
     }
 
     let result: DeviceCodeExchangeResponse = response
