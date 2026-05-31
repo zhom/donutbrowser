@@ -172,6 +172,13 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
                     <sub><b>Thiago Mafra</b></sub>
                 </a>
             </td>
+            <td align="center">
+                <a href="https://github.com/huy97">
+                    <img src="https://avatars.githubusercontent.com/u/30153437?v=4" width="100;" alt="huy97"/>
+                    <br />
+                    <sub><b>Huy Le</b></sub>
+                </a>
+            </td>
 		</tr>
 	<tbody>
 </table>
