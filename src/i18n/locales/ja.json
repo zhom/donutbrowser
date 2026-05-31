@@ -33,7 +33,8 @@
       "minimize": "最小化",
       "saving": "保存中…",
       "saved": "保存しました",
-      "copied": "コピーしました"
+      "copied": "コピーしました",
+      "learnMore": "詳細"
     },
     "status": {
       "active": "アクティブ",
@@ -99,6 +100,9 @@
     "srOnly": {
       "copy": "コピー",
       "copied": "コピーしました"
+    },
+    "placeholders": {
+      "example": "例: {{value}}"
     }
   },
   "settings": {
@@ -340,7 +344,8 @@
       "downloading": "{{browser}} バージョン ({{version}}) をダウンロード中...",
       "latestNeedsDownload": "最新バージョン ({{version}}) をダウンロードする必要があります",
       "latestAvailable": "最新バージョン ({{version}}) は利用可能です",
-      "latestDownloading": "バージョン ({{version}}) をダウンロード中..."
+      "latestDownloading": "バージョン ({{version}}) をダウンロード中...",
+      "upgradeAvailable": "{{browser}} の新しいバージョン（{{version}}）が利用可能です。"
     },
     "chromiumLabel": "Chromium",
     "chromiumSubtitle": "Wayfern搭載",
@@ -351,7 +356,9 @@
     "passwordProtect": {
       "label": "このプロファイルをパスワードで保護",
       "description": "ディスク上のプロファイルデータを暗号化します。起動に必要です。"
-    }
+    },
+    "downloadingSubtitle": "ダウンロード中…",
+    "browsersDownloading": "ブラウザをダウンロード中です。ダウンロードが完了するとプロファイルを作成できます。"
   },
   "deleteDialog": {
     "title": "プロファイルを削除",
@@ -1188,7 +1195,9 @@
       "cannotWhileRunning": "パスワードを変更する前にプロファイルを停止してください。"
     },
     "fingerprint": {
-      "notSupported": "フィンガープリント編集は Camoufox / Wayfern プロファイルでのみ利用できます。"
+      "notSupported": "フィンガープリント編集は Camoufox / Wayfern プロファイルでのみ利用できます。",
+      "lockedTitle": "フィンガープリントは Pro 機能です",
+      "lockedDescription": "プロファイルのフィンガープリントの表示と編集には有効な有料プランが必要です。アップグレードしてフィンガープリント保護をご利用ください。"
     }
   },
   "extensions": {
@@ -1524,17 +1533,6 @@
     "creatingButton": "作成中...",
     "createButton": "作成"
   },
-  "launchOnLogin": {
-    "title": "ログイン時に起動しますか?",
-    "description": "バックグラウンドで実行することで、プロキシとブラウザを維持できます。",
-    "declineButton": "今後は表示しない",
-    "declining": "...",
-    "enableButton": "有効にする",
-    "enableSuccess": "ログイン時の起動を有効にしました",
-    "enableFailed": "ログイン時の起動を有効にできませんでした",
-    "declineFailed": "設定の保存に失敗しました",
-    "tryAgain": "もう一度お試しください"
-  },
   "wayfernTerms": {
     "title": "Wayfern 利用規約",
     "description": "Donut Browser を使用する前に、Wayfern の利用規約を読み、同意する必要があります。",
@@ -1680,7 +1678,8 @@
       "viewRelease": "リリースを見る",
       "later": "後で",
       "uploading": "アップロード中",
-      "downloading": "ダウンロード中"
+      "downloading": "ダウンロード中",
+      "startingUpdate": "更新を開始しています..."
     }
   },
   "browserDownload": {
@@ -1694,7 +1693,9 @@
       "extractionFailedDescription": "破損したファイルは削除されました。次回の試行時に再ダウンロードされます。",
       "extracting": "ブラウザファイルを展開中... アプリを閉じないでください。",
       "verifying": "ブラウザファイルを検証中...",
-      "downloadingRolling": "ローリングリリースビルドをダウンロード中..."
+      "downloadingRolling": "ローリングリリースビルドをダウンロード中...",
+      "geoipDownloading": "GeoIP データベースをダウンロード中",
+      "geoipDownloaded": "GeoIP データベースのダウンロードが完了しました！"
     }
   },
   "versionUpdater": {
@@ -1712,7 +1713,12 @@
       "updateSuccessDescription": "{{successfulUpdates}} 個のブラウザに {{newVersions}} 個の新しいバージョンが見つかりました。自動ダウンロードがまもなく開始します。",
       "upToDate": "新しいブラウザのバージョンは見つかりませんでした",
       "upToDateDescription": "すべてのブラウザバージョンは最新です",
-      "updateAllFailed": "ブラウザバージョンの更新に失敗しました"
+      "updateAllFailed": "ブラウザバージョンの更新に失敗しました",
+      "updateStarted": "{{browser}} の更新を開始しました",
+      "updateStartedDescription": "バージョン {{version}} のダウンロードがまもなく開始されます。更新が完了するまでブラウザの起動は無効になります。",
+      "downloadStarting": "{{browser}} {{version}} のダウンロードを開始しています",
+      "downloadProgressBelow": "ダウンロードの進行状況は下に表示されます...",
+      "autoDownloadStarted": "{{browser}} {{version}} を自動的にダウンロードしています。進行状況は下に表示されます。"
     }
   },
   "profilePassword": {
@@ -1800,7 +1806,11 @@
     "invalidLaunchHookUrl": "起動フックURLが無効です。完全な http:// または https:// URL を使用してください。",
     "cookieDbLocked": "Cookie を読み取れません — データベースがロックされています。ブラウザを閉じてから再試行してください。",
     "cookieDbUnavailable": "Cookie を読み取れません — Cookie ストアを利用できません。",
-    "selfHostedRequiresLogout": "セルフホストサーバーを設定する前に Donut アカウントからサインアウトしてください。"
+    "selfHostedRequiresLogout": "セルフホストサーバーを設定する前に Donut アカウントからサインアウトしてください。",
+    "fingerprintRequiresPro": "フィンガープリント保護には有効な有料プランが必要です。",
+    "proxyNotWorking": "選択したプロキシが機能していないため、プロファイルは作成されませんでした。",
+    "proxyPaymentRequired": "選択したプロキシは支払いが必要です（402）。サブスクリプションが期限切れの可能性があります。そのため、プロファイルは作成されませんでした。",
+    "vpnNotWorking": "選択したVPNが機能していないため、プロファイルは作成されませんでした。"
   },
   "rail": {
     "profiles": "プロファイル",
@@ -1866,7 +1876,8 @@
       "plan": "プラン",
       "status": "ステータス",
       "teamRole": "チームロール",
-      "period": "請求周期"
+      "period": "請求周期",
+      "device": "デバイス"
     },
     "tabs": {
       "account": "アカウント",
@@ -1880,7 +1891,10 @@
       "statusUnknown": "未テスト",
       "testConnection": "接続をテスト",
       "disconnect": "切断"
-    }
+    },
+    "deviceOrdinal": "{{count}} 台中 {{ordinal}} 台目",
+    "automationPrimaryOnly": "ブラウザの自動化はプライマリデバイス（デバイス1）でのみ実行できます。ここで使用するには、そのデバイスでサインアウトしてください。",
+    "automationActiveHere": "ブラウザの自動化はこのデバイスで有効です。"
   },
   "shortcutsPage": {
     "title": "キーボードショートカット",
@@ -1918,5 +1932,90 @@
     "description": "アプリをシステムトレイに格納しますか、それとも終了しますか？",
     "minimize": "トレイに格納",
     "quit": "終了"
+  },
+  "tray": {
+    "show": "Donut Browser を表示",
+    "quit": "終了"
+  },
+  "browserSupport": {
+    "endingSoonTitle": "ブラウザのサポートが間もなく終了します",
+    "endingSoonDescription": "次のプロファイルのサポートは 2026 年 3 月 15 日に削除されます: {{profiles}}。Wayfern または Camoufox のプロファイルに移行してください。"
+  },
+  "onboarding": {
+    "steps": {
+      "createProfile": {
+        "title": "最初のプロファイルを作成",
+        "content": "ここをクリックして最初のプロファイルを作成します。ブラウザには Wayfern を選んでください。フィンガープリント対策済みの推奨 Chromium です。"
+      },
+      "dnsBlocking": {
+        "title": "DNS ブロック",
+        "content": "このドロップダウンでプロファイルの DNS ブロックリストのレベルを設定します。広告・トラッカー・マルウェアをネットワークレベルでブロックします。レベルが高いほど多くブロックします。"
+      }
+    },
+    "buttons": {
+      "skip": "スキップ",
+      "back": "戻る",
+      "next": "次へ",
+      "finish": "完了"
+    },
+    "thankYou": {
+      "title": "Donut Browser を選んでいただきありがとうございます",
+      "body": "それぞれのIDを分けて、データを端末の外に出さずに、よりプライベートなブラウジングのお役に立てれば幸いです。どうぞお楽しみください。",
+      "cta": "ブラウジングを始める"
+    }
+  },
+  "welcome": {
+    "title": "Donut Browser へようこそ",
+    "tagline": "複数のIDを同時に管理できるオープンソースのアンチディテクトブラウザ。",
+    "skip": "スキップ",
+    "next": "次へ",
+    "permissions": {
+      "title": "マイクとカメラを許可",
+      "desc": "マイクやカメラを必要とするサイトがブラウザプロファイル内で動作するよう、アクセスを許可してください。macOS は一度だけ確認します。各サイトは引き続き個別に許可を求めます。",
+      "skip": "後で",
+      "grant": "アクセスを許可",
+      "requesting": "リクエスト中…"
+    },
+    "ready": {
+      "title": "準備しています",
+      "descDownloading": "最初のブラウザ（Wayfern）をダウンロードしています。この初回セットアップはバックグラウンドで実行されます。少々お待ちください。",
+      "descReady": "ブラウザの準備ができました。最初のプロファイルを作成しましょう。",
+      "cta": "最初のプロファイルを作成",
+      "downloading": "ダウンロード中…",
+      "extracting": "展開中…",
+      "stats": "{{total}} 中 {{downloaded}}",
+      "speed": "{{speed}}/秒",
+      "timeLeft": "残り {{time}}",
+      "descExtracting": "ブラウザを展開しています。この初回セットアップはバックグラウンドで実行されます。少々お待ちください。",
+      "almostFinished": "まもなく完了します…",
+      "errorTitle": "セットアップに失敗しました",
+      "errorDownload": "{{browser}} をダウンロードできませんでした。接続を確認して、もう一度お試しください。",
+      "errorExtraction": "{{browser}} を展開できませんでした。もう一度お試しください。",
+      "errorGeneric": "{{browser}} のセットアップ中に問題が発生しました。もう一度お試しください。",
+      "retry": "再試行"
+    },
+    "features": {
+      "title": "機能",
+      "items": {
+        "setDefault": "既定のブラウザに設定",
+        "proxy": "プロキシ対応（HTTP/SOCKS5）",
+        "vpn": "VPN対応（WireGuard）",
+        "profiles": "無制限のローカルプロファイル",
+        "api": "プロファイル管理APIとMCP",
+        "openSource": "オープンソース",
+        "groups": "プロファイルグループ",
+        "cookies": "Cookieのインポート・エクスポート"
+      }
+    },
+    "license": {
+      "title": "ライセンス",
+      "body": "Donut Browser はオープンソースで、無料で利用できます。",
+      "agree": "了解しました",
+      "personalTitle": "個人利用",
+      "personalDesc": "永久に無料です。",
+      "commercialTitle": "商用利用",
+      "trialBadge": "2週間無料",
+      "commercialDesc": "2週間の評価期間は無料です。その後は有料プランが必要で、これによりプロジェクトの維持と発展が支えられます。"
+    }
   }
 }

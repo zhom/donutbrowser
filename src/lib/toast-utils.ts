@@ -10,6 +10,9 @@ interface BaseToastProps {
   duration?: number;
   action?: ExternalToast["action"];
   onCancel?: () => void;
+  // When false, the toast cannot be dismissed by the user (no swipe; combine
+  // with duration: Infinity and no onCancel to make it fully non-closable).
+  dismissible?: boolean;
 }
 
 interface LoadingToastProps extends BaseToastProps {
@@ -110,12 +113,13 @@ export function showToast(props: ToastProps & { id?: string }) {
     sonnerToast.custom(() => React.createElement(UnifiedToast, props), {
       id: toastId,
       duration,
+      dismissible: props.dismissible,
       style: {
         background: "transparent",
         border: "none",
         boxShadow: "none",
         padding: 0,
-        zIndex: 99999,
+        zIndex: 10001,
         pointerEvents: "auto",
       },
     });
@@ -123,12 +127,13 @@ export function showToast(props: ToastProps & { id?: string }) {
     sonnerToast.custom(() => React.createElement(UnifiedToast, props), {
       id: toastId,
       duration,
+      dismissible: props.dismissible,
       style: {
         background: "transparent",
         border: "none",
         boxShadow: "none",
         padding: 0,
-        zIndex: 99999,
+        zIndex: 10001,
         pointerEvents: "auto",
       },
     });
@@ -136,12 +141,13 @@ export function showToast(props: ToastProps & { id?: string }) {
     sonnerToast.custom(() => React.createElement(UnifiedToast, props), {
       id: toastId,
       duration,
+      dismissible: props.dismissible,
       style: {
         background: "transparent",
         border: "none",
         boxShadow: "none",
         padding: 0,
-        zIndex: 99999,
+        zIndex: 10001,
         pointerEvents: "auto",
       },
     });

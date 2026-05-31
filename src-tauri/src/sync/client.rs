@@ -50,6 +50,21 @@ impl SyncClient {
     key: &str,
     content_type: Option<&str>,
   ) -> SyncResult<PresignUploadResponse> {
+    self
+      .presign_upload_with_metadata(key, content_type, None)
+      .await
+  }
+
+  /// Presign an upload, asking the server to sign `metadata` into the object as
+  /// `x-amz-meta-*`. The response echoes the metadata the server actually signed
+  /// (empty/None on older servers); the caller must send exactly that back on
+  /// the PUT via `upload_bytes_with_metadata`.
+  pub async fn presign_upload_with_metadata(
+    &self,
+    key: &str,
+    content_type: Option<&str>,
+    metadata: Option<std::collections::HashMap<String, String>>,
+  ) -> SyncResult<PresignUploadResponse> {
     let response = self
       .client
       .post(self.url("presign-upload"))
@@ -58,6 +73,7 @@ impl SyncClient {
         key: key.to_string(),
         content_type: content_type.map(|s| s.to_string()),
         expires_in: Some(3600),
+        metadata,
       })
       .send()
       .await
@@ -187,6 +203,21 @@ impl SyncClient {
     data: &[u8],
     content_type: Option<&str>,
   ) -> SyncResult<()> {
+    self
+      .upload_bytes_with_metadata(presigned_url, data, content_type, None)
+      .await
+  }
+
+  /// PUT to a presigned URL, sending `metadata` as `x-amz-meta-*` headers. These
+  /// MUST be exactly the metadata the presign signed (from
+  /// `PresignUploadResponse::metadata`) or S3 rejects the request.
+  pub async fn upload_bytes_with_metadata(
+    &self,
+    presigned_url: &str,
+    data: &[u8],
+    content_type: Option<&str>,
+    metadata: Option<&std::collections::HashMap<String, String>>,
+  ) -> SyncResult<()> {
     let mut req = self
       .client
       .put(presigned_url)
@@ -195,6 +226,12 @@ impl SyncClient {
 
     if let Some(ct) = content_type {
       req = req.header("Content-Type", ct);
+    }
+
+    if let Some(meta) = metadata {
+      for (k, v) in meta {
+        req = req.header(format!("x-amz-meta-{k}"), v);
+      }
     }
 
     let response = req

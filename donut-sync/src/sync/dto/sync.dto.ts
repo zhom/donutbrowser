@@ -6,17 +6,25 @@ export class StatResponseDto {
   exists: boolean;
   lastModified?: string;
   size?: number;
+  // User-defined S3 object metadata (lowercased keys, no `x-amz-meta-` prefix).
+  // Carries `updated-at` for sync conflict resolution via HEAD (no body GET).
+  metadata?: Record<string, string>;
 }
 
 export class PresignUploadRequestDto {
   key: string;
   contentType?: string;
   expiresIn?: number;
+  // Object metadata to sign into the presigned PUT as `x-amz-meta-*`.
+  metadata?: Record<string, string>;
 }
 
 export class PresignUploadResponseDto {
   url: string;
   expiresAt: string;
+  // Metadata the server actually signed; the client must echo it as
+  // `x-amz-meta-*` headers on the PUT (older clients/servers omit it).
+  metadata?: Record<string, string>;
 }
 
 export class PresignDownloadRequestDto {

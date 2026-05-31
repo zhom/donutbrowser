@@ -34,6 +34,7 @@
           libsoup_3
           glib
           gtk3
+          libayatana-appindicator
           cairo
           gdk-pixbuf
           pango
@@ -84,6 +85,7 @@
           pkgs.gdk-pixbuf
           pkgs.glib
           pkgs.gtk3
+          pkgs.libayatana-appindicator
           pkgs.libsoup_3
           pkgs.libxkbcommon
           pkgs.openssl

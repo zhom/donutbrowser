@@ -256,6 +256,10 @@ export class SyncService implements OnModuleInit {
         exists: true,
         lastModified: response.LastModified?.toISOString(),
         size: response.ContentLength,
+        // S3 returns user metadata with lowercased keys and no `x-amz-meta-`
+        // prefix. Clients read `updated-at` from here to resolve sync conflicts
+        // without downloading the object body.
+        metadata: response.Metadata,
       };
     } catch (error: unknown) {
       if (
@@ -289,6 +293,9 @@ export class SyncService implements OnModuleInit {
       Bucket: this.bucket,
       Key: key,
       ContentType: dto.contentType || "application/octet-stream",
+      // Signed into the presigned URL as `x-amz-meta-*`. The client must send
+      // exactly these headers on the PUT, so we echo them in the response.
+      Metadata: dto.metadata,
     });
 
     const url = await getSignedUrl(this.s3Client, command, { expiresIn });

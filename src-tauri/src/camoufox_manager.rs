@@ -200,6 +200,7 @@ impl CamoufoxManager {
   }
 
   /// Launch Camoufox browser by directly spawning the process
+  #[allow(clippy::too_many_arguments)]
   pub async fn launch_camoufox(
     &self,
     _app_handle: &AppHandle,
@@ -207,6 +208,7 @@ impl CamoufoxManager {
     profile_path: &str,
     config: &CamoufoxConfig,
     url: Option<&str>,
+    remote_debugging_port: Option<u16>,
     headless: bool,
   ) -> Result<CamoufoxLaunchResult, Box<dyn std::error::Error + Send + Sync>> {
     let custom_config = if let Some(existing_fingerprint) = &config.fingerprint {
@@ -249,7 +251,10 @@ impl CamoufoxManager {
         .to_string(),
     ];
 
-    let cdp_port = Self::find_free_port().await?;
+    let cdp_port = match remote_debugging_port {
+      Some(p) => p,
+      None => Self::find_free_port().await?,
+    };
     args.push(format!("--remote-debugging-port={cdp_port}"));
 
     // Add URL if provided
@@ -666,6 +671,7 @@ impl CamoufoxManager {
 }
 
 impl CamoufoxManager {
+  #[allow(clippy::too_many_arguments)]
   pub async fn launch_camoufox_profile(
     &self,
     app_handle: AppHandle,
@@ -673,6 +679,7 @@ impl CamoufoxManager {
     config: CamoufoxConfig,
     url: Option<String>,
     override_profile_path: Option<std::path::PathBuf>,
+    remote_debugging_port: Option<u16>,
     headless: bool,
   ) -> Result<CamoufoxLaunchResult, String> {
     // Get profile path
@@ -817,6 +824,7 @@ impl CamoufoxManager {
         &profile_path_str,
         &config,
         url.as_deref(),
+        remote_debugging_port,
         headless,
       )
       .await

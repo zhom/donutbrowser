@@ -200,6 +200,7 @@ impl ProfileManager {
           dns_blocklist: None,
           password_protected: false,
           created_at: None,
+          updated_at: None,
         };
 
         match self
@@ -303,6 +304,7 @@ impl ProfileManager {
           dns_blocklist: None,
           password_protected: false,
           created_at: None,
+          updated_at: None,
         };
 
         match self
@@ -365,6 +367,7 @@ impl ProfileManager {
           .map(|d| d.as_secs())
           .unwrap_or(0),
       ),
+      updated_at: Some(crate::proxy_manager::now_secs()),
     };
 
     // Save profile info
@@ -510,6 +513,7 @@ impl ProfileManager {
 
     // Update profile name (no need to move directories since we use UUID)
     profile.name = new_name.to_string();
+    profile.updated_at = Some(crate::proxy_manager::now_secs());
 
     // Save profile with new name
     self.save_profile(&profile)?;
@@ -719,6 +723,7 @@ impl ProfileManager {
       }
 
       profile.group_id = group_id.clone();
+      profile.updated_at = Some(crate::proxy_manager::now_secs());
       self.save_profile(&profile)?;
 
       crate::sync::queue_profile_sync_if_eligible(&profile);
@@ -773,6 +778,7 @@ impl ProfileManager {
       }
     }
     profile.tags = deduped;
+    profile.updated_at = Some(crate::proxy_manager::now_secs());
 
     // Save profile
     self.save_profile(&profile)?;
@@ -809,6 +815,7 @@ impl ProfileManager {
 
     // Update note (trim whitespace, set to None if empty)
     profile.note = note.map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
+    profile.updated_at = Some(crate::proxy_manager::now_secs());
 
     // Save profile
     self.save_profile(&profile)?;
@@ -838,6 +845,7 @@ impl ProfileManager {
       .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
 
     profile.launch_hook = Self::normalize_launch_hook(launch_hook)?;
+    profile.updated_at = Some(crate::proxy_manager::now_secs());
 
     self.save_profile(&profile)?;
 
@@ -869,6 +877,7 @@ impl ProfileManager {
       .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
 
     profile.proxy_bypass_rules = rules;
+    profile.updated_at = Some(crate::proxy_manager::now_secs());
 
     self.save_profile(&profile)?;
 
@@ -895,6 +904,7 @@ impl ProfileManager {
       .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
 
     profile.dns_blocklist = dns_blocklist;
+    profile.updated_at = Some(crate::proxy_manager::now_secs());
 
     self.save_profile(&profile)?;
 
@@ -1058,6 +1068,7 @@ impl ProfileManager {
           .map(|d| d.as_secs())
           .unwrap_or(0),
       ),
+      updated_at: Some(crate::proxy_manager::now_secs()),
     };
 
     self.save_profile(&new_profile)?;
@@ -1225,6 +1236,7 @@ impl ProfileManager {
     // Update proxy settings and clear VPN (mutual exclusion)
     profile.proxy_id = proxy_id.clone();
     profile.vpn_id = None;
+    profile.updated_at = Some(crate::proxy_manager::now_secs());
 
     // Save the updated profile
     self
@@ -1324,6 +1336,7 @@ impl ProfileManager {
     // Update VPN and clear proxy (mutual exclusion)
     profile.vpn_id = vpn_id.clone();
     profile.proxy_id = None;
+    profile.updated_at = Some(crate::proxy_manager::now_secs());
 
     self
       .save_profile(&profile)
@@ -1368,6 +1381,7 @@ impl ProfileManager {
       .ok_or_else(|| format!("Profile with ID '{profile_id}' not found"))?;
 
     profile.extension_group_id = extension_group_id.clone();
+    profile.updated_at = Some(crate::proxy_manager::now_secs());
     self.save_profile(&profile)?;
 
     crate::sync::queue_profile_sync_if_eligible(&profile);
@@ -2455,6 +2469,10 @@ pub async fn create_browser_profile_new(
     return Err("Fingerprint OS spoofing requires an active Pro subscription".to_string());
   }
 
+  // A dead/unreachable proxy or VPN (or a 402 from an expired proxy
+  // subscription) cancels creation with a translatable error.
+  crate::validate_profile_network(proxy_id.as_deref(), vpn_id.as_deref()).await?;
+
   let browser_type =
     BrowserType::from_str(&browser_str).map_err(|e| format!("Invalid browser type: {e}"))?;
   create_browser_profile_with_group(
@@ -2486,7 +2504,7 @@ pub async fn update_camoufox_config(
       .has_active_paid_subscription()
       .await
   {
-    return Err("Fingerprint editing requires an active Pro subscription".to_string());
+    return Err(serde_json::json!({ "code": "FINGERPRINT_REQUIRES_PRO" }).to_string());
   }
 
   if !crate::cloud_auth::CLOUD_AUTH
@@ -2514,7 +2532,7 @@ pub async fn update_wayfern_config(
       .has_active_paid_subscription()
       .await
   {
-    return Err("Fingerprint editing requires an active Pro subscription".to_string());
+    return Err(serde_json::json!({ "code": "FINGERPRINT_REQUIRES_PRO" }).to_string());
   }
 
   if !crate::cloud_auth::CLOUD_AUTH

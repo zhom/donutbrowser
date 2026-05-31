@@ -1296,20 +1296,72 @@ pub async fn ensure_active_browsers_downloaded(
     };
 
     log::info!("Auto-downloading {browser} {version} (no versions found locally)");
-    match crate::downloader::download_browser(
-      app_handle.clone(),
-      browser.to_string(),
-      version.clone(),
-    )
-    .await
-    {
-      Ok(_) => {
-        downloaded.push(format!("{browser} {version}"));
-        log::info!("Successfully auto-downloaded {browser} {version}");
+
+    // Retry transient failures a few times. Each attempt is wrapped in an overall
+    // timeout so that a hang anywhere in the download pipeline (version resolution,
+    // a stalled stream, extraction) cannot block the next browser forever. This is
+    // the core of the bug fix: Wayfern going first must never starve Camoufox.
+    const MAX_ATTEMPTS: u32 = 3;
+    const ATTEMPT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(600);
+    let mut succeeded = false;
+    for attempt in 1..=MAX_ATTEMPTS {
+      let result = tokio::time::timeout(
+        ATTEMPT_TIMEOUT,
+        crate::downloader::download_browser(
+          app_handle.clone(),
+          browser.to_string(),
+          version.clone(),
+        ),
+      )
+      .await;
+
+      match result {
+        Ok(Ok(_)) => {
+          downloaded.push(format!("{browser} {version}"));
+          log::info!("Successfully auto-downloaded {browser} {version}");
+          succeeded = true;
+          break;
+        }
+        Ok(Err(e)) => {
+          log::warn!(
+            "Failed to auto-download {browser} {version} (attempt {attempt}/{MAX_ATTEMPTS}): {e}"
+          );
+        }
+        Err(_) => {
+          // The download future itself hung past the overall timeout and was dropped,
+          // so its own cleanup never ran. Clear any leftover in-progress bookkeeping
+          // (the future may have re-resolved to a different version, so clear by
+          // browser prefix) and emit a terminal error event so the UI stops spinning.
+          log::warn!(
+            "Auto-download of {browser} {version} timed out after {}s (attempt {attempt}/{MAX_ATTEMPTS})",
+            ATTEMPT_TIMEOUT.as_secs()
+          );
+          crate::downloader::clear_download_state_for_browser(browser);
+          let progress = crate::downloader::DownloadProgress {
+            browser: (*browser).to_string(),
+            version: version.clone(),
+            downloaded_bytes: 0,
+            total_bytes: None,
+            percentage: 0.0,
+            speed_bytes_per_sec: 0.0,
+            eta_seconds: None,
+            stage: "error".to_string(),
+          };
+          let _ = crate::events::emit("download-progress", &progress);
+        }
       }
-      Err(e) => {
-        log::warn!("Failed to auto-download {browser} {version}: {e}");
+
+      if attempt < MAX_ATTEMPTS {
+        // Short backoff before retrying a transient failure.
+        let backoff = std::time::Duration::from_secs(2u64.pow(attempt - 1));
+        tokio::time::sleep(backoff).await;
       }
+    }
+
+    if !succeeded {
+      // Do NOT abort the whole routine: continue so the next browser (Camoufox)
+      // still gets its chance even though this one failed/timed out.
+      log::warn!("Giving up on auto-download of {browser} {version} after {MAX_ATTEMPTS} attempts");
     }
   }
 

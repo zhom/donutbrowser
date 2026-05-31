@@ -89,6 +89,12 @@ export interface CloudUser {
   teamId?: string;
   teamName?: string;
   teamRole?: string;
+  // This device's position among the user's active devices (oldest = 1).
+  // Ordinal 1 / isPrimaryDevice === true is the only device that can run
+  // browser automation. Optional: older backends omit them.
+  deviceOrdinal?: number | null;
+  deviceCount?: number | null;
+  isPrimaryDevice?: boolean | null;
 }
 
 export interface ProfileLockInfo {

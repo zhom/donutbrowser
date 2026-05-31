@@ -16,6 +16,7 @@ import {
   LuGroup,
   LuKey,
   LuLink,
+  LuLock,
   LuLockOpen,
   LuPlus,
   LuPuzzle,
@@ -341,7 +342,9 @@ export function ProfileInfoDialog({
       onClick: () => {
         handleAction(() => onConfigureCamoufox?.(profile));
       },
-      disabled: isDisabled,
+      // Viewing and editing fingerprints both require an active paid plan.
+      disabled: isDisabled || !crossOsUnlocked,
+      proBadge: !crossOsUnlocked,
       runningBadge: isRunning,
       hidden: !isCamoufoxOrWayfern || !onConfigureCamoufox,
     },
@@ -481,6 +484,9 @@ export function ProfileInfoDialog({
         hideClose
         className="sm:max-w-3xl w-[720px] max-w-[720px] h-[480px] max-h-[480px] flex flex-col p-0 gap-0 overflow-hidden"
       >
+        {/* The dialog renders its own custom header, so the accessible title is
+            visually hidden but present for screen readers (Radix requires it). */}
+        <DialogTitle className="sr-only">{t("profileInfo.title")}</DialogTitle>
         <ProfileInfoLayout
           profile={profile}
           ProfileIcon={ProfileIcon}
@@ -888,6 +894,7 @@ function ProfileInfoLayout({
                 // proBadge state. Default to false if action missing.
                 fingerprintAction && !fingerprintAction.proBadge,
               )}
+              onSaved={onClose}
               t={t}
             />
           )}
@@ -1586,11 +1593,13 @@ function FingerprintSectionInline({
   profile,
   isDisabled,
   crossOsUnlocked,
+  onSaved,
   t,
 }: {
   profile: BrowserProfile;
   isDisabled: boolean;
   crossOsUnlocked: boolean;
+  onSaved: () => void;
   t: (key: string, options?: Record<string, unknown>) => string;
 }) {
   const [camoufoxConfig, setCamoufoxConfig] = React.useState<CamoufoxConfig>(
@@ -1629,6 +1638,23 @@ function FingerprintSectionInline({
     );
   }
 
+  // Viewing and editing fingerprints both require an active paid plan
+  // (`crossOsUnlocked` is that paid flag here). Render a locked state instead of
+  // the editor so free users can neither see nor change the fingerprint.
+  if (!crossOsUnlocked) {
+    return (
+      <div className="flex flex-col items-center gap-3 rounded-lg border p-6 text-center">
+        <LuLock className="size-4 shrink-0 text-muted-foreground" />
+        <h3 className="text-sm font-medium text-foreground">
+          {t("profileInfo.fingerprint.lockedTitle")}
+        </h3>
+        <p className="max-w-[48ch] text-sm text-pretty text-muted-foreground">
+          {t("profileInfo.fingerprint.lockedDescription")}
+        </p>
+      </div>
+    );
+  }
+
   const onCamoufoxChange = (key: keyof CamoufoxConfig, value: unknown) => {
     setCamoufoxConfig((prev) => ({ ...prev, [key]: value }));
     setSuccess(null);
@@ -1655,6 +1681,8 @@ function FingerprintSectionInline({
         });
       }
       setSuccess(t("common.buttons.saved"));
+      // Close the dialog once the fingerprint is saved.
+      onSaved();
     } catch (e) {
       setError(String(e));
     } finally {

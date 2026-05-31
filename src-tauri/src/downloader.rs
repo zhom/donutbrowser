@@ -10,6 +10,11 @@ use crate::browser::{create_browser, BrowserType};
 use crate::browser_version_manager::DownloadInfo;
 use crate::events;
 
+// Maximum time to wait for the next chunk of a streaming download before treating
+// the connection as stalled. Converts an indefinite hang into a terminal error so
+// the UI can surface it and the caller can move on / retry.
+const STREAM_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
 // Global state to track currently downloading browser-version pairs
 lazy_static::lazy_static! {
   static ref DOWNLOADING_BROWSERS: std::sync::Arc<Mutex<std::collections::HashSet<String>>> =
@@ -44,6 +49,11 @@ impl Downloader {
     Self {
       client: Client::builder()
         .connect_timeout(std::time::Duration::from_secs(30))
+        // Per-read idle timeout: if the connection stalls mid-stream with no bytes
+        // for this long, the read fails instead of hanging forever. This is the
+        // transport-level guard; the streaming loop also wraps each read in an
+        // explicit tokio timeout as defense-in-depth.
+        .read_timeout(STREAM_IDLE_TIMEOUT)
         .build()
         .unwrap_or_else(|_| Client::new()),
       api_client: ApiClient::instance(),
@@ -470,7 +480,26 @@ impl Downloader {
     let mut stream = response.bytes_stream();
 
     use futures_util::StreamExt;
-    while let Some(chunk) = stream.next().await {
+    loop {
+      // Wrap each read in an idle timeout so a stalled connection (no bytes flowing)
+      // surfaces as a terminal error instead of awaiting forever.
+      let next = match tokio::time::timeout(STREAM_IDLE_TIMEOUT, stream.next()).await {
+        Ok(item) => item,
+        Err(_) => {
+          drop(file);
+          // Keep any partial bytes on disk so a later attempt can resume via Range.
+          return Err(
+            format!(
+              "Download stalled: no data received for {}s",
+              STREAM_IDLE_TIMEOUT.as_secs()
+            )
+            .into(),
+          );
+        }
+      };
+      let Some(chunk) = next else {
+        break;
+      };
       if let Some(token) = cancel_token {
         if token.is_cancelled() {
           drop(file);
@@ -694,20 +723,25 @@ impl Downloader {
         let mut tokens = DOWNLOAD_CANCELLATION_TOKENS.lock().unwrap();
         tokens.remove(&download_key);
 
-        // Emit cancelled stage if the download was cancelled by user
-        if cancel_token.is_cancelled() {
-          let progress = DownloadProgress {
-            browser: browser_str.clone(),
-            version: version.clone(),
-            downloaded_bytes: 0,
-            total_bytes: None,
-            percentage: 0.0,
-            speed_bytes_per_sec: 0.0,
-            eta_seconds: None,
-            stage: "cancelled".to_string(),
-          };
-          let _ = events::emit("download-progress", &progress);
-        }
+        // Emit a terminal stage so the UI stops spinning. A user cancellation maps to
+        // "cancelled"; any other failure (network error, stall timeout, bad status)
+        // maps to "error" so the frontend can show a concrete error toast.
+        let stage = if cancel_token.is_cancelled() {
+          "cancelled"
+        } else {
+          "error"
+        };
+        let progress = DownloadProgress {
+          browser: browser_str.clone(),
+          version: version.clone(),
+          downloaded_bytes: 0,
+          total_bytes: None,
+          percentage: 0.0,
+          speed_bytes_per_sec: 0.0,
+          eta_seconds: None,
+          stage: stage.to_string(),
+        };
+        let _ = events::emit("download-progress", &progress);
 
         return Err(format!("Failed to download browser: {e}").into());
       }
@@ -844,6 +878,20 @@ impl Downloader {
       // Do not delete files on verification failure; keep archive for manual retry.
       let _ = self.registry.remove_browser(&browser_str, &version);
       let _ = self.registry.save();
+
+      // Emit a terminal error stage so the UI shows an error instead of spinning.
+      let progress = DownloadProgress {
+        browser: browser_str.clone(),
+        version: version.clone(),
+        downloaded_bytes: 0,
+        total_bytes: None,
+        percentage: 0.0,
+        speed_bytes_per_sec: 0.0,
+        eta_seconds: None,
+        stage: "error".to_string(),
+      };
+      let _ = events::emit("download-progress", &progress);
+
       // Remove browser-version pair from downloading set on verification failure
       {
         let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
@@ -979,6 +1027,25 @@ pub fn is_downloading(browser: &str, version: &str) -> bool {
   downloading.contains(&download_key)
 }
 
+/// Clear all in-progress download bookkeeping for a browser.
+///
+/// Used as a last-resort cleanup when a download future is abandoned (e.g. dropped
+/// by an outer timeout) before its own error path could run. Because
+/// `download_browser_full` may re-resolve to a different version than requested, this
+/// matches by the `"{browser}-"` key prefix rather than an exact version so no stuck
+/// key is left behind regardless of which version was actually in flight.
+pub fn clear_download_state_for_browser(browser: &str) {
+  let prefix = format!("{browser}-");
+  {
+    let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
+    downloading.retain(|key| !key.starts_with(&prefix));
+  }
+  {
+    let mut tokens = DOWNLOAD_CANCELLATION_TOKENS.lock().unwrap();
+    tokens.retain(|key, _| !key.starts_with(&prefix));
+  }
+}
+
 #[tauri::command]
 pub async fn download_browser(
   app_handle: tauri::AppHandle,
@@ -1109,6 +1176,49 @@ mod tests {
 
     let downloaded_content = std::fs::read(&downloaded_file).unwrap();
     assert_eq!(downloaded_content.len(), test_content.len());
+  }
+
+  #[test]
+  fn test_clear_download_state_for_browser_removes_stuck_keys() {
+    // Simulate a download future that was abandoned without running its own cleanup,
+    // leaving stuck bookkeeping for a version that differs from the requested one.
+    let key = "wayfern-1.2.3-resolved".to_string();
+    {
+      let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
+      downloading.insert(key.clone());
+    }
+    {
+      let mut tokens = DOWNLOAD_CANCELLATION_TOKENS.lock().unwrap();
+      tokens.insert(key.clone(), CancellationToken::new());
+    }
+
+    // A different browser's in-progress state must be left untouched.
+    let other = "camoufox-9.9.9".to_string();
+    {
+      let mut downloading = DOWNLOADING_BROWSERS.lock().unwrap();
+      downloading.insert(other.clone());
+    }
+
+    clear_download_state_for_browser("wayfern");
+
+    assert!(
+      !is_downloading("wayfern", "1.2.3-resolved"),
+      "stuck wayfern key should be cleared even when version differs from request"
+    );
+    {
+      let tokens = DOWNLOAD_CANCELLATION_TOKENS.lock().unwrap();
+      assert!(
+        !tokens.contains_key(&key),
+        "stuck wayfern cancellation token should be cleared"
+      );
+    }
+    assert!(
+      is_downloading("camoufox", "9.9.9"),
+      "unrelated browser's download state must be preserved"
+    );
+
+    // Cleanup so we don't leak global state into other tests.
+    clear_download_state_for_browser("camoufox");
   }
 }
 

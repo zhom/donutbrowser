@@ -102,6 +102,3 @@ copy_binary() {
 # Copy donut-proxy binary
 copy_binary "donut-proxy"
 
-# Copy donut-daemon binary
-copy_binary "donut-daemon"
-

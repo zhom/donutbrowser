@@ -3,7 +3,9 @@ extend-exclude = [
     "src-tauri/src/camoufox/data/*.json",
     "src-tauri/src/camoufox/data/*.xml",
     "src/i18n/locales/*.json",
-    "src-tauri/build.rs",
+    # Auto-generated from commit subjects by release.yml; typos here originate
+    # in commit messages, which are immutable, so don't spell-check it.
+    "CHANGELOG.md",
 ]
 
 [default.extend-words]

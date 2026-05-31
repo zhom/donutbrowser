@@ -5,7 +5,7 @@ fn main() {
   // This allows running cargo test without building the frontend first
   ensure_dist_folder_exists();
 
-  // Generate tray icon PNGs from SVG (macOS template icon format)
+  // Generate tray icon PNG files from SVG (macOS template icon format)
   generate_tray_icons();
 
   #[cfg(target_os = "macos")]
@@ -93,19 +93,13 @@ fn external_binaries_exist() -> bool {
   let binaries_dir = PathBuf::from(&manifest_dir).join("binaries");
 
   // Check for all required external binaries (must match tauri.conf.json externalBin)
-  let (donut_proxy_name, donut_daemon_name) = if target.contains("windows") {
-    (
-      format!("donut-proxy-{}.exe", target),
-      format!("donut-daemon-{}.exe", target),
-    )
+  let donut_proxy_name = if target.contains("windows") {
+    format!("donut-proxy-{}.exe", target)
   } else {
-    (
-      format!("donut-proxy-{}", target),
-      format!("donut-daemon-{}", target),
-    )
+    format!("donut-proxy-{}", target)
   };
 
-  binaries_dir.join(&donut_proxy_name).exists() && binaries_dir.join(&donut_daemon_name).exists()
+  binaries_dir.join(&donut_proxy_name).exists()
 }
 
 fn ensure_dist_folder_exists() {

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Donut",
-  "version": "0.24.4",
+  "version": "0.25.0",
   "identifier": "com.donutbrowser",
   "build": {
     "beforeDevCommand": "pnpm copy-proxy-binary && pnpm dev",
@@ -19,7 +19,7 @@
     "active": true,
     "targets": ["app", "dmg", "nsis", "deb", "rpm", "appimage"],
     "category": "Productivity",
-    "externalBin": ["binaries/donut-proxy", "binaries/donut-daemon"],
+    "externalBin": ["binaries/donut-proxy"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -42,11 +42,11 @@
     "linux": {
       "deb": {
         "desktopTemplate": "donutbrowser.desktop",
-        "depends": ["xdg-utils", "libxdo3"]
+        "depends": ["xdg-utils", "libxdo3", "libayatana-appindicator3-1"]
       },
       "rpm": {
         "desktopTemplate": "donutbrowser.desktop",
-        "depends": ["xdg-utils", "libxdo"]
+        "depends": ["xdg-utils", "libxdo", "libayatana-appindicator-gtk3"]
       },
       "appimage": {
         "files": {

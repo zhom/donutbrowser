@@ -47,3 +47,11 @@ jobs:
 
       - name: Run flake info app
         run: nix run .#info
+
+      # `nix flake show` above only evaluates the flake. This step actually
+      # compiles the app inside the Nix environment, which is what catches a
+      # missing build-time dependency — in particular libayatana-appindicator
+      # (required by libappindicator-sys for the Linux system tray). The build
+      # fails here if that dependency is dropped from the flake.
+      - name: Build the app via the flake
+        run: nix run .#build

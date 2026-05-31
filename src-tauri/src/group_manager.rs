@@ -13,6 +13,10 @@ pub struct ProfileGroup {
   pub sync_enabled: bool,
   #[serde(default)]
   pub last_sync: Option<u64>,
+  /// Unix seconds of the last meaningful user edit. Source of truth for sync
+  /// conflict resolution (last-write-wins); bumped on edits only.
+  #[serde(default)]
+  pub updated_at: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,6 +94,7 @@ impl GroupManager {
       name,
       sync_enabled,
       last_sync: None,
+      updated_at: Some(crate::proxy_manager::now_secs()),
     };
 
     groups_data.groups.push(group.clone());
@@ -136,6 +141,7 @@ impl GroupManager {
       .ok_or_else(|| format!("Group with id '{id}' not found"))?;
 
     group.name = name;
+    group.updated_at = Some(crate::proxy_manager::now_secs());
     let updated_group = group.clone();
 
     self.save_groups_data(&groups_data)?;
@@ -167,6 +173,7 @@ impl GroupManager {
       existing.name = group.name.clone();
       existing.sync_enabled = group.sync_enabled;
       existing.last_sync = group.last_sync;
+      existing.updated_at = group.updated_at;
       self.save_groups_data(&groups_data)?;
     }
 
@@ -183,6 +190,7 @@ impl GroupManager {
       existing.name = group.name.clone();
       existing.sync_enabled = group.sync_enabled;
       existing.last_sync = group.last_sync;
+      existing.updated_at = group.updated_at;
     } else {
       groups_data.groups.push(group.clone());
     }

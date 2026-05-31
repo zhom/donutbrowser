@@ -139,7 +139,13 @@ export function useVersionUpdater() {
               try {
                 // Show auto-update start notification
                 showAutoUpdateToast(browserDisplayName, new_version, {
-                  description: `Downloading ${browserDisplayName} ${new_version} automatically. Progress will be shown below.`,
+                  description: i18n.t(
+                    "versionUpdater.toast.autoDownloadStarted",
+                    {
+                      browser: browserDisplayName,
+                      version: new_version,
+                    },
+                  ),
                 });
 
                 // Dismiss the update notification in the backend

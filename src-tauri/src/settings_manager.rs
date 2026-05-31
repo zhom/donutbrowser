@@ -50,11 +50,11 @@ pub struct AppSettings {
   #[serde(default)]
   pub mcp_token: Option<String>, // Displayed token for user to copy (not persisted, loaded from encrypted file)
   #[serde(default)]
-  pub launch_on_login_declined: bool, // User permanently declined the launch-on-login prompt
-  #[serde(default)]
   pub language: Option<String>, // ISO 639-1: "en", "es", "pt", "fr", "zh", "ja", "ko", "ru", or None for system default
   #[serde(default)]
   pub window_resize_warning_dismissed: bool,
+  #[serde(default)]
+  pub onboarding_completed: bool, // First-launch onboarding has been shown/handled (one-shot)
   #[serde(default)]
   pub disable_auto_updates: bool,
   /// When true, the decrypted in-RAM copy of a password-protected profile is
@@ -93,9 +93,9 @@ impl Default for AppSettings {
       mcp_enabled: false,
       mcp_port: None,
       mcp_token: None,
-      launch_on_login_declined: false,
       language: None,
       window_resize_warning_dismissed: false,
+      onboarding_completed: false,
       disable_auto_updates: false,
       keep_decrypted_profiles_in_ram: false,
     }
@@ -181,17 +181,6 @@ impl SettingsManager {
     fs::write(sorting_file, json)?;
 
     Ok(())
-  }
-
-  pub fn should_show_launch_on_login_prompt(&self) -> Result<bool, Box<dyn std::error::Error>> {
-    // Daemon is currently disabled, never show this prompt
-    Ok(false)
-  }
-
-  pub fn decline_launch_on_login(&self) -> Result<(), Box<dyn std::error::Error>> {
-    let mut settings = self.load_settings()?;
-    settings.launch_on_login_declined = true;
-    self.save_settings(&settings)
   }
 
   fn get_vault_password() -> String {
@@ -795,7 +784,6 @@ pub async fn save_app_settings(
   if let Ok(content) = std::fs::read_to_string(manager.get_settings_file()) {
     if let Ok(current) = serde_json::from_str::<AppSettings>(&content) {
       settings.window_resize_warning_dismissed = current.window_resize_warning_dismissed;
-      settings.launch_on_login_declined = current.launch_on_login_declined;
     }
   }
 
@@ -920,28 +908,6 @@ pub async fn open_log_directory(app_handle: tauri::AppHandle) -> Result<(), Stri
 }
 
 #[tauri::command]
-pub async fn should_show_launch_on_login_prompt() -> Result<bool, String> {
-  let manager = SettingsManager::instance();
-  manager
-    .should_show_launch_on_login_prompt()
-    .map_err(|e| format!("Failed to check launch on login prompt setting: {e}"))
-}
-
-#[tauri::command]
-pub async fn enable_launch_on_login() -> Result<(), String> {
-  crate::daemon::autostart::enable_autostart()
-    .map_err(|e| format!("Failed to enable autostart: {e}"))
-}
-
-#[tauri::command]
-pub async fn decline_launch_on_login() -> Result<(), String> {
-  let manager = SettingsManager::instance();
-  manager
-    .decline_launch_on_login()
-    .map_err(|e| format!("Failed to decline launch on login: {e}"))
-}
-
-#[tauri::command]
 pub async fn get_table_sorting_settings() -> Result<TableSortingSettings, String> {
   let manager = SettingsManager::instance();
   manager
@@ -1045,6 +1011,27 @@ pub async fn get_window_resize_warning_dismissed() -> Result<bool, String> {
     .load_settings()
     .map_err(|e| format!("Failed to load settings: {e}"))?;
   Ok(settings.window_resize_warning_dismissed)
+}
+
+#[tauri::command]
+pub async fn get_onboarding_completed() -> Result<bool, String> {
+  let manager = SettingsManager::instance();
+  let settings = manager
+    .load_settings()
+    .map_err(|e| format!("Failed to load settings: {e}"))?;
+  Ok(settings.onboarding_completed)
+}
+
+#[tauri::command]
+pub async fn complete_onboarding() -> Result<(), String> {
+  let manager = SettingsManager::instance();
+  let mut settings = manager
+    .load_settings()
+    .map_err(|e| format!("Failed to load settings: {e}"))?;
+  settings.onboarding_completed = true;
+  manager
+    .save_settings(&settings)
+    .map_err(|e| format!("Failed to save settings: {e}"))
 }
 
 #[tauri::command]
@@ -1182,9 +1169,9 @@ mod tests {
       mcp_enabled: false,
       mcp_port: None,
       mcp_token: None,
-      launch_on_login_declined: false,
       language: None,
       window_resize_warning_dismissed: false,
+      onboarding_completed: false,
       disable_auto_updates: false,
       keep_decrypted_profiles_in_ram: false,
     };
@@ -1245,29 +1232,6 @@ mod tests {
       loaded_sorting.direction, "desc",
       "Loaded direction should match saved"
     );
-  }
-
-  #[test]
-  fn test_should_show_launch_on_login_prompt() {
-    let (manager, _temp_dir, _guard) = create_test_settings_manager();
-
-    let result = manager.should_show_launch_on_login_prompt();
-    assert!(result.is_ok(), "Should not fail");
-
-    let _should_show = result.unwrap();
-  }
-
-  #[test]
-  fn test_decline_launch_on_login() {
-    let (manager, _temp_dir, _guard) = create_test_settings_manager();
-
-    let settings = manager.load_settings().unwrap();
-    assert!(!settings.launch_on_login_declined);
-
-    manager.decline_launch_on_login().unwrap();
-
-    let settings = manager.load_settings().unwrap();
-    assert!(settings.launch_on_login_declined);
   }
 
   #[test]

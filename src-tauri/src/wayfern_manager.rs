@@ -51,6 +51,12 @@ pub struct WayfernLaunchResult {
   pub profilePath: Option<String>,
   pub url: Option<String>,
   pub cdp_port: Option<u16>,
+  /// The fingerprint Wayfern actually applied, echoed back by
+  /// Wayfern.setFingerprint. It may be UPGRADED from the stored fingerprint
+  /// (e.g. when the stored one targets an older browser version). Internal
+  /// only — the caller persists it to the profile; never sent to the frontend.
+  #[serde(default, skip_serializing)]
+  pub used_fingerprint: Option<String>,
 }
 
 struct WayfernInstance {
@@ -703,6 +709,7 @@ impl WayfernManager {
     log::info!("Found {} page targets", page_targets.len());
 
     // Apply fingerprint if configured
+    let mut used_fingerprint: Option<String> = None;
     if let Some(fingerprint_json) = &config.fingerprint {
       log::info!(
         "Applying fingerprint to Wayfern browser, fingerprint length: {} chars",
@@ -781,10 +788,30 @@ impl WayfernManager {
             .send_cdp_command(ws_url, "Wayfern.setFingerprint", fingerprint_params.clone())
             .await
           {
-            Ok(result) => log::info!(
-              "Successfully applied fingerprint to page target: {:?}",
-              result
-            ),
+            Ok(result) => {
+              log::info!(
+                "Successfully applied fingerprint to page target: {:?}",
+                result
+              );
+              // Wayfern.setFingerprint echoes back the fingerprint it actually
+              // used, which may be UPGRADED from what we sent (e.g. when the
+              // stored fingerprint targets an older browser version). Capture
+              // it once, from the first target that succeeds, so the caller can
+              // persist the upgraded value to the profile.
+              if used_fingerprint.is_none() {
+                // getFingerprint/setFingerprint wrap the object as
+                // { fingerprint: {...} }; tolerate a bare object too.
+                let fp = result.get("fingerprint").cloned().unwrap_or(result);
+                if fp.is_object() {
+                  match serde_json::to_string(&Self::normalize_fingerprint(fp)) {
+                    Ok(s) => used_fingerprint = Some(s),
+                    Err(e) => {
+                      log::warn!("Failed to serialize used fingerprint: {e}")
+                    }
+                  }
+                }
+              }
+            }
             Err(e) => log::error!("Failed to apply fingerprint to target: {e}"),
           }
         }
@@ -849,6 +876,7 @@ impl WayfernManager {
       profilePath: Some(profile_path.to_string()),
       url: url.map(|s| s.to_string()),
       cdp_port: Some(port),
+      used_fingerprint,
     })
   }
 
@@ -990,6 +1018,7 @@ impl WayfernManager {
               profilePath: instance.profile_path.clone(),
               url: instance.url.clone(),
               cdp_port: instance.cdp_port,
+              used_fingerprint: None,
             });
           } else {
             log::info!(
@@ -1032,6 +1061,7 @@ impl WayfernManager {
         profilePath: Some(found_profile_path),
         url: None,
         cdp_port,
+        used_fingerprint: None,
       });
     }
 

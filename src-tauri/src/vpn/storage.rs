@@ -36,6 +36,8 @@ struct StoredVpnConfig {
   sync_enabled: bool,
   #[serde(default)]
   last_sync: Option<u64>,
+  #[serde(default)]
+  updated_at: Option<u64>,
 }
 
 /// VPN storage manager with encryption
@@ -247,6 +249,7 @@ impl VpnStorage {
       last_used: config.last_used,
       sync_enabled: config.sync_enabled,
       last_sync: config.last_sync,
+      updated_at: config.updated_at,
     };
 
     // Update existing or add new
@@ -280,6 +283,7 @@ impl VpnStorage {
       last_used: stored.last_used,
       sync_enabled: stored.sync_enabled,
       last_sync: stored.last_sync,
+      updated_at: stored.updated_at,
     })
   }
 
@@ -300,6 +304,7 @@ impl VpnStorage {
           last_used: stored.last_used,
           sync_enabled: stored.sync_enabled,
           last_sync: stored.last_sync,
+          updated_at: stored.updated_at,
         })
         .collect(),
     )
@@ -356,6 +361,7 @@ impl VpnStorage {
       last_used: None,
       sync_enabled,
       last_sync: None,
+      updated_at: Some(crate::proxy_manager::now_secs()),
     };
 
     self.save_config(&config)?;
@@ -367,6 +373,7 @@ impl VpnStorage {
   pub fn update_config_name(&self, id: &str, new_name: &str) -> Result<VpnConfig, VpnError> {
     let mut config = self.load_config(id)?;
     config.name = new_name.to_string();
+    config.updated_at = Some(crate::proxy_manager::now_secs());
     self.save_config(&config)?;
     Ok(config)
   }
@@ -420,6 +427,7 @@ impl VpnStorage {
       last_used: None,
       sync_enabled,
       last_sync: None,
+      updated_at: Some(crate::proxy_manager::now_secs()),
     };
 
     self.save_config(&config)?;
@@ -463,6 +471,7 @@ mod tests {
       last_used: None,
       sync_enabled: false,
       last_sync: None,
+      updated_at: None,
     };
 
     storage.save_config(&config).unwrap();
@@ -487,6 +496,7 @@ mod tests {
       last_used: None,
       sync_enabled: false,
       last_sync: None,
+      updated_at: None,
     };
 
     let config2 = VpnConfig {
@@ -498,6 +508,7 @@ mod tests {
       last_used: Some(3000),
       sync_enabled: false,
       last_sync: None,
+      updated_at: None,
     };
 
     storage.save_config(&config1).unwrap();
@@ -524,6 +535,7 @@ mod tests {
       last_used: None,
       sync_enabled: false,
       last_sync: None,
+      updated_at: None,
     };
 
     storage.save_config(&config).unwrap();

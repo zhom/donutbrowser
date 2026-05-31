@@ -3,6 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrent } from "@tauri-apps/plugin-deep-link";
+import { useOnborda } from "onborda";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AccountPage } from "@/components/account-page";
@@ -23,7 +24,7 @@ import { GroupManagementDialog } from "@/components/group-management-dialog";
 import HomeHeader from "@/components/home-header";
 import { ImportProfileDialog } from "@/components/import-profile-dialog";
 import { IntegrationsDialog } from "@/components/integrations-dialog";
-import { LaunchOnLoginDialog } from "@/components/launch-on-login-dialog";
+import { ONBOARDING_TOUR } from "@/components/onboarding-provider";
 import { PermissionDialog } from "@/components/permission-dialog";
 import { ProfilesDataTable } from "@/components/profile-data-table";
 import {
@@ -40,7 +41,9 @@ import { ShortcutsPage } from "@/components/shortcuts-page";
 import { SyncAllDialog } from "@/components/sync-all-dialog";
 import { SyncConfigDialog } from "@/components/sync-config-dialog";
 import { SyncFollowerDialog } from "@/components/sync-follower-dialog";
+import { ThankYouDialog } from "@/components/thank-you-dialog";
 import { WayfernTermsDialog } from "@/components/wayfern-terms-dialog";
+import { WelcomeDialog } from "@/components/welcome-dialog";
 import { WindowResizeWarningDialog } from "@/components/window-resize-warning-dialog";
 import { useAppUpdateNotifications } from "@/hooks/use-app-update-notifications";
 import { useCloudAuth } from "@/hooks/use-cloud-auth";
@@ -56,6 +59,10 @@ import { useVersionUpdater } from "@/hooks/use-version-updater";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
 import { useWayfernTerms } from "@/hooks/use-wayfern-terms";
 import { translateBackendError } from "@/lib/backend-errors";
+import {
+  ONBOARDING_TOUR_FINISHED_EVENT,
+  setOnboardingActive,
+} from "@/lib/onboarding-signal";
 import {
   matchesGroupDigit,
   matchesShortcut,
@@ -95,6 +102,95 @@ export default function Home() {
     isLoading: profilesLoading,
     error: profilesError,
   } = useProfileEvents();
+
+  // First-run onboarding tour (Onborda).
+  const { startOnborda, setCurrentStep, isOnbordaVisible, currentStep } =
+    useOnborda();
+  const onboardingHandledRef = useRef(false);
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const [thankYouOpen, setThankYouOpen] = useState(false);
+  // null = onboarding decision pending; false = not a first-run onboarding (run
+  // the normal permission checks); true = first-run onboarding, so the welcome
+  // flow drives permissions and the standalone permission dialog is suppressed.
+  const [firstRunOnboarding, setFirstRunOnboarding] = useState<boolean | null>(
+    null,
+  );
+
+  // Welcome flow finished. Existing-profile users are done after the welcome +
+  // commercial-use steps; users with no profile yet continue into the in-app
+  // product tour that walks them through creating their first profile.
+  const handleWelcomeComplete = useCallback(() => {
+    setWelcomeOpen(false);
+    setFirstRunOnboarding(false);
+    if (profiles.length === 0) {
+      startOnborda(ONBOARDING_TOUR);
+    }
+  }, [startOnborda, profiles.length]);
+
+  // The product tour finished (user clicked "Finish", not "Skip") → celebrate.
+  useEffect(() => {
+    const handler = () => setThankYouOpen(true);
+    window.addEventListener(ONBOARDING_TOUR_FINISHED_EVENT, handler);
+    return () =>
+      window.removeEventListener(ONBOARDING_TOUR_FINISHED_EVENT, handler);
+  }, []);
+
+  // Suppress the global browser-download toasts while onboarding (welcome or
+  // tour) is active — the welcome dialog shows setup progress itself.
+  useEffect(() => {
+    setOnboardingActive(welcomeOpen || isOnbordaVisible);
+  }, [welcomeOpen, isOnbordaVisible]);
+
+  // While the tour is visible, keep the body pinned to the left. Onborda calls
+  // scrollIntoView({ inline: "center" }) on the highlighted element; because the
+  // body is overflow-hidden it can still be scrolled programmatically, which
+  // would shove the whole app (rail and all) sideways with no way to scroll
+  // back. The profile table keeps its own scroll container, untouched here.
+  useEffect(() => {
+    if (!isOnbordaVisible) return;
+    const pin = () => {
+      if (document.body.scrollLeft !== 0) document.body.scrollLeft = 0;
+      if (document.documentElement.scrollLeft !== 0)
+        document.documentElement.scrollLeft = 0;
+    };
+    pin();
+    window.addEventListener("scroll", pin, true);
+    return () => window.removeEventListener("scroll", pin, true);
+  }, [isOnbordaVisible]);
+
+  // On the very first launch, always show the welcome + commercial-use steps
+  // (one-shot: the backend flag is set immediately so it can't trigger again).
+  // The welcome dialog itself decides whether to continue into the browser
+  // download + profile-creation flow — only when the user has no profile yet.
+  useEffect(() => {
+    if (profilesLoading || onboardingHandledRef.current) return;
+    onboardingHandledRef.current = true;
+    void (async () => {
+      try {
+        const completed = await invoke<boolean>("get_onboarding_completed");
+        if (completed) {
+          setFirstRunOnboarding(false);
+          return;
+        }
+        await invoke("complete_onboarding");
+        setFirstRunOnboarding(true);
+        setWelcomeOpen(true);
+      } catch (err) {
+        console.error("Onboarding init failed:", err);
+        setFirstRunOnboarding(false);
+      }
+    })();
+  }, [profilesLoading]);
+
+  // Advance from the "create a profile" step to the "DNS blocking" step as soon
+  // as the user's first profile exists (its DNS dropdown is now in the DOM).
+  useEffect(() => {
+    if (isOnbordaVisible && currentStep === 0 && profiles.length > 0) {
+      // Small delay so the new profile row (and its DNS dropdown target) has
+      // mounted before Onborda re-points at it.
+      setCurrentStep(1, 300);
+    }
+  }, [isOnbordaVisible, currentStep, profiles.length, setCurrentStep]);
 
   const {
     groups: groupsData,
@@ -215,8 +311,6 @@ export default function Home() {
   const [passwordDialogMode, setPasswordDialogMode] =
     useState<PasswordDialogMode>("set");
   const pendingLaunchAfterUnlockRef = useRef<BrowserProfile | null>(null);
-  const [hasCheckedStartupPrompt, setHasCheckedStartupPrompt] = useState(false);
-  const [launchOnLoginDialogOpen, setLaunchOnLoginDialogOpen] = useState(false);
   const [windowResizeWarningOpen, setWindowResizeWarningOpen] = useState(false);
   const [windowResizeWarningBrowserType, setWindowResizeWarningBrowserType] =
     useState<string | undefined>(undefined);
@@ -546,24 +640,6 @@ export default function Home() {
     }
   }, [handleUrlOpen, hasCheckedStartupUrl]);
 
-  const checkStartupPrompt = useCallback(async () => {
-    // Only check once during app startup to prevent reopening after dismissing notifications
-    if (hasCheckedStartupPrompt) return;
-
-    try {
-      const shouldShow = await invoke<boolean>(
-        "should_show_launch_on_login_prompt",
-      );
-      if (shouldShow) {
-        setLaunchOnLoginDialogOpen(true);
-      }
-    } catch (error) {
-      console.error("Failed to check startup prompt:", error);
-    } finally {
-      setHasCheckedStartupPrompt(true);
-    }
-  }, [hasCheckedStartupPrompt]);
-
   // Handle profile errors from useProfileEvents hook
   useEffect(() => {
     if (profilesError) {
@@ -796,9 +872,12 @@ export default function Home() {
       } catch (error) {
         showErrorToast(
           t("errors.createProfileFailed", {
-            error: error instanceof Error ? error.message : String(error),
+            error: translateBackendError(t, error),
           }),
         );
+        // Rethrow so the create dialog keeps itself open (its own handler
+        // skips closing on error), letting the user fix the proxy/VPN and retry.
+        throw error;
       }
     },
     [selectedGroupId, t],
@@ -1190,9 +1269,6 @@ export default function Home() {
   }, [profiles, t]);
 
   useEffect(() => {
-    // Check for startup default browser prompt
-    void checkStartupPrompt();
-
     // Listen for URL open events and get cleanup function
     const setupListeners = async () => {
       const cleanup = await listenForUrlEvents();
@@ -1235,7 +1311,6 @@ export default function Home() {
     };
   }, [
     checkForUpdates,
-    checkStartupPrompt,
     listenForUrlEvents,
     checkCurrentUrl,
     checkMissingBinaries,
@@ -1337,11 +1412,13 @@ export default function Home() {
       showToast({
         id: "browser-support-ending-warning",
         type: "error",
-        title: "Browser support ending soon",
-        description: `Support for the following profiles will be removed on March 15, 2026: ${unsupportedNames}. Please migrate to Wayfern or Camoufox profiles.`,
+        title: t("browserSupport.endingSoonTitle"),
+        description: t("browserSupport.endingSoonDescription", {
+          profiles: unsupportedNames,
+        }),
         duration: 15000,
         action: {
-          label: "Learn more",
+          label: t("common.buttons.learnMore"),
           onClick: () => {
             const event = new CustomEvent("url-open-request", {
               detail: "https://github.com/zhom/donutbrowser/discussions",
@@ -1351,7 +1428,7 @@ export default function Home() {
         },
       });
     }
-  }, [profiles]);
+  }, [profiles, t]);
 
   // Re-check Wayfern terms when a browser download completes
   useEffect(() => {
@@ -1372,12 +1449,14 @@ export default function Home() {
     };
   }, [checkTerms]);
 
-  // Check permissions when they are initialized
+  // Check permissions when they are initialized. During first-run onboarding
+  // the welcome flow requests permissions, so the standalone dialog is deferred
+  // until we know this isn't a first-run onboarding.
   useEffect(() => {
-    if (isInitialized) {
+    if (isInitialized && firstRunOnboarding === false) {
       checkAllPermissions();
     }
-  }, [isInitialized, checkAllPermissions]);
+  }, [isInitialized, firstRunOnboarding, checkAllPermissions]);
 
   // Check self-hosted sync config on mount and when cloud user changes
   useEffect(() => {
@@ -1647,6 +1726,16 @@ export default function Home() {
         onPermissionGranted={checkNextPermission}
       />
 
+      <WelcomeDialog
+        isOpen={welcomeOpen}
+        needsSetup={profiles.length === 0}
+        onComplete={handleWelcomeComplete}
+      />
+      <ThankYouDialog
+        isOpen={thankYouOpen}
+        onClose={() => setThankYouOpen(false)}
+      />
+
       <CloneProfileDialog
         isOpen={!!cloneProfile}
         onClose={() => {
@@ -1849,14 +1938,6 @@ export default function Home() {
           !crossOsUnlocked
         }
         onClose={checkTrialStatus}
-      />
-
-      {/* Launch on Login Dialog - shown on every startup until enabled or declined */}
-      <LaunchOnLoginDialog
-        isOpen={launchOnLoginDialogOpen}
-        onClose={() => {
-          setLaunchOnLoginDialogOpen(false);
-        }}
       />
 
       <WindowResizeWarningDialog

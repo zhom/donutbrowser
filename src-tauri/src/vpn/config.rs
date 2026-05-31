@@ -52,6 +52,10 @@ pub struct VpnConfig {
   pub sync_enabled: bool,
   #[serde(default)]
   pub last_sync: Option<u64>,
+  /// Unix seconds of the last meaningful user edit. Source of truth for sync
+  /// conflict resolution (last-write-wins); bumped on config edits only.
+  #[serde(default)]
+  pub updated_at: Option<u64>,
 }
 
 /// Parsed WireGuard configuration

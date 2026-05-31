@@ -78,6 +78,12 @@ pub struct BrowserProfile {
   /// any staleness check.
   #[serde(default)]
   pub created_at: Option<u64>,
+  /// Unix seconds of the last meaningful metadata edit (name, tags, note,
+  /// proxy/vpn/group/extension assignment, launch hook, bypass rules, dns).
+  /// Source of truth for metadata sync conflict resolution (last-write-wins);
+  /// NOT bumped by browser-file changes, which sync via the file manifest.
+  #[serde(default)]
+  pub updated_at: Option<u64>,
 }
 
 pub fn default_release_type() -> String {

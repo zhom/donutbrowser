@@ -312,7 +312,7 @@ export const ColorPickerAlpha = ({
             'url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMUlEQVQ4T2NkYGAQYcAP3uCTZhw1gGGYhAGBZIA/nYDCgBDAm9BGDWAAJyRCgLaBCAAgXwixzAS0pgAAAABJRU5ErkJggg==") left center',
         }}
       >
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent rounded-full to-black/50" />
+        <div className="absolute inset-0 bg-linear-to-r from-transparent rounded-full to-black/50" />
         <Slider.Range className="absolute h-full bg-transparent rounded-full" />
       </Slider.Track>
       <Slider.Thumb className="block size-4 rounded-full border shadow transition-colors border-primary/50 bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50" />

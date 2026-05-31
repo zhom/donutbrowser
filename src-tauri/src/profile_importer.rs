@@ -586,6 +586,7 @@ impl ProfileImporter {
           dns_blocklist: None,
           password_protected: false,
           created_at: None,
+          updated_at: None,
         };
 
         match self
@@ -668,6 +669,7 @@ impl ProfileImporter {
           dns_blocklist: None,
           password_protected: false,
           created_at: None,
+          updated_at: None,
         };
 
         match self
@@ -726,6 +728,7 @@ impl ProfileImporter {
           .map(|d| d.as_secs())
           .unwrap_or(0),
       ),
+      updated_at: Some(crate::proxy_manager::now_secs()),
     };
 
     self.profile_manager.save_profile(&profile)?;

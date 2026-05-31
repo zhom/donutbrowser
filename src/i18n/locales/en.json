@@ -33,7 +33,8 @@
       "minimize": "Minimize",
       "saving": "Saving…",
       "saved": "Saved",
-      "copied": "Copied"
+      "copied": "Copied",
+      "learnMore": "Learn more"
     },
     "status": {
       "active": "Active",
@@ -99,6 +100,9 @@
     "srOnly": {
       "copy": "Copy",
       "copied": "Copied"
+    },
+    "placeholders": {
+      "example": "e.g., {{value}}"
     }
   },
   "settings": {
@@ -340,7 +344,8 @@
       "downloading": "Downloading {{browser}} version ({{version}})...",
       "latestNeedsDownload": "Latest version ({{version}}) needs to be downloaded",
       "latestAvailable": "Latest version ({{version}}) is available",
-      "latestDownloading": "Downloading version ({{version}})..."
+      "latestDownloading": "Downloading version ({{version}})...",
+      "upgradeAvailable": "A newer version ({{version}}) of {{browser}} is available."
     },
     "chromiumLabel": "Chromium",
     "chromiumSubtitle": "Powered by Wayfern",
@@ -351,7 +356,9 @@
     "passwordProtect": {
       "label": "Password protect this profile",
       "description": "Encrypts the on-disk profile data. Required to launch."
-    }
+    },
+    "downloadingSubtitle": "Downloading…",
+    "browsersDownloading": "Browsers are still downloading. Profile creation will be available once a download finishes."
   },
   "deleteDialog": {
     "title": "Delete Profile",
@@ -1188,7 +1195,9 @@
       "cannotWhileRunning": "Stop the profile before changing its password."
     },
     "fingerprint": {
-      "notSupported": "Fingerprint editing is only available for Camoufox and Wayfern profiles."
+      "notSupported": "Fingerprint editing is only available for Camoufox and Wayfern profiles.",
+      "lockedTitle": "Fingerprint is a Pro feature",
+      "lockedDescription": "Viewing and editing a profile's fingerprint requires an active paid plan. Upgrade to unlock fingerprint protection."
     }
   },
   "extensions": {
@@ -1524,17 +1533,6 @@
     "creatingButton": "Creating...",
     "createButton": "Create"
   },
-  "launchOnLogin": {
-    "title": "Enable Launch on Login?",
-    "description": "Running in the background helps keep your proxies and browsers alive.",
-    "declineButton": "Don't Ask Again",
-    "declining": "...",
-    "enableButton": "Enable",
-    "enableSuccess": "Launch on login enabled",
-    "enableFailed": "Failed to enable launch on login",
-    "declineFailed": "Failed to save preference",
-    "tryAgain": "Please try again"
-  },
   "wayfernTerms": {
     "title": "Wayfern Terms and Conditions",
     "description": "Before using Donut Browser, you must read and agree to Wayfern's Terms and Conditions.",
@@ -1680,7 +1678,8 @@
       "viewRelease": "View Release",
       "later": "Later",
       "uploading": "Uploading",
-      "downloading": "Downloading"
+      "downloading": "Downloading",
+      "startingUpdate": "Starting update..."
     }
   },
   "browserDownload": {
@@ -1694,7 +1693,9 @@
       "extractionFailedDescription": "The corrupt file was deleted. It will be re-downloaded on next attempt.",
       "extracting": "Extracting browser files... Please do not close the app.",
       "verifying": "Verifying browser files...",
-      "downloadingRolling": "Downloading rolling release build..."
+      "downloadingRolling": "Downloading rolling release build...",
+      "geoipDownloading": "Downloading GeoIP database",
+      "geoipDownloaded": "GeoIP database downloaded successfully!"
     }
   },
   "versionUpdater": {
@@ -1712,7 +1713,12 @@
       "updateSuccessDescription": "Found {{newVersions}} new versions across {{successfulUpdates}} browsers. Auto-downloads will start shortly.",
       "upToDate": "No new browser versions found",
       "upToDateDescription": "All browser versions are up to date",
-      "updateAllFailed": "Failed to update browser versions"
+      "updateAllFailed": "Failed to update browser versions",
+      "updateStarted": "{{browser}} update started",
+      "updateStartedDescription": "Version {{version}} download will begin shortly. Browser launch is disabled until update completes.",
+      "downloadStarting": "Starting {{browser}} {{version}} download",
+      "downloadProgressBelow": "Download progress will be shown below...",
+      "autoDownloadStarted": "Downloading {{browser}} {{version}} automatically. Progress will be shown below."
     }
   },
   "profilePassword": {
@@ -1800,7 +1806,11 @@
     "invalidLaunchHookUrl": "Invalid launch hook URL. Use a full http:// or https:// URL.",
     "cookieDbLocked": "Could not read cookies — the database is locked. Close the browser and try again.",
     "cookieDbUnavailable": "Could not read cookies — the cookie store is unavailable.",
-    "selfHostedRequiresLogout": "Sign out of your Donut account before configuring a self-hosted server."
+    "selfHostedRequiresLogout": "Sign out of your Donut account before configuring a self-hosted server.",
+    "fingerprintRequiresPro": "Fingerprint protection requires an active paid plan.",
+    "proxyNotWorking": "The selected proxy isn't working, so the profile wasn't created.",
+    "proxyPaymentRequired": "The selected proxy requires payment (402) — its subscription may have expired — so the profile wasn't created.",
+    "vpnNotWorking": "The selected VPN isn't working, so the profile wasn't created."
   },
   "rail": {
     "profiles": "Profiles",
@@ -1866,7 +1876,8 @@
       "plan": "Plan",
       "status": "Status",
       "teamRole": "Team role",
-      "period": "Billing period"
+      "period": "Billing period",
+      "device": "Device"
     },
     "tabs": {
       "account": "Account",
@@ -1880,7 +1891,10 @@
       "statusUnknown": "Untested",
       "testConnection": "Test connection",
       "disconnect": "Disconnect"
-    }
+    },
+    "deviceOrdinal": "{{ordinal}} of {{count}}",
+    "automationPrimaryOnly": "Browser automation runs only on your primary device (Device 1). Sign out there to use it here.",
+    "automationActiveHere": "Browser automation is active on this device."
   },
   "shortcutsPage": {
     "title": "Keyboard shortcuts",
@@ -1918,5 +1932,90 @@
     "description": "Would you like to send the app to the system tray or quit?",
     "minimize": "Minimize to Tray",
     "quit": "Quit"
+  },
+  "tray": {
+    "show": "Show Donut Browser",
+    "quit": "Quit"
+  },
+  "browserSupport": {
+    "endingSoonTitle": "Browser support ending soon",
+    "endingSoonDescription": "Support for the following profiles will be removed on March 15, 2026: {{profiles}}. Please migrate to Wayfern or Camoufox profiles."
+  },
+  "onboarding": {
+    "steps": {
+      "createProfile": {
+        "title": "Create your first profile",
+        "content": "Click here to create your first profile. Pick Wayfern as the browser — the recommended, fingerprint-protected Chromium."
+      },
+      "dnsBlocking": {
+        "title": "DNS blocking",
+        "content": "Use this dropdown to set a DNS blocklist level for the profile — it blocks ads, trackers, and malware at the network level. Higher levels block more."
+      }
+    },
+    "buttons": {
+      "skip": "Skip",
+      "back": "Back",
+      "next": "Next",
+      "finish": "Finish"
+    },
+    "thankYou": {
+      "title": "Thank you for choosing Donut Browser",
+      "body": "Hopefully it helps make your browsing more private — every identity kept its own, and nothing leaving your machine. Enjoy.",
+      "cta": "Start browsing"
+    }
+  },
+  "welcome": {
+    "title": "Welcome to Donut Browser",
+    "tagline": "An open-source anti-detect browser for managing many identities at once.",
+    "skip": "Skip",
+    "next": "Next",
+    "permissions": {
+      "title": "Allow microphone & camera",
+      "desc": "Grant access so sites that need a mic or camera work inside your browser profiles. macOS asks once; each site still asks you individually.",
+      "skip": "Not now",
+      "grant": "Allow access",
+      "requesting": "Requesting…"
+    },
+    "ready": {
+      "title": "Setting things up",
+      "descDownloading": "Downloading your first browser (Wayfern). This one-time setup runs in the background — hang tight.",
+      "descReady": "Your browser is ready. Let's create your first profile.",
+      "cta": "Create my first profile",
+      "downloading": "Downloading…",
+      "extracting": "Extracting…",
+      "stats": "{{downloaded}} of {{total}}",
+      "speed": "{{speed}}/s",
+      "timeLeft": "{{time}} left",
+      "descExtracting": "Extracting your browser. This one-time setup runs in the background — hang tight.",
+      "almostFinished": "Almost finished…",
+      "errorTitle": "Setup failed",
+      "errorDownload": "{{browser}} couldn't be downloaded. Check your connection and try again.",
+      "errorExtraction": "{{browser}} couldn't be extracted. Please try again.",
+      "errorGeneric": "Something went wrong while setting up {{browser}}. Please try again.",
+      "retry": "Try again"
+    },
+    "features": {
+      "title": "Features",
+      "items": {
+        "setDefault": "Set as Default Browser",
+        "proxy": "Proxy Support (HTTP/SOCKS5)",
+        "vpn": "VPN Support (WireGuard)",
+        "profiles": "Unlimited Local Profiles",
+        "api": "Profile Management API & MCP",
+        "openSource": "Open Source",
+        "groups": "Profile Groups",
+        "cookies": "Cookie Import & Export"
+      }
+    },
+    "license": {
+      "title": "Licensing",
+      "body": "Donut Browser is open source and free to use.",
+      "agree": "I understand",
+      "personalTitle": "Personal use",
+      "personalDesc": "Free forever.",
+      "commercialTitle": "Commercial use",
+      "trialBadge": "2 weeks free",
+      "commercialDesc": "Free for a 2-week evaluation. After that, a paid plan keeps the project maintained and thriving."
+    }
   }
 }

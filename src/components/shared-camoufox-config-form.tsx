@@ -422,7 +422,9 @@ export function SharedCamoufoxConfigForm({
                       e.target.value || undefined,
                     );
                   }}
-                  placeholder="Mozilla/5.0..."
+                  placeholder={t("common.placeholders.example", {
+                    value: "Mozilla/5.0...",
+                  })}
                 />
               </div>
               <div className="space-y-2">
@@ -436,7 +438,9 @@ export function SharedCamoufoxConfigForm({
                       e.target.value || undefined,
                     );
                   }}
-                  placeholder="e.g., MacIntel, Win32"
+                  placeholder={t("common.placeholders.example", {
+                    value: "MacIntel, Win32",
+                  })}
                 />
               </div>
               <div className="space-y-2">
@@ -452,7 +456,9 @@ export function SharedCamoufoxConfigForm({
                       e.target.value || undefined,
                     );
                   }}
-                  placeholder="e.g., 5.0 (Macintosh)"
+                  placeholder={t("common.placeholders.example", {
+                    value: "5.0 (Macintosh)",
+                  })}
                 />
               </div>
               <div className="space-y-2">
@@ -487,7 +493,7 @@ export function SharedCamoufoxConfigForm({
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
                     );
                   }}
-                  placeholder="e.g., 8"
+                  placeholder={t("common.placeholders.example", { value: "8" })}
                 />
               </div>
               <div className="space-y-2">
@@ -504,7 +510,7 @@ export function SharedCamoufoxConfigForm({
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
                     );
                   }}
-                  placeholder="e.g., 0"
+                  placeholder={t("common.placeholders.example", { value: "0" })}
                 />
               </div>
               <div className="space-y-2">
@@ -549,7 +555,9 @@ export function SharedCamoufoxConfigForm({
                       e.target.value || undefined,
                     );
                   }}
-                  placeholder="e.g., en-US"
+                  placeholder={t("common.placeholders.example", {
+                    value: "en-US",
+                  })}
                 />
               </div>
             </div>
@@ -573,7 +581,9 @@ export function SharedCamoufoxConfigForm({
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
                     );
                   }}
-                  placeholder="e.g., 1920"
+                  placeholder={t("common.placeholders.example", {
+                    value: "1920",
+                  })}
                 />
               </div>
               <div className="space-y-2">
@@ -590,7 +600,9 @@ export function SharedCamoufoxConfigForm({
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
                     );
                   }}
-                  placeholder="e.g., 1080"
+                  placeholder={t("common.placeholders.example", {
+                    value: "1080",
+                  })}
                 />
               </div>
               <div className="space-y-2">
@@ -607,7 +619,9 @@ export function SharedCamoufoxConfigForm({
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
                     );
                   }}
-                  placeholder="e.g., 1920"
+                  placeholder={t("common.placeholders.example", {
+                    value: "1920",
+                  })}
                 />
               </div>
               <div className="space-y-2">
@@ -624,7 +638,9 @@ export function SharedCamoufoxConfigForm({
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
                     );
                   }}
-                  placeholder="e.g., 1055"
+                  placeholder={t("common.placeholders.example", {
+                    value: "1055",
+                  })}
                 />
               </div>
               <div className="space-y-2">
@@ -641,7 +657,9 @@ export function SharedCamoufoxConfigForm({
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
                     );
                   }}
-                  placeholder="e.g., 30"
+                  placeholder={t("common.placeholders.example", {
+                    value: "30",
+                  })}
                 />
               </div>
               <div className="space-y-2">
@@ -658,7 +676,9 @@ export function SharedCamoufoxConfigForm({
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
                     );
                   }}
-                  placeholder="e.g., 30"
+                  placeholder={t("common.placeholders.example", {
+                    value: "30",
+                  })}
                 />
               </div>
             </div>
@@ -682,7 +702,9 @@ export function SharedCamoufoxConfigForm({
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
                     );
                   }}
-                  placeholder="e.g., 1512"
+                  placeholder={t("common.placeholders.example", {
+                    value: "1512",
+                  })}
                 />
               </div>
               <div className="space-y-2">
@@ -699,7 +721,9 @@ export function SharedCamoufoxConfigForm({
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
                     );
                   }}
-                  placeholder="e.g., 886"
+                  placeholder={t("common.placeholders.example", {
+                    value: "886",
+                  })}
                 />
               </div>
               <div className="space-y-2">
@@ -716,7 +740,9 @@ export function SharedCamoufoxConfigForm({
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
                     );
                   }}
-                  placeholder="e.g., 1512"
+                  placeholder={t("common.placeholders.example", {
+                    value: "1512",
+                  })}
                 />
               </div>
               <div className="space-y-2">
@@ -733,7 +759,9 @@ export function SharedCamoufoxConfigForm({
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
                     );
                   }}
-                  placeholder="e.g., 886"
+                  placeholder={t("common.placeholders.example", {
+                    value: "886",
+                  })}
                 />
               </div>
               <div className="space-y-2">
@@ -748,7 +776,7 @@ export function SharedCamoufoxConfigForm({
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
                     );
                   }}
-                  placeholder="e.g., 0"
+                  placeholder={t("common.placeholders.example", { value: "0" })}
                 />
               </div>
               <div className="space-y-2">
@@ -763,7 +791,7 @@ export function SharedCamoufoxConfigForm({
                       e.target.value ? parseInt(e.target.value, 10) : undefined,
                     );
                   }}
-                  placeholder="e.g., 0"
+                  placeholder={t("common.placeholders.example", { value: "0" })}
                 />
               </div>
             </div>
@@ -786,7 +814,9 @@ export function SharedCamoufoxConfigForm({
                       e.target.value ? parseFloat(e.target.value) : undefined,
                     );
                   }}
-                  placeholder="e.g., 41.0019"
+                  placeholder={t("common.placeholders.example", {
+                    value: "41.0019",
+                  })}
                 />
               </div>
               <div className="space-y-2">
@@ -802,7 +832,9 @@ export function SharedCamoufoxConfigForm({
                       e.target.value ? parseFloat(e.target.value) : undefined,
                     );
                   }}
-                  placeholder="e.g., 28.9645"
+                  placeholder={t("common.placeholders.example", {
+                    value: "28.9645",
+                  })}
                 />
               </div>
               <div className="space-y-2">
@@ -817,7 +849,9 @@ export function SharedCamoufoxConfigForm({
                       e.target.value || undefined,
                     );
                   }}
-                  placeholder="e.g., America/New_York"
+                  placeholder={t("common.placeholders.example", {
+                    value: "America/New_York",
+                  })}
                 />
               </div>
             </div>
@@ -840,7 +874,9 @@ export function SharedCamoufoxConfigForm({
                       e.target.value || undefined,
                     );
                   }}
-                  placeholder="e.g., tr"
+                  placeholder={t("common.placeholders.example", {
+                    value: "tr",
+                  })}
                 />
               </div>
               <div className="space-y-2">
@@ -854,7 +890,9 @@ export function SharedCamoufoxConfigForm({
                       e.target.value || undefined,
                     );
                   }}
-                  placeholder="e.g., TR"
+                  placeholder={t("common.placeholders.example", {
+                    value: "TR",
+                  })}
                 />
               </div>
               <div className="space-y-2">
@@ -868,7 +906,9 @@ export function SharedCamoufoxConfigForm({
                       e.target.value || undefined,
                     );
                   }}
-                  placeholder="e.g., Latn"
+                  placeholder={t("common.placeholders.example", {
+                    value: "Latn",
+                  })}
                 />
               </div>
             </div>
@@ -891,7 +931,9 @@ export function SharedCamoufoxConfigForm({
                       e.target.value || undefined,
                     );
                   }}
-                  placeholder="e.g., Mesa"
+                  placeholder={t("common.placeholders.example", {
+                    value: "Mesa",
+                  })}
                 />
               </div>
               <div className="space-y-2">
@@ -1053,7 +1095,7 @@ export function SharedCamoufoxConfigForm({
                       e.target.value ? parseFloat(e.target.value) : undefined,
                     );
                   }}
-                  placeholder="e.g., 0"
+                  placeholder={t("common.placeholders.example", { value: "0" })}
                 />
               </div>
               <div className="space-y-2">
@@ -1071,7 +1113,7 @@ export function SharedCamoufoxConfigForm({
                       e.target.value ? parseFloat(e.target.value) : undefined,
                     );
                   }}
-                  placeholder="e.g., 0"
+                  placeholder={t("common.placeholders.example", { value: "0" })}
                 />
               </div>
             </div>
@@ -1097,10 +1139,10 @@ export function SharedCamoufoxConfigForm({
         {limitedMode && (
           <>
             <div className="absolute inset-0 backdrop-blur-[6px] bg-background/30 z-[1]" />
-            <div className="absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-background to-transparent z-[2]" />
-            <div className="absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-background to-transparent z-[2]" />
-            <div className="absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-background to-transparent z-[2]" />
-            <div className="absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-background to-transparent z-[2]" />
+            <div className="absolute inset-y-0 left-0 w-6 bg-linear-to-r from-background to-transparent z-[2]" />
+            <div className="absolute inset-y-0 right-0 w-6 bg-linear-to-l from-background to-transparent z-[2]" />
+            <div className="absolute inset-x-0 top-0 h-6 bg-linear-to-b from-background to-transparent z-[2]" />
+            <div className="absolute inset-x-0 bottom-0 h-6 bg-linear-to-t from-background to-transparent z-[2]" />
             <div className="absolute inset-0 flex items-center justify-center z-[3]">
               <div className="flex items-center gap-2 rounded-md bg-background/80 px-3 py-1.5">
                 <ProBadge />
@@ -1240,7 +1282,9 @@ export function SharedCamoufoxConfigForm({
                             : undefined,
                         );
                       }}
-                      placeholder="e.g., 1920"
+                      placeholder={t("common.placeholders.example", {
+                        value: "1920",
+                      })}
                     />
                   </div>
                   <div className="space-y-2">
@@ -1259,7 +1303,9 @@ export function SharedCamoufoxConfigForm({
                             : undefined,
                         );
                       }}
-                      placeholder="e.g., 1080"
+                      placeholder={t("common.placeholders.example", {
+                        value: "1080",
+                      })}
                     />
                   </div>
                   <div className="space-y-2">
@@ -1278,7 +1324,9 @@ export function SharedCamoufoxConfigForm({
                             : undefined,
                         );
                       }}
-                      placeholder="e.g., 800"
+                      placeholder={t("common.placeholders.example", {
+                        value: "800",
+                      })}
                     />
                   </div>
                   <div className="space-y-2">
@@ -1297,7 +1345,9 @@ export function SharedCamoufoxConfigForm({
                             : undefined,
                         );
                       }}
-                      placeholder="e.g., 600"
+                      placeholder={t("common.placeholders.example", {
+                        value: "600",
+                      })}
                     />
                   </div>
                 </div>
@@ -1305,10 +1355,10 @@ export function SharedCamoufoxConfigForm({
               {limitedMode && (
                 <>
                   <div className="absolute inset-0 backdrop-blur-[6px] bg-background/30 z-[1]" />
-                  <div className="absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-background to-transparent z-[2]" />
-                  <div className="absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-background to-transparent z-[2]" />
-                  <div className="absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-background to-transparent z-[2]" />
-                  <div className="absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-background to-transparent z-[2]" />
+                  <div className="absolute inset-y-0 left-0 w-6 bg-linear-to-r from-background to-transparent z-[2]" />
+                  <div className="absolute inset-y-0 right-0 w-6 bg-linear-to-l from-background to-transparent z-[2]" />
+                  <div className="absolute inset-x-0 top-0 h-6 bg-linear-to-b from-background to-transparent z-[2]" />
+                  <div className="absolute inset-x-0 bottom-0 h-6 bg-linear-to-t from-background to-transparent z-[2]" />
                   <div className="absolute inset-0 flex items-center justify-center z-[3]">
                     <div className="flex items-center gap-2 rounded-md bg-background/80 px-3 py-1.5">
                       <ProBadge />

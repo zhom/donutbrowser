@@ -33,7 +33,8 @@
       "minimize": "最小化",
       "saving": "正在保存…",
       "saved": "已保存",
-      "copied": "已复制"
+      "copied": "已复制",
+      "learnMore": "了解更多"
     },
     "status": {
       "active": "活跃",
@@ -99,6 +100,9 @@
     "srOnly": {
       "copy": "复制",
       "copied": "已复制"
+    },
+    "placeholders": {
+      "example": "例如：{{value}}"
     }
   },
   "settings": {
@@ -340,7 +344,8 @@
       "downloading": "正在下载 {{browser}} 版本 ({{version}})...",
       "latestNeedsDownload": "最新版本 ({{version}}) 需要下载",
       "latestAvailable": "最新版本 ({{version}}) 可用",
-      "latestDownloading": "正在下载版本 ({{version}})..."
+      "latestDownloading": "正在下载版本 ({{version}})...",
+      "upgradeAvailable": "{{browser}} 有新版本（{{version}}）可用。"
     },
     "chromiumLabel": "Chromium",
     "chromiumSubtitle": "由 Wayfern 驱动",
@@ -351,7 +356,9 @@
     "passwordProtect": {
       "label": "为此配置文件设置密码保护",
       "description": "加密磁盘上的配置文件数据。启动时需要密码。"
-    }
+    },
+    "downloadingSubtitle": "正在下载…",
+    "browsersDownloading": "浏览器仍在下载中。下载完成后即可创建配置文件。"
   },
   "deleteDialog": {
     "title": "删除配置文件",
@@ -1188,7 +1195,9 @@
       "cannotWhileRunning": "更改密码前请先停止此配置文件。"
     },
     "fingerprint": {
-      "notSupported": "指纹编辑仅适用于 Camoufox 和 Wayfern 配置文件。"
+      "notSupported": "指纹编辑仅适用于 Camoufox 和 Wayfern 配置文件。",
+      "lockedTitle": "指纹是 Pro 功能",
+      "lockedDescription": "查看和编辑配置文件的指纹需要有效的付费方案。升级后即可解锁指纹保护。"
     }
   },
   "extensions": {
@@ -1524,17 +1533,6 @@
     "creatingButton": "正在创建...",
     "createButton": "创建"
   },
-  "launchOnLogin": {
-    "title": "启用登录时启动?",
-    "description": "在后台运行有助于保持代理和浏览器存活。",
-    "declineButton": "不再询问",
-    "declining": "...",
-    "enableButton": "启用",
-    "enableSuccess": "已启用登录时启动",
-    "enableFailed": "启用登录时启动失败",
-    "declineFailed": "保存偏好失败",
-    "tryAgain": "请重试"
-  },
   "wayfernTerms": {
     "title": "Wayfern 条款和条件",
     "description": "在使用 Donut Browser 之前,你必须阅读并同意 Wayfern 的条款和条件。",
@@ -1680,7 +1678,8 @@
       "viewRelease": "查看版本",
       "later": "稍后",
       "uploading": "上传中",
-      "downloading": "下载中"
+      "downloading": "下载中",
+      "startingUpdate": "正在开始更新..."
     }
   },
   "browserDownload": {
@@ -1694,7 +1693,9 @@
       "extractionFailedDescription": "损坏的文件已删除。下次尝试时将重新下载。",
       "extracting": "正在提取浏览器文件...请不要关闭应用。",
       "verifying": "正在验证浏览器文件...",
-      "downloadingRolling": "正在下载滚动发布版本..."
+      "downloadingRolling": "正在下载滚动发布版本...",
+      "geoipDownloading": "正在下载 GeoIP 数据库",
+      "geoipDownloaded": "GeoIP 数据库下载成功！"
     }
   },
   "versionUpdater": {
@@ -1712,7 +1713,12 @@
       "updateSuccessDescription": "在 {{successfulUpdates}} 个浏览器中发现 {{newVersions}} 个新版本。自动下载即将开始。",
       "upToDate": "未发现新的浏览器版本",
       "upToDateDescription": "所有浏览器版本都是最新的",
-      "updateAllFailed": "更新浏览器版本失败"
+      "updateAllFailed": "更新浏览器版本失败",
+      "updateStarted": "{{browser}} 更新已开始",
+      "updateStartedDescription": "版本 {{version}} 即将开始下载。更新完成前浏览器启动将被禁用。",
+      "downloadStarting": "正在开始下载 {{browser}} {{version}}",
+      "downloadProgressBelow": "下载进度将显示在下方...",
+      "autoDownloadStarted": "正在自动下载 {{browser}} {{version}}。进度将显示在下方。"
     }
   },
   "profilePassword": {
@@ -1800,7 +1806,11 @@
     "invalidLaunchHookUrl": "启动钩子 URL 无效。请使用完整的 http:// 或 https:// URL。",
     "cookieDbLocked": "无法读取 Cookie — 数据库已锁定。请关闭浏览器后重试。",
     "cookieDbUnavailable": "无法读取 Cookie — Cookie 存储不可用。",
-    "selfHostedRequiresLogout": "在配置自托管服务器之前请先退出 Donut 账户。"
+    "selfHostedRequiresLogout": "在配置自托管服务器之前请先退出 Donut 账户。",
+    "fingerprintRequiresPro": "指纹保护需要有效的付费方案。",
+    "proxyNotWorking": "所选代理无法使用，因此未创建配置文件。",
+    "proxyPaymentRequired": "所选代理需要付费（402），其订阅可能已过期，因此未创建配置文件。",
+    "vpnNotWorking": "所选 VPN 无法使用，因此未创建配置文件。"
   },
   "rail": {
     "profiles": "配置文件",
@@ -1866,7 +1876,8 @@
       "plan": "套餐",
       "status": "状态",
       "teamRole": "团队角色",
-      "period": "计费周期"
+      "period": "计费周期",
+      "device": "设备"
     },
     "tabs": {
       "account": "账户",
@@ -1880,7 +1891,10 @@
       "statusUnknown": "未测试",
       "testConnection": "测试连接",
       "disconnect": "断开连接"
-    }
+    },
+    "deviceOrdinal": "第 {{ordinal}} 台，共 {{count}} 台",
+    "automationPrimaryOnly": "浏览器自动化仅在您的主设备（设备 1）上运行。请在该设备上退出登录，才能在此设备上使用。",
+    "automationActiveHere": "浏览器自动化已在此设备上启用。"
   },
   "shortcutsPage": {
     "title": "键盘快捷键",
@@ -1918,5 +1932,90 @@
     "description": "您想将应用最小化到系统托盘还是退出？",
     "minimize": "最小化到托盘",
     "quit": "退出"
+  },
+  "tray": {
+    "show": "显示 Donut Browser",
+    "quit": "退出"
+  },
+  "browserSupport": {
+    "endingSoonTitle": "浏览器支持即将结束",
+    "endingSoonDescription": "以下配置文件的支持将于 2026 年 3 月 15 日移除：{{profiles}}。请迁移到 Wayfern 或 Camoufox 配置文件。"
+  },
+  "onboarding": {
+    "steps": {
+      "createProfile": {
+        "title": "创建你的第一个配置文件",
+        "content": "点击这里创建您的第一个配置文件。浏览器请选择 Wayfern——推荐的、具备指纹保护的 Chromium。"
+      },
+      "dnsBlocking": {
+        "title": "DNS 拦截",
+        "content": "使用此下拉菜单为配置文件设置 DNS 拦截级别——在网络层面拦截广告、跟踪器和恶意软件。级别越高，拦截越多。"
+      }
+    },
+    "buttons": {
+      "skip": "跳过",
+      "back": "返回",
+      "next": "下一步",
+      "finish": "完成"
+    },
+    "thankYou": {
+      "title": "感谢您选择 Donut Browser",
+      "body": "希望它能让您的网络浏览更加私密——每个身份彼此独立，数据不会离开您的设备。祝您使用愉快！",
+      "cta": "开始浏览"
+    }
+  },
+  "welcome": {
+    "title": "欢迎使用 Donut Browser",
+    "tagline": "一款开源的反检测浏览器，可同时管理多个身份。",
+    "skip": "跳过",
+    "next": "下一步",
+    "permissions": {
+      "title": "允许使用麦克风和摄像头",
+      "desc": "授予权限，让需要麦克风或摄像头的网站在你的浏览器配置文件中正常工作。macOS 只询问一次；每个网站仍会单独请求。",
+      "skip": "暂不",
+      "grant": "允许访问",
+      "requesting": "正在请求…"
+    },
+    "ready": {
+      "title": "正在准备",
+      "descDownloading": "正在下载你的第一个浏览器（Wayfern）。此一次性设置在后台运行——请稍候。",
+      "descReady": "你的浏览器已就绪。来创建你的第一个配置文件吧。",
+      "cta": "创建我的第一个配置文件",
+      "downloading": "正在下载…",
+      "extracting": "正在解压…",
+      "stats": "{{downloaded}} / {{total}}",
+      "speed": "{{speed}}/秒",
+      "timeLeft": "剩余 {{time}}",
+      "descExtracting": "正在解压浏览器。此一次性设置在后台运行，请稍候。",
+      "almostFinished": "即将完成…",
+      "errorTitle": "设置失败",
+      "errorDownload": "无法下载 {{browser}}。请检查网络连接后重试。",
+      "errorExtraction": "无法解压 {{browser}}。请重试。",
+      "errorGeneric": "设置 {{browser}} 时出现问题。请重试。",
+      "retry": "重试"
+    },
+    "features": {
+      "title": "功能",
+      "items": {
+        "setDefault": "设为默认浏览器",
+        "proxy": "代理支持（HTTP/SOCKS5）",
+        "vpn": "VPN 支持（WireGuard）",
+        "profiles": "无限本地配置文件",
+        "api": "配置文件管理 API 和 MCP",
+        "openSource": "开源",
+        "groups": "配置文件分组",
+        "cookies": "Cookie 导入与导出"
+      }
+    },
+    "license": {
+      "title": "许可",
+      "body": "Donut Browser 是开源软件，可免费使用。",
+      "agree": "我知道了",
+      "personalTitle": "个人使用",
+      "personalDesc": "永久免费。",
+      "commercialTitle": "商业使用",
+      "trialBadge": "2 周免费",
+      "commercialDesc": "在 2 周评估期内免费。之后需要付费方案，这有助于本项目的持续维护与发展。"
+    }
   }
 }

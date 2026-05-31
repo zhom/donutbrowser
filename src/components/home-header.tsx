@@ -321,6 +321,7 @@ const HomeHeader = ({
             <span className="shrink-0">
               <Button
                 size="sm"
+                data-onborda="create-profile"
                 onClick={() => {
                   onCreateProfileDialogOpen(true);
                 }}

@@ -7,77 +7,10 @@ use crate::platform_browser;
 use crate::profile::{BrowserProfile, ProfileManager};
 use crate::proxy_manager::PROXY_MANAGER;
 use crate::wayfern_manager::{WayfernConfig, WayfernManager};
-use chrono::{Datelike, TimeZone, Utc};
 use serde::Serialize;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use sysinfo::System;
-
-/// Fixed UTC hour at which Wayfern fingerprints rotate. Picked to land in a
-/// low-traffic window for the average user; everyone shares the same UTC
-/// instant so the value here doesn't track any one user's local schedule.
-const FINGERPRINT_ROLLOVER_HOUR_UTC: u32 = 4;
-
-/// File name of the per-profile marker recording the last fingerprint
-/// refresh time. Lives at `<profiles_dir>/<profile_id>/.last-fp-refresh`
-/// and is excluded from cloud sync (see `sync::manifest`) so each device
-/// runs its own refresh schedule.
-const LAST_FP_REFRESH_FILE: &str = ".last-fp-refresh";
-
-/// Most recent rollover instant on or before `now` — used as a staleness
-/// threshold for Wayfern fingerprints. Anything generated before this
-/// timestamp is considered stale and gets regenerated on next launch.
-fn most_recent_rollover_epoch() -> u64 {
-  let now = Utc::now();
-  let today_threshold = Utc
-    .with_ymd_and_hms(
-      now.year(),
-      now.month(),
-      now.day(),
-      FINGERPRINT_ROLLOVER_HOUR_UTC,
-      0,
-      0,
-    )
-    .single()
-    .unwrap_or(now);
-  let threshold = if now >= today_threshold {
-    today_threshold
-  } else {
-    today_threshold - chrono::Duration::days(1)
-  };
-  threshold.timestamp().max(0) as u64
-}
-
-fn last_fp_refresh_path(profile_id: &str, profiles_dir: &std::path::Path) -> PathBuf {
-  profiles_dir.join(profile_id).join(LAST_FP_REFRESH_FILE)
-}
-
-/// Read the epoch-seconds timestamp stored in the per-profile refresh marker.
-/// Returns `None` if the file doesn't exist or its content can't be parsed —
-/// both signal "needs a refresh" to the caller.
-fn read_last_fp_refresh(profile_id: &str, profiles_dir: &std::path::Path) -> Option<u64> {
-  let path = last_fp_refresh_path(profile_id, profiles_dir);
-  let content = std::fs::read_to_string(&path).ok()?;
-  content.trim().parse::<u64>().ok()
-}
-
-/// Record `ts` (epoch seconds) as the most recent fingerprint refresh for
-/// this profile. Failure is logged but never propagated — a missing marker
-/// only costs an extra regen on the next launch, never blocks one.
-fn write_last_fp_refresh(profile_id: &str, profiles_dir: &std::path::Path, ts: u64) {
-  let path = last_fp_refresh_path(profile_id, profiles_dir);
-  if let Some(parent) = path.parent() {
-    if !parent.exists() {
-      if let Err(e) = std::fs::create_dir_all(parent) {
-        log::warn!("Failed to create profile dir for fingerprint refresh marker {profile_id}: {e}");
-        return;
-      }
-    }
-  }
-  if let Err(e) = std::fs::write(&path, ts.to_string()) {
-    log::warn!("Failed to write fingerprint refresh marker for {profile_id}: {e}");
-  }
-}
 
 pub struct BrowserRunner {
   pub profile_manager: &'static ProfileManager,
@@ -448,6 +381,7 @@ impl BrowserRunner {
           camoufox_config,
           url,
           override_profile_path,
+          remote_debugging_port,
           headless,
         )
         .await
@@ -612,32 +546,12 @@ impl BrowserRunner {
         wayfern_config.proxy
       );
 
-      // Decide whether to (re)generate the Wayfern fingerprint for this
-      // launch. Two triggers:
-      //
-      // 1. `randomize_fingerprint_on_launch = true` — explicit per-launch
-      //    randomization the user opted into.
-      // 2. The fingerprint hasn't been refreshed since the most recent
-      //    rollover instant. We check the per-profile marker file first
-      //    (`.last-fp-refresh`); if it's absent we fall back to
-      //    `profile.created_at` so brand-new profiles don't immediately
-      //    regenerate the fingerprint they were just created with.
-      //    Profiles with neither (truly legacy) are treated as ancient
-      //    and refresh on next launch — once.
+      // Check if we need to generate a new fingerprint on every launch
       let mut updated_profile = profile.clone();
-      let stale_threshold = most_recent_rollover_epoch();
-      let profile_id_str = profile.id.to_string();
-      let profiles_dir_for_marker = self.profile_manager.get_profiles_dir();
-      let effective_last_refresh =
-        read_last_fp_refresh(&profile_id_str, &profiles_dir_for_marker).or(profile.created_at);
-      let is_stale_profile = effective_last_refresh.is_none_or(|ts| ts < stale_threshold);
-      let randomize_every_launch = wayfern_config.randomize_fingerprint_on_launch == Some(true);
-      if randomize_every_launch || is_stale_profile {
+      if wayfern_config.randomize_fingerprint_on_launch == Some(true) {
         log::info!(
-          "Generating Wayfern fingerprint for profile {} (per-launch={}, rollover={})",
-          profile.name,
-          randomize_every_launch,
-          is_stale_profile
+          "Generating random fingerprint for Wayfern profile: {}",
+          profile.name
         );
 
         // Create a config copy without the existing fingerprint to force generation of a new one
@@ -659,24 +573,12 @@ impl BrowserRunner {
         // Update the config with the new fingerprint for launching
         wayfern_config.fingerprint = Some(new_fingerprint.clone());
 
-        // Write the marker so the next launch within the same rollover
-        // window skips this branch. The marker is excluded from cloud
-        // sync (see `sync::manifest::DEFAULT_EXCLUDE_PATTERNS`), so each
-        // device's refresh schedule is independent.
-        let now_epoch = SystemTime::now()
-          .duration_since(UNIX_EPOCH)
-          .map(|d| d.as_secs())
-          .unwrap_or(stale_threshold);
-        write_last_fp_refresh(&profile_id_str, &profiles_dir_for_marker, now_epoch);
-
         // Save the updated fingerprint to the profile so it persists.
         let mut updated_wayfern_config = updated_profile.wayfern_config.clone().unwrap_or_default();
         updated_wayfern_config.fingerprint = Some(new_fingerprint);
-        // Preserve the user's randomize-on-launch preference rather than
-        // forcing it on. The rollover path must not silently flip this
-        // flag for users who only opted into the scheduled refresh.
-        updated_wayfern_config.randomize_fingerprint_on_launch =
-          wayfern_config.randomize_fingerprint_on_launch;
+        // Preserve the randomize flag so it persists across launches
+        updated_wayfern_config.randomize_fingerprint_on_launch = Some(true);
+        // Preserve the OS setting so it's used for future fingerprint generation
         if wayfern_config.os.is_some() {
           updated_wayfern_config.os = wayfern_config.os.clone();
         }
@@ -753,6 +655,24 @@ impl BrowserRunner {
       // Get the process ID from launch result
       let process_id = wayfern_result.processId.unwrap_or(0);
       log::info!("Wayfern launched successfully with PID: {process_id}");
+
+      // Wayfern.setFingerprint echoes back the fingerprint the browser actually
+      // applied, which may be UPGRADED from the stored one (e.g. when the
+      // stored fingerprint targets an older browser version). Persist it so the
+      // next launch starts from the upgraded value — saved below via
+      // save_process_info(&updated_profile).
+      if let Some(used_fp) = wayfern_result.used_fingerprint.clone() {
+        let mut cfg = updated_profile.wayfern_config.clone().unwrap_or_default();
+        if cfg.fingerprint.as_deref() != Some(used_fp.as_str()) {
+          log::info!(
+            "Persisting upgraded fingerprint from Wayfern.setFingerprint for profile: {} (len {})",
+            profile.name,
+            used_fp.len()
+          );
+          cfg.fingerprint = Some(used_fp);
+          updated_profile.wayfern_config = Some(cfg);
+        }
+      }
 
       // Update profile with the process info
       updated_profile.process_id = Some(process_id);
@@ -935,57 +855,19 @@ impl BrowserRunner {
     remote_debugging_port: Option<u16>,
     headless: bool,
   ) -> Result<BrowserProfile, Box<dyn std::error::Error + Send + Sync>> {
-    // Always start a local proxy for API launches
-    let upstream_proxy = self
-      .resolve_launch_proxy(profile)
-      .await
-      .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
-
-    // Use a temporary PID (1) to start the proxy, we'll update it after browser launch
-    let temp_pid = 1u32;
-    let profile_id_str = profile.id.to_string();
-
-    // Start local proxy - if this fails, DO NOT launch browser
-    let blocklist_file = Self::resolve_blocklist_file(profile)
-      .await
-      .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.into() })?;
-    let internal_proxy = PROXY_MANAGER
-      .start_proxy(
-        app_handle.clone(),
-        upstream_proxy.as_ref(),
-        temp_pid,
-        Some(&profile_id_str),
-        profile.proxy_bypass_rules.clone(),
-        blocklist_file,
-      )
-      .await
-      .map_err(|e| {
-        let error_msg = format!("Failed to start local proxy: {e}");
-        log::error!("{}", error_msg);
-        error_msg
-      })?;
-
-    let internal_proxy_settings = Some(internal_proxy.clone());
-
-    let result = self
+    // Camoufox and Wayfern start (and PID-reconcile) their own local proxy
+    // inside `launch_browser_internal`, so we hand it None here rather than
+    // staging a second, orphaned proxy worker.
+    self
       .launch_browser_internal(
-        app_handle.clone(),
+        app_handle,
         profile,
         url,
-        internal_proxy_settings.as_ref(),
+        None,
         remote_debugging_port,
         headless,
       )
-      .await;
-
-    // Update proxy with correct PID if launch succeeded
-    if let Ok(ref updated_profile) = result {
-      if let Some(actual_pid) = updated_profile.process_id {
-        let _ = PROXY_MANAGER.update_proxy_pid(temp_pid, actual_pid);
-      }
-    }
-
-    result
+      .await
   }
 
   pub async fn launch_or_open_url(
@@ -2396,6 +2278,17 @@ pub async fn launch_browser_profile(
   profile: BrowserProfile,
   url: Option<String>,
 ) -> Result<BrowserProfile, String> {
+  launch_browser_profile_impl(app_handle, profile, url, None, false, false).await
+}
+
+pub async fn launch_browser_profile_impl(
+  app_handle: tauri::AppHandle,
+  profile: BrowserProfile,
+  url: Option<String>,
+  remote_debugging_port: Option<u16>,
+  headless: bool,
+  force_new: bool,
+) -> Result<BrowserProfile, String> {
   log::info!(
     "Launch request received for profile: {} (ID: {})",
     profile.name,
@@ -2424,9 +2317,6 @@ pub async fn launch_browser_profile(
 
   let browser_runner = BrowserRunner::instance();
 
-  // Store the internal proxy settings for passing to launch_browser
-  let mut internal_proxy_settings: Option<ProxySettings> = None;
-
   // Resolve the most up-to-date profile from disk by ID to avoid using stale proxy_id/browser state
   let profile_for_launch = match browser_runner
     .profile_manager
@@ -2448,112 +2338,36 @@ pub async fn launch_browser_profile(
     profile_for_launch.id
   );
 
-  // Always start a local proxy before launching (non-Camoufox/Wayfern handled here; they have their own flow)
-  // This ensures all traffic goes through the local proxy for monitoring and future features
-  if profile.browser != "camoufox" && profile.browser != "wayfern" {
-    // Determine upstream proxy if configured; otherwise use DIRECT (no upstream)
-    // Refresh cloud proxy credentials and inject profile-specific sid
-    let mut upstream_proxy = BrowserRunner::instance()
-      .resolve_launch_proxy(&profile_for_launch)
-      .await?;
-
-    // If profile has a VPN instead of proxy, start VPN worker and use it as upstream
-    if upstream_proxy.is_none() {
-      if let Some(ref vpn_id) = profile_for_launch.vpn_id {
-        match crate::vpn_worker_runner::start_vpn_worker(vpn_id).await {
-          Ok(vpn_worker) => {
-            if let Some(port) = vpn_worker.local_port {
-              upstream_proxy = Some(ProxySettings {
-                proxy_type: "socks5".to_string(),
-                host: "127.0.0.1".to_string(),
-                port,
-                username: None,
-                password: None,
-              });
-              log::info!("VPN worker started for profile on port {}", port);
-            }
-          }
-          Err(e) => {
-            return Err(format!("Failed to start VPN worker: {e}"));
-          }
-        }
-      }
-    }
-
-    // Use a temporary PID (1) to start the proxy, we'll update it after browser launch
-    let temp_pid = 1u32;
-    let profile_id_str = profile.id.to_string();
-
-    // Always start a local proxy, even if there's no upstream proxy
-    // This allows for traffic monitoring and future features
-    let blocklist_file = BrowserRunner::resolve_blocklist_file(&profile_for_launch).await?;
-    match PROXY_MANAGER
-      .start_proxy(
-        app_handle.clone(),
-        upstream_proxy.as_ref(),
-        temp_pid,
-        Some(&profile_id_str),
-        profile_for_launch.proxy_bypass_rules.clone(),
-        blocklist_file,
-      )
-      .await
-    {
-      Ok(internal_proxy) => {
-        // Use internal proxy for subsequent launch
-        internal_proxy_settings = Some(internal_proxy.clone());
-
-        // For Firefox-based browsers, always apply PAC/user.js to point to the local proxy
-        if matches!(
-          profile_for_launch.browser.as_str(),
-          "firefox" | "firefox-developer" | "zen"
-        ) {
-          let profiles_dir = browser_runner.profile_manager.get_profiles_dir();
-          let profile_path = profiles_dir
-            .join(profile_for_launch.id.to_string())
-            .join("profile");
-
-          // Provide a dummy upstream (ignored when internal proxy is provided)
-          let dummy_upstream = ProxySettings {
-            proxy_type: "http".to_string(),
-            host: "127.0.0.1".to_string(),
-            port: internal_proxy.port,
-            username: None,
-            password: None,
-          };
-
-          browser_runner
-            .profile_manager
-            .apply_proxy_settings_to_profile(&profile_path, &dummy_upstream, Some(&internal_proxy))
-            .map_err(|e| format!("Failed to update profile proxy: {e}"))?;
-        }
-
-        log::info!(
-          "Local proxy prepared for profile: {} on port: {} (upstream: {})",
-          profile_for_launch.name,
-          internal_proxy.port,
-          upstream_proxy
-            .as_ref()
-            .map(|p| format!("{}:{}", p.host, p.port))
-            .unwrap_or_else(|| "DIRECT".to_string())
-        );
-      }
-      Err(e) => {
-        let error_msg = format!("Failed to start local proxy: {e}");
-        log::error!("{}", error_msg);
-        // DO NOT launch browser if proxy startup fails - all browsers must use local proxy
-        return Err(error_msg);
-      }
-    }
-  }
-
   log::info!(
     "Starting browser launch for profile: {} (ID: {})",
     profile_for_launch.name,
     profile_for_launch.id
   );
 
-  // Launch browser or open URL in existing instance
-  let updated_profile = browser_runner.launch_or_open_url(app_handle.clone(), &profile_for_launch, url, internal_proxy_settings.as_ref()).await.map_err(|e| {
+  // Launch browser or open URL in existing instance. Camoufox and Wayfern
+  // start their own local proxies inside `launch_browser_internal`; any
+  // other browser type is rejected there (we only support those for import,
+  // not launch), so no proxy needs to be staged here.
+  //
+  // `force_new` callers (API/MCP) always start a fresh instance with the
+  // requested debug port and headless mode, bypassing the "open URL in the
+  // existing window" path which would otherwise ignore both.
+  let launch_result = if force_new {
+    browser_runner
+      .launch_browser_with_debugging(
+        app_handle.clone(),
+        &profile_for_launch,
+        url,
+        remote_debugging_port,
+        headless,
+      )
+      .await
+  } else {
+    browser_runner
+      .launch_or_open_url(app_handle.clone(), &profile_for_launch, url, None)
+      .await
+  };
+  let updated_profile = launch_result.map_err(|e| {
     log::info!("Browser launch failed for profile: {}, error: {}", profile_for_launch.name, e);
 
     // Emit a failure event to clear loading states in the frontend
@@ -2708,28 +2522,6 @@ pub async fn kill_browser_profile(
       Err(format!("Failed to kill browser: {e}"))
     }
   }
-}
-
-pub async fn launch_browser_profile_with_debugging(
-  app_handle: tauri::AppHandle,
-  profile: BrowserProfile,
-  url: Option<String>,
-  remote_debugging_port: Option<u16>,
-  headless: bool,
-) -> Result<BrowserProfile, String> {
-  if profile.is_cross_os() {
-    return Err(format!(
-      "Cannot launch profile '{}': this profile was created on {} and cannot be launched on a different operating system",
-      profile.name,
-      profile.host_os.as_deref().unwrap_or("another OS"),
-    ));
-  }
-
-  let browser_runner = BrowserRunner::instance();
-  browser_runner
-    .launch_browser_with_debugging(app_handle, &profile, url, remote_debugging_port, headless)
-    .await
-    .map_err(|e| format!("Failed to launch browser with debugging: {e}"))
 }
 
 #[tauri::command]

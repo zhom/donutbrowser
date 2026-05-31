@@ -56,6 +56,16 @@ donutbrowser/
 - The full `pnpm test` output dumps every test name (≈400+ lines) which burns context for no signal. Filter:
   `pnpm test 2>&1 | grep -E "test result|panicked|FAILED"` — four "test result: ok" lines means everything passed.
 
+## Logs (when debugging a running app)
+
+Three log surfaces, in order of usefulness:
+
+- **Donut Browser GUI** — `~/Library/Logs/com.donutbrowser/DonutBrowser.log` on macOS (newest = active session; older `DonutBrowser_<date>.log` are rotated). The GUI / Tauri / `browser_runner` / `proxy_manager` / `sync` all log here. Search for `Camoufox`, `Wayfern`, `Starting local proxy`, `Configured local proxy` to find a launch chain. Dev builds write to `DonutBrowserDev.log` instead.
+- **donut-proxy worker** — `$TMPDIR/donut-proxy-<config_id>.log`. One file per proxy worker process (each profile launch spawns a fresh one). Map a worker to its launch via the `Cleanup: browser PID X is dead, stopping proxy worker <id>` lines in DonutBrowser.log, or by mtime. CONNECT requests, upstream accept/reject (status lines like `HTTP/1.1 402 user reached limit`), and tunnel errors are at INFO/WARN — anything finer is at TRACE and requires `RUST_LOG=donut_proxy=trace`. The `Upstream CONNECT response coalesced N byte(s) of payload — these would be dropped without forwarding` warning marks a real bug in `handle_connect_from_buffer` if it ever fires.
+- **Camoufox stderr** — `$TMPDIR/camoufox-stderr-<profile_id>.log`, written by `camoufox_manager::launch_camoufox`. Captures NSS / GPU Helper / juggler errors. Firefox does **not** print TLS/network errors here by default — set `MOZ_LOG=nsHttp:5,signaling:5` on the env if you need that. The `RustSearch.sys.mjs missing field 'recordType'` lines are noise from our `search.json.mozlz4` schema being slightly off for FF150+; not a network problem.
+
+Linux/Windows swap `~/Library/Logs/com.donutbrowser/` for the platform-appropriate location (see `app_dirs::app_name()`), but the `$TMPDIR` worker logs are always under the system temp dir.
+
 ## Code Quality
 
 - Don't leave comments that don't add value
@@ -205,6 +215,57 @@ docker run --rm -v "$(pwd):/work" -w /work --env-file .env -e GH_TOKEN="$(gh aut
 The `.github/workflows/publish-repos.yml` workflow runs automatically after stable releases and can also be triggered manually via `gh workflow run publish-repos.yml -f tag=v0.18.1`.
 
 Required env vars / secrets: `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ENDPOINT_URL`, `R2_BUCKET_NAME`.
+
+## Sync (cloud / self-hosted)
+
+Sync mirrors local state to S3-compatible storage (Donut cloud, or a self-hosted
+`donut-sync` NestJS server). Two distinct mechanisms live in `src-tauri/src/sync/`:
+
+- **Profile browser files** (the Chromium/Firefox profile directory): a
+  **content-hash manifest** (`manifest.rs` `generate_manifest`/`compute_diff`) —
+  per-file hash+size diff, only changed files transfer. `sync_profile` in
+  `engine.rs`.
+- **Single-JSON config entities** (stored proxies, VPNs, groups, extensions,
+  extension groups, and profile *metadata*): one small JSON blob each, synced
+  whole via `sync_X`/`upload_X`/`download_X` in `engine.rs`.
+
+### Conflict resolution — one rule everywhere: `updated_at` last-write-wins
+
+Every config entity carries `updated_at: Option<u64>` (unix seconds;
+`extension_manager` uses a non-Optional `u64`). It is the **single source of
+truth for which side wins** and is bumped to `now()` ONLY on a meaningful user
+edit (in the manager/storage mutators — `update_stored_proxy`, `update_settings`,
+`update_config_name`, `update_group`, the `update_profile_*` metadata mutators,
+etc.), NEVER by sync bookkeeping. Use `crate::proxy_manager::now_secs()`.
+
+`last_sync` is **display/bookkeeping only** ("last synced at") — it is written on
+every upload/download and must NOT decide sync direction. (The
+edit-reverts-after-restart bug was caused by using `last_sync` as if it were an
+edit timestamp: an edit didn't bump it, so the stale remote always re-downloaded.)
+
+Reconcile (`engine.rs::remote_updated_at` + each `sync_X`):
+1. `stat` (HEAD) the remote object. Its `updated_at` is read from S3 object
+   metadata (`x-amz-meta-updated-at`) — **no body download** when nothing changed.
+2. Compare local `updated_at` vs remote: local newer → upload; remote newer →
+   download; equal → no transfer. Legacy objects with no timestamp resolve to 0,
+   so any real edit wins.
+3. **Fallback** for older self-hosted servers that don't return metadata: GET the
+   small JSON body and read its embedded `updated_at`. Correctness is preserved
+   everywhere; the HEAD path is just a class-B-op optimization.
+
+Uploads go through `engine.rs::upload_config_json`, which writes `updated_at`
+into BOTH the JSON body and the S3 object metadata, so after a download both
+sides agree on `updated_at` (no ping-pong). Adding a new synced config field?
+Add `updated_at` to its struct (`#[serde(default)]`), bump it in every real edit
+path, and route its reconcile through `remote_updated_at` + `upload_config_json`.
+
+### Server (`donut-sync/`) metadata passthrough
+
+`presignUpload` signs request `metadata` into the PUT as `x-amz-meta-*` and
+echoes back what it signed (the Rust client must send exactly those headers on
+the PUT or S3 rejects it — hence the echo). `stat` returns `response.Metadata`.
+Older servers omit `metadata` → client falls back to the body-GET path. DTOs:
+`donut-sync/src/sync/dto/sync.dto.ts`; logic: `sync.service.ts`.
 
 ## Proprietary Changes
 

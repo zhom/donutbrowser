@@ -1,6 +1,5 @@
 use crate::browser::ProxySettings;
 use crate::camoufox_manager::CamoufoxConfig;
-use crate::daemon_ws::{ws_handler, WsState};
 use crate::events;
 use crate::group_manager::GROUP_MANAGER;
 use crate::profile::manager::ProfileManager;
@@ -412,16 +411,9 @@ impl ApiServer {
       ))
       .layer(middleware::from_fn(terms_check_middleware));
 
-    // Create WebSocket route with its own state (no auth required for daemon IPC)
-    let ws_state = WsState::new();
-    let ws_routes = Router::new()
-      .route("/events", get(ws_handler))
-      .with_state(ws_state);
-
     let api_for_v1 = api.clone();
     let app = Router::new()
       .merge(v1_routes)
-      .nest("/ws", ws_routes)
       .route("/openapi.json", get(move || async move { Json(api) }))
       .route(
         "/v1/openapi.json",
@@ -594,6 +586,24 @@ pub async fn get_api_server_status() -> Result<Option<u16>, String> {
   Ok(server_guard.get_port())
 }
 
+/// Serialize a browser config (camoufox/wayfern) to JSON for an API response,
+/// dropping the `fingerprint` field unless the user has an active paid plan.
+/// Viewing fingerprints is a paid feature, so free users (and unauthenticated
+/// API/MCP callers) must never receive it. `is_paid` is resolved once per
+/// handler via `has_active_paid_subscription()`.
+fn config_to_api_value<T: serde::Serialize>(
+  config: Option<&T>,
+  is_paid: bool,
+) -> Option<serde_json::Value> {
+  let mut value = serde_json::to_value(config?).ok()?;
+  if !is_paid {
+    if let Some(obj) = value.as_object_mut() {
+      obj.remove("fingerprint");
+    }
+  }
+  Some(value)
+}
+
 // API Handlers - Profiles
 #[utoipa::path(
   get,
@@ -610,6 +620,9 @@ pub async fn get_api_server_status() -> Result<Option<u16>, String> {
 )]
 async fn get_profiles() -> Result<Json<ApiProfilesResponse>, StatusCode> {
   let profile_manager = ProfileManager::instance();
+  let is_paid = crate::cloud_auth::CLOUD_AUTH
+    .has_active_paid_subscription()
+    .await;
   match profile_manager.list_profiles() {
     Ok(profiles) => {
       let api_profiles: Vec<ApiProfile> = profiles
@@ -624,10 +637,7 @@ async fn get_profiles() -> Result<Json<ApiProfilesResponse>, StatusCode> {
           process_id: profile.process_id,
           last_launch: profile.last_launch,
           release_type: profile.release_type.clone(),
-          camoufox_config: profile
-            .camoufox_config
-            .as_ref()
-            .and_then(|c| serde_json::to_value(c).ok()),
+          camoufox_config: config_to_api_value(profile.camoufox_config.as_ref(), is_paid),
           group_id: profile.group_id.clone(),
           tags: profile.tags.clone(),
           is_running: profile.process_id.is_some(), // Simple check based on process_id
@@ -667,6 +677,9 @@ async fn get_profile(
   State(_state): State<ApiServerState>,
 ) -> Result<Json<ApiProfileResponse>, StatusCode> {
   let profile_manager = ProfileManager::instance();
+  let is_paid = crate::cloud_auth::CLOUD_AUTH
+    .has_active_paid_subscription()
+    .await;
   match profile_manager.list_profiles() {
     Ok(profiles) => {
       if let Some(profile) = profiles.iter().find(|p| p.id.to_string() == id) {
@@ -681,10 +694,7 @@ async fn get_profile(
             process_id: profile.process_id,
             last_launch: profile.last_launch,
             release_type: profile.release_type.clone(),
-            camoufox_config: profile
-              .camoufox_config
-              .as_ref()
-              .and_then(|c| serde_json::to_value(c).ok()),
+            camoufox_config: config_to_api_value(profile.camoufox_config.as_ref(), is_paid),
             group_id: profile.group_id.clone(),
             tags: profile.tags.clone(),
             is_running: profile.process_id.is_some(), // Simple check based on process_id
@@ -720,6 +730,9 @@ async fn create_profile(
   Json(request): Json<CreateProfileRequest>,
 ) -> Result<Json<ApiProfileResponse>, StatusCode> {
   let profile_manager = ProfileManager::instance();
+  let is_paid = crate::cloud_auth::CLOUD_AUTH
+    .has_active_paid_subscription()
+    .await;
 
   // Parse camoufox config if provided
   let camoufox_config = if let Some(config) = &request.camoufox_config {
@@ -734,6 +747,18 @@ async fn create_profile(
   } else {
     None
   };
+
+  // Reject a dead/unreachable proxy or VPN before creating the profile. A 402
+  // (expired proxy subscription) maps to 402; anything else is a 400.
+  if let Err(err) =
+    crate::validate_profile_network(request.proxy_id.as_deref(), request.vpn_id.as_deref()).await
+  {
+    return Err(if err.contains("PROXY_PAYMENT_REQUIRED") {
+      StatusCode::PAYMENT_REQUIRED
+    } else {
+      StatusCode::BAD_REQUEST
+    });
+  }
 
   // Create profile using the async create_profile_with_group method
   match profile_manager
@@ -784,10 +809,7 @@ async fn create_profile(
           process_id: profile.process_id,
           last_launch: profile.last_launch,
           release_type: profile.release_type,
-          camoufox_config: profile
-            .camoufox_config
-            .as_ref()
-            .and_then(|c| serde_json::to_value(c).ok()),
+          camoufox_config: config_to_api_value(profile.camoufox_config.as_ref(), is_paid),
           group_id: profile.group_id,
           tags: profile.tags,
           is_running: false,
@@ -1750,13 +1772,15 @@ async fn run_profile(
     port
   };
 
-  // Use the same launch method as the main app, but with remote debugging enabled
-  match crate::browser_runner::launch_browser_profile_with_debugging(
+  // Use the same launch path as the main app, but force a fresh instance with
+  // remote debugging enabled so the returned port is the one the browser binds.
+  match crate::browser_runner::launch_browser_profile_impl(
     state.app_handle.clone(),
     profile.clone(),
     url,
     Some(remote_debugging_port),
     headless,
+    true,
   )
   .await
   {

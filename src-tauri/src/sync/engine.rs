@@ -15,6 +15,11 @@ use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Instant;
 use tokio::sync::{Mutex as TokioMutex, Semaphore};
 
+/// S3 object-metadata key (stored as `x-amz-meta-updated-at`) holding an
+/// entity's user-edit timestamp in unix seconds. Used to resolve sync conflicts
+/// (last-write-wins) from a HEAD request without downloading the object body.
+const UPDATED_AT_META_KEY: &str = "updated-at";
+
 lazy_static::lazy_static! {
   static ref SYNC_CANCEL_FLAGS: StdMutex<HashMap<String, Arc<AtomicBool>>> =
     StdMutex::new(HashMap::new());
@@ -356,6 +361,67 @@ impl SyncEngine {
   /// Check if this is a self-hosted sync (no cloud login).
   async fn is_self_hosted_sync() -> bool {
     !crate::cloud_auth::CLOUD_AUTH.is_logged_in().await
+  }
+
+  /// Resolve a remote config object's user-edit timestamp (`updated_at`) for
+  /// conflict resolution. Prefers the value from S3 object metadata returned by
+  /// the HEAD (`stat`) — no body transfer. Falls back to downloading and
+  /// decrypting the small JSON body and reading its embedded `updated_at` (for
+  /// older self-hosted servers that don't surface metadata). Legacy objects with
+  /// neither resolve to 0, so any real local edit (`updated_at` > 0) wins.
+  async fn remote_updated_at(&self, stat: &StatResponse, remote_key: &str) -> u64 {
+    if let Some(meta) = &stat.metadata {
+      if let Some(v) = meta
+        .get(UPDATED_AT_META_KEY)
+        .and_then(|s| s.parse::<u64>().ok())
+      {
+        return v;
+      }
+    }
+    // Fallback: read updated_at from the (small) JSON body.
+    if let Ok(presign) = self.client.presign_download(remote_key).await {
+      if let Ok(raw) = self.client.download_bytes(&presign.url).await {
+        if let Ok(data) = encryption::maybe_unseal_after_download(&raw) {
+          if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&data) {
+            if let Some(u) = val.get("updated_at").and_then(|x| x.as_u64()) {
+              return u;
+            }
+          }
+        }
+      }
+    }
+    0
+  }
+
+  /// Upload a small config JSON blob (proxy/vpn/group/extension/extension-group/
+  /// profile metadata), signing its `updated_at` into S3 object metadata so
+  /// future reconciles can compare via HEAD without downloading the body. The
+  /// body is sealed (E2E) exactly as before; only a plaintext unix timestamp
+  /// lives in the object metadata.
+  async fn upload_config_json(
+    &self,
+    remote_key: &str,
+    json: &str,
+    updated_at: u64,
+  ) -> SyncResult<()> {
+    let (payload, content_type) = encryption::maybe_seal_for_upload(json.as_bytes())
+      .map_err(|e| SyncError::InvalidData(format!("Failed to seal config: {e}")))?;
+    let mut meta = HashMap::new();
+    meta.insert(UPDATED_AT_META_KEY.to_string(), updated_at.to_string());
+    let presign = self
+      .client
+      .presign_upload_with_metadata(remote_key, Some(content_type), Some(meta))
+      .await?;
+    self
+      .client
+      .upload_bytes_with_metadata(
+        &presign.url,
+        &payload,
+        Some(content_type),
+        presign.metadata.as_ref(),
+      )
+      .await?;
+    Ok(())
   }
 
   pub async fn sync_profile(
@@ -1431,21 +1497,13 @@ impl SyncEngine {
 
     match (local_proxy, stat.exists) {
       (Some(proxy), true) => {
-        // Both exist - compare timestamps
-        let local_updated = proxy.last_sync.unwrap_or(0);
-        let remote_updated: DateTime<Utc> = stat
-          .last_modified
-          .as_ref()
-          .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
-          .map(|dt| dt.with_timezone(&Utc))
-          .unwrap_or_else(Utc::now);
-        let remote_ts = remote_updated.timestamp() as u64;
+        // Both exist - resolve by user-edit timestamp (last-write-wins).
+        let local_updated = proxy.updated_at.unwrap_or(0);
+        let remote_updated = self.remote_updated_at(&stat, &remote_key).await;
 
-        if remote_ts > local_updated {
-          // Remote is newer - download
+        if remote_updated > local_updated {
           self.download_proxy(proxy_id, app_handle).await?;
-        } else if local_updated > remote_ts {
-          // Local is newer - upload
+        } else if local_updated > remote_updated {
           self.upload_proxy(&proxy).await?;
         }
       }
@@ -1478,17 +1536,9 @@ impl SyncEngine {
     let json = serde_json::to_string_pretty(&updated_proxy)
       .map_err(|e| SyncError::SerializationError(format!("Failed to serialize proxy: {e}")))?;
 
-    let (payload, content_type) = encryption::maybe_seal_for_upload(json.as_bytes())
-      .map_err(|e| SyncError::InvalidData(format!("Failed to seal proxy: {e}")))?;
-
     let remote_key = format!("proxies/{}.json", proxy.id);
-    let presign = self
-      .client
-      .presign_upload(&remote_key, Some(content_type))
-      .await?;
     self
-      .client
-      .upload_bytes(&presign.url, &payload, Some(content_type))
+      .upload_config_json(&remote_key, &json, updated_proxy.updated_at.unwrap_or(0))
       .await?;
 
     // Update local proxy with new last_sync (always write plaintext locally)
@@ -1579,21 +1629,13 @@ impl SyncEngine {
 
     match (local_group, stat.exists) {
       (Some(group), true) => {
-        // Both exist - compare timestamps
-        let local_updated = group.last_sync.unwrap_or(0);
-        let remote_updated: DateTime<Utc> = stat
-          .last_modified
-          .as_ref()
-          .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
-          .map(|dt| dt.with_timezone(&Utc))
-          .unwrap_or_else(Utc::now);
-        let remote_ts = remote_updated.timestamp() as u64;
+        // Both exist - resolve by user-edit timestamp (last-write-wins).
+        let local_updated = group.updated_at.unwrap_or(0);
+        let remote_updated = self.remote_updated_at(&stat, &remote_key).await;
 
-        if remote_ts > local_updated {
-          // Remote is newer - download
+        if remote_updated > local_updated {
           self.download_group(group_id, app_handle).await?;
-        } else if local_updated > remote_ts {
-          // Local is newer - upload
+        } else if local_updated > remote_updated {
           self.upload_group(&group).await?;
         }
       }
@@ -1626,17 +1668,9 @@ impl SyncEngine {
     let json = serde_json::to_string_pretty(&updated_group)
       .map_err(|e| SyncError::SerializationError(format!("Failed to serialize group: {e}")))?;
 
-    let (payload, content_type) = encryption::maybe_seal_for_upload(json.as_bytes())
-      .map_err(|e| SyncError::InvalidData(format!("Failed to seal group: {e}")))?;
-
     let remote_key = format!("groups/{}.json", group.id);
-    let presign = self
-      .client
-      .presign_upload(&remote_key, Some(content_type))
-      .await?;
     self
-      .client
-      .upload_bytes(&presign.url, &payload, Some(content_type))
+      .upload_config_json(&remote_key, &json, updated_group.updated_at.unwrap_or(0))
       .await?;
 
     // Update local group with new last_sync
@@ -1795,18 +1829,13 @@ impl SyncEngine {
 
     match (local_vpn, stat.exists) {
       (Some(vpn), true) => {
-        let local_updated = vpn.last_sync.unwrap_or(0);
-        let remote_updated: DateTime<Utc> = stat
-          .last_modified
-          .as_ref()
-          .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
-          .map(|dt| dt.with_timezone(&Utc))
-          .unwrap_or_else(Utc::now);
-        let remote_ts = remote_updated.timestamp() as u64;
+        // Both exist - resolve by user-edit timestamp (last-write-wins).
+        let local_updated = vpn.updated_at.unwrap_or(0);
+        let remote_updated = self.remote_updated_at(&stat, &remote_key).await;
 
-        if remote_ts > local_updated {
+        if remote_updated > local_updated {
           self.download_vpn(vpn_id, app_handle).await?;
-        } else if local_updated > remote_ts {
+        } else if local_updated > remote_updated {
           self.upload_vpn(&vpn).await?;
         }
       }
@@ -1836,17 +1865,9 @@ impl SyncEngine {
     let json = serde_json::to_string_pretty(&updated_vpn)
       .map_err(|e| SyncError::SerializationError(format!("Failed to serialize VPN: {e}")))?;
 
-    let (payload, content_type) = encryption::maybe_seal_for_upload(json.as_bytes())
-      .map_err(|e| SyncError::InvalidData(format!("Failed to seal VPN: {e}")))?;
-
     let remote_key = format!("vpns/{}.json", vpn.id);
-    let presign = self
-      .client
-      .presign_upload(&remote_key, Some(content_type))
-      .await?;
     self
-      .client
-      .upload_bytes(&presign.url, &payload, Some(content_type))
+      .upload_config_json(&remote_key, &json, updated_vpn.updated_at.unwrap_or(0))
       .await?;
 
     // Update local VPN with new last_sync
@@ -1946,18 +1967,13 @@ impl SyncEngine {
 
     match (local_ext, stat.exists) {
       (Some(ext), true) => {
-        let local_updated = ext.last_sync.unwrap_or(0);
-        let remote_updated: DateTime<Utc> = stat
-          .last_modified
-          .as_ref()
-          .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
-          .map(|dt| dt.with_timezone(&Utc))
-          .unwrap_or_else(Utc::now);
-        let remote_ts = remote_updated.timestamp() as u64;
+        // Both exist - resolve by user-edit timestamp (last-write-wins).
+        let local_updated = ext.updated_at;
+        let remote_updated = self.remote_updated_at(&stat, &remote_key).await;
 
-        if remote_ts > local_updated {
+        if remote_updated > local_updated {
           self.download_extension(ext_id, app_handle).await?;
-        } else if local_updated > remote_ts {
+        } else if local_updated > remote_updated {
           self.upload_extension(&ext).await?;
         }
       }
@@ -1987,17 +2003,9 @@ impl SyncEngine {
     let json = serde_json::to_string_pretty(&updated_ext)
       .map_err(|e| SyncError::SerializationError(format!("Failed to serialize extension: {e}")))?;
 
-    let (meta_payload, meta_content_type) = encryption::maybe_seal_for_upload(json.as_bytes())
-      .map_err(|e| SyncError::InvalidData(format!("Failed to seal extension: {e}")))?;
-
     let remote_key = format!("extensions/{}.json", ext.id);
-    let presign = self
-      .client
-      .presign_upload(&remote_key, Some(meta_content_type))
-      .await?;
     self
-      .client
-      .upload_bytes(&presign.url, &meta_payload, Some(meta_content_type))
+      .upload_config_json(&remote_key, &json, updated_ext.updated_at)
       .await?;
 
     // Also upload the extension file data — encrypted as a sealed envelope
@@ -2151,18 +2159,13 @@ impl SyncEngine {
 
     match (local_group, stat.exists) {
       (Some(group), true) => {
-        let local_updated = group.last_sync.unwrap_or(0);
-        let remote_updated: DateTime<Utc> = stat
-          .last_modified
-          .as_ref()
-          .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
-          .map(|dt| dt.with_timezone(&Utc))
-          .unwrap_or_else(Utc::now);
-        let remote_ts = remote_updated.timestamp() as u64;
+        // Both exist - resolve by user-edit timestamp (last-write-wins).
+        let local_updated = group.updated_at;
+        let remote_updated = self.remote_updated_at(&stat, &remote_key).await;
 
-        if remote_ts > local_updated {
+        if remote_updated > local_updated {
           self.download_extension_group(group_id, app_handle).await?;
-        } else if local_updated > remote_ts {
+        } else if local_updated > remote_updated {
           self.upload_extension_group(&group).await?;
         }
       }
@@ -2196,17 +2199,9 @@ impl SyncEngine {
       SyncError::SerializationError(format!("Failed to serialize extension group: {e}"))
     })?;
 
-    let (payload, content_type) = encryption::maybe_seal_for_upload(json.as_bytes())
-      .map_err(|e| SyncError::InvalidData(format!("Failed to seal extension group: {e}")))?;
-
     let remote_key = format!("extension_groups/{}.json", group.id);
-    let presign = self
-      .client
-      .presign_upload(&remote_key, Some(content_type))
-      .await?;
     self
-      .client
-      .upload_bytes(&presign.url, &payload, Some(content_type))
+      .upload_config_json(&remote_key, &json, updated_group.updated_at)
       .await?;
 
     // Update local group with new last_sync

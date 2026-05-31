@@ -52,11 +52,6 @@ mod wayfern_terms;
 pub mod cloud_auth;
 mod commercial_license;
 mod cookie_manager;
-pub mod daemon;
-pub mod daemon_client;
-#[allow(dead_code)]
-mod daemon_spawn;
-pub mod daemon_ws;
 pub mod events;
 mod mcp_integrations;
 mod mcp_server;
@@ -98,10 +93,10 @@ use downloaded_browsers_registry::{
 use downloader::{cancel_download, download_browser};
 
 use settings_manager::{
-  decline_launch_on_login, dismiss_window_resize_warning, enable_launch_on_login, get_app_settings,
+  complete_onboarding, dismiss_window_resize_warning, get_app_settings, get_onboarding_completed,
   get_sync_settings, get_system_info, get_system_language, get_table_sorting_settings,
   get_window_resize_warning_dismissed, open_log_directory, read_log_files, save_app_settings,
-  save_sync_settings, save_table_sorting_settings, should_show_launch_on_login_prompt,
+  save_sync_settings, save_table_sorting_settings,
 };
 
 use sync::{
@@ -196,7 +191,8 @@ impl<R: Runtime> WindowExt for WebviewWindow<R> {
   }
 }
 
-#[tauri::command]
+// Called internally for deep-link / startup URL handling — not invoked from the
+// frontend, so it is intentionally not a `#[tauri::command]`.
 async fn handle_url_open(app: tauri::AppHandle, url: String) -> Result<(), String> {
   log::info!("handle_url_open called with URL: {url}");
 
@@ -934,14 +930,20 @@ async fn update_vpn_config(vpn_id: String, name: String) -> Result<vpn::VpnConfi
 async fn check_vpn_validity(
   vpn_id: String,
 ) -> Result<crate::proxy_manager::ProxyCheckResult, String> {
+  check_vpn_validity_core(&vpn_id).await
+}
+
+pub async fn check_vpn_validity_core(
+  vpn_id: &str,
+) -> Result<crate::proxy_manager::ProxyCheckResult, String> {
   let now = std::time::SystemTime::now()
     .duration_since(std::time::UNIX_EPOCH)
     .unwrap_or_default()
     .as_secs();
 
-  let had_existing_worker = vpn_worker_storage::find_vpn_worker_by_vpn_id(&vpn_id).is_some();
+  let had_existing_worker = vpn_worker_storage::find_vpn_worker_by_vpn_id(vpn_id).is_some();
 
-  let vpn_worker = vpn_worker_runner::start_vpn_worker(&vpn_id)
+  let vpn_worker = vpn_worker_runner::start_vpn_worker(vpn_id)
     .await
     .map_err(|e| format!("Failed to start VPN worker: {e}"))?;
 
@@ -1016,6 +1018,53 @@ async fn check_vpn_validity(
   });
 
   Ok(result)
+}
+
+/// Validate that a profile's selected proxy or VPN actually works before the
+/// profile is created. Shared by the Tauri command, REST API, and MCP create
+/// paths so a dead/unreachable proxy or VPN (or a 402 from an expired proxy
+/// subscription) fails creation identically everywhere. Returns structured
+/// `{ "code": ... }` error strings the frontend translates via backend-errors.ts.
+pub async fn validate_profile_network(
+  proxy_id: Option<&str>,
+  vpn_id: Option<&str>,
+) -> Result<(), String> {
+  if let Some(vpn_id) = vpn_id.filter(|s| !s.is_empty()) {
+    let result = check_vpn_validity_core(vpn_id).await?;
+    if !result.is_valid {
+      return Err(serde_json::json!({ "code": "VPN_NOT_WORKING" }).to_string());
+    }
+    return Ok(());
+  }
+
+  if let Some(proxy_id) = proxy_id.filter(|s| !s.is_empty()) {
+    // The cloud-included proxy is managed infrastructure; its only failure mode
+    // is the user hitting their usage limit, which surfaces as a 402 at request
+    // time. There's nothing to pre-validate here.
+    if proxy_id == crate::proxy_manager::CLOUD_PROXY_ID {
+      return Ok(());
+    }
+    let settings = crate::proxy_manager::PROXY_MANAGER
+      .get_proxy_settings_by_id(proxy_id)
+      .ok_or_else(|| format!("Proxy '{proxy_id}' not found"))?;
+    match crate::proxy_manager::PROXY_MANAGER
+      .check_proxy_validity(proxy_id, &settings)
+      .await
+    {
+      Ok(result) if result.is_valid => {}
+      Ok(_) => {
+        return Err(serde_json::json!({ "code": "PROXY_NOT_WORKING" }).to_string());
+      }
+      Err(err) if err.contains("402") => {
+        return Err(serde_json::json!({ "code": "PROXY_PAYMENT_REQUIRED" }).to_string());
+      }
+      Err(_) => {
+        return Err(serde_json::json!({ "code": "PROXY_NOT_WORKING" }).to_string());
+      }
+    }
+  }
+
+  Ok(())
 }
 
 #[tauri::command]
@@ -1126,6 +1175,7 @@ async fn generate_sample_fingerprint(
     dns_blocklist: None,
     password_protected: false,
     created_at: None,
+    updated_at: None,
   };
 
   if browser == "camoufox" {
@@ -1175,6 +1225,96 @@ fn show_main_window(app_handle: &tauri::AppHandle) {
   }
 }
 
+/// Update the tray menu labels with localized strings pushed from the frontend
+/// (which owns the active language). The item ids are unchanged so the existing
+/// menu-event handler keeps matching.
+#[tauri::command]
+fn update_tray_menu(
+  app_handle: tauri::AppHandle,
+  show_label: String,
+  quit_label: String,
+) -> Result<(), String> {
+  use tauri::menu::{MenuBuilder, MenuItemBuilder};
+  if let Some(tray) = app_handle.tray_by_id("main") {
+    let show_item = MenuItemBuilder::with_id("tray_show", show_label)
+      .build(&app_handle)
+      .map_err(|e| e.to_string())?;
+    let quit_item = MenuItemBuilder::with_id("tray_quit", quit_label)
+      .build(&app_handle)
+      .map_err(|e| e.to_string())?;
+    let menu = MenuBuilder::new(&app_handle)
+      .item(&show_item)
+      .separator()
+      .item(&quit_item)
+      .build()
+      .map_err(|e| e.to_string())?;
+    tray.set_menu(Some(menu)).map_err(|e| e.to_string())?;
+  }
+  Ok(())
+}
+
+/// Build the system tray. Best-effort: on Linux the tray depends on
+/// libayatana-appindicator at runtime, so any failure here must not abort app
+/// startup — the caller logs and continues without a tray.
+fn setup_system_tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+  use std::sync::atomic::Ordering;
+  use tauri::menu::{MenuBuilder, MenuItemBuilder};
+  use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+  // Bootstrap labels only — the frontend pushes localized labels via
+  // `update_tray_menu` on mount and on language change, and the menu is only
+  // opened after a minimize-to-tray (post-mount), so these are never shown.
+  let show_item = MenuItemBuilder::with_id("tray_show", "Show Donut Browser").build(app)?;
+  let quit_item = MenuItemBuilder::with_id("tray_quit", "Quit").build(app)?;
+  let tray_menu = MenuBuilder::new(app)
+    .item(&show_item)
+    .separator()
+    .item(&quit_item)
+    .build()?;
+
+  // macOS uses a black template icon (the OS tints it for light/dark menu
+  // bars). Windows and Linux use the full-color icon, because neither tints a
+  // template — a black template would be invisible on dark Linux panels.
+  #[cfg(target_os = "macos")]
+  let tray_icon_bytes: &[u8] = include_bytes!("../icons/tray-icon-44.png");
+  #[cfg(not(target_os = "macos"))]
+  let tray_icon_bytes: &[u8] = include_bytes!("../icons/tray-icon-win-44.png");
+  let tray_rgba = image::load_from_memory(tray_icon_bytes)?.into_rgba8();
+  let (tray_w, tray_h) = tray_rgba.dimensions();
+  let tray_image = tauri::image::Image::new_owned(tray_rgba.into_raw(), tray_w, tray_h);
+
+  TrayIconBuilder::with_id("main")
+    .icon(tray_image)
+    .icon_as_template(cfg!(target_os = "macos"))
+    .tooltip("Donut Browser")
+    .menu(&tray_menu)
+    .show_menu_on_left_click(false)
+    .on_menu_event(|app_handle, event| match event.id().as_ref() {
+      "tray_show" => show_main_window(app_handle),
+      "tray_quit" => {
+        QUIT_CONFIRMED.store(true, Ordering::SeqCst);
+        app_handle.exit(0);
+      }
+      _ => {}
+    })
+    .on_tray_icon_event(|tray, event| {
+      // Click events are not delivered on Linux (AppIndicator/SNI only drives
+      // the menu), so left-click-to-restore is macOS/Windows only — Linux users
+      // restore via the "Show Donut Browser" menu item.
+      if let TrayIconEvent::Click {
+        button: MouseButton::Left,
+        button_state: MouseButtonState::Up,
+        ..
+      } = event
+      {
+        show_main_window(tray.app_handle());
+      }
+    })
+    .build(app)?;
+
+  Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   let args: Vec<String> = env::args().collect();
@@ -1188,15 +1328,25 @@ pub fn run() {
 
   let log_file_name = app_dirs::app_name();
 
+  // Honor DONUTBROWSER_DATA_ROOT: when set, logs go to <root>/logs instead of
+  // the platform default app log dir, so all on-disk state lives under one root.
+  let file_log_target = match app_dirs::log_dir_override() {
+    Some(path) => Target::new(TargetKind::Folder {
+      path,
+      file_name: Some(log_file_name.to_string()),
+    }),
+    None => Target::new(TargetKind::LogDir {
+      file_name: Some(log_file_name.to_string()),
+    }),
+  };
+
   tauri::Builder::default()
     .plugin(
       tauri_plugin_log::Builder::new()
         .clear_targets() // Clear default targets to avoid duplicates
         .target(Target::new(TargetKind::Stdout))
         .target(Target::new(TargetKind::Webview))
-        .target(Target::new(TargetKind::LogDir {
-          file_name: Some(log_file_name.to_string()),
-        }))
+        .target(file_log_target)
         // 5 MB per rotated file × KeepAll — the previous 100 KB limit
         // truncated useful context in customer support reports; 50 MB
         // turned out to be excessive disk pressure.
@@ -1248,14 +1398,6 @@ pub fn run() {
         mgr.ensure_icons_extracted();
       }
 
-      // Daemon (tray icon) is currently disabled — clean up any existing autostart
-      if daemon::autostart::is_autostart_enabled() {
-        log::info!("Removing daemon autostart (daemon is disabled)");
-        if let Err(e) = daemon::autostart::disable_autostart() {
-          log::warn!("Failed to remove daemon autostart: {e}");
-        }
-      }
-
       // Create the main window programmatically
       #[allow(unused_variables)]
       let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
@@ -1274,65 +1416,11 @@ pub fn run() {
       let window = win_builder.build().unwrap();
 
       // System tray so the user can keep the app running after the close
-      // dialog's "Minimize" action hides the window.
-      {
-        use tauri::menu::{MenuBuilder, MenuItemBuilder};
-        use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-
-        let show_item = MenuItemBuilder::with_id("tray_show", "Show Donut Browser")
-          .build(app)
-          .map_err(|e| format!("Failed to build tray show item: {e}"))?;
-        let quit_item = MenuItemBuilder::with_id("tray_quit", "Quit")
-          .build(app)
-          .map_err(|e| format!("Failed to build tray quit item: {e}"))?;
-        let tray_menu = MenuBuilder::new(app)
-          .item(&show_item)
-          .separator()
-          .item(&quit_item)
-          .build()
-          .map_err(|e| format!("Failed to build tray menu: {e}"))?;
-
-        // Tray-specific icons. macOS/Linux get a template (black + alpha)
-        // version so the OS can tint it for light/dark menu bars; Windows
-        // gets the full-color variant. Decode through the `image` crate so
-        // we hand Tauri raw RGBA — `Image::from_bytes` can fail silently on
-        // bitmaps that don't match the size Tauri expects.
-        #[cfg(target_os = "windows")]
-        let tray_icon_bytes: &[u8] = include_bytes!("../icons/tray-icon-win-44.png");
-        #[cfg(not(target_os = "windows"))]
-        let tray_icon_bytes: &[u8] = include_bytes!("../icons/tray-icon-44.png");
-        let tray_rgba = image::load_from_memory(tray_icon_bytes)
-          .map_err(|e| format!("Failed to decode tray icon: {e}"))?
-          .into_rgba8();
-        let (tray_w, tray_h) = tray_rgba.dimensions();
-        let tray_image = tauri::image::Image::new_owned(tray_rgba.into_raw(), tray_w, tray_h);
-
-        let _tray = TrayIconBuilder::with_id("main")
-          .icon(tray_image)
-          .icon_as_template(cfg!(not(target_os = "windows")))
-          .tooltip("Donut Browser")
-          .menu(&tray_menu)
-          .show_menu_on_left_click(false)
-          .on_menu_event(|app_handle, event| match event.id().as_ref() {
-            "tray_show" => show_main_window(app_handle),
-            "tray_quit" => {
-              QUIT_CONFIRMED.store(true, Ordering::SeqCst);
-              app_handle.exit(0);
-            }
-            _ => {}
-          })
-          .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click {
-              button: MouseButton::Left,
-              button_state: MouseButtonState::Up,
-              ..
-            } = event
-            {
-              show_main_window(tray.app_handle());
-            }
-          })
-          .build(app)
-          .map_err(|e| format!("Failed to build tray icon: {e}"))?;
+      // dialog's "Minimize" action hides the window. Best-effort: a tray
+      // failure (e.g. missing libayatana-appindicator on Linux) must never
+      // prevent the app from launching, so we log and continue without it.
+      if let Err(e) = setup_system_tray(app.handle()) {
+        log::warn!("System tray unavailable, continuing without it: {e}");
       }
 
       // Intercept the window close so the frontend can ask the user whether
@@ -2066,6 +2154,7 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       confirm_quit,
       hide_to_tray,
+      update_tray_menu,
       get_supported_browsers,
       is_browser_supported_on_platform,
       download_browser,
@@ -2096,15 +2185,14 @@ pub fn run() {
       save_app_settings,
       read_log_files,
       open_log_directory,
-      should_show_launch_on_login_prompt,
-      enable_launch_on_login,
-      decline_launch_on_login,
       get_table_sorting_settings,
       save_table_sorting_settings,
       get_system_language,
       get_system_info,
       dismiss_window_resize_warning,
       get_window_resize_warning_dismissed,
+      get_onboarding_completed,
+      complete_onboarding,
       clear_all_version_cache_and_refetch,
       is_default_browser,
       open_url_with_profile,
@@ -2216,7 +2304,6 @@ pub fn run() {
       disconnect_vpn,
       get_vpn_status,
       list_active_vpn_connections,
-      handle_url_open,
       // Cloud auth commands
       cloud_auth::cloud_exchange_device_code,
       cloud_auth::cloud_get_user,

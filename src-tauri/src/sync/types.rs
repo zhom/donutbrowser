@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StatRequest {
@@ -11,6 +12,11 @@ pub struct StatResponse {
   #[serde(rename = "lastModified")]
   pub last_modified: Option<String>,
   pub size: Option<u64>,
+  /// User-defined S3 object metadata (`x-amz-meta-*`), lowercased keys without
+  /// the prefix. `None` from older servers that don't return it. Used to read
+  /// `updated-at` for sync conflict resolution without downloading the body.
+  #[serde(default)]
+  pub metadata: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,6 +26,9 @@ pub struct PresignUploadRequest {
   pub content_type: Option<String>,
   #[serde(rename = "expiresIn")]
   pub expires_in: Option<u64>,
+  /// Object metadata to sign into the presigned PUT (stored as `x-amz-meta-*`).
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub metadata: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,6 +36,11 @@ pub struct PresignUploadResponse {
   pub url: String,
   #[serde(rename = "expiresAt")]
   pub expires_at: String,
+  /// The metadata the server actually signed into the URL. The client must send
+  /// exactly these as `x-amz-meta-*` headers on the PUT or S3 rejects it. `None`
+  /// from older servers → client sends no metadata headers (body-GET fallback).
+  #[serde(default)]
+  pub metadata: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
