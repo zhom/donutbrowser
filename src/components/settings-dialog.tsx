@@ -483,7 +483,8 @@ export function SettingsDialog({
                 | "zh"
                 | "ja"
                 | "ko"
-                | "ru"),
+                | "ru"
+                | "vi"),
         );
         setOriginalLanguage(selectedLanguage);
       }

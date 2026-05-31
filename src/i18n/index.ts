@@ -8,6 +8,7 @@ import ja from "./locales/ja.json";
 import ko from "./locales/ko.json";
 import pt from "./locales/pt.json";
 import ru from "./locales/ru.json";
+import vi from "./locales/vi.json";
 import zh from "./locales/zh.json";
 
 export const SUPPORTED_LANGUAGES = [
@@ -19,6 +20,7 @@ export const SUPPORTED_LANGUAGES = [
   { code: "ja", name: "Japanese", nativeName: "日本語" },
   { code: "ko", name: "Korean", nativeName: "한국어" },
   { code: "ru", name: "Russian", nativeName: "Русский" },
+  { code: "vi", name: "Vietnamese", nativeName: "Tiếng Việt" },
 ] as const;
 
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number]["code"];
@@ -36,6 +38,7 @@ export const LANGUAGE_FALLBACKS: Record<string, string[]> = {
   "es-ES": ["es", "en"],
   "fr-CA": ["fr", "en"],
   "fr-FR": ["fr", "en"],
+  "vi-VN": ["vi", "en"],
 };
 
 export function getLanguageWithFallback(systemLocale: string): string {
@@ -65,6 +68,7 @@ const resources = {
   ja: { translation: ja },
   ko: { translation: ko },
   ru: { translation: ru },
+  vi: { translation: vi },
 };
 
 i18n.use(initReactI18next).init({
