@@ -2,7 +2,7 @@ name: Issue Compliance Check
 
 on:
   issues:
-    types: [opened, edited]
+    types: [opened]
 
 permissions:
   contents: read
@@ -13,7 +13,12 @@ env:
 
 jobs:
   check-compliance:
-    if: github.repository == 'zhom/donutbrowser' && github.event.action == 'opened'
+    # Maintainers' own issues are exempt — they open quick tracking issues
+    # without the template on purpose. Everyone else is checked.
+    if: >-
+      github.repository == 'zhom/donutbrowser' &&
+      github.event.issue.author_association != 'OWNER' &&
+      github.event.issue.author_association != 'MEMBER'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -44,7 +49,7 @@ jobs:
           - A feature request gives no use case at all
           - The author left required fields empty (Operating System, Donut Browser version, Which browser is affected, Steps to reproduce on bug reports)
 
-          Do NOT flag for missing optional fields, missing screenshots, short titles, or stylistic issues. Be conservative.
+          Do NOT flag for missing optional fields, missing screenshots, short titles, or stylistic issues. Be conservative — a non-compliant verdict closes the issue, so only flag a genuine template violation.
 
           ## Output schema
           {
@@ -83,7 +88,7 @@ jobs:
           jq -r '.choices[0].message.content // empty' <<< "$RESPONSE" > /tmp/raw.txt
 
           # Strip accidental markdown fences and parse. On parse failure, fall back
-          # to a noop result so the workflow doesn't fail the issue author's run.
+          # to a compliant result so a flaky model never closes a legitimate issue.
           sed -E 's/^```(json)?$//; s/```$//' /tmp/raw.txt > /tmp/result.json
           if ! jq -e . /tmp/result.json >/dev/null 2>&1; then
             echo "::warning::Model returned non-JSON; treating as compliant"
@@ -94,6 +99,7 @@ jobs:
           cat /tmp/result.json
 
       - name: Build comment
+        id: build
         run: |
           python3 - <<'EOF'
           import json, os
@@ -103,167 +109,25 @@ jobs:
 
           parts = []
           if not compliant:
-              parts.append('<!-- issue-compliance -->')
-              parts.append("This issue doesn't fully meet our [contributing guidelines](../blob/main/CONTRIBUTING.md).")
+              parts.append("This issue was automatically closed because it doesn't follow our [issue templates](../issues/new/choose).")
               parts.append('')
-              parts.append('**What needs to be fixed:**')
+              parts.append('**What was missing:**')
               for reason in reasons:
                   parts.append(f'- {reason}')
               parts.append('')
-              parts.append('Please edit this issue to address the above within **24 hours**, or it will be automatically closed.')
-              parts.append('')
-              parts.append('If you believe this was flagged incorrectly, please let a maintainer know.')
+              parts.append('If this is a real bug or feature request, please open a new issue using the **Bug Report** or **Feature Request** template and fill in the required fields. Issues that ignore the template are not triaged.')
 
           comment = '\n'.join(parts).strip()
           open('/tmp/comment.md', 'w').write(comment)
           with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
-              fh.write(f'has_comment={"true" if comment else "false"}\n')
               fh.write(f'non_compliant={"true" if not compliant else "false"}\n')
           EOF
-        id: build
 
-      - name: Post comment
-        if: steps.build.outputs.has_comment == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-        run: |
-          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file /tmp/comment.md
-
-      - name: Apply needs:compliance label
+      - name: Comment and close non-compliant issue
         if: steps.build.outputs.non_compliant == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --add-label "needs:compliance"
-
-  recheck-compliance:
-    # When a flagged issue is edited, re-check. If now compliant: remove label,
-    # delete the previous compliance comment, and thank the author. If still
-    # non-compliant: leave label and post an updated note.
-    if: >
-      github.repository == 'zhom/donutbrowser' &&
-      github.event.action == 'edited' &&
-      contains(github.event.issue.labels.*.name, 'needs:compliance')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Gather context
-        env:
-          ISSUE_TITLE: ${{ github.event.issue.title }}
-          ISSUE_BODY: ${{ github.event.issue.body }}
-        run: |
-          printf '%s' "$ISSUE_TITLE" > /tmp/issue-title.txt
-          printf '%s' "${ISSUE_BODY:-}" > /tmp/issue-body.txt
-
-      - name: Build prompt
-        run: |
-          cat > /tmp/system.txt <<'PROMPT'
-          You are re-checking a GitHub issue that was previously flagged as not meeting template requirements. Return ONLY a single JSON object, no prose, no markdown fences.
-
-          Project: Donut Browser. There are three valid templates:
-          - Bug Report (Description + Operating System + Donut Browser version + Which browser is affected + Steps to reproduce + Error logs/screenshots fields)
-          - Feature Request (description + verification checkbox)
-          - Question (free form)
-
-          ## Flag NON-compliant ONLY when at least one of these is true
-          - The issue body is empty or contains only placeholder text from the template
-          - The issue is an obvious AI-generated wall of text with no real specifics
-          - A bug report has no reproduction information or no error description
-          - A feature request gives no use case at all
-          - The author left required fields empty (Operating System, Donut Browser version, Which browser is affected, Steps to reproduce on bug reports)
-
-          Do NOT flag for missing optional fields, missing screenshots, short titles, or stylistic issues. Be conservative.
-
-          ## Output schema
-          {
-            "is_compliant": true | false,
-            "non_compliance_reasons": ["short bullet", ...]
-          }
-          PROMPT
-
-      - name: Call OpenRouter
-        env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        run: |
-          PAYLOAD=$(jq -n \
-            --arg model "$MODEL" \
-            --rawfile system_prompt /tmp/system.txt \
-            --rawfile title /tmp/issue-title.txt \
-            --rawfile body /tmp/issue-body.txt \
-            '{
-              model: $model,
-              messages: [
-                { role: "system", content: $system_prompt },
-                { role: "user", content: ("Title: " + $title + "\n\nBody:\n" + $body) }
-              ],
-              response_format: { type: "json_object" }
-            }')
-
-          RESPONSE=$(curl -fsSL https://openrouter.ai/api/v1/chat/completions \
-            -H "Authorization: Bearer $OPENROUTER_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "$PAYLOAD")
-
-          jq -r '.choices[0].message.content // empty' <<< "$RESPONSE" > /tmp/raw.txt
-          sed -E 's/^```(json)?$//; s/```$//' /tmp/raw.txt > /tmp/result.json
-          if ! jq -e . /tmp/result.json >/dev/null 2>&1; then
-            echo "::warning::Model returned non-JSON; assuming still non-compliant"
-            echo '{"is_compliant": false, "non_compliance_reasons": ["unable to parse model output"]}' > /tmp/result.json
-          fi
-
-      - name: Resolve compliance state
-        id: resolve
-        run: |
-          IS_COMPLIANT=$(jq -r '.is_compliant // false' /tmp/result.json)
-          echo "is_compliant=$IS_COMPLIANT" >> "$GITHUB_OUTPUT"
-
-      - name: Clear compliance label and acknowledge fix
-        if: steps.resolve.outputs.is_compliant == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-        run: |
-          gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label "needs:compliance" || true
-
-          # Delete the previous <!-- issue-compliance --> sentinel comment so
-          # the thread is clean once the author has addressed the issue.
-          COMMENT_ID=$(gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER/comments" \
-            --jq '[.[] | select(.body | contains("<!-- issue-compliance -->"))][-1].id // empty')
-          if [ -n "$COMMENT_ID" ]; then
-            gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID" || true
-          fi
-
-          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
-            --body "Thanks for updating the issue."
-
-      - name: Build follow-up comment
-        if: steps.resolve.outputs.is_compliant != 'true'
-        run: |
-          python3 - <<'EOF'
-          import json
-          r = json.load(open('/tmp/result.json'))
-          reasons = r.get('non_compliance_reasons') or []
-          parts = [
-            '<!-- issue-compliance -->',
-            'This issue still does not meet our [contributing guidelines](../blob/main/CONTRIBUTING.md).',
-            '',
-            '**What still needs to be fixed:**',
-          ]
-          for reason in reasons:
-              parts.append(f'- {reason}')
-          parts.append('')
-          parts.append('Please edit this issue to address the above within **24 hours**, or it will be automatically closed.')
-          open('/tmp/comment.md', 'w').write('\n'.join(parts))
-          EOF
-
-      - name: Post follow-up comment
-        if: steps.resolve.outputs.is_compliant != 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-        run: |
           gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file /tmp/comment.md
+          gh issue close "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --reason "not planned"
