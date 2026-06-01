@@ -33,7 +33,8 @@
       "minimize": "Thu nhỏ",
       "saving": "Đang lưu…",
       "saved": "Đã lưu",
-      "copied": "Đã sao chép"
+      "copied": "Đã sao chép",
+      "learnMore": "Tìm hiểu thêm"
     },
     "status": {
       "active": "Đang hoạt động",
@@ -99,6 +100,9 @@
     "srOnly": {
       "copy": "Sao chép",
       "copied": "Đã sao chép"
+    },
+    "placeholders": {
+      "example": "ví dụ: {{value}}"
     }
   },
   "settings": {
@@ -340,7 +344,8 @@
       "downloading": "Đang tải xuống {{browser}} phiên bản ({{version}})...",
       "latestNeedsDownload": "Phiên bản mới nhất ({{version}}) cần được tải xuống",
       "latestAvailable": "Phiên bản mới nhất ({{version}}) đã sẵn sàng",
-      "latestDownloading": "Đang tải xuống phiên bản ({{version}})..."
+      "latestDownloading": "Đang tải xuống phiên bản ({{version}})...",
+      "upgradeAvailable": "Đã có phiên bản mới hơn ({{version}}) của {{browser}}."
     },
     "chromiumLabel": "Chromium",
     "chromiumSubtitle": "Dựa trên Wayfern",
@@ -351,7 +356,9 @@
     "passwordProtect": {
       "label": "Bảo vệ hồ sơ bằng mật khẩu",
       "description": "Mã hóa dữ liệu hồ sơ trên ổ đĩa. Yêu cầu mật khẩu để khởi chạy."
-    }
+    },
+    "downloadingSubtitle": "Đang tải xuống…",
+    "browsersDownloading": "Trình duyệt vẫn đang được tải xuống. Việc tạo hồ sơ sẽ khả dụng khi quá trình tải hoàn tất."
   },
   "deleteDialog": {
     "title": "Xóa hồ sơ",
@@ -1188,7 +1195,9 @@
       "cannotWhileRunning": "Dừng profile trước khi thay đổi mật khẩu."
     },
     "fingerprint": {
-      "notSupported": "Chỉnh sửa vân tay chỉ khả dụng cho profile Camoufox và Wayfern."
+      "notSupported": "Chỉnh sửa vân tay chỉ khả dụng cho profile Camoufox và Wayfern.",
+      "lockedTitle": "Vân tay là tính năng Pro",
+      "lockedDescription": "Xem và chỉnh sửa vân tay của profile yêu cầu gói trả phí đang hoạt động. Nâng cấp để mở khóa bảo vệ vân tay."
     }
   },
   "extensions": {
@@ -1524,17 +1533,6 @@
     "creatingButton": "Đang tạo...",
     "createButton": "Tạo"
   },
-  "launchOnLogin": {
-    "title": "Bật khởi chạy khi đăng nhập?",
-    "description": "Chạy trong nền giúp giữ proxy và trình duyệt của bạn hoạt động.",
-    "declineButton": "Không hỏi lại",
-    "declining": "...",
-    "enableButton": "Bật",
-    "enableSuccess": "Đã bật khởi chạy khi đăng nhập",
-    "enableFailed": "Bật khởi chạy khi đăng nhập thất bại",
-    "declineFailed": "Lưu tùy chọn thất bại",
-    "tryAgain": "Vui lòng thử lại"
-  },
   "wayfernTerms": {
     "title": "Điều khoản và điều kiện Wayfern",
     "description": "Trước khi sử dụng Donut Browser, bạn phải đọc và đồng ý với Điều khoản và Điều kiện của Wayfern.",
@@ -1680,7 +1678,8 @@
       "viewRelease": "Xem phiên bản",
       "later": "Để sau",
       "uploading": "Đang tải lên",
-      "downloading": "Đang tải xuống"
+      "downloading": "Đang tải xuống",
+      "startingUpdate": "Đang bắt đầu cập nhật..."
     }
   },
   "browserDownload": {
@@ -1694,7 +1693,9 @@
       "extractionFailedDescription": "Tệp hỏng đã bị xóa. Sẽ được tải lại trong lần thử tiếp theo.",
       "extracting": "Đang giải nén tệp trình duyệt... Vui lòng không đóng ứng dụng.",
       "verifying": "Đang xác minh tệp trình duyệt...",
-      "downloadingRolling": "Đang tải bản phát hành rolling..."
+      "downloadingRolling": "Đang tải bản phát hành rolling...",
+      "geoipDownloading": "Đang tải cơ sở dữ liệu GeoIP",
+      "geoipDownloaded": "Đã tải cơ sở dữ liệu GeoIP thành công!"
     }
   },
   "versionUpdater": {
@@ -1712,7 +1713,12 @@
       "updateSuccessDescription": "Tìm thấy {{newVersions}} phiên bản mới trên {{successfulUpdates}} trình duyệt. Tự động tải xuống sẽ bắt đầu sớm.",
       "upToDate": "Không tìm thấy phiên bản trình duyệt mới",
       "upToDateDescription": "Tất cả phiên bản trình duyệt đều đã cập nhật",
-      "updateAllFailed": "Cập nhật phiên bản trình duyệt thất bại"
+      "updateAllFailed": "Cập nhật phiên bản trình duyệt thất bại",
+      "updateStarted": "Đã bắt đầu cập nhật {{browser}}",
+      "updateStartedDescription": "Quá trình tải phiên bản {{version}} sẽ sớm bắt đầu. Việc khởi chạy trình duyệt bị tắt cho đến khi cập nhật hoàn tất.",
+      "downloadStarting": "Đang bắt đầu tải {{browser}} {{version}}",
+      "downloadProgressBelow": "Tiến trình tải sẽ hiển thị bên dưới...",
+      "autoDownloadStarted": "Đang tự động tải {{browser}} {{version}}. Tiến trình sẽ hiển thị bên dưới."
     }
   },
   "profilePassword": {
@@ -1800,7 +1806,11 @@
     "invalidLaunchHookUrl": "URL hook khởi chạy không hợp lệ. Sử dụng URL http:// hoặc https:// đầy đủ.",
     "cookieDbLocked": "Không thể đọc cookie — cơ sở dữ liệu bị khóa. Đóng trình duyệt và thử lại.",
     "cookieDbUnavailable": "Không thể đọc cookie — kho cookie không khả dụng.",
-    "selfHostedRequiresLogout": "Đăng xuất khỏi tài khoản Donut trước khi cấu hình máy chủ tự lưu trữ."
+    "selfHostedRequiresLogout": "Đăng xuất khỏi tài khoản Donut trước khi cấu hình máy chủ tự lưu trữ.",
+    "fingerprintRequiresPro": "Bảo vệ vân tay yêu cầu gói trả phí đang hoạt động.",
+    "proxyNotWorking": "Proxy đã chọn không hoạt động, nên profile chưa được tạo.",
+    "proxyPaymentRequired": "Proxy đã chọn yêu cầu thanh toán (402) — gói đăng ký của nó có thể đã hết hạn — nên profile chưa được tạo.",
+    "vpnNotWorking": "VPN đã chọn không hoạt động, nên profile chưa được tạo."
   },
   "rail": {
     "profiles": "Profile",
@@ -1866,7 +1876,8 @@
       "plan": "Gói",
       "status": "Trạng thái",
       "teamRole": "Vai trò nhóm",
-      "period": "Chu kỳ thanh toán"
+      "period": "Chu kỳ thanh toán",
+      "device": "Thiết bị"
     },
     "tabs": {
       "account": "Tài khoản",
@@ -1880,7 +1891,10 @@
       "statusUnknown": "Chưa kiểm tra",
       "testConnection": "Kiểm tra kết nối",
       "disconnect": "Ngắt kết nối"
-    }
+    },
+    "deviceOrdinal": "{{ordinal}} trên {{count}}",
+    "automationPrimaryOnly": "Tự động hóa trình duyệt chỉ chạy trên thiết bị chính của bạn (Thiết bị 1). Đăng xuất ở đó để sử dụng tại đây.",
+    "automationActiveHere": "Tự động hóa trình duyệt đang hoạt động trên thiết bị này."
   },
   "shortcutsPage": {
     "title": "Phím tắt",
@@ -1918,5 +1932,90 @@
     "description": "Bạn muốn thu nhỏ ứng dụng vào khay hệ thống hay thoát?",
     "minimize": "Thu nhỏ vào khay",
     "quit": "Thoát"
+  },
+  "tray": {
+    "show": "Hiển thị Donut Browser",
+    "quit": "Thoát"
+  },
+  "browserSupport": {
+    "endingSoonTitle": "Hỗ trợ trình duyệt sắp kết thúc",
+    "endingSoonDescription": "Hỗ trợ cho các profile sau sẽ bị gỡ bỏ vào ngày 15 tháng 3 năm 2026: {{profiles}}. Vui lòng chuyển sang profile Wayfern hoặc Camoufox."
+  },
+  "onboarding": {
+    "steps": {
+      "createProfile": {
+        "title": "Tạo hồ sơ đầu tiên của bạn",
+        "content": "Nhấn vào đây để tạo hồ sơ đầu tiên của bạn. Chọn Wayfern làm trình duyệt — Chromium được khuyến nghị, có bảo vệ vân tay."
+      },
+      "dnsBlocking": {
+        "title": "Chặn DNS",
+        "content": "Dùng menu thả xuống này để đặt mức danh sách chặn DNS cho hồ sơ — nó chặn quảng cáo, trình theo dõi và phần mềm độc hại ở cấp mạng. Mức cao hơn chặn nhiều hơn."
+      }
+    },
+    "buttons": {
+      "skip": "Bỏ qua",
+      "back": "Quay lại",
+      "next": "Tiếp theo",
+      "finish": "Hoàn tất"
+    },
+    "thankYou": {
+      "title": "Cảm ơn bạn đã chọn Donut Browser",
+      "body": "Hy vọng nó giúp việc duyệt web của bạn riêng tư hơn — mỗi danh tính được giữ riêng, và không có gì rời khỏi máy của bạn. Chúc bạn duyệt web vui vẻ.",
+      "cta": "Bắt đầu duyệt web"
+    }
+  },
+  "welcome": {
+    "title": "Chào mừng đến với Donut Browser",
+    "tagline": "Trình duyệt chống phát hiện mã nguồn mở để quản lý nhiều danh tính cùng lúc.",
+    "skip": "Bỏ qua",
+    "next": "Tiếp theo",
+    "permissions": {
+      "title": "Cho phép micro & camera",
+      "desc": "Cấp quyền truy cập để các trang cần micro hoặc camera hoạt động bên trong các hồ sơ trình duyệt của bạn. macOS chỉ hỏi một lần; mỗi trang vẫn hỏi riêng bạn.",
+      "skip": "Để sau",
+      "grant": "Cho phép truy cập",
+      "requesting": "Đang yêu cầu…"
+    },
+    "ready": {
+      "title": "Đang thiết lập",
+      "descDownloading": "Đang tải trình duyệt đầu tiên của bạn (Wayfern). Quá trình thiết lập một lần này chạy ngầm — vui lòng chờ.",
+      "descReady": "Trình duyệt của bạn đã sẵn sàng. Hãy tạo hồ sơ đầu tiên của bạn.",
+      "cta": "Tạo hồ sơ đầu tiên của tôi",
+      "downloading": "Đang tải xuống…",
+      "extracting": "Đang giải nén…",
+      "stats": "{{downloaded}} trên {{total}}",
+      "speed": "{{speed}}/giây",
+      "timeLeft": "còn {{time}}",
+      "descExtracting": "Đang giải nén trình duyệt của bạn. Quá trình thiết lập một lần này chạy ngầm — vui lòng chờ.",
+      "almostFinished": "Sắp hoàn tất…",
+      "errorTitle": "Thiết lập thất bại",
+      "errorDownload": "Không thể tải {{browser}}. Kiểm tra kết nối và thử lại.",
+      "errorExtraction": "Không thể giải nén {{browser}}. Vui lòng thử lại.",
+      "errorGeneric": "Đã xảy ra lỗi khi thiết lập {{browser}}. Vui lòng thử lại.",
+      "retry": "Thử lại"
+    },
+    "features": {
+      "title": "Tính năng",
+      "items": {
+        "setDefault": "Đặt làm trình duyệt mặc định",
+        "proxy": "Hỗ trợ Proxy (HTTP/SOCKS5)",
+        "vpn": "Hỗ trợ VPN (WireGuard)",
+        "profiles": "Hồ sơ cục bộ không giới hạn",
+        "api": "API quản lý hồ sơ & MCP",
+        "openSource": "Mã nguồn mở",
+        "groups": "Nhóm hồ sơ",
+        "cookies": "Nhập & xuất cookie"
+      }
+    },
+    "license": {
+      "title": "Cấp phép",
+      "body": "Donut Browser là mã nguồn mở và miễn phí sử dụng.",
+      "agree": "Tôi hiểu",
+      "personalTitle": "Sử dụng cá nhân",
+      "personalDesc": "Miễn phí vĩnh viễn.",
+      "commercialTitle": "Sử dụng thương mại",
+      "trialBadge": "2 tuần miễn phí",
+      "commercialDesc": "Miễn phí dùng thử 2 tuần. Sau đó, gói trả phí giúp dự án được duy trì và phát triển."
+    }
   }
 }
