@@ -1,6 +1,15 @@
 # Changelog
 
 
+## v0.25.0 (2026-06-01)
+
+Note: created manually due to CI issue
+
+- Onboarding added for new users.
+- When closing the window, you can choose to minimize to tray or quit.
+- Improved feedback for macOS permission grants.
+- Cloud login now opens in your external browser.
+
 ## v0.24.4 (2026-05-26)
 
 ### Refactoring
