@@ -1,6 +1,16 @@
 # Changelog
 
 
+## v0.25.1 (2026-06-01)
+
+### Maintenance
+
+- chore: version bump
+- chore: update issue validation
+- chore: cleanup windows ci
+- chore: add missing keys
+
+
 ## v0.25.0 (2026-06-01)
 
 Note: created manually due to CI issue
