@@ -247,7 +247,12 @@ jobs:
 
           cp "src-tauri/target/${{ matrix.target }}/release/donutbrowser.exe" "$PORTABLE_DIR/Donut.exe"
           cp "src-tauri/target/${{ matrix.target }}/release/donut-proxy.exe" "$PORTABLE_DIR/"
-          cp "src-tauri/target/${{ matrix.target }}/release/donut-daemon.exe" "$PORTABLE_DIR/"
+          # The daemon is currently disabled (no Cargo bin target), so it isn't
+          # built. Copy it only if a build produced it, so the absent binary
+          # doesn't fail the job.
+          if [ -f "src-tauri/target/${{ matrix.target }}/release/donut-daemon.exe" ]; then
+            cp "src-tauri/target/${{ matrix.target }}/release/donut-daemon.exe" "$PORTABLE_DIR/"
+          fi
 
           if [ -f "src-tauri/target/${{ matrix.target }}/release/WebView2Loader.dll" ]; then
             cp "src-tauri/target/${{ matrix.target }}/release/WebView2Loader.dll" "$PORTABLE_DIR/"
