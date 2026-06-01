@@ -508,7 +508,7 @@ impl McpServer {
       },
       McpTool {
         name: "run_profile".to_string(),
-        description: "Launch a browser profile with an optional URL".to_string(),
+        description: "Launch a browser profile with an optional URL. Requires an active Pro subscription.".to_string(),
         input_schema: serde_json::json!({
           "type": "object",
           "properties": {
@@ -530,7 +530,7 @@ impl McpServer {
       },
       McpTool {
         name: "kill_profile".to_string(),
-        description: "Stop a running browser profile".to_string(),
+        description: "Stop a running browser profile. Requires an active Pro subscription.".to_string(),
         input_schema: serde_json::json!({
           "type": "object",
           "properties": {
@@ -1829,6 +1829,9 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
+    // Launching profiles programmatically is a paid feature.
+    Self::require_paid_subscription("Launching a profile").await?;
+
     let profile_id = arguments
       .get("profile_id")
       .and_then(|v| v.as_str())
@@ -1910,6 +1913,9 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
+    // Stopping profiles programmatically is a paid feature.
+    Self::require_paid_subscription("Killing a profile").await?;
+
     let profile_id = arguments
       .get("profile_id")
       .and_then(|v| v.as_str())

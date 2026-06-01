@@ -586,22 +586,12 @@ pub async fn get_api_server_status() -> Result<Option<u16>, String> {
   Ok(server_guard.get_port())
 }
 
-/// Serialize a browser config (camoufox/wayfern) to JSON for an API response,
-/// dropping the `fingerprint` field unless the user has an active paid plan.
-/// Viewing fingerprints is a paid feature, so free users (and unauthenticated
-/// API/MCP callers) must never receive it. `is_paid` is resolved once per
-/// handler via `has_active_paid_subscription()`.
-fn config_to_api_value<T: serde::Serialize>(
-  config: Option<&T>,
-  is_paid: bool,
-) -> Option<serde_json::Value> {
-  let mut value = serde_json::to_value(config?).ok()?;
-  if !is_paid {
-    if let Some(obj) = value.as_object_mut() {
-      obj.remove("fingerprint");
-    }
-  }
-  Some(value)
+/// Serialize a browser config (camoufox/wayfern) to JSON for an API response.
+/// Viewing a profile's fingerprint is available to every API caller; only
+/// editing it (via `update_profile`) and launching/killing profiles
+/// programmatically require an active paid plan.
+fn config_to_api_value<T: serde::Serialize>(config: Option<&T>) -> Option<serde_json::Value> {
+  serde_json::to_value(config?).ok()
 }
 
 // API Handlers - Profiles
@@ -620,9 +610,6 @@ fn config_to_api_value<T: serde::Serialize>(
 )]
 async fn get_profiles() -> Result<Json<ApiProfilesResponse>, StatusCode> {
   let profile_manager = ProfileManager::instance();
-  let is_paid = crate::cloud_auth::CLOUD_AUTH
-    .has_active_paid_subscription()
-    .await;
   match profile_manager.list_profiles() {
     Ok(profiles) => {
       let api_profiles: Vec<ApiProfile> = profiles
@@ -637,7 +624,7 @@ async fn get_profiles() -> Result<Json<ApiProfilesResponse>, StatusCode> {
           process_id: profile.process_id,
           last_launch: profile.last_launch,
           release_type: profile.release_type.clone(),
-          camoufox_config: config_to_api_value(profile.camoufox_config.as_ref(), is_paid),
+          camoufox_config: config_to_api_value(profile.camoufox_config.as_ref()),
           group_id: profile.group_id.clone(),
           tags: profile.tags.clone(),
           is_running: profile.process_id.is_some(), // Simple check based on process_id
@@ -677,9 +664,6 @@ async fn get_profile(
   State(_state): State<ApiServerState>,
 ) -> Result<Json<ApiProfileResponse>, StatusCode> {
   let profile_manager = ProfileManager::instance();
-  let is_paid = crate::cloud_auth::CLOUD_AUTH
-    .has_active_paid_subscription()
-    .await;
   match profile_manager.list_profiles() {
     Ok(profiles) => {
       if let Some(profile) = profiles.iter().find(|p| p.id.to_string() == id) {
@@ -694,7 +678,7 @@ async fn get_profile(
             process_id: profile.process_id,
             last_launch: profile.last_launch,
             release_type: profile.release_type.clone(),
-            camoufox_config: config_to_api_value(profile.camoufox_config.as_ref(), is_paid),
+            camoufox_config: config_to_api_value(profile.camoufox_config.as_ref()),
             group_id: profile.group_id.clone(),
             tags: profile.tags.clone(),
             is_running: profile.process_id.is_some(), // Simple check based on process_id
@@ -730,9 +714,6 @@ async fn create_profile(
   Json(request): Json<CreateProfileRequest>,
 ) -> Result<Json<ApiProfileResponse>, StatusCode> {
   let profile_manager = ProfileManager::instance();
-  let is_paid = crate::cloud_auth::CLOUD_AUTH
-    .has_active_paid_subscription()
-    .await;
 
   // Parse camoufox config if provided
   let camoufox_config = if let Some(config) = &request.camoufox_config {
@@ -809,7 +790,7 @@ async fn create_profile(
           process_id: profile.process_id,
           last_launch: profile.last_launch,
           release_type: profile.release_type,
-          camoufox_config: config_to_api_value(profile.camoufox_config.as_ref(), is_paid),
+          camoufox_config: config_to_api_value(profile.camoufox_config.as_ref()),
           group_id: profile.group_id,
           tags: profile.tags,
           is_running: false,
@@ -914,6 +895,14 @@ async fn update_profile(
   }
 
   if let Some(camoufox_config) = request.camoufox_config {
+    // Editing a profile's fingerprint config is a paid feature everywhere
+    // (GUI, API, MCP). Viewing it is free; mutating it is not.
+    if !crate::cloud_auth::CLOUD_AUTH
+      .has_active_paid_subscription()
+      .await
+    {
+      return Err(StatusCode::PAYMENT_REQUIRED);
+    }
     let config: Result<CamoufoxConfig, _> = serde_json::from_value(camoufox_config);
     match config {
       Ok(config) => {
@@ -1844,6 +1833,7 @@ async fn open_url_in_profile(
   responses(
     (status = 204, description = "Browser process killed successfully"),
     (status = 401, description = "Unauthorized"),
+    (status = 402, description = "Active paid plan required"),
     (status = 404, description = "Profile not found"),
     (status = 500, description = "Internal server error")
   ),
@@ -1856,6 +1846,15 @@ async fn kill_profile(
   Path(id): Path<String>,
   State(state): State<ApiServerState>,
 ) -> Result<StatusCode, StatusCode> {
+  // Programmatically launching and stopping profiles is a paid feature; the
+  // run/open-url handlers gate the same way.
+  if !crate::cloud_auth::CLOUD_AUTH
+    .has_active_paid_subscription()
+    .await
+  {
+    return Err(StatusCode::PAYMENT_REQUIRED);
+  }
+
   let profile_manager = ProfileManager::instance();
   let profiles = profile_manager
     .list_profiles()
