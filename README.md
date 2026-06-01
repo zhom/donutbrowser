@@ -150,12 +150,21 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
                 </a>
             </td>
             <td align="center">
+                <a href="https://github.com/huy97">
+                    <img src="https://avatars.githubusercontent.com/u/30153437?v=4" width="100;" alt="huy97"/>
+                    <br />
+                    <sub><b>Huy Le</b></sub>
+                </a>
+            </td>
+            <td align="center">
                 <a href="https://github.com/drunkod">
                     <img src="https://avatars.githubusercontent.com/u/9677471?v=4" width="100;" alt="drunkod"/>
                     <br />
                     <sub><b>drunkod</b></sub>
                 </a>
             </td>
+		</tr>
+		<tr>
             <td align="center">
                 <a href="https://github.com/JorySeverijnse">
                     <img src="https://avatars.githubusercontent.com/u/117462355?v=4" width="100;" alt="JorySeverijnse"/>
@@ -163,20 +172,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
                     <sub><b>Jory Severijnse</b></sub>
                 </a>
             </td>
-		</tr>
-		<tr>
             <td align="center">
                 <a href="https://github.com/ThiagoMafra-Integrare">
                     <img src="https://avatars.githubusercontent.com/u/222241596?v=4" width="100;" alt="ThiagoMafra-Integrare"/>
                     <br />
                     <sub><b>Thiago Mafra</b></sub>
-                </a>
-            </td>
-            <td align="center">
-                <a href="https://github.com/huy97">
-                    <img src="https://avatars.githubusercontent.com/u/30153437?v=4" width="100;" alt="huy97"/>
-                    <br />
-                    <sub><b>Huy Le</b></sub>
                 </a>
             </td>
 		</tr>
