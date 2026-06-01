@@ -1196,8 +1196,8 @@
     },
     "fingerprint": {
       "notSupported": "Fingerprint editing is only available for Camoufox and Wayfern profiles.",
-      "lockedTitle": "Fingerprint is a Pro feature",
-      "lockedDescription": "Viewing and editing a profile's fingerprint requires an active paid plan. Upgrade to unlock fingerprint protection."
+      "lockedTitle": "Viewing & editing the fingerprint is a Pro feature",
+      "lockedDescription": "Fingerprint protection is included on every plan. Viewing and editing a profile's fingerprint values is what requires an active paid plan."
     }
   },
   "extensions": {
@@ -1807,7 +1807,7 @@
     "cookieDbLocked": "Could not read cookies — the database is locked. Close the browser and try again.",
     "cookieDbUnavailable": "Could not read cookies — the cookie store is unavailable.",
     "selfHostedRequiresLogout": "Sign out of your Donut account before configuring a self-hosted server.",
-    "fingerprintRequiresPro": "Fingerprint protection requires an active paid plan.",
+    "fingerprintRequiresPro": "Viewing or editing the fingerprint requires an active paid plan. Protection is included on all plans.",
     "proxyNotWorking": "The selected proxy isn't working, so the profile wasn't created.",
     "proxyPaymentRequired": "The selected proxy requires payment (402) — its subscription may have expired — so the profile wasn't created.",
     "vpnNotWorking": "The selected VPN isn't working, so the profile wasn't created."

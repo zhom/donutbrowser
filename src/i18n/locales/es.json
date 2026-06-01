@@ -1196,8 +1196,8 @@
     },
     "fingerprint": {
       "notSupported": "La edición de huellas digitales solo está disponible para perfiles Camoufox y Wayfern.",
-      "lockedTitle": "La huella digital es una función Pro",
-      "lockedDescription": "Ver y editar la huella digital de un perfil requiere un plan de pago activo. Mejora tu plan para desbloquear la protección de huella digital."
+      "lockedTitle": "Ver y editar la huella digital es una función Pro",
+      "lockedDescription": "La protección de huella digital está incluida en todos los planes. Ver y editar los valores de la huella digital de un perfil es lo que requiere un plan de pago activo."
     }
   },
   "extensions": {
@@ -1807,7 +1807,7 @@
     "cookieDbLocked": "No se pudieron leer las cookies — la base de datos está bloqueada. Cierra el navegador e inténtalo de nuevo.",
     "cookieDbUnavailable": "No se pudieron leer las cookies — el almacén de cookies no está disponible.",
     "selfHostedRequiresLogout": "Cierra sesión en tu cuenta de Donut antes de configurar un servidor autoalojado.",
-    "fingerprintRequiresPro": "La protección de huella digital requiere un plan de pago activo.",
+    "fingerprintRequiresPro": "Ver o editar la huella digital requiere un plan de pago activo. La protección está incluida en todos los planes.",
     "proxyNotWorking": "El proxy seleccionado no funciona, por lo que no se creó el perfil.",
     "proxyPaymentRequired": "El proxy seleccionado requiere pago (402) —su suscripción puede haber vencido— por lo que no se creó el perfil.",
     "vpnNotWorking": "La VPN seleccionada no funciona, por lo que no se creó el perfil."

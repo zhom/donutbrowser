@@ -1196,8 +1196,8 @@
     },
     "fingerprint": {
       "notSupported": "フィンガープリント編集は Camoufox / Wayfern プロファイルでのみ利用できます。",
-      "lockedTitle": "フィンガープリントは Pro 機能です",
-      "lockedDescription": "プロファイルのフィンガープリントの表示と編集には有効な有料プランが必要です。アップグレードしてフィンガープリント保護をご利用ください。"
+      "lockedTitle": "フィンガープリントの表示と編集は Pro 機能です",
+      "lockedDescription": "フィンガープリント保護はすべてのプランに含まれています。プロファイルのフィンガープリントの値を表示・編集するには、有効な有料プランが必要です。"
     }
   },
   "extensions": {
@@ -1807,7 +1807,7 @@
     "cookieDbLocked": "Cookie を読み取れません — データベースがロックされています。ブラウザを閉じてから再試行してください。",
     "cookieDbUnavailable": "Cookie を読み取れません — Cookie ストアを利用できません。",
     "selfHostedRequiresLogout": "セルフホストサーバーを設定する前に Donut アカウントからサインアウトしてください。",
-    "fingerprintRequiresPro": "フィンガープリント保護には有効な有料プランが必要です。",
+    "fingerprintRequiresPro": "フィンガープリントの表示または編集には有効な有料プランが必要です。保護機能はすべてのプランに含まれています。",
     "proxyNotWorking": "選択したプロキシが機能していないため、プロファイルは作成されませんでした。",
     "proxyPaymentRequired": "選択したプロキシは支払いが必要です（402）。サブスクリプションが期限切れの可能性があります。そのため、プロファイルは作成されませんでした。",
     "vpnNotWorking": "選択したVPNが機能していないため、プロファイルは作成されませんでした。"

@@ -1196,8 +1196,8 @@
     },
     "fingerprint": {
       "notSupported": "A edição de impressão digital só está disponível para perfis Camoufox e Wayfern.",
-      "lockedTitle": "A impressão digital é um recurso Pro",
-      "lockedDescription": "Visualizar e editar a impressão digital de um perfil requer um plano pago ativo. Faça upgrade para desbloquear a proteção contra fingerprint."
+      "lockedTitle": "Visualizar e editar a impressão digital é um recurso Pro",
+      "lockedDescription": "A proteção contra fingerprint está incluída em todos os planos. Visualizar e editar os valores da impressão digital de um perfil é o que requer um plano pago ativo."
     }
   },
   "extensions": {
@@ -1807,7 +1807,7 @@
     "cookieDbLocked": "Não foi possível ler os cookies — o banco de dados está bloqueado. Feche o navegador e tente novamente.",
     "cookieDbUnavailable": "Não foi possível ler os cookies — o repositório de cookies está indisponível.",
     "selfHostedRequiresLogout": "Saia da sua conta Donut antes de configurar um servidor auto-hospedado.",
-    "fingerprintRequiresPro": "A proteção contra fingerprint requer um plano pago ativo.",
+    "fingerprintRequiresPro": "Visualizar ou editar a impressão digital requer um plano pago ativo. A proteção está incluída em todos os planos.",
     "proxyNotWorking": "O proxy selecionado não está funcionando, então o perfil não foi criado.",
     "proxyPaymentRequired": "O proxy selecionado exige pagamento (402) — sua assinatura pode ter expirado — então o perfil não foi criado.",
     "vpnNotWorking": "A VPN selecionada não está funcionando, então o perfil não foi criado."

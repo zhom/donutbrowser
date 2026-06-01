@@ -1196,8 +1196,8 @@
     },
     "fingerprint": {
       "notSupported": "指纹编辑仅适用于 Camoufox 和 Wayfern 配置文件。",
-      "lockedTitle": "指纹是 Pro 功能",
-      "lockedDescription": "查看和编辑配置文件的指纹需要有效的付费方案。升级后即可解锁指纹保护。"
+      "lockedTitle": "查看和编辑指纹是 Pro 功能",
+      "lockedDescription": "所有方案都包含指纹保护。查看和编辑配置文件的指纹数值才需要有效的付费方案。"
     }
   },
   "extensions": {
@@ -1807,7 +1807,7 @@
     "cookieDbLocked": "无法读取 Cookie — 数据库已锁定。请关闭浏览器后重试。",
     "cookieDbUnavailable": "无法读取 Cookie — Cookie 存储不可用。",
     "selfHostedRequiresLogout": "在配置自托管服务器之前请先退出 Donut 账户。",
-    "fingerprintRequiresPro": "指纹保护需要有效的付费方案。",
+    "fingerprintRequiresPro": "查看或编辑指纹需要有效的付费方案。所有方案均包含指纹保护。",
     "proxyNotWorking": "所选代理无法使用，因此未创建配置文件。",
     "proxyPaymentRequired": "所选代理需要付费（402），其订阅可能已过期，因此未创建配置文件。",
     "vpnNotWorking": "所选 VPN 无法使用，因此未创建配置文件。"
