@@ -1,6 +1,24 @@
 # Changelog
 
 
+## v0.25.2 (2026-06-02)
+
+### Refactoring
+
+- cleanup
+
+### Documentation
+
+- update CHANGELOG.md and README.md for v0.25.1 [skip ci] (#412)
+
+### Maintenance
+
+- chore: simplify linux repo publish
+- chore: version bump
+- chore: copy
+- chore: update flake.nix for v0.25.1 [skip ci] (#413)
+
+
 ## v0.25.1 (2026-06-01)
 
 ### Maintenance
