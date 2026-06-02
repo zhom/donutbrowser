@@ -43,26 +43,14 @@ jobs:
             echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Install tools (dpkg-dev, createrepo-c, aws-cli v1)
+      - name: Install tools
         run: |
+          # Mirror the local/Docker setup from CLAUDE.md exactly: the same apt
+          # packages and the same pip-installed awscli the working local run uses.
           sudo apt-get update
           sudo apt-get install -y dpkg-dev createrepo-c python3-pip
-          # GitHub runners ship aws-cli v2, which sends CRC64NVME integrity
-          # checksums that Cloudflare R2 rejects with `Unauthorized` on
-          # ListObjectsV2 (the call behind `aws s3 sync`). aws-cli v1 predates
-          # that behavior — the same reason scripts/publish-repo.sh works in
-          # Docker. Remove v2 and install v1 system-wide so it's the binary on
-          # PATH within this job, and fail fast if v2 somehow survives rather
-          # than letting the publish step die on an opaque Unauthorized later.
-          sudo rm -f /usr/local/bin/aws /usr/local/bin/aws_completer
-          sudo rm -rf /usr/local/aws-cli
-          sudo pip3 install --break-system-packages 'awscli<2'
-          hash -r
-          aws --version
-          case "$(aws --version 2>&1)" in
-            aws-cli/1.*) ;;
-            *) echo "::error::Expected aws-cli v1 but got: $(aws --version 2>&1)"; exit 1 ;;
-          esac
+          pip3 install --break-system-packages awscli
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Publish DEB & RPM repositories to R2
         env:
