@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v0.25.3 (2026-06-03)
+
+### Bug Fixes
+
+- launch wayfern with proper dimentions for mobile devices
+
+### Maintenance
+
+- chore: version bump
+- chore: update flake.nix for v0.25.2 [skip ci] (#415)
+
+
 ## v0.25.2 (2026-06-02)
 
 ### Refactoring
