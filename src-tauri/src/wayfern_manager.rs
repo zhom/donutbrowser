@@ -138,6 +138,46 @@ impl WayfernManager {
     fingerprint
   }
 
+  /// Derive the on-screen window size Chromium should open at, from the stored
+  /// fingerprint. `Wayfern.setFingerprint` only spoofs what the page *reports*
+  /// for `windowOuterWidth`/`screenWidth`/etc.; it does not move or resize the
+  /// real top-level window. Without `--window-size` the OS window keeps
+  /// Chromium's default, so the visible window contradicts the reported
+  /// dimensions — a detectable mismatch. We pass `--window-size` so the actual
+  /// window matches the fingerprint.
+  ///
+  /// Keys are the camelCase fields Wayfern uses in its fingerprint
+  /// (`windowOuterWidth`, `screenAvailWidth`, …) — NOT the dotted
+  /// Camoufox-style keys. Preference order, matching how the fingerprint
+  /// describes the window:
+  /// 1. `windowOuterWidth` / `windowOuterHeight` — the real window size.
+  /// 2. `screenAvailWidth` / `screenAvailHeight` — usable screen area.
+  /// 3. `screenWidth` / `screenHeight` — full screen.
+  ///
+  /// Returns `None` when the fingerprint carries no usable dimensions, leaving
+  /// Chromium's default untouched. The fingerprint JSON may be the bare object
+  /// or the legacy `{ "fingerprint": {...} }` wrapper.
+  fn window_size_from_fingerprint(fingerprint_json: &str) -> Option<(u32, u32)> {
+    let parsed: serde_json::Value = serde_json::from_str(fingerprint_json).ok()?;
+    let fp = parsed.get("fingerprint").unwrap_or(&parsed);
+    let obj = fp.as_object()?;
+
+    // Accept both numeric and stringified numbers (Wayfern emits numbers, but a
+    // CDP echo or older saved fingerprint may stringify them).
+    let read = |key: &str| -> Option<u32> {
+      let v = obj.get(key)?;
+      v.as_u64()
+        .or_else(|| v.as_str().and_then(|s| s.trim().parse::<u64>().ok()))
+        .filter(|n| *n > 0)
+        .map(|n| n as u32)
+    };
+    let pair = |w: &str, h: &str| -> Option<(u32, u32)> { Some((read(w)?, read(h)?)) };
+
+    pair("windowOuterWidth", "windowOuterHeight")
+      .or_else(|| pair("screenAvailWidth", "screenAvailHeight"))
+      .or_else(|| pair("screenWidth", "screenHeight"))
+  }
+
   async fn wait_for_cdp_ready(
     &self,
     port: u16,
@@ -618,6 +658,18 @@ impl WayfernManager {
 
     if headless {
       args.push("--headless=new".to_string());
+    } else if let Some((w, h)) = config
+      .fingerprint
+      .as_deref()
+      .and_then(Self::window_size_from_fingerprint)
+    {
+      // Size the real OS window to match the fingerprint so the visible window
+      // agrees with the reported windowOuterWidth/screen dimensions. Anchor at
+      // 0,0 so the window also fits within the spoofed screen origin. Skipped in
+      // headless mode, where there is no on-screen window.
+      log::info!("Sizing Wayfern window to fingerprint dimensions: {w}x{h}");
+      args.push(format!("--window-size={w},{h}"));
+      args.push("--window-position=0,0".to_string());
     }
 
     #[cfg(target_os = "linux")]
@@ -1197,4 +1249,73 @@ impl WayfernManager {
 
 lazy_static::lazy_static! {
   static ref WAYFERN_MANAGER: WayfernManager = WayfernManager::new();
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn window_size_prefers_outer_window_dimensions() {
+    // Field names + values mirror a real Wayfern fingerprint (camelCase).
+    let fp = r#"{"windowOuterWidth": 1268, "windowOuterHeight": 764,
+                 "windowInnerWidth": 1253, "windowInnerHeight": 630,
+                 "screenAvailWidth": 1280, "screenAvailHeight": 775,
+                 "screenWidth": 1280, "screenHeight": 800}"#;
+    assert_eq!(
+      WayfernManager::window_size_from_fingerprint(fp),
+      Some((1268, 764))
+    );
+  }
+
+  #[test]
+  fn window_size_falls_back_to_avail_then_full_screen() {
+    let avail = r#"{"screenAvailWidth": 1280, "screenAvailHeight": 775,
+                    "screenWidth": 1280, "screenHeight": 800}"#;
+    assert_eq!(
+      WayfernManager::window_size_from_fingerprint(avail),
+      Some((1280, 775))
+    );
+
+    let full = r#"{"screenWidth": 2560, "screenHeight": 1440}"#;
+    assert_eq!(
+      WayfernManager::window_size_from_fingerprint(full),
+      Some((2560, 1440))
+    );
+  }
+
+  #[test]
+  fn window_size_handles_wrapper_and_stringified_numbers() {
+    let wrapped = r#"{"fingerprint": {"windowOuterWidth": "1366", "windowOuterHeight": "768"}}"#;
+    assert_eq!(
+      WayfernManager::window_size_from_fingerprint(wrapped),
+      Some((1366, 768))
+    );
+  }
+
+  #[test]
+  fn window_size_none_when_missing_or_invalid() {
+    // No dimensions at all.
+    assert_eq!(
+      WayfernManager::window_size_from_fingerprint(r#"{"userAgent": "x"}"#),
+      None
+    );
+    // A width with no matching height is not a usable pair.
+    assert_eq!(
+      WayfernManager::window_size_from_fingerprint(r#"{"windowOuterWidth": 1268}"#),
+      None
+    );
+    // Zero is rejected as a degenerate size.
+    assert_eq!(
+      WayfernManager::window_size_from_fingerprint(
+        r#"{"windowOuterWidth": 0, "windowOuterHeight": 0}"#
+      ),
+      None
+    );
+    // Not valid JSON.
+    assert_eq!(
+      WayfernManager::window_size_from_fingerprint("not json"),
+      None
+    );
+  }
 }
