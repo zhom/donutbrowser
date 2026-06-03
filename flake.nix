@@ -96,17 +96,17 @@
         pkgConfigPath = lib.makeSearchPath "lib/pkgconfig" (
           pkgConfigLibs ++ map lib.getDev pkgConfigLibs
         );
-        releaseVersion = "0.25.2";
+        releaseVersion = "0.25.3";
         releaseAppImage =
           if system == "x86_64-linux" then
             pkgs.fetchurl {
-              url = "https://github.com/zhom/donutbrowser/releases/download/v0.25.2/Donut_0.25.2_amd64.AppImage";
-              hash = "sha256-awESxsKfrSJFMAGbTasbXjL8UnF58ziLnS8Ee0phgb8=";
+              url = "https://github.com/zhom/donutbrowser/releases/download/v0.25.3/Donut_0.25.3_amd64.AppImage";
+              hash = "sha256-GB+HMfMQuZj0YYibiyCD64u6o943anSI/1jyD36YJq4=";
             }
           else if system == "aarch64-linux" then
             pkgs.fetchurl {
-              url = "https://github.com/zhom/donutbrowser/releases/download/v0.25.2/Donut_0.25.2_aarch64.AppImage";
-              hash = "sha256-zOUWnvf+5stknWomHwYRUw2TR0aS4/XeiVySBjHuJLA=";
+              url = "https://github.com/zhom/donutbrowser/releases/download/v0.25.3/Donut_0.25.3_aarch64.AppImage";
+              hash = "sha256-IKpz8AI3uM4+VxiF+8fwhj/mLn0KZW1KQMo3lGCTO8g=";
             }
           else
             null;
