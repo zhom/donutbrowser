@@ -1035,7 +1035,7 @@ impl ProfileManager {
       fs::create_dir_all(&dest_dir)?;
     }
 
-    let new_profile = BrowserProfile {
+    let mut new_profile = BrowserProfile {
       id: new_id,
       name: clone_name,
       browser: source.browser,
@@ -1070,6 +1070,21 @@ impl ProfileManager {
       ),
       updated_at: Some(crate::proxy_manager::now_secs()),
     };
+
+    // Donut: a clone must NOT be linkable to its source. The source
+    // wayfern_config embeds the persisted fingerprint JSON (including the
+    // canvas_noise_seed), so copying it verbatim makes the clone emit
+    // BYTE-IDENTICAL canvas/WebGL/audio readback hashes and identical device
+    // signals as the source — trivially linkable if both run concurrently. Clear
+    // the fingerprint so the launch path mints a fresh one (a new
+    // canvas_noise_seed via RandBytes + an independent device fingerprint),
+    // exactly as create_profile does when fingerprint.is_none(). NOTE: the
+    // user-data-dir copy above still duplicates cookies/localStorage/TLS state —
+    // a separate storage-linkage vector the user must clear if they want full
+    // isolation between a clone and its source.
+    if let Some(cfg) = new_profile.wayfern_config.as_mut() {
+      cfg.fingerprint = None;
+    }
 
     self.save_profile(&new_profile)?;
 

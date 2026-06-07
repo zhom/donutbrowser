@@ -239,7 +239,11 @@
       "extDefault": "Mặc định",
       "dnsLevel": "Danh sách chặn DNS: {{level}}",
       "extSearch": "Tìm kiếm nhóm…",
-      "extEmpty": "Không có nhóm tiện ích"
+      "extEmpty": "Không có nhóm tiện ích",
+      "cantModifyRunning": "Không thể chỉnh sửa profile đang chạy",
+      "cantModifyLaunching": "Không thể chỉnh sửa profile khi đang khởi chạy",
+      "cantModifyStopping": "Không thể chỉnh sửa profile khi đang dừng",
+      "cantModifyUpdating": "Không thể chỉnh sửa profile khi trình duyệt đang cập nhật"
     },
     "actions": {
       "launch": "Khởi chạy",
@@ -639,7 +643,11 @@
       "profileSynced": "Đã đồng bộ profile '{{name}}' thành công",
       "profileSyncFailed": "Đồng bộ profile '{{name}}' thất bại",
       "profileSyncFailedWithError": "Đồng bộ profile '{{name}}' thất bại: {{error}}"
-    }
+    },
+    "enabledToast": "Đã bật đồng bộ",
+    "disabledToast": "Đã tắt đồng bộ",
+    "enabledDescription": "Đồng bộ profile đã được bật",
+    "disabledDescription": "Đồng bộ profile đã được tắt"
   },
   "integrations": {
     "title": "Tích hợp",
@@ -918,6 +926,11 @@
       "syncingProfile": "Đang đồng bộ profile '{{name}}'...",
       "syncingProfileWithProgress": "{{count}} tệp ({{size}})",
       "updatingVersions": "Đang cập nhật phiên bản trình duyệt..."
+    },
+    "progress": {
+      "remaining": "còn {{time}}",
+      "filesProgress": "{{completed}}/{{total}} tệp",
+      "filesFailed": "{{count}} tệp thất bại"
     }
   },
   "errors": {
@@ -1136,7 +1149,9 @@
       "addRule": "Thêm quy tắc",
       "rulePlaceholder": "ví dụ: example.com, 192.168.1.*, .*\\.local",
       "noRules": "Chưa cấu hình quy tắc bỏ qua nào.",
-      "ruleTypes": "Hỗ trợ tên máy chủ, địa chỉ IP và biểu thức chính quy."
+      "ruleTypes": "Hỗ trợ tên máy chủ, địa chỉ IP và biểu thức chính quy.",
+      "vpnLabel": "VPN: {{name}}",
+      "proxyLabel": "Proxy: {{name}}"
     },
     "launchHook": {
       "title": "URL hook khởi chạy",
@@ -1198,6 +1213,12 @@
       "notSupported": "Chỉnh sửa vân tay chỉ khả dụng cho profile Camoufox và Wayfern.",
       "lockedTitle": "Xem và chỉnh sửa vân tay là tính năng Pro",
       "lockedDescription": "Bảo vệ vân tay được bao gồm trong mọi gói. Việc xem và chỉnh sửa các giá trị vân tay của profile mới là phần yêu cầu gói trả phí đang hoạt động."
+    },
+    "syncStatusValue": {
+      "waiting": "Đang chờ",
+      "syncing": "Đang đồng bộ",
+      "synced": "Đã đồng bộ",
+      "error": "Lỗi"
     }
   },
   "extensions": {
@@ -1718,7 +1739,8 @@
       "updateStartedDescription": "Quá trình tải phiên bản {{version}} sẽ sớm bắt đầu. Việc khởi chạy trình duyệt bị tắt cho đến khi cập nhật hoàn tất.",
       "downloadStarting": "Đang bắt đầu tải {{browser}} {{version}}",
       "downloadProgressBelow": "Tiến trình tải sẽ hiển thị bên dưới...",
-      "autoDownloadStarted": "Đang tự động tải {{browser}} {{version}}. Tiến trình sẽ hiển thị bên dưới."
+      "autoDownloadStarted": "Đang tự động tải {{browser}} {{version}}. Tiến trình sẽ hiển thị bên dưới.",
+      "lookingForUpdates": "Đang tìm bản cập nhật cho {{browser}}"
     }
   },
   "profilePassword": {
@@ -2017,5 +2039,9 @@
       "trialBadge": "2 tuần miễn phí",
       "commercialDesc": "Miễn phí dùng thử 2 tuần. Sau đó, gói trả phí giúp dự án được duy trì và phát triển."
     }
+  },
+  "wayfernBlocked": {
+    "title": "Tự động hóa trình duyệt đã tạm dừng",
+    "description": "Tài khoản của bạn tạm thời bị hạn chế các tính năng Pro của trình duyệt, thường do đăng nhập trên nhiều thiết bị cùng lúc. Hãy đăng xuất khỏi các thiết bị khác rồi khởi chạy lại profile để khôi phục."
   }
 }

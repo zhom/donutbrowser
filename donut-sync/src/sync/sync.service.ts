@@ -54,6 +54,29 @@ import type {
  */
 const MANIFEST_KEY = ".donut-sync-manifest";
 
+/** Max presigned-URL lifetime. The client requests ~1h; never mint a URL that
+ * outlives this, regardless of a (possibly hostile) client-supplied expiresIn. */
+const MAX_PRESIGN_EXPIRES_IN = 3600;
+
+/** Clamp a client-supplied expiresIn to a sane positive range. */
+function clampExpiresIn(requested: number | undefined): number {
+  const v = typeof requested === "number" && requested > 0 ? requested : 3600;
+  return Math.min(v, MAX_PRESIGN_EXPIRES_IN);
+}
+
+/** Only this metadata key is meaningful to sync (LWW conflict resolution).
+ * Whitelisting prevents a client from signing arbitrary x-amz-meta-* values. */
+function sanitizeMetadata(
+  metadata: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!metadata) return undefined;
+  const out: Record<string, string> = {};
+  if (typeof metadata["updated-at"] === "string") {
+    out["updated-at"] = metadata["updated-at"];
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 @Injectable()
 export class SyncService implements OnModuleInit {
   private readonly logger = new Logger(SyncService.name);
@@ -286,16 +309,19 @@ export class SyncService implements OnModuleInit {
       await this.checkProfileLimit(ctx);
     }
 
-    const expiresIn = dto.expiresIn || 3600;
+    const expiresIn = clampExpiresIn(dto.expiresIn);
     const expiresAt = new Date(Date.now() + expiresIn * 1000);
 
+    // Whitelist metadata to the single key sync relies on, so a client can't
+    // sign arbitrary x-amz-meta-* values into its objects.
+    const metadata = sanitizeMetadata(dto.metadata);
     const command = new PutCmd({
       Bucket: this.bucket,
       Key: key,
       ContentType: dto.contentType || "application/octet-stream",
       // Signed into the presigned URL as `x-amz-meta-*`. The client must send
       // exactly these headers on the PUT, so we echo them in the response.
-      Metadata: dto.metadata,
+      Metadata: metadata,
     });
 
     const url = await getSignedUrl(this.s3Client, command, { expiresIn });
@@ -313,6 +339,9 @@ export class SyncService implements OnModuleInit {
     return {
       url,
       expiresAt: expiresAt.toISOString(),
+      // Echo the metadata we actually signed so the client sends matching
+      // x-amz-meta-* headers on the PUT (S3 rejects unsigned ones).
+      metadata,
     };
   }
 
@@ -323,7 +352,7 @@ export class SyncService implements OnModuleInit {
     const key = this.scopeKey(ctx, dto.key);
     this.validateKeyAccess(ctx, key);
 
-    const expiresIn = dto.expiresIn || 3600;
+    const expiresIn = clampExpiresIn(dto.expiresIn);
     const expiresAt = new Date(Date.now() + expiresIn * 1000);
 
     const command = new GetObjectCommand({
@@ -438,7 +467,7 @@ export class SyncService implements OnModuleInit {
       await this.checkProfileLimit(ctx);
     }
 
-    const expiresIn = dto.expiresIn || 3600;
+    const expiresIn = clampExpiresIn(dto.expiresIn);
     const expiresAt = new Date(Date.now() + expiresIn * 1000);
 
     const items = await Promise.all(
@@ -491,7 +520,7 @@ export class SyncService implements OnModuleInit {
     dto: PresignDownloadBatchRequestDto,
     ctx: UserContext,
   ): Promise<PresignDownloadBatchResponseDto> {
-    const expiresIn = dto.expiresIn || 3600;
+    const expiresIn = clampExpiresIn(dto.expiresIn);
     const expiresAt = new Date(Date.now() + expiresIn * 1000);
 
     const items = await Promise.all(

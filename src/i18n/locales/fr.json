@@ -239,7 +239,11 @@
       "extDefault": "Défaut",
       "dnsLevel": "Liste DNS : {{level}}",
       "extSearch": "Rechercher des groupes…",
-      "extEmpty": "Aucun groupe d’extensions"
+      "extEmpty": "Aucun groupe d’extensions",
+      "cantModifyRunning": "Impossible de modifier un profil en cours d'exécution",
+      "cantModifyLaunching": "Impossible de modifier le profil pendant le lancement",
+      "cantModifyStopping": "Impossible de modifier le profil pendant l'arrêt",
+      "cantModifyUpdating": "Impossible de modifier le profil pendant la mise à jour du navigateur"
     },
     "actions": {
       "launch": "Lancer",
@@ -639,7 +643,11 @@
       "profileSynced": "Profil '{{name}}' synchronisé avec succès",
       "profileSyncFailed": "Échec de la synchronisation du profil '{{name}}'",
       "profileSyncFailedWithError": "Échec de la synchronisation du profil '{{name}}' : {{error}}"
-    }
+    },
+    "enabledToast": "Synchronisation activée",
+    "disabledToast": "Synchronisation désactivée",
+    "enabledDescription": "La synchronisation du profil a été activée",
+    "disabledDescription": "La synchronisation du profil a été désactivée"
   },
   "integrations": {
     "title": "Intégrations",
@@ -918,6 +926,11 @@
       "syncingProfile": "Synchronisation du profil '{{name}}'...",
       "syncingProfileWithProgress": "{{count}} fichiers ({{size}})",
       "updatingVersions": "Mise à jour des versions de navigateurs..."
+    },
+    "progress": {
+      "remaining": "{{time}} restant",
+      "filesProgress": "{{completed}}/{{total}} fichiers",
+      "filesFailed": "Échec de {{count}} fichier(s)"
     }
   },
   "errors": {
@@ -1136,7 +1149,9 @@
       "addRule": "Ajouter une Règle",
       "rulePlaceholder": "ex. example.com, 192.168.1.*, .*\\.local",
       "noRules": "Aucune règle de contournement configurée.",
-      "ruleTypes": "Prend en charge les noms d'hôte, les adresses IP et les expressions régulières."
+      "ruleTypes": "Prend en charge les noms d'hôte, les adresses IP et les expressions régulières.",
+      "vpnLabel": "VPN : {{name}}",
+      "proxyLabel": "Proxy : {{name}}"
     },
     "launchHook": {
       "title": "URL du hook de lancement",
@@ -1198,6 +1213,12 @@
       "notSupported": "L’édition des empreintes n’est disponible que pour les profils Camoufox et Wayfern.",
       "lockedTitle": "Afficher et modifier l'empreinte est une fonctionnalité Pro",
       "lockedDescription": "La protection contre le fingerprinting est incluse dans tous les forfaits. C'est l'affichage et la modification des valeurs de l'empreinte d'un profil qui nécessitent un forfait payant actif."
+    },
+    "syncStatusValue": {
+      "waiting": "En attente",
+      "syncing": "Synchronisation",
+      "synced": "Synchronisé",
+      "error": "Erreur"
     }
   },
   "extensions": {
@@ -1718,7 +1739,8 @@
       "updateStartedDescription": "Le téléchargement de la version {{version}} va bientôt commencer. Le lancement du navigateur est désactivé jusqu'à la fin de la mise à jour.",
       "downloadStarting": "Démarrage du téléchargement de {{browser}} {{version}}",
       "downloadProgressBelow": "La progression du téléchargement sera affichée ci-dessous...",
-      "autoDownloadStarted": "Téléchargement automatique de {{browser}} {{version}}. La progression sera affichée ci-dessous."
+      "autoDownloadStarted": "Téléchargement automatique de {{browser}} {{version}}. La progression sera affichée ci-dessous.",
+      "lookingForUpdates": "Recherche de mises à jour pour {{browser}}"
     }
   },
   "profilePassword": {
@@ -2017,5 +2039,9 @@
       "trialBadge": "2 semaines gratuites",
       "commercialDesc": "Gratuit pendant une évaluation de 2 semaines. Ensuite, un forfait payant permet de maintenir et de faire prospérer le projet."
     }
+  },
+  "wayfernBlocked": {
+    "title": "Automatisation du navigateur en pause",
+    "description": "Votre compte a été temporairement privé des fonctionnalités Pro du navigateur, généralement à cause d'une connexion sur plusieurs appareils à la fois. Déconnectez-vous des autres appareils, puis relancez le profil pour la rétablir."
   }
 }

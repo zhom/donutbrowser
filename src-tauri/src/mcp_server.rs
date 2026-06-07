@@ -339,8 +339,16 @@ impl McpServer {
       .and_then(|h| h.to_str().ok())
       .and_then(|h| h.strip_prefix("Bearer "));
 
-    let valid =
-      path_token == Some(state.token.as_str()) || header_token == Some(state.token.as_str());
+    // Constant-time comparison to avoid leaking the token prefix via timing.
+    use subtle::ConstantTimeEq;
+    let expected = state.token.as_bytes();
+    let ct_eq = |t: Option<&str>| {
+      t.is_some_and(|t| {
+        let b = t.as_bytes();
+        b.len() == expected.len() && b.ct_eq(expected).into()
+      })
+    };
+    let valid = ct_eq(path_token) || ct_eq(header_token);
 
     if !valid {
       return Err(StatusCode::UNAUTHORIZED);
@@ -1671,11 +1679,10 @@ impl McpServer {
       "connect_vpn" => self.handle_connect_vpn(arguments).await,
       "disconnect_vpn" => self.handle_disconnect_vpn(arguments).await,
       "get_vpn_status" => self.handle_get_vpn_status(arguments).await,
-      // Fingerprint management — viewing and editing both require a paid plan.
-      "get_profile_fingerprint" => {
-        Self::require_paid_subscription("Fingerprint").await?;
-        self.handle_get_profile_fingerprint(arguments).await
-      }
+      // Fingerprint management — viewing is free everywhere (matches the REST
+      // API and the get_profile tool, which already expose the config); only
+      // editing requires a paid plan.
+      "get_profile_fingerprint" => self.handle_get_profile_fingerprint(arguments).await,
       "update_profile_fingerprint" => {
         Self::require_paid_subscription("Fingerprint").await?;
         self.handle_update_profile_fingerprint(arguments).await
@@ -2591,6 +2598,15 @@ impl McpServer {
         code: -32602,
         message: "Missing proxy_type".to_string(),
       })?;
+
+    // The tool schema declares an enum, but JSON-Schema enums are advisory only;
+    // enforce it here so a bad value can't produce a non-functional proxy.
+    if !matches!(proxy_type, "http" | "https" | "socks4" | "socks5") {
+      return Err(McpError {
+        code: -32602,
+        message: "proxy_type must be one of: http, https, socks4, socks5".to_string(),
+      });
+    }
 
     let host = arguments
       .get("host")

@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import {
   type CanActivate,
   type ExecutionContext,
@@ -9,6 +10,13 @@ import { ConfigService } from "@nestjs/config";
 import type { Request } from "express";
 import * as jwt from "jsonwebtoken";
 import type { UserContext } from "./user-context.interface.js";
+
+/** Constant-time string compare; false on length mismatch (no early return). */
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -37,7 +45,7 @@ export class AuthGuard implements CanActivate {
 
     // Try SYNC_TOKEN first (self-hosted mode)
     const expectedToken = this.configService.get<string>("SYNC_TOKEN");
-    if (expectedToken && token === expectedToken) {
+    if (expectedToken && safeEqual(token, expectedToken)) {
       (request as unknown as Record<string, unknown>).user = {
         mode: "self-hosted",
         prefix: "",
@@ -55,10 +63,29 @@ export class AuthGuard implements CanActivate {
           algorithms: ["RS256"],
         }) as jwt.JwtPayload;
 
+        // Validate the scope claims' SHAPE before trusting them as S3 key
+        // prefixes. An empty/over-broad prefix would make validateKeyAccess
+        // (`key.startsWith(prefix)`) authorize the entire bucket, so a signer
+        // bug or permissive claim must not silently widen scope.
+        const prefix = decoded.prefix || `users/${decoded.sub}/`;
+        if (typeof prefix !== "string" || !/^users\/[^/]+\/$/.test(prefix)) {
+          throw new Error(`Invalid prefix claim: ${String(decoded.prefix)}`);
+        }
+        const teamPrefix =
+          decoded.teamPrefix === undefined || decoded.teamPrefix === null
+            ? null
+            : decoded.teamPrefix;
+        if (
+          teamPrefix !== null &&
+          !/^teams\/[^/]+\/$/.test(String(teamPrefix))
+        ) {
+          throw new Error(`Invalid teamPrefix claim: ${String(teamPrefix)}`);
+        }
+
         (request as unknown as Record<string, unknown>).user = {
           mode: "cloud",
-          prefix: decoded.prefix || `users/${decoded.sub}/`,
-          teamPrefix: decoded.teamPrefix || null,
+          prefix,
+          teamPrefix,
           profileLimit: decoded.profileLimit || 0,
           teamProfileLimit: decoded.teamProfileLimit || 0,
         } satisfies UserContext;

@@ -239,7 +239,11 @@
       "extDefault": "Padrão",
       "dnsLevel": "Lista DNS: {{level}}",
       "extSearch": "Pesquisar grupos…",
-      "extEmpty": "Sem grupos de extensões"
+      "extEmpty": "Sem grupos de extensões",
+      "cantModifyRunning": "Não é possível modificar um perfil em execução",
+      "cantModifyLaunching": "Não é possível modificar o perfil durante a inicialização",
+      "cantModifyStopping": "Não é possível modificar o perfil durante a parada",
+      "cantModifyUpdating": "Não é possível modificar o perfil enquanto o navegador é atualizado"
     },
     "actions": {
       "launch": "Iniciar",
@@ -639,7 +643,11 @@
       "profileSynced": "Perfil '{{name}}' sincronizado com sucesso",
       "profileSyncFailed": "Falha ao sincronizar o perfil '{{name}}'",
       "profileSyncFailedWithError": "Falha ao sincronizar o perfil '{{name}}': {{error}}"
-    }
+    },
+    "enabledToast": "Sincronização ativada",
+    "disabledToast": "Sincronização desativada",
+    "enabledDescription": "A sincronização do perfil foi ativada",
+    "disabledDescription": "A sincronização do perfil foi desativada"
   },
   "integrations": {
     "title": "Integrações",
@@ -918,6 +926,11 @@
       "syncingProfile": "Sincronizando perfil '{{name}}'...",
       "syncingProfileWithProgress": "{{count}} arquivos ({{size}})",
       "updatingVersions": "Atualizando versões de navegadores..."
+    },
+    "progress": {
+      "remaining": "{{time}} restante",
+      "filesProgress": "{{completed}}/{{total}} arquivos",
+      "filesFailed": "{{count}} arquivo(s) com falha"
     }
   },
   "errors": {
@@ -1136,7 +1149,9 @@
       "addRule": "Adicionar Regra",
       "rulePlaceholder": "ex. example.com, 192.168.1.*, .*\\.local",
       "noRules": "Nenhuma regra de bypass configurada.",
-      "ruleTypes": "Suporta nomes de host, endereços IP e padrões regex."
+      "ruleTypes": "Suporta nomes de host, endereços IP e padrões regex.",
+      "vpnLabel": "VPN: {{name}}",
+      "proxyLabel": "Proxy: {{name}}"
     },
     "launchHook": {
       "title": "URL do hook de inicialização",
@@ -1198,6 +1213,12 @@
       "notSupported": "A edição de impressão digital só está disponível para perfis Camoufox e Wayfern.",
       "lockedTitle": "Visualizar e editar a impressão digital é um recurso Pro",
       "lockedDescription": "A proteção contra fingerprint está incluída em todos os planos. Visualizar e editar os valores da impressão digital de um perfil é o que requer um plano pago ativo."
+    },
+    "syncStatusValue": {
+      "waiting": "Aguardando",
+      "syncing": "Sincronizando",
+      "synced": "Sincronizado",
+      "error": "Erro"
     }
   },
   "extensions": {
@@ -1718,7 +1739,8 @@
       "updateStartedDescription": "O download da versão {{version}} começará em breve. O início do navegador está desativado até a atualização ser concluída.",
       "downloadStarting": "Iniciando o download do {{browser}} {{version}}",
       "downloadProgressBelow": "O progresso do download será mostrado abaixo...",
-      "autoDownloadStarted": "Baixando {{browser}} {{version}} automaticamente. O progresso será mostrado abaixo."
+      "autoDownloadStarted": "Baixando {{browser}} {{version}} automaticamente. O progresso será mostrado abaixo.",
+      "lookingForUpdates": "Procurando atualizações para {{browser}}"
     }
   },
   "profilePassword": {
@@ -2017,5 +2039,9 @@
       "trialBadge": "2 semanas grátis",
       "commercialDesc": "Gratuito durante uma avaliação de 2 semanas. Depois, um plano pago mantém o projeto ativo e próspero."
     }
+  },
+  "wayfernBlocked": {
+    "title": "Automação do navegador pausada",
+    "description": "Sua conta foi temporariamente restringida dos recursos Pro do navegador, geralmente por entrar em vários dispositivos ao mesmo tempo. Saia dos outros dispositivos e reinicie o perfil para restaurá-la."
   }
 }

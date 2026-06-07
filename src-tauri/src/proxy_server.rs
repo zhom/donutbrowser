@@ -509,47 +509,20 @@ async fn handle_http_via_socks4(
     }
   };
 
-  // Resolve target host to IP (SOCKS4 requires IP addresses)
-  let target_ip = match tokio::net::lookup_host((target_host, target_port)).await {
-    Ok(mut addrs) => {
-      if let Some(addr) = addrs.next() {
-        match addr.ip() {
-          std::net::IpAddr::V4(ipv4) => ipv4.octets(),
-          std::net::IpAddr::V6(_) => {
-            log::error!("SOCKS4 does not support IPv6");
-            let mut response = Response::new(Full::new(Bytes::from(
-              "SOCKS4 does not support IPv6 addresses",
-            )));
-            *response.status_mut() = StatusCode::BAD_GATEWAY;
-            return Ok(response);
-          }
-        }
-      } else {
-        log::error!("Failed to resolve target host: {}", target_host);
-        let mut response = Response::new(Full::new(Bytes::from(format!(
-          "Failed to resolve target host: {}",
-          target_host
-        ))));
-        *response.status_mut() = StatusCode::BAD_GATEWAY;
-        return Ok(response);
-      }
-    }
-    Err(e) => {
-      log::error!("Failed to resolve target host {}: {}", target_host, e);
-      let mut response = Response::new(Full::new(Bytes::from(format!(
-        "Failed to resolve target host: {}",
-        e
-      ))));
-      *response.status_mut() = StatusCode::BAD_GATEWAY;
-      return Ok(response);
-    }
-  };
-
-  // Build SOCKS4 CONNECT request
+  // Build a SOCKS4a CONNECT request. We deliberately do NOT resolve the target
+  // hostname locally: tokio::net::lookup_host would call the HOST resolver
+  // (getaddrinfo), leaking the destination domain to the host's DNS server and
+  // defeating the per-profile proxy. SOCKS4a has the PROXY resolve the name —
+  // send the sentinel IP 0.0.0.x (x != 0), then the NULL-terminated userid, then
+  // the NULL-terminated hostname. (Most SOCKS4 proxies support 4a; a legacy
+  // SOCKS4-only proxy without remote DNS cannot be used leak-free for plaintext
+  // HTTP — prefer SOCKS5 there.)
   let mut socks_request = vec![0x04, 0x01]; // SOCKS4, CONNECT
   socks_request.extend_from_slice(&target_port.to_be_bytes());
-  socks_request.extend_from_slice(&target_ip);
-  socks_request.push(0); // NULL terminator for userid
+  socks_request.extend_from_slice(&[0, 0, 0, 1]); // 0.0.0.1 => SOCKS4a remote-DNS marker
+  socks_request.push(0); // empty userid, NULL-terminated
+  socks_request.extend_from_slice(target_host.as_bytes()); // hostname for the proxy to resolve
+  socks_request.push(0); // NULL-terminated hostname
 
   // Send SOCKS4 CONNECT request
   if let Err(e) = socks_stream.write_all(&socks_request).await {
@@ -1071,8 +1044,19 @@ fn build_reqwest_client_with_proxy(
       Proxy::http(upstream_url)?
     }
     "socks5" => {
-      // For SOCKS5, reqwest supports it directly
-      Proxy::all(upstream_url)?
+      // Donut: force REMOTE (proxy-side) DNS for plaintext HTTP over a SOCKS5
+      // upstream. reqwest maps the bare `socks5` scheme to DnsResolve::Local,
+      // which resolves the destination hostname on the HOST (getaddrinfo) BEFORE
+      // connecting — leaking the destination domain to the host's DNS resolver
+      // and defeating the per-profile proxy. The `socks5h` scheme maps to
+      // DnsResolve::Proxy, so the proxy resolves the hostname and nothing leaks.
+      // (The CONNECT/HTTPS path already does remote DNS via connect_via_socks's
+      // AddrKind::Domain.)
+      let remote_dns_url = match upstream_url.strip_prefix("socks5://") {
+        Some(rest) => format!("socks5h://{rest}"),
+        None => upstream_url.to_string(),
+      };
+      Proxy::all(remote_dns_url)?
     }
     "socks4" => {
       // SOCKS4 is handled manually in handle_http_via_socks4

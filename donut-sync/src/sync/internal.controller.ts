@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import {
   Body,
   Controller,
@@ -8,6 +9,13 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { SyncService } from "./sync.service.js";
+
+/** Constant-time string compare; false on length mismatch. */
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
 
 @Controller("v1/internal")
 export class InternalController {
@@ -26,7 +34,7 @@ export class InternalController {
     @Headers("x-internal-key") key: string,
     @Body() body: { userId: string; maxProfiles: number },
   ) {
-    if (!this.internalKey || key !== this.internalKey) {
+    if (!this.internalKey || !key || !safeEqual(key, this.internalKey)) {
       throw new UnauthorizedException("Invalid internal key");
     }
 

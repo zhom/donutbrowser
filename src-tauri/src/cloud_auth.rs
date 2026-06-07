@@ -1016,7 +1016,7 @@ impl CloudAuthManager {
       return Ok(());
     }
 
-    let token = self
+    let result = self
       .api_call_with_retry(|access_token| {
         let url = format!("{CLOUD_API_URL}/api/auth/wayfern-start");
         // Bound the request: without a timeout, an unreachable
@@ -1050,7 +1050,31 @@ impl CloudAuthManager {
           Ok(result.token)
         }
       })
-      .await?;
+      .await;
+
+    let token = match result {
+      Ok(token) => token,
+      Err(e) => {
+        // The backend returns 403 (ForbiddenException) for paid-feature blocks:
+        // token-reuse throttle, "active subscription required", and the
+        // primary-device restriction (see donutbrowser-infra wayfern.service.ts).
+        // This is distinct from a 401 (dead access token) — the session is still
+        // valid, the user is just temporarily/conditionally not entitled. So we
+        // do NOT invalidate the session. Instead: drop the stale wayfern token so
+        // no browser launches half-authenticated, re-fetch the profile so the
+        // cached plan reflects the backend's real state (it may have changed),
+        // and signal the UI so the user learns why automation stopped working.
+        if e.contains("(403") || e.contains("Forbidden") {
+          log::warn!("Wayfern token blocked by backend (403): {e}");
+          self.clear_wayfern_token().await;
+          if let Err(fetch_err) = self.fetch_profile().await {
+            log::warn!("Profile re-fetch after wayfern block failed: {fetch_err}");
+          }
+          let _ = crate::events::emit_empty("wayfern-paid-blocked");
+        }
+        return Err(e);
+      }
+    };
 
     let mut wt = self.wayfern_token.lock().await;
     *wt = Some(token);

@@ -239,7 +239,11 @@
       "extDefault": "既定",
       "dnsLevel": "DNS ブロックリスト: {{level}}",
       "extSearch": "グループを検索…",
-      "extEmpty": "拡張機能グループがありません"
+      "extEmpty": "拡張機能グループがありません",
+      "cantModifyRunning": "実行中のプロファイルは変更できません",
+      "cantModifyLaunching": "起動中はプロファイルを変更できません",
+      "cantModifyStopping": "停止中はプロファイルを変更できません",
+      "cantModifyUpdating": "ブラウザの更新中はプロファイルを変更できません"
     },
     "actions": {
       "launch": "起動",
@@ -639,7 +643,11 @@
       "profileSynced": "プロファイル '{{name}}' を同期しました",
       "profileSyncFailed": "プロファイル '{{name}}' の同期に失敗しました",
       "profileSyncFailedWithError": "プロファイル '{{name}}' の同期に失敗しました: {{error}}"
-    }
+    },
+    "enabledToast": "同期を有効化しました",
+    "disabledToast": "同期を無効化しました",
+    "enabledDescription": "プロファイルの同期が有効になりました",
+    "disabledDescription": "プロファイルの同期が無効になりました"
   },
   "integrations": {
     "title": "統合",
@@ -918,6 +926,11 @@
       "syncingProfile": "プロファイル '{{name}}' を同期中...",
       "syncingProfileWithProgress": "{{count}} ファイル ({{size}})",
       "updatingVersions": "ブラウザバージョンを更新中..."
+    },
+    "progress": {
+      "remaining": "残り {{time}}",
+      "filesProgress": "{{completed}}/{{total}} ファイル",
+      "filesFailed": "{{count}} 件のファイルが失敗しました"
     }
   },
   "errors": {
@@ -1136,7 +1149,9 @@
       "addRule": "ルールを追加",
       "rulePlaceholder": "例: example.com, 192.168.1.*, .*\\.local",
       "noRules": "バイパスルールは設定されていません。",
-      "ruleTypes": "ホスト名、IPアドレス、正規表現パターンをサポートしています。"
+      "ruleTypes": "ホスト名、IPアドレス、正規表現パターンをサポートしています。",
+      "vpnLabel": "VPN: {{name}}",
+      "proxyLabel": "Proxy: {{name}}"
     },
     "launchHook": {
       "title": "起動フックURL",
@@ -1198,6 +1213,12 @@
       "notSupported": "フィンガープリント編集は Camoufox / Wayfern プロファイルでのみ利用できます。",
       "lockedTitle": "フィンガープリントの表示と編集は Pro 機能です",
       "lockedDescription": "フィンガープリント保護はすべてのプランに含まれています。プロファイルのフィンガープリントの値を表示・編集するには、有効な有料プランが必要です。"
+    },
+    "syncStatusValue": {
+      "waiting": "待機中",
+      "syncing": "同期中",
+      "synced": "同期済み",
+      "error": "エラー"
     }
   },
   "extensions": {
@@ -1718,7 +1739,8 @@
       "updateStartedDescription": "バージョン {{version}} のダウンロードがまもなく開始されます。更新が完了するまでブラウザの起動は無効になります。",
       "downloadStarting": "{{browser}} {{version}} のダウンロードを開始しています",
       "downloadProgressBelow": "ダウンロードの進行状況は下に表示されます...",
-      "autoDownloadStarted": "{{browser}} {{version}} を自動的にダウンロードしています。進行状況は下に表示されます。"
+      "autoDownloadStarted": "{{browser}} {{version}} を自動的にダウンロードしています。進行状況は下に表示されます。",
+      "lookingForUpdates": "{{browser}} の更新を確認しています"
     }
   },
   "profilePassword": {
@@ -2017,5 +2039,9 @@
       "trialBadge": "2週間無料",
       "commercialDesc": "2週間の評価期間は無料です。その後は有料プランが必要で、これによりプロジェクトの維持と発展が支えられます。"
     }
+  },
+  "wayfernBlocked": {
+    "title": "ブラウザの自動化が一時停止しました",
+    "description": "通常は複数のデバイスで同時にサインインしたことが原因で、アカウントのProブラウザ機能が一時的に制限されました。他のデバイスからサインアウトし、プロファイルを再起動すると復元されます。"
   }
 }

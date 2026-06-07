@@ -2039,12 +2039,12 @@ export function ProfilesDataTable({
 
           if (isDisabled) {
             const tooltipMessage = isRunning
-              ? "Can't modify running profile"
+              ? t("profiles.table.cantModifyRunning")
               : isLaunching
-                ? "Can't modify profile while launching"
+                ? t("profiles.table.cantModifyLaunching")
                 : isStopping
-                  ? "Can't modify profile while stopping"
-                  : "Can't modify profile while browser is updating";
+                  ? t("profiles.table.cantModifyStopping")
+                  : t("profiles.table.cantModifyUpdating");
 
             return (
               <Tooltip>

@@ -239,7 +239,11 @@
       "extDefault": "Default",
       "dnsLevel": "DNS blocklist: {{level}}",
       "extSearch": "Search groups…",
-      "extEmpty": "No extension groups"
+      "extEmpty": "No extension groups",
+      "cantModifyRunning": "Can't modify running profile",
+      "cantModifyLaunching": "Can't modify profile while launching",
+      "cantModifyStopping": "Can't modify profile while stopping",
+      "cantModifyUpdating": "Can't modify profile while browser is updating"
     },
     "actions": {
       "launch": "Launch",
@@ -639,7 +643,11 @@
       "profileSynced": "Profile '{{name}}' synced successfully",
       "profileSyncFailed": "Failed to sync profile '{{name}}'",
       "profileSyncFailedWithError": "Failed to sync profile '{{name}}': {{error}}"
-    }
+    },
+    "enabledToast": "Sync enabled",
+    "disabledToast": "Sync disabled",
+    "enabledDescription": "Profile sync has been enabled",
+    "disabledDescription": "Profile sync has been disabled"
   },
   "integrations": {
     "title": "Integrations",
@@ -918,6 +926,11 @@
       "syncingProfile": "Syncing profile '{{name}}'...",
       "syncingProfileWithProgress": "{{count}} files ({{size}})",
       "updatingVersions": "Updating browser versions..."
+    },
+    "progress": {
+      "remaining": "{{time}} remaining",
+      "filesProgress": "{{completed}}/{{total}} files",
+      "filesFailed": "{{count}} file(s) failed"
     }
   },
   "errors": {
@@ -1136,7 +1149,9 @@
       "addRule": "Add Rule",
       "rulePlaceholder": "e.g. example.com, 192.168.1.*, .*\\.local",
       "noRules": "No bypass rules configured.",
-      "ruleTypes": "Supports hostnames, IP addresses, and regex patterns."
+      "ruleTypes": "Supports hostnames, IP addresses, and regex patterns.",
+      "vpnLabel": "VPN: {{name}}",
+      "proxyLabel": "Proxy: {{name}}"
     },
     "launchHook": {
       "title": "Launch Hook URL",
@@ -1198,6 +1213,12 @@
       "notSupported": "Fingerprint editing is only available for Camoufox and Wayfern profiles.",
       "lockedTitle": "Viewing & editing the fingerprint is a Pro feature",
       "lockedDescription": "Fingerprint protection is included on every plan. Viewing and editing a profile's fingerprint values is what requires an active paid plan."
+    },
+    "syncStatusValue": {
+      "waiting": "Waiting",
+      "syncing": "Syncing",
+      "synced": "Synced",
+      "error": "Error"
     }
   },
   "extensions": {
@@ -1718,7 +1739,8 @@
       "updateStartedDescription": "Version {{version}} download will begin shortly. Browser launch is disabled until update completes.",
       "downloadStarting": "Starting {{browser}} {{version}} download",
       "downloadProgressBelow": "Download progress will be shown below...",
-      "autoDownloadStarted": "Downloading {{browser}} {{version}} automatically. Progress will be shown below."
+      "autoDownloadStarted": "Downloading {{browser}} {{version}} automatically. Progress will be shown below.",
+      "lookingForUpdates": "Looking for updates for {{browser}}"
     }
   },
   "profilePassword": {
@@ -2017,5 +2039,9 @@
       "trialBadge": "2 weeks free",
       "commercialDesc": "Free for a 2-week evaluation. After that, a paid plan keeps the project maintained and thriving."
     }
+  },
+  "wayfernBlocked": {
+    "title": "Browser automation paused",
+    "description": "Your account was temporarily restricted from Pro browser features, usually from signing in on multiple devices at once. Sign out of other devices, then relaunch the profile to restore it."
   }
 }

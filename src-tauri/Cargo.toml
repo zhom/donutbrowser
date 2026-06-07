@@ -81,6 +81,7 @@ aes-gcm = "0.10"
 aes = "0.9"
 cbc = "0.2"
 ring = "0.17"
+subtle = "2"
 sha2 = "0.11"
 shadowsocks = { version = "1.24", default-features = false, features = ["aead-cipher"] }
 hyper = { version = "1.10", features = ["full"] }

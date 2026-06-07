@@ -263,9 +263,9 @@ export function ProfileInfoDialog({
     ? vpnConfigs.find((v) => v.id === profile.vpn_id)?.name
     : null;
   const networkLabel = vpnName
-    ? `VPN: ${vpnName}`
+    ? t("profileInfo.network.vpnLabel", { name: vpnName })
     : proxyName
-      ? `Proxy: ${proxyName}`
+      ? t("profileInfo.network.proxyLabel", { name: proxyName })
       : t("profileInfo.values.none");
 
   const syncStatus = syncStatuses[profile.id];
@@ -299,6 +299,10 @@ export function ProfileInfoDialog({
   // `ProfileDnsBlocklistDialog` for the pattern). The settings tab is purely
   // a navigation hub.
   interface ActionItem {
+    // Stable, language-independent key used to map sidebar sections to actions.
+    // The sidebar must NOT match on `label` — labels are translated, so English
+    // substring matching hides sections for every non-English user.
+    id?: string;
     icon: React.ReactNode;
     label: string;
     onClick: () => void;
@@ -311,6 +315,7 @@ export function ProfileInfoDialog({
 
   const actions: ActionItem[] = [
     {
+      id: "network",
       icon: <LuGlobe className="size-4" />,
       label: t("profiles.actions.viewNetwork"),
       onClick: () => {
@@ -319,6 +324,7 @@ export function ProfileInfoDialog({
       disabled: isCrossOs,
     },
     {
+      id: "sync",
       icon: <LuRefreshCw className="size-4" />,
       label: t("profiles.actions.syncSettings"),
       onClick: () => {
@@ -337,6 +343,7 @@ export function ProfileInfoDialog({
       runningBadge: isRunning,
     },
     {
+      id: "fingerprint",
       icon: <LuFingerprint className="size-4" />,
       label: t("profiles.actions.changeFingerprint"),
       onClick: () => {
@@ -359,6 +366,7 @@ export function ProfileInfoDialog({
       hidden: profile.browser !== "wayfern" || !onLaunchWithSync,
     },
     {
+      id: "cookiesCopy",
       icon: <LuCopy className="size-4" />,
       label: t("profiles.actions.copyCookiesToProfile"),
       onClick: () => {
@@ -372,6 +380,7 @@ export function ProfileInfoDialog({
         !onCopyCookiesToProfile,
     },
     {
+      id: "cookiesManage",
       icon: <LuCookie className="size-4" />,
       label: t("profileInfo.actions.manageCookies"),
       onClick: () => {
@@ -395,6 +404,7 @@ export function ProfileInfoDialog({
       hidden: profile.ephemeral === true,
     },
     {
+      id: "extension",
       icon: <LuPuzzle className="size-4" />,
       label: t("profileInfo.actions.assignExtensionGroup"),
       onClick: () => {
@@ -419,6 +429,7 @@ export function ProfileInfoDialog({
       },
     },
     {
+      id: "hook",
       icon: <LuLink className="size-4" />,
       label: t("profiles.actions.launchHook"),
       onClick: () => {
@@ -461,6 +472,7 @@ export function ProfileInfoDialog({
       destructive: true,
     },
     {
+      id: "delete",
       icon: <LuTrash2 className="size-4" />,
       label: t("profiles.actions.delete"),
       onClick: () => {
@@ -534,6 +546,7 @@ interface ProfileInfoLayoutProps {
   onCloneProfile?: (profile: BrowserProfile) => void;
   onKillProfile?: (profile: BrowserProfile) => void;
   visibleActions: {
+    id?: string;
     icon: React.ReactNode;
     label: string;
     onClick: () => void;
@@ -579,22 +592,23 @@ function ProfileInfoLayout({
 }: ProfileInfoLayoutProps) {
   const [section, setSection] = React.useState<ProfileSection>("overview");
 
-  // Map sidebar items to existing action labels, so clicking a section
-  // simply triggers the existing dialog handler.
+  // Map sidebar items to existing actions by their stable, language-independent
+  // `id`, so clicking a section triggers the existing dialog handler. Matching
+  // on `label` would break for every non-English locale (the labels are
+  // translated) and hide whole sections.
   const findAction = React.useCallback(
-    (substr: string) =>
-      visibleActions.find((a) => a.label.toLowerCase().includes(substr)),
+    (id: string) => visibleActions.find((a) => a.id === id),
     [visibleActions],
   );
 
   const deleteAction = findAction("delete");
   const fingerprintAction = findAction("fingerprint");
-  const cookiesManageAction = findAction("manage cookies");
-  const cookiesCopyAction = findAction("copy cookies");
+  const cookiesManageAction = findAction("cookiesManage");
+  const cookiesCopyAction = findAction("cookiesCopy");
   const cookiesAction = cookiesManageAction ?? cookiesCopyAction;
   const extensionAction = findAction("extension");
   const syncAction = findAction("sync");
-  const _launchHookAction = findAction("hook") ?? findAction("launch hook");
+  const _launchHookAction = findAction("hook");
   const _networkAction = findAction("network");
   // Password actions are no longer routed via the legacy action handlers —
   // SecuritySectionInline writes directly to the backend instead.
@@ -1149,7 +1163,7 @@ function SyncSectionInline({
         syncMode: mode,
       });
     } catch (e) {
-      setError(String(e));
+      setError(translateBackendError(t as never, e));
     } finally {
       setIsSaving(false);
     }
@@ -1192,7 +1206,9 @@ function SyncSectionInline({
           <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
             {t("profileInfo.fields.syncStatus")}
           </p>
-          <p className="text-sm mt-0.5">{syncStatus.status}</p>
+          <p className="text-sm mt-0.5">
+            {t(`profileInfo.syncStatusValue.${syncStatus.status}`)}
+          </p>
           {syncStatus.error && (
             <p className="text-xs text-destructive mt-1">{syncStatus.error}</p>
           )}
@@ -1246,7 +1262,7 @@ function NetworkSectionInline({
       setProxyId(nextId);
       if (nextId !== null) setVpnId(null);
     } catch (e) {
-      setError(String(e));
+      setError(translateBackendError(t as never, e));
     } finally {
       setIsSaving(false);
     }
@@ -1264,7 +1280,7 @@ function NetworkSectionInline({
       setVpnId(nextId);
       if (nextId !== null) setProxyId(null);
     } catch (e) {
-      setError(String(e));
+      setError(translateBackendError(t as never, e));
     } finally {
       setIsSaving(false);
     }
@@ -1370,7 +1386,7 @@ function ExtensionsSectionInline({
         );
         if (mounted) setGroups(data);
       } catch (e) {
-        if (mounted) setError(String(e));
+        if (mounted) setError(translateBackendError(t as never, e));
       }
     };
     void load();
@@ -1384,7 +1400,7 @@ function ExtensionsSectionInline({
       mounted = false;
       unlisten?.();
     };
-  }, []);
+  }, [t]);
 
   const onChange = async (value: string) => {
     const next = value === "__none__" ? null : value;
@@ -1397,7 +1413,7 @@ function ExtensionsSectionInline({
       });
       setGroupId(next);
     } catch (e) {
-      setError(String(e));
+      setError(translateBackendError(t as never, e));
     } finally {
       setIsSaving(false);
     }
@@ -1684,7 +1700,7 @@ function FingerprintSectionInline({
       // Close the dialog once the fingerprint is saved.
       onSaved();
     } catch (e) {
-      setError(String(e));
+      setError(translateBackendError(t as never, e));
     } finally {
       setIsSaving(false);
     }

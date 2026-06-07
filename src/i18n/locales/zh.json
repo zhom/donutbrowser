@@ -239,7 +239,11 @@
       "extDefault": "默认",
       "dnsLevel": "DNS 屏蔽列表: {{level}}",
       "extSearch": "搜索分组…",
-      "extEmpty": "没有扩展组"
+      "extEmpty": "没有扩展组",
+      "cantModifyRunning": "无法修改正在运行的配置文件",
+      "cantModifyLaunching": "启动期间无法修改配置文件",
+      "cantModifyStopping": "停止期间无法修改配置文件",
+      "cantModifyUpdating": "浏览器更新期间无法修改配置文件"
     },
     "actions": {
       "launch": "启动",
@@ -639,7 +643,11 @@
       "profileSynced": "配置文件 '{{name}}' 同步成功",
       "profileSyncFailed": "同步配置文件 '{{name}}' 失败",
       "profileSyncFailedWithError": "同步配置文件 '{{name}}' 失败: {{error}}"
-    }
+    },
+    "enabledToast": "已启用同步",
+    "disabledToast": "已禁用同步",
+    "enabledDescription": "已启用配置文件同步",
+    "disabledDescription": "已禁用配置文件同步"
   },
   "integrations": {
     "title": "集成",
@@ -918,6 +926,11 @@
       "syncingProfile": "正在同步配置文件 '{{name}}'...",
       "syncingProfileWithProgress": "{{count}} 个文件 ({{size}})",
       "updatingVersions": "正在更新浏览器版本..."
+    },
+    "progress": {
+      "remaining": "剩余 {{time}}",
+      "filesProgress": "{{completed}}/{{total}} 个文件",
+      "filesFailed": "{{count}} 个文件失败"
     }
   },
   "errors": {
@@ -1136,7 +1149,9 @@
       "addRule": "添加规则",
       "rulePlaceholder": "例如 example.com, 192.168.1.*, .*\\.local",
       "noRules": "未配置绕过规则。",
-      "ruleTypes": "支持主机名、IP地址和正则表达式模式。"
+      "ruleTypes": "支持主机名、IP地址和正则表达式模式。",
+      "vpnLabel": "VPN：{{name}}",
+      "proxyLabel": "代理：{{name}}"
     },
     "launchHook": {
       "title": "启动钩子 URL",
@@ -1198,6 +1213,12 @@
       "notSupported": "指纹编辑仅适用于 Camoufox 和 Wayfern 配置文件。",
       "lockedTitle": "查看和编辑指纹是 Pro 功能",
       "lockedDescription": "所有方案都包含指纹保护。查看和编辑配置文件的指纹数值才需要有效的付费方案。"
+    },
+    "syncStatusValue": {
+      "waiting": "等待中",
+      "syncing": "同步中",
+      "synced": "已同步",
+      "error": "错误"
     }
   },
   "extensions": {
@@ -1718,7 +1739,8 @@
       "updateStartedDescription": "版本 {{version}} 即将开始下载。更新完成前浏览器启动将被禁用。",
       "downloadStarting": "正在开始下载 {{browser}} {{version}}",
       "downloadProgressBelow": "下载进度将显示在下方...",
-      "autoDownloadStarted": "正在自动下载 {{browser}} {{version}}。进度将显示在下方。"
+      "autoDownloadStarted": "正在自动下载 {{browser}} {{version}}。进度将显示在下方。",
+      "lookingForUpdates": "正在检查 {{browser}} 的更新"
     }
   },
   "profilePassword": {
@@ -2017,5 +2039,9 @@
       "trialBadge": "2 周免费",
       "commercialDesc": "在 2 周评估期内免费。之后需要付费方案，这有助于本项目的持续维护与发展。"
     }
+  },
+  "wayfernBlocked": {
+    "title": "浏览器自动化已暂停",
+    "description": "您的账户暂时被限制使用 Pro 浏览器功能，通常是因为同时在多台设备上登录。请退出其他设备的登录，然后重新启动配置文件即可恢复。"
   }
 }

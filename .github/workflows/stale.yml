@@ -22,3 +22,6 @@ jobs:
           stale-pr-label: "stale"
           days-before-stale: 30
           days-before-close: 7
+          # Never let the maintainer's own assigned issues go stale or get
+          # closed, regardless of inactivity.
+          exempt-issue-assignees: "zhom"

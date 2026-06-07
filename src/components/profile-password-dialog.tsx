@@ -203,7 +203,7 @@ export function ProfilePasswordDialog({
         <div className="flex flex-col gap-3">
           {(mode === "set" || mode === "change") && (
             <div className="rounded-md border border-warning/50 bg-warning/10 p-3 text-sm">
-              <p className="font-medium text-warning-foreground">
+              <p className="font-medium text-warning">
                 {t("profilePassword.warnings.forgetWarningTitle")}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">

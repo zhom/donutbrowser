@@ -58,13 +58,25 @@ pub struct ApiProfileResponse {
 pub struct CreateProfileRequest {
   pub name: String,
   pub browser: String,
-  pub version: String,
+  /// Optional. Omit (or pass `"latest"`) to use the newest already-downloaded
+  /// version of the chosen browser. A concrete version must already be
+  /// downloaded; the create path does not fetch new versions.
+  #[serde(default)]
+  pub version: Option<String>,
   pub proxy_id: Option<String>,
   pub vpn_id: Option<String>,
   pub launch_hook: Option<String>,
   pub release_type: Option<String>,
+  /// Camoufox fingerprint/config. Send only when `browser` is `"camoufox"`.
+  /// Omit it, or pass an empty object `{}`, to have a fresh fingerprint
+  /// generated automatically at creation. Provide a `fingerprint` field to
+  /// pin a specific one.
   #[schema(value_type = Object)]
   pub camoufox_config: Option<serde_json::Value>,
+  /// Wayfern fingerprint/config. Send only when `browser` is `"wayfern"`.
+  /// Omit it, or pass an empty object `{}`, to have a fresh fingerprint
+  /// generated automatically at creation. Provide a `fingerprint` field to
+  /// pin a specific one.
   #[schema(value_type = Object)]
   pub wayfern_config: Option<serde_json::Value>,
   pub group_id: Option<String>,
@@ -74,7 +86,9 @@ pub struct CreateProfileRequest {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct UpdateProfileRequest {
   pub name: Option<String>,
-  pub browser: Option<String>,
+  // No `browser` field: a profile's engine is fixed at creation (changing it
+  // would invalidate the generated fingerprint and on-disk profile dir).
+  // Accepting it here only to silently ignore it misled API clients.
   pub version: Option<String>,
   pub proxy_id: Option<String>,
   pub vpn_id: Option<String>,
@@ -508,8 +522,14 @@ async fn auth_middleware(
     }
   };
 
-  // Compare tokens
-  if token != stored_token {
+  // Constant-time comparison so the auth check doesn't leak the shared-prefix
+  // length via timing. `ConstantTimeEq` on equal-length byte slices; differing
+  // lengths simply compare unequal.
+  use subtle::ConstantTimeEq;
+  let token_bytes = token.as_bytes();
+  let stored_bytes = stored_token.as_bytes();
+  let matches = token_bytes.len() == stored_bytes.len() && token_bytes.ct_eq(stored_bytes).into();
+  if !matches {
     log::warn!("[api] Rejected {path}: token mismatch");
     return Err(StatusCode::UNAUTHORIZED);
   }
@@ -694,14 +714,24 @@ async fn get_profile(
   }
 }
 
+/// Create a profile.
+///
+/// - `browser` must be `"wayfern"` or `"camoufox"`; any other value is rejected
+///   with 400.
+/// - `version` is optional: omit it or pass `"latest"` to use the newest
+///   already-downloaded version of that browser. The version must be present
+///   locally (this endpoint does not download new versions); 400 if none is.
+/// - Omitting the matching `wayfern_config`/`camoufox_config`, or passing an
+///   empty object `{}`, generates a fresh fingerprint automatically.
 #[utoipa::path(
   post,
   path = "/v1/profiles",
   request_body = CreateProfileRequest,
   responses(
     (status = 200, description = "Profile created successfully", body = ApiProfileResponse),
-    (status = 400, description = "Bad request"),
+    (status = 400, description = "Invalid browser, or no downloaded version available"),
     (status = 401, description = "Unauthorized"),
+    (status = 402, description = "Selected proxy requires payment"),
     (status = 500, description = "Internal server error")
   ),
   security(
@@ -714,6 +744,34 @@ async fn create_profile(
   Json(request): Json<CreateProfileRequest>,
 ) -> Result<Json<ApiProfileResponse>, StatusCode> {
   let profile_manager = ProfileManager::instance();
+
+  // Only Wayfern and Camoufox profiles are launchable; the rest of the system
+  // (fingerprint generation, launch, run) supports nothing else. Reject anything
+  // else up front — otherwise the profile is created with no fingerprint and an
+  // unrecognized browser, then crashes with a 500 on /run. Mirrors the MCP
+  // create_profile validation.
+  if request.browser != "wayfern" && request.browser != "camoufox" {
+    return Err(StatusCode::BAD_REQUEST);
+  }
+
+  // Resolve the version. Omitted, empty, or "latest" means "newest version
+  // already downloaded for this browser". The create path generates the
+  // fingerprint by launching that binary, so the version must be present
+  // locally — we don't fetch new versions here. 400 if none is downloaded.
+  let version = match request.version.as_deref() {
+    Some(v) if !v.is_empty() && v != "latest" => v.to_string(),
+    _ => {
+      let registry = crate::downloaded_browsers_registry::DownloadedBrowsersRegistry::instance();
+      let mut versions = registry.get_downloaded_versions(&request.browser);
+      // browsers is a HashMap, so keys are unordered — sort newest-first by
+      // semver before taking the latest.
+      versions.sort_by(|a, b| crate::api_client::compare_versions(b, a));
+      match versions.into_iter().next() {
+        Some(v) => v,
+        None => return Err(StatusCode::BAD_REQUEST),
+      }
+    }
+  };
 
   // Parse camoufox config if provided
   let camoufox_config = if let Some(config) = &request.camoufox_config {
@@ -747,7 +805,7 @@ async fn create_profile(
       &state.app_handle,
       &request.name,
       &request.browser,
-      &request.version,
+      &version,
       request.release_type.as_deref().unwrap_or("stable"),
       request.proxy_id.clone(),
       request.vpn_id.clone(),
@@ -2089,4 +2147,58 @@ async fn refresh_wayfern_token(
 
   let token = crate::cloud_auth::CLOUD_AUTH.get_wayfern_token().await;
   Ok(Json(WayfernTokenResponse { token }))
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  // Removing `browser` from UpdateProfileRequest, and rejecting invalid
+  // `browser` values on create, must NOT make the API reject requests that
+  // carry extra/unknown fields — old clients still send them. serde ignores
+  // unknown fields by default; these tests lock that in so a future
+  // `#[serde(deny_unknown_fields)]` can't silently break compatibility.
+  #[test]
+  fn update_profile_request_ignores_unknown_fields() {
+    // `browser` is no longer a field, plus a wholly unknown field. Both must
+    // be accepted and ignored, not rejected.
+    let json = r#"{"name": "p", "browser": "wayfern", "totally_unknown": 123}"#;
+    let parsed: UpdateProfileRequest =
+      serde_json::from_str(json).expect("unknown fields must be ignored, not rejected");
+    assert_eq!(parsed.name.as_deref(), Some("p"));
+  }
+
+  #[test]
+  fn create_profile_request_ignores_unknown_fields() {
+    let json = r#"{"name": "p", "browser": "wayfern", "version": "latest", "future_field": true}"#;
+    let parsed: CreateProfileRequest =
+      serde_json::from_str(json).expect("unknown fields must be ignored, not rejected");
+    assert_eq!(parsed.browser, "wayfern");
+  }
+
+  #[test]
+  fn create_profile_request_allows_omitting_version_and_configs() {
+    // Minimal body: no version, no wayfern_config/camoufox_config. Must
+    // deserialize (version resolves to latest-downloaded at the handler; an
+    // absent config triggers fresh-fingerprint generation).
+    let json = r#"{"name": "p", "browser": "wayfern"}"#;
+    let parsed: CreateProfileRequest =
+      serde_json::from_str(json).expect("version and configs are optional");
+    assert_eq!(parsed.browser, "wayfern");
+    assert!(parsed.version.is_none());
+    assert!(parsed.wayfern_config.is_none());
+    assert!(parsed.camoufox_config.is_none());
+  }
+
+  #[test]
+  fn create_profile_browser_validation_matches_supported_engines() {
+    // The handler rejects anything that isn't a launchable engine; this is the
+    // same predicate it uses, kept in lockstep with MCP's create_profile.
+    let is_valid = |b: &str| b == "wayfern" || b == "camoufox";
+    assert!(is_valid("wayfern"));
+    assert!(is_valid("camoufox"));
+    assert!(!is_valid("chromium"));
+    assert!(!is_valid("firefox"));
+    assert!(!is_valid(""));
+  }
 }

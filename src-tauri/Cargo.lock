@@ -1847,6 +1847,7 @@ dependencies = [
  "sha2 0.11.0",
  "shadowsocks",
  "smoltcp",
+ "subtle",
  "sys-locale",
  "sysinfo",
  "tar",

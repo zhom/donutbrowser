@@ -83,12 +83,7 @@ interface ErrorToastProps extends BaseToastProps {
 
 interface DownloadToastProps extends BaseToastProps {
   type: "download";
-  stage?:
-    | "downloading"
-    | "extracting"
-    | "verifying"
-    | "completed"
-    | "downloading (twilight rolling release)";
+  stage?: "downloading" | "extracting" | "verifying" | "completed";
   progress?: {
     percentage: number;
     speed?: string;
@@ -109,12 +104,6 @@ interface VersionUpdateToastProps extends BaseToastProps {
 interface FetchingToastProps extends BaseToastProps {
   type: "fetching";
   browserName?: string;
-}
-
-interface TwilightUpdateToastProps extends BaseToastProps {
-  type: "twilight-update";
-  browserName?: string;
-  hasUpdate?: boolean;
 }
 
 interface SyncProgressToastProps extends BaseToastProps {
@@ -138,7 +127,6 @@ type ToastProps =
   | DownloadToastProps
   | VersionUpdateToastProps
   | FetchingToastProps
-  | TwilightUpdateToastProps
   | SyncProgressToastProps;
 
 function formatBytesCompact(bytes: number): string {
@@ -188,10 +176,6 @@ function getToastIcon(type: ToastProps["type"], stage?: string) {
         <LuRefreshCw className="shrink-0 size-4 animate-spin text-foreground" />
       );
     case "fetching":
-      return (
-        <LuRefreshCw className="shrink-0 size-4 animate-spin text-foreground" />
-      );
-    case "twilight-update":
       return (
         <LuRefreshCw className="shrink-0 size-4 animate-spin text-foreground" />
       );
@@ -246,7 +230,8 @@ export function UnifiedToast(props: ToastProps) {
                 <p className="flex-1 min-w-0 text-xs text-muted-foreground">
                   {progress.percentage.toFixed(1)}%
                   {progress.speed && ` • ${progress.speed} MB/s`}
-                  {progress.eta && ` • ${progress.eta} remaining`}
+                  {progress.eta &&
+                    ` • ${t("toasts.progress.remaining", { time: progress.eta })}`}
                 </p>
               </div>
               <div className="w-full bg-muted rounded-full h-1.5">
@@ -264,9 +249,10 @@ export function UnifiedToast(props: ToastProps) {
           "current_browser" in progress && (
             <div className="mt-2 space-y-1">
               <p className="text-xs text-muted-foreground">
-                {progress.current_browser && (
-                  <>Looking for updates for {progress.current_browser}</>
-                )}
+                {progress.current_browser &&
+                  t("versionUpdater.toast.lookingForUpdates", {
+                    browser: progress.current_browser,
+                  })}
               </p>
               <div className="flex items-center gap-x-2">
                 <div className="flex-1 bg-muted rounded-full h-1.5 min-w-0">
@@ -293,7 +279,10 @@ export function UnifiedToast(props: ToastProps) {
                 {progress.phase === "uploading"
                   ? t("appUpdate.toast.uploading")
                   : t("appUpdate.toast.downloading")}{" "}
-                {progress.completed_files}/{progress.total_files} files
+                {t("toasts.progress.filesProgress", {
+                  completed: progress.completed_files,
+                  total: progress.total_files,
+                })}
                 {" \u2022 "}
                 {formatBytesCompact(progress.completed_bytes)} /{" "}
                 {formatBytesCompact(progress.total_bytes)}
@@ -304,36 +293,20 @@ export function UnifiedToast(props: ToastProps) {
                   </>
                 )}
                 {progress.eta_seconds > 0 &&
-                  progress.completed_files < progress.total_files && (
-                    <>
-                      {" \u2022 ~"}
-                      {formatEtaCompact(progress.eta_seconds)} remaining
-                    </>
-                  )}
+                  progress.completed_files < progress.total_files &&
+                  ` \u2022 ${t("toasts.progress.remaining", {
+                    time: `~${formatEtaCompact(progress.eta_seconds)}`,
+                  })}`}
               </p>
               {progress.failed_count > 0 && (
                 <p className="text-xs text-destructive mt-0.5">
-                  {progress.failed_count} file(s) failed
+                  {t("toasts.progress.filesFailed", {
+                    count: progress.failed_count,
+                  })}
                 </p>
               )}
             </div>
           )}
-
-        {/* Twilight update progress */}
-        {type === "twilight-update" && (
-          <div className="mt-2">
-            <p className="text-xs text-muted-foreground">
-              {"hasUpdate" in props && props.hasUpdate
-                ? "New twilight build available for download"
-                : "Checking for twilight updates..."}
-            </p>
-            {props.browserName && (
-              <p className="mt-1 text-xs text-muted-foreground">
-                {props.browserName} • Rolling Release
-              </p>
-            )}
-          </div>
-        )}
 
         {/* Description */}
         {description && (
@@ -353,11 +326,6 @@ export function UnifiedToast(props: ToastProps) {
             {stage === "verifying" && (
               <p className="mt-1 text-xs text-muted-foreground">
                 {t("browserDownload.toast.verifying")}
-              </p>
-            )}
-            {stage === "downloading (twilight rolling release)" && (
-              <p className="mt-1 text-xs text-muted-foreground">
-                {t("browserDownload.toast.downloadingRolling")}
               </p>
             )}
           </>

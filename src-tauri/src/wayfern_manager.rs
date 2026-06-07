@@ -651,7 +651,12 @@ impl WayfernManager {
       "--disable-session-crashed-bubble".to_string(),
       "--hide-crash-restore-bubble".to_string(),
       "--disable-infobars".to_string(),
-      "--disable-features=DialMediaRouteProvider,DnsOverHttps,AsyncDns".to_string(),
+      // Prefetch* / NoStatePrefetch: cross-site Speculation-Rules prefetch uses
+      // an isolated NetworkContext that defaults to DIRECT egress (real host IP
+      // leaks past the per-profile proxy). Disabling via a LAUNCH FLAG cannot be
+      // re-enabled by an imported/synced network_prediction_options pref (which a
+      // compile-time pref default could be).
+      "--disable-features=DialMediaRouteProvider,DnsOverHttps,AsyncDns,Prefetch,PrefetchProxy,SpeculationRulesPrefetchFuture,NoStatePrefetch".to_string(),
       "--use-mock-keychain".to_string(),
       "--password-store=basic".to_string(),
     ];

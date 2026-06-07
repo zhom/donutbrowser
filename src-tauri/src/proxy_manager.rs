@@ -774,6 +774,17 @@ impl ProxyManager {
     list
   }
 
+  /// Insert/replace a stored proxy in the in-memory map. Used by sync's
+  /// download_proxy after it writes the file to disk, mirroring how
+  /// download_group/download_vpn/download_extension keep their managers'
+  /// in-memory state in sync. Without this, get_stored_proxies (which reads
+  /// only the map) never sees a downloaded proxy until restart, so sync keeps
+  /// re-downloading it indefinitely.
+  pub fn upsert_stored_proxy(&self, proxy: StoredProxy) {
+    let mut stored_proxies = self.stored_proxies.lock().unwrap();
+    stored_proxies.insert(proxy.id.clone(), proxy);
+  }
+
   // Get a stored proxy by ID
 
   // Update a stored proxy
@@ -1730,12 +1741,18 @@ impl ProxyManager {
       .arg("--id")
       .arg(&proxy_id);
 
-    let output = proxy_cmd.output().await.unwrap();
-
-    if !output.status.success() {
-      let stderr = String::from_utf8_lossy(&output.stderr);
-      log::warn!("Proxy stop error: {stderr}");
-      // We still return Ok since we've already removed the proxy from our tracking
+    // A failed spawn (sidecar missing, permission denied, fd exhaustion) must
+    // not panic the cleanup task — the proxy is already removed from tracking,
+    // so degrade gracefully like the non-success branch below.
+    match proxy_cmd.output().await {
+      Ok(output) if !output.status.success() => {
+        log::warn!(
+          "Proxy stop error: {}",
+          String::from_utf8_lossy(&output.stderr)
+        );
+      }
+      Ok(_) => {}
+      Err(e) => log::warn!("Failed to run donut-proxy stop: {e}"),
     }
 
     // Clear profile-to-proxy mapping if it references this proxy
@@ -1795,11 +1812,16 @@ impl ProxyManager {
           .arg("--id")
           .arg(&proxy_id);
 
-        let output = proxy_cmd.output().await.unwrap();
-
-        if !output.status.success() {
-          let stderr = String::from_utf8_lossy(&output.stderr);
-          log::warn!("Proxy stop error: {stderr}");
+        // Don't panic if the sidecar can't be spawned — still clear the mapping.
+        match proxy_cmd.output().await {
+          Ok(output) if !output.status.success() => {
+            log::warn!(
+              "Proxy stop error: {}",
+              String::from_utf8_lossy(&output.stderr)
+            );
+          }
+          Ok(_) => {}
+          Err(e) => log::warn!("Failed to run donut-proxy stop: {e}"),
         }
 
         // Clear profile-to-proxy mapping

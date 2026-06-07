@@ -1168,11 +1168,14 @@ export default function Home() {
           profileId: profile.id,
           syncMode: enabling ? "Regular" : "Disabled",
         });
-        showSuccessToast(enabling ? "Sync enabled" : "Sync disabled", {
-          description: enabling
-            ? "Profile sync has been enabled"
-            : "Profile sync has been disabled",
-        });
+        showSuccessToast(
+          t(enabling ? "sync.enabledToast" : "sync.disabledToast"),
+          {
+            description: t(
+              enabling ? "sync.enabledDescription" : "sync.disabledDescription",
+            ),
+          },
+        );
       } catch (error) {
         console.error("Failed to toggle sync:", error);
         showErrorToast(t("errors.updateSyncSettingsFailed"));
@@ -1325,6 +1328,7 @@ export default function Home() {
     let unlistenStarted: (() => void) | undefined;
     let unlistenProgress: (() => void) | undefined;
     let unlistenCompleted: (() => void) | undefined;
+    let unlistenWayfernBlocked: (() => void) | undefined;
 
     void (async () => {
       unlistenRequired = await listen(
@@ -1386,6 +1390,16 @@ export default function Home() {
           duration: 5000,
         });
       });
+
+      unlistenWayfernBlocked = await listen("wayfern-paid-blocked", () => {
+        showToast({
+          id: "wayfern-paid-blocked",
+          type: "error",
+          title: t("wayfernBlocked.title"),
+          description: t("wayfernBlocked.description"),
+          duration: 15000,
+        });
+      });
     })();
 
     return () => {
@@ -1393,6 +1407,7 @@ export default function Home() {
       unlistenStarted?.();
       unlistenProgress?.();
       unlistenCompleted?.();
+      unlistenWayfernBlocked?.();
     };
   }, [t]);
 

@@ -239,7 +239,11 @@
       "extDefault": "Predet.",
       "dnsLevel": "Lista DNS: {{level}}",
       "extSearch": "Buscar grupos…",
-      "extEmpty": "Sin grupos de extensiones"
+      "extEmpty": "Sin grupos de extensiones",
+      "cantModifyRunning": "No se puede modificar un perfil en ejecución",
+      "cantModifyLaunching": "No se puede modificar el perfil mientras se inicia",
+      "cantModifyStopping": "No se puede modificar el perfil mientras se detiene",
+      "cantModifyUpdating": "No se puede modificar el perfil mientras se actualiza el navegador"
     },
     "actions": {
       "launch": "Iniciar",
@@ -639,7 +643,11 @@
       "profileSynced": "Perfil '{{name}}' sincronizado correctamente",
       "profileSyncFailed": "Error al sincronizar el perfil '{{name}}'",
       "profileSyncFailedWithError": "Error al sincronizar el perfil '{{name}}': {{error}}"
-    }
+    },
+    "enabledToast": "Sincronización activada",
+    "disabledToast": "Sincronización desactivada",
+    "enabledDescription": "Se ha activado la sincronización del perfil",
+    "disabledDescription": "Se ha desactivado la sincronización del perfil"
   },
   "integrations": {
     "title": "Integraciones",
@@ -918,6 +926,11 @@
       "syncingProfile": "Sincronizando perfil '{{name}}'...",
       "syncingProfileWithProgress": "{{count}} archivos ({{size}})",
       "updatingVersions": "Actualizando versiones de navegadores..."
+    },
+    "progress": {
+      "remaining": "{{time}} restante",
+      "filesProgress": "{{completed}}/{{total}} archivos",
+      "filesFailed": "{{count}} archivo(s) con error"
     }
   },
   "errors": {
@@ -1136,7 +1149,9 @@
       "addRule": "Agregar Regla",
       "rulePlaceholder": "ej. example.com, 192.168.1.*, .*\\.local",
       "noRules": "No hay reglas de omisión configuradas.",
-      "ruleTypes": "Soporta nombres de host, direcciones IP y patrones regex."
+      "ruleTypes": "Soporta nombres de host, direcciones IP y patrones regex.",
+      "vpnLabel": "VPN: {{name}}",
+      "proxyLabel": "Proxy: {{name}}"
     },
     "launchHook": {
       "title": "URL del hook de inicio",
@@ -1198,6 +1213,12 @@
       "notSupported": "La edición de huellas digitales solo está disponible para perfiles Camoufox y Wayfern.",
       "lockedTitle": "Ver y editar la huella digital es una función Pro",
       "lockedDescription": "La protección de huella digital está incluida en todos los planes. Ver y editar los valores de la huella digital de un perfil es lo que requiere un plan de pago activo."
+    },
+    "syncStatusValue": {
+      "waiting": "Esperando",
+      "syncing": "Sincronizando",
+      "synced": "Sincronizado",
+      "error": "Error"
     }
   },
   "extensions": {
@@ -1718,7 +1739,8 @@
       "updateStartedDescription": "La descarga de la versión {{version}} comenzará en breve. El inicio del navegador está deshabilitado hasta que finalice la actualización.",
       "downloadStarting": "Iniciando la descarga de {{browser}} {{version}}",
       "downloadProgressBelow": "El progreso de la descarga se mostrará a continuación...",
-      "autoDownloadStarted": "Descargando {{browser}} {{version}} automáticamente. El progreso se mostrará a continuación."
+      "autoDownloadStarted": "Descargando {{browser}} {{version}} automáticamente. El progreso se mostrará a continuación.",
+      "lookingForUpdates": "Buscando actualizaciones de {{browser}}"
     }
   },
   "profilePassword": {
@@ -2017,5 +2039,9 @@
       "trialBadge": "2 semanas gratis",
       "commercialDesc": "Gratis durante una evaluación de 2 semanas. Después, un plan de pago mantiene el proyecto en buen estado y próspero."
     }
+  },
+  "wayfernBlocked": {
+    "title": "Automatización del navegador en pausa",
+    "description": "Tu cuenta fue restringida temporalmente de las funciones Pro del navegador, normalmente por iniciar sesión en varios dispositivos a la vez. Cierra sesión en los demás dispositivos y vuelve a iniciar el perfil para restaurarla."
   }
 }

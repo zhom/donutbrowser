@@ -1597,6 +1597,13 @@ impl SyncEngine {
       ))
     })?;
 
+    // Keep the in-memory cache in sync with disk. Without this, get_stored_proxies
+    // (which reads only the in-memory map) never sees the downloaded proxy until
+    // restart, so check_for_missing_synced_entities/sync_proxy treat it as
+    // missing every pass and re-download it forever. Mirrors download_group/
+    // download_vpn/download_extension.
+    proxy_manager.upsert_stored_proxy(proxy.clone());
+
     // Emit event for UI update
     if let Some(_handle) = app_handle {
       let _ = events::emit("stored-proxies-changed", ());

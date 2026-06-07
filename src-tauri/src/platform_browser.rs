@@ -3,6 +3,38 @@ use crate::profile::BrowserProfile;
 use std::path::Path;
 use std::process::Command;
 
+/// True if a process command line refers to `profile_path` as a real browser
+/// profile/data-dir argument, NOT merely a substring. A bare `contains` match
+/// force-killed unrelated processes that happened to mention the path (editors,
+/// `tail`, a terminal that `cd`'d there, or another profile whose path has this
+/// one as a prefix). Mirrors the precise matching in browser_runner/wayfern_manager.
+fn cmd_matches_profile_path(cmd: &[std::ffi::OsString], profile_path: &str) -> bool {
+  let args: Vec<&str> = cmd.iter().filter_map(|a| a.to_str()).collect();
+  for (i, arg) in args.iter().enumerate() {
+    // Exact argument equality (Firefox/Camoufox: `-profile <path>`; some launchers
+    // pass the path as its own arg).
+    if *arg == profile_path {
+      return true;
+    }
+    // `--user-data-dir=<path>` (Chromium/Wayfern) or `-profile=<path>`.
+    if let Some(val) = arg
+      .strip_prefix("--user-data-dir=")
+      .or_else(|| arg.strip_prefix("-profile="))
+    {
+      if val == profile_path {
+        return true;
+      }
+    }
+    // Flag followed by the path as the next argument.
+    if (*arg == "-profile" || *arg == "--user-data-dir")
+      && args.get(i + 1).is_some_and(|next| *next == profile_path)
+    {
+      return true;
+    }
+  }
+  false
+}
+
 // Platform-specific modules
 #[cfg(target_os = "macos")]
 #[allow(dead_code)]
@@ -215,16 +247,7 @@ pub mod macos {
         continue;
       }
 
-      // Check if any command line argument contains the profile path
-      let has_profile = cmd.iter().any(|arg| {
-        if let Some(arg_str) = arg.to_str() {
-          arg_str.contains(profile_path)
-        } else {
-          false
-        }
-      });
-
-      if has_profile {
+      if cmd_matches_profile_path(cmd, profile_path) {
         pids.push(pid.as_u32());
       }
     }
@@ -832,15 +855,7 @@ pub mod linux {
         continue;
       }
 
-      let has_profile = cmd.iter().any(|arg| {
-        if let Some(arg_str) = arg.to_str() {
-          arg_str.contains(profile_path)
-        } else {
-          false
-        }
-      });
-
-      if has_profile {
+      if cmd_matches_profile_path(cmd, profile_path) {
         pids.push(pid.as_u32());
       }
     }

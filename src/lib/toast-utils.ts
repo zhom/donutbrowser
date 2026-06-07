@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import React from "react";
 import { type ExternalToast, toast as sonnerToast } from "sonner";
 import { UnifiedToast } from "@/components/custom-toast";
+import i18n from "@/i18n";
 
 interface BaseToastProps {
   id?: string;
@@ -29,12 +30,7 @@ interface ErrorToastProps extends BaseToastProps {
 
 interface DownloadToastProps extends BaseToastProps {
   type: "download";
-  stage?:
-    | "downloading"
-    | "extracting"
-    | "verifying"
-    | "completed"
-    | "downloading (twilight rolling release)";
+  stage?: "downloading" | "extracting" | "verifying" | "completed";
   progress?: {
     percentage: number;
     speed?: string;
@@ -159,25 +155,19 @@ export function showToast(props: ToastProps & { id?: string }) {
 export function showDownloadToast(
   browserName: string,
   version: string,
-  stage:
-    | "downloading"
-    | "extracting"
-    | "verifying"
-    | "completed"
-    | "downloading (twilight rolling release)",
+  stage: "downloading" | "extracting" | "verifying" | "completed",
   progress?: { percentage: number; speed?: string; eta?: string },
   options?: { suppressCompletionToast?: boolean; onCancel?: () => void },
 ) {
+  const tParams = { browser: browserName, version };
   const title =
     stage === "completed"
-      ? `${browserName} ${version} downloaded successfully!`
+      ? i18n.t("toasts.success.downloadComplete", tParams)
       : stage === "downloading"
-        ? `Downloading ${browserName} ${version}`
+        ? i18n.t("toasts.loading.downloading", tParams)
         : stage === "extracting"
-          ? `Extracting ${browserName} ${version}`
-          : stage === "downloading (twilight rolling release)"
-            ? `Downloading ${browserName} ${version}`
-            : `Verifying ${browserName} ${version}`;
+          ? i18n.t("toasts.loading.extracting", tParams)
+          : i18n.t("toasts.loading.verifying", tParams);
 
   // Don't show completion toast if suppressed (for auto-update scenarios)
   if (stage === "completed" && options?.suppressCompletionToast) {
@@ -186,9 +176,7 @@ export function showDownloadToast(
   }
 
   // Only show cancel button during active downloading, not for completed/extracting/verifying
-  const showCancel =
-    stage === "downloading" ||
-    stage === "downloading (twilight rolling release)";
+  const showCancel = stage === "downloading";
 
   return showToast({
     type: "download",
@@ -241,10 +229,15 @@ export function showAutoUpdateToast(
 ) {
   return showToast({
     type: "loading",
-    title: `${browserName} update started`,
+    title: i18n.t("versionUpdater.toast.updateStarted", {
+      browser: browserName,
+    }),
     description:
       options?.description ??
-      `Automatically downloading ${browserName} ${version}. Progress will be shown in download notifications.`,
+      i18n.t("versionUpdater.toast.autoDownloadStarted", {
+        browser: browserName,
+        version,
+      }),
     id: options?.id ?? `auto-update-${browserName.toLowerCase()}-${version}`,
     duration: options?.duration ?? 4000,
   });
@@ -270,7 +263,7 @@ export function showSyncProgressToast(
 ) {
   return showToast({
     type: "sync-progress",
-    title: `Syncing profile '${profileName}'...`,
+    title: i18n.t("toasts.loading.syncingProfile", { name: profileName }),
     progress,
     id: options?.id,
     duration: Number.POSITIVE_INFINITY,
