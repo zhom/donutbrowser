@@ -14,8 +14,6 @@ import { GoPlus } from "react-icons/go";
 import { LuCheck, LuChevronsUpDown, LuLoaderCircle } from "react-icons/lu";
 import { LoadingButton } from "@/components/loading-button";
 import { ProxyFormDialog } from "@/components/proxy-form-dialog";
-import { SharedCamoufoxConfigForm } from "@/components/shared-camoufox-config-form";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -56,15 +54,9 @@ import { useProxyEvents } from "@/hooks/use-proxy-events";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
 import { getBrowserIcon } from "@/lib/browser-utils";
 import { cn } from "@/lib/utils";
-import type {
-  BrowserReleaseTypes,
-  CamoufoxConfig,
-  CamoufoxOS,
-  WayfernConfig,
-  WayfernOS,
-} from "@/types";
+import type { BrowserReleaseTypes, WayfernConfig, WayfernOS } from "@/types";
 
-const getCurrentOS = (): CamoufoxOS => {
+const getCurrentOS = (): WayfernOS => {
   if (typeof navigator === "undefined") return "linux";
   const platform = navigator.platform.toLowerCase();
   if (platform.includes("win")) return "windows";
@@ -86,7 +78,6 @@ interface CreateProfileDialogProps {
     releaseType: string;
     proxyId?: string;
     vpnId?: string;
-    camoufoxConfig?: CamoufoxConfig;
     wayfernConfig?: WayfernConfig;
     groupId?: string;
     extensionGroupId?: string;
@@ -106,10 +97,6 @@ interface BrowserOption {
 
 const browserOptions: BrowserOption[] = [
   {
-    value: "camoufox",
-    label: "Camoufox",
-  },
-  {
     value: "wayfern",
     label: "Wayfern",
   },
@@ -126,28 +113,24 @@ export function CreateProfileDialog({
   const proxyListboxIdAntiDetect = useId();
   const proxyListboxIdRegular = useId();
   const [profileName, setProfileName] = useState("");
+  // Camoufox is deprecated: only Wayfern profiles can be created, so the dialog
+  // opens straight into the Wayfern config step (no browser-selection screen).
   const [currentStep, setCurrentStep] = useState<
     "browser-selection" | "browser-config"
-  >("browser-selection");
+  >("browser-config");
   const [activeTab, setActiveTab] = useState("anti-detect");
 
-  // Browser selection states
+  // Browser selection states. Defaults to Wayfern — the only creatable browser.
   const [selectedBrowser, setSelectedBrowser] =
-    useState<BrowserTypeString | null>(null);
+    useState<BrowserTypeString>("wayfern");
   const [selectedProxyId, setSelectedProxyId] = useState<string>();
   const [proxyPopoverOpen, setProxyPopoverOpen] = useState(false);
   const [dnsBlocklist, setDnsBlocklist] = useState<string>("");
   const [launchHook, setLaunchHook] = useState("");
 
-  // Camoufox anti-detect states
-  const [camoufoxConfig, setCamoufoxConfig] = useState<CamoufoxConfig>(() => ({
-    geoip: true, // Default to automatic geoip
-    os: getCurrentOS(), // Default to current OS
-  }));
-
   // Wayfern anti-detect states
   const [wayfernConfig, setWayfernConfig] = useState<WayfernConfig>(() => ({
-    os: getCurrentOS() as WayfernOS, // Default to current OS
+    os: getCurrentOS(), // Default to current OS
   }));
 
   // Handle browser selection from the initial screen
@@ -156,22 +139,23 @@ export function CreateProfileDialog({
     setCurrentStep("browser-config");
   };
 
-  // Handle back button
-  const handleBack = () => {
-    setCurrentStep("browser-selection");
-    setSelectedBrowser(null);
+  // Reset the form fields without leaving the Wayfern config step — Camoufox is
+  // deprecated, so there is no browser-selection screen to go back to.
+  const resetForm = () => {
+    setSelectedBrowser("wayfern");
     setProfileName("");
     setSelectedProxyId(undefined);
     setLaunchHook("");
   };
 
+  // Handle back button
+  const handleBack = () => {
+    resetForm();
+  };
+
   const handleTabChange = (value: string) => {
     setActiveTab(value);
-    setCurrentStep("browser-selection");
-    setSelectedBrowser(null);
-    setProfileName("");
-    setSelectedProxyId(undefined);
-    setLaunchHook("");
+    resetForm();
   };
 
   const [supportedBrowsers, setSupportedBrowsers] = useState<string[]>([]);
@@ -307,16 +291,15 @@ export function CreateProfileDialog({
   useEffect(() => {
     if (isOpen) {
       void loadSupportedBrowsers();
-      // Load downloaded versions for both anti-detect browsers up front so the
-      // selection-screen availability gate is accurate before either is picked.
+      // Load downloaded Wayfern versions up front so the availability gate is
+      // accurate. Camoufox is deprecated and no longer creatable.
       void loadDownloadedVersions("wayfern");
-      void loadDownloadedVersions("camoufox");
       // Load release types when a browser is selected
       if (selectedBrowser) {
         void loadReleaseTypes(selectedBrowser);
       }
-      // Check and download GeoIP database if needed for Camoufox or Wayfern
-      if (selectedBrowser === "camoufox" || selectedBrowser === "wayfern") {
+      // Wayfern needs the GeoIP database for fingerprint generation.
+      if (selectedBrowser === "wayfern") {
         void checkAndDownloadGeoIPDatabase();
       }
     }
@@ -417,66 +400,34 @@ export function CreateProfileDialog({
         : undefined;
     try {
       if (activeTab === "anti-detect") {
-        // Anti-detect browser - check if Wayfern or Camoufox is selected
-        if (selectedBrowser === "wayfern") {
-          const bestWayfernVersion = getCreatableVersion("wayfern");
-          if (!bestWayfernVersion) {
-            console.error("No Wayfern version available");
-            return;
-          }
-
-          // The fingerprint will be generated at launch time by the Rust backend
-          const finalWayfernConfig = { ...wayfernConfig };
-
-          await onCreateProfile({
-            name: profileName.trim(),
-            browserStr: "wayfern" as BrowserTypeString,
-            version: bestWayfernVersion.version,
-            releaseType: bestWayfernVersion.releaseType,
-            proxyId: resolvedProxyId,
-            vpnId: resolvedVpnId,
-            wayfernConfig: finalWayfernConfig,
-            groupId:
-              selectedGroupId && selectedGroupId !== "__all__"
-                ? selectedGroupId
-                : undefined,
-            extensionGroupId: selectedExtensionGroupId,
-            ephemeral,
-            dnsBlocklist: dnsBlocklist || undefined,
-            launchHook: launchHook.trim() || undefined,
-            password: passwordToSet,
-          });
-        } else {
-          // Default to Camoufox
-          const bestCamoufoxVersion = getCreatableVersion("camoufox");
-          if (!bestCamoufoxVersion) {
-            console.error("No Camoufox version available");
-            return;
-          }
-
-          // The fingerprint will be generated at launch time by the Rust backend
-          // We don't need to generate it here during profile creation
-          const finalCamoufoxConfig = { ...camoufoxConfig };
-
-          await onCreateProfile({
-            name: profileName.trim(),
-            browserStr: "camoufox" as BrowserTypeString,
-            version: bestCamoufoxVersion.version,
-            releaseType: bestCamoufoxVersion.releaseType,
-            proxyId: resolvedProxyId,
-            vpnId: resolvedVpnId,
-            camoufoxConfig: finalCamoufoxConfig,
-            groupId:
-              selectedGroupId && selectedGroupId !== "__all__"
-                ? selectedGroupId
-                : undefined,
-            extensionGroupId: selectedExtensionGroupId,
-            ephemeral,
-            dnsBlocklist: dnsBlocklist || undefined,
-            launchHook: launchHook.trim() || undefined,
-            password: passwordToSet,
-          });
+        // Camoufox is deprecated — only Wayfern anti-detect profiles are created.
+        const bestWayfernVersion = getCreatableVersion("wayfern");
+        if (!bestWayfernVersion) {
+          console.error("No Wayfern version available");
+          return;
         }
+
+        // The fingerprint will be generated at launch time by the Rust backend
+        const finalWayfernConfig = { ...wayfernConfig };
+
+        await onCreateProfile({
+          name: profileName.trim(),
+          browserStr: "wayfern" as BrowserTypeString,
+          version: bestWayfernVersion.version,
+          releaseType: bestWayfernVersion.releaseType,
+          proxyId: resolvedProxyId,
+          vpnId: resolvedVpnId,
+          wayfernConfig: finalWayfernConfig,
+          groupId:
+            selectedGroupId && selectedGroupId !== "__all__"
+              ? selectedGroupId
+              : undefined,
+          extensionGroupId: selectedExtensionGroupId,
+          ephemeral,
+          dnsBlocklist: dnsBlocklist || undefined,
+          launchHook: launchHook.trim() || undefined,
+          password: passwordToSet,
+        });
       } else {
         // Regular browser
         if (!selectedBrowser) {
@@ -519,22 +470,19 @@ export function CreateProfileDialog({
     // Cancel any ongoing loading
     loadingBrowserRef.current = null;
 
-    // Reset all states
+    // Reset all states. Stay on the Wayfern config step — Camoufox is
+    // deprecated, so the browser-selection screen is gone.
     setProfileName("");
-    setCurrentStep("browser-selection");
+    setCurrentStep("browser-config");
     setActiveTab("anti-detect");
-    setSelectedBrowser(null);
+    setSelectedBrowser("wayfern");
     setSelectedProxyId(undefined);
     setLaunchHook("");
     setReleaseTypes({});
     setIsLoadingReleaseTypes(false);
     setReleaseTypesError(null);
-    setCamoufoxConfig({
-      geoip: true, // Reset to automatic geoip
-      os: getCurrentOS(), // Reset to current OS
-    });
     setWayfernConfig({
-      os: getCurrentOS() as WayfernOS, // Reset to current OS
+      os: getCurrentOS(), // Reset to current OS
     });
     setEphemeral(false);
     setEnablePassword(false);
@@ -542,10 +490,6 @@ export function CreateProfileDialog({
     setPasswordConfirm("");
     setPasswordError(null);
     onClose();
-  };
-
-  const updateCamoufoxConfig = (key: keyof CamoufoxConfig, value: unknown) => {
-    setCamoufoxConfig((prev) => ({ ...prev, [key]: value }));
   };
 
   const updateWayfernConfig = (key: keyof WayfernConfig, value: unknown) => {
@@ -652,46 +596,14 @@ export function CreateProfileDialog({
                           </div>
                         </Button>
 
-                        {/* Camoufox (Firefox) - Second */}
-                        <Button
-                          onClick={() => {
-                            handleBrowserSelect("camoufox");
-                          }}
-                          disabled={!getCreatableVersion("camoufox")}
-                          className="flex gap-3 justify-start items-center p-4 w-full h-16 border-2 transition-colors hover:border-primary/50"
-                          variant="outline"
-                        >
-                          <div className="flex justify-center items-center size-8">
-                            {isBrowserCurrentlyDownloading("camoufox") ? (
-                              <LuLoaderCircle className="size-6 animate-spin" />
-                            ) : (
-                              (() => {
-                                const IconComponent =
-                                  getBrowserIcon("camoufox");
-                                return IconComponent ? (
-                                  <IconComponent className="size-6" />
-                                ) : null;
-                              })()
-                            )}
-                          </div>
-                          <div className="text-left">
-                            <div className="font-medium">
-                              {t("createProfile.firefoxLabel")}
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                              {isBrowserCurrentlyDownloading("camoufox")
-                                ? t("createProfile.downloadingSubtitle")
-                                : t("createProfile.firefoxSubtitle")}
-                            </div>
-                          </div>
-                        </Button>
+                        {/* Camoufox is deprecated — no longer offered for new
+                            profiles. Only Wayfern can be created. */}
 
-                        {!getCreatableVersion("wayfern") &&
-                          !getCreatableVersion("camoufox") && (
-                            <p className="pt-2 text-sm text-center text-muted-foreground">
-                              {t("createProfile.browsersDownloading")}
-                            </p>
-                          )}
+                        {!getCreatableVersion("wayfern") && (
+                          <p className="pt-2 text-sm text-center text-muted-foreground">
+                            {t("createProfile.browsersDownloading")}
+                          </p>
+                        )}
                       </div>
                     </TabsContent>
 
@@ -996,162 +908,9 @@ export function CreateProfileDialog({
                               profileBrowser="wayfern"
                             />
                           </div>
-                        ) : selectedBrowser === "camoufox" ? (
-                          // Camoufox Configuration
-                          <div className="space-y-6">
-                            {/* Camoufox Download Status */}
-                            {isLoadingReleaseTypes && (
-                              <div className="flex gap-3 items-center p-3 rounded-md border">
-                                <div className="size-4 rounded-full border-2 animate-spin border-muted/40 border-t-primary" />
-                                <p className="text-sm text-muted-foreground">
-                                  {t("createProfile.version.fetching")}
-                                </p>
-                              </div>
-                            )}
-                            {!isLoadingReleaseTypes && releaseTypesError && (
-                              <div className="flex gap-3 items-center p-3 rounded-md border border-destructive/50 bg-destructive/10">
-                                <p className="flex-1 text-sm text-destructive">
-                                  {releaseTypesError}
-                                </p>
-                                <RippleButton
-                                  onClick={() =>
-                                    selectedBrowser &&
-                                    loadReleaseTypes(selectedBrowser)
-                                  }
-                                  size="sm"
-                                  variant="outline"
-                                >
-                                  {t("common.buttons.retry")}
-                                </RippleButton>
-                              </div>
-                            )}
-                            {!isLoadingReleaseTypes &&
-                              !releaseTypesError &&
-                              !getBestAvailableVersion("camoufox") && (
-                                <div className="flex gap-3 items-center p-3 rounded-md border border-warning/50 bg-warning/10">
-                                  <p className="text-sm text-warning">
-                                    {t("createProfile.platformUnavailable", {
-                                      browser: "Camoufox",
-                                    })}
-                                  </p>
-                                </div>
-                              )}
-                            {!isLoadingReleaseTypes &&
-                              !releaseTypesError &&
-                              !isBrowserCurrentlyDownloading("camoufox") &&
-                              !getCreatableVersion("camoufox") &&
-                              getBestAvailableVersion("camoufox") && (
-                                <div className="flex gap-3 items-center p-3 rounded-md border">
-                                  <p className="text-sm text-muted-foreground">
-                                    {t("createProfile.version.needsDownload", {
-                                      browser: "Camoufox",
-                                      version:
-                                        getBestAvailableVersion("camoufox")
-                                          ?.version,
-                                    })}
-                                  </p>
-                                  <LoadingButton
-                                    onClick={() => {
-                                      void handleDownload("camoufox");
-                                    }}
-                                    isLoading={isBrowserCurrentlyDownloading(
-                                      "camoufox",
-                                    )}
-                                    size="sm"
-                                    disabled={isBrowserCurrentlyDownloading(
-                                      "camoufox",
-                                    )}
-                                  >
-                                    {isBrowserCurrentlyDownloading("camoufox")
-                                      ? t("common.buttons.downloading")
-                                      : t("common.buttons.download")}
-                                  </LoadingButton>
-                                </div>
-                              )}
-                            {!isLoadingReleaseTypes &&
-                              !releaseTypesError &&
-                              !isBrowserCurrentlyDownloading("camoufox") &&
-                              getCreatableVersion("camoufox") && (
-                                <div className="p-3 text-sm rounded-md border text-muted-foreground">
-                                  ✓{" "}
-                                  {t("createProfile.version.available", {
-                                    browser: "Camoufox",
-                                    version:
-                                      getCreatableVersion("camoufox")?.version,
-                                  })}
-                                </div>
-                              )}
-                            {!isLoadingReleaseTypes &&
-                              !releaseTypesError &&
-                              !isBrowserCurrentlyDownloading("camoufox") &&
-                              getCreatableVersion("camoufox") &&
-                              !isBrowserVersionAvailable("camoufox") &&
-                              getBestAvailableVersion("camoufox") && (
-                                <div className="flex gap-3 items-center p-3 rounded-md border">
-                                  <p className="flex-1 text-sm text-muted-foreground">
-                                    {t(
-                                      "createProfile.version.upgradeAvailable",
-                                      {
-                                        browser: "Camoufox",
-                                        version:
-                                          getBestAvailableVersion("camoufox")
-                                            ?.version,
-                                      },
-                                    )}
-                                  </p>
-                                  <LoadingButton
-                                    onClick={() => {
-                                      void handleDownload("camoufox");
-                                    }}
-                                    isLoading={isBrowserCurrentlyDownloading(
-                                      "camoufox",
-                                    )}
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={isBrowserCurrentlyDownloading(
-                                      "camoufox",
-                                    )}
-                                  >
-                                    {isBrowserCurrentlyDownloading("camoufox")
-                                      ? t("common.buttons.downloading")
-                                      : t("common.buttons.download")}
-                                  </LoadingButton>
-                                </div>
-                              )}
-                            {isBrowserCurrentlyDownloading("camoufox") && (
-                              <div className="p-3 text-sm rounded-md border text-muted-foreground">
-                                {t("createProfile.version.downloading", {
-                                  browser: "Camoufox",
-                                  version:
-                                    getBestAvailableVersion("camoufox")
-                                      ?.version,
-                                })}
-                              </div>
-                            )}
-
-                            {crossOsUnlocked && (
-                              <Alert className="border-warning/50 bg-warning/10">
-                                <AlertDescription className="text-sm">
-                                  {t("createProfile.camoufoxWarning")}
-                                </AlertDescription>
-                              </Alert>
-                            )}
-
-                            <SharedCamoufoxConfigForm
-                              config={camoufoxConfig}
-                              onConfigChange={updateCamoufoxConfig}
-                              isCreating
-                              browserType="camoufox"
-                              crossOsUnlocked={crossOsUnlocked}
-                              limitedMode={!crossOsUnlocked}
-                              profileVersion={
-                                getCreatableVersion("camoufox")?.version
-                              }
-                              profileBrowser="camoufox"
-                            />
-                          </div>
                         ) : (
-                          // Regular Browser Configuration (should not happen in anti-detect tab)
+                          // Regular Browser Configuration (should not happen in
+                          // the anti-detect tab; Camoufox creation is removed).
                           <div className="space-y-4">
                             {selectedBrowser && (
                               <div className="space-y-3">

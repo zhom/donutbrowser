@@ -1832,7 +1832,8 @@
     "fingerprintRequiresPro": "Viewing or editing the fingerprint requires an active paid plan. Protection is included on all plans.",
     "proxyNotWorking": "The selected proxy isn't working, so the profile wasn't created.",
     "proxyPaymentRequired": "The selected proxy requires payment (402) — its subscription may have expired — so the profile wasn't created.",
-    "vpnNotWorking": "The selected VPN isn't working, so the profile wasn't created."
+    "vpnNotWorking": "The selected VPN isn't working, so the profile wasn't created.",
+    "camoufoxImportDeprecated": "Importing Firefox-based (Camoufox) profiles is no longer supported. Camoufox is being deprecated — please use Wayfern instead."
   },
   "rail": {
     "profiles": "Profiles",
@@ -1961,7 +1962,7 @@
   },
   "browserSupport": {
     "endingSoonTitle": "Browser support ending soon",
-    "endingSoonDescription": "Support for the following profiles will be removed on March 15, 2026: {{profiles}}. Please migrate to Wayfern or Camoufox profiles."
+    "endingSoonDescription": "Support for the following profiles will be removed on March 15, 2026: {{profiles}}. Please migrate to Wayfern profiles."
   },
   "onboarding": {
     "steps": {
@@ -2043,5 +2044,10 @@
   "wayfernBlocked": {
     "title": "Browser automation paused",
     "description": "Your account was temporarily restricted from Pro browser features, usually from signing in on multiple devices at once. Sign out of other devices, then relaunch the profile to restore it."
+  },
+  "camoufoxDeprecation": {
+    "title": "Camoufox support is ending",
+    "description": "Support for Camoufox profiles is ending on July 8, 2026. You have one or more Camoufox profiles. Please migrate them to Wayfern before then — after that date, Camoufox profiles may stop working.",
+    "acknowledge": "Got it"
   }
 }

@@ -1832,7 +1832,8 @@
     "fingerprintRequiresPro": "핑거프린트를 보거나 편집하려면 활성 유료 요금제가 필요합니다. 보호 기능은 모든 요금제에 포함되어 있습니다.",
     "proxyNotWorking": "선택한 프록시가 작동하지 않아 프로필이 생성되지 않았습니다.",
     "proxyPaymentRequired": "선택한 프록시는 결제가 필요합니다(402). 구독이 만료되었을 수 있어 프로필이 생성되지 않았습니다.",
-    "vpnNotWorking": "선택한 VPN이 작동하지 않아 프로필이 생성되지 않았습니다."
+    "vpnNotWorking": "선택한 VPN이 작동하지 않아 프로필이 생성되지 않았습니다.",
+    "camoufoxImportDeprecated": "Firefox 기반(Camoufox) 프로필 가져오기는 더 이상 지원되지 않습니다. Camoufox는 지원 종료 예정입니다. 대신 Wayfern을 사용하세요."
   },
   "rail": {
     "profiles": "프로필",
@@ -1961,7 +1962,7 @@
   },
   "browserSupport": {
     "endingSoonTitle": "브라우저 지원이 곧 종료됩니다",
-    "endingSoonDescription": "다음 프로필에 대한 지원이 2026년 3월 15일에 제거됩니다: {{profiles}}. Wayfern 또는 Camoufox 프로필로 마이그레이션하세요."
+    "endingSoonDescription": "다음 프로필에 대한 지원이 2026년 3월 15일에 제거됩니다: {{profiles}}. Wayfern 프로필로 이전하세요."
   },
   "onboarding": {
     "steps": {
@@ -2043,5 +2044,10 @@
   "wayfernBlocked": {
     "title": "브라우저 자동화가 일시 중지됨",
     "description": "보통 여러 기기에서 동시에 로그인하여 계정의 Pro 브라우저 기능이 일시적으로 제한되었습니다. 다른 기기에서 로그아웃한 후 프로필을 다시 실행하면 복원됩니다."
+  },
+  "camoufoxDeprecation": {
+    "title": "Camoufox 지원이 종료됩니다",
+    "description": "Camoufox 프로필 지원이 2026년 7월 8일에 종료됩니다. Camoufox 프로필이 하나 이상 있습니다. 그 전에 Wayfern으로 이전하세요. 이후에는 Camoufox 프로필이 작동하지 않을 수 있습니다.",
+    "acknowledge": "확인"
   }
 }

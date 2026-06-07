@@ -21,6 +21,76 @@ use crate::sync;
 pub const CLOUD_API_URL: &str = "https://api.donutbrowser.com";
 pub const CLOUD_SYNC_URL: &str = "https://sync.donutbrowser.com";
 
+/// Default per-hour cap on local automation API / MCP requests. Mirrors the
+/// backend's DEFAULT_REQUESTS_PER_HOUR. Not enforced yet — see the inert
+/// rate-limit chokepoints in api_server / mcp_server.
+const DEFAULT_REQUESTS_PER_HOUR: i64 = 100;
+
+/// Capability + limit set the account is entitled to, derived from its plan.
+/// Mirrors `apps/backend/src/plans/entitlements.ts`. Features are gated on these
+/// flags instead of a single "is paid?" boolean, so a plan like the future
+/// "starter" tier (cross-OS fingerprints + cloud backup, no automation) is just
+/// data here.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Entitlements {
+  #[serde(default)]
+  pub active: bool,
+  #[serde(rename = "browserAutomation", default)]
+  pub browser_automation: bool,
+  #[serde(rename = "crossOsFingerprints", default)]
+  pub cross_os_fingerprints: bool,
+  #[serde(rename = "cloudBackup", default)]
+  pub cloud_backup: bool,
+  #[serde(rename = "teamCollaboration", default)]
+  pub team_collaboration: bool,
+  #[serde(rename = "profileLimit", default)]
+  pub profile_limit: i64,
+  #[serde(rename = "requestsPerHour", default)]
+  pub requests_per_hour: i64,
+}
+
+/// Local fallback mirror of the backend plan -> capability matrix, used only when
+/// the server hasn't sent an entitlements object (older cached state / backend).
+fn derive_entitlements(
+  plan: &str,
+  plan_period: Option<&str>,
+  subscription_status: &str,
+  profile_limit: i64,
+) -> Entitlements {
+  let active =
+    plan != "free" && (subscription_status == "active" || plan_period == Some("lifetime"));
+  if !active {
+    return Entitlements {
+      active: false,
+      browser_automation: false,
+      cross_os_fingerprints: false,
+      cloud_backup: false,
+      team_collaboration: false,
+      profile_limit: 0,
+      requests_per_hour: 0,
+    };
+  }
+  // pro and any unrecognized paid plan -> pro-level (never team).
+  let (browser_automation, cross_os_fingerprints, cloud_backup, team_collaboration) = match plan {
+    "starter" => (false, true, true, false),
+    "team" | "enterprise" => (true, true, true, true),
+    _ => (true, true, true, false),
+  };
+  Entitlements {
+    active,
+    browser_automation,
+    cross_os_fingerprints,
+    cloud_backup,
+    team_collaboration,
+    profile_limit,
+    requests_per_hour: if browser_automation {
+      DEFAULT_REQUESTS_PER_HOUR
+    } else {
+      0
+    },
+  }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CloudUser {
   pub id: String,
@@ -56,6 +126,26 @@ pub struct CloudUser {
   pub device_count: Option<i64>,
   #[serde(rename = "isPrimaryDevice", default)]
   pub is_primary_device: Option<bool>,
+  /// Capability/limit set derived from the plan by the backend. `default` (None)
+  /// keeps older login/state payloads deserializing; resolve via `entitlements()`.
+  #[serde(default)]
+  pub entitlements: Option<Entitlements>,
+}
+
+impl CloudUser {
+  /// Authoritative entitlements: the server-sent set when present, else derived
+  /// locally from the plan fields (keeps older cached state / backends working).
+  pub fn entitlements(&self) -> Entitlements {
+    if let Some(e) = &self.entitlements {
+      return e.clone();
+    }
+    derive_entitlements(
+      &self.plan,
+      self.plan_period.as_deref(),
+      &self.subscription_status,
+      self.profile_limit,
+    )
+  }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -658,31 +748,75 @@ impl CloudAuthManager {
     state.is_some()
   }
 
-  pub async fn has_active_paid_subscription(&self) -> bool {
+  /// Resolve this session's entitlements (server-sent or locally derived).
+  pub async fn entitlements(&self) -> Option<Entitlements> {
     let state = self.state.lock().await;
-    match &*state {
-      Some(auth) => {
-        auth.user.plan != "free"
-          && (auth.user.subscription_status == "active"
-            || auth.user.plan_period.as_deref() == Some("lifetime"))
-      }
-      None => false,
-    }
+    state.as_ref().map(|auth| auth.user.entitlements())
+  }
+
+  /// Account is in a paid/active state. Used for the "any active plan" gates
+  /// (sync token, wayfern token); per-feature access uses the capability helpers.
+  pub async fn has_active_paid_subscription(&self) -> bool {
+    self.entitlements().await.map(|e| e.active).unwrap_or(false)
   }
 
   /// Non-async version that uses try_lock, defaults to false if lock can't be acquired.
   pub fn has_active_paid_subscription_sync(&self) -> bool {
     match self.state.try_lock() {
-      Ok(state) => match &*state {
-        Some(auth) => {
-          auth.user.plan != "free"
-            && (auth.user.subscription_status == "active"
-              || auth.user.plan_period.as_deref() == Some("lifetime"))
-        }
-        None => false,
-      },
+      Ok(state) => state
+        .as_ref()
+        .map(|auth| auth.user.entitlements().active)
+        .unwrap_or(false),
       Err(_) => false,
     }
+  }
+
+  /// Launch/drive profiles programmatically (local API + MCP automation).
+  pub async fn can_use_browser_automation(&self) -> bool {
+    self
+      .entitlements()
+      .await
+      .map(|e| e.browser_automation)
+      .unwrap_or(false)
+  }
+
+  /// Edit fingerprints / use a non-native OS fingerprint.
+  pub async fn can_use_cross_os_fingerprints(&self) -> bool {
+    self
+      .entitlements()
+      .await
+      .map(|e| e.cross_os_fingerprints)
+      .unwrap_or(false)
+  }
+
+  /// Cloud profile sync / backup (async).
+  pub async fn can_use_cloud_backup(&self) -> bool {
+    self
+      .entitlements()
+      .await
+      .map(|e| e.cloud_backup)
+      .unwrap_or(false)
+  }
+
+  /// Cloud profile sync / backup (non-async, try_lock; false if unavailable).
+  pub fn can_use_cloud_backup_sync(&self) -> bool {
+    match self.state.try_lock() {
+      Ok(state) => state
+        .as_ref()
+        .map(|auth| auth.user.entitlements().cloud_backup)
+        .unwrap_or(false),
+      Err(_) => false,
+    }
+  }
+
+  /// Per-hour cap on automation requests (0 when automation is unavailable).
+  /// Carried for the future local rate limiter; read by the inert chokepoints.
+  pub async fn requests_per_hour(&self) -> i64 {
+    self
+      .entitlements()
+      .await
+      .map(|e| e.requests_per_hour)
+      .unwrap_or(0)
   }
 
   pub async fn is_fingerprint_os_allowed(&self, fingerprint_os: Option<&str>) -> bool {
@@ -690,7 +824,7 @@ impl CloudAuthManager {
     match fingerprint_os {
       None => true,
       Some(os) if os == host_os => true,
-      Some(_) => self.has_active_paid_subscription().await,
+      Some(_) => self.can_use_cross_os_fingerprints().await,
     }
   }
 
@@ -1208,7 +1342,7 @@ pub async fn cloud_exchange_device_code(
   app_handle: tauri::AppHandle,
   code: String,
 ) -> Result<CloudAuthState, String> {
-  let state = CLOUD_AUTH.exchange_device_code(&code).await?;
+  let mut state = CLOUD_AUTH.exchange_device_code(&code).await?;
 
   let has_subscription = CLOUD_AUTH.has_active_paid_subscription().await;
   log::info!(
@@ -1243,17 +1377,25 @@ pub async fn cloud_exchange_device_code(
   let _ = crate::events::emit_empty("cloud-auth-changed");
 
   let _ = &app_handle;
+  state.user.entitlements = Some(state.user.entitlements());
   Ok(state)
 }
 
 #[tauri::command]
 pub async fn cloud_get_user() -> Result<Option<CloudAuthState>, String> {
-  Ok(CLOUD_AUTH.get_user().await)
+  Ok(CLOUD_AUTH.get_user().await.map(|mut state| {
+    // Always hand the frontend a resolved entitlements object so it never has to
+    // derive capabilities itself (covers older cached state with no entitlements).
+    state.user.entitlements = Some(state.user.entitlements());
+    state
+  }))
 }
 
 #[tauri::command]
 pub async fn cloud_refresh_profile() -> Result<CloudUser, String> {
-  CLOUD_AUTH.fetch_profile().await
+  let mut user = CLOUD_AUTH.fetch_profile().await?;
+  user.entitlements = Some(user.entitlements());
+  Ok(user)
 }
 
 #[tauri::command]

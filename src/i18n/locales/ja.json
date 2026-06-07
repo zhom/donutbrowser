@@ -1832,7 +1832,8 @@
     "fingerprintRequiresPro": "フィンガープリントの表示または編集には有効な有料プランが必要です。保護機能はすべてのプランに含まれています。",
     "proxyNotWorking": "選択したプロキシが機能していないため、プロファイルは作成されませんでした。",
     "proxyPaymentRequired": "選択したプロキシは支払いが必要です（402）。サブスクリプションが期限切れの可能性があります。そのため、プロファイルは作成されませんでした。",
-    "vpnNotWorking": "選択したVPNが機能していないため、プロファイルは作成されませんでした。"
+    "vpnNotWorking": "選択したVPNが機能していないため、プロファイルは作成されませんでした。",
+    "camoufoxImportDeprecated": "Firefox ベース（Camoufox）のプロファイルのインポートはサポートされなくなりました。Camoufox は廃止予定です。代わりに Wayfern をご利用ください。"
   },
   "rail": {
     "profiles": "プロファイル",
@@ -1961,7 +1962,7 @@
   },
   "browserSupport": {
     "endingSoonTitle": "ブラウザのサポートが間もなく終了します",
-    "endingSoonDescription": "次のプロファイルのサポートは 2026 年 3 月 15 日に削除されます: {{profiles}}。Wayfern または Camoufox のプロファイルに移行してください。"
+    "endingSoonDescription": "以下のプロファイルのサポートは 2026 年 3 月 15 日に削除されます: {{profiles}}。Wayfern プロファイルに移行してください。"
   },
   "onboarding": {
     "steps": {
@@ -2043,5 +2044,10 @@
   "wayfernBlocked": {
     "title": "ブラウザの自動化が一時停止しました",
     "description": "通常は複数のデバイスで同時にサインインしたことが原因で、アカウントのProブラウザ機能が一時的に制限されました。他のデバイスからサインアウトし、プロファイルを再起動すると復元されます。"
+  },
+  "camoufoxDeprecation": {
+    "title": "Camoufox のサポートが終了します",
+    "description": "Camoufox プロファイルのサポートは 2026 年 7 月 8 日に終了します。Camoufox プロファイルが 1 つ以上あります。それまでに Wayfern へ移行してください。その後、Camoufox プロファイルは動作しなくなる可能性があります。",
+    "acknowledge": "了解しました"
   }
 }

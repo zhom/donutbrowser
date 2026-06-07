@@ -1832,7 +1832,8 @@
     "fingerprintRequiresPro": "查看或编辑指纹需要有效的付费方案。所有方案均包含指纹保护。",
     "proxyNotWorking": "所选代理无法使用，因此未创建配置文件。",
     "proxyPaymentRequired": "所选代理需要付费（402），其订阅可能已过期，因此未创建配置文件。",
-    "vpnNotWorking": "所选 VPN 无法使用，因此未创建配置文件。"
+    "vpnNotWorking": "所选 VPN 无法使用，因此未创建配置文件。",
+    "camoufoxImportDeprecated": "不再支持导入基于 Firefox 的 (Camoufox) 配置文件。Camoufox 即将停用——请改用 Wayfern。"
   },
   "rail": {
     "profiles": "配置文件",
@@ -1961,7 +1962,7 @@
   },
   "browserSupport": {
     "endingSoonTitle": "浏览器支持即将结束",
-    "endingSoonDescription": "以下配置文件的支持将于 2026 年 3 月 15 日移除：{{profiles}}。请迁移到 Wayfern 或 Camoufox 配置文件。"
+    "endingSoonDescription": "以下配置文件的支持将于 2026 年 3 月 15 日移除：{{profiles}}。请迁移到 Wayfern 配置文件。"
   },
   "onboarding": {
     "steps": {
@@ -2043,5 +2044,10 @@
   "wayfernBlocked": {
     "title": "浏览器自动化已暂停",
     "description": "您的账户暂时被限制使用 Pro 浏览器功能，通常是因为同时在多台设备上登录。请退出其他设备的登录，然后重新启动配置文件即可恢复。"
+  },
+  "camoufoxDeprecation": {
+    "title": "Camoufox 支持即将结束",
+    "description": "Camoufox 配置文件的支持将于 2026 年 7 月 8 日结束。您有一个或多个 Camoufox 配置文件。请在此之前迁移到 Wayfern——之后 Camoufox 配置文件可能会停止工作。",
+    "acknowledge": "知道了"
   }
 }

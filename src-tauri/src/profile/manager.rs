@@ -2516,7 +2516,7 @@ pub async fn update_camoufox_config(
 ) -> Result<(), String> {
   if config.fingerprint.is_some()
     && !crate::cloud_auth::CLOUD_AUTH
-      .has_active_paid_subscription()
+      .can_use_cross_os_fingerprints()
       .await
   {
     return Err(serde_json::json!({ "code": "FINGERPRINT_REQUIRES_PRO" }).to_string());
@@ -2544,7 +2544,7 @@ pub async fn update_wayfern_config(
 ) -> Result<(), String> {
   if config.fingerprint.is_some()
     && !crate::cloud_auth::CLOUD_AUTH
-      .has_active_paid_subscription()
+      .can_use_cross_os_fingerprints()
       .await
   {
     return Err(serde_json::json!({ "code": "FINGERPRINT_REQUIRES_PRO" }).to_string());

@@ -1832,7 +1832,8 @@
     "fingerprintRequiresPro": "Afficher ou modifier l'empreinte nécessite un forfait payant actif. La protection est incluse dans tous les forfaits.",
     "proxyNotWorking": "Le proxy sélectionné ne fonctionne pas, le profil n'a donc pas été créé.",
     "proxyPaymentRequired": "Le proxy sélectionné requiert un paiement (402) — son abonnement a peut-être expiré — le profil n'a donc pas été créé.",
-    "vpnNotWorking": "Le VPN sélectionné ne fonctionne pas, le profil n'a donc pas été créé."
+    "vpnNotWorking": "Le VPN sélectionné ne fonctionne pas, le profil n'a donc pas été créé.",
+    "camoufoxImportDeprecated": "L'importation de profils basés sur Firefox (Camoufox) n'est plus prise en charge. Camoufox est en cours d'abandon — utilisez Wayfern à la place."
   },
   "rail": {
     "profiles": "Profils",
@@ -1961,7 +1962,7 @@
   },
   "browserSupport": {
     "endingSoonTitle": "La prise en charge du navigateur prend bientôt fin",
-    "endingSoonDescription": "La prise en charge des profils suivants sera supprimée le 15 mars 2026 : {{profiles}}. Veuillez migrer vers des profils Wayfern ou Camoufox."
+    "endingSoonDescription": "La prise en charge des profils suivants sera supprimée le 15 mars 2026 : {{profiles}}. Veuillez migrer vers des profils Wayfern."
   },
   "onboarding": {
     "steps": {
@@ -2043,5 +2044,10 @@
   "wayfernBlocked": {
     "title": "Automatisation du navigateur en pause",
     "description": "Votre compte a été temporairement privé des fonctionnalités Pro du navigateur, généralement à cause d'une connexion sur plusieurs appareils à la fois. Déconnectez-vous des autres appareils, puis relancez le profil pour la rétablir."
+  },
+  "camoufoxDeprecation": {
+    "title": "La prise en charge de Camoufox prend fin",
+    "description": "La prise en charge des profils Camoufox prendra fin le 8 juillet 2026. Vous avez un ou plusieurs profils Camoufox. Migrez-les vers Wayfern avant cette date — après quoi, les profils Camoufox pourraient cesser de fonctionner.",
+    "acknowledge": "Compris"
   }
 }

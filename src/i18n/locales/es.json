@@ -1832,7 +1832,8 @@
     "fingerprintRequiresPro": "Ver o editar la huella digital requiere un plan de pago activo. La protección está incluida en todos los planes.",
     "proxyNotWorking": "El proxy seleccionado no funciona, por lo que no se creó el perfil.",
     "proxyPaymentRequired": "El proxy seleccionado requiere pago (402) —su suscripción puede haber vencido— por lo que no se creó el perfil.",
-    "vpnNotWorking": "La VPN seleccionada no funciona, por lo que no se creó el perfil."
+    "vpnNotWorking": "La VPN seleccionada no funciona, por lo que no se creó el perfil.",
+    "camoufoxImportDeprecated": "La importación de perfiles basados en Firefox (Camoufox) ya no es compatible. Camoufox está en desuso; usa Wayfern en su lugar."
   },
   "rail": {
     "profiles": "Perfiles",
@@ -1961,7 +1962,7 @@
   },
   "browserSupport": {
     "endingSoonTitle": "El soporte del navegador finalizará pronto",
-    "endingSoonDescription": "El soporte para los siguientes perfiles se eliminará el 15 de marzo de 2026: {{profiles}}. Migra a perfiles de Wayfern o Camoufox."
+    "endingSoonDescription": "El soporte para los siguientes perfiles se eliminará el 15 de marzo de 2026: {{profiles}}. Migra a perfiles de Wayfern."
   },
   "onboarding": {
     "steps": {
@@ -2043,5 +2044,10 @@
   "wayfernBlocked": {
     "title": "Automatización del navegador en pausa",
     "description": "Tu cuenta fue restringida temporalmente de las funciones Pro del navegador, normalmente por iniciar sesión en varios dispositivos a la vez. Cierra sesión en los demás dispositivos y vuelve a iniciar el perfil para restaurarla."
+  },
+  "camoufoxDeprecation": {
+    "title": "El soporte para Camoufox está terminando",
+    "description": "El soporte para los perfiles de Camoufox terminará el 8 de julio de 2026. Tienes uno o más perfiles de Camoufox. Migra a Wayfern antes de esa fecha; después, los perfiles de Camoufox podrían dejar de funcionar.",
+    "acknowledge": "Entendido"
   }
 }

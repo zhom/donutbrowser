@@ -32,6 +32,7 @@ export type BackendErrorCode =
   | "PROXY_NOT_WORKING"
   | "PROXY_PAYMENT_REQUIRED"
   | "VPN_NOT_WORKING"
+  | "CAMOUFOX_IMPORT_DEPRECATED"
   | "INTERNAL_ERROR";
 
 export interface BackendError {
@@ -132,6 +133,8 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.proxyPaymentRequired");
     case "VPN_NOT_WORKING":
       return t("backendErrors.vpnNotWorking");
+    case "CAMOUFOX_IMPORT_DEPRECATED":
+      return t("backendErrors.camoufoxImportDeprecated");
     case "INTERNAL_ERROR":
       return t("backendErrors.internal", {
         detail: parsed.params?.detail ?? "",

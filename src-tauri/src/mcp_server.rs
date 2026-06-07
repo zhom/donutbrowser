@@ -152,11 +152,11 @@ impl McpServer {
     self.is_running.load(Ordering::SeqCst)
   }
 
-  async fn require_paid_subscription(feature: &str) -> Result<(), McpError> {
-    if !CLOUD_AUTH.has_active_paid_subscription().await {
-      // Log the failed gate so customer logs explain why an MCP tool returned
-      // an error. Include enough state (logged-in vs not, plan, status) for
-      // support to diagnose without leaking secrets.
+  /// Gate an MCP tool on a capability the caller already resolved (e.g.
+  /// `CLOUD_AUTH.can_use_browser_automation().await`). Logs the rejected gate
+  /// with enough state for support to diagnose, without leaking secrets.
+  async fn require_capability(feature: &str, allowed: bool) -> Result<(), McpError> {
+    if !allowed {
       let summary = match CLOUD_AUTH.get_user().await {
         Some(state) => format!(
           "logged_in=true plan={} status={} period={:?}",
@@ -164,10 +164,10 @@ impl McpServer {
         ),
         None => "logged_in=false".to_string(),
       };
-      log::warn!("[mcp] Rejected '{feature}' — paid subscription gate failed ({summary})");
+      log::warn!("[mcp] Rejected '{feature}' — plan does not include it ({summary})");
       return Err(McpError {
         code: -32000,
-        message: format!("{feature} requires an active paid subscription"),
+        message: format!("{feature} requires a plan that includes this feature"),
       });
     }
     Ok(())
@@ -286,6 +286,9 @@ impl McpServer {
           .delete(Self::handle_mcp_delete),
       )
       .route("/health", get(Self::handle_health))
+      // Inert chokepoint (innermost → runs after auth) for the future per-hour
+      // automation request limit. See rate_limit_middleware.
+      .layer(middleware::from_fn(Self::rate_limit_middleware))
       .layer(middleware::from_fn_with_state(
         state.clone(),
         Self::auth_middleware,
@@ -314,6 +317,17 @@ impl McpServer {
         log::info!("[mcp] Server shutting down");
       },
     }
+  }
+
+  /// Chokepoint for the future per-hour automation request limit, mirroring the
+  /// REST API's. The limit (`requests_per_hour`, default 100) is plumbed through
+  /// entitlements; this is intentionally inert today — it resolves the limit but
+  /// never blocks. To enforce, count authenticated tool calls per rolling hour
+  /// and return StatusCode::TOO_MANY_REQUESTS once the limit (when > 0) is hit.
+  async fn rate_limit_middleware(req: Request<Body>, next: Next) -> Result<Response, StatusCode> {
+    let _requests_per_hour = CLOUD_AUTH.requests_per_hour().await;
+    // TODO(rate-limit): enforce `_requests_per_hour` for MCP tool calls.
+    Ok(next.run(req).await)
   }
 
   async fn auth_middleware(
@@ -1647,10 +1661,21 @@ impl McpServer {
       "list_profiles" => self.handle_list_profiles().await,
       "get_profile" => self.handle_get_profile(arguments).await,
       "run_profile" => {
-        Self::require_paid_subscription("Browser automation").await?;
+        Self::require_capability(
+          "Browser automation",
+          CLOUD_AUTH.can_use_browser_automation().await,
+        )
+        .await?;
         self.handle_run_profile(arguments).await
       }
-      "kill_profile" => self.handle_kill_profile(arguments).await,
+      "kill_profile" => {
+        Self::require_capability(
+          "Browser automation",
+          CLOUD_AUTH.can_use_browser_automation().await,
+        )
+        .await?;
+        self.handle_kill_profile(arguments).await
+      }
       "create_profile" => self.handle_create_profile(arguments).await,
       "update_profile" => self.handle_update_profile(arguments).await,
       "delete_profile" => self.handle_delete_profile(arguments).await,
@@ -1684,7 +1709,11 @@ impl McpServer {
       // editing requires a paid plan.
       "get_profile_fingerprint" => self.handle_get_profile_fingerprint(arguments).await,
       "update_profile_fingerprint" => {
-        Self::require_paid_subscription("Fingerprint").await?;
+        Self::require_capability(
+          "Fingerprint editing",
+          CLOUD_AUTH.can_use_cross_os_fingerprints().await,
+        )
+        .await?;
         self.handle_update_profile_fingerprint(arguments).await
       }
       "update_profile_proxy_bypass_rules" => {
@@ -1713,7 +1742,11 @@ impl McpServer {
       "get_team_lock_status" => self.handle_get_team_lock_status(arguments).await,
       // Synchronizer tools
       "start_sync_session" => {
-        Self::require_paid_subscription("Synchronizer").await?;
+        Self::require_capability(
+          "Synchronizer",
+          CLOUD_AUTH.can_use_browser_automation().await,
+        )
+        .await?;
         self.handle_start_sync_session(arguments).await
       }
       "stop_sync_session" => self.handle_stop_sync_session(arguments).await,
@@ -1721,43 +1754,83 @@ impl McpServer {
       "remove_sync_follower" => self.handle_remove_sync_follower(arguments).await,
       // Browser interaction tools (require paid subscription)
       "navigate" => {
-        Self::require_paid_subscription("Browser automation").await?;
+        Self::require_capability(
+          "Browser automation",
+          CLOUD_AUTH.can_use_browser_automation().await,
+        )
+        .await?;
         self.handle_navigate(arguments).await
       }
       "screenshot" => {
-        Self::require_paid_subscription("Browser automation").await?;
+        Self::require_capability(
+          "Browser automation",
+          CLOUD_AUTH.can_use_browser_automation().await,
+        )
+        .await?;
         self.handle_screenshot(arguments).await
       }
       "evaluate_javascript" => {
-        Self::require_paid_subscription("Browser automation").await?;
+        Self::require_capability(
+          "Browser automation",
+          CLOUD_AUTH.can_use_browser_automation().await,
+        )
+        .await?;
         self.handle_evaluate_javascript(arguments).await
       }
       "click_element" => {
-        Self::require_paid_subscription("Browser automation").await?;
+        Self::require_capability(
+          "Browser automation",
+          CLOUD_AUTH.can_use_browser_automation().await,
+        )
+        .await?;
         self.handle_click_element(arguments).await
       }
       "type_text" => {
-        Self::require_paid_subscription("Browser automation").await?;
+        Self::require_capability(
+          "Browser automation",
+          CLOUD_AUTH.can_use_browser_automation().await,
+        )
+        .await?;
         self.handle_type_text(arguments).await
       }
       "get_page_content" => {
-        Self::require_paid_subscription("Browser automation").await?;
+        Self::require_capability(
+          "Browser automation",
+          CLOUD_AUTH.can_use_browser_automation().await,
+        )
+        .await?;
         self.handle_get_page_content(arguments).await
       }
       "get_page_info" => {
-        Self::require_paid_subscription("Browser automation").await?;
+        Self::require_capability(
+          "Browser automation",
+          CLOUD_AUTH.can_use_browser_automation().await,
+        )
+        .await?;
         self.handle_get_page_info(arguments).await
       }
       "get_interactive_elements" => {
-        Self::require_paid_subscription("Browser automation").await?;
+        Self::require_capability(
+          "Browser automation",
+          CLOUD_AUTH.can_use_browser_automation().await,
+        )
+        .await?;
         self.handle_get_interactive_elements(arguments).await
       }
       "click_by_index" => {
-        Self::require_paid_subscription("Browser automation").await?;
+        Self::require_capability(
+          "Browser automation",
+          CLOUD_AUTH.can_use_browser_automation().await,
+        )
+        .await?;
         self.handle_click_by_index(arguments).await
       }
       "type_by_index" => {
-        Self::require_paid_subscription("Browser automation").await?;
+        Self::require_capability(
+          "Browser automation",
+          CLOUD_AUTH.can_use_browser_automation().await,
+        )
+        .await?;
         self.handle_type_by_index(arguments).await
       }
       _ => Err(McpError {
@@ -1836,8 +1909,12 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    // Launching profiles programmatically is a paid feature.
-    Self::require_paid_subscription("Launching a profile").await?;
+    // Launching profiles programmatically requires the automation capability.
+    Self::require_capability(
+      "Launching a profile",
+      CLOUD_AUTH.can_use_browser_automation().await,
+    )
+    .await?;
 
     let profile_id = arguments
       .get("profile_id")
@@ -1920,8 +1997,12 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    // Stopping profiles programmatically is a paid feature.
-    Self::require_paid_subscription("Killing a profile").await?;
+    // Stopping profiles programmatically requires the automation capability.
+    Self::require_capability(
+      "Killing a profile",
+      CLOUD_AUTH.can_use_browser_automation().await,
+    )
+    .await?;
 
     let profile_id = arguments
       .get("profile_id")
@@ -3259,10 +3340,10 @@ impl McpServer {
     &self,
     arguments: &serde_json::Value,
   ) -> Result<serde_json::Value, McpError> {
-    if !CLOUD_AUTH.has_active_paid_subscription().await {
+    if !CLOUD_AUTH.can_use_cross_os_fingerprints().await {
       return Err(McpError {
         code: -32000,
-        message: "Fingerprint editing requires an active Pro subscription".to_string(),
+        message: "Fingerprint editing requires a plan that includes it".to_string(),
       });
     }
 

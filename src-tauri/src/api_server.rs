@@ -419,6 +419,9 @@ impl ApiServer {
     let api = ApiDoc::openapi();
 
     let v1_routes = v1_routes
+      // Inert chokepoint (innermost → runs after auth) for the future per-hour
+      // automation request limit. See rate_limit_middleware.
+      .layer(middleware::from_fn(rate_limit_middleware))
       .layer(middleware::from_fn_with_state(
         state.clone(),
         auth_middleware,
@@ -568,6 +571,20 @@ async fn request_logging_middleware(request: axum::extract::Request, next: Next)
   }
 
   response
+}
+
+/// Chokepoint for the future per-hour automation request limit. The limit
+/// (`requests_per_hour`, default 100) is already plumbed through entitlements;
+/// this middleware is intentionally inert today — it resolves the limit but
+/// never blocks. To enforce, count authenticated requests per rolling hour and
+/// return `StatusCode::TOO_MANY_REQUESTS` once the limit (when > 0) is exceeded.
+async fn rate_limit_middleware(
+  request: axum::extract::Request,
+  next: Next,
+) -> Result<Response, StatusCode> {
+  let _requests_per_hour = crate::cloud_auth::CLOUD_AUTH.requests_per_hour().await;
+  // TODO(rate-limit): enforce `_requests_per_hour` for automation routes.
+  Ok(next.run(request).await)
 }
 
 // Global API server instance
@@ -953,10 +970,10 @@ async fn update_profile(
   }
 
   if let Some(camoufox_config) = request.camoufox_config {
-    // Editing a profile's fingerprint config is a paid feature everywhere
-    // (GUI, API, MCP). Viewing it is free; mutating it is not.
+    // Editing a profile's fingerprint config is part of the cross-OS fingerprint
+    // capability (GUI, API, MCP). Viewing it is free; mutating it is not.
     if !crate::cloud_auth::CLOUD_AUTH
-      .has_active_paid_subscription()
+      .can_use_cross_os_fingerprints()
       .await
     {
       return Err(StatusCode::PAYMENT_REQUIRED);
@@ -1779,7 +1796,7 @@ async fn run_profile(
   Json(request): Json<RunProfileRequest>,
 ) -> Result<Json<RunProfileResponse>, StatusCode> {
   if !crate::cloud_auth::CLOUD_AUTH
-    .has_active_paid_subscription()
+    .can_use_browser_automation()
     .await
   {
     return Err(StatusCode::PAYMENT_REQUIRED);
@@ -1865,7 +1882,7 @@ async fn open_url_in_profile(
   Json(request): Json<OpenUrlRequest>,
 ) -> Result<StatusCode, StatusCode> {
   if !crate::cloud_auth::CLOUD_AUTH
-    .has_active_paid_subscription()
+    .can_use_browser_automation()
     .await
   {
     return Err(StatusCode::PAYMENT_REQUIRED);
@@ -1907,7 +1924,7 @@ async fn kill_profile(
   // Programmatically launching and stopping profiles is a paid feature; the
   // run/open-url handlers gate the same way.
   if !crate::cloud_auth::CLOUD_AUTH
-    .has_active_paid_subscription()
+    .can_use_browser_automation()
     .await
   {
     return Err(StatusCode::PAYMENT_REQUIRED);

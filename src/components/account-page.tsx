@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCloudAuth } from "@/hooks/use-cloud-auth";
 import { translateBackendError } from "@/lib/backend-errors";
+import { getEntitlements } from "@/lib/entitlements";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
 import type { SyncSettings } from "@/types";
 
@@ -298,7 +299,7 @@ export function AccountPage({
 
                 {isLoggedIn &&
                   user &&
-                  user.plan !== "free" &&
+                  getEntitlements(user).browserAutomation &&
                   user.isPrimaryDevice === false && (
                     <p className="text-xs text-warning">
                       {t("account.automationPrimaryOnly")}
@@ -306,7 +307,7 @@ export function AccountPage({
                   )}
                 {isLoggedIn &&
                   user &&
-                  user.plan !== "free" &&
+                  getEntitlements(user).browserAutomation &&
                   user.isPrimaryDevice === true &&
                   (user.deviceCount ?? 1) > 1 && (
                     <p className="text-xs text-success">

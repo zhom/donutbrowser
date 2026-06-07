@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AccountPage } from "@/components/account-page";
 import { CamoufoxConfigDialog } from "@/components/camoufox-config-dialog";
+import { CamoufoxDeprecationDialog } from "@/components/camoufox-deprecation-dialog";
 import { CloneProfileDialog } from "@/components/clone-profile-dialog";
 import { CloseConfirmDialog } from "@/components/close-confirm-dialog";
 import { CommandPalette } from "@/components/command-palette";
@@ -59,6 +60,7 @@ import { useVersionUpdater } from "@/hooks/use-version-updater";
 import { useVpnEvents } from "@/hooks/use-vpn-events";
 import { useWayfernTerms } from "@/hooks/use-wayfern-terms";
 import { translateBackendError } from "@/lib/backend-errors";
+import { getEntitlements } from "@/lib/entitlements";
 import {
   ONBOARDING_TOUR_FINISHED_EVENT,
   setOnboardingActive,
@@ -225,10 +227,7 @@ export default function Home() {
 
   // Cloud auth for cross-OS unlock
   const { user: cloudUser } = useCloudAuth();
-  const crossOsUnlocked =
-    cloudUser?.plan !== "free" &&
-    (cloudUser?.subscriptionStatus === "active" ||
-      cloudUser?.planPeriod === "lifetime");
+  const crossOsUnlocked = getEntitlements(cloudUser).crossOsFingerprints;
 
   const [selfHostedSyncConfigured, setSelfHostedSyncConfigured] =
     useState(false);
@@ -1527,6 +1526,7 @@ export default function Home() {
   return (
     <div className="flex flex-col h-screen bg-background font-(family-name:--font-geist-sans)">
       <CloseConfirmDialog />
+      <CamoufoxDeprecationDialog profiles={profiles} />
       <HomeHeader
         onCreateProfileDialogOpen={setCreateProfileDialogOpen}
         searchQuery={searchQuery}

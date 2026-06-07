@@ -1832,7 +1832,8 @@
     "fingerprintRequiresPro": "Xem hoặc chỉnh sửa vân tay yêu cầu gói trả phí đang hoạt động. Tính năng bảo vệ được bao gồm trong mọi gói.",
     "proxyNotWorking": "Proxy đã chọn không hoạt động, nên profile chưa được tạo.",
     "proxyPaymentRequired": "Proxy đã chọn yêu cầu thanh toán (402) — gói đăng ký của nó có thể đã hết hạn — nên profile chưa được tạo.",
-    "vpnNotWorking": "VPN đã chọn không hoạt động, nên profile chưa được tạo."
+    "vpnNotWorking": "VPN đã chọn không hoạt động, nên profile chưa được tạo.",
+    "camoufoxImportDeprecated": "Không còn hỗ trợ nhập profile dựa trên Firefox (Camoufox). Camoufox đang bị ngừng hỗ trợ — vui lòng dùng Wayfern."
   },
   "rail": {
     "profiles": "Profile",
@@ -1961,7 +1962,7 @@
   },
   "browserSupport": {
     "endingSoonTitle": "Hỗ trợ trình duyệt sắp kết thúc",
-    "endingSoonDescription": "Hỗ trợ cho các profile sau sẽ bị gỡ bỏ vào ngày 15 tháng 3 năm 2026: {{profiles}}. Vui lòng chuyển sang profile Wayfern hoặc Camoufox."
+    "endingSoonDescription": "Hỗ trợ cho các profile sau sẽ bị gỡ bỏ vào ngày 15 tháng 3 năm 2026: {{profiles}}. Vui lòng chuyển sang profile Wayfern."
   },
   "onboarding": {
     "steps": {
@@ -2043,5 +2044,10 @@
   "wayfernBlocked": {
     "title": "Tự động hóa trình duyệt đã tạm dừng",
     "description": "Tài khoản của bạn tạm thời bị hạn chế các tính năng Pro của trình duyệt, thường do đăng nhập trên nhiều thiết bị cùng lúc. Hãy đăng xuất khỏi các thiết bị khác rồi khởi chạy lại profile để khôi phục."
+  },
+  "camoufoxDeprecation": {
+    "title": "Hỗ trợ Camoufox sắp kết thúc",
+    "description": "Hỗ trợ cho các profile Camoufox sẽ kết thúc vào ngày 8 tháng 7 năm 2026. Bạn có một hoặc nhiều profile Camoufox. Hãy chuyển chúng sang Wayfern trước thời điểm đó — sau ngày này, các profile Camoufox có thể ngừng hoạt động.",
+    "acknowledge": "Đã hiểu"
   }
 }
