@@ -2,6 +2,8 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { save } from "@tauri-apps/plugin-dialog";
+import { writeTextFile } from "@tauri-apps/plugin-fs";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { FaApple, FaLinux, FaWindows } from "react-icons/fa";
@@ -11,6 +13,7 @@ import {
   LuClipboardCheck,
   LuCookie,
   LuCopy,
+  LuDownload,
   LuFingerprint,
   LuGlobe,
   LuGroup,
@@ -39,6 +42,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -1511,6 +1520,41 @@ function CookiesSectionInline({
     };
   }, [profile.id, isRunning, t]);
 
+  const [isExporting, setIsExporting] = React.useState(false);
+
+  // Export all of this profile's cookies in one of the same formats import
+  // accepts (JSON or Netscape). The backend formats every cookie; we just pick
+  // a destination file.
+  const handleExport = React.useCallback(
+    async (format: "json" | "netscape") => {
+      setIsExporting(true);
+      try {
+        const content = await invoke<string>("export_profile_cookies", {
+          profileId: profile.id,
+          format,
+        });
+        const ext = format === "json" ? "json" : "txt";
+        const filePath = await save({
+          defaultPath: `${profile.name}_cookies.${ext}`,
+          filters: [
+            {
+              name: format === "json" ? "JSON" : "Text",
+              extensions: [ext],
+            },
+          ],
+        });
+        if (!filePath) return;
+        await writeTextFile(filePath, content);
+        showSuccessToast(t("cookies.export.success"));
+      } catch (e) {
+        showErrorToast(translateBackendError(t as never, e));
+      } finally {
+        setIsExporting(false);
+      }
+    },
+    [profile.id, profile.name, t],
+  );
+
   const domains = stats?.domains ?? [];
 
   return (
@@ -1521,6 +1565,41 @@ function CookiesSectionInline({
           {t("profileInfo.sections.cookies")}
         </div>
         <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1.5"
+                disabled={
+                  isDisabled ||
+                  isRunning ||
+                  isExporting ||
+                  !stats ||
+                  stats.total_count === 0
+                }
+              >
+                <LuDownload className="size-3.5" />
+                {t("common.buttons.export")}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => {
+                  void handleExport("json");
+                }}
+              >
+                {t("cookies.export.json")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  void handleExport("netscape");
+                }}
+              >
+                {t("cookies.export.netscape")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {onImportCookies && (
             <Button
               variant="outline"
@@ -1530,7 +1609,7 @@ function CookiesSectionInline({
               onClick={onImportCookies}
             >
               <LuUpload className="size-3.5" />
-              {t("cookies.import.title")}
+              {t("common.buttons.import")}
             </Button>
           )}
           {onCopyCookies && (
@@ -1542,7 +1621,7 @@ function CookiesSectionInline({
               onClick={onCopyCookies}
             >
               <LuCopy className="size-3.5" />
-              {t("profiles.actions.copyCookies")}
+              {t("common.buttons.copy")}
             </Button>
           )}
         </div>
