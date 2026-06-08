@@ -1,6 +1,29 @@
 # Changelog
 
 
+## v0.26.0 (2026-06-08)
+
+### Features
+
+- add cookie export
+
+### Refactoring
+
+- deprecate camoufox
+- cleanup
+
+### Maintenance
+
+- chore: version bump
+- chore: linting
+- ci(deps): bump the github-actions group with 3 updates (#421)
+- chore: update flake.nix for v0.25.3 [skip ci] (#417)
+
+### Other
+
+- deps(rust)(deps): bump the rust-dependencies group (#422)
+
+
 ## v0.25.3 (2026-06-03)
 
 ### Bug Fixes
