@@ -1,3 +1,9 @@
+# ⛔ ABSOLUTE GIT RULE — READ FIRST (2026-06-11)
+
+**NEVER run any git command that modifies git history OR the working tree, in ANY repo** (wayfern, wayfern-macos, wayfern-test, donutbrowser, build/src), **unless the user EXPLICITLY authorizes that exact command.** Forbidden without per-command authorization: `commit`, `revert`, `cherry-pick`, `restore`, `checkout` (files/branches), `reset`, `rebase`, `merge`, `stash`, `clean`, `apply`, `add`, `rm`, `push`, any force op. Only read-only git (`status`, `log`, `show`, `diff`, `ls-files`, `rev-parse`) is allowed without asking. **Authorization is per-command: 1 explicit authorization = exactly 1 command.** If a git mutation seems needed, STOP and ask for that one command.
+
+---
+
 # Project Guidelines
 
 > **NOTE**: CLAUDE.md is a symlink to AGENTS.md — editing either file updates both.

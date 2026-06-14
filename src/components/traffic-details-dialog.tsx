@@ -127,7 +127,7 @@ const TruncatedDomain = React.memo<{ domain: string }>(({ domain }) => {
   }, [checkTruncation]);
 
   const content = (
-    <span ref={ref} className="truncate max-w-[200px] block">
+    <span ref={ref} className="truncate block min-w-0 flex-1">
       {domain}
     </span>
   );
@@ -257,7 +257,7 @@ export function TrafficDetailsDialog({
         if (!open) onClose();
       }}
     >
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-[min(56rem,calc(100%-4rem))]">
         <DialogHeader>
           <DialogTitle>
             {t("traffic.title")}
@@ -303,7 +303,7 @@ export function TrafficDetailsDialog({
                 </Select>
               </div>
 
-              <div className="h-[200px] w-full">
+              <div className="h-[clamp(200px,28vh,360px)] w-full">
                 <ResponsiveContainer
                   width="100%"
                   height="100%"
@@ -509,7 +509,7 @@ export function TrafficDetailsDialog({
                       {t("traffic.columnReceived")}
                     </span>
                   </div>
-                  <div className="max-h-[180px] overflow-y-auto">
+                  <div className="max-h-[clamp(180px,25vh,400px)] overflow-y-auto">
                     {topDomainsByTraffic.map((domain, index) => (
                       <div
                         key={domain.domain}
@@ -558,7 +558,7 @@ export function TrafficDetailsDialog({
                       {t("traffic.columnTotal")}
                     </span>
                   </div>
-                  <div className="max-h-[180px] overflow-y-auto">
+                  <div className="max-h-[clamp(180px,25vh,400px)] overflow-y-auto">
                     {topDomainsByRequests.map((domain, index) => (
                       <div
                         key={domain.domain}
@@ -591,7 +591,7 @@ export function TrafficDetailsDialog({
                 <h3 className="text-sm font-medium mb-2">
                   {t("traffic.uniqueIps", { count: stats.unique_ips.length })}
                 </h3>
-                <FadingScrollArea className="p-3 max-h-[120px]">
+                <FadingScrollArea className="p-3 max-h-[clamp(120px,15vh,240px)]">
                   <div className="flex flex-wrap gap-1.5">
                     {stats.unique_ips.map((ip) => (
                       <span

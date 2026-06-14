@@ -158,7 +158,7 @@ export function ProxyFormDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="grid gap-4 py-4">
+        <div className="grid gap-4 py-4 @container">
           <div className="grid gap-2">
             <Label htmlFor="proxy-name">{t("proxies.form.name")}</Label>
             <Input
@@ -228,12 +228,12 @@ export function ProxyFormDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 @sm:grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="proxy-username">
                 {form.proxy_type === "ss"
                   ? t("proxies.form.cipher")
-                  : `${t("proxies.form.username")} (${t("proxies.form.usernamePlaceholder")})`}
+                  : t("proxies.form.username")}
               </Label>
               <Input
                 id="proxy-username"
@@ -252,9 +252,7 @@ export function ProxyFormDialog({
 
             <div className="grid gap-2">
               <Label htmlFor="proxy-password">
-                {form.proxy_type === "ss"
-                  ? t("proxies.form.password")
-                  : `${t("proxies.form.password")} (${t("proxies.form.passwordPlaceholder")})`}
+                {t("proxies.form.password")}
               </Label>
               <Input
                 id="proxy-password"

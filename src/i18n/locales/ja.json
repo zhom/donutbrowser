@@ -90,7 +90,9 @@
       "unknown": "不明なエラーが発生しました"
     },
     "window": {
-      "minimize": "最小化"
+      "minimize": "最小化",
+      "maximize": "最大化",
+      "restore": "元に戻す"
     },
     "commandPalette": {
       "title": "コマンドパレット",
@@ -399,6 +401,7 @@
       "newProxy": "新しいプロキシ",
       "newVpn": "新しいVPN",
       "protocolCol": "プロトコル",
+      "hostPort": "ホスト : ポート",
       "title": "プロキシと VPN"
     },
     "add": "プロキシを追加",

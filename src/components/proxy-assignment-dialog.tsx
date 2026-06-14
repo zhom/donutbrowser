@@ -157,7 +157,7 @@ export function ProxyAssignmentDialog({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>{t("proxyAssignment.selectedProfilesLabel")}</Label>
-            <div className="p-3 bg-muted rounded-md max-h-32 overflow-y-auto">
+            <div className="p-3 bg-muted rounded-md max-h-[min(8rem,20vh)] overflow-y-auto">
               <ul className="text-sm space-y-1">
                 {selectedProfiles.map((profileId) => {
                   const profile = profiles.find(
@@ -206,7 +206,7 @@ export function ProxyAssignmentDialog({
               </PopoverTrigger>
               <PopoverContent
                 id={proxyListboxId}
-                className="w-[240px] p-0"
+                className="w-[var(--radix-popover-trigger-width)] p-0"
                 sideOffset={8}
               >
                 <Command>

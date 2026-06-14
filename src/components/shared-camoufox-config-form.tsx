@@ -410,7 +410,7 @@ export function SharedCamoufoxConfigForm({
           {/* Navigator Properties */}
           <div className="space-y-3">
             <Label>{t("fingerprint.navigatorProperties")}</Label>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 @md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="user-agent">{t("fingerprint.userAgent")}</Label>
                 <Input
@@ -566,7 +566,7 @@ export function SharedCamoufoxConfigForm({
           {/* Screen Properties */}
           <div className="space-y-3">
             <Label>{t("fingerprint.screenProperties")}</Label>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 @md:grid-cols-2 @2xl:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="screen-width">
                   {t("fingerprint.screenWidth")}
@@ -687,7 +687,7 @@ export function SharedCamoufoxConfigForm({
           {/* Window Properties */}
           <div className="space-y-3">
             <Label>{t("fingerprint.windowProperties")}</Label>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 @md:grid-cols-2 @2xl:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="outer-width">
                   {t("fingerprint.outerWidth")}
@@ -800,7 +800,7 @@ export function SharedCamoufoxConfigForm({
           {/* Geolocation */}
           <div className="space-y-3">
             <Label>{t("fingerprint.geolocation")}</Label>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 @md:grid-cols-2 @2xl:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="latitude">{t("fingerprint.latitude")}</Label>
                 <Input
@@ -860,7 +860,7 @@ export function SharedCamoufoxConfigForm({
           {/* Locale */}
           <div className="space-y-3">
             <Label>{t("fingerprint.locale")}</Label>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 @md:grid-cols-2 @2xl:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="locale-language">
                   {t("fingerprint.language")}
@@ -917,7 +917,7 @@ export function SharedCamoufoxConfigForm({
           {/* WebGL Properties */}
           <div className="space-y-3">
             <Label>{t("fingerprint.webglProperties")}</Label>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 @md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="webgl-vendor">
                   {t("fingerprint.webglVendor")}
@@ -1065,7 +1065,7 @@ export function SharedCamoufoxConfigForm({
           {/* Battery */}
           <div className="space-y-3">
             <Label>{t("fingerprint.battery")}</Label>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 @md:grid-cols-2 @2xl:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <div className="flex items-center gap-x-2">
                   <Checkbox
@@ -1158,7 +1158,7 @@ export function SharedCamoufoxConfigForm({
   );
 
   return (
-    <div className={`space-y-6 ${className}`}>
+    <div className={`@container space-y-6 ${className}`}>
       {forceAdvanced ? (
         // Advanced mode only (for editing)
         renderAdvancedForm()
@@ -1265,7 +1265,7 @@ export function SharedCamoufoxConfigForm({
                 className="space-y-3"
               >
                 <Label>{t("fingerprint.screenResolution")}</Label>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 @md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="screen-max-width">
                       {t("fingerprint.maxWidth")}

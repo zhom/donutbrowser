@@ -390,7 +390,7 @@ export function CookieManagementDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-[min(44rem,calc(100%-4rem))]">
         <DialogHeader>
           <DialogTitle>{t("cookies.management.title")}</DialogTitle>
         </DialogHeader>
@@ -563,7 +563,7 @@ export function CookieManagementDialog({
                   {t("cookies.management.noCookies")}
                 </div>
               ) : (
-                <FadingScrollArea className="h-[200px]">
+                <FadingScrollArea className="h-[clamp(140px,30vh,420px)]">
                   <div className="p-2 space-y-1">
                     {exportCookieData.domains.map((domain) => (
                       <ExportDomainRow

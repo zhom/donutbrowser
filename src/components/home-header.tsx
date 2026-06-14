@@ -131,6 +131,16 @@ const HomeHeader = ({
     [clearHold],
   );
 
+  const handleDoubleClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (isTextInputTarget(e.target)) return;
+      if (e.target instanceof Element && e.target.closest("button")) return;
+      clearHold();
+      void getCurrentWindow().toggleMaximize();
+    },
+    [clearHold],
+  );
+
   // Horizontal scroll fades for the group filter strip — when the user
   // has more groups than fit, the right edge fades to hint at overflow.
   const groupsScrollRef = useRef<HTMLDivElement | null>(null);
@@ -156,20 +166,22 @@ const HomeHeader = ({
   const isWindows = platform === "windows";
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: titlebar drag surface; the interactive controls inside are real buttons/inputs
     <div
       ref={dragRootRef}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerEnd}
       onPointerCancel={handlePointerEnd}
+      onDoubleClick={handleDoubleClick}
       className={cn(
         "flex items-center gap-2 h-11 pl-3 border-b border-border bg-card select-none",
-        // Windows: WindowDragArea renders two 44px native-style controls
-        // (minimize + close) fixed at top-right with z-50, total 88px wide.
-        // Reserve 100px on the right edge so the "+ New" button and search
-        // input clear them with a few pixels of breathing room — issues
-        // #358, #361, #362 all reported the same overlap before this fix.
-        isWindows ? "pr-[100px]" : "pr-3",
+        // Windows: WindowDragArea renders three 44px native-style controls
+        // (minimize + maximize/restore + close) fixed at top-right with
+        // z-50, total 132px wide. Reserve 144px on the right edge so the
+        // "+ New" button and search input clear them with a few pixels of
+        // breathing room and never sit underneath the controls.
+        isWindows ? "pr-[144px]" : "pr-3",
       )}
     >
       {isMacOS && (
@@ -248,6 +260,7 @@ const HomeHeader = ({
                 <button
                   key={group.id}
                   type="button"
+                  title={group.name}
                   onClick={() => {
                     onGroupSelect(active ? ALL_FILTER_ID : group.id);
                   }}
@@ -258,7 +271,7 @@ const HomeHeader = ({
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  <span>{group.name}</span>
+                  <span className="max-w-40 truncate">{group.name}</span>
                   <span className="text-[11px] text-muted-foreground tabular-nums">
                     {group.count}
                   </span>
@@ -297,7 +310,7 @@ const HomeHeader = ({
             onChange={(e) => {
               onSearchQueryChange(e.target.value);
             }}
-            className="pr-7 pl-8 w-52 h-7 text-xs"
+            className="pr-7 pl-8 w-36 min-[860px]:w-52 h-7 text-xs"
           />
           <LuSearch className="absolute left-2.5 top-1/2 size-3.5 transform -translate-y-1/2 text-muted-foreground pointer-events-none" />
           {searchQuery ? (

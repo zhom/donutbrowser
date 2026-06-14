@@ -53,7 +53,7 @@ function CommandDialog({
         <DialogTitle>{resolvedTitle}</DialogTitle>
         <DialogDescription>{resolvedDescription}</DialogDescription>
       </DialogHeader>
-      <DialogContent className="overflow-hidden p-0">
+      <DialogContent className="overflow-hidden p-0 sm:max-w-xl">
         <Command
           filter={filter}
           shouldFilter={shouldFilter}
@@ -96,7 +96,7 @@ function CommandList({
     <CommandPrimitive.List
       data-slot="command-list"
       className={cn(
-        "max-h-[300px] scroll-py-1 overflow-x-hidden overflow-y-auto",
+        "max-h-[min(50vh,500px)] scroll-py-1 overflow-x-hidden overflow-y-auto",
         className,
       )}
       {...props}

@@ -193,7 +193,7 @@ export function ProfilePasswordDialog({
         if (!open) onClose();
       }}
     >
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{t(titleKey)}</DialogTitle>
           <DialogDescription>

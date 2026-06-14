@@ -87,7 +87,7 @@ export function DnsBlocklistDialog({
           {t("dnsBlocklist.settingsDescription")}
         </p>
 
-        <div className="space-y-3">
+        <div className="space-y-3 overflow-y-auto min-h-0 max-h-[40vh]">
           {statuses.map((status) => (
             <div
               key={status.level}

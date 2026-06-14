@@ -90,7 +90,9 @@
       "unknown": "Unknown error occurred"
     },
     "window": {
-      "minimize": "Minimize"
+      "minimize": "Minimize",
+      "maximize": "Maximize",
+      "restore": "Restore"
     },
     "commandPalette": {
       "title": "Command Palette",
@@ -399,6 +401,7 @@
       "newProxy": "New proxy",
       "newVpn": "New VPN",
       "protocolCol": "Protocol",
+      "hostPort": "Host : port",
       "title": "Proxies & VPNs"
     },
     "add": "Add Proxy",

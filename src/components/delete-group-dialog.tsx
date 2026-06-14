@@ -136,10 +136,10 @@ export function DeleteGroupDialog({
                         count: associatedProfiles.length,
                       })}
                     </Label>
-                    <ScrollArea className="h-32 w-full border rounded-md p-3">
+                    <ScrollArea className="max-h-[min(8rem,25vh)] overflow-y-auto w-full border rounded-md p-3">
                       <div className="space-y-1">
                         {associatedProfiles.map((profile) => (
-                          <div key={profile.id} className="text-sm">
+                          <div key={profile.id} className="text-sm truncate">
                             • {profile.name}
                           </div>
                         ))}

@@ -57,7 +57,10 @@ export function DeleteConfirmationDialog({
                     const profile = profiles.find((p) => p.id === id);
                     const displayName = profile ? profile.name : id;
                     return (
-                      <li key={id} className="text-sm text-muted-foreground">
+                      <li
+                        key={id}
+                        className="text-sm text-muted-foreground truncate"
+                      >
                         • {displayName}
                       </li>
                     );

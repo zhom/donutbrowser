@@ -172,8 +172,8 @@ export function ProfileSyncDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
+      <DialogContent className="max-w-md flex flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle>{t("sync.mode.title")}</DialogTitle>
           <DialogDescription>
             {t("sync.mode.description", {
@@ -183,115 +183,117 @@ export function ProfileSyncDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {isCheckingConfig ? (
-          <div className="flex justify-center py-8">
-            <div className="size-6 rounded-full border-2 border-current animate-spin border-t-transparent" />
-          </div>
-        ) : (
-          <div className="grid gap-4 py-4">
-            {!hasConfig && (
-              <div className="p-3 text-sm rounded-md bg-muted">
-                <p className="mb-2">{t("sync.mode.notConfigured")}</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    onSyncConfigOpen();
-                    onClose();
-                  }}
-                >
-                  {t("sync.mode.configureService")}
-                </Button>
-              </div>
-            )}
-
-            {hasConfig && (
-              <>
-                <RadioGroup
-                  value={syncMode}
-                  onValueChange={handleModeChange}
-                  disabled={isSaving}
-                  className="grid gap-3"
-                >
-                  <div className="flex items-start gap-x-3">
-                    <RadioGroupItem value="Disabled" id="sync-disabled" />
-                    <Label htmlFor="sync-disabled" className="cursor-pointer">
-                      <span className="font-medium">
-                        {t("sync.mode.disabled")}
-                      </span>
-                      <p className="text-sm text-muted-foreground">
-                        {t("sync.mode.disabledDescription")}
-                      </p>
-                    </Label>
-                  </div>
-
-                  <div className="flex items-start gap-x-3">
-                    <RadioGroupItem value="Regular" id="sync-regular" />
-                    <Label htmlFor="sync-regular" className="cursor-pointer">
-                      <span className="font-medium">
-                        {t("sync.mode.regular")}
-                      </span>
-                      <p className="text-sm text-muted-foreground">
-                        {t("sync.mode.regularDescription")}
-                      </p>
-                    </Label>
-                  </div>
-
-                  <div className="flex items-start gap-x-3">
-                    <RadioGroupItem
-                      value="Encrypted"
-                      id="sync-encrypted"
-                      disabled={!canUseEncryption}
-                    />
-                    <Label
-                      htmlFor="sync-encrypted"
-                      className={
-                        canUseEncryption
-                          ? "cursor-pointer"
-                          : "cursor-not-allowed opacity-50"
-                      }
-                    >
-                      <span className="font-medium">
-                        {t("sync.mode.encrypted")}
-                      </span>
-                      <p className="text-sm text-muted-foreground">
-                        {canUseEncryption
-                          ? t("sync.mode.encryptedDescription")
-                          : t("settings.encryption.requiresProOrOwner")}
-                      </p>
-                    </Label>
-                  </div>
-                </RadioGroup>
-
-                {syncMode === "Encrypted" &&
-                  !hasE2ePassword &&
-                  userChangedMode && (
-                    <div className="p-3 text-sm rounded-md bg-destructive/10 text-destructive">
-                      {t("sync.mode.noPasswordWarning")}
-                    </div>
-                  )}
-
-                <div className="space-y-2">
-                  <Label>{t("sync.mode.lastSynced")}</Label>
-                  <div className="flex gap-2 items-center">
-                    <Badge variant="outline">
-                      {formatLastSync(profile.last_sync)}
-                    </Badge>
-                    {isSyncEnabled(profile) && (
-                      <Badge
-                        variant={profile.last_sync ? "default" : "secondary"}
-                      >
-                        {profile.last_sync
-                          ? t("common.status.synced")
-                          : t("common.status.pending")}
-                      </Badge>
-                    )}
-                  </div>
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {isCheckingConfig ? (
+            <div className="flex justify-center py-8">
+              <div className="size-6 rounded-full border-2 border-current animate-spin border-t-transparent" />
+            </div>
+          ) : (
+            <div className="grid gap-4 py-4">
+              {!hasConfig && (
+                <div className="p-3 text-sm rounded-md bg-muted">
+                  <p className="mb-2">{t("sync.mode.notConfigured")}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      onSyncConfigOpen();
+                      onClose();
+                    }}
+                  >
+                    {t("sync.mode.configureService")}
+                  </Button>
                 </div>
-              </>
-            )}
-          </div>
-        )}
+              )}
+
+              {hasConfig && (
+                <>
+                  <RadioGroup
+                    value={syncMode}
+                    onValueChange={handleModeChange}
+                    disabled={isSaving}
+                    className="grid gap-3"
+                  >
+                    <div className="flex items-start gap-x-3">
+                      <RadioGroupItem value="Disabled" id="sync-disabled" />
+                      <Label htmlFor="sync-disabled" className="cursor-pointer">
+                        <span className="font-medium">
+                          {t("sync.mode.disabled")}
+                        </span>
+                        <p className="text-sm text-muted-foreground">
+                          {t("sync.mode.disabledDescription")}
+                        </p>
+                      </Label>
+                    </div>
+
+                    <div className="flex items-start gap-x-3">
+                      <RadioGroupItem value="Regular" id="sync-regular" />
+                      <Label htmlFor="sync-regular" className="cursor-pointer">
+                        <span className="font-medium">
+                          {t("sync.mode.regular")}
+                        </span>
+                        <p className="text-sm text-muted-foreground">
+                          {t("sync.mode.regularDescription")}
+                        </p>
+                      </Label>
+                    </div>
+
+                    <div className="flex items-start gap-x-3">
+                      <RadioGroupItem
+                        value="Encrypted"
+                        id="sync-encrypted"
+                        disabled={!canUseEncryption}
+                      />
+                      <Label
+                        htmlFor="sync-encrypted"
+                        className={
+                          canUseEncryption
+                            ? "cursor-pointer"
+                            : "cursor-not-allowed opacity-50"
+                        }
+                      >
+                        <span className="font-medium">
+                          {t("sync.mode.encrypted")}
+                        </span>
+                        <p className="text-sm text-muted-foreground">
+                          {canUseEncryption
+                            ? t("sync.mode.encryptedDescription")
+                            : t("settings.encryption.requiresProOrOwner")}
+                        </p>
+                      </Label>
+                    </div>
+                  </RadioGroup>
+
+                  {syncMode === "Encrypted" &&
+                    !hasE2ePassword &&
+                    userChangedMode && (
+                      <div className="p-3 text-sm rounded-md bg-destructive/10 text-destructive">
+                        {t("sync.mode.noPasswordWarning")}
+                      </div>
+                    )}
+
+                  <div className="space-y-2">
+                    <Label>{t("sync.mode.lastSynced")}</Label>
+                    <div className="flex gap-2 items-center">
+                      <Badge variant="outline">
+                        {formatLastSync(profile.last_sync)}
+                      </Badge>
+                      {isSyncEnabled(profile) && (
+                        <Badge
+                          variant={profile.last_sync ? "default" : "secondary"}
+                        >
+                          {profile.last_sync
+                            ? t("common.status.synced")
+                            : t("common.status.pending")}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>

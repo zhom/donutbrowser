@@ -90,7 +90,9 @@
       "unknown": "Đã xảy ra lỗi không xác định"
     },
     "window": {
-      "minimize": "Thu nhỏ"
+      "minimize": "Thu nhỏ",
+      "maximize": "Phóng to",
+      "restore": "Khôi phục"
     },
     "commandPalette": {
       "title": "Bảng lệnh",
@@ -399,6 +401,7 @@
       "newProxy": "Proxy mới",
       "newVpn": "VPN mới",
       "protocolCol": "Giao thức",
+      "hostPort": "Máy chủ : cổng",
       "title": "Proxy & VPN"
     },
     "add": "Thêm Proxy",

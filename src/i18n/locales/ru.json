@@ -90,7 +90,9 @@
       "unknown": "Произошла неизвестная ошибка"
     },
     "window": {
-      "minimize": "Свернуть"
+      "minimize": "Свернуть",
+      "maximize": "Развернуть",
+      "restore": "Восстановить"
     },
     "commandPalette": {
       "title": "Палитра команд",
@@ -399,6 +401,7 @@
       "newProxy": "Новый прокси",
       "newVpn": "Новый VPN",
       "protocolCol": "Протокол",
+      "hostPort": "Хост : порт",
       "title": "Прокси и VPN"
     },
     "add": "Добавить прокси",

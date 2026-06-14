@@ -120,7 +120,7 @@ export function WelcomeDialog({
     <Dialog open={isOpen} onOpenChange={() => {}}>
       <DialogContent
         dismissible={false}
-        className="overflow-hidden sm:max-w-xl"
+        className="overflow-x-hidden sm:max-w-xl"
       >
         <DialogTitle className="sr-only">{t("welcome.title")}</DialogTitle>
 

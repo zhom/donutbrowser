@@ -90,7 +90,9 @@
       "unknown": "알 수 없는 오류가 발생했습니다"
     },
     "window": {
-      "minimize": "최소화"
+      "minimize": "최소화",
+      "maximize": "최대화",
+      "restore": "이전 크기로 복원"
     },
     "commandPalette": {
       "title": "명령 팔레트",
@@ -399,6 +401,7 @@
       "newProxy": "새 프록시",
       "newVpn": "새 VPN",
       "protocolCol": "프로토콜",
+      "hostPort": "호스트 : 포트",
       "title": "프록시 및 VPN"
     },
     "add": "프록시 추가",

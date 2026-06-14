@@ -157,7 +157,7 @@ export function CommandPalette({
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange} filter={fuzzyFilter}>
       <CommandInput placeholder={t("commandPalette.placeholder")} />
-      <CommandList>
+      <CommandList className="max-h-[min(60vh,480px)]">
         <CommandEmpty>{t("commandPalette.empty")}</CommandEmpty>
 
         <CommandGroup heading={t("commandPalette.groups.navigation")}>
@@ -205,7 +205,7 @@ export function CommandPalette({
                     }}
                   >
                     <LuCircleStop />
-                    <span>
+                    <span className="min-w-0 flex-1 truncate">
                       {t("commandPalette.actions.stopProfile", {
                         name: p.name,
                       })}
@@ -221,7 +221,7 @@ export function CommandPalette({
                     }}
                   >
                     <LuPlay />
-                    <span>
+                    <span className="min-w-0 flex-1 truncate">
                       {t("commandPalette.actions.launchProfile", {
                         name: p.name,
                       })}
@@ -239,7 +239,7 @@ export function CommandPalette({
                   }}
                 >
                   <LuInfo />
-                  <span>
+                  <span className="min-w-0 flex-1 truncate">
                     {t("commandPalette.actions.profileInfo", { name: p.name })}
                   </span>
                 </CommandItem>

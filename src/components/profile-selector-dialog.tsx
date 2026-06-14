@@ -180,7 +180,7 @@ export function ProfileSelectorDialog({
                   successMessage={t("profileSelector.urlCopied")}
                 />
               </div>
-              <div className="p-2 text-sm break-all rounded bg-muted">
+              <div className="p-2 text-sm break-all rounded bg-muted max-h-24 overflow-y-auto">
                 {url}
               </div>
             </div>

@@ -275,7 +275,7 @@ export function VpnImportDialog({ isOpen, onClose }: VpnImportDialogProps) {
 
             <div className="space-y-2">
               <Label>{t("vpns.import.configPreview")}</Label>
-              <ScrollArea className="h-[150px] border rounded-md">
+              <ScrollArea className="h-[min(150px,25vh)] border rounded-md">
                 <pre className="p-2 text-xs font-mono whitespace-pre-wrap break-all">
                   {vpnPreview.content.slice(0, 1000)}
                   {vpnPreview.content.length > 1000 && "..."}

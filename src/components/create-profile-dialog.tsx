@@ -534,7 +534,7 @@ export function CreateProfileDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="w-[380px] max-w-[380px] max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-[min(48rem,calc(100%-4rem))] max-h-[90vh] flex flex-col">
         <DialogHeader className="shrink-0">
           <DialogTitle>
             {currentStep === "browser-selection"
@@ -557,7 +557,7 @@ export function CreateProfileDialog({
 
           <ScrollArea className="overflow-y-auto flex-1">
             <div className="flex flex-col justify-center items-center w-full">
-              <div className="py-4 space-y-6 w-full max-w-md">
+              <div className="py-4 space-y-6 w-full">
                 {currentStep === "browser-selection" ? (
                   <>
                     <TabsContent value="anti-detect" className="mt-0 space-y-6">

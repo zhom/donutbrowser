@@ -90,7 +90,9 @@
       "unknown": "发生未知错误"
     },
     "window": {
-      "minimize": "最小化"
+      "minimize": "最小化",
+      "maximize": "最大化",
+      "restore": "还原"
     },
     "commandPalette": {
       "title": "命令面板",
@@ -399,6 +401,7 @@
       "newProxy": "新建代理",
       "newVpn": "新建 VPN",
       "protocolCol": "协议",
+      "hostPort": "主机 : 端口",
       "title": "代理和 VPN"
     },
     "add": "添加代理",

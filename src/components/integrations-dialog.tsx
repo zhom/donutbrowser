@@ -32,6 +32,7 @@ import { Label } from "@/components/ui/label";
 import { useWayfernTerms } from "@/hooks/use-wayfern-terms";
 import { translateBackendError } from "@/lib/backend-errors";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
+import { cn } from "@/lib/utils";
 import { CopyToClipboard } from "./ui/copy-to-clipboard";
 
 interface AppSettings {
@@ -307,14 +308,19 @@ export function IntegrationsDialog({
       }}
       subPage={subPage}
     >
-      <DialogContent className="max-w-3xl max-h-[85vh] my-8 flex flex-col">
+      <DialogContent className="max-w-3xl max-h-[calc(100vh-5rem)] flex flex-col">
         {!subPage && (
           <DialogHeader className="shrink-0">
             <DialogTitle>{t("integrations.title")}</DialogTitle>
           </DialogHeader>
         )}
 
-        <div className="overflow-y-auto flex-1 min-h-0">
+        <div
+          className={cn(
+            "overflow-y-auto flex-1 min-h-0",
+            subPage && "w-full max-w-3xl mx-auto",
+          )}
+        >
           <AnimatedTabs key={initialTab} defaultValue={initialTab}>
             <AnimatedTabsList>
               <AnimatedTabsTrigger value="api">
@@ -327,7 +333,7 @@ export function IntegrationsDialog({
 
             <AnimatedTabsContent
               value="api"
-              className="mt-4 flex flex-col gap-4"
+              className="mt-4 flex flex-col gap-4 @container"
             >
               <div className="rounded-md border bg-card p-4 flex flex-col gap-4">
                 <div className="flex items-start justify-between gap-3">
@@ -364,7 +370,7 @@ export function IntegrationsDialog({
 
               {settings.api_enabled && (
                 <>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 @2xl:grid-cols-2 gap-4">
                     <div className="rounded-md border bg-card p-4 flex flex-col gap-2">
                       <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
                         {t("integrations.apiPortLabel")}
@@ -581,11 +587,11 @@ export function IntegrationsDialog({
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-3 @container">
                     <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
                       {t("integrations.mcp.clientsLabel")}
                     </Label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 @2xl:grid-cols-2 gap-3">
                       {agents.map((agent) => {
                         const busy = busyAgentIds.has(agent.id);
                         return (

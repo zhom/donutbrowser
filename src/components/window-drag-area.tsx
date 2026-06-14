@@ -16,10 +16,35 @@ function detectPlatform(): Platform {
 export function WindowDragArea() {
   const { t } = useTranslation();
   const [platform, setPlatform] = useState<Platform | null>(null);
+  const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
     setPlatform(detectPlatform());
   }, []);
+
+  useEffect(() => {
+    if (platform !== "windows") return;
+    const win = getCurrentWindow();
+    let cancelled = false;
+    const sync = async () => {
+      try {
+        const maximized = await win.isMaximized();
+        if (!cancelled) setIsMaximized(maximized);
+      } catch (error) {
+        console.error("Failed to read window maximized state:", error);
+      }
+    };
+    void sync();
+    const unlistenPromise = win.onResized(() => {
+      void sync();
+    });
+    return () => {
+      cancelled = true;
+      void unlistenPromise.then((unlisten) => {
+        unlisten();
+      });
+    };
+  }, [platform]);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
@@ -53,8 +78,8 @@ export function WindowDragArea() {
     return null;
   }
 
-  // Windows: minimize/close controls anchored at the top-right corner of
-  // the sys-bar. The HomeHeader's own drag-region overlay handles window
+  // Windows: minimize/maximize/close controls anchored at the top-right
+  // corner of the sys-bar. The HomeHeader's own drag-region overlay handles window
   // dragging via Tauri 2, so we don't need a separate draggable spacer
   // covering the whole width.
   const handleMinimize = async () => {
@@ -62,6 +87,14 @@ export function WindowDragArea() {
       await getCurrentWindow().minimize();
     } catch (error) {
       console.error("Failed to minimize window:", error);
+    }
+  };
+
+  const handleToggleMaximize = async () => {
+    try {
+      await getCurrentWindow().toggleMaximize();
+    } catch (error) {
+      console.error("Failed to toggle window maximize:", error);
     }
   };
 
@@ -97,6 +130,45 @@ export function WindowDragArea() {
         >
           <rect width="10" height="1" />
         </svg>
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          void handleToggleMaximize();
+        }}
+        className="flex items-center justify-center w-11 h-full hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
+        aria-label={
+          isMaximized ? t("common.window.restore") : t("common.window.maximize")
+        }
+      >
+        {isMaximized ? (
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 10 10"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.2"
+            role="img"
+            aria-label={t("common.window.restore")}
+          >
+            <rect x="1" y="3" width="6" height="6" />
+            <path d="M3 3 V1 H9 V7 H7" />
+          </svg>
+        ) : (
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 10 10"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.2"
+            role="img"
+            aria-label={t("common.window.maximize")}
+          >
+            <rect x="1" y="1" width="8" height="8" />
+          </svg>
+        )}
       </button>
       <button
         type="button"

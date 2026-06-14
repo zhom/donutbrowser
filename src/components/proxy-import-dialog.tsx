@@ -280,7 +280,7 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{t("proxies.importDialog.title")}</DialogTitle>
           <DialogDescription>
@@ -376,12 +376,12 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
                   </span>
                 )}
               </Label>
-              <ScrollArea className="h-[200px] border rounded-md">
+              <ScrollArea className="h-[clamp(120px,30vh,400px)] border rounded-md">
                 <div className="p-2 space-y-1">
                   {parsedProxies.map((proxy, i) => (
                     <div
                       key={`${proxy.original_line}-${i}`}
-                      className="text-xs font-mono p-2 bg-muted/30 rounded"
+                      className="text-xs font-mono p-2 bg-muted/30 rounded break-all"
                     >
                       <span className="text-primary">
                         {proxy.proxy_type}://
@@ -407,14 +407,14 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
             <p className="text-sm text-muted-foreground">
               {t("proxies.importDialog.ambiguousIntro")}
             </p>
-            <ScrollArea className="h-[250px] border rounded-md">
+            <ScrollArea className="h-[clamp(150px,35vh,450px)] border rounded-md">
               <div className="p-3 space-y-4">
                 {ambiguousProxies.map((proxy, i) => (
                   <div
                     key={`${proxy.line}-${i}`}
                     className="space-y-2 pb-3 border-b last:border-0"
                   >
-                    <code className="text-xs bg-muted px-2 py-1 rounded block">
+                    <code className="text-xs bg-muted px-2 py-1 rounded block break-all">
                       {proxy.line}
                     </code>
                     <div className="flex flex-col gap-2">

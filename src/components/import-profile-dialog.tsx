@@ -306,14 +306,19 @@ export function ImportProfileDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose} subPage={subPage}>
-      <DialogContent className="max-w-2xl max-h-[80vh] my-8 flex flex-col">
+      <DialogContent className="max-w-[min(48rem,calc(100%-4rem))] max-h-[80vh] flex flex-col">
         {!subPage && (
           <DialogHeader className="shrink-0">
             <DialogTitle>{t("importProfile.title")}</DialogTitle>
           </DialogHeader>
         )}
 
-        <div className="overflow-y-auto flex-1 space-y-6 min-h-0">
+        <div
+          className={cn(
+            "overflow-y-auto flex-1 space-y-6 min-h-0",
+            subPage && "mx-auto w-full max-w-2xl",
+          )}
+        >
           {currentStep === "select" && (
             <AnimatedTabs
               value={importMode}
@@ -409,7 +414,7 @@ export function ImportProfileDialog({
 
                       {selectedProfile && (
                         <div className="p-3 rounded-lg bg-muted">
-                          <p className="text-sm">
+                          <p className="text-sm break-all">
                             <span className="font-medium">
                               {t("importProfile.pathLabel")}
                             </span>{" "}
@@ -513,7 +518,7 @@ export function ImportProfileDialog({
                           <FaFolder className="size-4" />
                         </Button>
                       </div>
-                      <p className="mt-2 text-xs text-muted-foreground">
+                      <p className="mt-2 text-xs text-muted-foreground break-all">
                         {t("importProfile.examplePaths")}
                         <br />
                         macOS: ~/Library/Application
@@ -600,7 +605,9 @@ export function ImportProfileDialog({
         <div
           className={cn(
             "shrink-0 flex gap-2 items-center justify-end",
-            subPage ? "pt-2 border-t border-border" : undefined,
+            subPage
+              ? "pt-2 border-t border-border mx-auto w-full max-w-2xl"
+              : undefined,
           )}
         >
           {currentStep === "select" ? (

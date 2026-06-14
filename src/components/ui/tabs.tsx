@@ -78,7 +78,7 @@ const TabsList = React.forwardRef<
     ref={ref}
     data-slot="tabs-list"
     className={cn(
-      "inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground",
+      "inline-flex h-10 max-w-full items-center justify-center overflow-x-auto rounded-md bg-muted p-1 text-muted-foreground [scrollbar-width:none]",
       className,
     )}
     {...props}
@@ -168,6 +168,10 @@ function isAutoMode(props: TabsContentsProps): props is TabsContentsAutoProps {
   return !("mode" in props) || props.mode === "auto-height";
 }
 
+// Auto-height mode animates to a measured pixel height; in a
+// height-constrained parent (e.g. a dialog capped at the viewport) the pane
+// itself must carry "overflow-y-auto min-h-0" so overflow scrolls instead of
+// clipping.
 function TabsContents(props: TabsContentsProps) {
   const { value } = useTabs();
 

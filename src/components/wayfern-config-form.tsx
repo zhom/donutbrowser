@@ -290,8 +290,8 @@ export function WayfernConfigForm({
           {/* User Agent and Platform */}
           <div className="space-y-3">
             <Label>{t("fingerprint.userAgentAndPlatform")}</Label>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2 col-span-2">
+            <div className="grid grid-cols-1 @md:grid-cols-2 gap-4">
+              <div className="space-y-2 col-span-full">
                 <Label htmlFor="user-agent">{t("fingerprint.userAgent")}</Label>
                 <Input
                   id="user-agent"
@@ -381,7 +381,7 @@ export function WayfernConfigForm({
           {/* Hardware Properties */}
           <div className="space-y-3">
             <Label>{t("fingerprint.hardwareProperties")}</Label>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 @md:grid-cols-2 @2xl:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="hardware-concurrency">
                   {t("fingerprint.hardwareConcurrency")}
@@ -439,7 +439,7 @@ export function WayfernConfigForm({
           {/* Screen Properties */}
           <div className="space-y-3">
             <Label>{t("fingerprint.screenProperties")}</Label>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 @md:grid-cols-2 @2xl:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="screen-width">
                   {t("fingerprint.screenWidth")}
@@ -561,7 +561,7 @@ export function WayfernConfigForm({
           {/* Window Properties */}
           <div className="space-y-3">
             <Label>{t("fingerprint.windowProperties")}</Label>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 @md:grid-cols-2 @2xl:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="window-outer-width">
                   {t("fingerprint.outerWidth")}
@@ -674,7 +674,7 @@ export function WayfernConfigForm({
           {/* Language & Locale */}
           <div className="space-y-3">
             <Label>{t("fingerprint.languageAndLocale")}</Label>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 @md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="language">
                   {t("fingerprint.primaryLanguage")}
@@ -756,7 +756,7 @@ export function WayfernConfigForm({
             <p className="text-sm text-muted-foreground">
               {t("fingerprint.timezoneGeolocationDescription")}
             </p>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 @md:grid-cols-2 @2xl:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="timezone">
                   {t("fingerprint.timezoneIana")}
@@ -853,7 +853,7 @@ export function WayfernConfigForm({
           {/* WebGL Properties */}
           <div className="space-y-3">
             <Label>{t("fingerprint.webglProperties")}</Label>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 @md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="webgl-vendor">
                   {t("fingerprint.webglVendor")}
@@ -951,7 +951,7 @@ export function WayfernConfigForm({
           {/* Audio */}
           <div className="space-y-3">
             <Label>{t("fingerprint.audioProperties")}</Label>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 @md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="audio-sample-rate">
                   {t("fingerprint.sampleRate")}
@@ -994,7 +994,7 @@ export function WayfernConfigForm({
           {/* Battery */}
           <div className="space-y-3">
             <Label>{t("fingerprint.battery")}</Label>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 @md:grid-cols-2 @2xl:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <div className="flex items-center gap-x-2">
                   <Checkbox
@@ -1040,7 +1040,7 @@ export function WayfernConfigForm({
           {/* Vendor Info */}
           <div className="space-y-3">
             <Label>{t("fingerprint.vendorInfo")}</Label>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 @md:grid-cols-2 @2xl:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="vendor">{t("fingerprint.vendor")}</Label>
                 <Input
@@ -1114,7 +1114,7 @@ export function WayfernConfigForm({
   );
 
   return (
-    <div className={`space-y-6 ${className}`}>
+    <div className={`@container space-y-6 ${className}`}>
       {forceAdvanced ? (
         renderAdvancedForm()
       ) : (
@@ -1228,7 +1228,7 @@ export function WayfernConfigForm({
                 className="space-y-3"
               >
                 <Label>{t("fingerprint.screenResolution")}</Label>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 @md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="screen-max-width">
                       {t("fingerprint.maxWidth")}

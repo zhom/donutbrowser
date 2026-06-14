@@ -42,12 +42,14 @@ function AutoHeight({
 
   return (
     <Comp
-      style={{ overflow: "hidden", ...style }}
+      style={{ overflow: "hidden", maxHeight: "100%", ...style }}
       animate={{ height, ...animate }}
       transition={transition}
       {...props}
     >
-      <div ref={ref}>{children}</div>
+      <div ref={ref} className="min-h-0">
+        {children}
+      </div>
     </Comp>
   );
 }

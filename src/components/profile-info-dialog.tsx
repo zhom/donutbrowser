@@ -503,7 +503,7 @@ export function ProfileInfoDialog({
     >
       <DialogContent
         hideClose
-        className="sm:max-w-3xl w-[720px] max-w-[720px] h-[480px] max-h-[480px] flex flex-col p-0 gap-0 overflow-hidden"
+        className="max-w-[min(60rem,calc(100%-4rem))] h-[min(clamp(30rem,80vh,48rem),calc(100vh-3rem))] flex flex-col p-0 gap-0 overflow-hidden"
       >
         {/* The dialog renders its own custom header, so the accessible title is
             visually hidden but present for screen readers (Radix requires it). */}

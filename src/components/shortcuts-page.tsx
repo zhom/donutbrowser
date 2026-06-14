@@ -21,7 +21,7 @@ interface ShortcutsPageProps {
 
 function Tokens({ tokens }: { tokens: string[] }) {
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1 shrink-0">
       {tokens.map((tok, i) => (
         <kbd
           key={i}
@@ -72,7 +72,12 @@ export function ShortcutsPage({ groupTargets }: ShortcutsPageProps) {
                     key={s.id}
                     className="flex items-center justify-between gap-4 px-3 py-2"
                   >
-                    <span className="text-sm">{t(s.labelKey)}</span>
+                    <span
+                      className="text-sm truncate min-w-0"
+                      title={t(s.labelKey)}
+                    >
+                      {t(s.labelKey)}
+                    </span>
                     <ShortcutTokens shortcut={s} />
                   </div>
                 ))}
@@ -92,7 +97,12 @@ export function ShortcutsPage({ groupTargets }: ShortcutsPageProps) {
                   key={target.id}
                   className="flex items-center justify-between gap-4 px-3 py-2"
                 >
-                  <span className="text-sm">{target.name}</span>
+                  <span
+                    className="text-sm truncate min-w-0"
+                    title={target.name}
+                  >
+                    {target.name}
+                  </span>
                   <Tokens tokens={formatGroupShortcut(i + 1)} />
                 </div>
               ))}

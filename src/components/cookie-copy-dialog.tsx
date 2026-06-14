@@ -332,7 +332,7 @@ export function CookieCopyDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+      <DialogContent className="max-w-[min(48rem,calc(100%-4rem))] max-h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <LuCookie className="size-5" />
@@ -463,7 +463,7 @@ export function CookieCopyDialog({
                     : t("cookies.copy.noFound")}
                 </div>
               ) : (
-                <ScrollArea className="h-[250px] border rounded-md">
+                <ScrollArea className="h-[clamp(150px,35vh,450px)] border rounded-md">
                   <div className="p-2 space-y-1">
                     {filteredDomains.map((domain) => (
                       <DomainRow
@@ -559,7 +559,7 @@ function DomainRow({
         />
         <button
           type="button"
-          className="flex items-center gap-1 flex-1 text-left bg-transparent border-none cursor-pointer"
+          className="flex items-center gap-1 flex-1 min-w-0 text-left bg-transparent border-none cursor-pointer"
           onClick={() => {
             onToggleExpand(domain.domain);
           }}
@@ -569,8 +569,8 @@ function DomainRow({
           ) : (
             <LuChevronRight className="size-4" />
           )}
-          <span className="font-medium">{domain.domain}</span>
-          <span className="text-xs text-muted-foreground">
+          <span className="font-medium truncate">{domain.domain}</span>
+          <span className="text-xs text-muted-foreground shrink-0">
             ({domain.cookie_count})
           </span>
         </button>

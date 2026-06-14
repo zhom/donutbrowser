@@ -5,9 +5,11 @@ import {
   flexRender,
   getCoreRowModel,
   getSortedRowModel,
+  type RowData,
   type RowSelectionState,
   type SortingState,
   useReactTable,
+  type VisibilityState,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { invoke } from "@tauri-apps/api/core";
@@ -81,7 +83,6 @@ import {
   isCrossOsProfile,
 } from "@/lib/browser-utils";
 import { formatRelativeTime } from "@/lib/flag-utils";
-import { trimName } from "@/lib/name-utils";
 import { cn } from "@/lib/utils";
 import type {
   BrowserProfile,
@@ -104,6 +105,15 @@ import { ProxyCheckButton } from "./proxy-check-button";
 import { TrafficDetailsDialog } from "./traffic-details-dialog";
 import { Input } from "./ui/input";
 import { RippleButton } from "./ui/ripple";
+
+declare module "@tanstack/react-table" {
+  interface ColumnMeta<TData extends RowData, TValue> {
+    // Emit no width for this column so table-fixed hands it all remaining
+    // space. Checking columnDef.size alone can't express this: TanStack
+    // resolves an unspecified size to its 150px default.
+    flexWidth?: boolean;
+  }
+}
 
 // Stable table meta type to pass volatile state/handlers into TanStack Table without
 // causing column definitions to be recreated on every render.
@@ -821,6 +831,96 @@ const NonHoverableTooltip = React.memo<{
 );
 
 NonHoverableTooltip.displayName = "NonHoverableTooltip";
+
+// CSS-truncated text whose tooltip only appears when the text actually
+// overflows its column (measured on hover, so it tracks live resizes).
+const OverflowTooltipText = React.memo<{
+  text: string;
+  className?: string;
+}>(({ text, className }) => {
+  const textRef = React.useRef<HTMLSpanElement | null>(null);
+  const [isOverflowing, setIsOverflowing] = React.useState(false);
+
+  return (
+    <Tooltip
+      onOpenChange={(open) => {
+        if (!open) return;
+        const el = textRef.current;
+        if (el) setIsOverflowing(el.scrollWidth > el.clientWidth);
+      }}
+    >
+      <TooltipTrigger asChild>
+        <span
+          ref={textRef}
+          className={cn("block min-w-0 max-w-full truncate", className)}
+        >
+          {text}
+        </span>
+      </TooltipTrigger>
+      {isOverflowing && <TooltipContent>{text}</TooltipContent>}
+    </Tooltip>
+  );
+});
+
+OverflowTooltipText.displayName = "OverflowTooltipText";
+
+// Must be rendered inside a <Popover>; the tooltip shows the full assignment
+// name only when it is truncated in the cell.
+const ProxyCellTrigger = React.memo<{
+  displayName: string;
+  hasAssignment: boolean;
+  vpnBadge: string | null;
+  isDisabled: boolean;
+}>(({ displayName, hasAssignment, vpnBadge, isDisabled }) => {
+  const textRef = React.useRef<HTMLSpanElement | null>(null);
+  const [isOverflowing, setIsOverflowing] = React.useState(false);
+
+  return (
+    <Tooltip
+      onOpenChange={(open) => {
+        if (!open) return;
+        const el = textRef.current;
+        if (el) setIsOverflowing(el.scrollWidth > el.clientWidth);
+      }}
+    >
+      <TooltipTrigger asChild>
+        <PopoverTrigger asChild>
+          <span
+            className={cn(
+              "flex gap-2 items-center px-2 py-1 rounded min-w-0 max-w-full",
+              isDisabled
+                ? "opacity-60 cursor-not-allowed pointer-events-none"
+                : "cursor-pointer hover:bg-accent/50",
+            )}
+          >
+            {vpnBadge && (
+              <Badge
+                variant="outline"
+                className="text-[10px] px-1 py-0 leading-tight shrink-0"
+              >
+                {vpnBadge}
+              </Badge>
+            )}
+            <span
+              ref={textRef}
+              className={cn(
+                "text-sm min-w-0 truncate",
+                !hasAssignment && "text-muted-foreground",
+              )}
+            >
+              {displayName}
+            </span>
+          </span>
+        </PopoverTrigger>
+      </TooltipTrigger>
+      {hasAssignment && isOverflowing && (
+        <TooltipContent>{displayName}</TooltipContent>
+      )}
+    </Tooltip>
+  );
+});
+
+ProxyCellTrigger.displayName = "ProxyCellTrigger";
 
 const NoteCell = React.memo<{
   profile: BrowserProfile;
@@ -2276,7 +2376,9 @@ export function ProfilesDataTable({
       },
       {
         accessorKey: "name",
-        size: 130,
+        // The only column without a fixed width: table-fixed hands it all
+        // remaining space as the window grows or shrinks.
+        meta: { flexWidth: true },
         header: ({ column, table }) => {
           const meta = table.options.meta as TableMeta;
           return (
@@ -2341,27 +2443,18 @@ export function ProfilesDataTable({
                       meta.setRenameError(null);
                     }
                   }}
-                  className="w-30 h-6 px-2 py-1 text-sm font-medium leading-none border-0 shadow-none focus-visible:ring-0"
+                  className="w-full min-w-0 max-w-full h-6 px-2 py-1 text-sm font-medium leading-none border-0 shadow-none focus-visible:ring-0"
                 />
               </div>
             );
           }
 
-          const display =
-            name.length < 14 ? (
-              <div className="font-medium text-left leading-none truncate">
-                {name}
-              </div>
-            ) : (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="leading-none block truncate">
-                    {trimName(name, 14)}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>{name}</TooltipContent>
-              </Tooltip>
-            );
+          const display = (
+            <OverflowTooltipText
+              text={name}
+              className="font-medium text-left leading-none"
+            />
+          );
 
           const isCrossOs = isCrossOsProfile(profile);
           const isCrossOsBlocked = isCrossOs;
@@ -2528,7 +2621,6 @@ export function ProfilesDataTable({
               ? effectiveProxy.name
               : meta.t("profiles.table.notSelected");
           const vpnBadge = effectiveVpn ? "WG" : null;
-          const tooltipText = hasAssignment ? displayName : null;
           const isSelectorOpen = meta.openProxySelectorFor === profile.id;
           const selectedId = effectiveVpnId ?? effectiveProxyId ?? null;
 
@@ -2562,42 +2654,12 @@ export function ProfilesDataTable({
                   meta.setOpenProxySelectorFor(open ? profile.id : null);
                 }}
               >
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <PopoverTrigger asChild>
-                      <span
-                        className={cn(
-                          "flex gap-2 items-center px-2 py-1 rounded",
-                          isDisabled
-                            ? "opacity-60 cursor-not-allowed pointer-events-none"
-                            : "cursor-pointer hover:bg-accent/50",
-                        )}
-                      >
-                        {vpnBadge && (
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] px-1 py-0 leading-tight"
-                          >
-                            {vpnBadge}
-                          </Badge>
-                        )}
-                        <span
-                          className={cn(
-                            "text-sm",
-                            !hasAssignment && "text-muted-foreground",
-                          )}
-                        >
-                          {hasAssignment
-                            ? trimName(displayName, 10)
-                            : displayName}
-                        </span>
-                      </span>
-                    </PopoverTrigger>
-                  </TooltipTrigger>
-                  {tooltipText && (
-                    <TooltipContent>{tooltipText}</TooltipContent>
-                  )}
-                </Tooltip>
+                <ProxyCellTrigger
+                  displayName={displayName}
+                  hasAssignment={hasAssignment}
+                  vpnBadge={vpnBadge}
+                  isDisabled={isDisabled}
+                />
 
                 {!isDisabled && (
                   <PopoverContent
@@ -2861,15 +2923,29 @@ export function ProfilesDataTable({
     [t, setProfileForInfoDialog],
   );
 
+  // Low-priority columns leave the table as the container narrows (most
+  // expendable first); their data stays reachable via the profile info
+  // dialog. Visibility (not CSS hiding) so table-fixed reclaims the width.
+  const [columnVisibility, setColumnVisibility] =
+    React.useState<VisibilityState>({});
+
+  // Content columns grow proportionally with the container but never drop
+  // below the compact-layout floor; the name column takes the remainder.
+  // Computed in px from the observed container width because fixed table
+  // layout ignores max()/calc() column widths.
+  const [containerWidth, setContainerWidth] = React.useState(0);
+
   const table = useReactTable({
     data: profiles,
     columns,
     state: {
       sorting,
       rowSelection,
+      columnVisibility,
     },
     onSortingChange: handleSortingChange,
     onRowSelectionChange: handleRowSelectionChange,
+    onColumnVisibilityChange: setColumnVisibility,
     enableRowSelection: (row) => {
       const profile = row.original;
       const isRunning =
@@ -2885,8 +2961,49 @@ export function ProfilesDataTable({
   });
 
   const scrollParentRef = React.useRef<HTMLDivElement | null>(null);
+  const columnWidth = React.useCallback(
+    (id: string, sizePx: number) => {
+      const proportions: Record<string, { pct: number; floor: number }> = {
+        tags: { pct: 0.12, floor: 100 },
+        note: { pct: 0.1, floor: 80 },
+        proxy: { pct: 0.13, floor: 110 },
+        ext: { pct: 0.11, floor: 95 },
+        dns: { pct: 0.11, floor: 95 },
+      };
+      const p = proportions[id];
+      if (!p) return `${sizePx}px`;
+      return `${Math.max(p.floor, Math.round(containerWidth * p.pct))}px`;
+    },
+    [containerWidth],
+  );
   const sortedRows = table.getRowModel().rows;
   useScrollFade(scrollParentRef);
+
+  React.useEffect(() => {
+    const el = scrollParentRef.current;
+    if (!el) return;
+    const update = () => {
+      const w = el.clientWidth;
+      setContainerWidth(Math.round(w / 8) * 8);
+      setColumnVisibility((prev) => {
+        const next: VisibilityState = {
+          dns: w >= 768,
+          ext: w >= 672,
+          note: w >= 576,
+          tags: w >= 512,
+        };
+        return Object.keys(next).every((k) => prev[k] === next[k])
+          ? prev
+          : next;
+      });
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+    };
+  }, []);
 
   // Compact 36px row from the redesign spec; estimateSize must match the
   // actual rendered row height or virtualizer placement drifts under scroll.
@@ -2912,7 +3029,13 @@ export function ProfilesDataTable({
       <div className="relative flex-1 min-h-0 flex flex-col">
         <div
           ref={scrollParentRef}
-          className="overflow-auto relative flex-1 min-h-0 scroll-fade"
+          className={cn(
+            "overflow-auto relative flex-1 min-h-0 scroll-fade",
+            // Clearance for the floating selection action bar (bottom-6 +
+            // ~46px tall) so the last rows can scroll out from behind it.
+            // Same predicate DataTableActionBar uses for its visibility.
+            table.getFilteredSelectedRowModel().rows.length > 0 && "pb-20",
+          )}
           style={
             {
               // Sticky table header is 32px tall (h-8); shift the top
@@ -2922,7 +3045,7 @@ export function ProfilesDataTable({
             } as React.CSSProperties
           }
         >
-          <Table className="table-fixed">
+          <Table className="table-fixed" containerClassName="overflow-visible">
             <TableHeader className="overflow-visible sticky top-0 z-10 bg-background [&_tr]:border-0">
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow
@@ -2934,9 +3057,12 @@ export function ProfilesDataTable({
                       <TableHead
                         key={header.id}
                         style={{
-                          width: header.column.columnDef.size
-                            ? `${header.column.getSize()}px`
-                            : undefined,
+                          width: header.column.columnDef.meta?.flexWidth
+                            ? undefined
+                            : columnWidth(
+                                header.column.id,
+                                header.column.getSize(),
+                              ),
                         }}
                       >
                         {header.isPlaceholder
@@ -2955,7 +3081,7 @@ export function ProfilesDataTable({
               {sortedRows.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={columns.length}
+                    colSpan={table.getVisibleLeafColumns().length}
                     className="h-24 text-center"
                   >
                     {t("profiles.table.empty")}
@@ -2965,7 +3091,7 @@ export function ProfilesDataTable({
                 <>
                   {paddingTop > 0 && (
                     <tr style={{ height: `${paddingTop}px` }}>
-                      <td colSpan={columns.length} />
+                      <td colSpan={table.getVisibleLeafColumns().length} />
                     </tr>
                   )}
                   {virtualRows.map((virtualRow) => {
@@ -2997,9 +3123,12 @@ export function ProfilesDataTable({
                             key={cell.id}
                             className="overflow-visible py-0"
                             style={{
-                              width: cell.column.columnDef.size
-                                ? `${cell.column.getSize()}px`
-                                : undefined,
+                              width: cell.column.columnDef.meta?.flexWidth
+                                ? undefined
+                                : columnWidth(
+                                    cell.column.id,
+                                    cell.column.getSize(),
+                                  ),
                             }}
                           >
                             {flexRender(
@@ -3013,7 +3142,7 @@ export function ProfilesDataTable({
                   })}
                   {paddingBottom > 0 && (
                     <tr style={{ height: `${paddingBottom}px` }}>
-                      <td colSpan={columns.length} />
+                      <td colSpan={table.getVisibleLeafColumns().length} />
                     </tr>
                   )}
                 </>

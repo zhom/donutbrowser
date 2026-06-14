@@ -27,6 +27,7 @@ import { useCloudAuth } from "@/hooks/use-cloud-auth";
 import { translateBackendError } from "@/lib/backend-errors";
 import { getEntitlements } from "@/lib/entitlements";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
+import { cn } from "@/lib/utils";
 import type { SyncSettings } from "@/types";
 
 interface AccountPageProps {
@@ -197,8 +198,13 @@ export function AccountPage({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose} subPage={subPage}>
-      <DialogContent className="max-w-2xl flex flex-col">
-        <div className="flex flex-col gap-4 p-4">
+      <DialogContent className="max-w-2xl max-h-[calc(100vh-4rem)] flex flex-col">
+        <div
+          className={cn(
+            "flex flex-col gap-4 p-4 overflow-y-auto flex-1 min-h-0",
+            subPage && "w-full max-w-2xl mx-auto",
+          )}
+        >
           <AnimatedTabs defaultValue="account">
             <AnimatedTabsList>
               <AnimatedTabsTrigger value="account">

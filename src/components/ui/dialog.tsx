@@ -179,6 +179,7 @@ function SubPageContent({
         gap: 12,
         overflow: "auto",
         background: "var(--background)",
+        containerType: "inline-size",
       }}
     >
       {children}
@@ -254,7 +255,10 @@ function DialogContent({
             transition ?? { duration: 0.25, ease: [0.22, 1, 0.36, 1] }
           }
           className={cn(
-            "bg-background fixed top-[50%] left-[50%] z-10000 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg",
+            // w-[calc(100%-2rem)] (not w-full + max-w) keeps the 1rem window
+            // gutter even when callers override max-w-*: tailwind-merge drops
+            // a base max-w in favor of the caller's, but leaves width alone.
+            "bg-background fixed top-[50%] left-[50%] z-10000 grid w-[calc(100%-2rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg max-h-[calc(100vh-3rem)] overflow-y-auto",
             className,
           )}
           {...props}
@@ -282,7 +286,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-2 text-center sm:text-left", className)}
+      className={cn("flex flex-col gap-2 text-left pr-8", className)}
       {...props}
     />
   );
@@ -293,7 +297,7 @@ function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="dialog-footer"
       className={cn(
-        "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
+        "flex flex-row flex-wrap justify-end gap-2 shrink-0",
         className,
       )}
       {...props}

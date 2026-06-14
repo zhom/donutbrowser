@@ -64,13 +64,18 @@ export function Combobox({
           disabled={disabled}
           className={cn("w-full justify-between", className)}
         >
-          {value
-            ? options.find((option) => option.value === value)?.label
-            : resolvedPlaceholder}
+          <span className="truncate">
+            {value
+              ? options.find((option) => option.value === value)?.label
+              : resolvedPlaceholder}
+          </span>
           <LuChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent id={listboxId} className="w-full p-0">
+      <PopoverContent
+        id={listboxId}
+        className="w-(--radix-popover-trigger-width) p-0"
+      >
         <Command>
           <CommandInput placeholder={resolvedSearchPlaceholder} />
           <CommandList>
@@ -91,10 +96,10 @@ export function Combobox({
                       value === option.value ? "opacity-100" : "opacity-0",
                     )}
                   />
-                  <div className="flex flex-col">
-                    <span>{option.label}</span>
+                  <div className="flex min-w-0 flex-col">
+                    <span className="truncate">{option.label}</span>
                     {option.description && (
-                      <span className="text-sm text-muted-foreground">
+                      <span className="truncate text-sm text-muted-foreground">
                         {option.description}
                       </span>
                     )}

@@ -150,6 +150,8 @@ use api_server::{get_api_server_status, start_api_server, stop_api_server};
 pub trait WindowExt {
   #[cfg(target_os = "macos")]
   fn set_transparent_titlebar(&self, transparent: bool) -> Result<(), String>;
+  #[cfg(target_os = "macos")]
+  fn disable_native_fullscreen(&self) -> Result<(), String>;
 }
 
 impl<R: Runtime> WindowExt for WebviewWindow<R> {
@@ -164,7 +166,7 @@ impl<R: Runtime> WindowExt for WebviewWindow<R> {
 
       if transparent {
         // Hide the title text
-        ns_window.setTitleVisibility(NSWindowTitleVisibility(2)); // NSWindowTitleHidden
+        ns_window.setTitleVisibility(NSWindowTitleVisibility(1)); // NSWindowTitleHidden
 
         // Make titlebar transparent
         ns_window.setTitlebarAppearsTransparent(true);
@@ -185,6 +187,33 @@ impl<R: Runtime> WindowExt for WebviewWindow<R> {
         let new_mask = NSWindowStyleMask(current_mask.0 & !(1 << 15));
         ns_window.setStyleMask(new_mask);
       }
+    }
+
+    Ok(())
+  }
+
+  #[cfg(target_os = "macos")]
+  fn disable_native_fullscreen(&self) -> Result<(), String> {
+    use objc2::rc::Retained;
+    use objc2_app_kit::{NSWindow, NSWindowCollectionBehavior};
+
+    unsafe {
+      let ns_window: Retained<NSWindow> =
+        Retained::retain(self.ns_window().unwrap().cast()).unwrap();
+
+      // Make the green title-bar button (and titlebar double-click) "zoom"
+      // the window to fill the screen as an ordinary window instead of
+      // entering immersive native fullscreen that hides the menu bar and
+      // moves to its own Space. Mirrors Electron's `fullscreenable: false`:
+      // clear FullScreenPrimary and set FullScreenNone. AppKit then maps the
+      // green button to the standard zoom, expanding to the visible screen
+      // frame while keeping the window chrome and the current Space.
+      const FULL_SCREEN_PRIMARY: usize = 1 << 7;
+      const FULL_SCREEN_NONE: usize = 1 << 9;
+      let current = ns_window.collectionBehavior();
+      let updated =
+        NSWindowCollectionBehavior((current.0 & !FULL_SCREEN_PRIMARY) | FULL_SCREEN_NONE);
+      ns_window.setCollectionBehavior(updated);
     }
 
     Ok(())
@@ -1388,6 +1417,21 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_macos_permissions::init())
     .plugin(tauri_plugin_clipboard_manager::init())
+    // Persist window size/position across restarts. VISIBLE is excluded
+    // because the app hides to tray: restoring visibility would otherwise
+    // relaunch with an invisible window after quitting from the tray while
+    // hidden. FULLSCREEN is excluded because native fullscreen is disabled
+    // (the green button zooms instead) — the maximized flag captures the
+    // "filled screen" state, including green-button zoom on macOS.
+    .plugin(
+      tauri_plugin_window_state::Builder::default()
+        .with_state_flags(
+          tauri_plugin_window_state::StateFlags::all()
+            & !tauri_plugin_window_state::StateFlags::VISIBLE
+            & !tauri_plugin_window_state::StateFlags::FULLSCREEN,
+        )
+        .build(),
+    )
     .setup(|app| {
       // Recover ephemeral dir mappings from RAM-backed storage (tmpfs/ramdisk)
       ephemeral_dirs::recover_ephemeral_dirs();
@@ -1403,7 +1447,8 @@ pub fn run() {
       let win_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
         .title("Donut Browser")
         .inner_size(880.0, 500.0)
-        .resizable(false)
+        .min_inner_size(640.0, 400.0)
+        .resizable(true)
         .fullscreen(false)
         .center()
         .focused(true)
@@ -1446,6 +1491,11 @@ pub fn run() {
       {
         if let Err(e) = window.set_transparent_titlebar(true) {
           log::warn!("Failed to set transparent titlebar: {e}");
+        }
+        // Green title-bar button maximizes (zoom) the window rather than
+        // entering immersive native fullscreen.
+        if let Err(e) = window.disable_native_fullscreen() {
+          log::warn!("Failed to disable native fullscreen: {e}");
         }
       }
 

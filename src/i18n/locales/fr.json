@@ -90,7 +90,9 @@
       "unknown": "Une erreur inconnue est survenue"
     },
     "window": {
-      "minimize": "Réduire"
+      "minimize": "Réduire",
+      "maximize": "Agrandir",
+      "restore": "Restaurer"
     },
     "commandPalette": {
       "title": "Palette de commandes",
@@ -399,6 +401,7 @@
       "newProxy": "Nouveau proxy",
       "newVpn": "Nouveau VPN",
       "protocolCol": "Protocole",
+      "hostPort": "Hôte : port",
       "title": "Proxys et VPN"
     },
     "add": "Ajouter un proxy",

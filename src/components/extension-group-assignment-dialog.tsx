@@ -110,7 +110,7 @@ export function ExtensionGroupAssignmentDialog({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>{t("extensions.assignTitle")}:</Label>
-            <div className="p-3 bg-muted rounded-md max-h-32 overflow-y-auto">
+            <div className="p-3 bg-muted rounded-md max-h-[min(8rem,20vh)] overflow-y-auto">
               <ul className="text-sm space-y-1">
                 {selectedProfiles.map((profileId) => {
                   const profile = profiles.find(

@@ -78,7 +78,7 @@ function AnimatedTabsList({
     <TabsPrimitive.List
       data-slot="animated-tabs-list"
       className={cn(
-        "relative inline-flex items-center gap-1 rounded-md p-0",
+        "relative inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-md p-0 [scrollbar-width:none]",
         className,
       )}
       onMouseLeave={(event) => {

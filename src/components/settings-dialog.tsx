@@ -633,7 +633,7 @@ export function SettingsDialog({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={handleClose} subPage={subPage}>
-        <DialogContent className="max-w-md max-h-[80vh] my-8 flex flex-col">
+        <DialogContent className="max-w-md max-h-[calc(100vh-5rem)] flex flex-col">
           {!subPage && (
             <DialogHeader className="shrink-0">
               <DialogTitle>{t("settings.title")}</DialogTitle>
@@ -643,7 +643,7 @@ export function SettingsDialog({
           <div
             className={cn(
               "grid overflow-y-auto flex-1 gap-6 min-h-0",
-              subPage ? "py-2" : "py-4",
+              subPage ? "py-2 w-full max-w-2xl mx-auto" : "py-4",
             )}
           >
             {/* Appearance Section */}
@@ -748,7 +748,7 @@ export function SettingsDialog({
                   <div className="text-sm font-medium">
                     {t("settings.appearance.customColors")}
                   </div>
-                  <div className="grid grid-cols-4 gap-3">
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(4rem,1fr))] gap-3">
                     {THEME_VARIABLES.map(({ key, label }) => {
                       const colorValue =
                         customThemeState.colors[key] ?? "#000000";
@@ -1314,7 +1314,7 @@ export function SettingsDialog({
           </div>
 
           {subPage ? (
-            <div className="shrink-0 flex items-center justify-end gap-2 pt-2 border-t border-border">
+            <div className="shrink-0 flex items-center justify-end gap-2 pt-2 border-t border-border w-full max-w-2xl mx-auto">
               <LoadingButton
                 size="sm"
                 isLoading={isSaving}

@@ -77,7 +77,7 @@ export function CloneProfileDialog({
         if (!open) onClose();
       }}
     >
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{t("profileInfo.clone.title")}</DialogTitle>
           <DialogDescription>

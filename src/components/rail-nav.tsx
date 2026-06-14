@@ -74,8 +74,6 @@ function useLogoEasterEgg({
     const rect = el.getBoundingClientRect();
     const startX = rect.left;
     const startY = rect.top;
-    const floorY = window.innerHeight;
-    const rightWall = window.innerWidth;
 
     const clone = el.cloneNode(true) as HTMLElement;
     clone.style.position = "fixed";
@@ -98,6 +96,10 @@ function useLogoEasterEgg({
     const animate = (time: number) => {
       const dt = Math.min((time - lastTime) / 1000, 0.05);
       lastTime = time;
+
+      // Read live so a mid-animation window resize moves the floor/wall.
+      const floorY = window.innerHeight;
+      const rightWall = window.innerWidth;
 
       vy += GRAVITY * dt;
       x += vx * dt;
@@ -294,7 +296,7 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
           ref={logoRef}
           type="button"
           aria-label={t("header.donutLogo")}
-          className="grid place-items-center size-7 rounded-md cursor-pointer select-none text-foreground bg-transparent"
+          className="grid place-items-center size-7 rounded-md cursor-pointer select-none text-foreground bg-transparent shrink-0"
           onClick={handleClick}
           onPointerDown={() => {
             setIsPressed(true);
@@ -331,43 +333,45 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
           </span>
         </button>
       ) : (
-        <div className="size-7" />
+        <div className="size-7 shrink-0" />
       )}
 
-      <div className="w-5 h-px bg-border my-1" />
+      <div className="w-5 h-px bg-border my-1 shrink-0" />
 
-      {TOP_ITEMS.map(({ page, Icon, labelKey }) => {
-        const active = currentPage === page;
-        return (
-          <Tooltip key={page} delayDuration={300}>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={() => {
-                  onNavigate(page);
-                }}
-                aria-label={t(labelKey)}
-                aria-current={active ? "page" : undefined}
-                className={cn(
-                  "relative grid place-items-center size-7 rounded-md transition-colors duration-100",
-                  active
-                    ? "text-foreground bg-accent"
-                    : "text-muted-foreground hover:text-card-foreground hover:bg-accent/50",
-                )}
-              >
-                {active && (
-                  <span
-                    aria-hidden="true"
-                    className="absolute left-[-7px] top-1.5 bottom-1.5 w-[2px] rounded-full bg-foreground"
-                  />
-                )}
-                <Icon className="size-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="right">{t(labelKey)}</TooltipContent>
-          </Tooltip>
-        );
-      })}
+      <div className="flex flex-col items-center gap-1 w-full min-h-0 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        {TOP_ITEMS.map(({ page, Icon, labelKey }) => {
+          const active = currentPage === page;
+          return (
+            <Tooltip key={page} delayDuration={300}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onNavigate(page);
+                  }}
+                  aria-label={t(labelKey)}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "relative grid place-items-center size-7 rounded-md transition-colors duration-100 shrink-0",
+                    active
+                      ? "text-foreground bg-accent"
+                      : "text-muted-foreground hover:text-card-foreground hover:bg-accent/50",
+                  )}
+                >
+                  {active && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute left-[-7px] top-1.5 bottom-1.5 w-[2px] rounded-full bg-foreground"
+                    />
+                  )}
+                  <Icon className="size-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">{t(labelKey)}</TooltipContent>
+            </Tooltip>
+          );
+        })}
+      </div>
 
       <div className="flex-1" />
 
@@ -381,7 +385,7 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
             aria-label={t("rail.more.label")}
             aria-expanded={moreOpen}
             className={cn(
-              "grid place-items-center size-7 rounded-md transition-colors duration-100",
+              "grid place-items-center size-7 rounded-md transition-colors duration-100 shrink-0",
               moreOpen
                 ? "text-foreground bg-accent"
                 : "text-muted-foreground hover:text-card-foreground hover:bg-accent/50",
@@ -403,7 +407,7 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
             aria-label={t("rail.settings")}
             aria-current={currentPage === "settings" ? "page" : undefined}
             className={cn(
-              "relative grid place-items-center size-7 rounded-md transition-colors duration-100",
+              "relative grid place-items-center size-7 rounded-md transition-colors duration-100 shrink-0",
               currentPage === "settings"
                 ? "text-foreground bg-accent"
                 : "text-muted-foreground hover:text-card-foreground hover:bg-accent/50",

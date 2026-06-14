@@ -194,7 +194,7 @@ export function VpnFormDialog({
           <DialogDescription>{dialogDescription}</DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[60vh] pr-4">
+        <ScrollArea className="max-h-[min(60vh,calc(100vh-15rem))] overflow-y-auto pr-4">
           <div className="grid gap-4 py-2">
             <div className="grid gap-2">
               <Label htmlFor="wg-name">{t("vpns.form.name")}</Label>

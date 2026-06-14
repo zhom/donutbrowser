@@ -137,7 +137,7 @@ export function SyncFollowerDialog({
             </div>
 
             <div className="border rounded-md">
-              <ScrollArea className="h-[150px]">
+              <ScrollArea className="h-[clamp(120px,30vh,20rem)]">
                 <div className="space-y-1 p-2">
                   {eligibleProfiles.length === 0 ? (
                     <p className="text-sm text-muted-foreground py-4 text-center">

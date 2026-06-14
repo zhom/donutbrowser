@@ -75,6 +75,7 @@ import {
 } from "@/components/ui/tooltip";
 import { parseBackendError, translateBackendError } from "@/lib/backend-errors";
 import { showErrorToast, showSuccessToast } from "@/lib/toast-utils";
+import { cn } from "@/lib/utils";
 import type { Extension, ExtensionGroup } from "@/types";
 import { DeleteConfirmationDialog } from "./delete-confirmation-dialog";
 import { RippleButton } from "./ui/ripple";
@@ -770,6 +771,7 @@ export function ExtensionManagementDialog({
       },
       {
         id: "compat",
+        size: 56,
         enableSorting: false,
         header: () => null,
         cell: ({ row }) =>
@@ -821,6 +823,7 @@ export function ExtensionManagementDialog({
       },
       {
         id: "actions",
+        size: 80,
         enableSorting: false,
         header: () => null,
         cell: ({ row }) => {
@@ -942,6 +945,7 @@ export function ExtensionManagementDialog({
       },
       {
         id: "extensions",
+        size: 120,
         enableSorting: false,
         header: () => null,
         cell: ({ row }) => {
@@ -952,7 +956,7 @@ export function ExtensionManagementDialog({
           const visibleExts = groupExts.slice(0, MAX_VISIBLE_ICONS);
           const overflowCount = groupExts.length - MAX_VISIBLE_ICONS;
           return (
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-1 min-w-0">
               {visibleExts.map((ext) => (
                 <Tooltip key={ext.id}>
                   <TooltipTrigger asChild>
@@ -985,7 +989,7 @@ export function ExtensionManagementDialog({
                 </Tooltip>
               )}
               {groupExts.length === 0 && (
-                <span className="text-xs text-muted-foreground">
+                <span className="text-xs text-muted-foreground truncate min-w-0">
                   {t("extensions.noExtensionsInGroup")}
                 </span>
               )}
@@ -1043,6 +1047,7 @@ export function ExtensionManagementDialog({
       },
       {
         id: "actions",
+        size: 80,
         enableSorting: false,
         header: () => null,
         cell: ({ row }) => {
@@ -1111,7 +1116,7 @@ export function ExtensionManagementDialog({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose} subPage={subPage}>
-        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+        <DialogContent className="max-w-[min(80rem,calc(100%-4rem))] max-h-[90vh] flex flex-col">
           {!subPage && (
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -1125,7 +1130,7 @@ export function ExtensionManagementDialog({
             </DialogHeader>
           )}
 
-          <div className="relative flex-1 min-h-0 flex flex-col">
+          <div className="@container relative w-full flex-1 min-h-0 flex flex-col">
             {limitedMode && (
               <>
                 <div className="absolute inset-0 backdrop-blur-[6px] bg-background/30 z-[1]" />
@@ -1150,7 +1155,7 @@ export function ExtensionManagementDialog({
               onValueChange={(v) => setActiveTab(v as "extensions" | "groups")}
               className="flex-1 min-h-0 flex flex-col"
             >
-              <div className="flex items-center justify-between gap-3 shrink-0">
+              <div className="flex flex-wrap items-center justify-between gap-2 shrink-0">
                 <AnimatedTabsList>
                   <AnimatedTabsTrigger
                     value="extensions"
@@ -1170,27 +1175,45 @@ export function ExtensionManagementDialog({
                 </AnimatedTabsList>
                 <div className="flex items-center gap-2">
                   {activeTab === "extensions" && (
-                    <RippleButton
-                      size="sm"
-                      variant="outline"
-                      disabled={limitedMode}
-                      onClick={() =>
-                        document.getElementById("ext-file-input")?.click()
-                      }
-                    >
-                      <LuUpload className="size-4" />
-                      {t("extensions.upload")}
-                    </RippleButton>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <RippleButton
+                          size="sm"
+                          variant="outline"
+                          disabled={limitedMode}
+                          onClick={() =>
+                            document.getElementById("ext-file-input")?.click()
+                          }
+                          aria-label={t("extensions.upload")}
+                        >
+                          <LuUpload className="size-4" />
+                          <span className="hidden @2xl:inline">
+                            {t("extensions.upload")}
+                          </span>
+                        </RippleButton>
+                      </TooltipTrigger>
+                      <TooltipContent>{t("extensions.upload")}</TooltipContent>
+                    </Tooltip>
                   )}
                   {activeTab === "groups" && (
-                    <RippleButton
-                      size="sm"
-                      disabled={limitedMode}
-                      onClick={() => setShowCreateGroup(true)}
-                    >
-                      <GoPlus className="size-4" />
-                      {t("extensions.newGroup")}
-                    </RippleButton>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <RippleButton
+                          size="sm"
+                          disabled={limitedMode}
+                          onClick={() => setShowCreateGroup(true)}
+                          aria-label={t("extensions.newGroup")}
+                        >
+                          <GoPlus className="size-4" />
+                          <span className="hidden @2xl:inline">
+                            {t("extensions.newGroup")}
+                          </span>
+                        </RippleButton>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {t("extensions.newGroup")}
+                      </TooltipContent>
+                    </Tooltip>
                   )}
                 </div>
               </div>
@@ -1267,14 +1290,20 @@ export function ExtensionManagementDialog({
                     </div>
                   ) : (
                     <FadingScrollArea
-                      className="flex-1 min-h-0"
+                      className={cn(
+                        "flex-1 min-h-0",
+                        selectedExtensions.length > 0 && "pb-16",
+                      )}
                       style={
                         {
                           "--scroll-fade-top-offset": "32px",
                         } as React.CSSProperties
                       }
                     >
-                      <Table>
+                      <Table
+                        className="w-full table-fixed"
+                        containerClassName="overflow-visible"
+                      >
                         <TableHeader className="sticky top-0 z-10 bg-background">
                           {extTable.getHeaderGroups().map((headerGroup) => (
                             <TableRow key={headerGroup.id}>
@@ -1282,10 +1311,14 @@ export function ExtensionManagementDialog({
                                 <TableHead
                                   key={header.id}
                                   style={{
-                                    width: header.column.columnDef.size
-                                      ? `${header.column.getSize()}px`
-                                      : undefined,
+                                    width:
+                                      header.column.id === "name"
+                                        ? undefined
+                                        : `${header.column.getSize()}px`,
                                   }}
+                                  className={cn(
+                                    header.column.id === "name" && "max-w-0",
+                                  )}
                                 >
                                   {header.isPlaceholder
                                     ? null
@@ -1308,10 +1341,14 @@ export function ExtensionManagementDialog({
                                 <TableCell
                                   key={cell.id}
                                   style={{
-                                    width: cell.column.columnDef.size
-                                      ? `${cell.column.getSize()}px`
-                                      : undefined,
+                                    width:
+                                      cell.column.id === "name"
+                                        ? undefined
+                                        : `${cell.column.getSize()}px`,
                                   }}
+                                  className={cn(
+                                    cell.column.id === "name" && "max-w-0",
+                                  )}
                                 >
                                   {flexRender(
                                     cell.column.columnDef.cell,
@@ -1374,14 +1411,20 @@ export function ExtensionManagementDialog({
                     </div>
                   ) : (
                     <FadingScrollArea
-                      className="flex-1 min-h-0"
+                      className={cn(
+                        "flex-1 min-h-0",
+                        selectedGroups.length > 0 && "pb-16",
+                      )}
                       style={
                         {
                           "--scroll-fade-top-offset": "32px",
                         } as React.CSSProperties
                       }
                     >
-                      <Table>
+                      <Table
+                        className="w-full table-fixed"
+                        containerClassName="overflow-visible"
+                      >
                         <TableHeader className="sticky top-0 z-10 bg-background">
                           {groupTable.getHeaderGroups().map((headerGroup) => (
                             <TableRow key={headerGroup.id}>
@@ -1389,10 +1432,14 @@ export function ExtensionManagementDialog({
                                 <TableHead
                                   key={header.id}
                                   style={{
-                                    width: header.column.columnDef.size
-                                      ? `${header.column.getSize()}px`
-                                      : undefined,
+                                    width:
+                                      header.column.id === "name"
+                                        ? undefined
+                                        : `${header.column.getSize()}px`,
                                   }}
+                                  className={cn(
+                                    header.column.id === "name" && "max-w-0",
+                                  )}
                                 >
                                   {header.isPlaceholder
                                     ? null
@@ -1415,10 +1462,14 @@ export function ExtensionManagementDialog({
                                 <TableCell
                                   key={cell.id}
                                   style={{
-                                    width: cell.column.columnDef.size
-                                      ? `${cell.column.getSize()}px`
-                                      : undefined,
+                                    width:
+                                      cell.column.id === "name"
+                                        ? undefined
+                                        : `${cell.column.getSize()}px`,
                                   }}
+                                  className={cn(
+                                    cell.column.id === "name" && "max-w-0",
+                                  )}
                                 >
                                   {flexRender(
                                     cell.column.columnDef.cell,
@@ -1515,7 +1566,7 @@ export function ExtensionManagementDialog({
                     {t("extensions.noExtensionsInGroup")}
                   </div>
                 ) : (
-                  <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                  <div className="space-y-1 max-h-[min(40vh,320px)] overflow-y-auto">
                     {editGroupExtensionIds.map((extId) => {
                       const ext = extensions.find((e) => e.id === extId);
                       if (!ext) return null;
@@ -1612,7 +1663,7 @@ export function ExtensionManagementDialog({
                   <Label className="text-xs text-muted-foreground uppercase tracking-wide">
                     {t("extensions.metadata")}
                   </Label>
-                  <div className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-1.5 text-sm">
+                  <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm">
                     {editingExtension.version && (
                       <>
                         <span className="text-muted-foreground">
@@ -1660,7 +1711,7 @@ export function ExtensionManagementDialog({
                           href={editingExtension.homepage_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-primary hover:underline flex items-center gap-1 truncate"
+                          className="text-primary hover:underline flex items-center gap-1 min-w-0"
                         >
                           <span className="truncate">
                             {editingExtension.homepage_url}

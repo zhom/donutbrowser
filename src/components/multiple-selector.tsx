@@ -194,7 +194,15 @@ const MultipleSelector = React.forwardRef<
   ) => {
     const inputRef = React.useRef<HTMLInputElement>(null);
     const [open, setOpen] = React.useState(false);
+    const [dropUp, setDropUp] = React.useState(false);
     const [isLoading, setIsLoading] = React.useState(false);
+
+    const updateDropUp = React.useCallback(() => {
+      const rect = inputRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setDropUp(spaceBelow < 240 && rect.top > spaceBelow);
+    }, []);
 
     const [selected, setSelected] = React.useState<Option[]>(value ?? []);
     const [options, setOptions] = React.useState<GroupOption>(
@@ -202,6 +210,19 @@ const MultipleSelector = React.forwardRef<
     );
     const [inputValue, setInputValue] = React.useState("");
     const debouncedSearchTerm = useDebounce(inputValue, delay ?? 500);
+
+    // Re-evaluate the flip while the list is open: selecting options grows
+    // the badge row (moving the input down) and window resizes change the
+    // space below — both can invalidate the side chosen on focus.
+    React.useLayoutEffect(() => {
+      if (!open) return;
+      void selected.length;
+      updateDropUp();
+      window.addEventListener("resize", updateDropUp);
+      return () => {
+        window.removeEventListener("resize", updateDropUp);
+      };
+    }, [open, selected.length, updateDropUp]);
 
     React.useImperativeHandle(
       ref,
@@ -377,7 +398,7 @@ const MultipleSelector = React.forwardRef<
           commandProps?.onKeyDown?.(e);
         }}
         className={cn(
-          "h-auto overflow-visible bg-transparent",
+          "relative h-auto overflow-visible bg-transparent",
           commandProps?.className,
         )}
         shouldFilter={
@@ -488,6 +509,7 @@ const MultipleSelector = React.forwardRef<
                 inputProps?.onBlur?.(event);
               }}
               onFocus={(event) => {
+                updateDropUp();
                 setOpen(true);
                 if (triggerSearchOnFocus && onSearch) {
                   void onSearch(debouncedSearchTerm);
@@ -511,9 +533,14 @@ const MultipleSelector = React.forwardRef<
             />
           </div>
         </div>
-        <div className="relative">
+        <div>
           {open && hasAvailableOptions && (
-            <CommandList className="absolute top-1 z-10 w-full rounded-md border shadow-md outline-none bg-popover text-popover-foreground animate-in">
+            <CommandList
+              className={cn(
+                "absolute z-10 w-full rounded-md border shadow-md outline-none bg-popover text-popover-foreground animate-in",
+                dropUp ? "bottom-full mb-1" : "top-full mt-1",
+              )}
+            >
               {isLoading ? (
                 loadingIndicator
               ) : (
@@ -527,7 +554,7 @@ const MultipleSelector = React.forwardRef<
                     <CommandGroup
                       key={key}
                       heading={key}
-                      className="overflow-auto h-24"
+                      className="overflow-auto max-h-48"
                     >
                       {dropdowns.map((option) => {
                         return (

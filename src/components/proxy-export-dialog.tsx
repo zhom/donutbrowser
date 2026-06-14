@@ -90,7 +90,7 @@ export function ProxyExportDialog({ isOpen, onClose }: ProxyExportDialogProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{t("proxies.exportDialog.title")}</DialogTitle>
           <DialogDescription>
@@ -125,7 +125,7 @@ export function ProxyExportDialog({ isOpen, onClose }: ProxyExportDialogProps) {
 
           <div className="space-y-2">
             <Label>{t("proxies.exportDialog.preview")}</Label>
-            <ScrollArea className="h-[200px] border rounded-md bg-muted/30">
+            <ScrollArea className="h-[clamp(120px,30vh,400px)] border rounded-md bg-muted/30">
               {isLoading ? (
                 <div className="flex items-center justify-center h-full p-4 text-sm text-muted-foreground">
                   {t("common.buttons.loading")}
