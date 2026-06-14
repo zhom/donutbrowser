@@ -1478,6 +1478,7 @@ impl ProxyManager {
 
   // Start a proxy for given proxy settings and associate it with a browser process ID
   // If proxy_settings is None, starts a direct proxy for traffic monitoring
+  #[allow(clippy::too_many_arguments)]
   pub async fn start_proxy(
     &self,
     app_handle: tauri::AppHandle,
@@ -1486,6 +1487,10 @@ impl ProxyManager {
     profile_id: Option<&str>,
     bypass_rules: Vec<String>,
     blocklist_file: Option<String>,
+    // Protocol the local worker serves the browser: "http" (Camoufox) or
+    // "socks5" (Wayfern). Reflected in the returned ProxySettings.proxy_type
+    // so the caller formats the right local proxy URL scheme.
+    local_protocol: &str,
   ) -> Result<ProxySettings, String> {
     if let Some(name) = profile_id {
       // Check if we have an active proxy recorded for this profile
@@ -1519,7 +1524,7 @@ impl ProxyManager {
             if proxies.contains_key(&browser_pid) {
               // Already mapped, reuse it
               return Ok(ProxySettings {
-                proxy_type: "http".to_string(),
+                proxy_type: local_protocol.to_string(),
                 host: "127.0.0.1".to_string(),
                 port: existing.local_port,
                 username: None,
@@ -1559,7 +1564,7 @@ impl ProxyManager {
           if profile_id_matches {
             // Reuse existing local proxy (settings and profile_id match)
             return Ok(ProxySettings {
-              proxy_type: "http".to_string(),
+              proxy_type: local_protocol.to_string(),
               host: "127.0.0.1".to_string(),
               port: existing.local_port,
               username: None,
@@ -1617,6 +1622,9 @@ impl ProxyManager {
     if let Some(ref path) = blocklist_file {
       proxy_cmd = proxy_cmd.arg("--blocklist-file").arg(path);
     }
+
+    // Tell the worker which protocol to serve the browser (http or socks5)
+    proxy_cmd = proxy_cmd.arg("--local-protocol").arg(local_protocol);
 
     // Execute the command and wait for it to complete
     // The donut-proxy binary should start the worker and then exit
@@ -1709,7 +1717,7 @@ impl ProxyManager {
 
     // Return proxy settings for the browser
     Ok(ProxySettings {
-      proxy_type: "http".to_string(),
+      proxy_type: local_protocol.to_string(),
       host: "127.0.0.1".to_string(), // Use 127.0.0.1 instead of localhost for better compatibility
       port: proxy_info.local_port,
       username: None,
@@ -2885,6 +2893,7 @@ mod tests {
       profile_id: None,
       bypass_rules: Vec::new(),
       blocklist_file: None,
+      local_protocol: None,
     };
     let dead_config = ProxyConfig {
       id: dead_id.clone(),
@@ -2896,6 +2905,7 @@ mod tests {
       profile_id: None,
       bypass_rules: Vec::new(),
       blocklist_file: None,
+      local_protocol: None,
     };
 
     save_proxy_config(&live_config).unwrap();
@@ -2935,6 +2945,7 @@ mod tests {
       profile_id: Some("prof_abc".to_string()),
       bypass_rules: vec!["*.local".to_string(), "192.168.*".to_string()],
       blocklist_file: None,
+      local_protocol: None,
     };
 
     // Save
@@ -3253,6 +3264,7 @@ mod tests {
       profile_id: None,
       bypass_rules: Vec::new(),
       blocklist_file: None,
+      local_protocol: None,
     };
     save_proxy_config(&config).unwrap();
 

@@ -4,8 +4,9 @@ use boringtun::x25519::{PublicKey, StaticSecret};
 use smoltcp::iface::{Config as IfaceConfig, Interface, SocketHandle, SocketSet};
 use smoltcp::phy::{Device, DeviceCapabilities, Medium, RxToken, TxToken};
 use smoltcp::socket::tcp::{Socket as TcpSocket, SocketBuffer};
+use smoltcp::socket::udp;
 use smoltcp::time::Instant as SmolInstant;
-use smoltcp::wire::{HardwareAddress, IpAddress, IpCidr, Ipv4Address};
+use smoltcp::wire::{HardwareAddress, IpAddress, IpCidr, IpEndpoint, Ipv4Address};
 use std::collections::VecDeque;
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 use std::sync::{Arc, Mutex};
@@ -13,6 +14,58 @@ use tokio::net::{TcpListener, TcpStream};
 
 const SMOLTCP_TCP_RX_BUF: usize = 65536;
 const SMOLTCP_TCP_TX_BUF: usize = 65536;
+const SMOLTCP_UDP_BUF: usize = 65536;
+
+/// Parse an RFC 1928 §7 UDP request header. Returns the destination endpoint
+/// and the payload offset, or None if malformed, fragmented, or domain-typed.
+/// Only literal IPs are routed through the tunnel: resolving a domain on the
+/// host would leak DNS, and QUIC/WebRTC datagrams always carry literal IPs.
+fn parse_udp_datagram(buf: &[u8]) -> Option<(IpEndpoint, usize)> {
+  if buf.len() < 4 || buf[2] != 0 {
+    // too short, or FRAG != 0 (fragmentation unsupported)
+    return None;
+  }
+  match buf[3] {
+    0x01 => {
+      if buf.len() < 10 {
+        return None;
+      }
+      let ip = Ipv4Address::new(buf[4], buf[5], buf[6], buf[7]);
+      let port = u16::from_be_bytes([buf[8], buf[9]]);
+      Some((IpEndpoint::new(IpAddress::Ipv4(ip), port), 10))
+    }
+    0x04 => {
+      if buf.len() < 22 {
+        return None;
+      }
+      let mut o = [0u8; 16];
+      o.copy_from_slice(&buf[4..20]);
+      let ip = smoltcp::wire::Ipv6Address::from(o);
+      let port = u16::from_be_bytes([buf[20], buf[21]]);
+      Some((IpEndpoint::new(IpAddress::Ipv6(ip), port), 22))
+    }
+    _ => None,
+  }
+}
+
+/// Wrap a tunnel-received datagram in an RFC 1928 §7 UDP reply header naming
+/// `src` as the origin, for delivery back to the browser's relay socket.
+fn build_udp_datagram(src: IpEndpoint, payload: &[u8]) -> Vec<u8> {
+  let mut out = vec![0x00, 0x00, 0x00]; // RSV(2) + FRAG(0)
+  match src.addr {
+    IpAddress::Ipv4(v4) => {
+      out.push(0x01);
+      out.extend_from_slice(&v4.octets());
+    }
+    IpAddress::Ipv6(v6) => {
+      out.push(0x04);
+      out.extend_from_slice(&v6.octets());
+    }
+  }
+  out.extend_from_slice(&src.port.to_be_bytes());
+  out.extend_from_slice(payload);
+  out
+}
 
 struct WgDevice {
   tunn: Arc<Mutex<Box<Tunn>>>,
@@ -432,6 +485,15 @@ impl WireGuardSocks5Server {
 
     let mut sockets = SocketSet::new(vec![]);
 
+    // A live SOCKS5 UDP ASSOCIATE: the loopback relay socket the browser sends
+    // datagrams to, and the browser's learned source address. The tunnel-side
+    // smoltcp UDP socket lives in `sockets`, keyed by the connection's
+    // (repurposed) `smol_handle`.
+    struct UdpAssoc {
+      relay: UdpSocket,
+      client_addr: Option<SocketAddr>,
+    }
+
     struct Connection {
       smol_handle: SocketHandle,
       tcp_stream: TcpStream,
@@ -440,6 +502,7 @@ impl WireGuardSocks5Server {
       greeting_done: bool,
       read_buf: Vec<u8>,
       dest_addr: Option<SocketAddr>,
+      udp: Option<UdpAssoc>,
     }
 
     let mut connections: Vec<Connection> = Vec::new();
@@ -463,6 +526,7 @@ impl WireGuardSocks5Server {
           greeting_done: false,
           read_buf: Vec::new(),
           dest_addr: None,
+          udp: None,
         });
       }
 
@@ -540,8 +604,17 @@ impl WireGuardSocks5Server {
           }
 
           if conn.greeting_done && conn.dest_addr.is_none() && conn.read_buf.len() >= 10 {
-            // SOCKS5 connect request
-            if conn.read_buf[0] != 0x05 || conn.read_buf[1] != 0x01 {
+            // SOCKS5 request: CONNECT (0x01) or UDP ASSOCIATE (0x03)
+            if conn.read_buf[0] != 0x05 {
+              completed.push(idx);
+              continue;
+            }
+            let cmd = conn.read_buf[1];
+            if cmd != 0x01 && cmd != 0x03 {
+              // command not supported
+              let _ = conn
+                .tcp_stream
+                .try_write(&[0x05, 0x07, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
               completed.push(idx);
               continue;
             }
@@ -613,6 +686,75 @@ impl WireGuardSocks5Server {
             };
 
             conn.read_buf.drain(..addr_len);
+
+            if cmd == 0x03 {
+              // === SOCKS5 UDP ASSOCIATE ===
+              // The request's DST is the client's intended source (typically
+              // 0.0.0.0:0) and is ignored — the browser's relay source is
+              // learned from its first datagram. Bind a loopback relay socket
+              // the browser sends to, plus a smoltcp UDP socket that egresses
+              // through the WireGuard tunnel on the interface IP.
+              let relay = match UdpSocket::bind("127.0.0.1:0") {
+                Ok(s) => s,
+                Err(_) => {
+                  let _ = conn
+                    .tcp_stream
+                    .try_write(&[0x05, 0x01, 0x00, 0x01, 0, 0, 0, 0, 0, 0]);
+                  completed.push(idx);
+                  continue;
+                }
+              };
+              let _ = relay.set_nonblocking(true);
+              let relay_port = relay.local_addr().map(|a| a.port()).unwrap_or(0);
+
+              // Reply with the relay endpoint (127.0.0.1:relay_port).
+              if conn
+                .tcp_stream
+                .try_write(&[
+                  0x05,
+                  0x00,
+                  0x00,
+                  0x01,
+                  127,
+                  0,
+                  0,
+                  1,
+                  (relay_port >> 8) as u8,
+                  (relay_port & 0xff) as u8,
+                ])
+                .is_err()
+              {
+                completed.push(idx);
+                continue;
+              }
+
+              let udp_rx = udp::PacketBuffer::new(
+                vec![udp::PacketMetadata::EMPTY; 32],
+                vec![0u8; SMOLTCP_UDP_BUF],
+              );
+              let udp_tx = udp::PacketBuffer::new(
+                vec![udp::PacketMetadata::EMPTY; 32],
+                vec![0u8; SMOLTCP_UDP_BUF],
+              );
+              let mut udp_socket = udp::Socket::new(udp_rx, udp_tx);
+              let local_port = 20000 + (rand::random::<u16>() % 40000);
+              if udp_socket.bind(local_port).is_err() {
+                completed.push(idx);
+                continue;
+              }
+
+              // Swap this connection's unused TCP socket for the UDP socket;
+              // `smol_handle` now keys the UDP socket, so teardown is unchanged.
+              sockets.remove(conn.smol_handle);
+              conn.smol_handle = sockets.add(udp_socket);
+              conn.udp = Some(UdpAssoc {
+                relay,
+                client_addr: None,
+              });
+              conn.socks_done = true;
+              continue;
+            }
+
             conn.dest_addr = Some(addr);
 
             // Open smoltcp TCP socket to the destination
@@ -640,6 +782,82 @@ impl WireGuardSocks5Server {
             }
 
             conn.connecting = true;
+          }
+        } else if conn.udp.is_some() {
+          // === UDP ASSOCIATE relay ===
+          // The association lives only while the TCP control connection is
+          // open (RFC 1928 §6); tear down when the browser closes it.
+          let mut probe = [0u8; 1];
+          match conn.tcp_stream.try_read(&mut probe) {
+            Ok(0) => {
+              completed.push(idx);
+              continue;
+            }
+            Ok(_) => {} // ignore any data on the control channel
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+            Err(_) => {
+              completed.push(idx);
+              continue;
+            }
+          }
+
+          let handle = conn.smol_handle;
+          let Some(udp) = conn.udp.as_mut() else {
+            continue;
+          };
+
+          // Browser → tunnel: strip the §7 header and forward the payload.
+          let mut dbuf = [0u8; SMOLTCP_UDP_BUF];
+          loop {
+            match udp.relay.recv_from(&mut dbuf) {
+              Ok((n, src)) => {
+                udp.client_addr = Some(src);
+                if let Some((dst, off)) = parse_udp_datagram(&dbuf[..n]) {
+                  let socket = sockets.get_mut::<udp::Socket>(handle);
+                  let cs = socket.can_send();
+                  let r = if cs {
+                    socket.send_slice(&dbuf[off..n], dst)
+                  } else {
+                    Ok(())
+                  };
+                  log::info!(
+                    "[wg-udp] browser->tunnel {}B dst={} client={} can_send={} send={:?}",
+                    n - off,
+                    dst,
+                    src,
+                    cs,
+                    r
+                  );
+                } else {
+                  log::info!("[wg-udp] browser->tunnel parse FAIL ({}B)", n);
+                }
+              }
+              Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+              Err(_) => break,
+            }
+          }
+
+          // Tunnel → browser: wrap each datagram in a §7 header and relay back.
+          loop {
+            let socket = sockets.get_mut::<udp::Socket>(handle);
+            if !socket.can_recv() {
+              break;
+            }
+            let (payload, src) = match socket.recv() {
+              Ok((data, meta)) => (data.to_vec(), meta.endpoint),
+              Err(_) => break,
+            };
+            if let Some(client) = udp.client_addr {
+              let resp = build_udp_datagram(src, &payload);
+              let r = udp.relay.send_to(&resp, client);
+              log::info!(
+                "[wg-udp] tunnel->browser {}B src={} -> client={} send={:?}",
+                payload.len(),
+                src,
+                client,
+                r
+              );
+            }
           }
         } else {
           // Data relay between SOCKS5 client and smoltcp socket

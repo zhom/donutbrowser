@@ -162,6 +162,11 @@ async fn main() {
               Arg::new("blocklist-file")
                 .long("blocklist-file")
                 .help("Path to DNS blocklist file (one domain per line)"),
+            )
+            .arg(
+              Arg::new("local-protocol")
+                .long("local-protocol")
+                .help("Protocol served to the browser: http (default) or socks5"),
             ),
         )
         .subcommand(
@@ -251,6 +256,7 @@ async fn main() {
         .and_then(|s| serde_json::from_str(s).ok())
         .unwrap_or_default();
       let blocklist_file = start_matches.get_one::<String>("blocklist-file").cloned();
+      let local_protocol = start_matches.get_one::<String>("local-protocol").cloned();
 
       match start_proxy_process_with_profile(
         upstream_url,
@@ -258,6 +264,7 @@ async fn main() {
         profile_id,
         bypass_rules,
         blocklist_file,
+        local_protocol,
       )
       .await
       {

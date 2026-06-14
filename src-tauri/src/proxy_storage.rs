@@ -16,6 +16,12 @@ pub struct ProxyConfig {
   pub bypass_rules: Vec<String>,
   #[serde(default)]
   pub blocklist_file: Option<String>,
+  /// Protocol the local worker serves to the browser: "http" (default, used
+  /// by Camoufox/Firefox) or "socks5" (used by Wayfern/Chromium so QUIC and
+  /// WebRTC UDP can be proxied without leaking the real IP). Independent of
+  /// `upstream_url`, which is the real upstream proxy/VPN this worker dials.
+  #[serde(default)]
+  pub local_protocol: Option<String>,
 }
 
 impl ProxyConfig {
@@ -30,6 +36,7 @@ impl ProxyConfig {
       profile_id: None,
       bypass_rules: Vec::new(),
       blocklist_file: None,
+      local_protocol: None,
     }
   }
 
@@ -46,6 +53,20 @@ impl ProxyConfig {
   pub fn with_blocklist_file(mut self, blocklist_file: Option<String>) -> Self {
     self.blocklist_file = blocklist_file;
     self
+  }
+
+  pub fn with_local_protocol(mut self, local_protocol: Option<String>) -> Self {
+    self.local_protocol = local_protocol;
+    self
+  }
+
+  /// "socks5" or "http" (default). Lowercased for case-insensitive matching.
+  pub fn local_protocol_or_default(&self) -> String {
+    self
+      .local_protocol
+      .as_deref()
+      .unwrap_or("http")
+      .to_lowercase()
   }
 }
 

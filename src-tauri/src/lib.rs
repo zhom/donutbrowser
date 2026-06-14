@@ -43,6 +43,7 @@ pub mod proxy_runner;
 pub mod proxy_server;
 pub mod proxy_storage;
 mod settings_manager;
+pub mod socks5_local;
 pub mod sync;
 mod synchronizer;
 pub mod traffic_stats;

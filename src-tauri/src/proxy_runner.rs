@@ -160,7 +160,7 @@ pub async fn start_proxy_process(
   upstream_url: Option<String>,
   port: Option<u16>,
 ) -> Result<ProxyConfig, Box<dyn std::error::Error>> {
-  start_proxy_process_with_profile(upstream_url, port, None, Vec::new(), None).await
+  start_proxy_process_with_profile(upstream_url, port, None, Vec::new(), None, None).await
 }
 
 pub async fn start_proxy_process_with_profile(
@@ -169,6 +169,7 @@ pub async fn start_proxy_process_with_profile(
   profile_id: Option<String>,
   bypass_rules: Vec<String>,
   blocklist_file: Option<String>,
+  local_protocol: Option<String>,
 ) -> Result<ProxyConfig, Box<dyn std::error::Error>> {
   let id = generate_proxy_id();
   let upstream = upstream_url.unwrap_or_else(|| "DIRECT".to_string());
@@ -183,7 +184,8 @@ pub async fn start_proxy_process_with_profile(
   let config = ProxyConfig::new(id.clone(), upstream, Some(local_port))
     .with_profile_id(profile_id.clone())
     .with_bypass_rules(bypass_rules)
-    .with_blocklist_file(blocklist_file);
+    .with_blocklist_file(blocklist_file)
+    .with_local_protocol(local_protocol);
   save_proxy_config(&config)?;
 
   // Log profile_id for debugging

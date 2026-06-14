@@ -728,9 +728,21 @@ impl WayfernManager {
     }
 
     if let Some(proxy) = proxy_url {
+      // Map the local proxy scheme to the matching PAC directive. SOCKS5 lets
+      // Chromium route UDP (QUIC/WebRTC) and resolve DNS through the proxy;
+      // PROXY is HTTP CONNECT (TCP only). The host:port is the same either way.
+      let (pac_directive, host_port) = if let Some(rest) = proxy.strip_prefix("socks5://") {
+        ("SOCKS5", rest)
+      } else {
+        (
+          "PROXY",
+          proxy
+            .trim_start_matches("http://")
+            .trim_start_matches("https://"),
+        )
+      };
       let pac_data = format!(
-        "data:application/x-ns-proxy-autoconfig,function FindProxyForURL(url,host){{return \"PROXY {}\";}}",
-        proxy.trim_start_matches("http://").trim_start_matches("https://")
+        "data:application/x-ns-proxy-autoconfig,function FindProxyForURL(url,host){{return \"{pac_directive} {host_port}\";}}",
       );
       args.push(format!("--proxy-pac-url={pac_data}"));
       args.push("--dns-prefetch-disable".to_string());

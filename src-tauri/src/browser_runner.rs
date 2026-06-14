@@ -261,6 +261,11 @@ impl BrowserRunner {
           Some(&profile_id_str),
           profile.proxy_bypass_rules.clone(),
           blocklist_file,
+          // Camoufox (Firefox 150, and Firefox 135 on the not-yet-updated
+          // Windows build) keeps the local HTTP proxy: Firefox's QUIC stack
+          // bypasses a configured proxy, so QUIC is disabled and HTTP CONNECT
+          // covers everything. SOCKS5 is reserved for Wayfern.
+          "http",
         )
         .await
         .map_err(|e| {
@@ -527,6 +532,11 @@ impl BrowserRunner {
           Some(&profile_id_str),
           profile.proxy_bypass_rules.clone(),
           blocklist_file,
+          // Wayfern (Chromium) uses a local SOCKS5 proxy so QUIC and WebRTC
+          // UDP can be routed through it (via SOCKS5 UDP ASSOCIATE) without
+          // leaking the real IP, rather than being forced direct as they
+          // would be over an HTTP CONNECT proxy.
+          "socks5",
         )
         .await
         .map_err(|e| {
@@ -535,8 +545,9 @@ impl BrowserRunner {
           error_msg
         })?;
 
-      // Format proxy URL for wayfern - always use HTTP for the local proxy
-      let proxy_url = format!("http://{}:{}", local_proxy.host, local_proxy.port);
+      // Format proxy URL for wayfern - use SOCKS5 for the local proxy so
+      // Chromium proxies UDP (QUIC/WebRTC), not just TCP.
+      let proxy_url = format!("socks5://{}:{}", local_proxy.host, local_proxy.port);
 
       // Set proxy in wayfern config
       wayfern_config.proxy = Some(proxy_url);

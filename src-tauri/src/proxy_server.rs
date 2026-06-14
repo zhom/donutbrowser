@@ -21,9 +21,9 @@ use tokio::net::TcpStream;
 /// Combined read+write trait for tunnel target streams, allowing
 /// `handle_connect_from_buffer` to handle plain TCP, SOCKS, and
 /// Shadowsocks through the same bidirectional-copy path.
-trait AsyncStream: AsyncRead + AsyncWrite + Unpin + Send {}
+pub(crate) trait AsyncStream: AsyncRead + AsyncWrite + Unpin + Send {}
 impl<T: AsyncRead + AsyncWrite + Unpin + Send> AsyncStream for T {}
-type BoxedAsyncStream = Box<dyn AsyncStream>;
+pub(crate) type BoxedAsyncStream = Box<dyn AsyncStream>;
 use url::Url;
 
 enum CompiledRule {
@@ -1247,10 +1247,19 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
 
   log::info!("Successfully bound to port {}", actual_port);
 
-  // Update config with actual port and local_url
+  // Protocol served to the browser: "socks5" (Wayfern) or "http" (default).
+  let local_protocol = config.local_protocol_or_default();
+  let serve_socks5 = local_protocol == "socks5";
+
+  // Update config with actual port and local_url (scheme matches the protocol
+  // we serve, so the parent's readiness check and any consumer see the truth)
   let mut updated_config = config.clone();
   updated_config.local_port = Some(actual_port);
-  updated_config.local_url = Some(format!("http://127.0.0.1:{}", actual_port));
+  updated_config.local_url = Some(format!(
+    "{}://127.0.0.1:{}",
+    if serve_socks5 { "socks5" } else { "http" },
+    actual_port
+  ));
 
   if !crate::proxy_storage::update_proxy_config(&updated_config) {
     log::error!("Failed to update proxy config");
@@ -1371,9 +1380,15 @@ pub async fn run_proxy_server(config: ProxyConfig) -> Result<(), Box<dyn std::er
         let upstream = upstream_url.clone();
         let matcher = bypass_matcher.clone();
         let blocker = blocklist_matcher.clone();
-        tokio::task::spawn(async move {
-          handle_proxy_connection(stream, upstream, matcher, blocker).await;
-        });
+        if serve_socks5 {
+          tokio::task::spawn(async move {
+            crate::socks5_local::handle_socks5_connection(stream, upstream, matcher, blocker).await;
+          });
+        } else {
+          tokio::task::spawn(async move {
+            handle_proxy_connection(stream, upstream, matcher, blocker).await;
+          });
+        }
       }
       Err(e) => {
         log::error!("Error accepting connection: {:?}", e);
@@ -1444,20 +1459,51 @@ async fn handle_connect_from_buffer(
   );
 
   // Connect to target (directly or via upstream proxy).
-  // Returns a BoxedAsyncStream so all upstream types (plain TCP, SOCKS,
-  // Shadowsocks) share the same bidirectional-copy tunnel code below.
+  let target_stream = connect_to_target_via_upstream(
+    target_host,
+    target_port,
+    upstream_url.as_deref(),
+    &bypass_matcher,
+  )
+  .await?;
+
+  // Send 200 Connection Established response to client
+  // CRITICAL: Must flush after writing to ensure response is sent before tunneling
+  client_stream
+    .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+    .await?;
+  client_stream.flush().await?;
+
+  log::trace!("Sent 200 Connection Established response, starting tunnel");
+
+  tunnel_streams(client_stream, target_stream, domain).await;
+
+  Ok(())
+}
+
+/// Establish a stream to `target_host:target_port`, either directly or through
+/// the configured upstream proxy. Shared by the HTTP CONNECT path and the
+/// local SOCKS5 server so every upstream type (direct, HTTP/HTTPS CONNECT,
+/// SOCKS4/5, Shadowsocks) is dialed in exactly one place. Returns a
+/// `BoxedAsyncStream` so the caller can tunnel over any upstream uniformly.
+pub(crate) async fn connect_to_target_via_upstream(
+  target_host: &str,
+  target_port: u16,
+  upstream_url: Option<&str>,
+  bypass_matcher: &BypassMatcher,
+) -> Result<BoxedAsyncStream, Box<dyn std::error::Error>> {
   let should_bypass = bypass_matcher.should_bypass(target_host);
   // Helper: configure outbound TCP to match browser TCP fingerprint
   let configure_tcp = |stream: &TcpStream| {
     let _ = stream.set_nodelay(true);
   };
-  let target_stream: BoxedAsyncStream = match upstream_url.as_ref() {
+  let target_stream: BoxedAsyncStream = match upstream_url {
     None => {
       let s = TcpStream::connect((target_host, target_port)).await?;
       configure_tcp(&s);
       Box::new(s)
     }
-    Some(url) if url == "DIRECT" => {
+    Some("DIRECT") => {
       let s = TcpStream::connect((target_host, target_port)).await?;
       configure_tcp(&s);
       Box::new(s)
@@ -1616,20 +1662,18 @@ async fn handle_connect_from_buffer(
     }
   };
 
-  // TCP_NODELAY is set per-stream where applicable (TcpStream paths).
-  // For encrypted streams (Shadowsocks), the underlying TCP connection
-  // is managed by the library and nodelay is handled internally.
+  Ok(target_stream)
+}
 
-  // Send 200 Connection Established response to client
-  // CRITICAL: Must flush after writing to ensure response is sent before tunneling
-  client_stream
-    .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
-    .await?;
-  client_stream.flush().await?;
-
-  log::trace!("Sent 200 Connection Established response, starting tunnel");
-
-  // Now tunnel data bidirectionally with counting
+/// Bidirectionally relay `client_stream` <-> `target_stream` until either side
+/// closes, counting bytes for traffic stats and attributing them to `domain`.
+/// The caller is responsible for having already sent any protocol-specific
+/// success reply (HTTP `200` or SOCKS5 reply) before calling this.
+pub(crate) async fn tunnel_streams(
+  client_stream: TcpStream,
+  target_stream: BoxedAsyncStream,
+  domain: String,
+) {
   // Wrap streams to count bytes transferred
   let counting_client = CountingStream::new(client_stream);
   let counting_target = CountingStream::new(target_stream);
@@ -1692,8 +1736,6 @@ async fn handle_connect_from_buffer(
   if let Some(tracker) = get_traffic_tracker() {
     tracker.update_domain_bytes(&domain, final_sent, final_recv);
   }
-
-  Ok(())
 }
 
 #[cfg(test)]
