@@ -1,6 +1,30 @@
 # Changelog
 
 
+## v0.27.0 (2026-06-17)
+
+### Features
+
+- amek window resizable
+
+### Refactoring
+
+- better tray icon
+- simplify socks connection
+- switch local proxy from http to socks
+
+### Documentation
+
+- readme
+- readme
+
+### Maintenance
+
+- chore: version bump
+- ci(deps): bump anomalyco/opencode in the github-actions group (#437)
+- chore: update flake.nix for v0.26.0 [skip ci] (#428)
+
+
 ## v0.26.0 (2026-06-08)
 
 ### Features
