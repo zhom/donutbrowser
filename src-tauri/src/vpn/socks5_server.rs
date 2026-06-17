@@ -814,22 +814,9 @@ impl WireGuardSocks5Server {
                 udp.client_addr = Some(src);
                 if let Some((dst, off)) = parse_udp_datagram(&dbuf[..n]) {
                   let socket = sockets.get_mut::<udp::Socket>(handle);
-                  let cs = socket.can_send();
-                  let r = if cs {
-                    socket.send_slice(&dbuf[off..n], dst)
-                  } else {
-                    Ok(())
-                  };
-                  log::info!(
-                    "[wg-udp] browser->tunnel {}B dst={} client={} can_send={} send={:?}",
-                    n - off,
-                    dst,
-                    src,
-                    cs,
-                    r
-                  );
-                } else {
-                  log::info!("[wg-udp] browser->tunnel parse FAIL ({}B)", n);
+                  if socket.can_send() {
+                    let _ = socket.send_slice(&dbuf[off..n], dst);
+                  }
                 }
               }
               Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
@@ -849,14 +836,7 @@ impl WireGuardSocks5Server {
             };
             if let Some(client) = udp.client_addr {
               let resp = build_udp_datagram(src, &payload);
-              let r = udp.relay.send_to(&resp, client);
-              log::info!(
-                "[wg-udp] tunnel->browser {}B src={} -> client={} send={:?}",
-                payload.len(),
-                src,
-                client,
-                r
-              );
+              let _ = udp.relay.send_to(&resp, client);
             }
           }
         } else {
