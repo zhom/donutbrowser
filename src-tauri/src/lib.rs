@@ -1302,13 +1302,18 @@ fn setup_system_tray(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::E
     .item(&quit_item)
     .build()?;
 
-  // macOS uses a black template icon (the OS tints it for light/dark menu
-  // bars). Windows and Linux use the full-color icon, because neither tints a
-  // template — a black template would be invisible on dark Linux panels.
+  // macOS uses the black icon as a template — the OS tints it for the light or
+  // dark menu bar. Linux (and other non-Windows desktops) get a white-bodied
+  // icon with a dark outline so it stays legible on both dark and light
+  // panels: Tauri feeds the SNI/AppIndicator a fixed pixmap with no template
+  // tinting, so the icon has to carry its own contrast (a solid black icon is
+  // invisible on GNOME's dark top bar). Windows keeps its own solid icon.
   #[cfg(target_os = "macos")]
   let tray_icon_bytes: &[u8] = include_bytes!("../icons/tray-icon-44.png");
-  #[cfg(not(target_os = "macos"))]
+  #[cfg(target_os = "windows")]
   let tray_icon_bytes: &[u8] = include_bytes!("../icons/tray-icon-win-44.png");
+  #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+  let tray_icon_bytes: &[u8] = include_bytes!("../icons/tray-icon-linux-44.png");
   let tray_rgba = image::load_from_memory(tray_icon_bytes)?.into_rgba8();
   let (tray_w, tray_h) = tray_rgba.dimensions();
   let tray_image = tauri::image::Image::new_owned(tray_rgba.into_raw(), tray_w, tray_h);
