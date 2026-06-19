@@ -326,19 +326,15 @@ async fn handle_connect(
         let port = upstream.port().unwrap_or(1080);
         let socks_addr = format!("{}:{}", host, port);
 
-        let username = upstream.username();
-        let password = upstream.password().unwrap_or("");
+        let (username, password) = upstream_userpass(&upstream);
+        let auth = (!username.is_empty()).then_some((username.as_str(), password.as_str()));
 
         match connect_via_socks(
           &socks_addr,
           target_host,
           target_port,
           scheme == "socks5",
-          if !username.is_empty() {
-            Some((username, password))
-          } else {
-            None
-          },
+          auth,
         )
         .await
         {
@@ -386,10 +382,9 @@ async fn connect_via_http_proxy(
     target_host, target_port, target_host, target_port
   );
 
-  if !upstream.username().is_empty() {
+  let (username, password) = upstream_userpass(upstream);
+  if !username.is_empty() {
     use base64::{engine::general_purpose, Engine as _};
-    let username = upstream.username();
-    let password = upstream.password().unwrap_or("");
     let auth = general_purpose::STANDARD.encode(format!("{}:{}", username, password));
     connect_req.push_str(&format!("Proxy-Authorization: Basic {}\r\n", auth));
   }
@@ -409,6 +404,96 @@ async fn connect_via_http_proxy(
   }
 }
 
+/// Extract percent-decoded (username, password) from the upstream URL.
+///
+/// `url::Url::username()` / `Url::password()` return percent-encoded ASCII
+/// strings per the WHATWG spec. `build_proxy_url` on the producer side
+/// already percent-encodes the credentials with `urlencoding::encode`, so
+/// we must decode here — otherwise the upstream SOCKS5 / HTTP CONNECT
+/// receives `%40` instead of `@`, breaking RFC1929 user/password
+/// authentication or HTTP Basic-Auth
+fn upstream_userpass(upstream: &Url) -> (String, String) {
+  let username = urlencoding::decode(upstream.username())
+    .map(|cow| cow.into_owned())
+    .unwrap_or_default();
+  let password = urlencoding::decode(upstream.password().unwrap_or(""))
+    .map(|cow| cow.into_owned())
+    .unwrap_or_default();
+  (username, password)
+}
+
+/// Transparent AsyncRead/AsyncWrite wrapper that logs every read/write
+/// byte of the SOCKS5 handshake. Used only during the handshake — the
+/// inner stream is taken back via `into_inner` once the handshake
+/// completes, so the tunnel phase pays no overhead
+struct SocksHandshakeLogger<S> {
+  inner: S,
+  label: String,
+}
+
+impl<S> SocksHandshakeLogger<S> {
+  fn new(inner: S, label: String) -> Self {
+    Self { inner, label }
+  }
+
+  fn into_inner(self) -> S {
+    self.inner
+  }
+}
+
+impl<S: AsyncRead + Unpin> AsyncRead for SocksHandshakeLogger<S> {
+  fn poll_read(
+    mut self: Pin<&mut Self>,
+    cx: &mut Context<'_>,
+    buf: &mut ReadBuf<'_>,
+  ) -> Poll<io::Result<()>> {
+    let before = buf.filled().len();
+    let result = Pin::new(&mut self.inner).poll_read(cx, buf);
+    if let Poll::Ready(Ok(())) = &result {
+      let after = buf.filled().len();
+      if after > before {
+        let bytes = &buf.filled()[before..after];
+        log::trace!(
+          "[socks-handshake:{}] <- {} byte(s): {:02x?}",
+          self.label,
+          bytes.len(),
+          bytes
+        );
+      } else {
+        log::trace!("[socks-handshake:{}] <- EOF (peer closed)", self.label);
+      }
+    }
+    result
+  }
+}
+
+impl<S: AsyncWrite + Unpin> AsyncWrite for SocksHandshakeLogger<S> {
+  fn poll_write(
+    mut self: Pin<&mut Self>,
+    cx: &mut Context<'_>,
+    buf: &[u8],
+  ) -> Poll<io::Result<usize>> {
+    let result = Pin::new(&mut self.inner).poll_write(cx, buf);
+    if let Poll::Ready(Ok(n)) = &result {
+      log::trace!(
+        "[socks-handshake:{}] -> {} byte(s): {:02x?}",
+        self.label,
+        n,
+        &buf[..*n]
+      );
+    }
+    result
+  }
+
+  fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    Pin::new(&mut self.inner).poll_flush(cx)
+  }
+
+  fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    Pin::new(&mut self.inner).poll_shutdown(cx)
+  }
+}
+
 async fn connect_via_socks(
   socks_addr: &str,
   target_host: &str,
@@ -416,7 +501,7 @@ async fn connect_via_socks(
   is_socks5: bool,
   auth: Option<(&str, &str)>,
 ) -> Result<TcpStream, Box<dyn std::error::Error>> {
-  let mut stream = TcpStream::connect(socks_addr).await?;
+  let stream = TcpStream::connect(socks_addr).await?;
 
   if is_socks5 {
     // SOCKS5 connection using async_socks5
@@ -433,9 +518,44 @@ async fn connect_via_socks(
       password: pass.to_string(),
     });
 
-    connect(&mut stream, target, auth_info).await?;
-    Ok(stream)
+    let has_auth = auth_info.is_some();
+    log::trace!(
+      "[socks-handshake] dialing {} (target={}:{}, has_auth={})",
+      socks_addr,
+      target_host,
+      target_port,
+      has_auth
+    );
+
+    // Disable Nagle so the kernel doesn't further delay/coalesce the
+    // syscalls issued when BufStream flushes
+    let _ = stream.set_nodelay(true);
+
+    // BufStream wrapping is required: async_socks5 calls write_u8 for every
+    // single-byte SOCKS5 / RFC1929 field, and on a raw TcpStream each call
+    // becomes its own TCP segment. Some upstream SOCKS5 implementations
+    // treat such a "fragmented auth submission" as a misbehaving client
+    // and silently FIN instead of returning an RFC1929 status. BufStream
+    // coalesces those small writes into one syscall on flush — this is
+    // the usage pattern shown in the async_socks5 README
+    let label = format!("{socks_addr}->{target_host}:{target_port}");
+    let logged = SocksHandshakeLogger::new(stream, label);
+    let mut buffered = tokio::io::BufStream::new(logged);
+    let handshake = connect(&mut buffered, target, auth_info).await;
+    // Unwrap the layered stream: BufStream → SocksHandshakeLogger → TcpStream
+    let stream = buffered.into_inner().into_inner();
+    match handshake {
+      Ok(_) => {
+        log::trace!("[socks-handshake] handshake completed ok");
+        Ok(stream)
+      }
+      Err(e) => {
+        log::trace!("[socks-handshake] handshake failed: {:?}", e);
+        Err(e.into())
+      }
+    }
   } else {
+    let mut stream = stream;
     // SOCKS4 - simplified implementation
     let ip: std::net::IpAddr = target_host.parse()?;
 
@@ -1529,10 +1649,9 @@ pub(crate) async fn connect_to_target_via_upstream(
             target_host, target_port, target_host, target_port
           );
 
-          if !upstream.username().is_empty() {
+          let (username, password) = upstream_userpass(&upstream);
+          if !username.is_empty() {
             use base64::{engine::general_purpose, Engine as _};
-            let username = upstream.username();
-            let password = upstream.password().unwrap_or("");
             let auth = general_purpose::STANDARD.encode(format!("{}:{}", username, password));
             connect_req.push_str(&format!("Proxy-Authorization: Basic {}\r\n", auth));
           }
@@ -1590,19 +1709,15 @@ pub(crate) async fn connect_to_target_via_upstream(
           let socks_port = upstream.port().unwrap_or(1080);
           let socks_addr = format!("{}:{}", socks_host, socks_port);
 
-          let username = upstream.username();
-          let password = upstream.password().unwrap_or("");
+          let (username, password) = upstream_userpass(&upstream);
+          let auth = (!username.is_empty()).then_some((username.as_str(), password.as_str()));
 
           let stream = connect_via_socks(
             &socks_addr,
             target_host,
             target_port,
             scheme == "socks5",
-            if !username.is_empty() {
-              Some((username, password))
-            } else {
-              None
-            },
+            auth,
           )
           .await?;
           Box::new(stream)
@@ -1742,6 +1857,61 @@ pub(crate) async fn tunnel_streams(
 mod tests {
   use super::*;
   use std::io::Write;
+
+  /// Build an upstream URL with `urlencoding::encode`-d user/pass,
+  /// mirroring what `proxy_manager::build_proxy_url` actually emits
+  fn parse_encoded_upstream(scheme: &str, user: &str, pass: &str) -> Url {
+    let s = format!(
+      "{}://{}:{}@127.0.0.1:1080",
+      scheme,
+      urlencoding::encode(user),
+      urlencoding::encode(pass),
+    );
+    Url::parse(&s).unwrap()
+  }
+
+  #[test]
+  fn upstream_userpass_handles_plain_ascii() {
+    let u = parse_encoded_upstream("socks5", "alice", "secret123");
+    assert_eq!(upstream_userpass(&u), ("alice".into(), "secret123".into()));
+  }
+
+  #[test]
+  fn upstream_userpass_decodes_special_chars() {
+    // These characters all get percent-encoded by build_proxy_url before
+    // landing in the URL, and must be decoded back to the original literal
+    // before being handed off to the upstream
+    let cases = [
+      ("alice", "p@ssw0rd"),
+      ("alice", "p:assw0rd"),
+      ("alice", "p ass word"),
+      ("alice", "abc/d+e=f"),
+      ("alice", "100%off!"),
+      ("alice", "测试密码"),
+      ("u@name", "v@lue"),
+    ];
+    for (user, pass) in cases {
+      let u = parse_encoded_upstream("socks5", user, pass);
+      assert_eq!(
+        upstream_userpass(&u),
+        (user.to_string(), pass.to_string()),
+        "decode failed: user={user:?} pass={pass:?}"
+      );
+    }
+  }
+
+  #[test]
+  fn upstream_userpass_empty_when_no_credentials() {
+    let u = Url::parse("socks5://127.0.0.1:1080").unwrap();
+    assert_eq!(upstream_userpass(&u), (String::new(), String::new()));
+  }
+
+  #[test]
+  fn upstream_userpass_handles_username_only() {
+    let s = format!("socks5://{}@127.0.0.1:1080", urlencoding::encode("u@name"));
+    let u = Url::parse(&s).unwrap();
+    assert_eq!(upstream_userpass(&u), ("u@name".into(), String::new()));
+  }
 
   #[test]
   fn test_blocklist_exact_match() {
