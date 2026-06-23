@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 #v6.0.3
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 #v7.0.0
 
       - name: Check if first-time contributor
         id: check-first-time
@@ -479,7 +479,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 #v6.0.3
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 #v7.0.0
 
       - name: Check if first-time contributor
         id: check-first-time
@@ -617,10 +617,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 #v6.0.3
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 #v7.0.0
 
       - name: Run opencode
-        uses: anomalyco/opencode/github@abda3515f444c4d28a98953d153c5a3e1892d3d4 #v1.17.4
+        uses: anomalyco/opencode/github@11e47f91496005aab4d7c5a2d0a7da5d2651b4ac #v1.17.8
         env:
           ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
