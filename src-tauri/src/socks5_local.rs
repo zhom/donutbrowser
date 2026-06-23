@@ -243,7 +243,7 @@ async fn handle_connect(
     tracker.record_request(&host, 0, 0);
   }
 
-  log::info!(
+  log::debug!(
     "SOCKS5 CONNECT {}:{} (upstream={})",
     host,
     port,
@@ -252,16 +252,29 @@ async fn handle_connect(
 
   // Resolve to the target stream, logging and dropping the (non-Send) dial
   // error inside the match arm so it is never held across the await below.
-  let target =
-    match connect_to_target_via_upstream(&host, port, upstream_url.as_deref(), &bypass_matcher)
-      .await
-    {
-      Ok(t) => Some(t),
-      Err(e) => {
-        log::warn!("SOCKS5 CONNECT to {host}:{port} failed: {e}");
-        None
+  let target = match connect_to_target_via_upstream(
+    &host,
+    port,
+    upstream_url.as_deref(),
+    &bypass_matcher,
+  )
+  .await
+  {
+    Ok(t) => Some(t),
+    Err(e) => {
+      let key = format!("socks5-connect:{host}:{port}");
+      if let Some(suppressed) = crate::proxy_server::log_throttle(&key) {
+        if suppressed > 0 {
+          log::warn!(
+              "SOCKS5 CONNECT to {host}:{port} failed: {e} ({suppressed} more suppressed in last 30s)"
+            );
+        } else {
+          log::warn!("SOCKS5 CONNECT to {host}:{port} failed: {e}");
+        }
       }
-    };
+      None
+    }
+  };
 
   let Some(target) = target else {
     let _ = send_reply(&mut stream, REP_GENERAL_FAILURE, unspecified()).await;

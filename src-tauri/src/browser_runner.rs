@@ -409,6 +409,10 @@ impl BrowserRunner {
         log::info!("Updated proxy PID mapping from temp (0) to actual PID: {process_id}");
       }
 
+      // Persist the real browser PID so the detached proxy worker self-reaps
+      // when this browser dies, even after the GUI exits/restarts.
+      PROXY_MANAGER.set_browser_pid_for_profile(&updated_profile.id.to_string(), process_id);
+
       // Save the updated profile (includes new fingerprint if randomize is enabled)
       log::info!(
         "Saving profile {} with camoufox_config fingerprint length: {}",
@@ -695,6 +699,10 @@ impl BrowserRunner {
       } else {
         log::info!("Updated proxy PID mapping from temp (0) to actual PID: {process_id}");
       }
+
+      // Persist the real browser PID so the detached proxy worker self-reaps
+      // when this browser dies, even after the GUI exits/restarts.
+      PROXY_MANAGER.set_browser_pid_for_profile(&updated_profile.id.to_string(), process_id);
 
       // Save the updated profile
       log::info!(

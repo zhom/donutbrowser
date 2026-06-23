@@ -1860,6 +1860,38 @@ impl ProxyManager {
     }
   }
 
+  /// Persist the real browser PID onto the worker's on-disk config so the
+  /// detached worker can self-terminate when that browser dies, independent of
+  /// the GUI being alive. Resolved via the profile→proxy_id map rather than the
+  /// PID-keyed `active_proxies` map: the latter uses a placeholder key 0 during
+  /// launch that collides across concurrent launches, which could tag a live
+  /// worker with the wrong (dead) PID and make it self-exit. Safe on the reuse
+  /// path — it simply rewrites `browser_pid` to the new live PID. A `browser_pid`
+  /// of 0 (launch failed to report a PID) is ignored so the worker never
+  /// self-exits against a bogus PID.
+  pub fn set_browser_pid_for_profile(&self, profile_id: &str, browser_pid: u32) {
+    if browser_pid == 0 {
+      return;
+    }
+    let proxy_id = {
+      let map = self.profile_active_proxy_ids.lock().unwrap();
+      match map.get(profile_id) {
+        Some(id) => id.clone(),
+        None => return, // No local worker for this profile — nothing to tag.
+      }
+    };
+    if let Some(mut cfg) = crate::proxy_storage::get_proxy_config(&proxy_id) {
+      cfg.browser_pid = Some(browser_pid);
+      if crate::proxy_storage::update_proxy_config(&cfg) {
+        log::info!(
+          "Recorded browser PID {browser_pid} on proxy config {proxy_id} for self-reaping"
+        );
+      } else {
+        log::warn!("Failed to persist browser_pid {browser_pid} to proxy config {proxy_id}");
+      }
+    }
+  }
+
   // Clean up proxies for dead browser processes
   // Only clean up orphaned config files where the proxy process itself is dead
   pub async fn cleanup_dead_proxies(
@@ -2894,6 +2926,7 @@ mod tests {
       bypass_rules: Vec::new(),
       blocklist_file: None,
       local_protocol: None,
+      browser_pid: None,
     };
     let dead_config = ProxyConfig {
       id: dead_id.clone(),
@@ -2906,6 +2939,7 @@ mod tests {
       bypass_rules: Vec::new(),
       blocklist_file: None,
       local_protocol: None,
+      browser_pid: None,
     };
 
     save_proxy_config(&live_config).unwrap();
@@ -2946,6 +2980,7 @@ mod tests {
       bypass_rules: vec!["*.local".to_string(), "192.168.*".to_string()],
       blocklist_file: None,
       local_protocol: None,
+      browser_pid: None,
     };
 
     // Save
@@ -3265,6 +3300,7 @@ mod tests {
       bypass_rules: Vec::new(),
       blocklist_file: None,
       local_protocol: None,
+      browser_pid: None,
     };
     save_proxy_config(&config).unwrap();
 

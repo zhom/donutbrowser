@@ -22,6 +22,13 @@ pub struct ProxyConfig {
   /// `upstream_url`, which is the real upstream proxy/VPN this worker dials.
   #[serde(default)]
   pub local_protocol: Option<String>,
+  /// PID of the browser process this worker serves, recorded by the GUI after
+  /// launch. The detached worker watches this and self-terminates when the
+  /// browser dies, so it dies with its browser even if the GUI has exited or
+  /// restarted. `None` until launch completes (the worker keeps running while
+  /// it is `None`).
+  #[serde(default)]
+  pub browser_pid: Option<u32>,
 }
 
 impl ProxyConfig {
@@ -37,6 +44,7 @@ impl ProxyConfig {
       bypass_rules: Vec::new(),
       blocklist_file: None,
       local_protocol: None,
+      browser_pid: None,
     }
   }
 
