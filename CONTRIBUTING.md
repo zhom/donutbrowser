@@ -1,6 +1,6 @@
 # Contributing to Donut Browser
 
-Contributions are welcome! To start working on an issue, leave a comment indicating you're taking it on.
+Contributions are welcome! Please do not create PRs for the sake of being added to the contributors list. Reviewing PRs takes time, so please create PRs only if you believe that your change will improve Donut for yourself and others. If you are thinking of making a significant change, please get in touch with the maintainer first.
 
 ## Before Starting
 
