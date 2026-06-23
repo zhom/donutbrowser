@@ -325,6 +325,12 @@
       "confirmDescription": "停止 {{count}} 个正在运行的配置文件？",
       "confirmButton": "停止 {{count}} 个",
       "noneToStop": "没有选中可停止的配置文件。"
+    },
+    "sort": {
+      "nameAsc": "名称 (A–Z)",
+      "nameDesc": "名称 (Z–A)",
+      "newest": "最新优先",
+      "oldest": "最早优先"
     }
   },
   "createProfile": {
@@ -1149,7 +1155,8 @@
       "proxy": "代理",
       "vpn": "VPN",
       "cookieCount": "存储的 Cookie",
-      "localDataTransfer": "本地数据传输"
+      "localDataTransfer": "本地数据传输",
+      "created": "创建时间"
     },
     "values": {
       "none": "无",
@@ -1158,7 +1165,8 @@
       "yes": "是",
       "activeNow": "当前活动",
       "direct": "直连",
-      "loading": "加载中…"
+      "loading": "加载中…",
+      "unknown": "未知"
     },
     "network": {
       "bypassRules": "代理绕过规则",

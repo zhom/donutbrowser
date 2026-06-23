@@ -52,6 +52,12 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -2382,27 +2388,88 @@ export function ProfilesDataTable({
         },
       },
       {
+        // Hidden, sort-only column so profiles can be sorted by creation date
+        // without showing a Created column in the table (issue #454). Kept
+        // hidden via columnVisibility; sorting still works on hidden columns.
+        id: "created_at",
+        accessorFn: (row) => row.created_at ?? 0,
+        enableSorting: true,
+        enableHiding: true,
+        sortingFn: "basic",
+        header: () => null,
+        cell: () => null,
+      },
+      {
         accessorKey: "name",
         // The only column without a fixed width: table-fixed hands it all
         // remaining space as the window grows or shrinks.
         meta: { flexWidth: true },
-        header: ({ column, table }) => {
+        // The Name header doubles as the sort control: clicking opens a menu to
+        // sort by name (A–Z / Z–A) or by creation date (newest / oldest), so
+        // creation-date sorting needs no visible column.
+        header: ({ table }) => {
           const meta = table.options.meta as TableMeta;
+          const sort = table.getState().sorting[0];
+          const isActive = (id: string, desc: boolean) =>
+            sort?.id === id && !!sort.desc === desc;
           return (
-            <Button
-              variant="ghost"
-              onClick={() => {
-                column.toggleSorting(column.getIsSorted() === "asc");
-              }}
-              className="justify-start p-0 h-auto font-semibold text-left cursor-pointer"
-            >
-              {meta.t("common.labels.name")}
-              {column.getIsSorted() === "asc" ? (
-                <LuChevronUp className="ml-2 size-4" />
-              ) : column.getIsSorted() === "desc" ? (
-                <LuChevronDown className="ml-2 size-4" />
-              ) : null}
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="justify-start p-0 h-auto font-semibold text-left cursor-pointer"
+                >
+                  {meta.t("common.labels.name")}
+                  {isActive("name", false) ? (
+                    <LuChevronUp className="ml-2 size-4" />
+                  ) : isActive("name", true) ? (
+                    <LuChevronDown className="ml-2 size-4" />
+                  ) : (
+                    <LuChevronDown className="ml-2 size-4 opacity-50" />
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem
+                  onClick={() =>
+                    table.setSorting([{ id: "name", desc: false }])
+                  }
+                >
+                  {isActive("name", false) && (
+                    <LuCheck className="mr-2 size-3.5" />
+                  )}
+                  {meta.t("profiles.sort.nameAsc")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => table.setSorting([{ id: "name", desc: true }])}
+                >
+                  {isActive("name", true) && (
+                    <LuCheck className="mr-2 size-3.5" />
+                  )}
+                  {meta.t("profiles.sort.nameDesc")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() =>
+                    table.setSorting([{ id: "created_at", desc: true }])
+                  }
+                >
+                  {isActive("created_at", true) && (
+                    <LuCheck className="mr-2 size-3.5" />
+                  )}
+                  {meta.t("profiles.sort.newest")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() =>
+                    table.setSorting([{ id: "created_at", desc: false }])
+                  }
+                >
+                  {isActive("created_at", false) && (
+                    <LuCheck className="mr-2 size-3.5" />
+                  )}
+                  {meta.t("profiles.sort.oldest")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           );
         },
         enableSorting: true,
@@ -2934,7 +3001,7 @@ export function ProfilesDataTable({
   // expendable first); their data stays reachable via the profile info
   // dialog. Visibility (not CSS hiding) so table-fixed reclaims the width.
   const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>({});
+    React.useState<VisibilityState>({ created_at: false });
 
   // Content columns grow proportionally with the container but never drop
   // below the compact-layout floor; the name column takes the remainder.
@@ -2994,6 +3061,8 @@ export function ProfilesDataTable({
       setContainerWidth(Math.round(w / 8) * 8);
       setColumnVisibility((prev) => {
         const next: VisibilityState = {
+          // Always hidden — sort-only column (issue #454).
+          created_at: false,
           dns: w >= 768,
           ext: w >= 672,
           note: w >= 576,

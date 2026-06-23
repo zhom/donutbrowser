@@ -325,6 +325,12 @@
       "confirmDescription": "Остановить {{count}} запущенных профилей?",
       "confirmButton": "Остановить {{count}}",
       "noneToStop": "Нет выбранных профилей для остановки."
+    },
+    "sort": {
+      "nameAsc": "Имя (А–Я)",
+      "nameDesc": "Имя (Я–А)",
+      "newest": "Сначала новые",
+      "oldest": "Сначала старые"
     }
   },
   "createProfile": {
@@ -1149,7 +1155,8 @@
       "proxy": "ПРОКСИ",
       "vpn": "VPN",
       "cookieCount": "Хранится Cookie",
-      "localDataTransfer": "Локальный трафик"
+      "localDataTransfer": "Локальный трафик",
+      "created": "Создан"
     },
     "values": {
       "none": "Нет",
@@ -1158,7 +1165,8 @@
       "yes": "Да",
       "activeNow": "Сейчас активен",
       "direct": "Без прокси",
-      "loading": "Загрузка…"
+      "loading": "Загрузка…",
+      "unknown": "Неизвестно"
     },
     "network": {
       "bypassRules": "Правила обхода прокси",

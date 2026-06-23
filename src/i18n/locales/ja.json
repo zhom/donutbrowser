@@ -325,6 +325,12 @@
       "confirmDescription": "実行中の {{count}} 個のプロファイルを停止しますか？",
       "confirmButton": "{{count}} 個を停止",
       "noneToStop": "停止する選択中のプロファイルがありません。"
+    },
+    "sort": {
+      "nameAsc": "名前 (A→Z)",
+      "nameDesc": "名前 (Z→A)",
+      "newest": "新しい順",
+      "oldest": "古い順"
     }
   },
   "createProfile": {
@@ -1149,7 +1155,8 @@
       "proxy": "プロキシ",
       "vpn": "VPN",
       "cookieCount": "保存された Cookie",
-      "localDataTransfer": "ローカルデータ転送量"
+      "localDataTransfer": "ローカルデータ転送量",
+      "created": "作成日"
     },
     "values": {
       "none": "なし",
@@ -1158,7 +1165,8 @@
       "yes": "はい",
       "activeNow": "現在アクティブ",
       "direct": "直接",
-      "loading": "読み込み中…"
+      "loading": "読み込み中…",
+      "unknown": "不明"
     },
     "network": {
       "bypassRules": "プロキシバイパスルール",

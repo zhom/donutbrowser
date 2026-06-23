@@ -325,6 +325,12 @@
       "confirmDescription": "실행 중인 {{count}}개의 프로필을 중지할까요?",
       "confirmButton": "{{count}}개 중지",
       "noneToStop": "중지할 선택된 프로필이 없습니다."
+    },
+    "sort": {
+      "nameAsc": "이름 (A→Z)",
+      "nameDesc": "이름 (Z→A)",
+      "newest": "최신순",
+      "oldest": "오래된순"
     }
   },
   "createProfile": {
@@ -1149,7 +1155,8 @@
       "proxy": "프록시",
       "vpn": "VPN",
       "cookieCount": "저장된 쿠키",
-      "localDataTransfer": "로컬 데이터 전송"
+      "localDataTransfer": "로컬 데이터 전송",
+      "created": "생성일"
     },
     "values": {
       "none": "없음",
@@ -1158,7 +1165,8 @@
       "yes": "예",
       "activeNow": "지금 활성",
       "direct": "직접",
-      "loading": "불러오는 중…"
+      "loading": "불러오는 중…",
+      "unknown": "알 수 없음"
     },
     "network": {
       "bypassRules": "프록시 우회 규칙",

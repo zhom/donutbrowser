@@ -879,6 +879,17 @@ function ProfileInfoLayout({
                 </span>
                 <div className="grid grid-cols-2 gap-2">
                   <InfoCard
+                    label={t("profileInfo.fields.created")}
+                    value={
+                      profile.created_at
+                        ? new Date(profile.created_at * 1000).toLocaleString(
+                            undefined,
+                            { dateStyle: "medium", timeStyle: "short" },
+                          )
+                        : t("profileInfo.values.unknown")
+                    }
+                  />
+                  <InfoCard
                     label={t("profileInfo.fields.lastLaunched")}
                     value={
                       isRunning

@@ -325,6 +325,12 @@
       "confirmDescription": "Arrêter {{count}} profils en cours d’exécution ?",
       "confirmButton": "Arrêter {{count}}",
       "noneToStop": "Aucun profil sélectionné à arrêter."
+    },
+    "sort": {
+      "nameAsc": "Nom (A–Z)",
+      "nameDesc": "Nom (Z–A)",
+      "newest": "Plus récents d’abord",
+      "oldest": "Plus anciens d’abord"
     }
   },
   "createProfile": {
@@ -1149,7 +1155,8 @@
       "proxy": "PROXY",
       "vpn": "VPN",
       "cookieCount": "Cookies stockés",
-      "localDataTransfer": "Transfert de données local"
+      "localDataTransfer": "Transfert de données local",
+      "created": "Créé le"
     },
     "values": {
       "none": "Aucun",
@@ -1158,7 +1165,8 @@
       "yes": "Oui",
       "activeNow": "Actif maintenant",
       "direct": "Direct",
-      "loading": "Chargement…"
+      "loading": "Chargement…",
+      "unknown": "Inconnu"
     },
     "network": {
       "bypassRules": "Règles de Contournement du Proxy",

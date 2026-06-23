@@ -325,6 +325,12 @@
       "confirmDescription": "Dừng {{count}} hồ sơ đang chạy?",
       "confirmButton": "Dừng {{count}}",
       "noneToStop": "Không có hồ sơ nào được chọn để dừng."
+    },
+    "sort": {
+      "nameAsc": "Tên (A–Z)",
+      "nameDesc": "Tên (Z–A)",
+      "newest": "Mới nhất trước",
+      "oldest": "Cũ nhất trước"
     }
   },
   "createProfile": {
@@ -1149,7 +1155,8 @@
       "proxy": "PROXY",
       "vpn": "VPN",
       "cookieCount": "Cookie đã lưu",
-      "localDataTransfer": "Truyền dữ liệu cục bộ"
+      "localDataTransfer": "Truyền dữ liệu cục bộ",
+      "created": "Đã tạo"
     },
     "values": {
       "none": "Không có",
@@ -1158,7 +1165,8 @@
       "yes": "Có",
       "activeNow": "Đang hoạt động",
       "direct": "Trực tiếp",
-      "loading": "Đang tải…"
+      "loading": "Đang tải…",
+      "unknown": "Không rõ"
     },
     "network": {
       "bypassRules": "Quy tắc bỏ qua proxy",
