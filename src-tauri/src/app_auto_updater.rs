@@ -1492,7 +1492,7 @@ impl AppAutoUpdater {
 
       // Create the restart script content
       let script_content = format!(
-        r#"#!/bin/bash
+        r#"#!/bin/sh
 # Wait for the current process to exit
 while kill -0 {} 2>/dev/null; do
   sleep 0.5
@@ -1521,7 +1521,7 @@ rm "{}"
         .output();
 
       // Execute the restart script in the background
-      let mut cmd = Command::new("bash");
+      let mut cmd = Command::new("sh");
       cmd.arg(script_path.to_str().unwrap());
 
       // Detach the process completely
@@ -1668,7 +1668,7 @@ rm "{}"
 
       // Create the restart script content
       let script_content = format!(
-        r#"#!/bin/bash
+        r#"#!/bin/sh
 # Wait for the current process to exit
 while kill -0 {} 2>/dev/null; do
   sleep 0.5
@@ -1697,7 +1697,7 @@ rm "{}"
         .output();
 
       // Execute the restart script in the background
-      let mut cmd = Command::new("bash");
+      let mut cmd = Command::new("sh");
       cmd.arg(script_path.to_str().unwrap());
 
       // Detach the process completely

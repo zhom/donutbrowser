@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { translateBackendError } from "@/lib/backend-errors";
 import type { StoredProxy } from "@/types";
 import { RippleButton } from "./ui/ripple";
 
@@ -127,9 +128,11 @@ export function ProxyFormDialog({
       onClose();
     } catch (error) {
       console.error("Failed to save proxy:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      toast.error(t("proxies.form.saveFailed", { error: errorMessage }));
+      toast.error(
+        t("proxies.form.saveFailed", {
+          error: translateBackendError(t, error),
+        }),
+      );
     } finally {
       setIsSubmitting(false);
     }

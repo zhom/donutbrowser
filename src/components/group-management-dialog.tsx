@@ -495,9 +495,15 @@ export function GroupManagementDialog({
       const results = await Promise.allSettled(
         ids.map((groupId) => invoke("delete_profile_group", { groupId })),
       );
-      const failed = results.filter((r) => r.status === "rejected");
-      if (failed.length > 0) {
-        showErrorToast(t("groups.deleteFailed"));
+      const firstRejection = results.find((r) => r.status === "rejected") as
+        | PromiseRejectedResult
+        | undefined;
+      if (firstRejection) {
+        showErrorToast(
+          parseBackendError(firstRejection.reason)
+            ? translateBackendError(t, firstRejection.reason)
+            : t("groups.deleteFailed"),
+        );
       } else {
         showSuccessToast(t("groups.deleteSuccess"));
       }
@@ -507,9 +513,7 @@ export function GroupManagementDialog({
       onGroupManagementComplete();
     } catch (err) {
       console.error("Bulk group delete failed:", err);
-      showErrorToast(
-        err instanceof Error ? err.message : t("groups.deleteFailed"),
-      );
+      showErrorToast(translateBackendError(t, err));
     } finally {
       setIsBulkDeleting(false);
     }

@@ -1844,6 +1844,7 @@
     "passwordTooShort": "密码至少需要 {{min}} 个字符",
     "proxyNotFound": "未找到代理",
     "groupNotFound": "未找到分组",
+    "groupAlreadyExists": "已存在同名分组",
     "vpnNotFound": "未找到 VPN",
     "extensionNotFound": "未找到扩展",
     "extensionGroupNotFound": "未找到扩展分组",

@@ -22,6 +22,7 @@ export type BackendErrorCode =
   | "SELF_HOSTED_REQUIRES_LOGOUT"
   | "PROXY_NOT_FOUND"
   | "GROUP_NOT_FOUND"
+  | "GROUP_ALREADY_EXISTS"
   | "VPN_NOT_FOUND"
   | "EXTENSION_NOT_FOUND"
   | "EXTENSION_GROUP_NOT_FOUND"
@@ -113,6 +114,8 @@ export function translateBackendError(t: TFunction, err: unknown): string {
       return t("backendErrors.proxyNotFound");
     case "GROUP_NOT_FOUND":
       return t("backendErrors.groupNotFound");
+    case "GROUP_ALREADY_EXISTS":
+      return t("backendErrors.groupAlreadyExists");
     case "VPN_NOT_FOUND":
       return t("backendErrors.vpnNotFound");
     case "EXTENSION_NOT_FOUND":

@@ -1844,6 +1844,7 @@
     "passwordTooShort": "Password must be at least {{min}} characters",
     "proxyNotFound": "Proxy not found",
     "groupNotFound": "Group not found",
+    "groupAlreadyExists": "A group with this name already exists",
     "vpnNotFound": "VPN not found",
     "extensionNotFound": "Extension not found",
     "extensionGroupNotFound": "Extension group not found",

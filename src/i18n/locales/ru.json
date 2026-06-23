@@ -1844,6 +1844,7 @@
     "passwordTooShort": "Пароль должен быть не короче {{min}} символов",
     "proxyNotFound": "Прокси не найден",
     "groupNotFound": "Группа не найдена",
+    "groupAlreadyExists": "Группа с таким именем уже существует",
     "vpnNotFound": "VPN не найден",
     "extensionNotFound": "Расширение не найдено",
     "extensionGroupNotFound": "Группа расширений не найдена",

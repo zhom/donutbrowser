@@ -85,7 +85,11 @@ impl GroupManager {
 
     // Check if group with this name already exists
     if groups_data.groups.iter().any(|g| g.name == name) {
-      return Err(format!("Group with name '{name}' already exists").into());
+      return Err(
+        serde_json::json!({ "code": "GROUP_ALREADY_EXISTS" })
+          .to_string()
+          .into(),
+      );
     }
 
     let sync_enabled = crate::sync::is_sync_configured();
@@ -131,14 +135,18 @@ impl GroupManager {
       .iter()
       .any(|g| g.name == name && g.id != id)
     {
-      return Err(format!("Group with name '{name}' already exists").into());
+      return Err(
+        serde_json::json!({ "code": "GROUP_ALREADY_EXISTS" })
+          .to_string()
+          .into(),
+      );
     }
 
     let group = groups_data
       .groups
       .iter_mut()
       .find(|g| g.id == id)
-      .ok_or_else(|| format!("Group with id '{id}' not found"))?;
+      .ok_or_else(|| serde_json::json!({ "code": "GROUP_NOT_FOUND" }).to_string())?;
 
     group.name = name;
     group.updated_at = Some(crate::proxy_manager::now_secs());
@@ -204,7 +212,11 @@ impl GroupManager {
     let initial_len = groups_data.groups.len();
     groups_data.groups.retain(|g| g.id != id);
     if groups_data.groups.len() == initial_len {
-      return Err(format!("Group with id '{id}' not found").into());
+      return Err(
+        serde_json::json!({ "code": "GROUP_NOT_FOUND" })
+          .to_string()
+          .into(),
+      );
     }
     self.save_groups_data(&groups_data)?;
     Ok(())
@@ -229,7 +241,11 @@ impl GroupManager {
     groups_data.groups.retain(|g| g.id != id);
 
     if groups_data.groups.len() == initial_len {
-      return Err(format!("Group with id '{id}' not found").into());
+      return Err(
+        serde_json::json!({ "code": "GROUP_NOT_FOUND" })
+          .to_string()
+          .into(),
+      );
     }
 
     self.save_groups_data(&groups_data)?;
@@ -334,7 +350,7 @@ pub async fn create_profile_group(
   let group_manager = GROUP_MANAGER.lock().unwrap();
   group_manager
     .create_group(&app_handle, name)
-    .map_err(|e| format!("Failed to create group: {e}"))
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -346,7 +362,7 @@ pub async fn update_profile_group(
   let group_manager = GROUP_MANAGER.lock().unwrap();
   group_manager
     .update_group(&app_handle, group_id, name)
-    .map_err(|e| format!("Failed to update group: {e}"))
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -357,7 +373,7 @@ pub async fn delete_profile_group(
   let group_manager = GROUP_MANAGER.lock().unwrap();
   group_manager
     .delete_group(&app_handle, group_id)
-    .map_err(|e| format!("Failed to delete group: {e}"))
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

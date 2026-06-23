@@ -113,8 +113,11 @@ for arch in amd64 arm64; do
   BINARY_DIR="$DEB_DIR/dists/stable/main/binary-${arch}"
 
   # dpkg-scanpackages needs to run from the repo root
-  # and needs paths relative to that root
-  (cd "$DEB_DIR" && dpkg-scanpackages --arch "$arch" pool/main) \
+  # and needs paths relative to that root.
+  # -m / --multiversion keeps every version present in the pool in the index
+  # (without it only the newest is listed, making older releases uninstallable
+  # via apt — createrepo_c already keeps all versions for the RPM repo).
+  (cd "$DEB_DIR" && dpkg-scanpackages -m --arch "$arch" pool/main) \
     > "$BINARY_DIR/Packages"
 
   gzip -9c "$BINARY_DIR/Packages" > "$BINARY_DIR/Packages.gz"

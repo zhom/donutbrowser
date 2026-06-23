@@ -148,12 +148,12 @@ jobs:
       - name: Verify frontend dist exists
         shell: bash
         run: |
-          if [ ! -d "dist" ]; then
-            echo "Error: dist directory not found after build"
-            ls -la
+          if [ ! -f "dist/index.html" ]; then
+            echo "Error: dist/index.html not found after build (static export incomplete)"
+            ls -la dist 2>/dev/null || ls -la
             exit 1
           fi
-          echo "Frontend dist directory verified at $(pwd)/dist"
+          echo "Frontend dist verified at $(pwd)/dist (index.html present)"
           echo "Checking from src-tauri perspective:"
           ls -la src-tauri/../dist || echo "Warning: dist not accessible from src-tauri"
 

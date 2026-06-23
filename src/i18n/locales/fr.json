@@ -1844,6 +1844,7 @@
     "passwordTooShort": "Le mot de passe doit comporter au moins {{min}} caractères",
     "proxyNotFound": "Proxy introuvable",
     "groupNotFound": "Groupe introuvable",
+    "groupAlreadyExists": "Un groupe portant ce nom existe déjà",
     "vpnNotFound": "VPN introuvable",
     "extensionNotFound": "Extension introuvable",
     "extensionGroupNotFound": "Groupe d'extensions introuvable",

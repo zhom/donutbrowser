@@ -1844,6 +1844,7 @@
     "passwordTooShort": "비밀번호는 {{min}}자 이상이어야 합니다",
     "proxyNotFound": "프록시를 찾을 수 없습니다",
     "groupNotFound": "그룹을 찾을 수 없습니다",
+    "groupAlreadyExists": "이 이름의 그룹이 이미 존재합니다",
     "vpnNotFound": "VPN을 찾을 수 없습니다",
     "extensionNotFound": "확장 프로그램을 찾을 수 없습니다",
     "extensionGroupNotFound": "확장 프로그램 그룹을 찾을 수 없습니다",

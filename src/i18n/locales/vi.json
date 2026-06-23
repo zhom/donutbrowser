@@ -1844,6 +1844,7 @@
     "passwordTooShort": "Mật khẩu phải có ít nhất {{min}} ký tự",
     "proxyNotFound": "Không tìm thấy proxy",
     "groupNotFound": "Không tìm thấy nhóm",
+    "groupAlreadyExists": "Đã tồn tại một nhóm với tên này",
     "vpnNotFound": "Không tìm thấy VPN",
     "extensionNotFound": "Không tìm thấy tiện ích",
     "extensionGroupNotFound": "Không tìm thấy nhóm tiện ích",

@@ -16,6 +16,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { translateBackendError } from "@/lib/backend-errors";
 import type { BrowserProfile, ProfileGroup } from "@/types";
 import { RippleButton } from "./ui/ripple";
 
@@ -97,8 +98,7 @@ export function DeleteGroupDialog({
       onClose();
     } catch (err) {
       console.error("Failed to delete group:", err);
-      const errorMessage =
-        err instanceof Error ? err.message : t("groups.deleteFailed");
+      const errorMessage = translateBackendError(t, err);
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {

@@ -1844,6 +1844,7 @@
     "passwordTooShort": "パスワードは {{min}} 文字以上必要です",
     "proxyNotFound": "プロキシが見つかりません",
     "groupNotFound": "グループが見つかりません",
+    "groupAlreadyExists": "この名前のグループは既に存在します",
     "vpnNotFound": "VPNが見つかりません",
     "extensionNotFound": "拡張機能が見つかりません",
     "extensionGroupNotFound": "拡張機能グループが見つかりません",

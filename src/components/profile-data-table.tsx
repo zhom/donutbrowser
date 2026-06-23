@@ -1250,14 +1250,16 @@ export function ProfilesDataTable({
           (id) => newSelection[id],
         );
 
-        // Only update external state if selection actually changed
-        const prevIds = Object.keys(prevSelection).filter(
-          (id) => prevSelection[id],
+        // Only update external state if selection actually changed.
+        // A Set gives O(1) membership; Array.includes() inside .every() would
+        // be O(n*m) over large selections.
+        const prevIdSet = new Set(
+          Object.keys(prevSelection).filter((id) => prevSelection[id]),
         );
 
         if (
-          selectedIds.length !== prevIds.length ||
-          !selectedIds.every((id) => prevIds.includes(id))
+          selectedIds.length !== prevIdSet.size ||
+          !selectedIds.every((id) => prevIdSet.has(id))
         ) {
           onSelectedProfilesChange(selectedIds);
         }
@@ -1559,10 +1561,13 @@ export function ProfilesDataTable({
           "get_all_traffic_snapshots",
         );
         const newSnapshots: Record<string, TrafficSnapshot> = {};
+        // O(1) membership; runningProfileIds.includes() in this loop would be
+        // O(snapshots * runningProfiles).
+        const runningSet = new Set(runningProfileIds);
         for (const snapshot of allSnapshots) {
           if (snapshot.profile_id) {
             // Only keep snapshots for profiles that are currently running
-            if (runningProfileIds.includes(snapshot.profile_id)) {
+            if (runningSet.has(snapshot.profile_id)) {
               const existing = newSnapshots[snapshot.profile_id];
               if (!existing || snapshot.last_update > existing.last_update) {
                 newSnapshots[snapshot.profile_id] = snapshot;
@@ -1591,9 +1596,10 @@ export function ProfilesDataTable({
 
     setTrafficSnapshots((prev) => {
       const cleaned: Record<string, TrafficSnapshot> = {};
+      const runningSet = new Set(runningProfileIds);
       for (const [profileId, snapshot] of Object.entries(prev)) {
         // Only keep snapshots for profiles that are currently running
-        if (runningProfileIds.includes(profileId)) {
+        if (runningSet.has(profileId)) {
           cleaned[profileId] = snapshot;
         }
       }

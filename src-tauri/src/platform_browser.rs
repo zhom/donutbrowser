@@ -634,19 +634,25 @@ pub mod linux {
       }
     }
 
-    // Additional Linux-specific environment variables for better compatibility
-    cmd.env(
-      "DISPLAY",
-      std::env::var("DISPLAY").unwrap_or(":0".to_string()),
-    );
+    // Propagate DISPLAY only when this session actually has an X11 display.
+    // Forcing DISPLAY=:0 breaks Wayland-only sessions (there is no X server on
+    // :0, so any X11 client launched with it set will fail to connect). When
+    // DISPLAY is set the child already inherits it from our environment, so
+    // setting it explicitly here is purely defensive; when it's unset we leave
+    // it unset and let the browser use Wayland.
+    if let Ok(display) = std::env::var("DISPLAY") {
+      cmd.env("DISPLAY", display);
+    }
 
     // Set MOZ_ENABLE_WAYLAND for better Wayland support
     if std::env::var("WAYLAND_DISPLAY").is_ok() {
       cmd.env("MOZ_ENABLE_WAYLAND", "1");
     }
 
-    // Disable GPU acceleration if running in headless environments
-    if std::env::var("DISPLAY").is_err() || std::env::var("WAYLAND_DISPLAY").is_err() {
+    // Warn only when running truly headless — i.e. NEITHER X11 nor Wayland is
+    // available. Using OR here would fire on every normal Wayland-only session
+    // (DISPLAY unset) or X11-only session (WAYLAND_DISPLAY unset).
+    if std::env::var("DISPLAY").is_err() && std::env::var("WAYLAND_DISPLAY").is_err() {
       log::info!("No display detected, browser may fail to start");
     }
 

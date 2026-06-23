@@ -712,49 +712,67 @@ export default function Home() {
   );
 
   const listenForUrlEvents = useCallback(async () => {
+    // Collect every listener we register so that — whether setup completes or
+    // throws partway through — we tear down exactly what was registered.
+    // Previously the Tauri unlisten handles were discarded (so re-runs stacked
+    // duplicate handlers and a single URL was handled N times), and a failing
+    // listen() call would leak the listeners that had already succeeded.
+    const unlisteners: Array<() => void> = [];
+    let handleLogoUrlEvent: ((event: CustomEvent) => void) | undefined;
+    const teardown = () => {
+      for (const unlisten of unlisteners) unlisten();
+      if (handleLogoUrlEvent) {
+        window.removeEventListener(
+          "url-open-request",
+          handleLogoUrlEvent as EventListener,
+        );
+      }
+    };
+
     try {
       // Listen for URL open events from the deep link handler (when app is already running)
-      await listen<string>("url-open-request", (event) => {
-        console.log("Received URL open request:", event.payload);
-        handleUrlOpen(event.payload);
-      });
+      unlisteners.push(
+        await listen<string>("url-open-request", (event) => {
+          console.log("Received URL open request:", event.payload);
+          handleUrlOpen(event.payload);
+        }),
+      );
 
       // Listen for show profile selector events
-      await listen<string>("show-profile-selector", (event) => {
-        console.log("Received show profile selector request:", event.payload);
-        handleUrlOpen(event.payload);
-      });
+      unlisteners.push(
+        await listen<string>("show-profile-selector", (event) => {
+          console.log("Received show profile selector request:", event.payload);
+          handleUrlOpen(event.payload);
+        }),
+      );
 
       // Listen for show create profile dialog events
-      await listen<string>("show-create-profile-dialog", (event) => {
-        console.log(
-          "Received show create profile dialog request:",
-          event.payload,
-        );
-        showErrorToast(t("errors.noProfilesForUrl"));
-        setCreateProfileDialogOpen(true);
-      });
+      unlisteners.push(
+        await listen<string>("show-create-profile-dialog", (event) => {
+          console.log(
+            "Received show create profile dialog request:",
+            event.payload,
+          );
+          showErrorToast(t("errors.noProfilesForUrl"));
+          setCreateProfileDialogOpen(true);
+        }),
+      );
 
       // Listen for custom logo click events
-      const handleLogoUrlEvent = (event: CustomEvent) => {
+      handleLogoUrlEvent = (event: CustomEvent) => {
         console.log("Received logo URL event:", event.detail);
         handleUrlOpen(event.detail);
       };
-
       window.addEventListener(
         "url-open-request",
         handleLogoUrlEvent as EventListener,
       );
 
-      // Return cleanup function
-      return () => {
-        window.removeEventListener(
-          "url-open-request",
-          handleLogoUrlEvent as EventListener,
-        );
-      };
+      return teardown;
     } catch (error) {
       console.error("Failed to setup URL listener:", error);
+      // Tear down whatever did register before the failure so nothing leaks.
+      teardown();
     }
   }, [handleUrlOpen, t]);
 
@@ -1257,6 +1275,7 @@ export default function Home() {
   );
 
   useEffect(() => {
+    let disposed = false;
     let unlistenStatus: (() => void) | undefined;
     let unlistenProgress: (() => void) | undefined;
     const profilesWithTransfer = new Set<string>();
@@ -1333,25 +1352,35 @@ export default function Home() {
             );
           }
         });
+        // If the effect was torn down while we were awaiting the listeners,
+        // unlisten immediately — the cleanup below already ran and would have
+        // missed these handles. (Tauri unlisten is safe to call more than once.)
+        if (disposed) {
+          unlistenStatus?.();
+          unlistenProgress?.();
+        }
       } catch (error) {
         console.error("Failed to listen for sync events:", error);
       }
     })();
     return () => {
+      disposed = true;
       if (unlistenStatus) unlistenStatus();
       if (unlistenProgress) unlistenProgress();
     };
   }, [profiles, t]);
 
   useEffect(() => {
-    // Listen for URL open events and get cleanup function
-    const setupListeners = async () => {
-      const cleanup = await listenForUrlEvents();
-      return cleanup;
-    };
-
+    // Listen for URL open events. Guard against the effect tearing down (or
+    // re-running) before the async listener setup resolves: if that happens,
+    // run the cleanup as soon as it's available so the listeners never leak.
     let cleanup: (() => void) | undefined;
-    void setupListeners().then((cleanupFn) => {
+    let disposed = false;
+    void listenForUrlEvents().then((cleanupFn) => {
+      if (disposed) {
+        cleanupFn?.();
+        return;
+      }
       cleanup = cleanupFn;
     });
 
@@ -1379,10 +1408,9 @@ export default function Home() {
     }
 
     return () => {
+      disposed = true;
       clearInterval(updateInterval);
-      if (cleanup) {
-        cleanup();
-      }
+      cleanup?.();
     };
   }, [
     checkForUpdates,
@@ -1396,6 +1424,7 @@ export default function Home() {
   // E2E encryption listeners — surface password-required prompts and rollover
   // progress so the user isn't left guessing whether sealing finished.
   useEffect(() => {
+    let disposed = false;
     let unlistenRequired: (() => void) | undefined;
     let unlistenStarted: (() => void) | undefined;
     let unlistenProgress: (() => void) | undefined;
@@ -1472,9 +1501,20 @@ export default function Home() {
           duration: 15000,
         });
       });
+
+      // If the effect was torn down mid-setup, the cleanup below already ran
+      // before these handles existed — unlisten them now so nothing leaks.
+      if (disposed) {
+        unlistenRequired?.();
+        unlistenStarted?.();
+        unlistenProgress?.();
+        unlistenCompleted?.();
+        unlistenWayfernBlocked?.();
+      }
     })();
 
     return () => {
+      disposed = true;
       unlistenRequired?.();
       unlistenStarted?.();
       unlistenProgress?.();
