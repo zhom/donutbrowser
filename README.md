@@ -179,6 +179,13 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
                     <sub><b>Thiago Mafra</b></sub>
                 </a>
             </td>
+            <td align="center">
+                <a href="https://github.com/liasica">
+                    <img src="https://avatars.githubusercontent.com/u/671431?v=4" width="100;" alt="liasica"/>
+                    <br />
+                    <sub><b>liasica</b></sub>
+                </a>
+            </td>
 		</tr>
 	<tbody>
 </table>
