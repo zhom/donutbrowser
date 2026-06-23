@@ -25,19 +25,19 @@
 
 ## Features
 
-- **Unlimited browser profiles** — each fully isolated with its own fingerprint, cookies, extensions, and data
-- **Anti-detect Chromium engine** — powered by [Wayfern](https://wayfern.com), which is privacy-focused Chromium fork that comes with advanced fingerprint spoofing which naturally hides information in a way that is not detected by Cloudflare, reCaptcha v3, and other browser fingerprinting and anti-bot services.
+- **Unlimited browser profiles**: each fully isolated with its own fingerprint, cookies, extensions, and data
+- **Anti-detect Chromium engine**: powered by [Wayfern](https://wayfern.com), which is privacy-focused Chromium fork that comes with advanced fingerprint spoofing which naturally hides information in a way that is not detected by Cloudflare, reCaptcha v3, and other browser fingerprinting and anti-bot services.
 - **DNS AdBlocker** - block ads, trackers, and other unwanted content with per-profile DNS blocking
-- **Proxy support** — HTTP, HTTPS, SOCKS4, SOCKS5 per profile, with dynamic proxy URLs
-- **VPN support** — WireGuard configs per profile
-- **Local API & MCP** — REST API and [Model Context Protocol](https://modelcontextprotocol.io) server for integration with Claude, automation tools, and custom workflows
-- **Profile groups** — organize profiles and apply bulk settings
-- **Import profiles** — migrate from Chrome, Firefox, Edge, Brave, or other Chromium browsers
-- **Cookie & extension management** — import/export cookies, manage extensions per profile
-- **Default browser** — set Donut as your default browser and choose which profile opens each link
-- **Cloud sync** — sync profiles, proxies, and groups across devices (self-hostable)
-- **E2E encryption** — optional end-to-end encrypted sync with a password only you know
-- **Zero telemetry** — no tracking or device fingerprinting
+- **Proxy support**: HTTP, HTTPS, SOCKS4, SOCKS5 per profile, with dynamic proxy URLs
+- **VPN support**: WireGuard configs per profile
+- **Local API & MCP**: REST API and [Model Context Protocol](https://modelcontextprotocol.io) server for integration with Claude, automation tools, and custom workflows
+- **Profile groups**: organize profiles and apply bulk settings
+- **Import profiles**: migrate from Chrome, Firefox, Edge, Brave, or other Chromium browsers
+- **Cookie & extension management**: import/export cookies, manage extensions per profile
+- **Default browser**: set Donut as your default browser and choose which profile opens each link
+- **Cloud sync**: sync profiles, proxies, and groups across devices (self-hostable)
+- **E2E encryption**: optional end-to-end encrypted sync with a password only you know
+- **Zero telemetry**: no tracking or device fingerprinting
 
 ## Install
 
@@ -94,7 +94,7 @@ nix run github:zhom/donutbrowser#release-start
 
 ## Self-Hosting Sync
 
-Donut Browser supports syncing profiles, proxies, and groups across devices via a self-hosted sync server. See the [Self-Hosting Guide](docs/self-hosting-donut-sync.md) for Docker-based setup instructions.
+Donut Browser supports syncing profiles, proxies, and groups across devices via a self-hosted sync server, which makes sync completely free. See the [Self-Hosting Donut Sync guide](https://donutbrowser.com/docs/self-hosting) for Docker-based setup instructions.
 
 ## Development
 

@@ -49,12 +49,12 @@ pnpm format && pnpm lint && pnpm test
 
 This runs:
 
-- **Biome** — JS/TS linting and formatting
-- **Clippy + rustfmt** — Rust linting and formatting
-- **typos** — Spellcheck (allowlist in `_typos.toml`)
-- **CodeQL** — Security analysis (JS, Actions, Rust) — runs in CI
-- **Unit tests** — 330+ Rust tests
-- **Integration tests** — proxy, sync e2e
+- **Biome**: JS/TS linting and formatting
+- **Clippy + rustfmt**: Rust linting and formatting
+- **typos**: Spellcheck (allowlist in `_typos.toml`)
+- **CodeQL**: Security analysis (JS, Actions, Rust), runs in CI
+- **Unit tests**: 330+ Rust tests
+- **Integration tests**: proxy, sync e2e
 
 ### Running CodeQL locally
 
@@ -88,10 +88,10 @@ codeql database analyze /tmp/codeql-rust --format=sarifv2.1.0 --output=/tmp/rust
 
 ## Architecture
 
-- **Frontend**: Next.js (React) — `src/`
-- **Backend**: Tauri (Rust) — `src-tauri/src/`
-- **Proxy Worker**: Detached process for proxy tunneling — `src-tauri/src/bin/proxy_server.rs`
-- **Sync**: Cloud sync via S3-compatible storage — `src-tauri/src/sync/`, `donut-sync/`
+- **Frontend**: Next.js (React), `src/`
+- **Backend**: Tauri (Rust), `src-tauri/src/`
+- **Proxy Worker**: Detached process for proxy tunneling, `src-tauri/src/bin/proxy_server.rs`
+- **Sync**: Cloud sync via S3-compatible storage, `src-tauri/src/sync/`, `donut-sync/`
 - **Browsers**: Camoufox (Firefox-based) and Wayfern (Chromium-based)
 
 ## Getting Help
