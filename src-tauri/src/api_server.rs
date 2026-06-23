@@ -244,6 +244,52 @@ struct ImportCookiesResponse {
   errors: Vec<String>,
 }
 
+#[derive(Debug, Deserialize, ToSchema)]
+struct BatchRunRequest {
+  /// Profile IDs to launch.
+  profile_ids: Vec<String>,
+  /// Optional URL to open in every launched profile.
+  url: Option<String>,
+  /// Launch headless. Defaults to false.
+  headless: Option<bool>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+struct BatchRunResult {
+  profile_id: String,
+  /// Whether this profile launched successfully.
+  ok: bool,
+  /// Remote debugging port if launched, otherwise null.
+  remote_debugging_port: Option<u16>,
+  /// Failure reason if not launched, otherwise null.
+  error: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+struct BatchRunResponse {
+  results: Vec<BatchRunResult>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+struct BatchStopRequest {
+  /// Profile IDs to stop.
+  profile_ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+struct BatchStopResult {
+  profile_id: String,
+  /// Whether this profile was stopped successfully.
+  ok: bool,
+  /// Failure reason if not stopped, otherwise null.
+  error: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+struct BatchStopResponse {
+  results: Vec<BatchStopResult>,
+}
+
 #[derive(OpenApi)]
 #[openapi(
   paths(
@@ -255,6 +301,8 @@ struct ImportCookiesResponse {
     run_profile,
     open_url_in_profile,
     kill_profile,
+    batch_run_profiles,
+    batch_stop_profiles,
     import_profile_cookies,
     get_groups,
     get_group,
@@ -297,6 +345,12 @@ struct ImportCookiesResponse {
     DownloadBrowserResponse,
     RunProfileResponse,
     RunProfileRequest,
+    BatchRunRequest,
+    BatchRunResult,
+    BatchRunResponse,
+    BatchStopRequest,
+    BatchStopResult,
+    BatchStopResponse,
     OpenUrlRequest,
     ImportCookiesRequest,
     ImportCookiesResponse,
@@ -396,6 +450,8 @@ impl ApiServer {
       .routes(routes!(run_profile))
       .routes(routes!(open_url_in_profile))
       .routes(routes!(kill_profile))
+      .routes(routes!(batch_run_profiles))
+      .routes(routes!(batch_stop_profiles))
       .routes(routes!(import_profile_cookies))
       .routes(routes!(get_groups, create_group))
       .routes(routes!(get_group, update_group, delete_group))
@@ -1949,6 +2005,170 @@ async fn kill_profile(
   crate::team_lock::release_team_lock_if_needed(profile).await;
 
   Ok(StatusCode::NO_CONTENT)
+}
+
+// API Handler - Batch run profiles (paid: browser automation). Mirrors the
+// single `/run` gate; never breaks the batch on a single profile's failure —
+// each profile gets its own result entry.
+#[utoipa::path(
+  post,
+  path = "/v1/profiles/batch/run",
+  request_body = BatchRunRequest,
+  responses(
+    (status = 200, description = "Batch launch completed; inspect per-profile results", body = BatchRunResponse),
+    (status = 401, description = "Unauthorized"),
+    (status = 402, description = "Active paid plan with browser automation required"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "profiles"
+)]
+async fn batch_run_profiles(
+  State(state): State<ApiServerState>,
+  Json(request): Json<BatchRunRequest>,
+) -> Result<Json<BatchRunResponse>, StatusCode> {
+  if !crate::cloud_auth::CLOUD_AUTH
+    .can_use_browser_automation()
+    .await
+  {
+    return Err(StatusCode::PAYMENT_REQUIRED);
+  }
+
+  let headless = request.headless.unwrap_or(false);
+  let profile_manager = ProfileManager::instance();
+  let profiles = profile_manager
+    .list_profiles()
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+  let mut results = Vec::with_capacity(request.profile_ids.len());
+  for profile_id in &request.profile_ids {
+    let fail = |error: &str| BatchRunResult {
+      profile_id: profile_id.clone(),
+      ok: false,
+      remote_debugging_port: None,
+      error: Some(error.to_string()),
+    };
+
+    let Some(profile) = profiles.iter().find(|p| p.id.to_string() == *profile_id) else {
+      results.push(fail("profile not found"));
+      continue;
+    };
+    if profile.is_cross_os() {
+      results.push(fail("cross-OS profiles cannot be launched"));
+      continue;
+    }
+    if crate::team_lock::acquire_team_lock_if_needed(profile)
+      .await
+      .is_err()
+    {
+      results.push(fail("profile is locked by another team member"));
+      continue;
+    }
+
+    let port = match tokio::net::TcpListener::bind("127.0.0.1:0").await {
+      Ok(listener) => match listener.local_addr() {
+        Ok(addr) => addr.port(),
+        Err(_) => {
+          results.push(fail("failed to allocate debugging port"));
+          continue;
+        }
+      },
+      Err(_) => {
+        results.push(fail("failed to allocate debugging port"));
+        continue;
+      }
+    };
+
+    match crate::browser_runner::launch_browser_profile_impl(
+      state.app_handle.clone(),
+      profile.clone(),
+      request.url.clone(),
+      Some(port),
+      headless,
+      true,
+    )
+    .await
+    {
+      Ok(_) => results.push(BatchRunResult {
+        profile_id: profile_id.clone(),
+        ok: true,
+        remote_debugging_port: Some(port),
+        error: None,
+      }),
+      Err(e) => results.push(fail(&format!("launch failed: {e}"))),
+    }
+  }
+
+  Ok(Json(BatchRunResponse { results }))
+}
+
+// API Handler - Batch stop profiles (paid: browser automation).
+#[utoipa::path(
+  post,
+  path = "/v1/profiles/batch/stop",
+  request_body = BatchStopRequest,
+  responses(
+    (status = 200, description = "Batch stop completed; inspect per-profile results", body = BatchStopResponse),
+    (status = 401, description = "Unauthorized"),
+    (status = 402, description = "Active paid plan with browser automation required"),
+    (status = 500, description = "Internal server error")
+  ),
+  security(
+    ("bearer_auth" = [])
+  ),
+  tag = "profiles"
+)]
+async fn batch_stop_profiles(
+  State(state): State<ApiServerState>,
+  Json(request): Json<BatchStopRequest>,
+) -> Result<Json<BatchStopResponse>, StatusCode> {
+  if !crate::cloud_auth::CLOUD_AUTH
+    .can_use_browser_automation()
+    .await
+  {
+    return Err(StatusCode::PAYMENT_REQUIRED);
+  }
+
+  let profile_manager = ProfileManager::instance();
+  let profiles = profile_manager
+    .list_profiles()
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+  let browser_runner = crate::browser_runner::BrowserRunner::instance();
+
+  let mut results = Vec::with_capacity(request.profile_ids.len());
+  for profile_id in &request.profile_ids {
+    let Some(profile) = profiles.iter().find(|p| p.id.to_string() == *profile_id) else {
+      results.push(BatchStopResult {
+        profile_id: profile_id.clone(),
+        ok: false,
+        error: Some("profile not found".to_string()),
+      });
+      continue;
+    };
+
+    match browser_runner
+      .kill_browser_process(state.app_handle.clone(), profile)
+      .await
+    {
+      Ok(_) => {
+        crate::team_lock::release_team_lock_if_needed(profile).await;
+        results.push(BatchStopResult {
+          profile_id: profile_id.clone(),
+          ok: true,
+          error: None,
+        });
+      }
+      Err(e) => results.push(BatchStopResult {
+        profile_id: profile_id.clone(),
+        ok: false,
+        error: Some(format!("stop failed: {e}")),
+      }),
+    }
+  }
+
+  Ok(Json(BatchStopResponse { results }))
 }
 
 #[utoipa::path(

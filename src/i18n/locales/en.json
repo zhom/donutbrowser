@@ -305,11 +305,26 @@
       "assignToGroup": "Assign to Group",
       "assignProxy": "Assign Proxy",
       "assignExtensionGroup": "Assign Extension Group",
-      "copyCookies": "Copy Cookies"
+      "copyCookies": "Copy Cookies",
+      "runSelected": "Run selected",
+      "stopSelected": "Stop selected",
+      "proRequired": "Pro plan required for bulk run/stop"
     },
     "passwordProtectedBadge": "Password Protected",
     "launchHook": {
       "placeholder": "https://example.com/track-launch"
+    },
+    "bulkRun": {
+      "confirmTitle": "Run {{count}} profiles?",
+      "confirmDescription": "Launching {{count}} profiles at once can use a lot of system resources. Continue?",
+      "confirmButton": "Run {{count}}",
+      "noneToRun": "No selected profiles to run."
+    },
+    "bulkStop": {
+      "confirmTitle": "Stop {{count}} profiles?",
+      "confirmDescription": "Stop {{count}} running profiles?",
+      "confirmButton": "Stop {{count}}",
+      "noneToStop": "No selected profiles to stop."
     }
   },
   "createProfile": {

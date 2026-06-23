@@ -305,11 +305,26 @@
       "assignToGroup": "Назначить группе",
       "assignProxy": "Назначить прокси",
       "assignExtensionGroup": "Назначить группу расширений",
-      "copyCookies": "Копировать cookies"
+      "copyCookies": "Копировать cookies",
+      "runSelected": "Запустить выбранные",
+      "stopSelected": "Остановить выбранные",
+      "proRequired": "Для массового запуска/остановки требуется план Pro"
     },
     "passwordProtectedBadge": "Защищено паролем",
     "launchHook": {
       "placeholder": "https://example.com/track-launch"
+    },
+    "bulkRun": {
+      "confirmTitle": "Запустить {{count}} профилей?",
+      "confirmDescription": "Одновременный запуск {{count}} профилей может потребовать много системных ресурсов. Продолжить?",
+      "confirmButton": "Запустить {{count}}",
+      "noneToRun": "Нет выбранных профилей для запуска."
+    },
+    "bulkStop": {
+      "confirmTitle": "Остановить {{count}} профилей?",
+      "confirmDescription": "Остановить {{count}} запущенных профилей?",
+      "confirmButton": "Остановить {{count}}",
+      "noneToStop": "Нет выбранных профилей для остановки."
     }
   },
   "createProfile": {

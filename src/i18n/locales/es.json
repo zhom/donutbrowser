@@ -305,11 +305,26 @@
       "assignToGroup": "Asignar a grupo",
       "assignProxy": "Asignar proxy",
       "assignExtensionGroup": "Asignar grupo de extensiones",
-      "copyCookies": "Copiar cookies"
+      "copyCookies": "Copiar cookies",
+      "runSelected": "Ejecutar seleccionados",
+      "stopSelected": "Detener seleccionados",
+      "proRequired": "Se requiere el plan Pro para ejecución/parada masiva"
     },
     "passwordProtectedBadge": "Protegido por Contraseña",
     "launchHook": {
       "placeholder": "https://example.com/track-launch"
+    },
+    "bulkRun": {
+      "confirmTitle": "¿Ejecutar {{count}} perfiles?",
+      "confirmDescription": "Iniciar {{count}} perfiles a la vez puede consumir muchos recursos del sistema. ¿Continuar?",
+      "confirmButton": "Ejecutar {{count}}",
+      "noneToRun": "No hay perfiles seleccionados para ejecutar."
+    },
+    "bulkStop": {
+      "confirmTitle": "¿Detener {{count}} perfiles?",
+      "confirmDescription": "¿Detener {{count}} perfiles en ejecución?",
+      "confirmButton": "Detener {{count}}",
+      "noneToStop": "No hay perfiles seleccionados para detener."
     }
   },
   "createProfile": {

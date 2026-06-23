@@ -565,6 +565,44 @@ impl McpServer {
         }),
       },
       McpTool {
+        name: "batch_run_profiles".to_string(),
+        description: "Launch multiple browser profiles at once with an optional URL. Requires an active Pro subscription.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_ids": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "UUIDs of the profiles to launch"
+            },
+            "url": {
+              "type": "string",
+              "description": "Optional URL to open in every launched profile"
+            },
+            "headless": {
+              "type": "boolean",
+              "description": "Run the browsers in headless mode"
+            }
+          },
+          "required": ["profile_ids"]
+        }),
+      },
+      McpTool {
+        name: "batch_stop_profiles".to_string(),
+        description: "Stop multiple running browser profiles at once. Requires an active Pro subscription.".to_string(),
+        input_schema: serde_json::json!({
+          "type": "object",
+          "properties": {
+            "profile_ids": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "UUIDs of the profiles to stop"
+            }
+          },
+          "required": ["profile_ids"]
+        }),
+      },
+      McpTool {
         name: "create_profile".to_string(),
         description: "Create a new browser profile".to_string(),
         input_schema: serde_json::json!({
@@ -1676,6 +1714,22 @@ impl McpServer {
         .await?;
         self.handle_kill_profile(arguments).await
       }
+      "batch_run_profiles" => {
+        Self::require_capability(
+          "Browser automation",
+          CLOUD_AUTH.can_use_browser_automation().await,
+        )
+        .await?;
+        self.handle_batch_run_profiles(arguments).await
+      }
+      "batch_stop_profiles" => {
+        Self::require_capability(
+          "Browser automation",
+          CLOUD_AUTH.can_use_browser_automation().await,
+        )
+        .await?;
+        self.handle_batch_stop_profiles(arguments).await
+      }
       "create_profile" => self.handle_create_profile(arguments).await,
       "update_profile" => self.handle_update_profile(arguments).await,
       "delete_profile" => self.handle_delete_profile(arguments).await,
@@ -2058,6 +2112,169 @@ impl McpServer {
       "content": [{
         "type": "text",
         "text": format!("Browser profile '{}' stopped successfully", profile.name)
+      }]
+    }))
+  }
+
+  async fn handle_batch_run_profiles(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    Self::require_capability(
+      "Batch launching profiles",
+      CLOUD_AUTH.can_use_browser_automation().await,
+    )
+    .await?;
+
+    let profile_ids: Vec<String> = arguments
+      .get("profile_ids")
+      .and_then(|v| v.as_array())
+      .map(|a| {
+        a.iter()
+          .filter_map(|v| v.as_str().map(|s| s.to_string()))
+          .collect()
+      })
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_ids array".to_string(),
+      })?;
+
+    let url = arguments.get("url").and_then(|v| v.as_str());
+    let headless = arguments
+      .get("headless")
+      .and_then(|v| v.as_bool())
+      .unwrap_or(false);
+
+    let profiles = ProfileManager::instance()
+      .list_profiles()
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to list profiles: {e}"),
+      })?;
+
+    // Clone the app handle and release the lock before the launch loop so we
+    // never hold the inner mutex across the per-profile awaits.
+    let app_handle = {
+      let inner = self.inner.lock().await;
+      inner
+        .app_handle
+        .as_ref()
+        .ok_or_else(|| McpError {
+          code: -32000,
+          message: "MCP server not properly initialized".to_string(),
+        })?
+        .clone()
+    };
+
+    let mut launched = 0usize;
+    let mut lines: Vec<String> = Vec::with_capacity(profile_ids.len());
+    for profile_id in &profile_ids {
+      let Some(profile) = profiles.iter().find(|p| p.id.to_string() == *profile_id) else {
+        lines.push(format!("{profile_id}: not found"));
+        continue;
+      };
+      if profile.browser != "wayfern" && profile.browser != "camoufox" {
+        lines.push(format!(
+          "{profile_id}: unsupported browser (MCP supports Wayfern/Camoufox)"
+        ));
+        continue;
+      }
+      if let Err(e) = crate::team_lock::acquire_team_lock_if_needed(profile).await {
+        lines.push(format!("{profile_id}: {e}"));
+        continue;
+      }
+      match crate::browser_runner::launch_browser_profile_impl(
+        app_handle.clone(),
+        profile.clone(),
+        url.map(|s| s.to_string()),
+        None,
+        headless,
+        true,
+      )
+      .await
+      {
+        Ok(_) => {
+          launched += 1;
+          lines.push(format!("{}: launched", profile.name));
+        }
+        Err(e) => lines.push(format!("{}: launch failed: {e}", profile.name)),
+      }
+    }
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!("Launched {}/{} profile(s):\n{}", launched, profile_ids.len(), lines.join("\n"))
+      }]
+    }))
+  }
+
+  async fn handle_batch_stop_profiles(
+    &self,
+    arguments: &serde_json::Value,
+  ) -> Result<serde_json::Value, McpError> {
+    Self::require_capability(
+      "Batch stopping profiles",
+      CLOUD_AUTH.can_use_browser_automation().await,
+    )
+    .await?;
+
+    let profile_ids: Vec<String> = arguments
+      .get("profile_ids")
+      .and_then(|v| v.as_array())
+      .map(|a| {
+        a.iter()
+          .filter_map(|v| v.as_str().map(|s| s.to_string()))
+          .collect()
+      })
+      .ok_or_else(|| McpError {
+        code: -32602,
+        message: "Missing profile_ids array".to_string(),
+      })?;
+
+    let profiles = ProfileManager::instance()
+      .list_profiles()
+      .map_err(|e| McpError {
+        code: -32000,
+        message: format!("Failed to list profiles: {e}"),
+      })?;
+
+    let app_handle = {
+      let inner = self.inner.lock().await;
+      inner
+        .app_handle
+        .as_ref()
+        .ok_or_else(|| McpError {
+          code: -32000,
+          message: "MCP server not properly initialized".to_string(),
+        })?
+        .clone()
+    };
+
+    let mut stopped = 0usize;
+    let mut lines: Vec<String> = Vec::with_capacity(profile_ids.len());
+    for profile_id in &profile_ids {
+      let Some(profile) = profiles.iter().find(|p| p.id.to_string() == *profile_id) else {
+        lines.push(format!("{profile_id}: not found"));
+        continue;
+      };
+      match crate::browser_runner::BrowserRunner::instance()
+        .kill_browser_process(app_handle.clone(), profile)
+        .await
+      {
+        Ok(_) => {
+          crate::team_lock::release_team_lock_if_needed(profile).await;
+          stopped += 1;
+          lines.push(format!("{}: stopped", profile.name));
+        }
+        Err(e) => lines.push(format!("{}: stop failed: {e}", profile.name)),
+      }
+    }
+
+    Ok(serde_json::json!({
+      "content": [{
+        "type": "text",
+        "text": format!("Stopped {}/{} profile(s):\n{}", stopped, profile_ids.len(), lines.join("\n"))
       }]
     }))
   }

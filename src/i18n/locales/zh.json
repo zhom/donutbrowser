@@ -305,11 +305,26 @@
       "assignToGroup": "分配到分组",
       "assignProxy": "分配代理",
       "assignExtensionGroup": "分配扩展分组",
-      "copyCookies": "复制 Cookie"
+      "copyCookies": "复制 Cookie",
+      "runSelected": "运行所选",
+      "stopSelected": "停止所选",
+      "proRequired": "批量运行/停止需要 Pro 套餐"
     },
     "passwordProtectedBadge": "密码保护",
     "launchHook": {
       "placeholder": "https://example.com/track-launch"
+    },
+    "bulkRun": {
+      "confirmTitle": "运行 {{count}} 个配置文件？",
+      "confirmDescription": "一次启动 {{count}} 个配置文件可能会占用大量系统资源。是否继续？",
+      "confirmButton": "运行 {{count}} 个",
+      "noneToRun": "没有选中可运行的配置文件。"
+    },
+    "bulkStop": {
+      "confirmTitle": "停止 {{count}} 个配置文件？",
+      "confirmDescription": "停止 {{count}} 个正在运行的配置文件？",
+      "confirmButton": "停止 {{count}} 个",
+      "noneToStop": "没有选中可停止的配置文件。"
     }
   },
   "createProfile": {

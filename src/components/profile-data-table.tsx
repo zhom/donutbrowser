@@ -56,6 +56,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ProBadge } from "@/components/ui/pro-badge";
 import {
   Table,
   TableBody,
@@ -1134,6 +1135,9 @@ interface ProfilesDataTableProps {
   onBulkGroupAssignment?: () => void;
   onBulkProxyAssignment?: () => void;
   onBulkCopyCookies?: () => void;
+  onBulkRun?: () => void;
+  onBulkStop?: () => void;
+  bulkActionsUnlocked?: boolean;
   onBulkExtensionGroupAssignment?: () => void;
   onAssignExtensionGroup?: (profileIds: string[]) => void;
   onOpenProfileSyncDialog?: (profile: BrowserProfile) => void;
@@ -1179,6 +1183,9 @@ export function ProfilesDataTable({
   onBulkGroupAssignment,
   onBulkProxyAssignment,
   onBulkCopyCookies,
+  onBulkRun,
+  onBulkStop,
+  bulkActionsUnlocked = false,
   onBulkExtensionGroupAssignment,
   onAssignExtensionGroup,
   onOpenProfileSyncDialog,
@@ -3223,6 +3230,44 @@ export function ProfilesDataTable({
         })()}
       <DataTableActionBar table={table}>
         <DataTableActionBarSelection table={table} />
+        {onBulkRun && (
+          <span className="relative inline-flex">
+            <DataTableActionBarAction
+              tooltip={
+                bulkActionsUnlocked
+                  ? t("profiles.actionBar.runSelected")
+                  : t("profiles.actionBar.proRequired")
+              }
+              onClick={bulkActionsUnlocked ? onBulkRun : undefined}
+              disabled={!bulkActionsUnlocked}
+              size="icon"
+            >
+              <LuPlay className="fill-current" />
+            </DataTableActionBarAction>
+            {!bulkActionsUnlocked && (
+              <ProBadge className="absolute -top-2 -right-2 pointer-events-none" />
+            )}
+          </span>
+        )}
+        {onBulkStop && (
+          <span className="relative inline-flex">
+            <DataTableActionBarAction
+              tooltip={
+                bulkActionsUnlocked
+                  ? t("profiles.actionBar.stopSelected")
+                  : t("profiles.actionBar.proRequired")
+              }
+              onClick={bulkActionsUnlocked ? onBulkStop : undefined}
+              disabled={!bulkActionsUnlocked}
+              size="icon"
+            >
+              <LuSquare className="fill-current" />
+            </DataTableActionBarAction>
+            {!bulkActionsUnlocked && (
+              <ProBadge className="absolute -top-2 -right-2 pointer-events-none" />
+            )}
+          </span>
+        )}
         {onBulkGroupAssignment && (
           <DataTableActionBarAction
             tooltip={t("profiles.actionBar.assignToGroup")}

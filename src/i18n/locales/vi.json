@@ -305,11 +305,26 @@
       "assignToGroup": "Gán vào nhóm",
       "assignProxy": "Gán Proxy",
       "assignExtensionGroup": "Gán nhóm tiện ích",
-      "copyCookies": "Sao chép Cookie"
+      "copyCookies": "Sao chép Cookie",
+      "runSelected": "Chạy mục đã chọn",
+      "stopSelected": "Dừng mục đã chọn",
+      "proRequired": "Cần gói Pro để chạy/dừng hàng loạt"
     },
     "passwordProtectedBadge": "Được bảo vệ bằng mật khẩu",
     "launchHook": {
       "placeholder": "https://example.com/track-launch"
+    },
+    "bulkRun": {
+      "confirmTitle": "Chạy {{count}} hồ sơ?",
+      "confirmDescription": "Khởi chạy {{count}} hồ sơ cùng lúc có thể tiêu tốn nhiều tài nguyên hệ thống. Tiếp tục?",
+      "confirmButton": "Chạy {{count}}",
+      "noneToRun": "Không có hồ sơ nào được chọn để chạy."
+    },
+    "bulkStop": {
+      "confirmTitle": "Dừng {{count}} hồ sơ?",
+      "confirmDescription": "Dừng {{count}} hồ sơ đang chạy?",
+      "confirmButton": "Dừng {{count}}",
+      "noneToStop": "Không có hồ sơ nào được chọn để dừng."
     }
   },
   "createProfile": {

@@ -305,11 +305,26 @@
       "assignToGroup": "그룹에 할당",
       "assignProxy": "프록시 할당",
       "assignExtensionGroup": "확장 프로그램 그룹 할당",
-      "copyCookies": "쿠키 복사"
+      "copyCookies": "쿠키 복사",
+      "runSelected": "선택 실행",
+      "stopSelected": "선택 중지",
+      "proRequired": "대량 실행/중지하려면 Pro 플랜이 필요합니다"
     },
     "passwordProtectedBadge": "비밀번호 보호됨",
     "launchHook": {
       "placeholder": "https://example.com/track-launch"
+    },
+    "bulkRun": {
+      "confirmTitle": "{{count}}개의 프로필을 실행할까요?",
+      "confirmDescription": "{{count}}개의 프로필을 한 번에 실행하면 시스템 리소스를 많이 사용할 수 있습니다. 계속할까요?",
+      "confirmButton": "{{count}}개 실행",
+      "noneToRun": "실행할 선택된 프로필이 없습니다."
+    },
+    "bulkStop": {
+      "confirmTitle": "{{count}}개의 프로필을 중지할까요?",
+      "confirmDescription": "실행 중인 {{count}}개의 프로필을 중지할까요?",
+      "confirmButton": "{{count}}개 중지",
+      "noneToStop": "중지할 선택된 프로필이 없습니다."
     }
   },
   "createProfile": {

@@ -305,11 +305,26 @@
       "assignToGroup": "グループに割り当て",
       "assignProxy": "プロキシを割り当て",
       "assignExtensionGroup": "拡張機能グループを割り当て",
-      "copyCookies": "Cookieをコピー"
+      "copyCookies": "Cookieをコピー",
+      "runSelected": "選択を実行",
+      "stopSelected": "選択を停止",
+      "proRequired": "一括実行・停止には Pro プランが必要です"
     },
     "passwordProtectedBadge": "パスワード保護",
     "launchHook": {
       "placeholder": "https://example.com/track-launch"
+    },
+    "bulkRun": {
+      "confirmTitle": "{{count}} 個のプロファイルを実行しますか？",
+      "confirmDescription": "{{count}} 個のプロファイルを一度に起動すると、システムリソースを大量に消費する可能性があります。続行しますか？",
+      "confirmButton": "{{count}} 個を実行",
+      "noneToRun": "実行する選択中のプロファイルがありません。"
+    },
+    "bulkStop": {
+      "confirmTitle": "{{count}} 個のプロファイルを停止しますか？",
+      "confirmDescription": "実行中の {{count}} 個のプロファイルを停止しますか？",
+      "confirmButton": "{{count}} 個を停止",
+      "noneToStop": "停止する選択中のプロファイルがありません。"
     }
   },
   "createProfile": {

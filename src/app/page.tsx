@@ -228,6 +228,10 @@ export default function Home() {
   // Cloud auth for cross-OS unlock
   const { user: cloudUser } = useCloudAuth();
   const crossOsUnlocked = getEntitlements(cloudUser).crossOsFingerprints;
+  // Bulk run/stop is a paid (browser automation) feature, matching the
+  // /v1/profiles/batch/run API gate. Free/starter users see the bulk Run/Stop
+  // actions disabled with a Pro badge.
+  const automationUnlocked = getEntitlements(cloudUser).browserAutomation;
 
   const [selfHostedSyncConfigured, setSelfHostedSyncConfigured] =
     useState(false);
@@ -1128,6 +1132,75 @@ export default function Home() {
     setCookieCopyDialogOpen(true);
   }, [selectedProfiles, profiles, t]);
 
+  const [pendingBulkAction, setPendingBulkAction] = useState<{
+    action: "run" | "stop";
+    profiles: BrowserProfile[];
+  } | null>(null);
+  const [isBulkActing, setIsBulkActing] = useState(false);
+
+  const executeBulkRun = useCallback(
+    async (targets: BrowserProfile[]) => {
+      setIsBulkActing(true);
+      try {
+        await Promise.allSettled(targets.map((p) => launchProfile(p)));
+        setSelectedProfiles([]);
+      } finally {
+        setIsBulkActing(false);
+        setPendingBulkAction(null);
+      }
+    },
+    [launchProfile],
+  );
+
+  const executeBulkStop = useCallback(
+    async (targets: BrowserProfile[]) => {
+      setIsBulkActing(true);
+      try {
+        await Promise.allSettled(targets.map((p) => handleKillProfile(p)));
+        setSelectedProfiles([]);
+      } finally {
+        setIsBulkActing(false);
+        setPendingBulkAction(null);
+      }
+    },
+    [handleKillProfile],
+  );
+
+  // Bulk run/stop only touch eligible profiles (run: not already running;
+  // stop: currently running). An empty result shows a toast instead of a silent
+  // no-op (guard), and 10+ targets require confirmation before launching/stopping.
+  const handleBulkRun = useCallback(() => {
+    if (selectedProfiles.length === 0) return;
+    const targets = profiles.filter(
+      (p) => selectedProfiles.includes(p.id) && !runningProfiles.has(p.id),
+    );
+    if (targets.length === 0) {
+      showErrorToast(t("profiles.bulkRun.noneToRun"));
+      return;
+    }
+    if (targets.length >= 10) {
+      setPendingBulkAction({ action: "run", profiles: targets });
+      return;
+    }
+    void executeBulkRun(targets);
+  }, [selectedProfiles, profiles, runningProfiles, executeBulkRun, t]);
+
+  const handleBulkStop = useCallback(() => {
+    if (selectedProfiles.length === 0) return;
+    const targets = profiles.filter(
+      (p) => selectedProfiles.includes(p.id) && runningProfiles.has(p.id),
+    );
+    if (targets.length === 0) {
+      showErrorToast(t("profiles.bulkStop.noneToStop"));
+      return;
+    }
+    if (targets.length >= 10) {
+      setPendingBulkAction({ action: "stop", profiles: targets });
+      return;
+    }
+    void executeBulkStop(targets);
+  }, [selectedProfiles, profiles, runningProfiles, executeBulkStop, t]);
+
   const handleCopyCookiesToProfile = useCallback((profile: BrowserProfile) => {
     setSelectedProfilesForCookies([profile.id]);
     setCookieCopyDialogOpen(true);
@@ -1569,6 +1642,9 @@ export default function Home() {
                 onBulkGroupAssignment={handleBulkGroupAssignment}
                 onBulkProxyAssignment={handleBulkProxyAssignment}
                 onBulkCopyCookies={handleBulkCopyCookies}
+                onBulkRun={handleBulkRun}
+                onBulkStop={handleBulkStop}
+                bulkActionsUnlocked={automationUnlocked}
                 onBulkExtensionGroupAssignment={
                   handleBulkExtensionGroupAssignment
                 }
@@ -1868,6 +1944,49 @@ export default function Home() {
         profile={currentProfileForCookieManagement}
       />
 
+      <DeleteConfirmationDialog
+        isOpen={pendingBulkAction !== null}
+        onClose={() => {
+          setPendingBulkAction(null);
+        }}
+        onConfirm={() => {
+          if (!pendingBulkAction) return;
+          if (pendingBulkAction.action === "run") {
+            void executeBulkRun(pendingBulkAction.profiles);
+          } else {
+            void executeBulkStop(pendingBulkAction.profiles);
+          }
+        }}
+        title={
+          pendingBulkAction?.action === "stop"
+            ? t("profiles.bulkStop.confirmTitle", {
+                count: pendingBulkAction?.profiles.length ?? 0,
+              })
+            : t("profiles.bulkRun.confirmTitle", {
+                count: pendingBulkAction?.profiles.length ?? 0,
+              })
+        }
+        description={
+          pendingBulkAction?.action === "stop"
+            ? t("profiles.bulkStop.confirmDescription", {
+                count: pendingBulkAction?.profiles.length ?? 0,
+              })
+            : t("profiles.bulkRun.confirmDescription", {
+                count: pendingBulkAction?.profiles.length ?? 0,
+              })
+        }
+        confirmButtonText={
+          pendingBulkAction?.action === "stop"
+            ? t("profiles.bulkStop.confirmButton", {
+                count: pendingBulkAction?.profiles.length ?? 0,
+              })
+            : t("profiles.bulkRun.confirmButton", {
+                count: pendingBulkAction?.profiles.length ?? 0,
+              })
+        }
+        confirmButtonVariant="default"
+        isLoading={isBulkActing}
+      />
       <DeleteConfirmationDialog
         isOpen={showBulkDeleteConfirmation}
         onClose={() => {
