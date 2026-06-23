@@ -44,7 +44,17 @@ if (!cmd) {
   process.exit(2);
 }
 
-const child = spawn(cmd, args, { stdio: "inherit", shell: false });
+// On Windows, npm-installed bins (e.g. `tauri`) are `.cmd` shims that cannot be
+// launched with `shell: false` — Node refuses to exec a batch file directly and
+// the spawn fails with ENOENT/EINVAL. Run through the shell on Windows (cmd.exe
+// resolves `tauri.cmd`); macOS/Linux keep `shell: false`, where the bin is a
+// directly-executable script. Under the Windows shell, quote args containing
+// whitespace so paths with spaces aren't split into multiple arguments.
+const isWindows = process.platform === "win32";
+const spawnArgs = isWindows
+  ? args.map((a) => (/\s/.test(a) ? `"${a}"` : a))
+  : args;
+const child = spawn(cmd, spawnArgs, { stdio: "inherit", shell: isWindows });
 child.on("error", (err) => {
   console.error(`Failed to spawn ${cmd}:`, err.message);
   process.exit(1);
