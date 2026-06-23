@@ -352,7 +352,7 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
                   aria-label={t(labelKey)}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "relative grid place-items-center size-7 rounded-md transition-colors duration-100 shrink-0",
+                    "relative grid place-items-center size-7 rounded-md cursor-pointer transition-colors duration-100 shrink-0",
                     active
                       ? "text-foreground bg-accent"
                       : "text-muted-foreground hover:text-card-foreground hover:bg-accent/50",
@@ -385,7 +385,7 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
             aria-label={t("rail.more.label")}
             aria-expanded={moreOpen}
             className={cn(
-              "grid place-items-center size-7 rounded-md transition-colors duration-100 shrink-0",
+              "grid place-items-center size-7 rounded-md cursor-pointer transition-colors duration-100 shrink-0",
               moreOpen
                 ? "text-foreground bg-accent"
                 : "text-muted-foreground hover:text-card-foreground hover:bg-accent/50",
@@ -407,7 +407,7 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
             aria-label={t("rail.settings")}
             aria-current={currentPage === "settings" ? "page" : undefined}
             className={cn(
-              "relative grid place-items-center size-7 rounded-md transition-colors duration-100 shrink-0",
+              "relative grid place-items-center size-7 rounded-md cursor-pointer transition-colors duration-100 shrink-0",
               currentPage === "settings"
                 ? "text-foreground bg-accent"
                 : "text-muted-foreground hover:text-card-foreground hover:bg-accent/50",
@@ -444,7 +444,7 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
                   setMoreOpen(false);
                   onNavigate(page);
                 }}
-                className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md hover:bg-accent transition-colors duration-100 text-left"
+                className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md cursor-pointer hover:bg-accent transition-colors duration-100 text-left"
               >
                 <span className="grid place-items-center size-5 rounded bg-muted text-muted-foreground shrink-0">
                   <Icon className="size-3" />

@@ -155,6 +155,23 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Interactive elements show a pointer cursor app-wide, so cursor behavior is
+     consistent everywhere without per-element classes — and there's no lingering
+     "fix the cursor" surface for drive-by PRs. Disabled controls rely on
+     pointer-events:none / their own disabled cursor, and an explicit `cursor-*`
+     utility still wins over this base rule (utilities out-rank the base layer),
+     e.g. the invisible click-to-close backdrop and the auto-scroll buttons. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="menuitem"],
+  [role="menuitemcheckbox"],
+  [role="menuitemradio"],
+  [role="option"],
+  [role="radio"],
+  [role="tab"],
+  [role="switch"] {
+    cursor: pointer;
+  }
 }
 
 /* Scroll-fade utility: a vertical mask that thins the alpha of the top and
