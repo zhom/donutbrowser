@@ -2,7 +2,7 @@
  * Get flag icon CSS class for a country code (ISO 3166-1 alpha-2)
  */
 export function getFlagIconClass(countryCode: string): string {
-  if (!countryCode || countryCode.length !== 2) {
+  if (countryCode?.length !== 2) {
     return "";
   }
   return `fi fi-${countryCode.toLowerCase()}`;

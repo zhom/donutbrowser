@@ -73,7 +73,7 @@ chrono = { version = "0.4", features = ["serde"] }
 chrono-tz = "0.10"
 axum = { version = "0.8.9", features = ["ws"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors"] }
+tower-http = { version = "0.7", features = ["cors"] }
 rand = "0.10.1"
 utoipa = { version = "5", features = ["axum_extras", "chrono"] }
 utoipa-axum = "0.2"
@@ -145,7 +145,7 @@ hyper = { version = "1.10", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
 http-body-util = "0.1"
 tower = "0.5"
-tower-http = { version = "0.6", features = ["fs", "trace"] }
+tower-http = { version = "0.7", features = ["fs", "trace"] }
 futures-util = "0.3"
 serial_test = "3"
 
