@@ -172,7 +172,7 @@ export function ProfileSyncDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-md flex flex-col overflow-hidden">
+      <DialogContent className="flex max-w-md flex-col overflow-hidden">
         <DialogHeader className="shrink-0">
           <DialogTitle>{t("sync.mode.title")}</DialogTitle>
           <DialogDescription>
@@ -183,15 +183,15 @@ export function ProfileSyncDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {isCheckingConfig ? (
             <div className="flex justify-center py-8">
-              <div className="size-6 rounded-full border-2 border-current animate-spin border-t-transparent" />
+              <div className="size-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
             </div>
           ) : (
             <div className="grid gap-4 py-4">
               {!hasConfig && (
-                <div className="p-3 text-sm rounded-md bg-muted">
+                <div className="rounded-md bg-muted p-3 text-sm">
                   <p className="mb-2">{t("sync.mode.notConfigured")}</p>
                   <Button
                     variant="outline"
@@ -267,14 +267,14 @@ export function ProfileSyncDialog({
                   {syncMode === "Encrypted" &&
                     !hasE2ePassword &&
                     userChangedMode && (
-                      <div className="p-3 text-sm rounded-md bg-destructive/10 text-destructive">
+                      <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
                         {t("sync.mode.noPasswordWarning")}
                       </div>
                     )}
 
                   <div className="space-y-2">
                     <Label>{t("sync.mode.lastSynced")}</Label>
-                    <div className="flex gap-2 items-center">
+                    <div className="flex items-center gap-2">
                       <Badge variant="outline">
                         {formatLastSync(profile.last_sync)}
                       </Badge>

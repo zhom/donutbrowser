@@ -125,17 +125,17 @@ export function ProxyExportDialog({ isOpen, onClose }: ProxyExportDialogProps) {
 
           <div className="space-y-2">
             <Label>{t("proxies.exportDialog.preview")}</Label>
-            <ScrollArea className="h-[clamp(120px,30vh,400px)] border rounded-md bg-muted/30">
+            <ScrollArea className="h-[clamp(120px,30vh,400px)] rounded-md border bg-muted/30">
               {isLoading ? (
-                <div className="flex items-center justify-center h-full p-4 text-sm text-muted-foreground">
+                <div className="flex h-full items-center justify-center p-4 text-sm text-muted-foreground">
                   {t("common.buttons.loading")}
                 </div>
               ) : exportContent ? (
-                <pre className="p-3 text-xs font-mono whitespace-pre-wrap break-all">
+                <pre className="p-3 font-mono text-xs break-all whitespace-pre-wrap">
                   {exportContent}
                 </pre>
               ) : (
-                <div className="flex items-center justify-center h-full p-4 text-sm text-muted-foreground">
+                <div className="flex h-full items-center justify-center p-4 text-sm text-muted-foreground">
                   {t("proxies.exportDialog.noProxies")}
                 </div>
               )}
@@ -143,7 +143,7 @@ export function ProxyExportDialog({ isOpen, onClose }: ProxyExportDialogProps) {
           </div>
         </div>
 
-        <DialogFooter className="flex-col sm:flex-row gap-2">
+        <DialogFooter className="flex-col gap-2 sm:flex-row">
           <RippleButton variant="outline" onClick={handleClose}>
             {t("common.buttons.close")}
           </RippleButton>
@@ -151,7 +151,7 @@ export function ProxyExportDialog({ isOpen, onClose }: ProxyExportDialogProps) {
             variant="outline"
             onClick={() => void handleCopyToClipboard()}
             disabled={!exportContent || isLoading}
-            className="flex gap-2 items-center"
+            className="flex items-center gap-2"
           >
             {copied ? (
               <LuCheck className="size-4" />
@@ -165,7 +165,7 @@ export function ProxyExportDialog({ isOpen, onClose }: ProxyExportDialogProps) {
           <RippleButton
             onClick={handleDownload}
             disabled={!exportContent || isLoading}
-            className="flex gap-2 items-center"
+            className="flex items-center gap-2"
           >
             <LuDownload className="size-4" />
             {t("common.buttons.download")}

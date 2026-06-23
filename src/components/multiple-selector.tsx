@@ -152,7 +152,7 @@ const CommandEmpty = forwardRef<
   return (
     <div
       ref={forwardedRef}
-      className={cn("py-6 text-sm text-center", className)}
+      className={cn("py-6 text-center text-sm", className)}
       cmdk-empty=""
       role="presentation"
       {...props}
@@ -428,8 +428,8 @@ const MultipleSelector = React.forwardRef<
                 <Badge
                   key={option.value}
                   className={cn(
-                    "data-[disabled]:bg-muted-foreground data-[disabled]:text-muted data-[disabled]:hover:bg-muted-foreground",
-                    "data-[fixed]:bg-muted-foreground data-[fixed]:text-muted data-[fixed]:hover:bg-muted-foreground",
+                    "data-disabled:bg-muted-foreground data-disabled:text-muted data-disabled:hover:bg-muted-foreground",
+                    "data-fixed:bg-muted-foreground data-fixed:text-muted data-fixed:hover:bg-muted-foreground",
                     badgeClassName,
                   )}
                   data-fixed={option.fixed}
@@ -439,7 +439,7 @@ const MultipleSelector = React.forwardRef<
                   <button
                     type="button"
                     className={cn(
-                      "cursor-pointer ml-1 rounded-full outline-none ring-offset-background focus:ring-2 focus:ring-ring focus:ring-offset-2",
+                      "ml-1 cursor-pointer rounded-full ring-offset-background outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
                       (disabled ?? option.fixed) && "hidden",
                     )}
                     onKeyDown={(e) => {
@@ -525,7 +525,7 @@ const MultipleSelector = React.forwardRef<
                 "flex-1 bg-transparent outline-none placeholder:text-muted-foreground",
                 {
                   "w-full": hidePlaceholderWhenSelected,
-                  "px-3 mt-1": selected.length === 0,
+                  "mt-1 px-3": selected.length === 0,
                   "ml-1": selected.length !== 0,
                 },
                 inputProps?.className,
@@ -537,7 +537,7 @@ const MultipleSelector = React.forwardRef<
           {open && hasAvailableOptions && (
             <CommandList
               className={cn(
-                "absolute z-10 w-full rounded-md border shadow-md outline-none bg-popover text-popover-foreground animate-in",
+                "absolute z-10 w-full animate-in rounded-md border bg-popover text-popover-foreground shadow-md outline-none",
                 dropUp ? "bottom-full mb-1" : "top-full mt-1",
               )}
             >
@@ -554,7 +554,7 @@ const MultipleSelector = React.forwardRef<
                     <CommandGroup
                       key={key}
                       heading={key}
-                      className="overflow-auto max-h-48"
+                      className="max-h-48 overflow-auto"
                     >
                       {dropdowns.map((option) => {
                         return (

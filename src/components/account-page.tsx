@@ -198,11 +198,11 @@ export function AccountPage({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose} subPage={subPage}>
-      <DialogContent className="max-w-2xl max-h-[calc(100vh-4rem)] flex flex-col">
+      <DialogContent className="flex max-h-[calc(100vh-4rem)] max-w-2xl flex-col">
         <div
           className={cn(
-            "flex flex-col gap-4 p-4 overflow-y-auto flex-1 min-h-0",
-            subPage && "w-full max-w-2xl mx-auto",
+            "flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4",
+            subPage && "mx-auto w-full max-w-2xl",
           )}
         >
           <AnimatedTabs defaultValue="account">
@@ -226,16 +226,16 @@ export function AccountPage({
             <AnimatedTabsContent value="account" className="mt-4">
               <div className="flex flex-col gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="grid place-items-center size-12 rounded-full bg-accent text-foreground shrink-0">
+                  <div className="grid size-12 shrink-0 place-items-center rounded-full bg-accent text-foreground">
                     <LuUser className="size-6" />
                   </div>
                   <div className="min-w-0 flex-1">
                     {isLoggedIn && user ? (
                       <>
-                        <h2 className="text-base font-semibold truncate">
+                        <h2 className="truncate text-base font-semibold">
                           {user.email}
                         </h2>
-                        <p className="text-xs text-muted-foreground mt-0.5">
+                        <p className="mt-0.5 text-xs text-muted-foreground">
                           {t("account.plan", {
                             plan: user.plan,
                             period: user.planPeriod ?? "—",
@@ -247,7 +247,7 @@ export function AccountPage({
                         <h2 className="text-base font-semibold">
                           {t("account.signedOut")}
                         </h2>
-                        <p className="text-xs text-muted-foreground mt-0.5">
+                        <p className="mt-0.5 text-xs text-muted-foreground">
                           {t("account.signedOutDescription")}
                         </p>
                       </>
@@ -257,39 +257,39 @@ export function AccountPage({
 
                 {isLoggedIn && user && (
                   <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="rounded-md bg-muted/40 border border-border px-3 py-2">
-                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
+                      <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
                         {t("account.fields.plan")}
                       </p>
                       <p className="mt-0.5 font-medium uppercase">
                         {user.plan}
                       </p>
                     </div>
-                    <div className="rounded-md bg-muted/40 border border-border px-3 py-2">
-                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
+                      <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
                         {t("account.fields.status")}
                       </p>
                       <p className="mt-0.5">{user.subscriptionStatus ?? "—"}</p>
                     </div>
                     {user.teamRole && (
-                      <div className="rounded-md bg-muted/40 border border-border px-3 py-2">
-                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                      <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
+                        <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
                           {t("account.fields.teamRole")}
                         </p>
                         <p className="mt-0.5">{user.teamRole}</p>
                       </div>
                     )}
                     {user.planPeriod && (
-                      <div className="rounded-md bg-muted/40 border border-border px-3 py-2">
-                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                      <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
+                        <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
                           {t("account.fields.period")}
                         </p>
                         <p className="mt-0.5">{user.planPeriod}</p>
                       </div>
                     )}
                     {typeof user.deviceOrdinal === "number" && (
-                      <div className="rounded-md bg-muted/40 border border-border px-3 py-2">
-                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                      <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
+                        <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
                           {t("account.fields.device")}
                         </p>
                         <p className="mt-0.5">
@@ -321,7 +321,7 @@ export function AccountPage({
                     </p>
                   )}
 
-                <div className="flex flex-wrap gap-2 mt-2">
+                <div className="mt-2 flex flex-wrap gap-2">
                   {isLoggedIn ? (
                     <>
                       <Button
@@ -331,7 +331,7 @@ export function AccountPage({
                           void handleRefresh();
                         }}
                         disabled={isRefreshing}
-                        className="h-8 text-xs gap-1.5"
+                        className="h-8 gap-1.5 text-xs"
                       >
                         <LuRefreshCw className="size-3" />
                         {t("account.refresh")}
@@ -344,7 +344,7 @@ export function AccountPage({
                         onClick={() => {
                           void handleLogout();
                         }}
-                        className="h-8 text-xs gap-1.5"
+                        className="h-8 gap-1.5 text-xs"
                       >
                         <LuLogOut className="size-3" />
                         {t("account.logout")}
@@ -354,7 +354,7 @@ export function AccountPage({
                     <Button
                       size="sm"
                       onClick={onOpenSignIn}
-                      className="h-8 text-xs gap-1.5"
+                      className="h-8 gap-1.5 text-xs"
                     >
                       <LuCloud className="size-3" />
                       {t("account.signIn")}
@@ -380,7 +380,7 @@ export function AccountPage({
                     <p className="text-sm font-medium">
                       {t("account.selfHosted.title")}
                     </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
+                    <p className="mt-0.5 text-xs text-muted-foreground">
                       {t("account.selfHosted.description")}
                     </p>
                   </div>
@@ -431,7 +431,7 @@ export function AccountPage({
                             ? t("common.aria.hideToken")
                             : t("common.aria.showToken")
                         }
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+                        className="absolute top-1/2 right-2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
                       >
                         {showToken ? (
                           <LuEyeOff className="size-3.5" />
@@ -449,7 +449,7 @@ export function AccountPage({
                     {connectionStatus === "connected" && (
                       <Badge
                         variant="default"
-                        className="text-success-foreground bg-success"
+                        className="bg-success text-success-foreground"
                       >
                         {t("sync.status.connected")}
                       </Badge>

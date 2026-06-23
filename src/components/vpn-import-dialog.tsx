@@ -219,8 +219,8 @@ export function VpnImportDialog({ isOpen, onClose }: VpnImportDialogProps) {
                 }
               }}
             >
-              <LuUpload className="size-10 text-muted-foreground mb-4" />
-              <p className="text-sm text-muted-foreground text-center">
+              <LuUpload className="mb-4 size-10 text-muted-foreground" />
+              <p className="text-center text-sm text-muted-foreground">
                 {t("vpns.import.dropzonePrompt")}
               </p>
               <input
@@ -235,7 +235,7 @@ export function VpnImportDialog({ isOpen, onClose }: VpnImportDialogProps) {
                 }}
               />
             </div>
-            <p className="text-xs text-muted-foreground text-center">
+            <p className="text-center text-xs text-muted-foreground">
               {t("vpns.import.pasteHint", { modKey })}
             </p>
           </div>
@@ -243,7 +243,7 @@ export function VpnImportDialog({ isOpen, onClose }: VpnImportDialogProps) {
 
         {step === "vpn-preview" && vpnPreview && (
           <div className="space-y-4">
-            <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg">
+            <div className="flex items-center gap-3 rounded-lg bg-muted/30 p-4">
               <LuShield className="size-8 text-primary" />
               <div>
                 <div className="font-medium">
@@ -275,8 +275,8 @@ export function VpnImportDialog({ isOpen, onClose }: VpnImportDialogProps) {
 
             <div className="space-y-2">
               <Label>{t("vpns.import.configPreview")}</Label>
-              <ScrollArea className="h-[min(150px,25vh)] border rounded-md">
-                <pre className="p-2 text-xs font-mono whitespace-pre-wrap break-all">
+              <ScrollArea className="h-[min(150px,25vh)] rounded-md border">
+                <pre className="p-2 font-mono text-xs break-all whitespace-pre-wrap">
                   {vpnPreview.content.slice(0, 1000)}
                   {vpnPreview.content.length > 1000 && "..."}
                 </pre>

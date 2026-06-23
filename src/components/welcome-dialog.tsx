@@ -214,7 +214,7 @@ export function WelcomeDialog({
                 <h2 className="text-2xl font-semibold tracking-tight text-balance">
                   {t("welcome.license.title")}
                 </h2>
-                <p className="mx-auto max-w-[55ch] text-sm leading-6 text-pretty text-muted-foreground">
+                <p className="mx-auto max-w-[55ch] text-sm/6 text-pretty text-muted-foreground">
                   {t("welcome.license.body")}
                 </p>
               </div>
@@ -286,7 +286,7 @@ export function WelcomeDialog({
                   <LuMic className="size-5 shrink-0" />
                   {t("welcome.permissions.title")}
                 </h2>
-                <p className="mx-auto max-w-[55ch] text-sm leading-6 text-pretty text-muted-foreground">
+                <p className="mx-auto max-w-[55ch] text-sm/6 text-pretty text-muted-foreground">
                   {t("welcome.permissions.desc")}
                 </p>
               </div>
@@ -337,7 +337,7 @@ export function WelcomeDialog({
                       <LuTriangleAlert className="size-5 shrink-0" />
                       {t("welcome.ready.errorTitle")}
                     </h2>
-                    <p className="max-w-[55ch] text-sm leading-6 text-pretty text-muted-foreground">
+                    <p className="max-w-[55ch] text-sm/6 text-pretty text-muted-foreground">
                       {setup.error?.stage === "downloading"
                         ? t("welcome.ready.errorDownload", {
                             browser: browserName,
@@ -371,7 +371,7 @@ export function WelcomeDialog({
                     <h2 className="text-2xl font-semibold tracking-tight text-balance">
                       {t("welcome.ready.title")}
                     </h2>
-                    <p className="max-w-[55ch] text-sm leading-6 text-pretty text-muted-foreground">
+                    <p className="max-w-[55ch] text-sm/6 text-pretty text-muted-foreground">
                       {setup.phase === "ready"
                         ? t("welcome.ready.descReady")
                         : setup.phase === "extracting"
@@ -396,14 +396,14 @@ export function WelcomeDialog({
                           }}
                         />
                       </div>
-                      <div className="flex items-center justify-between text-sm tabular-nums text-muted-foreground">
+                      <div className="flex items-center justify-between text-sm text-muted-foreground tabular-nums">
                         <span className="inline-flex items-center gap-1.5">
                           <LuLoaderCircle className="size-4 shrink-0 animate-spin" />
                           {t("welcome.ready.downloading")}
                         </span>
                         <span>{setup.downloadPercent}%</span>
                       </div>
-                      <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 text-xs tabular-nums text-muted-foreground">
+                      <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground tabular-nums">
                         <span>
                           {setup.totalBytes != null
                             ? t("welcome.ready.stats", {
@@ -435,7 +435,7 @@ export function WelcomeDialog({
                   {setup.phase === "extracting" && (
                     <div className="flex w-full max-w-xs flex-col gap-2">
                       {setup.extractionOvertime ? (
-                        <div className="flex items-center justify-center gap-1.5 text-sm tabular-nums text-muted-foreground">
+                        <div className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground tabular-nums">
                           <LuLoaderCircle className="size-4 shrink-0 animate-spin" />
                           {t("welcome.ready.almostFinished")}
                         </div>
@@ -455,7 +455,7 @@ export function WelcomeDialog({
                               }}
                             />
                           </div>
-                          <div className="flex items-center justify-between text-sm tabular-nums text-muted-foreground">
+                          <div className="flex items-center justify-between text-sm text-muted-foreground tabular-nums">
                             <span className="inline-flex items-center gap-1.5">
                               <LuLoaderCircle className="size-4 shrink-0 animate-spin" />
                               {t("welcome.ready.extracting")}

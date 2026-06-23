@@ -51,14 +51,14 @@ function TooltipContent({
         sideOffset={sideOffset}
         alignOffset={alignOffset}
         className={cn(
-          "bg-primary text-primary-foreground animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-[50000] w-fit max-w-[min(24rem,calc(100vw-2rem))] origin-(--radix-tooltip-content-transform-origin) rounded-md px-3 py-1.5 text-xs text-balance",
+          "z-50000 w-fit max-w-[min(24rem,calc(100vw-2rem))] origin-(--radix-tooltip-content-transform-origin) animate-in rounded-md bg-primary px-3 py-1.5 text-xs text-balance text-primary-foreground fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
           className,
         )}
         {...props}
       >
         {children}
         <TooltipPrimitive.Arrow
-          className="fill-primary z-[50000]"
+          className="z-50000 fill-primary"
           style={
             arrowOffset !== 0
               ? { transform: `translateX(${-arrowOffset}px)` }

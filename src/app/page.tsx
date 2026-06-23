@@ -1637,7 +1637,7 @@ export default function Home() {
         : t(`pageTitle.${currentPage}`);
 
   return (
-    <div className="flex flex-col h-screen bg-background font-(family-name:--font-geist-sans)">
+    <div className="flex h-dvh flex-col bg-background font-(family-name:--font-geist-sans)">
       <CloseConfirmDialog />
       <CamoufoxDeprecationDialog profiles={profiles} />
       <HomeHeader
@@ -1650,11 +1650,11 @@ export default function Home() {
         onGroupSelect={handleSelectGroup}
         pageTitle={subPageTitle}
       />
-      <div className="flex flex-1 min-h-0">
+      <div className="flex min-h-0 flex-1">
         <RailNav currentPage={currentPage} onNavigate={handleRailNavigate} />
-        <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
           {currentPage === "profiles" && (
-            <div className="px-3 pt-2.5 flex flex-col flex-1 min-h-0">
+            <div className="flex min-h-0 flex-1 flex-col px-3 pt-2.5">
               {isLoading && groupsData.length === 0 ? null : null}
               <ProfilesDataTable
                 profiles={filteredProfiles}

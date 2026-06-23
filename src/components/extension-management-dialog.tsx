@@ -655,7 +655,7 @@ export function ExtensionManagementDialog({
       const hasFirefox = compat.includes("firefox");
       if (!hasChromium && !hasFirefox) return null;
       return (
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex shrink-0 items-center gap-1">
           {hasChromium && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -753,7 +753,7 @@ export function ExtensionManagementDialog({
             onClick={() => {
               column.toggleSorting(column.getIsSorted() === "asc");
             }}
-            className="justify-start p-0 h-auto font-semibold text-left cursor-pointer"
+            className="h-auto cursor-pointer justify-start p-0 text-left font-semibold"
           >
             {t("common.labels.name")}
             {column.getIsSorted() === "asc" ? (
@@ -764,7 +764,7 @@ export function ExtensionManagementDialog({
           </Button>
         ),
         cell: ({ row }) => (
-          <span className="text-sm font-medium truncate min-w-0 block">
+          <span className="block min-w-0 truncate text-sm font-medium">
             {row.original.name}
           </span>
         ),
@@ -786,7 +786,7 @@ export function ExtensionManagementDialog({
           const ext = row.original;
           const syncDot = getSyncStatusDot(ext, extSyncStatus[ext.id], t);
           return (
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex shrink-0 items-center gap-2">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <div
@@ -801,7 +801,7 @@ export function ExtensionManagementDialog({
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="inline-flex items-center shrink-0">
+                  <span className="inline-flex shrink-0 items-center">
                     <AnimatedSwitch
                       checked={ext.sync_enabled}
                       onCheckedChange={() => void handleToggleExtSync(ext)}
@@ -829,7 +829,7 @@ export function ExtensionManagementDialog({
         cell: ({ row }) => {
           const ext = row.original;
           return (
-            <div className="flex gap-0.5 justify-end shrink-0">
+            <div className="flex shrink-0 justify-end gap-0.5">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -927,7 +927,7 @@ export function ExtensionManagementDialog({
             onClick={() => {
               column.toggleSorting(column.getIsSorted() === "asc");
             }}
-            className="justify-start p-0 h-auto font-semibold text-left cursor-pointer"
+            className="h-auto cursor-pointer justify-start p-0 text-left font-semibold"
           >
             {t("common.labels.name")}
             {column.getIsSorted() === "asc" ? (
@@ -938,7 +938,7 @@ export function ExtensionManagementDialog({
           </Button>
         ),
         cell: ({ row }) => (
-          <span className="font-medium text-sm truncate min-w-0 block">
+          <span className="block min-w-0 truncate text-sm font-medium">
             {row.original.name}
           </span>
         ),
@@ -956,7 +956,7 @@ export function ExtensionManagementDialog({
           const visibleExts = groupExts.slice(0, MAX_VISIBLE_ICONS);
           const overflowCount = groupExts.length - MAX_VISIBLE_ICONS;
           return (
-            <div className="flex items-center gap-1 min-w-0">
+            <div className="flex min-w-0 items-center gap-1">
               {visibleExts.map((ext) => (
                 <Tooltip key={ext.id}>
                   <TooltipTrigger asChild>
@@ -972,7 +972,7 @@ export function ExtensionManagementDialog({
                   <TooltipTrigger asChild>
                     <Badge
                       variant="secondary"
-                      className="text-xs h-5 px-1.5 shrink-0"
+                      className="h-5 shrink-0 px-1.5 text-xs"
                     >
                       +{overflowCount}
                     </Badge>
@@ -989,7 +989,7 @@ export function ExtensionManagementDialog({
                 </Tooltip>
               )}
               {groupExts.length === 0 && (
-                <span className="text-xs text-muted-foreground truncate min-w-0">
+                <span className="min-w-0 truncate text-xs text-muted-foreground">
                   {t("extensions.noExtensionsInGroup")}
                 </span>
               )}
@@ -1010,7 +1010,7 @@ export function ExtensionManagementDialog({
             t,
           );
           return (
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex shrink-0 items-center gap-2">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <div
@@ -1025,7 +1025,7 @@ export function ExtensionManagementDialog({
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="inline-flex items-center shrink-0">
+                  <span className="inline-flex shrink-0 items-center">
                     <AnimatedSwitch
                       checked={group.sync_enabled}
                       onCheckedChange={() => void handleToggleGroupSync(group)}
@@ -1053,7 +1053,7 @@ export function ExtensionManagementDialog({
         cell: ({ row }) => {
           const group = row.original;
           return (
-            <div className="flex gap-0.5 justify-end shrink-0">
+            <div className="flex shrink-0 justify-end gap-0.5">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -1116,7 +1116,7 @@ export function ExtensionManagementDialog({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose} subPage={subPage}>
-        <DialogContent className="max-w-[min(80rem,calc(100%-4rem))] max-h-[90vh] flex flex-col">
+        <DialogContent className="flex max-h-[90vh] max-w-[min(80rem,calc(100%-4rem))] flex-col">
           {!subPage && (
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -1130,15 +1130,15 @@ export function ExtensionManagementDialog({
             </DialogHeader>
           )}
 
-          <div className="@container relative w-full flex-1 min-h-0 flex flex-col">
+          <div className="@container relative flex min-h-0 w-full flex-1 flex-col">
             {limitedMode && (
               <>
-                <div className="absolute inset-0 backdrop-blur-[6px] bg-background/30 z-[1]" />
-                <div className="absolute inset-y-0 left-0 w-6 bg-linear-to-r from-background to-transparent z-[2]" />
-                <div className="absolute inset-y-0 right-0 w-6 bg-linear-to-l from-background to-transparent z-[2]" />
-                <div className="absolute inset-x-0 top-0 h-6 bg-linear-to-b from-background to-transparent z-[2]" />
-                <div className="absolute inset-x-0 bottom-0 h-6 bg-linear-to-t from-background to-transparent z-[2]" />
-                <div className="absolute inset-0 flex items-center justify-center z-[3]">
+                <div className="absolute inset-0 z-1 bg-background/30 backdrop-blur-[6px]" />
+                <div className="absolute inset-y-0 left-0 z-2 w-6 bg-linear-to-r from-background to-transparent" />
+                <div className="absolute inset-y-0 right-0 z-2 w-6 bg-linear-to-l from-background to-transparent" />
+                <div className="absolute inset-x-0 top-0 z-2 h-6 bg-linear-to-b from-background to-transparent" />
+                <div className="absolute inset-x-0 bottom-0 z-2 h-6 bg-linear-to-t from-background to-transparent" />
+                <div className="absolute inset-0 z-3 flex items-center justify-center">
                   <div className="flex items-center gap-2 rounded-md bg-background/80 px-3 py-1.5">
                     <ProBadge />
                     <span className="text-sm font-medium text-muted-foreground">
@@ -1153,9 +1153,9 @@ export function ExtensionManagementDialog({
               key={initialTab}
               value={activeTab}
               onValueChange={(v) => setActiveTab(v as "extensions" | "groups")}
-              className="flex-1 min-h-0 flex flex-col"
+              className="flex min-h-0 flex-1 flex-col"
             >
-              <div className="flex flex-wrap items-center justify-between gap-2 shrink-0">
+              <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
                 <AnimatedTabsList>
                   <AnimatedTabsTrigger
                     value="extensions"
@@ -1219,15 +1219,15 @@ export function ExtensionManagementDialog({
               </div>
 
               {/* Notice */}
-              <div className="rounded-md bg-muted/50 p-3 text-sm text-muted-foreground mt-4 shrink-0">
+              <div className="mt-4 shrink-0 rounded-md bg-muted/50 p-3 text-sm text-muted-foreground">
                 {t("extensions.managedNotice")}
               </div>
 
               <AnimatedTabsContent
                 value="extensions"
-                className="mt-4 flex-1 min-h-0 data-[state=active]:flex flex-col"
+                className="mt-4 min-h-0 flex-1 flex-col data-[state=active]:flex"
               >
-                <div className="flex flex-col gap-4 flex-1 min-h-0">
+                <div className="flex min-h-0 flex-1 flex-col gap-4">
                   <Input
                     id="ext-file-input"
                     type="file"
@@ -1291,7 +1291,7 @@ export function ExtensionManagementDialog({
                   ) : (
                     <FadingScrollArea
                       className={cn(
-                        "flex-1 min-h-0",
+                        "min-h-0 flex-1",
                         selectedExtensions.length > 0 && "pb-16",
                       )}
                       style={
@@ -1367,12 +1367,12 @@ export function ExtensionManagementDialog({
 
               <AnimatedTabsContent
                 value="groups"
-                className="mt-4 flex-1 min-h-0 data-[state=active]:flex flex-col"
+                className="mt-4 min-h-0 flex-1 flex-col data-[state=active]:flex"
               >
-                <div className="flex flex-col gap-4 flex-1 min-h-0">
+                <div className="flex min-h-0 flex-1 flex-col gap-4">
                   {/* Create group form */}
                   {showCreateGroup && (
-                    <div className="flex gap-2 items-center">
+                    <div className="flex items-center gap-2">
                       <Input
                         value={newGroupName}
                         onChange={(e) => {
@@ -1412,7 +1412,7 @@ export function ExtensionManagementDialog({
                   ) : (
                     <FadingScrollArea
                       className={cn(
-                        "flex-1 min-h-0",
+                        "min-h-0 flex-1",
                         selectedGroups.length > 0 && "pb-16",
                       )}
                       style={
@@ -1509,7 +1509,7 @@ export function ExtensionManagementDialog({
           }
         }}
       >
-        <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
+        <DialogContent className="flex max-h-[90vh] max-w-lg flex-col">
           <DialogHeader>
             <DialogTitle>{t("extensions.editGroup")}</DialogTitle>
             <DialogDescription>
@@ -1517,7 +1517,7 @@ export function ExtensionManagementDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <ScrollArea className="overflow-y-auto flex-1 -mx-6 px-6">
+          <ScrollArea className="-mx-6 flex-1 overflow-y-auto px-6">
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label>{t("common.labels.name")}</Label>
@@ -1562,11 +1562,11 @@ export function ExtensionManagementDialog({
               <div className="space-y-2">
                 <Label>{t("extensions.groupExtensions")}</Label>
                 {editGroupExtensionIds.length === 0 ? (
-                  <div className="text-sm text-muted-foreground py-2">
+                  <div className="py-2 text-sm text-muted-foreground">
                     {t("extensions.noExtensionsInGroup")}
                   </div>
                 ) : (
-                  <div className="space-y-1 max-h-[min(40vh,320px)] overflow-y-auto">
+                  <div className="max-h-[min(40vh,320px)] space-y-1 overflow-y-auto">
                     {editGroupExtensionIds.map((extId) => {
                       const ext = extensions.find((e) => e.id === extId);
                       if (!ext) return null;
@@ -1576,14 +1576,14 @@ export function ExtensionManagementDialog({
                           className="flex items-center gap-2 rounded-md border px-2 py-1.5"
                         >
                           {renderExtensionIcon(ext, "sm")}
-                          <span className="text-sm flex-1 truncate min-w-0">
+                          <span className="min-w-0 flex-1 truncate text-sm">
                             {ext.name}
                           </span>
                           {renderCompatIcons(ext.browser_compatibility)}
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="size-6 p-0 shrink-0"
+                            className="size-6 shrink-0 p-0"
                             onClick={() => {
                               setEditGroupExtensionIds((prev) =>
                                 prev.filter((id) => id !== extId),
@@ -1633,7 +1633,7 @@ export function ExtensionManagementDialog({
           }
         }}
       >
-        <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
+        <DialogContent className="flex max-h-[90vh] max-w-lg flex-col">
           <DialogHeader>
             <DialogTitle>{t("extensions.editExtension")}</DialogTitle>
             <DialogDescription>
@@ -1641,7 +1641,7 @@ export function ExtensionManagementDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <ScrollArea className="overflow-y-auto flex-1 -mx-6 px-6">
+          <ScrollArea className="-mx-6 flex-1 overflow-y-auto px-6">
             {editingExtension && (
               <div className="space-y-4">
                 <div className="space-y-2">
@@ -1659,8 +1659,8 @@ export function ExtensionManagementDialog({
                 </div>
 
                 {/* Metadata from manifest.json */}
-                <div className="rounded-md border p-3 space-y-2">
-                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">
+                <div className="space-y-2 rounded-md border p-3">
+                  <Label className="text-xs tracking-wide text-muted-foreground uppercase">
                     {t("extensions.metadata")}
                   </Label>
                   <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm">
@@ -1711,7 +1711,7 @@ export function ExtensionManagementDialog({
                           href={editingExtension.homepage_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-primary hover:underline flex items-center gap-1 min-w-0"
+                          className="flex min-w-0 items-center gap-1 text-primary hover:underline"
                         >
                           <span className="truncate">
                             {editingExtension.homepage_url}
@@ -1724,7 +1724,7 @@ export function ExtensionManagementDialog({
                       !editingExtension.author &&
                       !editingExtension.description &&
                       !editingExtension.homepage_url && (
-                        <span className="col-span-2 text-muted-foreground text-xs">
+                        <span className="col-span-2 text-xs text-muted-foreground">
                           {t("extensions.noMetadata")}
                         </span>
                       )}
@@ -1734,7 +1734,7 @@ export function ExtensionManagementDialog({
                 {/* Re-upload */}
                 <div className="space-y-2">
                   <Label>{t("extensions.reupload")}</Label>
-                  <div className="flex gap-2 items-center">
+                  <div className="flex items-center gap-2">
                     <RippleButton
                       size="sm"
                       variant="outline"
@@ -1742,7 +1742,7 @@ export function ExtensionManagementDialog({
                         document.getElementById("ext-edit-file-input")?.click()
                       }
                     >
-                      <LuUpload className="size-3 mr-1" />
+                      <LuUpload className="mr-1 size-3" />
                       {t("extensions.selectFile")}
                     </RippleButton>
                     <input
@@ -1753,7 +1753,7 @@ export function ExtensionManagementDialog({
                       onChange={handleEditFileSelect}
                     />
                     {pendingUpdateFile && (
-                      <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                      <span className="max-w-[200px] truncate text-xs text-muted-foreground">
                         {pendingUpdateFile.name}
                       </span>
                     )}

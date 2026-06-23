@@ -227,7 +227,7 @@ export function WayfernConfigForm({
       </div>
 
       {/* Randomize Fingerprint Option */}
-      <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
+      <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
         <div className="flex items-center gap-x-2">
           <Checkbox
             id="randomize-fingerprint"
@@ -241,7 +241,7 @@ export function WayfernConfigForm({
             {t("fingerprint.generateRandomOnLaunch")}
           </Label>
         </div>
-        <p className="text-sm text-muted-foreground ml-6">
+        <p className="ml-6 text-sm text-muted-foreground">
           {t("fingerprint.generateRandomDescription")}
         </p>
       </div>
@@ -290,8 +290,8 @@ export function WayfernConfigForm({
           {/* User Agent and Platform */}
           <div className="space-y-3">
             <Label>{t("fingerprint.userAgentAndPlatform")}</Label>
-            <div className="grid grid-cols-1 @md:grid-cols-2 gap-4">
-              <div className="space-y-2 col-span-full">
+            <div className="grid grid-cols-1 gap-4 @md:grid-cols-2">
+              <div className="col-span-full space-y-2">
                 <Label htmlFor="user-agent">{t("fingerprint.userAgent")}</Label>
                 <Input
                   id="user-agent"
@@ -381,7 +381,7 @@ export function WayfernConfigForm({
           {/* Hardware Properties */}
           <div className="space-y-3">
             <Label>{t("fingerprint.hardwareProperties")}</Label>
-            <div className="grid grid-cols-1 @md:grid-cols-2 @2xl:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 @md:grid-cols-2 @2xl:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="hardware-concurrency">
                   {t("fingerprint.hardwareConcurrency")}
@@ -439,7 +439,7 @@ export function WayfernConfigForm({
           {/* Screen Properties */}
           <div className="space-y-3">
             <Label>{t("fingerprint.screenProperties")}</Label>
-            <div className="grid grid-cols-1 @md:grid-cols-2 @2xl:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 @md:grid-cols-2 @2xl:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="screen-width">
                   {t("fingerprint.screenWidth")}
@@ -561,7 +561,7 @@ export function WayfernConfigForm({
           {/* Window Properties */}
           <div className="space-y-3">
             <Label>{t("fingerprint.windowProperties")}</Label>
-            <div className="grid grid-cols-1 @md:grid-cols-2 @2xl:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 @md:grid-cols-2 @2xl:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="window-outer-width">
                   {t("fingerprint.outerWidth")}
@@ -674,7 +674,7 @@ export function WayfernConfigForm({
           {/* Language & Locale */}
           <div className="space-y-3">
             <Label>{t("fingerprint.languageAndLocale")}</Label>
-            <div className="grid grid-cols-1 @md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 @md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="language">
                   {t("fingerprint.primaryLanguage")}
@@ -756,7 +756,7 @@ export function WayfernConfigForm({
             <p className="text-sm text-muted-foreground">
               {t("fingerprint.timezoneGeolocationDescription")}
             </p>
-            <div className="grid grid-cols-1 @md:grid-cols-2 @2xl:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 @md:grid-cols-2 @2xl:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="timezone">
                   {t("fingerprint.timezoneIana")}
@@ -853,7 +853,7 @@ export function WayfernConfigForm({
           {/* WebGL Properties */}
           <div className="space-y-3">
             <Label>{t("fingerprint.webglProperties")}</Label>
-            <div className="grid grid-cols-1 @md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 @md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="webgl-vendor">
                   {t("fingerprint.webglVendor")}
@@ -951,7 +951,7 @@ export function WayfernConfigForm({
           {/* Audio */}
           <div className="space-y-3">
             <Label>{t("fingerprint.audioProperties")}</Label>
-            <div className="grid grid-cols-1 @md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 @md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="audio-sample-rate">
                   {t("fingerprint.sampleRate")}
@@ -994,7 +994,7 @@ export function WayfernConfigForm({
           {/* Battery */}
           <div className="space-y-3">
             <Label>{t("fingerprint.battery")}</Label>
-            <div className="grid grid-cols-1 @md:grid-cols-2 @2xl:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 @md:grid-cols-2 @2xl:grid-cols-3">
               <div className="space-y-2">
                 <div className="flex items-center gap-x-2">
                   <Checkbox
@@ -1040,7 +1040,7 @@ export function WayfernConfigForm({
           {/* Vendor Info */}
           <div className="space-y-3">
             <Label>{t("fingerprint.vendorInfo")}</Label>
-            <div className="grid grid-cols-1 @md:grid-cols-2 @2xl:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 @md:grid-cols-2 @2xl:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="vendor">{t("fingerprint.vendor")}</Label>
                 <Input
@@ -1094,12 +1094,12 @@ export function WayfernConfigForm({
         </fieldset>
         {limitedMode && (
           <>
-            <div className="absolute inset-0 backdrop-blur-[6px] bg-background/30 z-[1]" />
-            <div className="absolute inset-y-0 left-0 w-6 bg-linear-to-r from-background to-transparent z-[2]" />
-            <div className="absolute inset-y-0 right-0 w-6 bg-linear-to-l from-background to-transparent z-[2]" />
-            <div className="absolute inset-x-0 top-0 h-6 bg-linear-to-b from-background to-transparent z-[2]" />
-            <div className="absolute inset-x-0 bottom-0 h-6 bg-linear-to-t from-background to-transparent z-[2]" />
-            <div className="absolute inset-0 flex items-center justify-center z-[3]">
+            <div className="absolute inset-0 z-1 bg-background/30 backdrop-blur-[6px]" />
+            <div className="absolute inset-y-0 left-0 z-2 w-6 bg-linear-to-r from-background to-transparent" />
+            <div className="absolute inset-y-0 right-0 z-2 w-6 bg-linear-to-l from-background to-transparent" />
+            <div className="absolute inset-x-0 top-0 z-2 h-6 bg-linear-to-b from-background to-transparent" />
+            <div className="absolute inset-x-0 bottom-0 z-2 h-6 bg-linear-to-t from-background to-transparent" />
+            <div className="absolute inset-0 z-3 flex items-center justify-center">
               <div className="flex items-center gap-2 rounded-md bg-background/80 px-3 py-1.5">
                 <ProBadge />
                 <span className="text-sm font-medium text-muted-foreground">
@@ -1123,7 +1123,7 @@ export function WayfernConfigForm({
           onValueChange={readOnly ? undefined : setActiveTab}
           className="w-full"
         >
-          <TabsList className="grid grid-cols-2 w-full">
+          <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="automatic" disabled={readOnly}>
               {t("fingerprint.automatic")}
             </TabsTrigger>
@@ -1180,7 +1180,7 @@ export function WayfernConfigForm({
             </div>
 
             {/* Randomize Fingerprint Option */}
-            <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
+            <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
               <div className="flex items-center gap-x-2">
                 <Checkbox
                   id="randomize-fingerprint-auto"
@@ -1197,7 +1197,7 @@ export function WayfernConfigForm({
                   {t("fingerprint.generateRandomOnLaunch")}
                 </Label>
               </div>
-              <p className="text-sm text-muted-foreground ml-6">
+              <p className="ml-6 text-sm text-muted-foreground">
                 {t("fingerprint.generateRandomDescription")}
               </p>
             </div>
@@ -1228,7 +1228,7 @@ export function WayfernConfigForm({
                 className="space-y-3"
               >
                 <Label>{t("fingerprint.screenResolution")}</Label>
-                <div className="grid grid-cols-1 @md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 @md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="screen-max-width">
                       {t("fingerprint.maxWidth")}
@@ -1317,12 +1317,12 @@ export function WayfernConfigForm({
               </fieldset>
               {limitedMode && (
                 <>
-                  <div className="absolute inset-0 backdrop-blur-[6px] bg-background/30 z-[1]" />
-                  <div className="absolute inset-y-0 left-0 w-6 bg-linear-to-r from-background to-transparent z-[2]" />
-                  <div className="absolute inset-y-0 right-0 w-6 bg-linear-to-l from-background to-transparent z-[2]" />
-                  <div className="absolute inset-x-0 top-0 h-6 bg-linear-to-b from-background to-transparent z-[2]" />
-                  <div className="absolute inset-x-0 bottom-0 h-6 bg-linear-to-t from-background to-transparent z-[2]" />
-                  <div className="absolute inset-0 flex items-center justify-center z-[3]">
+                  <div className="absolute inset-0 z-1 bg-background/30 backdrop-blur-[6px]" />
+                  <div className="absolute inset-y-0 left-0 z-2 w-6 bg-linear-to-r from-background to-transparent" />
+                  <div className="absolute inset-y-0 right-0 z-2 w-6 bg-linear-to-l from-background to-transparent" />
+                  <div className="absolute inset-x-0 top-0 z-2 h-6 bg-linear-to-b from-background to-transparent" />
+                  <div className="absolute inset-x-0 bottom-0 z-2 h-6 bg-linear-to-t from-background to-transparent" />
+                  <div className="absolute inset-0 z-3 flex items-center justify-center">
                     <div className="flex items-center gap-2 rounded-md bg-background/80 px-3 py-1.5">
                       <ProBadge />
                       <span className="text-sm font-medium text-muted-foreground">

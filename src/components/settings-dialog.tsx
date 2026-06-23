@@ -194,7 +194,7 @@ export function SettingsDialog({
         return (
           <Badge
             variant="default"
-            className="text-success-foreground bg-success"
+            className="bg-success text-success-foreground"
           >
             {t("common.status.granted")}
           </Badge>
@@ -633,7 +633,7 @@ export function SettingsDialog({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={handleClose} subPage={subPage}>
-        <DialogContent className="max-w-md max-h-[calc(100vh-5rem)] flex flex-col">
+        <DialogContent className="flex max-h-[calc(100vh-5rem)] max-w-md flex-col">
           {!subPage && (
             <DialogHeader className="shrink-0">
               <DialogTitle>{t("settings.title")}</DialogTitle>
@@ -642,8 +642,8 @@ export function SettingsDialog({
 
           <div
             className={cn(
-              "grid overflow-y-auto flex-1 gap-6 min-h-0",
-              subPage ? "py-2 w-full max-w-2xl mx-auto" : "py-4",
+              "grid min-h-0 flex-1 gap-6 overflow-y-auto",
+              subPage ? "mx-auto w-full max-w-2xl py-2" : "py-4",
             )}
           >
             {/* Appearance Section */}
@@ -755,14 +755,14 @@ export function SettingsDialog({
                       return (
                         <div
                           key={key}
-                          className="flex flex-col gap-1 items-center"
+                          className="flex flex-col items-center gap-1"
                         >
                           <Popover>
                             <PopoverTrigger asChild>
                               <button
                                 type="button"
                                 aria-label={label}
-                                className="size-8 rounded-md border shadow-sm cursor-pointer"
+                                className="size-8 cursor-pointer rounded-md border shadow-sm"
                                 style={{ backgroundColor: colorValue }}
                               />
                             </PopoverTrigger>
@@ -771,7 +771,7 @@ export function SettingsDialog({
                               sideOffset={6}
                             >
                               <ColorPicker
-                                className="p-3 rounded-md border shadow-sm bg-background"
+                                className="rounded-md border bg-background p-3 shadow-sm"
                                 value={colorValue}
                                 onColorChange={([r, g, b, a]) => {
                                   const next = Color({ r, g, b }).alpha(a);
@@ -792,21 +792,21 @@ export function SettingsDialog({
                                 }}
                               >
                                 <ColorPickerSelection className="h-36 rounded" />
-                                <div className="flex gap-3 items-center mt-3">
+                                <div className="mt-3 flex items-center gap-3">
                                   <ColorPickerEyeDropper />
-                                  <div className="grid gap-1 w-full">
+                                  <div className="grid w-full gap-1">
                                     <ColorPickerHue />
                                     <ColorPickerAlpha />
                                   </div>
                                 </div>
-                                <div className="flex gap-2 items-center mt-3">
+                                <div className="mt-3 flex items-center gap-2">
                                   <ColorPickerOutput />
                                   <ColorPickerFormat />
                                 </div>
                               </ColorPicker>
                             </PopoverContent>
                           </Popover>
-                          <div className="text-[10px] text-muted-foreground text-center leading-tight">
+                          <div className="text-center text-[10px] leading-tight text-muted-foreground">
                             {label}
                           </div>
                         </div>
@@ -860,7 +860,7 @@ export function SettingsDialog({
             {/* Default Browser Section - hidden in portable mode */}
             {!systemInfo?.portable && (
               <div className="space-y-4">
-                <div className="flex justify-between items-center">
+                <div className="flex items-center justify-between">
                   <Label className="text-base font-medium">
                     {t("settings.defaultBrowser.title")}
                   </Label>
@@ -909,7 +909,7 @@ export function SettingsDialog({
                     {permissions.map((permission) => (
                       <div
                         key={permission.permission_type}
-                        className="flex justify-between items-center p-3 rounded-lg border"
+                        className="flex items-center justify-between rounded-lg border p-3"
                       >
                         <div className="flex items-center gap-x-3">
                           {getPermissionIcon(permission.permission_type)}
@@ -1015,7 +1015,7 @@ export function SettingsDialog({
                       {t("settings.encryption.passwordSetDescription")}
                     </span>
                   </div>
-                  <div className="flex gap-2 flex-wrap">
+                  <div className="flex flex-wrap gap-2">
                     <Button
                       variant="outline"
                       size="sm"
@@ -1156,7 +1156,7 @@ export function SettingsDialog({
                 {t("settings.commercial.title")}
               </Label>
 
-              <div className="flex items-center justify-between p-3 rounded-md border bg-muted/40">
+              <div className="flex items-center justify-between rounded-md border bg-muted/40 p-3">
                 {cloudUser != null && cloudUser.plan !== "free" ? (
                   // Paid Donut plan supersedes the local commercial trial —
                   // the trial only exists to gate commercial use until the
@@ -1205,7 +1205,7 @@ export function SettingsDialog({
               </Label>
 
               {!isLinux && (
-                <div className="flex items-start gap-x-3 p-3 rounded-lg border">
+                <div className="flex items-start gap-x-3 rounded-lg border p-3">
                   <Checkbox
                     id="disable-auto-updates"
                     checked={settings.disable_auto_updates ?? false}
@@ -1227,7 +1227,7 @@ export function SettingsDialog({
                 </div>
               )}
 
-              <div className="flex items-start gap-x-3 p-3 rounded-lg border">
+              <div className="flex items-start gap-x-3 rounded-lg border p-3">
                 <Checkbox
                   id="keep-decrypted-profiles-in-ram"
                   checked={settings.keep_decrypted_profiles_in_ram ?? false}
@@ -1305,8 +1305,8 @@ export function SettingsDialog({
 
             {/* System Info */}
             {systemInfo && (
-              <div className="pt-2 border-t">
-                <p className="text-xs text-muted-foreground font-mono whitespace-pre-line select-all">
+              <div className="border-t pt-2">
+                <p className="font-mono text-xs whitespace-pre-line text-muted-foreground select-all">
                   {`Donut Browser ${systemInfo.app_version}\n${systemInfo.os} ${systemInfo.arch}${systemInfo.portable ? " (portable)" : ""}`}
                 </p>
               </div>
@@ -1314,7 +1314,7 @@ export function SettingsDialog({
           </div>
 
           {subPage ? (
-            <div className="shrink-0 flex items-center justify-end gap-2 pt-2 border-t border-border w-full max-w-2xl mx-auto">
+            <div className="mx-auto flex w-full max-w-2xl shrink-0 items-center justify-end gap-2 border-t border-border pt-2">
               <LoadingButton
                 size="sm"
                 isLoading={isSaving}

@@ -63,11 +63,11 @@ export function BandwidthMiniChart({
       type="button"
       onClick={onClick}
       className={cn(
-        "relative flex items-center gap-1.5 px-2 rounded cursor-pointer hover:bg-accent/50 transition-colors w-full min-w-0 border-none bg-transparent",
+        "relative flex w-full min-w-0 cursor-pointer items-center gap-1.5 rounded border-none bg-transparent px-2 transition-colors hover:bg-accent/50",
         className,
       )}
     >
-      <div className="flex-1 min-w-0 h-3 pointer-events-none">
+      <div className="pointer-events-none h-3 min-w-0 flex-1">
         <ResponsiveContainer
           width="100%"
           height="100%"
@@ -111,7 +111,7 @@ export function BandwidthMiniChart({
           </AreaChart>
         </ResponsiveContainer>
       </div>
-      <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0 min-w-[60px] text-right">
+      <span className="min-w-[60px] shrink-0 text-right text-xs whitespace-nowrap text-muted-foreground">
         {formatBytes(currentBandwidth)}
       </span>
     </button>

@@ -93,10 +93,10 @@ export function ReleaseTypeSelector({
               role="combobox"
               aria-expanded={popoverOpen}
               aria-controls={listboxId}
-              className="justify-between w-full"
+              className="w-full justify-between"
             >
               {selectedDisplayText}
-              <LuChevronsUpDown className="ml-2 size-4 opacity-50 shrink-0" />
+              <LuChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
             </RippleButton>
           </PopoverTrigger>
           <PopoverContent id={listboxId} className="p-0">
@@ -134,7 +134,7 @@ export function ReleaseTypeSelector({
                               : "opacity-0",
                           )}
                         />
-                        <div className="flex gap-2 items-center">
+                        <div className="flex items-center gap-2">
                           <span className="capitalize">{option.type}</span>
                           {option.type === "nightly" && (
                             <Badge variant="secondary" className="text-xs">
@@ -161,7 +161,7 @@ export function ReleaseTypeSelector({
       ) : (
         // Show a simple display when only one release type is available
         releaseOptions.length === 1 && (
-          <div className="flex gap-2 justify-center items-center p-3 rounded-md border bg-muted/50">
+          <div className="flex items-center justify-center gap-2 rounded-md border bg-muted/50 p-3">
             <span className="text-sm font-medium capitalize">
               {releaseOptions[0].type}
             </span>

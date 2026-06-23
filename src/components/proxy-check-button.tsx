@@ -123,14 +123,14 @@ export function ProxyCheckButton({
           disabled={isCurrentlyChecking || disabled}
         >
           {isCurrentlyChecking ? (
-            <div className="size-3 rounded-full border border-current animate-spin border-t-transparent" />
+            <div className="size-3 animate-spin rounded-full border border-current border-t-transparent" />
           ) : result?.is_valid && result.country_code ? (
             <span className="relative inline-flex items-center justify-center">
               <FlagIcon countryCode={result.country_code} className="h-2.5" />
-              <FiCheck className="absolute bottom-[-6px] right-[-4px]" />
+              <FiCheck className="absolute right-[-4px] bottom-[-6px]" />
             </span>
           ) : result && !result.is_valid ? (
-            <span className="text-destructive text-sm">✕</span>
+            <span className="text-sm text-destructive">✕</span>
           ) : (
             <FiCheck className="size-3" />
           )}

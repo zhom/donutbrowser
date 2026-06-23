@@ -110,8 +110,8 @@ export function ExtensionGroupAssignmentDialog({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>{t("extensions.assignTitle")}:</Label>
-            <div className="p-3 bg-muted rounded-md max-h-[min(8rem,20vh)] overflow-y-auto">
-              <ul className="text-sm space-y-1">
+            <div className="max-h-[min(8rem,20vh)] overflow-y-auto rounded-md bg-muted p-3">
+              <ul className="space-y-1 text-sm">
                 {selectedProfiles.map((profileId) => {
                   const profile = profiles.find(
                     (p: BrowserProfile) => p.id === profileId,
@@ -160,7 +160,7 @@ export function ExtensionGroupAssignmentDialog({
           </div>
 
           {error && (
-            <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md">
+            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
               {error}
             </div>
           )}

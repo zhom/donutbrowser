@@ -127,7 +127,7 @@ const TruncatedDomain = React.memo<{ domain: string }>(({ domain }) => {
   }, [checkTruncation]);
 
   const content = (
-    <span ref={ref} className="truncate block min-w-0 flex-1">
+    <span ref={ref} className="block min-w-0 flex-1 truncate">
       {domain}
     </span>
   );
@@ -209,8 +209,8 @@ export function TrafficDetailsDialog({
       const formattedTime = time.toLocaleTimeString();
 
       return (
-        <div className="bg-popover border rounded-lg px-3 py-2 shadow-lg">
-          <p className="text-xs text-muted-foreground mb-1">{formattedTime}</p>
+        <div className="rounded-lg border bg-popover px-3 py-2 shadow-lg">
+          <p className="mb-1 text-xs text-muted-foreground">{formattedTime}</p>
           {payload.map((entry) => (
             <p key={String(entry.dataKey)} className="text-sm">
               <span className="text-muted-foreground">
@@ -262,7 +262,7 @@ export function TrafficDetailsDialog({
           <DialogTitle>
             {t("traffic.title")}
             {profileName && (
-              <span className="text-muted-foreground font-normal ml-2">
+              <span className="ml-2 font-normal text-muted-foreground">
                 — {profileName}
               </span>
             )}
@@ -273,7 +273,7 @@ export function TrafficDetailsDialog({
           <div className="space-y-6 pr-4">
             {/* Chart with Period Selector */}
             <div>
-              <div className="flex items-center justify-between mb-2">
+              <div className="mb-2 flex items-center justify-between">
                 <h3 className="text-sm font-medium">
                   {t("traffic.bandwidthOverTime")}
                 </h3>
@@ -283,7 +283,7 @@ export function TrafficDetailsDialog({
                     setTimePeriod(v as TimePeriod);
                   }}
                 >
-                  <SelectTrigger className="w-[120px] h-8">
+                  <SelectTrigger className="h-8 w-[120px]">
                     <SelectValue
                       placeholder={t("traffic.timePeriodPlaceholder")}
                     />
@@ -396,7 +396,7 @@ export function TrafficDetailsDialog({
                 </ResponsiveContainer>
               </div>
 
-              <div className="flex items-center justify-center gap-6 mt-2">
+              <div className="mt-2 flex items-center justify-center gap-6">
                 <div className="flex items-center gap-2">
                   <div
                     className="size-3 rounded"
@@ -420,7 +420,7 @@ export function TrafficDetailsDialog({
 
             {/* Period Stats - now uses backend-computed values */}
             <div className="grid grid-cols-3 gap-4">
-              <div className="bg-muted/50 rounded-lg p-3">
+              <div className="rounded-lg bg-muted/50 p-3">
                 <p className="text-xs text-muted-foreground">
                   {t("traffic.sentLabel", {
                     period:
@@ -433,7 +433,7 @@ export function TrafficDetailsDialog({
                   {formatBytes(stats?.period_bytes_sent ?? 0)}
                 </p>
               </div>
-              <div className="bg-muted/50 rounded-lg p-3">
+              <div className="rounded-lg bg-muted/50 p-3">
                 <p className="text-xs text-muted-foreground">
                   {t("traffic.receivedLabel", {
                     period:
@@ -446,7 +446,7 @@ export function TrafficDetailsDialog({
                   {formatBytes(stats?.period_bytes_received ?? 0)}
                 </p>
               </div>
-              <div className="bg-muted/50 rounded-lg p-3">
+              <div className="rounded-lg bg-muted/50 p-3">
                 <p className="text-xs text-muted-foreground">
                   {t("traffic.requestsLabel", {
                     period:
@@ -462,7 +462,7 @@ export function TrafficDetailsDialog({
             </div>
 
             {/* Total Stats (smaller, under period stats) */}
-            <div className="flex items-center gap-6 text-sm text-muted-foreground border-t pt-4">
+            <div className="flex items-center gap-6 border-t pt-4 text-sm text-muted-foreground">
               <div>
                 <span className="font-medium">
                   {t("traffic.allTimeTraffic")}
@@ -488,7 +488,7 @@ export function TrafficDetailsDialog({
             {/* Top Domains by Traffic */}
             {topDomainsByTraffic.length > 0 && (
               <div>
-                <h3 className="text-sm font-medium mb-2">
+                <h3 className="mb-2 text-sm font-medium">
                   {t("traffic.topByTraffic", {
                     period:
                       timePeriod === "all"
@@ -496,8 +496,8 @@ export function TrafficDetailsDialog({
                         : timePeriod,
                   })}
                 </h3>
-                <div className="border rounded-md">
-                  <div className="grid grid-cols-[1fr_80px_80px_80px] gap-2 px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-muted/30">
+                <div className="rounded-md border">
+                  <div className="grid grid-cols-[1fr_80px_80px_80px] gap-2 border-b bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground">
                     <span>{t("traffic.columnDomain")}</span>
                     <span className="text-right">
                       {t("traffic.columnRequests")}
@@ -513,10 +513,10 @@ export function TrafficDetailsDialog({
                     {topDomainsByTraffic.map((domain, index) => (
                       <div
                         key={domain.domain}
-                        className="grid grid-cols-[1fr_80px_80px_80px] gap-2 px-3 py-2 text-sm border-b last:border-b-0 hover:bg-muted/30"
+                        className="grid grid-cols-[1fr_80px_80px_80px] gap-2 border-b px-3 py-2 text-sm last:border-b-0 hover:bg-muted/30"
                       >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-xs text-muted-foreground w-4 shrink-0">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="w-4 shrink-0 text-xs text-muted-foreground">
                             {index + 1}
                           </span>
                           <TruncatedDomain domain={domain.domain} />
@@ -540,7 +540,7 @@ export function TrafficDetailsDialog({
             {/* Top Domains by Requests */}
             {topDomainsByRequests.length > 0 && (
               <div>
-                <h3 className="text-sm font-medium mb-2">
+                <h3 className="mb-2 text-sm font-medium">
                   {t("traffic.topByRequests", {
                     period:
                       timePeriod === "all"
@@ -548,8 +548,8 @@ export function TrafficDetailsDialog({
                         : timePeriod,
                   })}
                 </h3>
-                <div className="border rounded-md">
-                  <div className="grid grid-cols-[1fr_80px_100px] gap-2 px-3 py-2 text-xs font-medium text-muted-foreground border-b bg-muted/30">
+                <div className="rounded-md border">
+                  <div className="grid grid-cols-[1fr_80px_100px] gap-2 border-b bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground">
                     <span>{t("traffic.columnDomain")}</span>
                     <span className="text-right">
                       {t("traffic.columnRequests")}
@@ -562,10 +562,10 @@ export function TrafficDetailsDialog({
                     {topDomainsByRequests.map((domain, index) => (
                       <div
                         key={domain.domain}
-                        className="grid grid-cols-[1fr_80px_100px] gap-2 px-3 py-2 text-sm border-b last:border-b-0 hover:bg-muted/30"
+                        className="grid grid-cols-[1fr_80px_100px] gap-2 border-b px-3 py-2 text-sm last:border-b-0 hover:bg-muted/30"
                       >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-xs text-muted-foreground w-4 shrink-0">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="w-4 shrink-0 text-xs text-muted-foreground">
                             {index + 1}
                           </span>
                           <TruncatedDomain domain={domain.domain} />
@@ -588,15 +588,15 @@ export function TrafficDetailsDialog({
             {/* Unique IPs */}
             {stats?.unique_ips && stats.unique_ips.length > 0 && (
               <div>
-                <h3 className="text-sm font-medium mb-2">
+                <h3 className="mb-2 text-sm font-medium">
                   {t("traffic.uniqueIps", { count: stats.unique_ips.length })}
                 </h3>
-                <FadingScrollArea className="p-3 max-h-[clamp(120px,15vh,240px)]">
+                <FadingScrollArea className="max-h-[clamp(120px,15vh,240px)] p-3">
                   <div className="flex flex-wrap gap-1.5">
                     {stats.unique_ips.map((ip) => (
                       <span
                         key={ip}
-                        className="text-xs bg-muted px-2 py-1 rounded font-mono"
+                        className="rounded bg-muted px-2 py-1 font-mono text-xs"
                       >
                         {ip}
                       </span>
@@ -608,9 +608,9 @@ export function TrafficDetailsDialog({
 
             {/* No data state */}
             {!stats && (
-              <div className="text-center py-8 text-muted-foreground">
+              <div className="py-8 text-center text-muted-foreground">
                 <p>{t("traffic.noData")}</p>
-                <p className="text-sm mt-1">{t("traffic.noDataHint")}</p>
+                <p className="mt-1 text-sm">{t("traffic.noDataHint")}</p>
               </div>
             )}
           </div>

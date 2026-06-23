@@ -409,7 +409,7 @@ export function CookieManagementDialog({
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="import" className="space-y-4 mt-4">
+          <TabsContent value="import" className="mt-4 space-y-4">
             {!fileContent && (
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground">
@@ -418,7 +418,7 @@ export function CookieManagementDialog({
                 <div
                   role="button"
                   tabIndex={0}
-                  className="flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-8 transition-colors cursor-pointer border-muted-foreground/25 hover:border-muted-foreground/50"
+                  className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/25 p-8 transition-colors hover:border-muted-foreground/50"
                   onClick={() =>
                     document.getElementById("cookie-file-input")?.click()
                   }
@@ -429,8 +429,8 @@ export function CookieManagementDialog({
                     }
                   }}
                 >
-                  <LuUpload className="size-10 text-muted-foreground mb-4" />
-                  <p className="text-sm text-muted-foreground text-center">
+                  <LuUpload className="mb-4 size-10 text-muted-foreground" />
+                  <p className="text-center text-sm text-muted-foreground">
                     {t("cookies.management.dropPrompt")}
                     <br />
                     <span className="text-xs">
@@ -454,7 +454,7 @@ export function CookieManagementDialog({
 
             {fileContent && !importResult && (
               <div className="space-y-4">
-                <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-lg">
+                <div className="flex items-center gap-3 rounded-lg bg-muted/30 p-4">
                   <div>
                     <div className="font-medium">{fileName}</div>
                     <div className="text-sm text-muted-foreground">
@@ -481,7 +481,7 @@ export function CookieManagementDialog({
 
             {importResult && (
               <div className="space-y-4">
-                <div className="p-4 rounded-lg bg-success/10">
+                <div className="rounded-lg bg-success/10 p-4">
                   <div className="font-medium text-success">
                     {t("cookies.management.importedSuccess", {
                       imported: importResult.cookies_imported,
@@ -505,7 +505,7 @@ export function CookieManagementDialog({
             )}
           </TabsContent>
 
-          <TabsContent value="export" className="space-y-3 mt-4">
+          <TabsContent value="export" className="mt-4 space-y-3">
             <div className="space-y-2">
               <Label>{t("cookies.export.formatLabel")}</Label>
               <Select
@@ -533,7 +533,7 @@ export function CookieManagementDialog({
                 <Label>
                   {t("cookies.management.cookiesLabel")}{" "}
                   {exportCookieData && (
-                    <span className="text-muted-foreground font-normal">
+                    <span className="font-normal text-muted-foreground">
                       {t("cookies.management.selectionStatus", {
                         selected: selectedExportCount,
                         total: exportCookieData.total_count,
@@ -544,7 +544,7 @@ export function CookieManagementDialog({
                 {exportCookieData && exportCookieData.total_count > 0 && (
                   <button
                     type="button"
-                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    className="text-xs text-muted-foreground transition-colors hover:text-foreground"
                     onClick={toggleSelectAll}
                   >
                     {selectedExportCount === exportCookieData.total_count
@@ -555,16 +555,16 @@ export function CookieManagementDialog({
               </div>
 
               {isLoadingExportCookies ? (
-                <div className="flex items-center justify-center h-24">
-                  <div className="animate-spin size-5 border-2 border-primary border-t-transparent rounded-full" />
+                <div className="flex h-24 items-center justify-center">
+                  <div className="size-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                 </div>
               ) : !exportCookieData || exportCookieData.domains.length === 0 ? (
-                <div className="p-4 text-center text-sm text-muted-foreground border rounded-md">
+                <div className="rounded-md border p-4 text-center text-sm text-muted-foreground">
                   {t("cookies.management.noCookies")}
                 </div>
               ) : (
                 <FadingScrollArea className="h-[clamp(140px,30vh,420px)]">
-                  <div className="p-2 space-y-1">
+                  <div className="space-y-1 p-2">
                     {exportCookieData.domains.map((domain) => (
                       <ExportDomainRow
                         key={domain.domain}
@@ -629,7 +629,7 @@ function ExportDomainRow({
 
   return (
     <div>
-      <div className="flex items-center gap-2 p-1.5 hover:bg-accent/50 rounded">
+      <div className="flex items-center gap-2 rounded p-1.5 hover:bg-accent/50">
         <Checkbox
           checked={isAllSelected || isPartial}
           onCheckedChange={() => {
@@ -639,7 +639,7 @@ function ExportDomainRow({
         />
         <button
           type="button"
-          className="flex items-center gap-1 flex-1 text-left text-sm bg-transparent border-none cursor-pointer"
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 border-none bg-transparent text-left text-sm"
           onClick={() => {
             onToggleExpand(domain.domain);
           }}
@@ -649,21 +649,21 @@ function ExportDomainRow({
           ) : (
             <LuChevronRight className="size-3.5" />
           )}
-          <span className="font-medium truncate">{domain.domain}</span>
-          <span className="text-xs text-muted-foreground shrink-0">
+          <span className="truncate font-medium">{domain.domain}</span>
+          <span className="shrink-0 text-xs text-muted-foreground">
             ({domain.cookie_count})
           </span>
         </button>
       </div>
       {isExpanded && (
-        <div className="ml-7 pl-2 border-l space-y-0.5">
+        <div className="ml-7 space-y-0.5 border-l pl-2">
           {domain.cookies.map((cookie) => {
             const isSelected =
               domainSelection?.cookies.has(cookie.name) ?? false;
             return (
               <div
                 key={`${domain.domain}-${cookie.name}`}
-                className="flex items-center gap-2 p-1 text-sm hover:bg-accent/30 rounded"
+                className="flex items-center gap-2 rounded p-1 text-sm hover:bg-accent/30"
               >
                 <Checkbox
                   checked={isSelected || isAllSelected}

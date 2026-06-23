@@ -315,8 +315,8 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
                 }
               }}
             >
-              <LuUpload className="size-10 text-muted-foreground mb-4" />
-              <p className="text-sm text-muted-foreground text-center">
+              <LuUpload className="mb-4 size-10 text-muted-foreground" />
+              <p className="text-center text-sm text-muted-foreground">
                 {t("proxies.importDialog.dropzonePrompt")}
                 <br />
                 <span className="text-xs">
@@ -335,7 +335,7 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
                 }}
               />
             </div>
-            <p className="text-xs text-muted-foreground text-center">
+            <p className="text-center text-xs text-muted-foreground">
               {t("proxies.importDialog.pasteHint", { modKey })}
             </p>
           </div>
@@ -369,19 +369,19 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
                   count: parsedProxies.length,
                 })}
                 {invalidProxies.length > 0 && (
-                  <span className="text-muted-foreground ml-2">
+                  <span className="ml-2 text-muted-foreground">
                     {t("proxies.importDialog.invalidCount", {
                       count: invalidProxies.length,
                     })}
                   </span>
                 )}
               </Label>
-              <ScrollArea className="h-[clamp(120px,30vh,400px)] border rounded-md">
-                <div className="p-2 space-y-1">
+              <ScrollArea className="h-[clamp(120px,30vh,400px)] rounded-md border">
+                <div className="space-y-1 p-2">
                   {parsedProxies.map((proxy, i) => (
                     <div
                       key={`${proxy.original_line}-${i}`}
-                      className="text-xs font-mono p-2 bg-muted/30 rounded break-all"
+                      className="rounded bg-muted/30 p-2 font-mono text-xs break-all"
                     >
                       <span className="text-primary">
                         {proxy.proxy_type}://
@@ -407,21 +407,21 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
             <p className="text-sm text-muted-foreground">
               {t("proxies.importDialog.ambiguousIntro")}
             </p>
-            <ScrollArea className="h-[clamp(150px,35vh,450px)] border rounded-md">
-              <div className="p-3 space-y-4">
+            <ScrollArea className="h-[clamp(150px,35vh,450px)] rounded-md border">
+              <div className="space-y-4 p-3">
                 {ambiguousProxies.map((proxy, i) => (
                   <div
                     key={`${proxy.line}-${i}`}
-                    className="space-y-2 pb-3 border-b last:border-0"
+                    className="space-y-2 border-b pb-3 last:border-0"
                   >
-                    <code className="text-xs bg-muted px-2 py-1 rounded block break-all">
+                    <code className="block rounded bg-muted px-2 py-1 text-xs break-all">
                       {proxy.line}
                     </code>
                     <div className="flex flex-col gap-2">
                       {proxy.possible_formats.map((format) => (
                         <label
                           key={format}
-                          className="flex items-center gap-2 cursor-pointer"
+                          className="flex cursor-pointer items-center gap-2"
                         >
                           <input
                             type="radio"
@@ -445,7 +445,7 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
 
         {step === "result" && importResult && (
           <div className="space-y-4">
-            <div className="p-4 bg-muted/30 rounded-lg space-y-2">
+            <div className="space-y-2 rounded-lg bg-muted/30 p-4">
               <div className="flex justify-between">
                 <span className="text-sm">
                   {t("proxies.importDialog.imported")}
@@ -479,8 +479,8 @@ export function ProxyImportDialog({ isOpen, onClose }: ProxyImportDialogProps) {
             {importResult.errors.length > 0 && (
               <div className="space-y-2">
                 <Label>{t("proxies.importDialog.errors")}</Label>
-                <ScrollArea className="h-[100px] border rounded-md">
-                  <div className="p-2 space-y-1">
+                <ScrollArea className="h-[100px] rounded-md border">
+                  <div className="space-y-1 p-2">
                     {importResult.errors.map((error, i) => (
                       <div
                         key={`error-${i}`}

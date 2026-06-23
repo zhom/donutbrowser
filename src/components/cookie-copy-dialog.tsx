@@ -332,7 +332,7 @@ export function CookieCopyDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[min(48rem,calc(100%-4rem))] max-h-[80vh] flex flex-col">
+      <DialogContent className="flex max-h-[80vh] max-w-[min(48rem,calc(100%-4rem))] flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <LuCookie className="size-5" />
@@ -349,7 +349,7 @@ export function CookieCopyDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto space-y-4">
+        <div className="flex-1 space-y-4 overflow-y-auto">
           <div className="space-y-2">
             <Label>{t("cookies.copy.sourceProfile")}</Label>
             <Select
@@ -393,7 +393,7 @@ export function CookieCopyDialog({
                 count: targetProfiles.length,
               })}
             </Label>
-            <div className="p-2 bg-muted rounded-md max-h-20 overflow-y-auto">
+            <div className="max-h-20 overflow-y-auto rounded-md bg-muted p-2">
               {targetProfiles.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   {sourceProfileId
@@ -405,7 +405,7 @@ export function CookieCopyDialog({
                   {targetProfiles.map((p) => (
                     <span
                       key={p.id}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-background rounded text-sm"
+                      className="inline-flex items-center gap-1 rounded bg-background px-2 py-0.5 text-sm"
                     >
                       {p.name}
                       {runningProfiles.has(p.id) && (
@@ -437,7 +437,7 @@ export function CookieCopyDialog({
               </div>
 
               <div className="relative">
-                <LuSearch className="absolute left-2 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                <LuSearch className="absolute top-1/2 left-2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder={t("cookies.copy.searchPlaceholder")}
                   value={searchQuery}
@@ -449,11 +449,11 @@ export function CookieCopyDialog({
               </div>
 
               {isLoadingCookies ? (
-                <div className="flex items-center justify-center h-40">
-                  <div className="animate-spin size-6 border-2 border-primary border-t-transparent rounded-full" />
+                <div className="flex h-40 items-center justify-center">
+                  <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                 </div>
               ) : error ? (
-                <div className="p-4 text-center text-destructive bg-destructive/10 rounded-md">
+                <div className="rounded-md bg-destructive/10 p-4 text-center text-destructive">
                   {error}
                 </div>
               ) : filteredDomains.length === 0 ? (
@@ -463,8 +463,8 @@ export function CookieCopyDialog({
                     : t("cookies.copy.noFound")}
                 </div>
               ) : (
-                <ScrollArea className="h-[clamp(150px,35vh,450px)] border rounded-md">
-                  <div className="p-2 space-y-1">
+                <ScrollArea className="h-[clamp(150px,35vh,450px)] rounded-md border">
+                  <div className="space-y-1 p-2">
                     {filteredDomains.map((domain) => (
                       <DomainRow
                         key={domain.domain}
@@ -549,7 +549,7 @@ function DomainRow({
 
   return (
     <div>
-      <div className="flex items-center gap-2 p-2 hover:bg-accent/50 rounded">
+      <div className="flex items-center gap-2 rounded p-2 hover:bg-accent/50">
         <Checkbox
           checked={isAllSelected || isPartial}
           onCheckedChange={() => {
@@ -559,7 +559,7 @@ function DomainRow({
         />
         <button
           type="button"
-          className="flex items-center gap-1 flex-1 min-w-0 text-left bg-transparent border-none cursor-pointer"
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 border-none bg-transparent text-left"
           onClick={() => {
             onToggleExpand(domain.domain);
           }}
@@ -569,21 +569,21 @@ function DomainRow({
           ) : (
             <LuChevronRight className="size-4" />
           )}
-          <span className="font-medium truncate">{domain.domain}</span>
-          <span className="text-xs text-muted-foreground shrink-0">
+          <span className="truncate font-medium">{domain.domain}</span>
+          <span className="shrink-0 text-xs text-muted-foreground">
             ({domain.cookie_count})
           </span>
         </button>
       </div>
       {isExpanded && (
-        <div className="ml-8 pl-2 border-l space-y-1">
+        <div className="ml-8 space-y-1 border-l pl-2">
           {domain.cookies.map((cookie) => {
             const isSelected =
               domainSelection?.cookies.has(cookie.name) ?? false;
             return (
               <div
                 key={`${domain.domain}-${cookie.name}`}
-                className="flex items-center gap-2 p-1 text-sm hover:bg-accent/30 rounded"
+                className="flex items-center gap-2 rounded p-1 text-sm hover:bg-accent/30"
               >
                 <Checkbox
                   checked={isSelected || isAllSelected}

@@ -541,7 +541,7 @@ export function ProxyManagementDialog({
             onClick={() => {
               column.toggleSorting(column.getIsSorted() === "asc");
             }}
-            className="justify-start p-0 h-auto font-semibold text-left cursor-pointer"
+            className="h-auto cursor-pointer justify-start p-0 text-left font-semibold"
           >
             {t("common.labels.name")}
             {column.getIsSorted() === "asc" ? (
@@ -552,7 +552,7 @@ export function ProxyManagementDialog({
           </Button>
         ),
         cell: ({ row }) => (
-          <span className="font-medium block truncate">
+          <span className="block truncate font-medium">
             {row.original.name}
           </span>
         ),
@@ -563,7 +563,7 @@ export function ProxyManagementDialog({
         enableSorting: false,
         header: () => t("proxies.management.protocolCol"),
         cell: ({ row }) => (
-          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          <span className="font-mono text-[10px] tracking-wider text-muted-foreground uppercase">
             {row.original.proxy_settings.proxy_type}
           </span>
         ),
@@ -573,7 +573,7 @@ export function ProxyManagementDialog({
         enableSorting: false,
         header: () => t("proxies.management.hostPort"),
         cell: ({ row }) => (
-          <span className="font-mono text-xs text-muted-foreground block truncate">
+          <span className="block truncate font-mono text-xs text-muted-foreground">
             {row.original.proxy_settings.host}:
             {row.original.proxy_settings.port}
           </span>
@@ -774,7 +774,7 @@ export function ProxyManagementDialog({
             onClick={() => {
               column.toggleSorting(column.getIsSorted() === "asc");
             }}
-            className="justify-start p-0 h-auto font-semibold text-left cursor-pointer"
+            className="h-auto cursor-pointer justify-start p-0 text-left font-semibold"
           >
             {t("common.labels.name")}
             {column.getIsSorted() === "asc" ? (
@@ -793,7 +793,7 @@ export function ProxyManagementDialog({
             vpnSyncErrors[vpn.id],
           );
           return (
-            <div className="flex items-center gap-2 font-medium min-w-0">
+            <div className="flex min-w-0 items-center gap-2 font-medium">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <div
@@ -1090,7 +1090,7 @@ export function ProxyManagementDialog({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose} subPage={subPage}>
-        <DialogContent className="max-w-[min(80rem,calc(100%-4rem))] max-h-[85vh] flex flex-col">
+        <DialogContent className="flex max-h-[85vh] max-w-[min(80rem,calc(100%-4rem))] flex-col">
           {!subPage && (
             <DialogHeader>
               <DialogTitle>{t("proxies.management.title")}</DialogTitle>
@@ -1100,14 +1100,14 @@ export function ProxyManagementDialog({
             </DialogHeader>
           )}
 
-          <div className="@container w-full flex-1 min-h-0 flex flex-col">
+          <div className="@container flex min-h-0 w-full flex-1 flex-col">
             <AnimatedTabs
               key={initialTab}
               defaultValue={initialTab}
               onValueChange={(v) => setActiveTab(v as "proxies" | "vpns")}
-              className="flex-1 min-h-0 flex flex-col"
+              className="flex min-h-0 flex-1 flex-col"
             >
-              <div className="flex flex-wrap items-center justify-between gap-2 shrink-0">
+              <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
                 <AnimatedTabsList>
                   <AnimatedTabsTrigger value="proxies">
                     <span>{t("proxies.management.tabProxies")}</span>
@@ -1133,7 +1133,7 @@ export function ProxyManagementDialog({
                             onClick={() => {
                               setShowImportDialog(true);
                             }}
-                            className="flex gap-2 items-center"
+                            className="flex items-center gap-2"
                             aria-label={t("common.buttons.import")}
                           >
                             <LuUpload className="size-4" />
@@ -1154,7 +1154,7 @@ export function ProxyManagementDialog({
                             onClick={() => {
                               setShowExportDialog(true);
                             }}
-                            className="flex gap-2 items-center"
+                            className="flex items-center gap-2"
                             aria-label={t("common.buttons.export")}
                             disabled={storedProxies.length === 0}
                           >
@@ -1173,7 +1173,7 @@ export function ProxyManagementDialog({
                           <RippleButton
                             size="sm"
                             onClick={handleCreateProxy}
-                            className="flex gap-2 items-center"
+                            className="flex items-center gap-2"
                             aria-label={t("proxies.management.newProxy")}
                           >
                             <GoPlus className="size-4" />
@@ -1198,7 +1198,7 @@ export function ProxyManagementDialog({
                             onClick={() => {
                               setShowVpnImportDialog(true);
                             }}
-                            className="flex gap-2 items-center"
+                            className="flex items-center gap-2"
                             aria-label={t("common.buttons.import")}
                           >
                             <LuUpload className="size-4" />
@@ -1216,7 +1216,7 @@ export function ProxyManagementDialog({
                           <RippleButton
                             size="sm"
                             onClick={handleCreateVpn}
-                            className="flex gap-2 items-center"
+                            className="flex items-center gap-2"
                             aria-label={t("proxies.management.newVpn")}
                           >
                             <GoPlus className="size-4" />
@@ -1236,9 +1236,9 @@ export function ProxyManagementDialog({
 
               <AnimatedTabsContent
                 value="proxies"
-                className="mt-4 flex-1 min-h-0 data-[state=active]:flex flex-col"
+                className="mt-4 min-h-0 flex-1 flex-col data-[state=active]:flex"
               >
-                <div className="flex flex-col gap-4 flex-1 min-h-0">
+                <div className="flex min-h-0 flex-1 flex-col gap-4">
                   {isLoading ? (
                     <div className="text-sm text-muted-foreground">
                       {t("proxies.management.loading")}
@@ -1250,7 +1250,7 @@ export function ProxyManagementDialog({
                   ) : (
                     <FadingScrollArea
                       className={cn(
-                        "flex-1 min-h-0",
+                        "min-h-0 flex-1",
                         selectedProxies.length > 0 && "pb-16",
                       )}
                       style={
@@ -1284,7 +1284,7 @@ export function ProxyManagementDialog({
                                     // of it).
                                     header.column.id === "name" && "max-w-0",
                                     header.column.id === "hostPort" &&
-                                      "hidden @2xl:table-cell max-w-0",
+                                      "hidden max-w-0 @2xl:table-cell",
                                     (header.column.id === "protocol" ||
                                       header.column.id === "type") &&
                                       "hidden @2xl:table-cell",
@@ -1320,7 +1320,7 @@ export function ProxyManagementDialog({
                                   className={cn(
                                     cell.column.id === "name" && "max-w-0",
                                     cell.column.id === "hostPort" &&
-                                      "hidden @2xl:table-cell max-w-0",
+                                      "hidden max-w-0 @2xl:table-cell",
                                     (cell.column.id === "protocol" ||
                                       cell.column.id === "type") &&
                                       "hidden @2xl:table-cell",
@@ -1343,9 +1343,9 @@ export function ProxyManagementDialog({
 
               <AnimatedTabsContent
                 value="vpns"
-                className="mt-4 flex-1 min-h-0 data-[state=active]:flex flex-col"
+                className="mt-4 min-h-0 flex-1 flex-col data-[state=active]:flex"
               >
-                <div className="flex flex-col gap-4 flex-1 min-h-0">
+                <div className="flex min-h-0 flex-1 flex-col gap-4">
                   {isLoadingVpns ? (
                     <div className="text-sm text-muted-foreground">
                       {t("vpns.management.loading")}
@@ -1357,7 +1357,7 @@ export function ProxyManagementDialog({
                   ) : (
                     <FadingScrollArea
                       className={cn(
-                        "flex-1 min-h-0",
+                        "min-h-0 flex-1",
                         selectedVpns.length > 0 && "pb-16",
                       )}
                       style={
@@ -1391,7 +1391,7 @@ export function ProxyManagementDialog({
                                     // of it).
                                     header.column.id === "name" && "max-w-0",
                                     header.column.id === "hostPort" &&
-                                      "hidden @2xl:table-cell max-w-0",
+                                      "hidden max-w-0 @2xl:table-cell",
                                     (header.column.id === "protocol" ||
                                       header.column.id === "type") &&
                                       "hidden @2xl:table-cell",
@@ -1427,7 +1427,7 @@ export function ProxyManagementDialog({
                                   className={cn(
                                     cell.column.id === "name" && "max-w-0",
                                     cell.column.id === "hostPort" &&
-                                      "hidden @2xl:table-cell max-w-0",
+                                      "hidden max-w-0 @2xl:table-cell",
                                     (cell.column.id === "protocol" ||
                                       cell.column.id === "type") &&
                                       "hidden @2xl:table-cell",

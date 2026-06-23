@@ -175,7 +175,7 @@ const HomeHeader = ({
       onPointerCancel={handlePointerEnd}
       onDoubleClick={handleDoubleClick}
       className={cn(
-        "flex items-center gap-2 h-11 pl-3 border-b border-border bg-card select-none",
+        "flex h-11 items-center gap-2 border-b border-border bg-card pl-3 select-none",
         // Windows: WindowDragArea renders three 44px native-style controls
         // (minimize + maximize/restore + close) fixed at top-right with
         // z-50, total 132px wide. Reserve 144px on the right edge so the
@@ -187,24 +187,24 @@ const HomeHeader = ({
       {isMacOS && (
         <div
           aria-hidden="true"
-          className="flex items-center gap-[7px] mr-1 shrink-0"
+          className="mr-1 flex shrink-0 items-center gap-[7px]"
         >
           {/* Reserve space for the macOS native traffic lights — the OS draws
               the colored buttons here through the transparent titlebar. */}
-          <div className="w-[11px] h-[11px] rounded-full" />
-          <div className="w-[11px] h-[11px] rounded-full" />
-          <div className="w-[11px] h-[11px] rounded-full" />
+          <div className="size-[11px] rounded-full" />
+          <div className="size-[11px] rounded-full" />
+          <div className="size-[11px] rounded-full" />
         </div>
       )}
 
       {pageTitle ? (
-        <span className="text-xs font-semibold text-card-foreground ml-2">
+        <span className="ml-2 text-xs font-semibold text-card-foreground">
           {pageTitle}
         </span>
       ) : null}
 
       {showProfileToolbar && (
-        <div className="relative flex-1 min-w-0 flex items-center">
+        <div className="relative flex min-w-0 flex-1 items-center">
           {groupsFadeLeft && (
             <button
               type="button"
@@ -217,14 +217,14 @@ const HomeHeader = ({
                     behavior: "smooth",
                   });
               }}
-              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 grid place-items-center size-5 rounded-full bg-card/90 hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shadow-sm"
+              className="absolute top-1/2 left-0 z-10 grid size-5 -translate-y-1/2 place-items-center rounded-full bg-card/90 text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground"
             >
               <LuChevronLeft className="size-3" />
             </button>
           )}
           <div
             ref={groupsScrollRef}
-            className="flex items-center gap-3 ml-2 overflow-x-auto scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+            className="ml-2 flex scrollbar-none items-center gap-3 overflow-x-auto scroll-smooth [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
             style={{
               paddingLeft: groupsFadeLeft ? 22 : 0,
               paddingRight: groupsFadeRight ? 22 : 0,
@@ -241,9 +241,9 @@ const HomeHeader = ({
                     onGroupSelect(ALL_FILTER_ID);
                   }}
                   className={cn(
-                    "flex items-center gap-1.5 h-7 px-1 text-xs transition-colors duration-100 shrink-0",
+                    "flex h-7 shrink-0 items-center gap-1.5 px-1 text-xs transition-colors duration-100",
                     active
-                      ? "text-foreground font-medium"
+                      ? "font-medium text-foreground"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -265,9 +265,9 @@ const HomeHeader = ({
                     onGroupSelect(active ? ALL_FILTER_ID : group.id);
                   }}
                   className={cn(
-                    "flex items-center gap-1.5 h-7 px-1 text-xs transition-colors duration-100 shrink-0",
+                    "flex h-7 shrink-0 items-center gap-1.5 px-1 text-xs transition-colors duration-100",
                     active
-                      ? "text-foreground font-medium"
+                      ? "font-medium text-foreground"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -291,7 +291,7 @@ const HomeHeader = ({
                     behavior: "smooth",
                   });
               }}
-              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 grid place-items-center size-5 rounded-full bg-card/90 hover:bg-accent text-muted-foreground hover:text-foreground transition-colors shadow-sm"
+              className="absolute top-1/2 right-0 z-10 grid size-5 -translate-y-1/2 place-items-center rounded-full bg-card/90 text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground"
             >
               <LuChevronRight className="size-3" />
             </button>
@@ -310,16 +310,16 @@ const HomeHeader = ({
             onChange={(e) => {
               onSearchQueryChange(e.target.value);
             }}
-            className="pr-7 pl-8 w-36 min-[860px]:w-52 h-7 text-xs"
+            className="h-7 w-36 pr-7 pl-8 text-xs min-[860px]:w-52"
           />
-          <LuSearch className="absolute left-2.5 top-1/2 size-3.5 transform -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          <LuSearch className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 transform text-muted-foreground" />
           {searchQuery ? (
             <button
               type="button"
               onClick={() => {
                 onSearchQueryChange("");
               }}
-              className="absolute right-1.5 top-1/2 p-0.5 rounded-sm transition-colors transform -translate-y-1/2 hover:bg-accent"
+              className="absolute top-1/2 right-1.5 -translate-y-1/2 transform rounded-sm p-0.5 transition-colors hover:bg-accent"
               aria-label={t("header.clearSearch")}
             >
               <LuX className="size-3.5 text-muted-foreground hover:text-foreground" />
@@ -338,7 +338,7 @@ const HomeHeader = ({
                 onClick={() => {
                   onCreateProfileDialogOpen(true);
                 }}
-                className="flex gap-1.5 items-center h-7 px-2.5 text-xs"
+                className="flex h-7 items-center gap-1.5 px-2.5 text-xs"
               >
                 <GoPlus className="size-3.5" />
                 {t("header.newProfile")}

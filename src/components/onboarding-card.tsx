@@ -28,26 +28,26 @@ export function OnboardingCard({
   const requiresAction = step.selector === '[data-onborda="create-profile"]';
 
   return (
-    <div className="relative p-4 w-80 max-w-[90vw] rounded-lg border shadow-lg bg-popover text-popover-foreground">
-      <div className="flex gap-2 items-start justify-between">
-        <h3 className="text-sm font-semibold leading-tight">{step.title}</h3>
-        <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+    <div className="relative w-80 max-w-[90vw] rounded-lg border bg-popover p-4 text-popover-foreground shadow-lg">
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="text-sm/tight font-semibold">{step.title}</h3>
+        <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
           {currentStep + 1}/{totalSteps}
         </span>
       </div>
 
-      <div className="mt-2 text-xs leading-relaxed text-muted-foreground">
+      <div className="mt-2 text-xs/relaxed text-muted-foreground">
         {step.content}
       </div>
 
-      <div className="flex gap-2 items-center justify-between mt-4">
+      <div className="mt-4 flex items-center justify-between gap-2">
         {isLast ? (
           <span />
         ) : (
           <Button
             variant="ghost"
             size="sm"
-            className="text-xs h-7 px-2 text-muted-foreground hover:text-foreground"
+            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
             onClick={() => {
               closeOnborda();
             }}
@@ -56,12 +56,12 @@ export function OnboardingCard({
           </Button>
         )}
 
-        <div className="flex gap-2 items-center">
+        <div className="flex items-center gap-2">
           {!isFirst && !isLast && (
             <Button
               variant="outline"
               size="sm"
-              className="text-xs h-7 px-2.5"
+              className="h-7 px-2.5 text-xs"
               onClick={() => {
                 prevStep();
               }}
@@ -72,7 +72,7 @@ export function OnboardingCard({
           {isLast ? (
             <Button
               size="sm"
-              className="text-xs h-7 px-3"
+              className="h-7 px-3 text-xs"
               onClick={() => {
                 closeOnborda();
                 window.dispatchEvent(new Event(ONBOARDING_TOUR_FINISHED_EVENT));
@@ -83,7 +83,7 @@ export function OnboardingCard({
           ) : requiresAction ? null : (
             <Button
               size="sm"
-              className="text-xs h-7 px-3"
+              className="h-7 px-3 text-xs"
               onClick={() => {
                 nextStep();
               }}

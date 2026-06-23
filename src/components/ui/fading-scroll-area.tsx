@@ -9,7 +9,7 @@ export type FadingScrollAreaProps = HTMLAttributes<HTMLDivElement>;
 /**
  * Scrollable container with top/bottom fade overlays. The fades only become
  * visible when the matching direction is actually scrollable. Use in place
- * of `<div className="border rounded-md max-h-[...] overflow-auto">` for
+ * of `<div className="max-h-[...] overflow-auto rounded-md border">` for
  * lists that should match the borderless aesthetic of the profile table.
  */
 export function FadingScrollArea({
@@ -23,7 +23,7 @@ export function FadingScrollArea({
   return (
     <div
       ref={ref}
-      className={cn("overflow-y-auto scroll-fade", className)}
+      className={cn("scroll-fade overflow-y-auto", className)}
       {...props}
     >
       {children}

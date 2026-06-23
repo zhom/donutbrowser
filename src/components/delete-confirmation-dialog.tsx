@@ -55,10 +55,10 @@ export function DeleteConfirmationDialog({
           <DialogDescription>{description}</DialogDescription>
           {profileIds && profileIds.length > 0 && (
             <div className="mt-4">
-              <p className="text-sm font-medium mb-2">
+              <p className="mb-2 text-sm font-medium">
                 {t("deleteDialog.profilesToDelete")}
               </p>
-              <div className="bg-muted rounded-md p-3 max-h-32 overflow-y-auto">
+              <div className="max-h-32 overflow-y-auto rounded-md bg-muted p-3">
                 <ul className="space-y-1">
                   {profileIds.map((id) => {
                     const profile = profiles.find((p) => p.id === id);
@@ -66,7 +66,7 @@ export function DeleteConfirmationDialog({
                     return (
                       <li
                         key={id}
-                        className="text-sm text-muted-foreground truncate"
+                        className="truncate text-sm text-muted-foreground"
                       >
                         • {displayName}
                       </li>

@@ -21,11 +21,11 @@ interface ShortcutsPageProps {
 
 function Tokens({ tokens }: { tokens: string[] }) {
   return (
-    <div className="flex items-center gap-1 shrink-0">
+    <div className="flex shrink-0 items-center gap-1">
       {tokens.map((tok, i) => (
         <kbd
           key={i}
-          className="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-1.5 rounded border border-border bg-muted text-[11px] font-medium text-foreground"
+          className="inline-flex h-6 min-w-6 items-center justify-center rounded border border-border bg-muted px-1.5 text-[11px] font-medium text-foreground"
         >
           {tok}
         </kbd>
@@ -49,8 +49,8 @@ export function ShortcutsPage({ groupTargets }: ShortcutsPageProps) {
   const digitGroups = groupTargets.slice(0, 9);
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 overflow-y-auto px-6 pt-4 pb-8">
-      <div className="max-w-3xl w-full mx-auto flex flex-col gap-6">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pt-4 pb-8">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
         <header className="flex flex-col gap-1">
           <h1 className="text-lg font-semibold">{t("shortcutsPage.title")}</h1>
           <p className="text-xs text-muted-foreground">
@@ -63,17 +63,17 @@ export function ShortcutsPage({ groupTargets }: ShortcutsPageProps) {
           if (items.length === 0) return null;
           return (
             <section key={key} className="flex flex-col gap-2">
-              <h2 className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              <h2 className="text-[10px] tracking-wide text-muted-foreground uppercase">
                 {t(titleKey)}
               </h2>
-              <div className="rounded-md border bg-card divide-y divide-border">
+              <div className="divide-y divide-border rounded-md border bg-card">
                 {items.map((s) => (
                   <div
                     key={s.id}
                     className="flex items-center justify-between gap-4 px-3 py-2"
                   >
                     <span
-                      className="text-sm truncate min-w-0"
+                      className="min-w-0 truncate text-sm"
                       title={t(s.labelKey)}
                     >
                       {t(s.labelKey)}
@@ -88,17 +88,17 @@ export function ShortcutsPage({ groupTargets }: ShortcutsPageProps) {
 
         {digitGroups.length > 0 ? (
           <section className="flex flex-col gap-2">
-            <h2 className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            <h2 className="text-[10px] tracking-wide text-muted-foreground uppercase">
               {t("commandPalette.groups.profileGroups")}
             </h2>
-            <div className="rounded-md border bg-card divide-y divide-border">
+            <div className="divide-y divide-border rounded-md border bg-card">
               {digitGroups.map((target, i) => (
                 <div
                   key={target.id}
                   className="flex items-center justify-between gap-4 px-3 py-2"
                 >
                   <span
-                    className="text-sm truncate min-w-0"
+                    className="min-w-0 truncate text-sm"
                     title={target.name}
                   >
                     {target.name}

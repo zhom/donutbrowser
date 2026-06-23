@@ -157,8 +157,8 @@ export function ProxyAssignmentDialog({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>{t("proxyAssignment.selectedProfilesLabel")}</Label>
-            <div className="p-3 bg-muted rounded-md max-h-[min(8rem,20vh)] overflow-y-auto">
-              <ul className="text-sm space-y-1">
+            <div className="max-h-[min(8rem,20vh)] overflow-y-auto rounded-md bg-muted p-3">
+              <ul className="space-y-1 text-sm">
                 {selectedProfiles.map((profileId) => {
                   const profile = profiles.find(
                     (p: BrowserProfile) => p.id === profileId,
@@ -206,7 +206,7 @@ export function ProxyAssignmentDialog({
               </PopoverTrigger>
               <PopoverContent
                 id={proxyListboxId}
-                className="w-[var(--radix-popover-trigger-width)] p-0"
+                className="w-(--radix-popover-trigger-width) p-0"
                 sideOffset={8}
               >
                 <Command>
@@ -283,7 +283,7 @@ export function ProxyAssignmentDialog({
                             />
                             <Badge
                               variant="outline"
-                              className="text-[10px] px-1 py-0 leading-tight mr-1"
+                              className="mr-1 px-1 py-0 text-[10px] leading-tight"
                             >
                               WG
                             </Badge>
@@ -299,7 +299,7 @@ export function ProxyAssignmentDialog({
           </div>
 
           {error && (
-            <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md">
+            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
               {error}
             </div>
           )}

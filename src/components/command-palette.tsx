@@ -74,7 +74,7 @@ function Tokens({ tokens }: { tokens: string[] }) {
       {tokens.map((tok, i) => (
         <kbd
           key={i}
-          className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded border border-border bg-muted text-[10px] font-medium text-muted-foreground"
+          className="inline-flex h-5 min-w-5 items-center justify-center rounded border border-border bg-muted px-1 text-[10px] font-medium text-muted-foreground"
         >
           {tok}
         </kbd>

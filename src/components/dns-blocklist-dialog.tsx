@@ -87,7 +87,7 @@ export function DnsBlocklistDialog({
           {t("dnsBlocklist.settingsDescription")}
         </p>
 
-        <div className="space-y-3 overflow-y-auto min-h-0 max-h-[40vh]">
+        <div className="max-h-[40vh] min-h-0 space-y-3 overflow-y-auto">
           {statuses.map((status) => (
             <div
               key={status.level}
@@ -100,18 +100,18 @@ export function DnsBlocklistDialog({
                   </span>
                   {status.is_cached ? (
                     status.is_fresh ? (
-                      <Badge variant="default" className="text-[10px] px-1.5">
+                      <Badge variant="default" className="px-1.5 text-[10px]">
                         {t("dnsBlocklist.fresh")}
                       </Badge>
                     ) : (
-                      <Badge variant="secondary" className="text-[10px] px-1.5">
+                      <Badge variant="secondary" className="px-1.5 text-[10px]">
                         {t("dnsBlocklist.stale")}
                       </Badge>
                     )
                   ) : (
                     <Badge
                       variant="outline"
-                      className="text-[10px] px-1.5 text-muted-foreground"
+                      className="px-1.5 text-[10px] text-muted-foreground"
                     >
                       {t("dnsBlocklist.notCached")}
                     </Badge>

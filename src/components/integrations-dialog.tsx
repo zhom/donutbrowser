@@ -308,7 +308,7 @@ export function IntegrationsDialog({
       }}
       subPage={subPage}
     >
-      <DialogContent className="max-w-3xl max-h-[calc(100vh-5rem)] flex flex-col">
+      <DialogContent className="flex max-h-[calc(100vh-5rem)] max-w-3xl flex-col">
         {!subPage && (
           <DialogHeader className="shrink-0">
             <DialogTitle>{t("integrations.title")}</DialogTitle>
@@ -317,8 +317,8 @@ export function IntegrationsDialog({
 
         <div
           className={cn(
-            "overflow-y-auto flex-1 min-h-0",
-            subPage && "w-full max-w-3xl mx-auto",
+            "min-h-0 flex-1 overflow-y-auto",
+            subPage && "mx-auto w-full max-w-3xl",
           )}
         >
           <AnimatedTabs key={initialTab} defaultValue={initialTab}>
@@ -333,12 +333,12 @@ export function IntegrationsDialog({
 
             <AnimatedTabsContent
               value="api"
-              className="mt-4 flex flex-col gap-4 @container"
+              className="@container mt-4 flex flex-col gap-4"
             >
-              <div className="rounded-md border bg-card p-4 flex flex-col gap-4">
+              <div className="flex flex-col gap-4 rounded-md border bg-card p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
-                    <LuPlug className="size-5 mt-0.5 text-muted-foreground" />
+                    <LuPlug className="mt-0.5 size-5 text-muted-foreground" />
                     <div className="flex flex-col gap-1">
                       <Label className="text-sm font-medium">
                         {t("integrations.apiEnableLabel")}
@@ -370,9 +370,9 @@ export function IntegrationsDialog({
 
               {settings.api_enabled && (
                 <>
-                  <div className="grid grid-cols-1 @2xl:grid-cols-2 gap-4">
-                    <div className="rounded-md border bg-card p-4 flex flex-col gap-2">
-                      <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <div className="grid grid-cols-1 gap-4 @2xl:grid-cols-2">
+                    <div className="flex flex-col gap-2 rounded-md border bg-card p-4">
+                      <Label className="text-[10px] tracking-wide text-muted-foreground uppercase">
                         {t("integrations.apiPortLabel")}
                       </Label>
                       <div className="flex items-center gap-2">
@@ -463,9 +463,9 @@ export function IntegrationsDialog({
                       </div>
                     </div>
 
-                    <div className="rounded-md border bg-card p-4 flex flex-col gap-2">
+                    <div className="flex flex-col gap-2 rounded-md border bg-card p-4">
                       <div className="flex items-center justify-between">
-                        <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        <Label className="text-[10px] tracking-wide text-muted-foreground uppercase">
                           {t("integrations.apiTokenLabel")}
                         </Label>
                       </div>
@@ -475,13 +475,13 @@ export function IntegrationsDialog({
                             type={showApiToken ? "text" : "password"}
                             value={settings.api_token ?? ""}
                             readOnly
-                            className="font-mono pr-10"
+                            className="pr-10 font-mono"
                           />
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
-                            className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                            className="absolute top-0 right-0 h-full px-3 hover:bg-transparent"
                             onClick={() => {
                               setShowApiToken(!showApiToken);
                             }}
@@ -501,9 +501,9 @@ export function IntegrationsDialog({
                     </div>
                   </div>
 
-                  <div className="rounded-md border bg-card p-4 flex flex-col gap-2">
+                  <div className="flex flex-col gap-2 rounded-md border bg-card p-4">
                     <div className="flex items-center justify-between">
-                      <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                      <Label className="text-[10px] tracking-wide text-muted-foreground uppercase">
                         {t("integrations.apiExampleRequest")}
                       </Label>
                       <CopyToClipboard
@@ -511,7 +511,7 @@ export function IntegrationsDialog({
                         successMessage={t("common.buttons.copied")}
                       />
                     </div>
-                    <pre className="font-mono text-[11px] whitespace-pre overflow-x-auto bg-background rounded p-3">
+                    <pre className="overflow-x-auto rounded bg-background p-3 font-mono text-[11px] whitespace-pre">
                       {`curl -H "Authorization: Bearer \${TOKEN}" \\
      http://127.0.0.1:${apiServerPort ?? settings.api_port}/v1/profiles`}
                     </pre>
@@ -524,10 +524,10 @@ export function IntegrationsDialog({
               value="mcp"
               className="mt-4 flex flex-col gap-5"
             >
-              <div className="rounded-md border bg-card p-4 flex flex-col gap-4">
+              <div className="flex flex-col gap-4 rounded-md border bg-card p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
-                    <LuZap className="size-5 mt-0.5 text-muted-foreground" />
+                    <LuZap className="mt-0.5 size-5 text-muted-foreground" />
                     <div className="flex flex-col gap-1">
                       <Label className="text-sm font-medium">
                         {t("integrations.mcpEnableLabel")}
@@ -552,8 +552,8 @@ export function IntegrationsDialog({
 
               {mcpConfig && (
                 <>
-                  <div className="rounded-md border bg-card p-4 flex flex-col gap-2">
-                    <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <div className="flex flex-col gap-2 rounded-md border bg-card p-4">
+                    <Label className="text-[10px] tracking-wide text-muted-foreground uppercase">
                       {t("integrations.mcp.url")}
                     </Label>
                     <div className="flex items-center gap-x-2">
@@ -562,13 +562,13 @@ export function IntegrationsDialog({
                           type={showMcpUrl ? "text" : "password"}
                           value={mcpUrl}
                           readOnly
-                          className="font-mono text-xs pr-10"
+                          className="pr-10 font-mono text-xs"
                         />
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                          className="absolute top-0 right-0 h-full px-3 hover:bg-transparent"
                           onClick={() => {
                             setShowMcpUrl(!showMcpUrl);
                           }}
@@ -587,32 +587,32 @@ export function IntegrationsDialog({
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-3 @container">
-                    <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <div className="@container flex flex-col gap-3">
+                    <Label className="text-[10px] tracking-wide text-muted-foreground uppercase">
                       {t("integrations.mcp.clientsLabel")}
                     </Label>
-                    <div className="grid grid-cols-1 @2xl:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2">
                       {agents.map((agent) => {
                         const busy = busyAgentIds.has(agent.id);
                         return (
                           <div
                             key={agent.id}
-                            className="rounded-md border bg-card px-3 py-2.5 flex items-center gap-3"
+                            className="flex items-center gap-3 rounded-md border bg-card px-3 py-2.5"
                           >
-                            <div className="grid place-items-center size-8 rounded-md bg-muted shrink-0">
+                            <div className="grid size-8 shrink-0 place-items-center rounded-md bg-muted">
                               <AgentIcon category={agent.category} />
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium truncate">
+                              <p className="truncate text-sm font-medium">
                                 {agent.display_name}
                               </p>
-                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                              <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
                                 {categoryLabel(t, agent.category)}
                               </p>
                             </div>
                             {agent.connected ? (
                               <div className="flex items-center gap-1">
-                                <span className="inline-flex items-center gap-1 rounded-md border bg-muted px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-foreground">
+                                <span className="inline-flex items-center gap-1 rounded-md border bg-muted px-2 py-1 text-[10px] font-medium tracking-wide text-foreground uppercase">
                                   <LuCheck className="size-3" />
                                   {t("integrations.mcp.connected")}
                                 </span>

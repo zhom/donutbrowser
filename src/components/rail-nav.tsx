@@ -290,13 +290,13 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
   } = useLogoEasterEgg({ currentPage, onNavigate });
 
   return (
-    <nav className="flex flex-col items-center w-10 py-2 gap-1 bg-background border-r border-border shrink-0 relative">
+    <nav className="relative flex w-10 shrink-0 flex-col items-center gap-1 border-r border-border bg-background py-2">
       {!isHidden ? (
         <button
           ref={logoRef}
           type="button"
           aria-label={t("header.donutLogo")}
-          className="grid place-items-center size-7 rounded-md cursor-pointer select-none text-foreground bg-transparent shrink-0"
+          className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-md bg-transparent text-foreground select-none"
           onClick={handleClick}
           onPointerDown={() => {
             setIsPressed(true);
@@ -336,9 +336,9 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
         <div className="size-7 shrink-0" />
       )}
 
-      <div className="w-5 h-px bg-border my-1 shrink-0" />
+      <div className="my-1 h-px w-5 shrink-0 bg-border" />
 
-      <div className="flex flex-col items-center gap-1 w-full min-h-0 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex min-h-0 w-full scrollbar-none flex-col items-center gap-1 overflow-y-auto [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {TOP_ITEMS.map(({ page, Icon, labelKey }) => {
           const active = currentPage === page;
           return (
@@ -352,16 +352,16 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
                   aria-label={t(labelKey)}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "relative grid place-items-center size-7 rounded-md cursor-pointer transition-colors duration-100 shrink-0",
+                    "relative grid size-7 shrink-0 cursor-pointer place-items-center rounded-md transition-colors duration-100",
                     active
-                      ? "text-foreground bg-accent"
-                      : "text-muted-foreground hover:text-card-foreground hover:bg-accent/50",
+                      ? "bg-accent text-foreground"
+                      : "text-muted-foreground hover:bg-accent/50 hover:text-card-foreground",
                   )}
                 >
                   {active && (
                     <span
                       aria-hidden="true"
-                      className="absolute left-[-7px] top-1.5 bottom-1.5 w-[2px] rounded-full bg-foreground"
+                      className="absolute inset-y-1.5 left-[-7px] w-[2px] rounded-full bg-foreground"
                     />
                   )}
                   <Icon className="size-3.5" />
@@ -385,10 +385,10 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
             aria-label={t("rail.more.label")}
             aria-expanded={moreOpen}
             className={cn(
-              "grid place-items-center size-7 rounded-md cursor-pointer transition-colors duration-100 shrink-0",
+              "grid size-7 shrink-0 cursor-pointer place-items-center rounded-md transition-colors duration-100",
               moreOpen
-                ? "text-foreground bg-accent"
-                : "text-muted-foreground hover:text-card-foreground hover:bg-accent/50",
+                ? "bg-accent text-foreground"
+                : "text-muted-foreground hover:bg-accent/50 hover:text-card-foreground",
             )}
           >
             <GoKebabHorizontal className="size-3.5" />
@@ -407,16 +407,16 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
             aria-label={t("rail.settings")}
             aria-current={currentPage === "settings" ? "page" : undefined}
             className={cn(
-              "relative grid place-items-center size-7 rounded-md cursor-pointer transition-colors duration-100 shrink-0",
+              "relative grid size-7 shrink-0 cursor-pointer place-items-center rounded-md transition-colors duration-100",
               currentPage === "settings"
-                ? "text-foreground bg-accent"
-                : "text-muted-foreground hover:text-card-foreground hover:bg-accent/50",
+                ? "bg-accent text-foreground"
+                : "text-muted-foreground hover:bg-accent/50 hover:text-card-foreground",
             )}
           >
             {currentPage === "settings" && (
               <span
                 aria-hidden="true"
-                className="absolute left-[-7px] top-1.5 bottom-1.5 w-[2px] rounded-full bg-foreground"
+                className="absolute inset-y-1.5 left-[-7px] w-[2px] rounded-full bg-foreground"
               />
             )}
             <GoGear className="size-3.5" />
@@ -430,12 +430,12 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
           <button
             type="button"
             aria-label={t("rail.more.closeAriaLabel")}
-            className="fixed inset-0 z-30 bg-transparent cursor-default"
+            className="fixed inset-0 z-30 cursor-default bg-transparent"
             onClick={() => {
               setMoreOpen(false);
             }}
           />
-          <div className="absolute bottom-14 left-11 w-56 bg-card border border-border rounded-lg shadow-2xl p-1 z-40 animate-in fade-in-0 slide-in-from-bottom-1 duration-100">
+          <div className="absolute bottom-14 left-11 z-40 w-56 animate-in rounded-lg border border-border bg-card p-1 shadow-2xl duration-100 fade-in-0 slide-in-from-bottom-1">
             {MORE_ITEMS.map(({ page, Icon, labelKey, hintKey }) => (
               <button
                 key={page}
@@ -444,16 +444,16 @@ export function RailNav({ currentPage, onNavigate }: RailNavProps) {
                   setMoreOpen(false);
                   onNavigate(page);
                 }}
-                className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md cursor-pointer hover:bg-accent transition-colors duration-100 text-left"
+                className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors duration-100 hover:bg-accent"
               >
-                <span className="grid place-items-center size-5 rounded bg-muted text-muted-foreground shrink-0">
+                <span className="grid size-5 shrink-0 place-items-center rounded bg-muted text-muted-foreground">
                   <Icon className="size-3" />
                 </span>
-                <span className="flex flex-col min-w-0">
-                  <span className="text-xs font-medium text-foreground truncate">
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate text-xs font-medium text-foreground">
                     {t(labelKey)}
                   </span>
-                  <span className="text-[10px] text-muted-foreground truncate">
+                  <span className="truncate text-[10px] text-muted-foreground">
                     {t(hintKey)}
                   </span>
                 </span>

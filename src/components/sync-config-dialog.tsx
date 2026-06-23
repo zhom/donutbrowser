@@ -248,7 +248,7 @@ export function SyncConfigDialog({
 
         {isLoggedIn && user ? (
           <div className="grid gap-4 py-4">
-            <div className="flex gap-2 items-center text-sm">
+            <div className="flex items-center gap-2 text-sm">
               <div className="size-2 rounded-full bg-success" />
               {t("sync.cloud.connected")}
             </div>
@@ -300,7 +300,7 @@ export function SyncConfigDialog({
                           : t("sync.team.roleMember")}
                     </span>
                   </div>
-                  <p className="text-xs text-muted-foreground pt-1">
+                  <p className="pt-1 text-xs text-muted-foreground">
                     {t("sync.team.manageOnWeb")}
                   </p>
                 </>
@@ -354,7 +354,7 @@ export function SyncConfigDialog({
             <TabsContent value="cloud">
               {isCloudLoading ? (
                 <div className="flex justify-center py-8">
-                  <div className="size-6 rounded-full border-2 border-current animate-spin border-t-transparent" />
+                  <div className="size-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
                 </div>
               ) : (
                 <div className="grid gap-4 py-4">
@@ -374,7 +374,7 @@ export function SyncConfigDialog({
             <TabsContent value="self-hosted">
               {isLoading ? (
                 <div className="flex justify-center py-8">
-                  <div className="size-6 rounded-full border-2 border-current animate-spin border-t-transparent" />
+                  <div className="size-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
                 </div>
               ) : (
                 <div className="grid gap-4 py-4">
@@ -412,7 +412,7 @@ export function SyncConfigDialog({
                             onClick={() => {
                               setShowToken(!showToken);
                             }}
-                            className="absolute right-3 top-1/2 p-1 rounded-sm transition-colors transform -translate-y-1/2 hover:bg-accent"
+                            className="absolute top-1/2 right-3 -translate-y-1/2 transform rounded-sm p-1 transition-colors hover:bg-accent"
                             aria-label={
                               showToken
                                 ? t("common.aria.hideToken")
@@ -434,19 +434,19 @@ export function SyncConfigDialog({
                   </div>
 
                   {connectionStatus === "testing" && (
-                    <div className="flex gap-2 items-center text-sm text-muted-foreground">
-                      <div className="size-4 rounded-full border-2 border-current animate-spin border-t-transparent" />
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <div className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
                       {t("sync.status.syncing")}
                     </div>
                   )}
                   {connectionStatus === "connected" && (
-                    <div className="flex gap-2 items-center text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <div className="size-2 rounded-full bg-success" />
                       {t("sync.status.connected")}
                     </div>
                   )}
                   {connectionStatus === "error" && (
-                    <div className="flex gap-2 items-center text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <div className="size-2 rounded-full bg-destructive" />
                       {t("sync.status.disconnected")}
                     </div>

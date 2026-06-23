@@ -306,7 +306,7 @@ export function ImportProfileDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose} subPage={subPage}>
-      <DialogContent className="max-w-[min(48rem,calc(100%-4rem))] max-h-[80vh] flex flex-col">
+      <DialogContent className="flex max-h-[80vh] max-w-[min(48rem,calc(100%-4rem))] flex-col">
         {!subPage && (
           <DialogHeader className="shrink-0">
             <DialogTitle>{t("importProfile.title")}</DialogTitle>
@@ -315,7 +315,7 @@ export function ImportProfileDialog({
 
         <div
           className={cn(
-            "overflow-y-auto flex-1 space-y-6 min-h-0",
+            "min-h-0 flex-1 space-y-6 overflow-y-auto",
             subPage && "mx-auto w-full max-w-2xl",
           )}
         >
@@ -389,7 +389,7 @@ export function ImportProfileDialog({
                                   key={profile.path}
                                   value={profile.path}
                                 >
-                                  <div className="flex gap-2 items-center">
+                                  <div className="flex items-center gap-2">
                                     {IconComponent && (
                                       <IconComponent className="size-4" />
                                     )}
@@ -413,7 +413,7 @@ export function ImportProfileDialog({
                       </div>
 
                       {selectedProfile && (
-                        <div className="p-3 rounded-lg bg-muted">
+                        <div className="rounded-lg bg-muted p-3">
                           <p className="text-sm break-all">
                             <span className="font-medium">
                               {t("importProfile.pathLabel")}
@@ -481,7 +481,7 @@ export function ImportProfileDialog({
                             const IconComponent = getBrowserIcon(browser);
                             return (
                               <SelectItem key={browser} value={browser}>
-                                <div className="flex gap-2 items-center">
+                                <div className="flex items-center gap-2">
                                   {IconComponent && (
                                     <IconComponent className="size-4" />
                                   )}
@@ -518,7 +518,7 @@ export function ImportProfileDialog({
                           <FaFolder className="size-4" />
                         </Button>
                       </div>
-                      <p className="mt-2 text-xs text-muted-foreground break-all">
+                      <p className="mt-2 text-xs break-all text-muted-foreground">
                         {t("importProfile.examplePaths")}
                         <br />
                         macOS: ~/Library/Application
@@ -604,9 +604,9 @@ export function ImportProfileDialog({
 
         <div
           className={cn(
-            "shrink-0 flex gap-2 items-center justify-end",
+            "flex shrink-0 items-center justify-end gap-2",
             subPage
-              ? "pt-2 border-t border-border mx-auto w-full max-w-2xl"
+              ? "mx-auto w-full max-w-2xl border-t border-border pt-2"
               : undefined,
           )}
         >

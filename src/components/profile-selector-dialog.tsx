@@ -171,7 +171,7 @@ export function ProfileSelectorDialog({
         <div className="grid gap-4 py-4">
           {url && (
             <div className="space-y-2">
-              <div className="flex justify-between items-center">
+              <div className="flex items-center justify-between">
                 <Label className="text-sm font-medium">
                   {t("profileSelector.openingUrl")}
                 </Label>
@@ -180,7 +180,7 @@ export function ProfileSelectorDialog({
                   successMessage={t("profileSelector.urlCopied")}
                 />
               </div>
-              <div className="p-2 text-sm break-all rounded bg-muted max-h-24 overflow-y-auto">
+              <div className="max-h-24 overflow-y-auto rounded bg-muted p-2 text-sm break-all">
                 {url}
               </div>
             </div>
@@ -230,8 +230,8 @@ export function ProfileSelectorDialog({
                                   !canUseForLinks ? "opacity-50" : ""
                                 }`}
                               >
-                                <div className="flex gap-3 items-center px-2 py-1 rounded-lg">
-                                  <div className="flex gap-2 items-center">
+                                <div className="flex items-center gap-3 rounded-lg px-2 py-1">
+                                  <div className="flex items-center gap-2">
                                     {(() => {
                                       const IconComponent = getBrowserIcon(
                                         profile.browser,

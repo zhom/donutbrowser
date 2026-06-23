@@ -258,14 +258,14 @@ function DialogContent({
             // w-[calc(100%-2rem)] (not w-full + max-w) keeps the 1rem window
             // gutter even when callers override max-w-*: tailwind-merge drops
             // a base max-w in favor of the caller's, but leaves width alone.
-            "bg-background fixed top-[50%] left-[50%] z-10000 grid w-[calc(100%-2rem)] max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg max-h-[calc(100vh-3rem)] overflow-y-auto",
+            "fixed top-[50%] left-[50%] z-10000 grid max-h-[calc(100vh-3rem)] w-[calc(100%-2rem)] max-w-lg -translate-[50%] gap-4 overflow-y-auto rounded-lg border bg-background p-6 shadow-lg",
             className,
           )}
           {...props}
         >
           {children}
           {!hideClose && dismissible && (
-            <DialogPrimitive.Close className="cursor-pointer ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
+            <DialogPrimitive.Close className="absolute top-4 right-4 cursor-pointer rounded-xs opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4">
               <RxCross2 />
               <span className="sr-only">{t("common.buttons.close")}</span>
             </DialogPrimitive.Close>
@@ -286,7 +286,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-2 text-left pr-8", className)}
+      className={cn("flex flex-col gap-2 pr-8 text-left", className)}
       {...props}
     />
   );
@@ -297,7 +297,7 @@ function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="dialog-footer"
       className={cn(
-        "flex flex-row flex-wrap justify-end gap-2 shrink-0",
+        "flex shrink-0 flex-row flex-wrap justify-end gap-2",
         className,
       )}
       {...props}
@@ -312,7 +312,7 @@ function DialogTitle({
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("text-lg font-semibold leading-none", className)}
+      className={cn("text-lg leading-none font-semibold", className)}
       {...props}
     />
   );

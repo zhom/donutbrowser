@@ -134,8 +134,8 @@ export function GroupAssignmentDialog({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>{t("groupAssignment.selectedProfilesLabel")}</Label>
-            <div className="p-3 bg-muted rounded-md max-h-[min(8rem,20vh)] overflow-y-auto">
-              <ul className="text-sm space-y-1">
+            <div className="max-h-[min(8rem,20vh)] overflow-y-auto rounded-md bg-muted p-3">
+              <ul className="space-y-1 text-sm">
                 {selectedProfiles.map((profileId) => {
                   // Find the profile name for display
                   const profile = profiles.find(
@@ -153,7 +153,7 @@ export function GroupAssignmentDialog({
           </div>
 
           <div className="space-y-2">
-            <div className="flex justify-between items-center">
+            <div className="flex items-center justify-between">
               <Label htmlFor="group-select">
                 {t("groupAssignment.assignGroupLabel")}
               </Label>
@@ -198,7 +198,7 @@ export function GroupAssignmentDialog({
           </div>
 
           {error && (
-            <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md">
+            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
               {error}
             </div>
           )}

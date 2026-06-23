@@ -116,9 +116,9 @@ function _OSIcon({ os }: { os: string }) {
 
 function InfoCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md bg-muted/50 border px-3 py-2.5">
+    <div className="rounded-md border bg-muted/50 px-3 py-2.5">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-sm mt-0.5 truncate">{value}</p>
+      <p className="mt-0.5 truncate text-sm">{value}</p>
     </div>
   );
 }
@@ -503,7 +503,7 @@ export function ProfileInfoDialog({
     >
       <DialogContent
         hideClose
-        className="max-w-[min(60rem,calc(100%-4rem))] h-[min(clamp(30rem,80vh,48rem),calc(100vh-3rem))] flex flex-col p-0 gap-0 overflow-hidden"
+        className="flex h-[min(clamp(30rem,80vh,48rem),calc(100vh-3rem))] max-w-[min(60rem,calc(100%-4rem))] flex-col gap-0 overflow-hidden p-0"
       >
         {/* The dialog renders its own custom header, so the accessible title is
             visually hidden but present for screen readers (Radix requires it). */}
@@ -720,20 +720,20 @@ function ProfileInfoLayout({
   return (
     <>
       {/* Top bar */}
-      <div className="flex items-center gap-2 h-11 px-3 border-b border-border shrink-0">
-        <LuUsers className="size-3.5 text-muted-foreground shrink-0" />
-        <div className="flex items-center gap-1.5 text-xs min-w-0 flex-1">
+      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
+        <LuUsers className="size-3.5 shrink-0 text-muted-foreground" />
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
           <span className="font-semibold">
             {t("profileInfo.breadcrumbRoot")}
           </span>
           <span className="text-muted-foreground">/</span>
-          <span className="text-muted-foreground truncate">{profile.name}</span>
+          <span className="truncate text-muted-foreground">{profile.name}</span>
         </div>
         {onCloneProfile && (
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 px-2 text-xs gap-1.5"
+            className="h-7 gap-1.5 px-2 text-xs"
             disabled={isDisabled}
             onClick={() => onCloneProfile(profile)}
           >
@@ -745,16 +745,16 @@ function ProfileInfoLayout({
           type="button"
           aria-label={t("common.buttons.close")}
           onClick={onClose}
-          className="grid place-items-center size-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors duration-100"
+          className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors duration-100 hover:bg-accent/50 hover:text-foreground"
         >
           <LuX className="size-3.5" />
         </button>
       </div>
 
       {/* Body */}
-      <div className="flex flex-1 min-h-0">
+      <div className="flex min-h-0 flex-1">
         {/* Sidebar */}
-        <nav className="w-44 shrink-0 border-r border-border p-2 flex flex-col gap-0.5 overflow-y-auto">
+        <nav className="flex w-44 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-border p-2">
           {sidebarItems
             .filter((it) => !it.hidden)
             .map((it) => {
@@ -765,16 +765,16 @@ function ProfileInfoLayout({
                   type="button"
                   onClick={() => setSection(it.id)}
                   className={cn(
-                    "flex items-center gap-2 h-7 px-2 rounded-md text-xs transition-colors duration-100 text-left",
+                    "flex h-7 items-center gap-2 rounded-md px-2 text-left text-xs transition-colors duration-100",
                     active
                       ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
+                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
                   )}
                 >
                   <span className="shrink-0">{it.icon}</span>
                   <span className="flex-1 truncate">{it.label}</span>
                   {it.badge && (
-                    <span className="text-[9px] uppercase text-muted-foreground tracking-wide truncate max-w-[60px]">
+                    <span className="max-w-[60px] truncate text-[9px] tracking-wide text-muted-foreground uppercase">
                       {it.badge}
                     </span>
                   )}
@@ -788,7 +788,7 @@ function ProfileInfoLayout({
                 type="button"
                 onClick={deleteAction.onClick}
                 disabled={deleteAction.disabled}
-                className="flex items-center gap-2 h-7 px-2 rounded-md text-xs transition-colors duration-100 text-destructive hover:bg-destructive/10 disabled:opacity-50 disabled:pointer-events-none"
+                className="flex h-7 items-center gap-2 rounded-md px-2 text-xs text-destructive transition-colors duration-100 hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
               >
                 <LuTrash2 className="size-3.5 shrink-0" />
                 <span className="flex-1 text-left">
@@ -800,21 +800,21 @@ function ProfileInfoLayout({
         </nav>
 
         {/* Main */}
-        <div className="flex-1 min-w-0 overflow-y-auto scroll-fade p-4">
+        <div className="scroll-fade min-w-0 flex-1 overflow-y-auto p-4">
           {section === "overview" && (
             <div className="flex flex-col gap-3">
               {/* Hero */}
               <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-muted p-2.5 shrink-0">
+                <div className="shrink-0 rounded-lg bg-muted p-2.5">
                   <ProfileIcon className="size-7 text-foreground" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
-                    <h3 className="text-base font-semibold truncate">
+                    <h3 className="truncate text-base font-semibold">
                       {profile.name}
                     </h3>
                   </div>
-                  <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[11px]">
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
                     <span className="font-mono text-muted-foreground">
                       {profile.version}
                     </span>
@@ -823,17 +823,17 @@ function ProfileInfoLayout({
               </div>
 
               {/* ID */}
-              <div className="flex items-center gap-2 rounded-md bg-muted/40 px-3 py-2 border border-border">
-                <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">
+              <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2">
+                <span className="shrink-0 text-[10px] tracking-wide text-muted-foreground uppercase">
                   ID
                 </span>
-                <span className="font-mono text-xs truncate flex-1">
+                <span className="flex-1 truncate font-mono text-xs">
                   {profile.id}
                 </span>
                 <button
                   type="button"
                   onClick={() => void handleCopyId()}
-                  className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                  className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
                   aria-label={t("common.buttons.copy")}
                 >
                   {copied ? (
@@ -874,7 +874,7 @@ function ProfileInfoLayout({
 
               {/* Activity */}
               <div className="mt-1 flex flex-col gap-1.5">
-                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                <span className="text-[10px] tracking-wide text-muted-foreground uppercase">
                   {t("profileInfo.sections.activity")}
                 </span>
                 <div className="grid grid-cols-2 gap-2">
@@ -904,11 +904,11 @@ function ProfileInfoLayout({
               </div>
 
               {profile.created_by_email && (
-                <div className="rounded-md bg-muted/40 border border-border px-3 py-2">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
+                  <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
                     {t("sync.team.title")}
                   </p>
-                  <p className="text-sm mt-0.5">
+                  <p className="mt-0.5 text-sm">
                     {t("sync.team.createdBy", {
                       email: profile.created_by_email,
                     })}
@@ -1014,7 +1014,7 @@ function _SectionPlaceholder({
       </div>
       <p className="text-xs text-muted-foreground">{description}</p>
       {hint && (
-        <div className="rounded-md bg-muted/40 border border-border px-3 py-2 text-xs">
+        <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs">
           {hint}
         </div>
       )}
@@ -1022,7 +1022,7 @@ function _SectionPlaceholder({
         size="sm"
         onClick={onAction}
         disabled={disabled}
-        className="self-start h-7 text-xs"
+        className="h-7 self-start text-xs"
       >
         {actionLabel}
       </Button>
@@ -1049,11 +1049,11 @@ function _SectionAction({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "flex items-center gap-2 h-9 px-3 rounded-md text-xs transition-colors text-left",
+        "flex h-9 items-center gap-2 rounded-md px-3 text-left text-xs transition-colors",
         destructive
           ? "text-destructive hover:bg-destructive/10"
           : "hover:bg-accent",
-        "disabled:opacity-50 disabled:pointer-events-none",
+        "disabled:pointer-events-none disabled:opacity-50",
       )}
     >
       {icon}
@@ -1121,7 +1121,7 @@ function LaunchHookEditor({
           setValue(e.target.value);
         }}
         placeholder={t("profiles.launchHook.placeholder")}
-        className="text-xs font-mono"
+        className="font-mono text-xs"
       />
       {showInvalidHint && (
         <p className="text-xs text-warning">
@@ -1199,7 +1199,7 @@ function SyncSectionInline({
         {t("profileInfo.sectionDesc.sync")}
       </p>
       <div className="flex items-center gap-2">
-        <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0">
+        <span className="shrink-0 text-[10px] tracking-wide text-muted-foreground uppercase">
           {t("profileInfo.fields.syncMode")}
         </span>
         <Select
@@ -1209,7 +1209,7 @@ function SyncSectionInline({
             void onChangeMode(v);
           }}
         >
-          <SelectTrigger className="h-7 text-xs flex-1">
+          <SelectTrigger className="h-7 flex-1 text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -1222,15 +1222,15 @@ function SyncSectionInline({
         </Select>
       </div>
       {syncStatus && (
-        <div className="rounded-md bg-muted/40 border border-border px-3 py-2">
-          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+        <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
+          <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
             {t("profileInfo.fields.syncStatus")}
           </p>
-          <p className="text-sm mt-0.5">
+          <p className="mt-0.5 text-sm">
             {t(`profileInfo.syncStatusValue.${syncStatus.status}`)}
           </p>
           {syncStatus.error && (
-            <p className="text-xs text-destructive mt-1">{syncStatus.error}</p>
+            <p className="mt-1 text-xs text-destructive">{syncStatus.error}</p>
           )}
         </div>
       )}
@@ -1317,7 +1317,7 @@ function NetworkSectionInline({
       </p>
 
       <div className="flex items-center gap-2">
-        <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0 w-12">
+        <span className="w-12 shrink-0 text-[10px] tracking-wide text-muted-foreground uppercase">
           {t("profileInfo.fields.proxy")}
         </span>
         <Select
@@ -1327,7 +1327,7 @@ function NetworkSectionInline({
             void onProxyChange(v);
           }}
         >
-          <SelectTrigger className="h-7 text-xs flex-1">
+          <SelectTrigger className="h-7 flex-1 text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -1344,7 +1344,7 @@ function NetworkSectionInline({
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0 w-12">
+        <span className="w-12 shrink-0 text-[10px] tracking-wide text-muted-foreground uppercase">
           {t("profileInfo.fields.vpn")}
         </span>
         <Select
@@ -1354,7 +1354,7 @@ function NetworkSectionInline({
             void onVpnChange(v);
           }}
         >
-          <SelectTrigger className="h-7 text-xs flex-1">
+          <SelectTrigger className="h-7 flex-1 text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -1449,7 +1449,7 @@ function ExtensionsSectionInline({
         {t("profileInfo.sectionDesc.extensions")}
       </p>
       <div className="flex items-center gap-2">
-        <span className="text-[10px] uppercase tracking-wide text-muted-foreground shrink-0 w-16">
+        <span className="w-16 shrink-0 text-[10px] tracking-wide text-muted-foreground uppercase">
           {t("profileInfo.fields.extensionGroup")}
         </span>
         <Select
@@ -1459,7 +1459,7 @@ function ExtensionsSectionInline({
             void onChange(v);
           }}
         >
-          <SelectTrigger className="h-7 text-xs flex-1">
+          <SelectTrigger className="h-7 flex-1 text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -1569,7 +1569,7 @@ function CookiesSectionInline({
   const domains = stats?.domains ?? [];
 
   return (
-    <div className="flex flex-col gap-3 min-h-0 flex-1">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <LuCookie className="size-4" />
@@ -1641,18 +1641,18 @@ function CookiesSectionInline({
         {t("profileInfo.sectionDesc.cookies")}
       </p>
       {isRunning ? (
-        <div className="rounded-md bg-muted/40 border border-border px-3 py-2">
+        <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
           <p className="text-xs text-muted-foreground">
             {t("profileInfo.cookies.runningNotice")}
           </p>
         </div>
       ) : (
         <>
-          <div className="rounded-md bg-muted/40 border border-border px-3 py-2">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
+            <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
               {t("profileInfo.fields.cookieCount")}
             </p>
-            <p className="text-sm mt-0.5">
+            <p className="mt-0.5 text-sm">
               {isLoading
                 ? t("profileInfo.values.loading")
                 : stats
@@ -1661,13 +1661,13 @@ function CookiesSectionInline({
             </p>
           </div>
           {domains.length > 0 && (
-            <div className="rounded-md bg-muted/40 border border-border flex flex-col min-h-0 flex-1 overflow-hidden">
-              <p className="text-[10px] uppercase tracking-wide text-muted-foreground px-3 py-2 border-b border-border shrink-0">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-muted/40">
+              <p className="shrink-0 border-b border-border px-3 py-2 text-[10px] tracking-wide text-muted-foreground uppercase">
                 {t("profileInfo.cookies.domainsHeader", {
                   count: domains.length,
                 })}
               </p>
-              <ul className="text-xs px-3 py-2 overflow-y-auto flex-1 space-y-1">
+              <ul className="flex-1 space-y-1 overflow-y-auto px-3 py-2 text-xs">
                 {domains.map((d) => (
                   <li
                     key={d.domain}
@@ -1842,7 +1842,7 @@ function FingerprintSectionInline({
       {error && <p className="text-xs text-destructive">{error}</p>}
       {success && !error && <p className="text-xs text-success">{success}</p>}
 
-      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border">
+      <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
         <Button
           size="sm"
           className="h-7 text-xs"
@@ -2013,8 +2013,8 @@ function SecuritySectionInline({
               setIsVerifyOpen(true);
             }}
             className={cn(
-              "flex-1 h-7 px-2 text-xs rounded-md border transition-colors",
-              "border-border text-muted-foreground hover:text-foreground hover:bg-accent/50",
+              "h-7 flex-1 rounded-md border px-2 text-xs transition-colors",
+              "border-border text-muted-foreground hover:bg-accent/50 hover:text-foreground",
             )}
           >
             {t("profilePassword.modes.validate")}
@@ -2026,10 +2026,10 @@ function SecuritySectionInline({
               reset();
             }}
             className={cn(
-              "flex-1 h-7 px-2 text-xs rounded-md border transition-colors",
+              "h-7 flex-1 rounded-md border px-2 text-xs transition-colors",
               mode === "change"
-                ? "bg-accent text-accent-foreground border-transparent"
-                : "border-border text-muted-foreground hover:text-foreground hover:bg-accent/50",
+                ? "border-transparent bg-accent text-accent-foreground"
+                : "border-border text-muted-foreground hover:bg-accent/50 hover:text-foreground",
             )}
           >
             {t("profilePassword.modes.change")}
@@ -2041,10 +2041,10 @@ function SecuritySectionInline({
               reset();
             }}
             className={cn(
-              "flex-1 h-7 px-2 text-xs rounded-md border transition-colors",
+              "h-7 flex-1 rounded-md border px-2 text-xs transition-colors",
               mode === "remove"
-                ? "bg-destructive/10 text-destructive border-transparent"
-                : "border-border text-muted-foreground hover:text-foreground hover:bg-accent/50",
+                ? "border-transparent bg-destructive/10 text-destructive"
+                : "border-border text-muted-foreground hover:bg-accent/50 hover:text-foreground",
             )}
           >
             {t("profilePassword.modes.remove")}
@@ -2106,7 +2106,7 @@ function SecuritySectionInline({
       <Button
         size="sm"
         variant={mode === "remove" ? "destructive" : "default"}
-        className="self-start h-7 text-xs"
+        className="h-7 self-start text-xs"
         disabled={isRunning || isSubmitting}
         onClick={() => {
           void onSubmit();
@@ -2397,11 +2397,11 @@ export function ProfileBypassRulesDialog({
         if (!open) onClose();
       }}
     >
-      <DialogContent className="sm:max-w-lg max-h-[80vh] flex flex-col">
+      <DialogContent className="flex max-h-[80vh] flex-col sm:max-w-lg">
         <DialogHeader className="shrink-0">
           <DialogTitle>{t("profileInfo.network.bypassRulesTitle")}</DialogTitle>
         </DialogHeader>
-        <ScrollArea className="flex-1 min-h-0">
+        <ScrollArea className="min-h-0 flex-1">
           <div className="flex flex-col gap-3 py-2">
             <p className="text-sm text-muted-foreground">
               {t("profileInfo.network.bypassRulesDescription")}
@@ -2423,12 +2423,12 @@ export function ProfileBypassRulesDialog({
                 onClick={handleAddRule}
                 disabled={!newRule.trim()}
               >
-                <LuPlus className="size-4 mr-1" />
+                <LuPlus className="mr-1 size-4" />
                 {t("profileInfo.network.addRule")}
               </Button>
             </div>
             {bypassRules.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-2">
+              <p className="py-2 text-sm text-muted-foreground">
                 {t("profileInfo.network.noRules")}
               </p>
             ) : (
@@ -2436,15 +2436,15 @@ export function ProfileBypassRulesDialog({
                 {bypassRules.map((rule) => (
                   <div
                     key={rule}
-                    className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-md bg-muted text-sm"
+                    className="flex items-center justify-between gap-2 rounded-md bg-muted px-3 py-1.5 text-sm"
                   >
-                    <span className="font-mono text-xs truncate">{rule}</span>
+                    <span className="truncate font-mono text-xs">{rule}</span>
                     <button
                       type="button"
                       onClick={() => {
                         handleRemoveRule(rule);
                       }}
-                      className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                      className="shrink-0 text-muted-foreground transition-colors hover:text-destructive"
                     >
                       <LuX className="size-3.5" />
                     </button>

@@ -109,7 +109,7 @@ export function WindowDragArea() {
 
   return (
     <div
-      className="fixed top-0 right-0 z-50 flex items-center h-11 select-none"
+      className="fixed top-0 right-0 z-50 flex h-11 items-center select-none"
       aria-hidden="false"
     >
       <button
@@ -117,7 +117,7 @@ export function WindowDragArea() {
         onClick={() => {
           void handleMinimize();
         }}
-        className="flex items-center justify-center w-11 h-full hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
+        className="flex h-full w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
         aria-label={t("common.window.minimize")}
       >
         <svg
@@ -136,7 +136,7 @@ export function WindowDragArea() {
         onClick={() => {
           void handleToggleMaximize();
         }}
-        className="flex items-center justify-center w-11 h-full hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
+        className="flex h-full w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
         aria-label={
           isMaximized ? t("common.window.restore") : t("common.window.maximize")
         }
@@ -175,7 +175,7 @@ export function WindowDragArea() {
         onClick={() => {
           void handleClose();
         }}
-        className="flex items-center justify-center w-11 h-full hover:bg-destructive/90 transition-colors text-muted-foreground hover:text-destructive-foreground"
+        className="flex h-full w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-destructive/90 hover:text-destructive-foreground"
         aria-label={t("common.buttons.close")}
       >
         <svg

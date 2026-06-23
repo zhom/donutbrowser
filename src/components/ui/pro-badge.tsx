@@ -4,7 +4,7 @@ export function ProBadge({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        "text-[10px] font-semibold px-1 py-0.5 rounded bg-primary text-primary-foreground",
+        "rounded bg-primary px-1 py-0.5 text-[10px] font-semibold text-primary-foreground",
         className,
       )}
     >

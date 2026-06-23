@@ -106,7 +106,7 @@ function DataTableActionBarAction({
       {...props}
     >
       {isPending ? (
-        <div className="size-3.5 rounded-full border border-current animate-spin border-t-transparent" />
+        <div className="size-3.5 animate-spin rounded-full border border-current border-t-transparent" />
       ) : (
         children
       )}
@@ -142,7 +142,7 @@ function DataTableActionBarSelection<TData>({
 
   return (
     <div className="flex h-7 items-center rounded-md border pr-1 pl-2.5">
-      <span className="whitespace-nowrap text-xs">
+      <span className="text-xs whitespace-nowrap">
         {t("dataTableActionBar.selected", {
           count: table.getFilteredSelectedRowModel().rows.length,
         })}
@@ -164,7 +164,7 @@ function DataTableActionBarSelection<TData>({
           className="flex items-center gap-2 border bg-accent px-2 py-1 font-semibold text-foreground dark:bg-card [&>span]:hidden"
         >
           <p>{t("dataTableActionBar.clearSelection")}</p>
-          <kbd className="select-none rounded border bg-background px-1.5 py-px font-mono font-normal text-[0.7rem] text-foreground shadow-xs">
+          <kbd className="rounded border bg-background px-1.5 py-px font-mono text-[0.7rem] font-normal text-foreground shadow-xs select-none">
             <abbr title={t("common.keys.escape")} className="no-underline">
               Esc
             </abbr>

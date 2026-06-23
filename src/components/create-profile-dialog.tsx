@@ -534,7 +534,7 @@ export function CreateProfileDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-[min(48rem,calc(100%-4rem))] max-h-[90vh] flex flex-col">
+      <DialogContent className="flex max-h-[90vh] max-w-[min(48rem,calc(100%-4rem))] flex-col">
         <DialogHeader className="shrink-0">
           <DialogTitle>
             {currentStep === "browser-selection"
@@ -551,13 +551,13 @@ export function CreateProfileDialog({
         <Tabs
           value={activeTab}
           onValueChange={handleTabChange}
-          className="flex flex-col flex-1 w-full min-h-0"
+          className="flex min-h-0 w-full flex-1 flex-col"
         >
           {/* Tab list hidden - only anti-detect browsers are supported */}
 
-          <ScrollArea className="overflow-y-auto flex-1">
-            <div className="flex flex-col justify-center items-center w-full">
-              <div className="py-4 space-y-6 w-full">
+          <ScrollArea className="flex-1 overflow-y-auto">
+            <div className="flex w-full flex-col items-center justify-center">
+              <div className="w-full space-y-6 py-4">
                 {currentStep === "browser-selection" ? (
                   <>
                     <TabsContent value="anti-detect" className="mt-0 space-y-6">
@@ -569,10 +569,10 @@ export function CreateProfileDialog({
                             handleBrowserSelect("wayfern");
                           }}
                           disabled={!getCreatableVersion("wayfern")}
-                          className="flex gap-3 justify-start items-center p-4 w-full h-16 border-2 transition-colors hover:border-primary/50"
+                          className="flex h-16 w-full items-center justify-start gap-3 border-2 p-4 transition-colors hover:border-primary/50"
                           variant="outline"
                         >
-                          <div className="flex justify-center items-center size-8">
+                          <div className="flex size-8 items-center justify-center">
                             {isBrowserCurrentlyDownloading("wayfern") ? (
                               <LuLoaderCircle className="size-6 animate-spin" />
                             ) : (
@@ -600,7 +600,7 @@ export function CreateProfileDialog({
                             profiles. Only Wayfern can be created. */}
 
                         {!getCreatableVersion("wayfern") && (
-                          <p className="pt-2 text-sm text-center text-muted-foreground">
+                          <p className="pt-2 text-center text-sm text-muted-foreground">
                             {t("createProfile.browsersDownloading")}
                           </p>
                         )}
@@ -629,10 +629,10 @@ export function CreateProfileDialog({
                                 onClick={() => {
                                   handleBrowserSelect(browser.value);
                                 }}
-                                className="flex gap-3 justify-start items-center p-4 w-full h-16 border-2 transition-colors hover:border-primary/50"
+                                className="flex h-16 w-full items-center justify-start gap-3 border-2 p-4 transition-colors hover:border-primary/50"
                                 variant="outline"
                               >
-                                <div className="flex justify-center items-center size-8">
+                                <div className="flex size-8 items-center justify-center">
                                   {IconComponent && (
                                     <IconComponent className="size-6" />
                                   )}
@@ -684,7 +684,7 @@ export function CreateProfileDialog({
                         </div>
 
                         {/* Ephemeral Option */}
-                        <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
+                        <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
                           <div className="flex items-center gap-x-2">
                             <Checkbox
                               id="ephemeral"
@@ -697,14 +697,14 @@ export function CreateProfileDialog({
                               {t("profiles.ephemeral")}
                             </Label>
                           </div>
-                          <p className="text-sm text-muted-foreground ml-6">
+                          <p className="ml-6 text-sm text-muted-foreground">
                             {t("profiles.ephemeralDescription")}
                           </p>
                         </div>
 
                         {/* Password Option */}
                         {!ephemeral && (
-                          <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
+                          <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
                             <div className="flex items-center gap-x-2">
                               <Checkbox
                                 id="enable-password"
@@ -725,7 +725,7 @@ export function CreateProfileDialog({
                                 {t("createProfile.passwordProtect.label")}
                               </Label>
                             </div>
-                            <p className="text-sm text-muted-foreground ml-6">
+                            <p className="ml-6 text-sm text-muted-foreground">
                               {t("createProfile.passwordProtect.description")}
                             </p>
                             {enablePassword && (
@@ -769,15 +769,15 @@ export function CreateProfileDialog({
                           <div className="space-y-6">
                             {/* Wayfern Download Status */}
                             {isLoadingReleaseTypes && (
-                              <div className="flex gap-3 items-center p-3 rounded-md border">
-                                <div className="size-4 rounded-full border-2 animate-spin border-muted/40 border-t-primary" />
+                              <div className="flex items-center gap-3 rounded-md border p-3">
+                                <div className="size-4 animate-spin rounded-full border-2 border-muted/40 border-t-primary" />
                                 <p className="text-sm text-muted-foreground">
                                   {t("createProfile.version.fetching")}
                                 </p>
                               </div>
                             )}
                             {!isLoadingReleaseTypes && releaseTypesError && (
-                              <div className="flex gap-3 items-center p-3 rounded-md border border-destructive/50 bg-destructive/10">
+                              <div className="flex items-center gap-3 rounded-md border border-destructive/50 bg-destructive/10 p-3">
                                 <p className="flex-1 text-sm text-destructive">
                                   {releaseTypesError}
                                 </p>
@@ -796,7 +796,7 @@ export function CreateProfileDialog({
                             {!isLoadingReleaseTypes &&
                               !releaseTypesError &&
                               !getBestAvailableVersion("wayfern") && (
-                                <div className="flex gap-3 items-center p-3 rounded-md border border-warning/50 bg-warning/10">
+                                <div className="flex items-center gap-3 rounded-md border border-warning/50 bg-warning/10 p-3">
                                   <p className="text-sm text-warning">
                                     {t("createProfile.platformUnavailable", {
                                       browser: "Wayfern",
@@ -809,7 +809,7 @@ export function CreateProfileDialog({
                               !isBrowserCurrentlyDownloading("wayfern") &&
                               !getCreatableVersion("wayfern") &&
                               getBestAvailableVersion("wayfern") && (
-                                <div className="flex gap-3 items-center p-3 rounded-md border">
+                                <div className="flex items-center gap-3 rounded-md border p-3">
                                   <p className="text-sm text-muted-foreground">
                                     {t("createProfile.version.needsDownload", {
                                       browser: "Wayfern",
@@ -840,7 +840,7 @@ export function CreateProfileDialog({
                               !releaseTypesError &&
                               !isBrowserCurrentlyDownloading("wayfern") &&
                               getCreatableVersion("wayfern") && (
-                                <div className="p-3 text-sm rounded-md border text-muted-foreground">
+                                <div className="rounded-md border p-3 text-sm text-muted-foreground">
                                   ✓{" "}
                                   {t("createProfile.version.available", {
                                     browser: "Wayfern",
@@ -855,7 +855,7 @@ export function CreateProfileDialog({
                               getCreatableVersion("wayfern") &&
                               !isBrowserVersionAvailable("wayfern") &&
                               getBestAvailableVersion("wayfern") && (
-                                <div className="flex gap-3 items-center p-3 rounded-md border">
+                                <div className="flex items-center gap-3 rounded-md border p-3">
                                   <p className="flex-1 text-sm text-muted-foreground">
                                     {t(
                                       "createProfile.version.upgradeAvailable",
@@ -887,7 +887,7 @@ export function CreateProfileDialog({
                                 </div>
                               )}
                             {isBrowserCurrentlyDownloading("wayfern") && (
-                              <div className="p-3 text-sm rounded-md border text-muted-foreground">
+                              <div className="rounded-md border p-3 text-sm text-muted-foreground">
                                 {t("createProfile.version.downloading", {
                                   browser: "Wayfern",
                                   version:
@@ -915,8 +915,8 @@ export function CreateProfileDialog({
                             {selectedBrowser && (
                               <div className="space-y-3">
                                 {isLoadingReleaseTypes && (
-                                  <div className="flex gap-3 items-center">
-                                    <div className="size-4 rounded-full border-2 animate-spin border-muted/40 border-t-primary" />
+                                  <div className="flex items-center gap-3">
+                                    <div className="size-4 animate-spin rounded-full border-2 border-muted/40 border-t-primary" />
                                     <p className="text-sm text-muted-foreground">
                                       {t("createProfile.version.fetching")}
                                     </p>
@@ -924,7 +924,7 @@ export function CreateProfileDialog({
                                 )}
                                 {!isLoadingReleaseTypes &&
                                   releaseTypesError && (
-                                    <div className="flex gap-3 items-center p-3 rounded-md border border-destructive/50 bg-destructive/10">
+                                    <div className="flex items-center gap-3 rounded-md border border-destructive/50 bg-destructive/10 p-3">
                                       <p className="flex-1 text-sm text-destructive">
                                         {releaseTypesError}
                                       </p>
@@ -947,7 +947,7 @@ export function CreateProfileDialog({
                                   ) &&
                                   !getCreatableVersion(selectedBrowser) &&
                                   getBestAvailableVersion(selectedBrowser) && (
-                                    <div className="flex gap-3 items-center">
+                                    <div className="flex items-center gap-3">
                                       <p className="text-sm text-muted-foreground">
                                         {t(
                                           "createProfile.version.latestNeedsDownload",
@@ -1016,7 +1016,7 @@ export function CreateProfileDialog({
 
                         {/* Proxy / VPN Selection - Always visible */}
                         <div className="space-y-3">
-                          <div className="flex justify-between items-center">
+                          <div className="flex items-center justify-between">
                             <Label>{t("createProfile.proxy.title")}</Label>
                             <RippleButton
                               size="sm"
@@ -1024,7 +1024,7 @@ export function CreateProfileDialog({
                               onClick={() => {
                                 setShowProxyForm(true);
                               }}
-                              className="px-2 h-7 text-xs"
+                              className="h-7 px-2 text-xs"
                             >
                               <GoPlus className="mr-1 size-3" />{" "}
                               {t("createProfile.proxy.addProxy")}
@@ -1144,7 +1144,7 @@ export function CreateProfileDialog({
                                             />
                                             <Badge
                                               variant="outline"
-                                              className="text-[10px] px-1 py-0 leading-tight mr-1"
+                                              className="mr-1 px-1 py-0 text-[10px] leading-tight"
                                             >
                                               WG
                                             </Badge>
@@ -1158,7 +1158,7 @@ export function CreateProfileDialog({
                               </PopoverContent>
                             </Popover>
                           ) : (
-                            <div className="flex gap-3 items-center p-3 text-sm rounded-md border text-muted-foreground">
+                            <div className="flex items-center gap-3 rounded-md border p-3 text-sm text-muted-foreground">
                               {t("createProfile.proxy.noProxiesAvailable")}
                             </div>
                           )}
@@ -1285,15 +1285,15 @@ export function CreateProfileDialog({
                           {selectedBrowser && (
                             <div className="space-y-3">
                               {isLoadingReleaseTypes && (
-                                <div className="flex gap-3 items-center">
-                                  <div className="size-4 rounded-full border-2 animate-spin border-muted/40 border-t-primary" />
+                                <div className="flex items-center gap-3">
+                                  <div className="size-4 animate-spin rounded-full border-2 border-muted/40 border-t-primary" />
                                   <p className="text-sm text-muted-foreground">
                                     {t("createProfile.version.fetching")}
                                   </p>
                                 </div>
                               )}
                               {!isLoadingReleaseTypes && releaseTypesError && (
-                                <div className="flex gap-3 items-center p-3 rounded-md border border-destructive/50 bg-destructive/10">
+                                <div className="flex items-center gap-3 rounded-md border border-destructive/50 bg-destructive/10 p-3">
                                   <p className="flex-1 text-sm text-destructive">
                                     {releaseTypesError}
                                   </p>
@@ -1316,7 +1316,7 @@ export function CreateProfileDialog({
                                 ) &&
                                 !getCreatableVersion(selectedBrowser) &&
                                 getBestAvailableVersion(selectedBrowser) && (
-                                  <div className="flex gap-3 items-center">
+                                  <div className="flex items-center gap-3">
                                     <p className="text-sm text-muted-foreground">
                                       {t(
                                         "createProfile.version.latestNeedsDownload",
@@ -1383,7 +1383,7 @@ export function CreateProfileDialog({
 
                         {/* Proxy / VPN Selection - Always visible */}
                         <div className="space-y-3">
-                          <div className="flex justify-between items-center">
+                          <div className="flex items-center justify-between">
                             <Label>{t("createProfile.proxy.title")}</Label>
                             <RippleButton
                               size="sm"
@@ -1391,7 +1391,7 @@ export function CreateProfileDialog({
                               onClick={() => {
                                 setShowProxyForm(true);
                               }}
-                              className="px-2 h-7 text-xs"
+                              className="h-7 px-2 text-xs"
                             >
                               <GoPlus className="mr-1 size-3" />{" "}
                               {t("createProfile.proxy.addProxy")}
@@ -1511,7 +1511,7 @@ export function CreateProfileDialog({
                                             />
                                             <Badge
                                               variant="outline"
-                                              className="text-[10px] px-1 py-0 leading-tight mr-1"
+                                              className="mr-1 px-1 py-0 text-[10px] leading-tight"
                                             >
                                               WG
                                             </Badge>
@@ -1525,7 +1525,7 @@ export function CreateProfileDialog({
                               </PopoverContent>
                             </Popover>
                           ) : (
-                            <div className="flex gap-3 items-center p-3 text-sm rounded-md border text-muted-foreground">
+                            <div className="flex items-center gap-3 rounded-md border p-3 text-sm text-muted-foreground">
                               {t("createProfile.proxy.noProxiesAvailable")}
                             </div>
                           )}
@@ -1556,7 +1556,7 @@ export function CreateProfileDialog({
           </ScrollArea>
         </Tabs>
 
-        <DialogFooter className="shrink-0 pt-4 border-t">
+        <DialogFooter className="shrink-0 border-t pt-4">
           {currentStep === "browser-config" ? (
             <>
               <RippleButton variant="outline" onClick={handleBack}>

@@ -67,7 +67,7 @@ export function ThankYouDialog({
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ ...spring, delay: 0.15 }}
-              className="mx-auto max-w-[46ch] text-sm leading-6 text-pretty text-muted-foreground"
+              className="mx-auto max-w-[46ch] text-sm/6 text-pretty text-muted-foreground"
             >
               {t("onboarding.thankYou.body")}
             </motion.p>

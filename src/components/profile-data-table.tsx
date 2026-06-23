@@ -365,10 +365,10 @@ function ExtCell({
         <button
           type="button"
           disabled={isSaving}
-          className="flex items-center gap-1.5 h-7 px-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 rounded transition-colors duration-100 w-full text-left disabled:opacity-50"
+          className="flex h-7 w-full items-center gap-1.5 rounded px-1.5 text-left text-xs text-muted-foreground transition-colors duration-100 hover:bg-accent/50 hover:text-foreground disabled:opacity-50"
         >
           <LuPuzzle className="size-3 shrink-0" />
-          <span className="truncate flex-1" title={label}>
+          <span className="flex-1 truncate" title={label}>
             {label}
           </span>
           <LuChevronDown className="size-3 shrink-0 text-muted-foreground" />
@@ -460,7 +460,7 @@ function DnsCell({
           type="button"
           data-onborda="dns-blocklist"
           disabled={isSaving}
-          className="flex items-center gap-1.5 h-7 px-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 rounded transition-colors duration-100 w-full text-left disabled:opacity-50"
+          className="flex h-7 w-full items-center gap-1.5 rounded px-1.5 text-left text-xs text-muted-foreground transition-colors duration-100 hover:bg-accent/50 hover:text-foreground disabled:opacity-50"
           title={
             level
               ? meta.t("profiles.table.dnsLevel", { level })
@@ -681,9 +681,9 @@ const TagsCell = React.memo<{
           type="button"
           ref={containerRef as unknown as React.RefObject<HTMLButtonElement>}
           className={cn(
-            "flex overflow-hidden gap-1 items-center px-2 py-1 h-6 w-full bg-transparent rounded border-none cursor-pointer",
+            "flex h-6 w-full cursor-pointer items-center gap-1 overflow-hidden rounded border-none bg-transparent px-2 py-1",
             isDisabled
-              ? "opacity-60 cursor-not-allowed"
+              ? "cursor-not-allowed opacity-60"
               : "cursor-pointer hover:bg-accent/50",
           )}
           onClick={() => {
@@ -709,7 +709,7 @@ const TagsCell = React.memo<{
       );
 
       return (
-        <div className="w-full h-6 cursor-pointer">
+        <div className="h-6 w-full cursor-pointer">
           <Tooltip>
             <TooltipTrigger asChild>{ButtonContent}</TooltipTrigger>
             {hiddenCount > 0 && (
@@ -735,13 +735,13 @@ const TagsCell = React.memo<{
     return (
       <div
         className={cn(
-          "w-full h-6 relative",
-          isDisabled && "opacity-60 pointer-events-none",
+          "relative h-6 w-full",
+          isDisabled && "pointer-events-none opacity-60",
         )}
       >
         <div
           ref={editorRef}
-          className="absolute top-0 left-0 z-50 w-40 min-h-6 bg-popover rounded-md shadow-md"
+          className="absolute top-0 left-0 z-50 min-h-6 w-40 rounded-md bg-popover shadow-md"
         >
           <MultipleSelector
             value={valueOptions}
@@ -755,11 +755,11 @@ const TagsCell = React.memo<{
                 : ""
             }
             className={cn(
-              "bg-transparent border-0! focus-within:ring-0!",
+              "border-0! bg-transparent focus-within:ring-0!",
               "[&_div:first-child]:border-0! [&_div:first-child]:ring-0! [&_div:first-child]:focus-within:ring-0!",
               "[&_div:first-child]:min-h-6! [&_div:first-child]:px-2! [&_div:first-child]:py-1!",
-              "[&_div:first-child>div]:items-center [&_div:first-child>div]:h-6!",
-              "[&_input]:ml-0! [&_input]:mt-0! [&_input]:px-0!",
+              "[&_div:first-child>div]:h-6! [&_div:first-child>div]:items-center",
+              "[&_input]:mt-0! [&_input]:ml-0! [&_input]:px-0!",
               !isFocused && "[&_div:first-child>div]:justify-center",
             )}
             badgeClassName="shrink-0"
@@ -859,7 +859,7 @@ const OverflowTooltipText = React.memo<{
       <TooltipTrigger asChild>
         <span
           ref={textRef}
-          className={cn("block min-w-0 max-w-full truncate", className)}
+          className={cn("block max-w-full min-w-0 truncate", className)}
         >
           {text}
         </span>
@@ -894,16 +894,16 @@ const ProxyCellTrigger = React.memo<{
         <PopoverTrigger asChild>
           <span
             className={cn(
-              "flex gap-2 items-center px-2 py-1 rounded min-w-0 max-w-full",
+              "flex max-w-full min-w-0 items-center gap-2 rounded px-2 py-1",
               isDisabled
-                ? "opacity-60 cursor-not-allowed pointer-events-none"
+                ? "pointer-events-none cursor-not-allowed opacity-60"
                 : "cursor-pointer hover:bg-accent/50",
             )}
           >
             {vpnBadge && (
               <Badge
                 variant="outline"
-                className="text-[10px] px-1 py-0 leading-tight shrink-0"
+                className="shrink-0 px-1 py-0 text-[10px] leading-tight"
               >
                 {vpnBadge}
               </Badge>
@@ -911,7 +911,7 @@ const ProxyCellTrigger = React.memo<{
             <span
               ref={textRef}
               className={cn(
-                "text-sm min-w-0 truncate",
+                "min-w-0 truncate text-sm",
                 !hasAssignment && "text-muted-foreground",
               )}
             >
@@ -1037,15 +1037,15 @@ const NoteCell = React.memo<{
 
     if (openNoteEditorFor !== profile.id) {
       return (
-        <div className="w-full min-h-6">
+        <div className="min-h-6 w-full">
           <Tooltip>
             <TooltipTrigger asChild>
               <button
                 type="button"
                 className={cn(
-                  "flex items-center px-2 py-1 min-h-6 w-full min-w-0 bg-transparent rounded border-none text-left",
+                  "flex min-h-6 w-full min-w-0 items-center rounded border-none bg-transparent px-2 py-1 text-left",
                   isDisabled
-                    ? "opacity-60 cursor-not-allowed"
+                    ? "cursor-not-allowed opacity-60"
                     : "cursor-pointer hover:bg-accent/50",
                 )}
                 onClick={() => {
@@ -1057,7 +1057,7 @@ const NoteCell = React.memo<{
               >
                 <span
                   className={cn(
-                    "text-sm truncate block w-full",
+                    "block w-full truncate text-sm",
                     !effectiveNote && "text-muted-foreground",
                   )}
                 >
@@ -1067,7 +1067,7 @@ const NoteCell = React.memo<{
             </TooltipTrigger>
             {showTooltip && (
               <TooltipContent className="max-w-[320px]">
-                <p className="whitespace-pre-wrap wrap-break-word">
+                <p className="wrap-break-word whitespace-pre-wrap">
                   {effectiveNote ?? t("profiles.note.empty")}
                 </p>
               </TooltipContent>
@@ -1080,13 +1080,13 @@ const NoteCell = React.memo<{
     return (
       <div
         className={cn(
-          "w-full relative",
-          isDisabled && "opacity-60 pointer-events-none",
+          "relative w-full",
+          isDisabled && "pointer-events-none opacity-60",
         )}
       >
         <div
           ref={editorRef}
-          className="absolute -top-[15px] -left-px z-50 w-60 min-h-6 bg-popover rounded-md shadow-md border"
+          className="absolute top-[-15px] -left-px z-50 min-h-6 w-60 rounded-md border bg-popover shadow-md"
         >
           <textarea
             ref={textareaRef}
@@ -1106,7 +1106,7 @@ const NoteCell = React.memo<{
               setOpenNoteEditorFor(null);
             }}
             placeholder={t("profiles.note.placeholder")}
-            className="w-full min-h-6 max-h-[200px] px-2 py-1 text-sm bg-transparent border-0 resize-none focus:outline-none focus:ring-0"
+            className="max-h-[200px] min-h-6 w-full resize-none border-0 bg-transparent px-2 py-1 text-sm focus:ring-0 focus:outline-none"
             style={{
               overflow: "auto",
             }}
@@ -2103,18 +2103,18 @@ export function ProfilesDataTable({
             return (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="flex justify-center items-center size-4">
+                  <span className="flex size-4 items-center justify-center">
                     <button
                       type="button"
-                      className="flex justify-center items-center p-0 border-none cursor-pointer"
+                      className="flex cursor-pointer items-center justify-center border-none p-0"
                       onClick={() => {
                         meta.handleIconClick(profile.id);
                       }}
                       aria-label={t("common.aria.selectProfile")}
                     >
-                      <span className="size-4 group">
+                      <span className="group size-4">
                         <OsIcon className="size-4 text-muted-foreground group-hover:hidden" />
-                        <span className="peer border-input dark:bg-input/30 dark:data-[state=checked]:bg-primary size-4 shrink-0 rounded-[4px] border shadow-xs transition-shadow outline-none size-4 hidden group-hover:block pointer-events-none items-center justify-center duration-150" />
+                        <span className="peer pointer-events-none hidden size-4 shrink-0 items-center justify-center rounded-[4px] border border-input shadow-xs transition-shadow duration-150 outline-none group-hover:block dark:bg-input/30 dark:data-[state=checked]:bg-primary" />
                       </span>
                     </button>
                   </span>
@@ -2142,7 +2142,7 @@ export function ProfilesDataTable({
                 sideOffset={4}
                 horizontalOffset={8}
               >
-                <span className="flex justify-center items-center size-4">
+                <span className="flex size-4 items-center justify-center">
                   <Checkbox
                     checked={isSelected}
                     onCheckedChange={(value) => {
@@ -2168,7 +2168,7 @@ export function ProfilesDataTable({
             return (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="flex justify-center items-center size-4 cursor-not-allowed">
+                  <span className="flex size-4 cursor-not-allowed items-center justify-center">
                     {IconComponent && (
                       <IconComponent className="size-4 opacity-50" />
                     )}
@@ -2190,7 +2190,7 @@ export function ProfilesDataTable({
                 sideOffset={4}
                 horizontalOffset={8}
               >
-                <span className="flex justify-center items-center size-4">
+                <span className="flex size-4 items-center justify-center">
                   <Checkbox
                     checked={isSelected}
                     onCheckedChange={(value) => {
@@ -2210,20 +2210,20 @@ export function ProfilesDataTable({
               sideOffset={4}
               horizontalOffset={8}
             >
-              <span className="flex relative justify-center items-center size-4">
+              <span className="relative flex size-4 items-center justify-center">
                 <button
                   type="button"
-                  className="flex justify-center items-center p-0 border-none cursor-pointer"
+                  className="flex cursor-pointer items-center justify-center border-none p-0"
                   onClick={() => {
                     meta.handleIconClick(profile.id);
                   }}
                   aria-label={t("common.aria.selectProfile")}
                 >
-                  <span className="size-4 group">
+                  <span className="group size-4">
                     {IconComponent && (
                       <IconComponent className="size-4 group-hover:hidden" />
                     )}
-                    <span className="peer border-input dark:bg-input/30 dark:data-[state=checked]:bg-primary size-4 shrink-0 rounded-[4px] border shadow-xs transition-shadow outline-none size-4 hidden group-hover:block pointer-events-none items-center justify-center duration-150" />
+                    <span className="peer pointer-events-none hidden size-4 shrink-0 items-center justify-center rounded-[4px] border border-input shadow-xs transition-shadow duration-150 outline-none group-hover:block dark:bg-input/30 dark:data-[state=checked]:bg-primary" />
                   </span>
                 </button>
               </span>
@@ -2332,7 +2332,7 @@ export function ProfilesDataTable({
             : "default";
 
           return (
-            <div className="flex gap-2 items-center">
+            <div className="flex items-center gap-2">
               {isDesynced && (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -2360,8 +2360,8 @@ export function ProfilesDataTable({
                           : meta.t("profiles.actions.launch")
                       }
                       className={cn(
-                        "size-7 p-0 grid place-items-center",
-                        !canLaunch && "opacity-50 cursor-not-allowed",
+                        "grid size-7 place-items-center p-0",
+                        !canLaunch && "cursor-not-allowed opacity-50",
                         canLaunch && "cursor-pointer",
                         isFollower && "border-accent",
                         isRunning &&
@@ -2374,7 +2374,7 @@ export function ProfilesDataTable({
                       }
                     >
                       {isLaunching || isStopping ? (
-                        <div className="size-3 rounded-full border border-current animate-spin border-t-transparent" />
+                        <div className="size-3 animate-spin rounded-full border border-current border-t-transparent" />
                       ) : isRunning ? (
                         <LuSquare className="size-3.5 fill-current" />
                       ) : (
@@ -2423,7 +2423,7 @@ export function ProfilesDataTable({
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="justify-start p-0 h-auto font-semibold text-left cursor-pointer"
+                  className="h-auto cursor-pointer justify-start p-0 text-left font-semibold"
                 >
                   {meta.t("common.labels.name")}
                   {isActive("name", false) ? (
@@ -2491,7 +2491,7 @@ export function ProfilesDataTable({
             return (
               <div
                 ref={renameContainerRef}
-                className="overflow-visible relative"
+                className="relative overflow-visible"
               >
                 <Input
                   autoFocus
@@ -2523,7 +2523,7 @@ export function ProfilesDataTable({
                       meta.setRenameError(null);
                     }
                   }}
-                  className="w-full min-w-0 max-w-full h-6 px-2 py-1 text-sm font-medium leading-none border-0 shadow-none focus-visible:ring-0"
+                  className="h-6 w-full max-w-full min-w-0 border-0 px-2 py-1 text-sm leading-none font-medium shadow-none focus-visible:ring-0"
                 />
               </div>
             );
@@ -2532,7 +2532,7 @@ export function ProfilesDataTable({
           const display = (
             <OverflowTooltipText
               text={name}
-              className="font-medium text-left leading-none"
+              className="text-left leading-none font-medium"
             />
           );
 
@@ -2548,13 +2548,13 @@ export function ProfilesDataTable({
           const isLocked = meta.isProfileLockedByAnother(profile.id);
 
           return (
-            <div className="flex items-center gap-1.5 min-w-0 max-w-full overflow-hidden">
+            <div className="flex max-w-full min-w-0 items-center gap-1.5 overflow-hidden">
               <button
                 type="button"
                 className={cn(
-                  "px-2 py-1 mr-auto text-left bg-transparent rounded border-none h-6 min-w-0 max-w-full overflow-hidden",
+                  "mr-auto h-6 max-w-full min-w-0 overflow-hidden rounded border-none bg-transparent px-2 py-1 text-left",
                   isDisabled
-                    ? "opacity-60 cursor-not-allowed"
+                    ? "cursor-not-allowed opacity-60"
                     : "cursor-pointer hover:bg-accent/50",
                 )}
                 onClick={() => {
@@ -2715,7 +2715,7 @@ export function ProfilesDataTable({
               (snapshot?.current_bytes_received ?? 0);
 
             return (
-              <div className="overflow-hidden min-w-0">
+              <div className="min-w-0 overflow-hidden">
                 <BandwidthMiniChart
                   key={`${profile.id}-${snapshot?.last_update ?? 0}-${bandwidthData.length}`}
                   data={bandwidthData}
@@ -2727,7 +2727,7 @@ export function ProfilesDataTable({
           }
 
           return (
-            <div className="flex overflow-hidden gap-2 items-center min-w-0">
+            <div className="flex min-w-0 items-center gap-2 overflow-hidden">
               <Popover
                 open={isSelectorOpen}
                 onOpenChange={(open) => {
@@ -2833,7 +2833,7 @@ export function ProfilesDataTable({
                                 />
                                 <Badge
                                   variant="outline"
-                                  className="text-[10px] px-1 py-0 leading-tight mr-1"
+                                  className="mr-1 px-1 py-0 text-[10px] leading-tight"
                                 >
                                   WG
                                 </Badge>
@@ -2956,7 +2956,7 @@ export function ProfilesDataTable({
           return (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="flex justify-center items-center h-9 w-full">
+                <span className="flex h-9 w-full items-center justify-center">
                   {dot.encrypted ? (
                     <LuLock
                       className={`size-3 ${dot.color.replace("bg-", "text-")}${dot.animate ? " animate-pulse" : ""}`}
@@ -2981,10 +2981,10 @@ export function ProfilesDataTable({
           const profile = row.original;
 
           return (
-            <div className="flex justify-end items-center h-9 w-full">
+            <div className="flex h-9 w-full items-center justify-end">
               <Button
                 variant="ghost"
-                className="p-0 size-7"
+                className="size-7 p-0"
                 disabled={!meta.isClient}
                 onClick={() => {
                   setProfileForInfoDialog(profile);
@@ -3108,11 +3108,11 @@ export function ProfilesDataTable({
 
   return (
     <>
-      <div className="relative flex-1 min-h-0 flex flex-col">
+      <div className="relative flex min-h-0 flex-1 flex-col">
         <div
           ref={scrollParentRef}
           className={cn(
-            "overflow-auto relative flex-1 min-h-0 scroll-fade",
+            "scroll-fade relative min-h-0 flex-1 overflow-auto",
             // Clearance for the floating selection action bar (bottom-6 +
             // ~46px tall) so the last rows can scroll out from behind it.
             // Same predicate DataTableActionBar uses for its visibility.
@@ -3128,11 +3128,11 @@ export function ProfilesDataTable({
           }
         >
           <Table className="table-fixed" containerClassName="overflow-visible">
-            <TableHeader className="overflow-visible sticky top-0 z-10 bg-background [&_tr]:border-0">
+            <TableHeader className="sticky top-0 z-10 overflow-visible bg-background [&_tr]:border-0">
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow
                   key={headerGroup.id}
-                  className="overflow-visible !border-0"
+                  className="overflow-visible border-0!"
                 >
                   {headerGroup.headers.map((header) => {
                     return (
@@ -3196,7 +3196,7 @@ export function ProfilesDataTable({
                         title={crossOsTitle}
                         style={{ height: `${ROW_HEIGHT}px` }}
                         className={cn(
-                          "overflow-visible hover:bg-accent/50 !border-0",
+                          "overflow-visible border-0! hover:bg-accent/50",
                           rowIsCrossOs && "opacity-60",
                         )}
                       >
@@ -3320,7 +3320,7 @@ export function ProfilesDataTable({
               <LuPlay className="fill-current" />
             </DataTableActionBarAction>
             {!bulkActionsUnlocked && (
-              <ProBadge className="absolute -top-2 -right-2 pointer-events-none" />
+              <ProBadge className="pointer-events-none absolute -top-2 -right-2" />
             )}
           </span>
         )}
@@ -3339,7 +3339,7 @@ export function ProfilesDataTable({
               <LuSquare className="fill-current" />
             </DataTableActionBarAction>
             {!bulkActionsUnlocked && (
-              <ProBadge className="absolute -top-2 -right-2 pointer-events-none" />
+              <ProBadge className="pointer-events-none absolute -top-2 -right-2" />
             )}
           </span>
         )}

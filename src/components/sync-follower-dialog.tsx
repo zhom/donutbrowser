@@ -127,20 +127,20 @@ export function SyncFollowerDialog({
 
         {leaderProfile && (
           <div className="space-y-3">
-            <div className="flex items-center gap-2 p-2 rounded-md bg-primary/10 border border-primary/20">
+            <div className="flex items-center gap-2 rounded-md border border-primary/20 bg-primary/10 p-2">
               <Badge variant="default" className="text-xs">
                 {t("profiles.synchronizer.leader")}
               </Badge>
-              <span className="text-sm font-medium truncate">
+              <span className="truncate text-sm font-medium">
                 {leaderProfile.name}
               </span>
             </div>
 
-            <div className="border rounded-md">
+            <div className="rounded-md border">
               <ScrollArea className="h-[clamp(120px,30vh,20rem)]">
                 <div className="space-y-1 p-2">
                   {eligibleProfiles.length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-4 text-center">
+                    <p className="py-4 text-center text-sm text-muted-foreground">
                       {t("profiles.synchronizer.wayfernOnly")}
                     </p>
                   ) : (
@@ -155,7 +155,7 @@ export function SyncFollowerDialog({
                       return (
                         <div
                           key={profile.id}
-                          className="flex items-center gap-3 p-2 rounded-md hover:bg-accent cursor-pointer"
+                          className="flex cursor-pointer items-center gap-3 rounded-md p-2 hover:bg-accent"
                           onClick={() => {
                             handleToggle(
                               profile.id,
@@ -174,7 +174,7 @@ export function SyncFollowerDialog({
                               handleToggle(profile.id, checked === true);
                             }}
                           />
-                          <span className="text-sm truncate flex-1">
+                          <span className="flex-1 truncate text-sm">
                             {profile.name}
                           </span>
                           {isFlaky && (
@@ -182,7 +182,7 @@ export function SyncFollowerDialog({
                               <TooltipTrigger asChild>
                                 <Badge
                                   variant="outline"
-                                  className="text-[10px] px-1.5 py-0 text-warning border-warning/50 shrink-0"
+                                  className="shrink-0 border-warning/50 px-1.5 py-0 text-[10px] text-warning"
                                 >
                                   {t("profiles.synchronizer.flakyBadge")}
                                 </Badge>

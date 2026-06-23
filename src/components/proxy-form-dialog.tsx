@@ -161,7 +161,7 @@ export function ProxyFormDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="grid gap-4 py-4 @container">
+        <div className="@container grid gap-4 py-4">
           <div className="grid gap-2">
             <Label htmlFor="proxy-name">{t("proxies.form.name")}</Label>
             <Input
@@ -231,7 +231,7 @@ export function ProxyFormDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 @sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 @sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="proxy-username">
                 {form.proxy_type === "ss"

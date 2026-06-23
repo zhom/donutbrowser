@@ -129,7 +129,7 @@ export function SyncAllDialog({ isOpen, onClose }: SyncAllDialogProps) {
 
         {isLoading ? (
           <div className="flex justify-center py-8">
-            <div className="size-6 rounded-full border-2 border-current animate-spin border-t-transparent" />
+            <div className="size-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-2 py-2">
@@ -141,12 +141,12 @@ export function SyncAllDialog({ isOpen, onClose }: SyncAllDialogProps) {
                 <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
                   <Icon className="size-4" />
                 </div>
-                <div className="min-w-0 flex-1 text-sm font-medium truncate">
+                <div className="min-w-0 flex-1 truncate text-sm font-medium">
                   {label}
                 </div>
                 <Badge
                   variant="secondary"
-                  className="shrink-0 tabular-nums px-2"
+                  className="shrink-0 px-2 tabular-nums"
                 >
                   {count}
                 </Badge>

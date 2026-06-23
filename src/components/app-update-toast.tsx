@@ -35,13 +35,13 @@ export function AppUpdateToast({
   };
 
   return (
-    <div className="flex items-start p-4 w-full max-w-md rounded-lg border shadow-lg bg-card border-border text-card-foreground">
-      <div className="mr-3 mt-0.5">
-        <LuCheckCheck className="shrink-0 size-5" />
+    <div className="flex w-full max-w-md items-start rounded-lg border border-border bg-card p-4 text-card-foreground shadow-lg">
+      <div className="mt-0.5 mr-3">
+        <LuCheckCheck className="size-5 shrink-0" />
       </div>
 
-      <div className="flex-1 min-w-0">
-        <div className="flex gap-2 justify-between items-start">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-2">
           <div className="flex flex-col gap-1">
             <span className="text-sm font-semibold text-foreground">
               {updateReady
@@ -59,18 +59,18 @@ export function AppUpdateToast({
             variant="ghost"
             size="sm"
             onClick={onDismiss}
-            className="p-0 size-6 shrink-0"
+            className="size-6 shrink-0 p-0"
           >
             <FaTimes className="size-3" />
           </Button>
         </div>
 
-        <div className="flex gap-2 items-center mt-3">
+        <div className="mt-3 flex items-center gap-2">
           {updateReady ? (
             <RippleButton
               onClick={() => void handleRestartClick()}
               size="sm"
-              className="flex gap-2 items-center text-xs"
+              className="flex items-center gap-2 text-xs"
             >
               <LuCheckCheck className="size-3" />
               {t("appUpdate.toast.restartNow")}
@@ -81,7 +81,7 @@ export function AppUpdateToast({
               <RippleButton
                 onClick={handleViewRelease}
                 size="sm"
-                className="flex gap-2 items-center text-xs"
+                className="flex items-center gap-2 text-xs"
               >
                 <FaExternalLinkAlt className="size-3" />
                 {t("appUpdate.toast.viewRelease")}
