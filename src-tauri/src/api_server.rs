@@ -57,6 +57,9 @@ pub struct ApiProfileResponse {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct CreateProfileRequest {
   pub name: String,
+  /// Browser engine. Must be `"wayfern"` (anti-detect Chromium) or `"camoufox"`
+  /// (anti-detect Firefox). Any other value (e.g. `"chromium"`) is rejected with
+  /// 400.
   pub browser: String,
   /// Optional. Omit (or pass `"latest"`) to use the newest already-downloaded
   /// version of the chosen browser. A concrete version must already be
@@ -815,7 +818,7 @@ async fn get_profile(
 async fn create_profile(
   State(state): State<ApiServerState>,
   Json(request): Json<CreateProfileRequest>,
-) -> Result<Json<ApiProfileResponse>, StatusCode> {
+) -> Result<Json<ApiProfileResponse>, (StatusCode, String)> {
   let profile_manager = ProfileManager::instance();
 
   // Only Wayfern and Camoufox profiles are launchable; the rest of the system
@@ -824,7 +827,13 @@ async fn create_profile(
   // unrecognized browser, then crashes with a 500 on /run. Mirrors the MCP
   // create_profile validation.
   if request.browser != "wayfern" && request.browser != "camoufox" {
-    return Err(StatusCode::BAD_REQUEST);
+    return Err((
+      StatusCode::BAD_REQUEST,
+      format!(
+        "Invalid browser \"{}\". Must be \"wayfern\" (anti-detect Chromium) or \"camoufox\" (anti-detect Firefox).",
+        request.browser
+      ),
+    ));
   }
 
   // Resolve the version. Omitted, empty, or "latest" means "newest version
@@ -841,7 +850,15 @@ async fn create_profile(
       versions.sort_by(|a, b| crate::api_client::compare_versions(b, a));
       match versions.into_iter().next() {
         Some(v) => v,
-        None => return Err(StatusCode::BAD_REQUEST),
+        None => {
+          return Err((
+            StatusCode::BAD_REQUEST,
+            format!(
+              "No downloaded version of \"{}\" is available. Download the browser in Donut Browser first — this endpoint does not download browsers.",
+              request.browser
+            ),
+          ));
+        }
       }
     }
   };
@@ -866,9 +883,15 @@ async fn create_profile(
     crate::validate_profile_network(request.proxy_id.as_deref(), request.vpn_id.as_deref()).await
   {
     return Err(if err.contains("PROXY_PAYMENT_REQUIRED") {
-      StatusCode::PAYMENT_REQUIRED
+      (
+        StatusCode::PAYMENT_REQUIRED,
+        "The selected proxy requires an active subscription.".to_string(),
+      )
     } else {
-      StatusCode::BAD_REQUEST
+      (
+        StatusCode::BAD_REQUEST,
+        format!("Profile network validation failed: {err}"),
+      )
     });
   }
 
@@ -898,7 +921,10 @@ async fn create_profile(
           .update_profile_tags(&state.app_handle, &profile.name, tags.clone())
           .is_err()
         {
-          return Err(StatusCode::INTERNAL_SERVER_ERROR);
+          return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Profile created but failed to apply tags.".to_string(),
+          ));
         }
         profile.tags = tags.clone();
       }
@@ -930,7 +956,10 @@ async fn create_profile(
         },
       }))
     }
-    Err(_) => Err(StatusCode::BAD_REQUEST),
+    Err(e) => Err((
+      StatusCode::BAD_REQUEST,
+      format!("Failed to create profile: {e}"),
+    )),
   }
 }
 
