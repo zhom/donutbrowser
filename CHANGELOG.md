@@ -1,6 +1,46 @@
 # Changelog
 
 
+## v0.27.1 (2026-06-24)
+
+### Features
+
+- profile sorting
+- batch profile launch/stop for paid users
+
+### Bug Fixes
+
+- prevent stale sse token refresh
+- properly handle cmd
+- make SOCKS5 upstream username/password authentication reliable
+
+### Refactoring
+
+- improve location info generation for fresh profiles
+- improve profile creation api invalid 'browser' handling
+- cleanup
+- bound proxy connection
+- add robust proxy lifecycle management"
+
+### Documentation
+
+- cleanup
+- contrib-readme-action has updated readme
+- contributions
+
+### Maintenance
+
+- chore: version bump
+- chore: dependency update
+- ci(deps): bump the github-actions group with 3 updates
+- chore: update flake.nix for v0.27.0 [skip ci] (#448)
+
+### Other
+
+- style: improve responsiveness
+- style: interactive elements consistently have cursor pointer
+
+
 ## v0.27.0 (2026-06-17)
 
 ### Features
