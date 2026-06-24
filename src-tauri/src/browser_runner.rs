@@ -597,6 +597,14 @@ impl BrowserRunner {
         if wayfern_config.os.is_some() {
           updated_wayfern_config.os = wayfern_config.os.clone();
         }
+        // The fresh fingerprint's location matches the current routing; record
+        // its signature so launches keep it in sync with the non-randomize path.
+        updated_wayfern_config.geo_proxy_signature =
+          Some(crate::wayfern_manager::WayfernManager::geo_signature(
+            upstream_proxy.as_ref(),
+            profile.vpn_id.as_deref(),
+            wayfern_config.geoip.as_ref(),
+          ));
         updated_profile.wayfern_config = Some(updated_wayfern_config.clone());
 
         log::info!(
@@ -604,6 +612,62 @@ impl BrowserRunner {
           profile.name,
           updated_wayfern_config.fingerprint.as_ref().map(|f| f.len()).unwrap_or(0)
         );
+      } else {
+        // Safety net: the stored fingerprint's timezone and geolocation were
+        // computed for whatever proxy was set when the fingerprint was
+        // generated. If the profile's proxy or VPN has changed since (the
+        // common case being a user who forgot to set a proxy at creation and
+        // added one afterwards), that location data is stale and the user would
+        // see the wrong timezone on first launch. When the routing signature no
+        // longer matches, refresh just the location fields of the stored
+        // fingerprint through the current proxy. Wayfern only; the randomize
+        // path above already regenerates the whole fingerprint each launch.
+        let current_geo_sig = crate::wayfern_manager::WayfernManager::geo_signature(
+          upstream_proxy.as_ref(),
+          profile.vpn_id.as_deref(),
+          wayfern_config.geoip.as_ref(),
+        );
+        let geo_enabled = !matches!(
+          wayfern_config.geoip.as_ref(),
+          Some(serde_json::Value::Bool(false))
+        );
+        if geo_enabled
+          && wayfern_config.geo_proxy_signature.as_deref() != Some(current_geo_sig.as_str())
+        {
+          if let Some(stored_fp) = wayfern_config.fingerprint.clone() {
+            log::info!(
+              "Routing changed for Wayfern profile {} since its fingerprint was generated (was {:?}, now {}); refreshing timezone and geolocation",
+              profile.name,
+              wayfern_config.geo_proxy_signature,
+              current_geo_sig
+            );
+            match crate::wayfern_manager::WayfernManager::refresh_fingerprint_geolocation(
+              &stored_fp,
+              wayfern_config.proxy.as_deref(),
+              wayfern_config.geoip.as_ref(),
+            )
+            .await
+            {
+              Some(refreshed) => {
+                // Use the refreshed fingerprint for this launch...
+                wayfern_config.fingerprint = Some(refreshed.clone());
+                wayfern_config.geo_proxy_signature = Some(current_geo_sig.clone());
+                // ...and persist it so the corrected location sticks and we do
+                // not refresh again on the next launch with the same proxy.
+                let mut cfg = updated_profile.wayfern_config.clone().unwrap_or_default();
+                cfg.fingerprint = Some(refreshed);
+                cfg.geo_proxy_signature = Some(current_geo_sig);
+                updated_profile.wayfern_config = Some(cfg);
+              }
+              None => {
+                log::warn!(
+                  "Could not refresh geolocation for Wayfern profile {} (proxy unreachable?); launching with existing location and will retry next launch",
+                  profile.name
+                );
+              }
+            }
+          }
+        }
       }
 
       // Create ephemeral dir for ephemeral or password-protected profiles

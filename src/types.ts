@@ -424,6 +424,7 @@ export interface WayfernConfig {
   fingerprint?: string; // JSON string of the complete fingerprint config
   randomize_fingerprint_on_launch?: boolean; // Generate new fingerprint on every launch
   os?: WayfernOS; // Operating system for fingerprint generation
+  geo_proxy_signature?: string; // Internal: routing the fingerprint's location was computed for
 }
 
 // Wayfern fingerprint config - matches the C++ FingerprintData structure

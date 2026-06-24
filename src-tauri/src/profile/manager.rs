@@ -326,6 +326,19 @@ impl ProfileManager {
         log::info!("Using provided fingerprint for Wayfern profile: {name}");
       }
 
+      // Record which proxy/geoip the fingerprint's location data was computed
+      // for. On launch this is compared against the profile's current routing
+      // so a proxy that was changed after creation triggers a location refresh
+      // instead of showing a stale timezone.
+      config.geo_proxy_signature = Some(crate::wayfern_manager::WayfernManager::geo_signature(
+        proxy_id
+          .as_ref()
+          .and_then(|id| PROXY_MANAGER.get_proxy_settings_by_id(id))
+          .as_ref(),
+        None,
+        config.geoip.as_ref(),
+      ));
+
       // Clear the proxy from config after fingerprint generation
       config.proxy = None;
 

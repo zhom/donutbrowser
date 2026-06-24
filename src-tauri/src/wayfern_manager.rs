@@ -39,6 +39,12 @@ pub struct WayfernConfig {
   pub block_webgl: Option<bool>,
   #[serde(default, skip_serializing)]
   pub proxy: Option<String>,
+  /// Stable signature of the proxy/VPN/geoip the fingerprint's location data
+  /// (timezone, latitude/longitude, language) was last computed for. Compared
+  /// on launch to detect that the routing changed since creation, so the
+  /// location can be refreshed instead of showing stale data.
+  #[serde(default)]
+  pub geo_proxy_signature: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -263,6 +269,130 @@ impl WayfernManager {
     Err("No response received from CDP".into())
   }
 
+  /// Stable signature describing what determines this profile's geolocation
+  /// (timezone, latitude/longitude, language): the geoip mode first, then the
+  /// VPN, the proxy, or a direct connection. Compared across creation and
+  /// launch to detect a change. The VPN case keys off `vpn_id` rather than the
+  /// per-launch local port, and the proxy case off type/host/port/username so
+  /// that editing the proxy is also caught.
+  pub fn geo_signature(
+    proxy: Option<&crate::browser::ProxySettings>,
+    vpn_id: Option<&str>,
+    geoip: Option<&serde_json::Value>,
+  ) -> String {
+    match geoip {
+      Some(serde_json::Value::Bool(false)) => "off".to_string(),
+      Some(serde_json::Value::String(ip)) if !ip.is_empty() => format!("ip:{ip}"),
+      _ => {
+        if let Some(id) = vpn_id {
+          format!("vpn:{id}")
+        } else if let Some(p) = proxy {
+          format!(
+            "proxy:{}://{}@{}:{}",
+            p.proxy_type.to_lowercase(),
+            p.username.as_deref().unwrap_or(""),
+            p.host,
+            p.port
+          )
+        } else {
+          "direct".to_string()
+        }
+      }
+    }
+  }
+
+  /// Apply timezone/geolocation fields to a fingerprint object from the proxy's
+  /// exit IP (or a fixed geoip IP). Mutates `fingerprint` in place. Returns true
+  /// if fresh geolocation was fetched and applied, false if geolocation is
+  /// disabled or could not be resolved (in which case only safe defaults are
+  /// filled in). Shared by fingerprint generation and the launch-time refresh
+  /// so both produce identical location data.
+  async fn apply_geolocation(
+    fingerprint: &mut serde_json::Value,
+    proxy: Option<&str>,
+    geoip: Option<&serde_json::Value>,
+  ) -> bool {
+    // Default to auto-detect; only an explicit `false` disables geolocation.
+    let should_geolocate = !matches!(geoip, Some(serde_json::Value::Bool(false)));
+    if !should_geolocate {
+      return false;
+    }
+
+    let geo_result = async {
+      let ip = match geoip {
+        Some(serde_json::Value::String(ip_str)) => ip_str.clone(),
+        _ => crate::ip_utils::fetch_public_ip(proxy)
+          .await
+          .map_err(|e| format!("Failed to fetch public IP: {e}"))?,
+      };
+      crate::camoufox::geolocation::get_geolocation(&ip)
+        .map_err(|e| format!("Failed to get geolocation for IP {ip}: {e}"))
+    }
+    .await;
+
+    match geo_result {
+      Ok(geo) => {
+        if let Some(obj) = fingerprint.as_object_mut() {
+          obj.insert("timezone".to_string(), json!(geo.timezone));
+          // Calculate timezone offset from IANA timezone name
+          if let Ok(tz) = geo.timezone.parse::<chrono_tz::Tz>() {
+            use chrono::Offset;
+            let now = chrono::Utc::now().with_timezone(&tz);
+            let offset_seconds = now.offset().fix().local_minus_utc();
+            let offset_minutes = -(offset_seconds / 60);
+            obj.insert("timezoneOffset".to_string(), json!(offset_minutes));
+          }
+          obj.insert("latitude".to_string(), json!(geo.latitude));
+          obj.insert("longitude".to_string(), json!(geo.longitude));
+          let locale_str = geo.locale.as_string();
+          obj.insert("language".to_string(), json!(&locale_str));
+          obj.insert(
+            "languages".to_string(),
+            json!([&locale_str, &geo.locale.language]),
+          );
+        }
+        log::info!(
+          "Applied geolocation to Wayfern fingerprint: {} ({})",
+          geo.locale.as_string(),
+          geo.timezone
+        );
+        true
+      }
+      Err(e) => {
+        log::warn!("Geolocation failed, using defaults: {e}");
+        if let Some(obj) = fingerprint.as_object_mut() {
+          if !obj.contains_key("timezone") {
+            obj.insert("timezone".to_string(), json!("America/New_York"));
+          }
+          if !obj.contains_key("timezoneOffset") {
+            obj.insert("timezoneOffset".to_string(), json!(300));
+          }
+        }
+        false
+      }
+    }
+  }
+
+  /// Refresh ONLY the location fields (timezone, offset, latitude/longitude,
+  /// language) of an already-generated fingerprint to match the current proxy,
+  /// leaving every other fingerprint field untouched. `proxy` is the local
+  /// proxy URL the browser will use. Returns the updated fingerprint JSON on
+  /// success, or None if geolocation is disabled or could not be resolved, in
+  /// which case the caller keeps the existing fingerprint and retries on the
+  /// next launch.
+  pub async fn refresh_fingerprint_geolocation(
+    fingerprint_json: &str,
+    proxy: Option<&str>,
+    geoip: Option<&serde_json::Value>,
+  ) -> Option<String> {
+    let mut fp: serde_json::Value = serde_json::from_str(fingerprint_json).ok()?;
+    if Self::apply_geolocation(&mut fp, proxy, geoip).await {
+      serde_json::to_string(&fp).ok()
+    } else {
+      None
+    }
+  }
+
   pub async fn generate_fingerprint_config(
     &self,
     _app_handle: &AppHandle,
@@ -424,70 +554,14 @@ impl WayfernManager {
         // Normalize the fingerprint: convert JSON string fields to proper types
         let mut normalized = Self::normalize_fingerprint(fp);
 
-        // Apply geolocation based on proxy IP or geoip config
-        let geoip_option = config.geoip.as_ref();
-        let should_geolocate = match geoip_option {
-          Some(serde_json::Value::Bool(false)) => false,
-          _ => true, // Default to auto-detect
-        };
-
-        if should_geolocate {
-          let geo_result = async {
-            let ip = match geoip_option {
-              Some(serde_json::Value::String(ip_str)) => ip_str.clone(),
-              _ => {
-                // Auto-detect IP, optionally through proxy
-                crate::ip_utils::fetch_public_ip(config.proxy.as_deref())
-                  .await
-                  .map_err(|e| format!("Failed to fetch public IP: {e}"))?
-              }
-            };
-
-            crate::camoufox::geolocation::get_geolocation(&ip)
-              .map_err(|e| format!("Failed to get geolocation for IP {ip}: {e}"))
-          }
-          .await;
-
-          match geo_result {
-            Ok(geo) => {
-              if let Some(obj) = normalized.as_object_mut() {
-                obj.insert("timezone".to_string(), json!(geo.timezone));
-                // Calculate timezone offset from IANA timezone name
-                if let Ok(tz) = geo.timezone.parse::<chrono_tz::Tz>() {
-                  use chrono::Offset;
-                  let now = chrono::Utc::now().with_timezone(&tz);
-                  let offset_seconds = now.offset().fix().local_minus_utc();
-                  let offset_minutes = -(offset_seconds / 60);
-                  obj.insert("timezoneOffset".to_string(), json!(offset_minutes));
-                }
-                obj.insert("latitude".to_string(), json!(geo.latitude));
-                obj.insert("longitude".to_string(), json!(geo.longitude));
-                let locale_str = geo.locale.as_string();
-                obj.insert("language".to_string(), json!(&locale_str));
-                obj.insert(
-                  "languages".to_string(),
-                  json!([&locale_str, &geo.locale.language]),
-                );
-              }
-              log::info!(
-                "Applied geolocation to Wayfern fingerprint: {} ({})",
-                geo.locale.as_string(),
-                geo.timezone
-              );
-            }
-            Err(e) => {
-              log::warn!("Geolocation failed, using defaults: {e}");
-              if let Some(obj) = normalized.as_object_mut() {
-                if !obj.contains_key("timezone") {
-                  obj.insert("timezone".to_string(), json!("America/New_York"));
-                }
-                if !obj.contains_key("timezoneOffset") {
-                  obj.insert("timezoneOffset".to_string(), json!(300));
-                }
-              }
-            }
-          }
-        }
+        // Apply timezone/geolocation for the proxy this fingerprint is being
+        // generated against. Shared with the launch-time location refresh.
+        Self::apply_geolocation(
+          &mut normalized,
+          config.proxy.as_deref(),
+          config.geoip.as_ref(),
+        )
+        .await;
 
         normalized
       }
