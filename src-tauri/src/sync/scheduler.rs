@@ -176,14 +176,36 @@ impl SyncScheduler {
   }
 
   pub async fn queue_profile_sync(&self, profile_id: String) {
-    self.queue_profile_sync_internal(profile_id).await;
+    self.enqueue_profile_sync(profile_id, false).await;
   }
 
   pub async fn queue_profile_sync_immediate(&self, profile_id: String) {
-    self.queue_profile_sync_internal(profile_id).await;
+    self.enqueue_profile_sync(profile_id, true).await;
   }
 
-  async fn queue_profile_sync_internal(&self, profile_id: String) {
+  async fn enqueue_profile_sync(&self, profile_id: String, force: bool) {
+    if !force {
+      let in_flight = self.in_flight_profiles.lock().await;
+      if in_flight.contains(&profile_id) {
+        log::debug!(
+          "Profile {} sync already in-flight, skipping duplicate queue",
+          profile_id
+        );
+        return;
+      }
+      drop(in_flight);
+
+      let pending = self.pending_profiles.lock().await;
+      if pending.contains_key(&profile_id) {
+        log::debug!(
+          "Profile {} sync already pending, skipping duplicate queue",
+          profile_id
+        );
+        return;
+      }
+      drop(pending);
+    }
+
     let is_running = self.is_profile_running(&profile_id).await;
     let mut pending = self.pending_profiles.lock().await;
 

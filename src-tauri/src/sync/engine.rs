@@ -574,6 +574,12 @@ impl SyncEngine {
 
     if diff.is_empty() {
       log::info!("Profile {} is already in sync", profile_id);
+      let now = crate::proxy_manager::now_secs();
+      let mut updated_profile = profile.clone();
+      if updated_profile.last_sync != Some(now) {
+        updated_profile.last_sync = Some(now);
+        let _ = profile_manager.save_profile(&updated_profile);
+      }
       let _ = events::emit(
         "profile-sync-status",
         serde_json::json!({
@@ -670,35 +676,34 @@ impl SyncEngine {
       log::debug!("Deleted remote file: {}", path);
     }
 
-    // Upload metadata.json (sanitized profile)
-    self
-      .upload_profile_metadata(&profile_id, profile, &key_prefix)
-      .await?;
+    // Only publish metadata/manifest when this device pushed file changes to
+    // remote. Download-only syncs must not overwrite the remote manifest with a
+    // stale pre-download snapshot — that caused A→B→A infinite sync loops via SSE.
+    if diff.pushes_to_remote() {
+      let mut post_sync_cache = HashCache::load(&cache_path);
+      let mut final_manifest = generate_manifest(&profile_id, &profile_dir, &mut post_sync_cache)?;
+      post_sync_cache.save(&cache_path)?;
+      final_manifest.encrypted = encryption_key.is_some();
 
-    // If we recovered from an empty local state (downloaded everything from remote),
-    // regenerate the manifest from the actual files now on disk so we don't
-    // overwrite the remote manifest with an empty one.
-    let final_manifest = if local_manifest.files.is_empty() && !diff.files_to_download.is_empty() {
-      let mut new_cache = HashCache::load(&cache_path);
-      let mut regenerated = generate_manifest(&profile_id, &profile_dir, &mut new_cache)?;
-      new_cache.save(&cache_path)?;
-      regenerated.encrypted = encryption_key.is_some();
-      regenerated
+      self
+        .upload_profile_metadata(&profile_id, profile, &key_prefix)
+        .await?;
+
+      // Upload manifest.json last for atomicity
+      self
+        .upload_manifest(
+          &profile_id,
+          &final_manifest,
+          encryption_key.as_ref(),
+          &key_prefix,
+        )
+        .await?;
     } else {
-      let mut m = local_manifest;
-      m.encrypted = encryption_key.is_some();
-      m
-    };
-
-    // Upload manifest.json last for atomicity
-    self
-      .upload_manifest(
-        &profile_id,
-        &final_manifest,
-        encryption_key.as_ref(),
-        &key_prefix,
-      )
-      .await?;
+      log::info!(
+        "Profile {} download-only sync — skipping remote metadata/manifest upload",
+        profile_id
+      );
+    }
 
     // Sync completed successfully — clean up resume state
     SyncResumeState::delete(&profile_dir);

@@ -8,7 +8,6 @@ use std::path::Path;
 use std::time::SystemTime;
 
 use super::types::{SyncError, SyncResult};
-use crate::profile::types::BrowserProfile;
 
 /// Default exclude patterns for volatile browser profile files.
 /// Patterns use `**/` prefix to match at any directory depth, since the sync
@@ -61,6 +60,10 @@ pub const DEFAULT_EXCLUDE_PATTERNS: &[&str] = &[
   "**/DawnWebGPUCache/**",
   "**/BrowserMetrics*",
   "**/.DS_Store",
+  // Profile metadata is synced via profiles/{id}/metadata.json (dedicated path),
+  // not the files/ delta. Including it here caused duplicate SSE events and
+  // last_sync bookkeeping mtime bumps that fed back into manifest.updatedAt.
+  "metadata.json",
   ".donut-sync/**",
   // Orphaned local-only marker from earlier rollover-based fingerprint
   // regeneration. Keep excluding it so any markers left on disk from
@@ -224,39 +227,6 @@ fn hash_file(path: &Path) -> Result<Option<String>, SyncError> {
   Ok(Some(hasher.finalize().to_hex().to_string()))
 }
 
-/// Compute blake3 hash of metadata.json after sanitizing volatile fields.
-/// This prevents infinite sync loops where updating last_sync triggers a new sync.
-fn hash_sanitized_metadata(path: &Path) -> Result<Option<String>, SyncError> {
-  let content = match fs::read_to_string(path) {
-    Ok(c) => c,
-    Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-    Err(e) => {
-      return Err(SyncError::IoError(format!(
-        "Failed to read metadata at {}: {e}",
-        path.display()
-      )));
-    }
-  };
-
-  let mut profile: BrowserProfile = serde_json::from_str(&content).map_err(|e| {
-    SyncError::SerializationError(format!("Failed to parse metadata for hashing: {e}"))
-  })?;
-
-  // Sanitize volatile fields that should not trigger a re-sync
-  profile.last_sync = None;
-  profile.process_id = None;
-  profile.last_launch = None;
-
-  let sanitized_json = serde_json::to_string(&profile).map_err(|e| {
-    SyncError::SerializationError(format!("Failed to serialize sanitized metadata: {e}"))
-  })?;
-
-  let mut hasher = blake3::Hasher::new();
-  hasher.update(sanitized_json.as_bytes());
-
-  Ok(Some(hasher.finalize().to_hex().to_string()))
-}
-
 /// Get mtime as unix timestamp
 /// Returns None if the file doesn't exist (was deleted)
 fn get_mtime(path: &Path) -> Result<Option<i64>, SyncError> {
@@ -372,19 +342,7 @@ pub fn generate_manifest(
         *max_mtime = (*max_mtime).max(mtime);
 
         // Check cache for existing hash
-        let hash = if relative_path == "metadata.json" {
-          // Special case: sanitize metadata.json before hashing to prevent sync loops
-          match hash_sanitized_metadata(&path)? {
-            Some(computed_hash) => computed_hash,
-            None => {
-              log::debug!(
-                "File disappeared during manifest generation, skipping: {}",
-                path.display()
-              );
-              continue;
-            }
-          }
-        } else if let Some(cached_hash) = cache.get(&relative_path, size, mtime) {
+        let hash = if let Some(cached_hash) = cache.get(&relative_path, size, mtime) {
           cached_hash.to_string()
         } else {
           match hash_file(&path)? {
@@ -452,6 +410,12 @@ impl ManifestDiff {
       && self.files_to_download.is_empty()
       && self.files_to_delete_local.is_empty()
       && self.files_to_delete_remote.is_empty()
+  }
+
+  /// True when this device uploaded or deleted remote profile files and should
+  /// publish metadata.json + manifest.json. Download-only diffs must not publish.
+  pub fn pushes_to_remote(&self) -> bool {
+    !self.files_to_upload.is_empty() || !self.files_to_delete_remote.is_empty()
   }
 }
 
@@ -546,6 +510,7 @@ pub fn get_cache_path(profile_dir: &Path) -> std::path::PathBuf {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::profile::types::BrowserProfile;
   use tempfile::TempDir;
 
   #[test]
@@ -664,8 +629,8 @@ mod tests {
 
     let paths: Vec<&str> = manifest.files.iter().map(|f| f.path.as_str()).collect();
     assert!(
-      paths.contains(&"metadata.json"),
-      "metadata.json should be synced"
+      !paths.contains(&"metadata.json"),
+      "metadata.json is synced via the dedicated metadata path, not file delta"
     );
     assert!(
       paths.contains(&"profile/Default/Cookies"),
@@ -803,6 +768,77 @@ mod tests {
   }
 
   #[test]
+  fn test_manifest_diff_pushes_to_remote() {
+    let download_only = ManifestDiff {
+      files_to_download: vec![ManifestFileEntry {
+        path: "Cookies".to_string(),
+        size: 10,
+        mtime: 1000,
+        hash: "abc".to_string(),
+      }],
+      ..Default::default()
+    };
+    assert!(!download_only.pushes_to_remote());
+
+    let upload = ManifestDiff {
+      files_to_upload: vec![ManifestFileEntry {
+        path: "Cookies".to_string(),
+        size: 10,
+        mtime: 1000,
+        hash: "abc".to_string(),
+      }],
+      ..Default::default()
+    };
+    assert!(upload.pushes_to_remote());
+
+    let delete_remote = ManifestDiff {
+      files_to_delete_remote: vec!["old.txt".to_string()],
+      ..Default::default()
+    };
+    assert!(delete_remote.pushes_to_remote());
+  }
+
+  #[test]
+  fn test_compute_diff_same_hashes_is_empty_despite_newer_remote_timestamp() {
+    let older = "2024-01-01T00:00:00Z";
+    let newer = "2024-01-02T00:00:00Z";
+
+    let local = SyncManifest {
+      version: 1,
+      profile_id: "test".to_string(),
+      generated_at: older.to_string(),
+      updated_at: older.to_string(),
+      exclude_globs: vec![],
+      files: vec![ManifestFileEntry {
+        path: "Cookies".to_string(),
+        size: 10,
+        mtime: 1000,
+        hash: "same".to_string(),
+      }],
+      encrypted: false,
+    };
+
+    let remote = SyncManifest {
+      version: 1,
+      profile_id: "test".to_string(),
+      generated_at: newer.to_string(),
+      updated_at: newer.to_string(),
+      exclude_globs: vec![],
+      files: vec![ManifestFileEntry {
+        path: "Cookies".to_string(),
+        size: 10,
+        mtime: 2000,
+        hash: "same".to_string(),
+      }],
+      encrypted: false,
+    };
+
+    let diff = compute_diff(&local, Some(&remote));
+    assert!(diff.is_empty());
+    assert!(!diff.pushes_to_remote());
+  }
+
+  #[test]
   fn test_manifest_encrypted_flag_default() {
     let json = r#"{"version":1,"profileId":"test","generatedAt":"2024-01-01T00:00:00Z","updatedAt":"2024-01-01T00:00:00Z","excludeGlobs":[],"files":[]}"#;
     let manifest: SyncManifest = serde_json::from_str(json).unwrap();
@@ -867,14 +903,12 @@ mod tests {
   }
 
   #[test]
-  fn test_generate_manifest_sanitizes_metadata() {
+  fn test_metadata_json_excluded_from_file_manifest() {
     let temp_dir = TempDir::new().unwrap();
     let profile_dir = temp_dir.path().join("profile");
     fs::create_dir_all(&profile_dir).unwrap();
 
     let profile_id = uuid::Uuid::new_v4();
-    let metadata_path = profile_dir.join("metadata.json");
-
     let profile = BrowserProfile {
       id: profile_id,
       name: "test-profile".to_string(),
@@ -883,67 +917,18 @@ mod tests {
       ..Default::default()
     };
 
-    fs::write(&metadata_path, serde_json::to_string(&profile).unwrap()).unwrap();
+    fs::write(
+      profile_dir.join("metadata.json"),
+      serde_json::to_string(&profile).unwrap(),
+    )
+    .unwrap();
+    fs::write(profile_dir.join("data.bin"), "payload").unwrap();
 
     let mut cache = HashCache::default();
-    let manifest1 = generate_manifest(&profile_id.to_string(), &profile_dir, &mut cache).unwrap();
-    let hash1 = manifest1
-      .files
-      .iter()
-      .find(|f| f.path == "metadata.json")
-      .unwrap()
-      .hash
-      .clone();
+    let manifest = generate_manifest(&profile_id.to_string(), &profile_dir, &mut cache).unwrap();
 
-    // Update volatile fields
-    let profile2 = BrowserProfile {
-      id: profile_id,
-      name: "test-profile".to_string(),
-      last_sync: Some(200),
-      process_id: Some(5678),
-      ..Default::default()
-    };
-
-    fs::write(&metadata_path, serde_json::to_string(&profile2).unwrap()).unwrap();
-
-    let manifest2 = generate_manifest(&profile_id.to_string(), &profile_dir, &mut cache).unwrap();
-    let hash2 = manifest2
-      .files
-      .iter()
-      .find(|f| f.path == "metadata.json")
-      .unwrap()
-      .hash
-      .clone();
-
-    // Hash should be identical because volatile fields are sanitized
-    assert_eq!(
-      hash1, hash2,
-      "Metadata hash should be stable across last_sync/process_id updates"
-    );
-
-    // Change a non-volatile field
-    let profile3 = BrowserProfile {
-      id: profile_id,
-      name: "changed-name".to_string(),
-      last_sync: Some(200),
-      ..Default::default()
-    };
-
-    fs::write(&metadata_path, serde_json::to_string(&profile3).unwrap()).unwrap();
-
-    let manifest3 = generate_manifest(&profile_id.to_string(), &profile_dir, &mut cache).unwrap();
-    let hash3 = manifest3
-      .files
-      .iter()
-      .find(|f| f.path == "metadata.json")
-      .unwrap()
-      .hash
-      .clone();
-
-    // Hash should be different because name changed
-    assert_ne!(
-      hash1, hash3,
-      "Metadata hash should change when non-volatile fields change"
-    );
+    let paths: Vec<&str> = manifest.files.iter().map(|f| f.path.as_str()).collect();
+    assert!(!paths.contains(&"metadata.json"));
+    assert!(paths.contains(&"data.bin"));
   }
 }
