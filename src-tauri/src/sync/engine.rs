@@ -2341,7 +2341,13 @@ impl SyncEngine {
     }
 
     let metadata_presign = self.client.presign_download(&metadata_key).await?;
-    let metadata_data = self.client.download_bytes(&metadata_presign.url).await?;
+    let metadata_raw = self.client.download_bytes(&metadata_presign.url).await?;
+    let metadata_data = encryption::maybe_unseal_after_download(&metadata_raw).map_err(|e| {
+      if e.contains("ENCRYPTION_PASSWORD_REQUIRED") {
+        let _ = events::emit("profile-sync-e2e-password-required", ());
+      }
+      SyncError::InvalidData(format!("Failed to unseal profile metadata: {e}"))
+    })?;
     let mut profile: BrowserProfile = serde_json::from_slice(&metadata_data)
       .map_err(|e| SyncError::SerializationError(format!("Failed to parse metadata: {e}")))?;
 
@@ -2756,7 +2762,11 @@ impl SyncEngine {
           Ok(stat) if stat.exists => match self.client.presign_download(&metadata_key).await {
             Ok(presign) => match self.client.download_bytes(&presign.url).await {
               Ok(data) => {
-                if let Ok(mut remote_profile) = serde_json::from_slice::<BrowserProfile>(&data) {
+                let unsealed = encryption::maybe_unseal_after_download(&data).ok();
+                let parsed = unsealed
+                  .as_ref()
+                  .and_then(|bytes| serde_json::from_slice::<BrowserProfile>(bytes).ok());
+                if let Some(mut remote_profile) = parsed {
                   remote_profile.sync_mode = *sync_mode;
                   remote_profile.last_sync = Some(
                     std::time::SystemTime::now()
@@ -4021,6 +4031,12 @@ pub async fn rollover_encryption_for_all_entities(
         }
       }
     });
+  }
+
+  if let Ok(engine) = SyncEngine::create_from_settings(&app_handle).await {
+    if let Err(e) = engine.check_for_missing_synced_profiles(&app_handle).await {
+      log::warn!("Rollover: failed to check for missing profiles: {e}");
+    }
   }
 
   let _ = events::emit("e2e-rollover-completed", ());
