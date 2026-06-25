@@ -1992,6 +1992,7 @@ pub fn run() {
             .collect();
 
           for profile in profiles_to_check {
+            let had_pid = profile.process_id.is_some();
             // Check browser status and track changes
             match runner
               .check_browser_status(app_handle_status.clone(), &profile)
@@ -2004,8 +2005,14 @@ pub fn run() {
                   .copied()
                   .unwrap_or(false);
 
-                // Only emit event if state actually changed
-                if last_state != is_running {
+                // Emit when the running state changed, or when we still had a
+                // stored PID but the browser is gone — the launch path sets the
+                // frontend to "running" immediately, and a missed transition
+                // here leaves the stop button stuck.
+                let should_emit =
+                  last_state != is_running || (!is_running && had_pid);
+
+                if should_emit {
                   log::debug!(
                     "Status checker detected change for profile {}: {} -> {}",
                     profile.name,

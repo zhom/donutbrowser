@@ -77,6 +77,23 @@ pub fn emit_empty(event: &str) -> Result<(), String> {
   global_emitter().emit_value(event, serde_json::Value::Null)
 }
 
+#[derive(Serialize)]
+struct ProfileRunningChangedPayload {
+  id: String,
+  is_running: bool,
+}
+
+/// Notify the frontend that a profile's browser running state changed.
+pub fn emit_profile_running_changed(profile_id: &str, is_running: bool) -> Result<(), String> {
+  emit(
+    "profile-running-changed",
+    ProfileRunningChangedPayload {
+      id: profile_id.to_string(),
+      is_running,
+    },
+  )
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;

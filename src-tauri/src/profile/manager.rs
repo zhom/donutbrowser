@@ -1438,6 +1438,32 @@ impl ProfileManager {
     Ok(profile)
   }
 
+  /// Clear a stored browser PID and notify the frontend the profile stopped.
+  fn finalize_profile_stopped(&self, app_handle: &tauri::AppHandle, latest: &mut BrowserProfile) {
+    if latest.process_id.is_none() {
+      return;
+    }
+
+    let profile_id = latest.id.to_string();
+    latest.process_id = None;
+    if let Err(e) = self.save_profile(latest) {
+      log::warn!("Warning: Failed to clear profile PID: {e}");
+    }
+
+    if let Some(updated) = crate::auto_updater::AutoUpdater::instance()
+      .update_profile_to_latest_installed(app_handle, latest)
+    {
+      *latest = updated;
+    }
+
+    if let Err(e) = events::emit("profile-updated", latest) {
+      log::warn!("Warning: Failed to emit profile update event: {e}");
+    }
+    if let Err(e) = events::emit_profile_running_changed(&profile_id, false) {
+      log::warn!("Failed to emit profile-running-changed event: {e}");
+    }
+  }
+
   pub async fn check_browser_status(
     &self,
     app_handle: tauri::AppHandle,
@@ -1581,7 +1607,6 @@ impl ProfileManager {
           }
         }
       } else if merged.process_id.is_some() {
-        // Clear the PID if no process found
         merged.process_id = None;
         if let Err(e) = self.save_profile(&merged) {
           log::warn!("Warning: Failed to clear profile PID: {e}");
@@ -1594,6 +1619,9 @@ impl ProfileManager {
           .update_profile_to_latest_installed(&app_handle, &merged)
         {
           merged = updated;
+        }
+        if let Err(e) = events::emit_profile_running_changed(&merged.id.to_string(), false) {
+          log::warn!("Failed to emit profile-running-changed event: {e}");
         }
       }
 
@@ -1682,20 +1710,7 @@ impl ProfileManager {
           };
 
           if latest.process_id.is_some() {
-            latest.process_id = None;
-            if let Err(e) = self.save_profile(&latest) {
-              log::warn!("Warning: Failed to clear Camoufox profile process info: {e}");
-            }
-
-            if let Some(updated) = crate::auto_updater::AutoUpdater::instance()
-              .update_profile_to_latest_installed(app_handle, &latest)
-            {
-              latest = updated;
-            }
-
-            if let Err(e) = events::emit("profile-updated", &latest) {
-              log::warn!("Warning: Failed to emit profile update event: {e}");
-            }
+            self.finalize_profile_stopped(app_handle, &mut latest);
           }
         }
         Ok(false)
@@ -1722,23 +1737,7 @@ impl ProfileManager {
           };
 
           if latest.process_id.is_some() {
-            latest.process_id = None;
-            if let Err(e2) = self.save_profile(&latest) {
-              log::warn!(
-                "Warning: Failed to clear Camoufox profile process info after error: {e2}"
-              );
-            }
-
-            if let Some(updated) = crate::auto_updater::AutoUpdater::instance()
-              .update_profile_to_latest_installed(app_handle, &latest)
-            {
-              latest = updated;
-            }
-
-            // Emit profile update event to frontend
-            if let Err(e3) = events::emit("profile-updated", &latest) {
-              log::warn!("Warning: Failed to emit profile update event: {e3}");
-            }
+            self.finalize_profile_stopped(app_handle, &mut latest);
           }
         }
         Ok(false)
@@ -1787,9 +1786,14 @@ impl ProfileManager {
               let _ = crate::proxy_manager::PROXY_MANAGER.update_proxy_pid(prev, new);
             }
 
-            // Emit profile update event to frontend
             if let Err(e) = events::emit("profile-updated", &latest) {
               log::warn!("Warning: Failed to emit profile update event: {e}");
+            }
+
+            if old_pid.is_none() && wayfern_process.processId.is_some() {
+              if let Err(e) = events::emit_profile_running_changed(&latest.id.to_string(), true) {
+                log::warn!("Failed to emit profile-running-changed event: {e}");
+              }
             }
 
             log::info!(
@@ -1822,20 +1826,7 @@ impl ProfileManager {
           };
 
           if latest.process_id.is_some() {
-            latest.process_id = None;
-            if let Err(e) = self.save_profile(&latest) {
-              log::warn!("Warning: Failed to clear Wayfern profile process info: {e}");
-            }
-
-            if let Some(updated) = crate::auto_updater::AutoUpdater::instance()
-              .update_profile_to_latest_installed(app_handle, &latest)
-            {
-              latest = updated;
-            }
-
-            if let Err(e) = events::emit("profile-updated", &latest) {
-              log::warn!("Warning: Failed to emit profile update event: {e}");
-            }
+            self.finalize_profile_stopped(app_handle, &mut latest);
           }
         }
         Ok(false)
